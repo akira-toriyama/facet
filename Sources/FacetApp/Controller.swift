@@ -151,18 +151,12 @@ final class Controller: NSObject {
                 guard let self else { return }
                 Log.debug("dnc cmd=\(cmd)")
                 switch cmd {
-                // -- Legacy aliases (kept for muscle-memory /
-                // shorthand). All resolve to the canonical
-                // dispatchView/Hide/Toggle("tree", …) underneath.
-                case "show":     self.dispatchView("tree", active: false)
-                case "hide":     self.dispatchHide("tree")
-                case "active":   self.dispatchView("tree", active: true)
                 case "quit":     NSApp.terminate(nil)
                 case let s where s.hasPrefix("style:"):
                     self.applyStyle(
                         String(s.dropFirst("style:".count)))
 
-                // -- Symmetric view ops --
+                // Symmetric view ops — canonical-only, no aliases.
                 case let s where s.hasPrefix("view:"):
                     // Payload: ``NAME`` or ``NAME+active``.
                     let rest = String(s.dropFirst("view:".count))
@@ -178,10 +172,7 @@ final class Controller: NSObject {
                         String(s.dropFirst("toggle:".count)))
 
                 default:
-                    // Bare unrecognised payload: treat as a tree
-                    // toggle. Matches the historical ws-tabs
-                    // ``--toggle`` (no qualifier) behaviour.
-                    self.dispatchToggle("tree")
+                    Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }
             }
         }

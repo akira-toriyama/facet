@@ -108,11 +108,14 @@ a `main.swift` file** — same trap as ws-tabs.
   combined with ``--view=tree`` (becomes ``view:tree+active`` on
   the DNC). For grid it's silently ignored — the overlay is
   always key/active by construction.
-- **Legacy alias flags** ``--show`` / ``--hide`` / ``--toggle`` /
-  ``--active`` (bare) resolve to the matching ``tree``
-  dispatch. Keep them — muscle memory + shorthand for the
-  most-used view. Document new flags only in the symmetric form
-  so the canonical surface stays obvious.
+- **No bare-flag tree aliases**. ``--show`` / ``--hide`` /
+  ``--toggle`` / ``--active`` standalone were dropped — every
+  view op specifies NAME explicitly. Keeps the canonical form
+  unambiguous (no "is ``--hide`` short for ``--hide=tree`` or
+  is it the legacy bare verb?" surface area). Shorthand is the
+  user's shell-alias problem, not facet's. Reintroducing bare
+  flags also means reintroducing per-view dispatch ambiguity
+  when a new view (dock, palette, …) lands.
 - **``--view=NAME`` is idempotent (show)**, not toggle. To
   toggle, use ``--toggle=NAME``. This is the one behaviour
   change vs ws-tabs; do not regress it back to toggle-on-show.

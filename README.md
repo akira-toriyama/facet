@@ -64,31 +64,35 @@ edit the file to make a change stick.
 facet is **CLI-driven**: a small set of flags posts a distributed
 notification to the running server. Bind these from whatever
 hotkey tool you already use (skhd, Karabiner, Raycast,
-Hammerspoon, macOS Shortcuts, …).
+Hammerspoon, macOS Shortcuts, …). Full cheatsheet:
+`facet --help`.
 
 ```sh
-# Symmetric per-view ops (canonical):
-facet --view=tree                 # show the tree sidebar (idempotent)
-facet --view=tree --active        # show + keyboard-nav mode
-facet --view=grid                 # open the overview grid (idempotent)
-facet --hide=tree                 # hide tree
-facet --hide=grid                 # close grid
-facet --toggle=tree               # toggle tree visibility
-facet --toggle=grid               # toggle grid visibility
+# Per-view ops — NAME ∈ tree | grid, required for every op.
+facet --view=NAME [--active]      # open NAME (idempotent)
+facet --hide=NAME                 # close NAME
+facet --toggle=NAME               # toggle NAME
 
-# Aliases (shorthand for the common "tree" view):
-facet --show     # = --view=tree
-facet --hide     # = --hide=tree
-facet --toggle   # = --toggle=tree
-facet --active   # = --view=tree --active
+# --active is a modifier — only meaningful with --view=tree
+# (enters keyboard-nav mode). With --view=grid it's silently
+# ignored; the overlay is always key/active by construction.
 
-# Server controls:
+# Server controls
 facet --theme=NAME                # terminal | cute | system
 facet --quit                      # terminate the running server
+facet --debug                     # verbose log to stderr +
+                                  # /tmp/facet.log (server-mode)
+facet --help                      # full reference
 ```
 
-Unknown view / theme names exit `2` with a stderr message — typos
-fail loudly rather than silently no-op.
+Unknown flag / view / theme names exit `2` with a stderr
+message — typos fail loudly rather than silently no-op. Shorthand
+is your shell's problem, not facet's:
+
+```sh
+alias fa='facet --view=tree --active'
+alias fg='facet --view=grid'
+```
 
 ## Debugging
 

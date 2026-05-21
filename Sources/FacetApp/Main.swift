@@ -15,7 +15,7 @@
 // the act of importing the executable spawning a panel. Same trap
 // CLAUDE.md flags for ws-tabs — don't reintroduce main.swift.
 //
-// CLI surface (case D in the conversation that settled on it):
+// CLI surface (case D, canonical-only — no aliases):
 //
 //   facet --view=NAME [--active]    open NAME, optionally active
 //   facet --hide=NAME               close NAME
@@ -23,12 +23,13 @@
 //   facet --theme=NAME              live re-theme
 //   facet --quit                    terminate server
 //   facet --debug                   verbose logging (server-mode)
+//   facet --help, -h                this help
 //
-// Aliases (compat / shorthand for the common "tree" view):
-//   --show     ↔ --view=tree
-//   --hide     ↔ --hide=tree
-//   --toggle   ↔ --toggle=tree
-//   --active   ↔ --view=tree --active
+// ``--active`` is a modifier; ``facet --active`` standalone is
+// NOT supported (would be ambiguous about which view to activate).
+// Same for ``--show`` / ``--hide`` / ``--toggle`` bare — every
+// view op must specify NAME explicitly. Shell aliases handle
+// shorthand if the user wants it.
 
 import AppKit
 import FacetCore
@@ -67,11 +68,10 @@ enum FacetApp {
           (enters keyboard-nav mode). With --view=grid it's silently
           ignored; the overlay is always key/active by construction.
 
-        TREE ALIASES                         (shorthand for "tree")
-          facet --show                       = --view=tree
-          facet --hide                       = --hide=tree
-          facet --toggle                     = --toggle=tree
-          facet --active                     = --view=tree --active
+          NAME is required for every view op (no implicit "tree").
+          Shell aliases handle shorthand if you want it:
+            alias fa='facet --view=tree --active'
+            alias fg='facet --view=grid'
 
         SERVER CONTROLS
           facet --theme=NAME                 terminal | cute | system
@@ -178,20 +178,14 @@ enum FacetApp {
         var toggleArg: String?
         var styleArg: String?
         var activeFlag = false
-        var bareShow = false
-        var bareHide = false
-        var bareToggle = false
-        var bareQuit = false
+        var quitFlag = false
 
         var i = 0
         while i < argv.count {
             defer { i += 1 }
             let a = argv[i]
             switch true {
-            case a == "--show":              bareShow = true
-            case a == "--hide":              bareHide = true
-            case a == "--toggle":            bareToggle = true
-            case a == "--quit":              bareQuit = true
+            case a == "--quit":              quitFlag = true
             case a == "--active":            activeFlag = true
             case a == "--debug":             break          // handled above
             case a.hasPrefix("--view="):
@@ -204,29 +198,40 @@ enum FacetApp {
                 toggleArg = String(a.dropFirst("--toggle=".count))
             case a.hasPrefix("--theme="):
                 styleArg = String(a.dropFirst("--theme=".count))
-            case a.hasPrefix("--style="):                    // legacy alias
-                styleArg = String(a.dropFirst("--style=".count))
-            case a == "--theme", a == "--style":
+            case a == "--theme":
                 if i + 1 < argv.count { styleArg = argv[i + 1]; i += 1 }
-            default:                         break
+            default:
+                // Loud reject — typos / dropped legacy flags
+                // (``--show`` / ``--hide`` / ``--toggle`` /
+                // ``--style=...``) hit here. Server mode falling
+                // through silently would launch a second instance
+                // by accident.
+                let msg = "facet: unknown flag \"\(a)\" — see "
+                    + "`facet --help`\n"
+                FileHandle.standardError.write(Data(msg.utf8))
+                exit(2)
             }
         }
 
+        // ``--active`` is a modifier only — standalone is rejected
+        // (would be ambiguous about which view to activate).
+        if activeFlag && viewArg == nil {
+            let msg = "facet: --active requires --view=NAME — "
+                + "see `facet --help`\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(2)
+        }
+
         // Dispatch (each branch ``postControl``s, which exits).
-        // Precedence: explicit ``--view/--hide/--toggle`` > bare
-        // aliases > standalone ``--active``. ``--theme`` and
-        // ``--quit`` are independent and applied first.
+        // ``--theme`` and ``--quit`` are independent — applied
+        // first so they compose with the view dispatch below if
+        // both happen to be passed together.
         if let s = styleArg          { postStyle(s) }
-        if bareQuit                  { postControl("quit") }
+        if quitFlag                  { postControl("quit") }
 
         if let v = viewArg           { postView(v, active: activeFlag) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
-
-        if bareShow                  { postView("tree", active: activeFlag) }
-        if bareHide                  { postHide("tree") }
-        if bareToggle                { postToggle("tree") }
-        if activeFlag                { postView("tree", active: true) }
 
         // Server mode. Reached only when no client flag matched.
 

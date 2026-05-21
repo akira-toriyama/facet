@@ -64,31 +64,33 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 facet は **CLI 駆動**: 小さな flag set が稼働中の server に
 distributed notification を投げる仕組み。 hotkey ツール (skhd /
 Karabiner / Raycast / Hammerspoon / macOS Shortcuts 等) からこれら
-を bind して使う想定。
+を bind して使う想定。 完全リファレンスは `facet --help`。
 
 ```sh
-# View 対称コマンド (canonical):
-facet --view=tree                 # tree sidebar 表示 (idempotent)
-facet --view=tree --active        # 表示 + kb モード
-facet --view=grid                 # overview grid 表示 (idempotent)
-facet --hide=tree                 # tree を隠す
-facet --hide=grid                 # grid を閉じる
-facet --toggle=tree               # tree トグル
-facet --toggle=grid               # grid トグル
+# View 対称コマンド — NAME ∈ tree | grid、 全 op で必須
+facet --view=NAME [--active]      # NAME 開く (idempotent)
+facet --hide=NAME                 # NAME 閉じる
+facet --toggle=NAME               # NAME トグル
 
-# エイリアス ("tree" view 短縮形):
-facet --show     # = --view=tree
-facet --hide     # = --hide=tree
-facet --toggle   # = --toggle=tree
-facet --active   # = --view=tree --active
+# --active は修飾子 — --view=tree と組み合わせた時のみ意味あり
+# (kb モード)。 --view=grid と組み合わせると silent no-op (grid
+# は常に key/active)。
 
-# Server 制御:
+# Server 制御
 facet --theme=NAME                # terminal | cute | system
 facet --quit                      # server 終了
+facet --debug                     # verbose log (stderr +
+                                  # /tmp/facet.log、 server-mode)
+facet --help                      # 完全リファレンス
 ```
 
-不明な view / theme 名は exit `2` + stderr メッセージ — typo は
-silent fail せず明示エラー。
+不明な flag / view / theme 名は exit `2` + stderr メッセージ —
+typo は silent fail せず明示エラー。 短縮はシェル alias で対応:
+
+```sh
+alias fa='facet --view=tree --active'
+alias fg='facet --view=grid'
+```
 
 ## デバッグ
 
