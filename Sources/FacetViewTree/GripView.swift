@@ -107,13 +107,11 @@ public final class GripView: NSView {
         // next drag tick was about to read. Memory:
         // [[grid-branch-grip-intermittent]].
         controller?.gripResizeBegan()
-        NSCursor.nwse.set()
     }
 
     public override func mouseDragged(with e: NSEvent) {
         guard resizing else { return }
         controller?.resizeBy(dx: e.deltaX, dy: e.deltaY)
-        NSCursor.nwse.set()
     }
 
     public override func mouseUp(with e: NSEvent) {
@@ -125,6 +123,5 @@ public final class GripView: NSView {
         // refresh so any backend events skipped during the drag
         // land now.
         controller?.gripResizeEnded()
-        NSCursor.arrow.set()
     }
 }

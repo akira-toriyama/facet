@@ -24,6 +24,9 @@ public final class SidebarView: NSView {
     // MARK: - Wiring
 
     public weak var controller: TreeController?
+    /// Set by PanelHost. Used by mouseMoved to skip cursor handling
+    /// over the grip's hit area (it manages its own nwse cursor).
+    public weak var grip: NSView?
     private let backend: any WindowBackend
 
     public init(frame: NSRect, backend: any WindowBackend) {
@@ -283,16 +286,12 @@ public final class SidebarView: NSView {
             hoverIdx = i; needsDisplay = true
             controller?.previewTargetChanged()
         }
-        // Don't fight GripView for the cursor: SidebarView's tracking
-        // area covers the whole panel (scroll documentView), grip's
-        // area is a sub-rect at the bottom-right. Without this guard,
-        // every mouseMoved here flips the cursor back to arrow while
-        // the grip is trying to hold nwse — net visible: flicker / no
-        // cursor change at all.
-        if let grip = window?.contentView?.subviews
-            .first(where: { $0 is GripView }) {
-            let gripInWin = grip.convert(grip.bounds, to: nil)
-            if gripInWin.contains(e.locationInWindow) { return }
+        // Skip cursor handling over the grip's hit area — its own
+        // NSTrackingArea pushes nwse and this view's mouseMoved would
+        // flicker it back to arrow on every event.
+        if let g = grip {
+            let r = g.convert(g.bounds, to: nil)
+            if r.contains(e.locationInWindow) { return }
         }
         (i != nil ? NSCursor.pointingHand : NSCursor.arrow).set()
     }

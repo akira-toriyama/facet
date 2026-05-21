@@ -100,6 +100,7 @@ final class PanelHost {
 
         grip = GripView(frame: NSRect(x: 0, y: 0,
                                       width: gripSize, height: gripSize))
+        view.grip = grip   // cached weak ref, SidebarView.mouseMoved uses it
 
         effect.addSubview(bgView)
         effect.addSubview(scroll)
