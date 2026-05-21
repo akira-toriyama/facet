@@ -1,0 +1,19 @@
+# SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+*.swp
+
+# App bundles produced by local build scripts
+*.app/
+
+# Code signing
+.signing-id
+
+# Logs (local dev)
+/tmp/*.log
