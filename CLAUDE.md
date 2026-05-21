@@ -96,6 +96,30 @@ a `main.swift` file** — same trap as ws-tabs.
   — separate TCC grants, separate self-signed cert. Don't reuse
   ws-tabs's id even temporarily.
 
+### CLI surface
+
+- **Symmetric per-view ops**: ``--view=NAME``,
+  ``--hide=NAME``, ``--toggle=NAME``. Adding a new view
+  (dock, palette, hover-bar, …) only needs an entry in
+  ``Main.canonicalViews`` + matching cases in
+  ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
+  don't reintroduce per-view bespoke flags.
+- **``--active`` is a modifier**, not a verb. Only meaningful
+  combined with ``--view=tree`` (becomes ``view:tree+active`` on
+  the DNC). For grid it's silently ignored — the overlay is
+  always key/active by construction.
+- **Legacy alias flags** ``--show`` / ``--hide`` / ``--toggle`` /
+  ``--active`` (bare) resolve to the matching ``tree``
+  dispatch. Keep them — muscle memory + shorthand for the
+  most-used view. Document new flags only in the symmetric form
+  so the canonical surface stays obvious.
+- **``--view=NAME`` is idempotent (show)**, not toggle. To
+  toggle, use ``--toggle=NAME``. This is the one behaviour
+  change vs ws-tabs; do not regress it back to toggle-on-show.
+- **Typo rejection is loud**: unknown view / theme names
+  ``exit 2`` with a stderr message. Silent fallback is the
+  ws-tabs misfeature we deliberately don't reproduce.
+
 ### Logging
 
 - **`Log` lives in `FacetCore`** so both adapters and view modules

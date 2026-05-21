@@ -59,6 +59,37 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 (`facet --theme=cute` 等) はセッション中のみ有効; 永続化したい
 場合はファイルを編集。
 
+## CLI
+
+facet は **CLI 駆動**: 小さな flag set が稼働中の server に
+distributed notification を投げる仕組み。 hotkey ツール (skhd /
+Karabiner / Raycast / Hammerspoon / macOS Shortcuts 等) からこれら
+を bind して使う想定。
+
+```sh
+# View 対称コマンド (canonical):
+facet --view=tree                 # tree sidebar 表示 (idempotent)
+facet --view=tree --active        # 表示 + kb モード
+facet --view=grid                 # overview grid 表示 (idempotent)
+facet --hide=tree                 # tree を隠す
+facet --hide=grid                 # grid を閉じる
+facet --toggle=tree               # tree トグル
+facet --toggle=grid               # grid トグル
+
+# エイリアス ("tree" view 短縮形):
+facet --show     # = --view=tree
+facet --hide     # = --hide=tree
+facet --toggle   # = --toggle=tree
+facet --active   # = --view=tree --active
+
+# Server 制御:
+facet --theme=NAME                # terminal | cute | system
+facet --quit                      # server 終了
+```
+
+不明な view / theme 名は exit `2` + stderr メッセージ — typo は
+silent fail せず明示エラー。
+
 ## デバッグ
 
 `--debug` フラグで `/tmp/facet.log` への出力を stderr にもミラー

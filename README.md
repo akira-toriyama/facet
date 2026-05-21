@@ -59,6 +59,37 @@ root for every option + inline docs. Runtime CLI overrides
 (`facet --theme=cute` etc.) apply for the current session only;
 edit the file to make a change stick.
 
+## CLI
+
+facet is **CLI-driven**: a small set of flags posts a distributed
+notification to the running server. Bind these from whatever
+hotkey tool you already use (skhd, Karabiner, Raycast,
+Hammerspoon, macOS Shortcuts, …).
+
+```sh
+# Symmetric per-view ops (canonical):
+facet --view=tree                 # show the tree sidebar (idempotent)
+facet --view=tree --active        # show + keyboard-nav mode
+facet --view=grid                 # open the overview grid (idempotent)
+facet --hide=tree                 # hide tree
+facet --hide=grid                 # close grid
+facet --toggle=tree               # toggle tree visibility
+facet --toggle=grid               # toggle grid visibility
+
+# Aliases (shorthand for the common "tree" view):
+facet --show     # = --view=tree
+facet --hide     # = --hide=tree
+facet --toggle   # = --toggle=tree
+facet --active   # = --view=tree --active
+
+# Server controls:
+facet --theme=NAME                # terminal | cute | system
+facet --quit                      # terminate the running server
+```
+
+Unknown view / theme names exit `2` with a stderr message — typos
+fail loudly rather than silently no-op.
+
 ## Debugging
 
 Start facet with `--debug` to mirror everything that goes into

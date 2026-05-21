@@ -149,29 +149,75 @@ final class Controller: NSObject {
             let cmd = (note.object as? String) ?? ""
             MainActor.assumeIsolated {
                 guard let self else { return }
+                Log.debug("dnc cmd=\(cmd)")
                 switch cmd {
-                case "show":   self.setHidden(false)
-                case "hide":   self.setHidden(true)
-                case "active": self.enterActive()
-                case "quit":   NSApp.terminate(nil)
+                // -- Legacy aliases (kept for muscle-memory /
+                // shorthand). All resolve to the canonical
+                // dispatchView/Hide/Toggle("tree", …) underneath.
+                case "show":     self.dispatchView("tree", active: false)
+                case "hide":     self.dispatchHide("tree")
+                case "active":   self.dispatchView("tree", active: true)
+                case "quit":     NSApp.terminate(nil)
                 case let s where s.hasPrefix("style:"):
                     self.applyStyle(
                         String(s.dropFirst("style:".count)))
+
+                // -- Symmetric view ops --
                 case let s where s.hasPrefix("view:"):
-                    // Unknown view names are silently ignored (no
-                    // fallback to another view — matches the
-                    // ``--theme`` validator's policy of staying
-                    // out of the user's way).
-                    switch String(s.dropFirst("view:".count)) {
-                    case "grid": self.toggleGrid()
-                    default:     break
-                    }
+                    // Payload: ``NAME`` or ``NAME+active``.
+                    let rest = String(s.dropFirst("view:".count))
+                    let parts = rest.split(separator: "+", maxSplits: 1)
+                    let name = String(parts.first ?? "")
+                    let active = parts.count > 1 && parts[1] == "active"
+                    self.dispatchView(name, active: active)
+                case let s where s.hasPrefix("hide:"):
+                    self.dispatchHide(
+                        String(s.dropFirst("hide:".count)))
+                case let s where s.hasPrefix("toggle:"):
+                    self.dispatchToggle(
+                        String(s.dropFirst("toggle:".count)))
+
                 default:
-                    // Bare `facet --toggle` (no qualifier): flip
-                    // the panel's hidden state.
-                    self.setHidden(!self.userHidden)
+                    // Bare unrecognised payload: treat as a tree
+                    // toggle. Matches the historical ws-tabs
+                    // ``--toggle`` (no qualifier) behaviour.
+                    self.dispatchToggle("tree")
                 }
             }
+        }
+    }
+
+    // MARK: - Symmetric view dispatch
+
+    /// Open (or activate) ``name``. Idempotent — re-issuing the
+    /// same view doesn't toggle it off; use ``dispatchToggle`` /
+    /// ``dispatchHide`` for that.
+    private func dispatchView(_ name: String, active: Bool) {
+        switch name {
+        case "tree":
+            if active { enterActive() } else { setHidden(false) }
+        case "grid":
+            // ``+active`` is silently a no-op for grid — the
+            // overlay is always key/active by nature.
+            showGrid()
+        default:
+            Log.debug("dispatchView unknown=\(name) — ignored")
+        }
+    }
+
+    private func dispatchHide(_ name: String) {
+        switch name {
+        case "tree": setHidden(true)
+        case "grid": hideGrid()
+        default:     Log.debug("dispatchHide unknown=\(name) — ignored")
+        }
+    }
+
+    private func dispatchToggle(_ name: String) {
+        switch name {
+        case "tree": setHidden(!userHidden)
+        case "grid": toggleGrid()
+        default:     Log.debug("dispatchToggle unknown=\(name) — ignored")
         }
     }
 
