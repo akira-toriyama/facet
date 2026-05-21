@@ -72,6 +72,14 @@ final class Controller: NSObject {
     private var treeWasHidden = false
     var isGridVisible: Bool { gridOverlay != nil }
 
+    // MARK: - Active mode (kb-nav)
+
+    private var kbMonitor: Any?
+    /// Frontmost app at the moment ``enterActive`` was called, so
+    /// ``exitActive(restore: true)`` can hand focus back.
+    private var prevApp: NSRunningApplication?
+    private let searchDelegate = SearchFieldDelegate()
+
     // MARK: - Subscription / polling
 
     private var eventTask: Task<Void, Never>?
@@ -98,6 +106,12 @@ final class Controller: NSObject {
         view.controller = self
         panelHost.grip.controller = self
         if #available(macOS 14.0, *) { winPreview = WindowPreview() }
+        searchDelegate.onChange = { [weak self] q in
+            MainActor.assumeIsolated {
+                self?.sidebarView.setQuery(q)
+            }
+        }
+        panelHost.searchBar.field.delegate = searchDelegate
     }
 
     // MARK: - Lifecycle
@@ -506,6 +520,136 @@ final class Controller: NSObject {
         }
     }
 
+    // MARK: - Active mode (--active keyboard navigation)
+    //
+    // `--show` stays passive (non-activating, never steals focus).
+    // `--active` additionally makes the app/panel key so a plain
+    // local NSEvent monitor receives ↑↓/Enter/Esc — no Input
+    // Monitoring, no CGEventTap (that path was the silent-failure
+    // trap ws-tabs deleted with the old hotkey).
+
+    func enterActive() {
+        setHidden(false)                           // ensure visible
+        if kbMonitor == nil {
+            kbMonitor = NSEvent.addLocalMonitorForEvents(
+                matching: .keyDown
+            ) { [weak self] e in
+                guard let self, self.sidebarView.kbNav else { return e }
+                return self.handleKbKey(e) ? nil : e
+            }
+        }
+        prevApp = NSWorkspace.shared.frontmostApplication
+        // A .accessory + .nonactivatingPanel app can't reliably
+        // become key, so the local keyDown monitor wouldn't fire
+        // and keys leaked to the window behind. Become a regular
+        // app for the duration of keyboard mode so we actually
+        // take key focus; revert on exit.
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        panelHost.makeKey()
+        sidebarView.enterKbNav()
+    }
+
+    func _exitActiveImpl(restore: Bool) {
+        if let m = kbMonitor {
+            NSEvent.removeMonitor(m); kbMonitor = nil
+        }
+        guard sidebarView.kbNav else { return }
+        sidebarView.exitKbNav()                    // also clears `searching`
+        panelHost.resignKey()
+        panelHost.layout(contentHeight: sidebarView.contentHeight,
+                         searching: sidebarView.searching)
+        NSApp.setActivationPolicy(.accessory)      // back to LSUIElement
+        if restore, let p = prevApp { p.activate() }
+        prevApp = nil
+    }
+
+    /// Returns true if the key was consumed (swallowed so it doesn't
+    /// beep or fall through to whatever is behind the panel).
+    private func handleKbKey(_ e: NSEvent) -> Bool {
+        let ctrl = e.modifierFlags.contains(.control)
+        let shift = e.modifierFlags.contains(.shift)
+
+        // A Space-opened context menu is up: let its own monitor
+        // handle keys (Esc closes, mouse picks). Don't run nav /
+        // exit-active here.
+        if PopupMenu.shared.isOpen { return false }
+
+        // -- Type-to-filter sub-mode --
+        // Nav/commit keys consumed here; everything else returns
+        // false so the event reaches the NSTextField (text + IME
+        // work natively).
+        if sidebarView.searching {
+            // While the IME has uncommitted text, intercept nothing:
+            // Enter commits the conversion, arrows move candidates,
+            // Esc cancels — all must reach the input.
+            if panelHost.searchBar.isComposing { return false }
+            switch e.keyCode {
+            case 53:                                            // Esc
+                if panelHost.searchBar.stringValue.isEmpty {
+                    exitSearch()
+                } else {
+                    panelHost.searchBar.stringValue = ""
+                    sidebarView.setQuery("")
+                }
+                return true
+            case 36, 76:  sidebarView.kbActivate();      return true
+            case 125:     sidebarView.kbMove(1);         return true
+            case 126:     sidebarView.kbMove(-1);        return true
+            case 48:      sidebarView.kbMove(shift ? -1 : 1)
+                          return true
+            default:      break
+            }
+            if ctrl, e.charactersIgnoringModifiers?.lowercased() == "n" {
+                sidebarView.kbMove(1);  return true
+            }
+            if ctrl, e.charactersIgnoringModifiers?.lowercased() == "p" {
+                sidebarView.kbMove(-1); return true
+            }
+            return false           // → NSTextField (typing, IME, ⌫)
+        }
+
+        // -- Normal keyboard nav --
+        switch e.keyCode {
+        case 53:      _exitActiveImpl(restore: true);    return true
+        case 36, 76:  sidebarView.kbActivate();          return true
+        case 125:     sidebarView.kbMove(1);             return true
+        case 126:     sidebarView.kbMove(-1);            return true
+        case 124:     sidebarView.kbJumpWS(1);           return true
+        case 123:     sidebarView.kbJumpWS(-1);          return true
+        case 48:      sidebarView.kbJumpWS(shift ? -1 : 1)
+                      return true
+        case 49:      sidebarView.kbContextMenu();       return true
+        default:      break
+        }
+        switch e.charactersIgnoringModifiers?.lowercased() {
+        case "n" where ctrl: sidebarView.kbMove(1);      return true
+        case "p" where ctrl: sidebarView.kbMove(-1);     return true
+        case "j":            sidebarView.kbMove(1);      return true
+        case "k":            sidebarView.kbMove(-1);     return true
+        case "l":            sidebarView.kbJumpWS(1);    return true
+        case "h":            sidebarView.kbJumpWS(-1);   return true
+        case "s":            enterSearch();              return true
+        default:             return false
+        }
+    }
+
+    private func enterSearch() {
+        sidebarView.beginSearch()
+        panelHost.searchBar.stringValue = ""
+        panelHost.layout(contentHeight: sidebarView.contentHeight,
+                         searching: sidebarView.searching)
+        // IME input goes to the field.
+        panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
+    }
+
+    private func exitSearch() {
+        sidebarView.endSearch()
+        panelHost.resignKey()
+        panelHost.layout(contentHeight: sidebarView.contentHeight,
+                         searching: sidebarView.searching)
+    }
+
     func hideGrid() {
         guard let overlay = gridOverlay else { return }
         if let m = gridKbMonitor {
@@ -531,6 +675,8 @@ final class Controller: NSObject {
     func setHidden(_ hide: Bool) {
         userHidden = hide
         if hide {
+            _exitActiveImpl(restore: false)
+            previewTimer?.invalidate(); previewPool.hideAll()
             panelHost.hide()
         } else {
             refresh()
@@ -615,7 +761,6 @@ extension Controller: TreeController {
     }
 
     func exitActive(restore: Bool) {
-        // Implemented in step 6g (keyboard-nav --active mode,
-        // NSApp activation policy, prevApp restore).
+        _exitActiveImpl(restore: restore)
     }
 }
