@@ -110,6 +110,23 @@ final class Controller: NSObject {
             }
         }
         panelHost.searchBar.field.delegate = searchDelegate
+        // Passive keyboard nav: when the panel acquires key status
+        // (e.g. user clicks it without --active), enable kbNav so
+        // arrow keys / s / Enter all work; relinquish on resign.
+        panelHost.onKeyChanged = { [weak self] isKey in
+            self?.handlePanelKeyChange(isKey: isKey)
+        }
+    }
+
+    private func handlePanelKeyChange(isKey: Bool) {
+        if isKey {
+            if !sidebarView.kbNav { sidebarView.enterKbNav() }
+        } else {
+            // Drop kbNav. If we got here via --active's
+            // _exitActiveImpl path, exitKbNav has already run and
+            // this is a harmless idempotent call.
+            if sidebarView.kbNav { sidebarView.exitKbNav() }
+        }
     }
 
     // MARK: - Lifecycle
@@ -634,14 +651,10 @@ final class Controller: NSObject {
     func enterActive() {
         Log.debug("enterActive")
         setHidden(false)                           // ensure visible
-        if kbMonitor == nil {
-            kbMonitor = NSEvent.addLocalMonitorForEvents(
-                matching: .keyDown
-            ) { [weak self] e in
-                guard let self, self.sidebarView.kbNav else { return e }
-                return self.handleKbKey(e) ? nil : e
-            }
-        }
+        // kbMonitor was already installed by setHidden(false) so
+        // `s` works even in passive (--view=tree without --active)
+        // when the panel has focus; enterActive only flips kbNav on
+        // to unlock the full nav set (↑↓/Enter/Esc/etc).
         prevApp = NSWorkspace.shared.frontmostApplication
         // A .accessory + .nonactivatingPanel app can't reliably
         // become key, so the local keyDown monitor wouldn't fire
@@ -656,9 +669,10 @@ final class Controller: NSObject {
 
     func _exitActiveImpl(restore: Bool) {
         Log.debug("exitActive restore=\(restore) wasKbNav=\(sidebarView.kbNav)")
-        if let m = kbMonitor {
-            NSEvent.removeMonitor(m); kbMonitor = nil
-        }
+        // Don't remove kbMonitor here — passive `s` opens search after
+        // the panel is clicked, which we want to keep. The monitor's
+        // own `panel.isKeyWindow` guard means it's idempotent /
+        // harmless while the panel isn't focused.
         guard sidebarView.kbNav else { return }
         sidebarView.exitKbNav()                    // also clears `searching`
         panelHost.resignKey()
@@ -672,6 +686,11 @@ final class Controller: NSObject {
     /// Returns true if the key was consumed (swallowed so it doesn't
     /// beep or fall through to whatever is behind the panel).
     private func handleKbKey(_ e: NSEvent) -> Bool {
+        // Only intercept keys when our panel actually has focus.
+        // Without this, the local monitor would catch keys while
+        // a different window is key and silently swallow them.
+        guard panelHost.panel.isKeyWindow else { return false }
+
         let ctrl = e.modifierFlags.contains(.control)
         let shift = e.modifierFlags.contains(.shift)
 
@@ -713,6 +732,9 @@ final class Controller: NSObject {
             }
             return false           // → NSTextField (typing, IME, ⌫)
         }
+
+        // panel.isKeyWindow already implies kbNav was enabled by the
+        // didBecomeKey hook below — fall through to the full nav.
 
         // -- Normal keyboard nav --
         switch e.keyCode {
@@ -785,8 +807,25 @@ final class Controller: NSObject {
             _exitActiveImpl(restore: false)
             previewTimer?.invalidate(); previewPool.hideAll()
             panelHost.hide()
+            removeKbMonitor()
         } else {
+            installKbMonitor()
             refresh()
+        }
+    }
+
+    private func installKbMonitor() {
+        guard kbMonitor == nil else { return }
+        kbMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown
+        ) { [weak self] e in
+            guard let self else { return e }
+            return self.handleKbKey(e) ? nil : e
+        }
+    }
+
+    private func removeKbMonitor() {
+        if let m = kbMonitor {
+            NSEvent.removeMonitor(m); kbMonitor = nil
         }
     }
 }

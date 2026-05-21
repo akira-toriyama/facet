@@ -33,6 +33,12 @@ final class PanelHost: NSObject {
     let searchBar: SearchBar
     private let view: SidebarView
 
+    /// Notified when the panel becomes / resigns key. Controller wires
+    /// kbNav on/off here so a plain click on the tree panel (without
+    /// --active) still enables keyboard navigation while the panel is
+    /// focused.
+    var onKeyChanged: ((Bool) -> Void)?
+
     // MARK: - Persisted geometry
 
     private(set) var anchorTL: NSPoint      // top-left in screen coords
@@ -271,5 +277,13 @@ extension PanelHost: NSWindowDelegate {
 
     nonisolated func windowDidEndLiveResize(_ notification: Notification) {
         MainActor.assumeIsolated { persistPosition() }
+    }
+
+    nonisolated func windowDidBecomeKey(_ notification: Notification) {
+        MainActor.assumeIsolated { onKeyChanged?(true) }
+    }
+
+    nonisolated func windowDidResignKey(_ notification: Notification) {
+        MainActor.assumeIsolated { onKeyChanged?(false) }
     }
 }
