@@ -288,6 +288,28 @@ contributors (human or AI) reopening the repo cold.
 - [GitHub topic: domain-driven-design](https://github.com/topics/domain-driven-design)
   — entry point for cross-language DDD pattern examples.
 
+### Conventions (commit / version)
+- [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+  — the commit-message spec facet's
+  [docs/commit-convention.md](docs/commit-convention.md) is
+  built on. ``cliff.toml`` parses ``<type>(<scope>)<!>:
+  <subject>`` per this spec; git-cliff derives the next semver
+  from the ``type`` field.
+- [gitmoji](https://gitmoji.dev/)
+  — emoji vocabulary the convention prepends. Use this site to
+  look up the ``:code:`` form (the convention requires the code
+  form, not the literal emoji glyph) and which emoji matches
+  which intent. carloscuesta/gitmoji repo + JSON are downstream
+  of this site; the site is the canonical reference.
+
+### Packaging / Release
+- [Homebrew](https://brew.sh/ja/)
+  — the distribution channel for the M3+ release. ``brew
+  install akira-toriyama/tap/facet`` lands at M3;
+  ``.github/workflows/update-tap.yml`` automates formula bumps
+  on every published release. Consult when authoring or
+  modifying the formula at ``akira-toriyama/homebrew-tap``.
+
 ### GitHub / CI
 - [GitHub Docs (root)](https://docs.github.com)
   — entry point for everything GitHub-related: Actions, REST
