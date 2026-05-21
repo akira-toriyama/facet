@@ -57,5 +57,7 @@ let package = Package(
                 "FacetViewGrid",
             ]),
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
+        .testTarget(name: "FacetAdapterRiftTests",
+                    dependencies: ["FacetAdapterRift", "FacetCore"]),
     ]
 )
