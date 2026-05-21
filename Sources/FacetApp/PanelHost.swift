@@ -37,8 +37,8 @@ final class PanelHost {
 
     private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
     private let gripSize: CGFloat = 80         // hit area; chevron visual stays compact via GripView.draw
-    private let scrollerInset: CGFloat = 30    // grip clear of the overlay scroller's hit-strip
-    private let gripBottomInset: CGFloat = 12  // grip clear of effect.cornerRadius pixels
+    private let scrollerInset: CGFloat = 8     // grip skirts the overlay scroller (~14 px visible, 8 leaves a sliver)
+    private let gripBottomInset: CGFloat = 0   // flush with the panel bottom; round-corner overlap accepted for corner-feel
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160

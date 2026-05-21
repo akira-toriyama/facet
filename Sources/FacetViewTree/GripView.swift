@@ -73,17 +73,18 @@ public final class GripView: NSView {
     }
 
     public override func draw(_ dirty: NSRect) {
-        pal.dim.withAlphaComponent(0.8).setStroke()
+        pal.accent.setStroke()
         let p = NSBezierPath()
-        p.lineWidth = 1.5
+        p.lineWidth = 2.0
         let b = bounds
         // Chevron at the grip's bottom-right (= visual edge of the
         // hit area). The grip's *frame* is already shifted left by
         // PanelHost.scrollerInset so this position sits just left of
         // the overlay scrollbar — guarantees visual == hit target.
-        for off in [CGFloat(3), 7, 11] {
-            p.move(to: NSPoint(x: b.maxX - off, y: b.minY + 3))
-            p.line(to: NSPoint(x: b.maxX - 3, y: b.minY + off))
+        let edge: CGFloat = 4
+        for off in [CGFloat(4), 10, 16] {
+            p.move(to: NSPoint(x: b.maxX - off,  y: b.minY + edge))
+            p.line(to: NSPoint(x: b.maxX - edge, y: b.minY + off))
         }
         p.stroke()
     }
