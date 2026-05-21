@@ -1,0 +1,27 @@
+# Dependabot config for facet.
+#
+# - github-actions: 4 workflows (build / commit-lint / release /
+#   update-tap) pin third-party actions (checkout, setup-xcode,
+#   install-action, etc) by major version. Weekly update PRs keep
+#   them honest without flooding the inbox.
+# - Swift Package Manager intentionally omitted: facet pulls zero
+#   external SwiftPM dependencies (Apple frameworks only); see
+#   the "dependency policy" in design-principles memory.
+#
+# Commit messages follow the gitmoji + Conventional Commits
+# convention in docs/commit-convention.md so commit-lint.yml stays
+# green on dependabot PRs.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ":arrow_up: chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
