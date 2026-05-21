@@ -37,6 +37,7 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .executable(name: "facet", targets: ["FacetApp"]),
+        .executable(name: "panel-sandbox", targets: ["PanelSandbox"]),
         .library(name: "FacetCore", targets: ["FacetCore"]),
     ],
     targets: [
@@ -56,6 +57,9 @@ let package = Package(
                 "FacetViewTree",
                 "FacetViewGrid",
             ]),
+        // Standalone sandbox for trying NSPanel styleMask / resize
+        // permutations side-by-side. No facet deps — just AppKit.
+        .executableTarget(name: "PanelSandbox"),
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
         .testTarget(name: "FacetAdapterRiftTests",
                     dependencies: ["FacetAdapterRift", "FacetCore"]),
