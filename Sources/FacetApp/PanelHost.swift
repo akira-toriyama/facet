@@ -41,7 +41,7 @@ final class PanelHost {
 
     private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
     private let gripSize: CGFloat = 80         // hit area; chevron visual stays compact via GripView.draw
-    private let scrollerInset: CGFloat = 8     // right grips skirt the overlay scroller (~14 px visible, 8 leaves a sliver)
+    private let sideInset: CGFloat = 0         // grips flush with panel edges; overlay scroller may briefly overlap right chevrons when visible
     private let gripBottomInset: CGFloat = 0   // bottom grips flush with panel bottom; round-corner overlap accepted
     private let topClearance: CGFloat = 16     // empty band at panel top so TL/TR grips don't sit over the WS-header row + master_stack pill
     private let screenMargin: CGFloat = 8
@@ -254,25 +254,24 @@ final class PanelHost {
         // don't sit over the WS-header row inside the scroll content.
         let topGripsVisible = !searching
         let topClear: CGFloat = topGripsVisible ? topClearance : 0
-        scroll.frame = NSRect(x: 0, y: 0,
-                              width: frame.width,
+        scroll.frame = NSRect(x: sideInset, y: 0,
+                              width: frame.width - 2 * sideInset,
                               height: frame.height - sh - topClear)
-        // 4 corner grips. Right-side grips inset by scrollerInset to
-        // dodge the overlay scroller. Top grips sit in the cleared
-        // band at the panel's top edge.
-        let rx = frame.width - gripSize - scrollerInset   // right grips x
-        let ty = frame.height - gripSize - sh             // top grips top-flush
+        // 4 corner grips, symmetric L/R inset.
+        let rx = frame.width - gripSize - sideInset   // right grips x
+        let lx = sideInset                            // left grips x
+        let ty = frame.height - gripSize - sh         // top grips top-flush
         gripBR.frame = NSRect(x: rx, y: gripBottomInset,
                               width: gripSize, height: gripSize)
-        gripBL.frame = NSRect(x: 0, y: gripBottomInset,
+        gripBL.frame = NSRect(x: lx, y: gripBottomInset,
                               width: gripSize, height: gripSize)
         gripTR.frame = NSRect(x: rx, y: ty,
                               width: gripSize, height: gripSize)
-        gripTL.frame = NSRect(x: 0, y: ty,
+        gripTL.frame = NSRect(x: lx, y: ty,
                               width: gripSize, height: gripSize)
         gripTR.isHidden = !topGripsVisible
         gripTL.isHidden = !topGripsVisible
-        view.frame = NSRect(x: 0, y: 0, width: frame.width,
+        view.frame = NSRect(x: 0, y: 0, width: frame.width - 2 * sideInset,
                             height: max(contentH, h - sh - topClear))
         // Lock min == max == current to tell macOS this window
         // isn't user-resizable. Without this, the system surfaces
