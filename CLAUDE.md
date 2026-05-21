@@ -96,6 +96,23 @@ a `main.swift` file** — same trap as ws-tabs.
   — separate TCC grants, separate self-signed cert. Don't reuse
   ws-tabs's id even temporarily.
 
+### Logging
+
+- **`Log` lives in `FacetCore`** so both adapters and view modules
+  can call it without crossing layer rules. Two functions:
+  ``Log.line`` (always on, for end-user-visible operational events
+  like AX focus mismatches) and ``Log.debug`` (gated by the
+  ``debugMode`` global, set from ``facet --debug`` at startup).
+- **Both write to `/tmp/facet.log`**; ``--debug`` also mirrors to
+  stderr so foreground users see events live and bug reports can
+  capture them with ``2>&1 | tee bug.log``. Non-debug runs stay
+  quiet on stderr so a backgrounded ``facet &`` doesn't pollute
+  the launching shell.
+- **Use ``Log.debug`` liberally** in Controller / Adapter /
+  EventSource hot paths. It costs one bool check when disabled.
+  Skip view-side handlers (mouseMoved etc.) — they fire too often
+  to be useful even with the gate.
+
 ### Configuration
 
 - **`config.toml` at the repo root is the source-of-truth template**.

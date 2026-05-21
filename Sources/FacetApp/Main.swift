@@ -71,6 +71,12 @@ enum FacetApp {
 
     static func main() {
         let argv = Array(CommandLine.arguments.dropFirst())
+
+        // Set debug mode first so any subsequent code path (incl.
+        // the validators that fire from client mode) can use
+        // ``Log.debug``. Bare flag, no value.
+        if argv.contains("--debug") { debugMode = true }
+
         for (i, a) in argv.enumerated() {
             switch true {
             case a == "--show", a == "--hide", a == "--toggle",
@@ -86,6 +92,10 @@ enum FacetApp {
                 postView(String(a.dropFirst("--view=".count)))
             case a == "--view":
                 postView(i + 1 < argv.count ? argv[i + 1] : "")
+            case a == "--debug":
+                // Handled above; skip during normal dispatch so
+                // it doesn't fall to client mode or trigger help.
+                continue
             default:
                 break
             }

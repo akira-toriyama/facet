@@ -59,6 +59,22 @@ root for every option + inline docs. Runtime CLI overrides
 (`facet --theme=cute` etc.) apply for the current session only;
 edit the file to make a change stick.
 
+## Debugging
+
+Start facet with `--debug` to mirror everything that goes into
+`/tmp/facet.log` to stderr as well, and to turn on verbose
+tracing (refresh ticks, backend commands, focus retries, grid
+DnD events, …):
+
+```sh
+.build/release/facet --debug              # foreground — events scroll live
+.build/release/facet --debug 2>&1 | tee bug.log   # capture for an issue
+```
+
+`--debug` only takes effect at server startup (it's a no-op when
+combined with client-mode flags like `--show`). Without it the
+app stays quiet on stderr and `Log.debug` calls are zero-cost.
+
 ## Build from source
 
 ```sh

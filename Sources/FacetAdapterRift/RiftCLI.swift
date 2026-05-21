@@ -4,6 +4,7 @@
 // thread until it exits (~10 ms).
 
 import Foundation
+import FacetCore
 
 enum RiftCLI {
     // Hard-coded for now; rift is brew-installed under Apple silicon's
@@ -23,9 +24,16 @@ enum RiftCLI {
         // parent (reading stdout). rift-cli's stderr is never useful
         // to us, so drop it outright.
         p.standardError = FileHandle.nullDevice
-        do { try p.run() } catch { return nil }
+        do { try p.run() } catch {
+            let argStr = args.joined(separator: " ")
+            Log.debug("rift-cli spawn failed: \(argStr) — \(error)")
+            return nil
+        }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
+        let bytes = data.count
+        Log.debug("rift-cli " + args.joined(separator: " ")
+            + " → exit=\(p.terminationStatus) bytes=\(bytes)")
         return p.terminationStatus == 0 ? data : nil
     }
 }

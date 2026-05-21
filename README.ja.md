@@ -59,6 +59,21 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 (`facet --theme=cute` 等) はセッション中のみ有効; 永続化したい
 場合はファイルを編集。
 
+## デバッグ
+
+`--debug` フラグで `/tmp/facet.log` への出力を stderr にもミラー
+し、 verbose トレース (refresh tick、 backend command、 focus
+retry、 grid DnD イベント等) を有効化:
+
+```sh
+.build/release/facet --debug              # foreground でイベント流れる
+.build/release/facet --debug 2>&1 | tee bug.log   # issue 用にキャプチャ
+```
+
+`--debug` は server 起動時のみ有効 (`--show` 等の client mode flag
+と併用しても no-op)。 通常起動では stderr は静か、 `Log.debug` 呼出
+もゼロコスト。
+
 ## ソースからビルド
 
 ```sh

@@ -121,6 +121,7 @@ final class Controller: NSObject {
     /// in the sense that calling it twice will leak the previous
     /// event task — don't.
     func start() {
+        Log.debug("controller start")
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await _ in self.backend.events {
@@ -181,6 +182,7 @@ final class Controller: NSObject {
     func applyStyle(_ name: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
+        Log.debug("applyStyle name=\(key)")
         pal = paletteFor(key)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
@@ -205,12 +207,14 @@ final class Controller: NSObject {
         // both this refresh's eventual `apply` and the grip's
         // `resizeBy` mutate `panel.frame` on the main thread. The
         // mouseUp re-runs refresh() so no backend snapshot is lost.
-        if isGripResizing { return }
+        if isGripResizing { Log.debug("refresh skipped (gripResizing)"); return }
+        Log.debug("refresh dispatch")
         let bk = backend
         cliQueue.async {
             let wss = bk.workspaces()
             // Fill in titles the backend left blank (AX, off-main).
             let titles = AXTitles.resolve(wss)
+            Log.debug("refresh fetched wss=\(wss.count) titles=\(titles.count)")
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
                     self?.apply(wss, titles)
@@ -375,6 +379,7 @@ final class Controller: NSObject {
     }
 
     func showGrid() {
+        Log.debug("showGrid request (isVisible=\(isGridVisible))")
         if isGridVisible { return }
         guard let scr = NSScreen.main else { return }
         // No snapshot yet (cold start, never queried): trigger an
@@ -580,6 +585,7 @@ final class Controller: NSObject {
     // trap ws-tabs deleted with the old hotkey).
 
     func enterActive() {
+        Log.debug("enterActive")
         setHidden(false)                           // ensure visible
         if kbMonitor == nil {
             kbMonitor = NSEvent.addLocalMonitorForEvents(
@@ -602,6 +608,7 @@ final class Controller: NSObject {
     }
 
     func _exitActiveImpl(restore: Bool) {
+        Log.debug("exitActive restore=\(restore) wasKbNav=\(sidebarView.kbNav)")
         if let m = kbMonitor {
             NSEvent.removeMonitor(m); kbMonitor = nil
         }
@@ -702,6 +709,7 @@ final class Controller: NSObject {
     }
 
     func hideGrid() {
+        Log.debug("hideGrid")
         guard let overlay = gridOverlay else { return }
         if let m = gridKbMonitor {
             NSEvent.removeMonitor(m); gridKbMonitor = nil
@@ -724,6 +732,7 @@ final class Controller: NSObject {
     // MARK: - Visibility
 
     func setHidden(_ hide: Bool) {
+        Log.debug("setHidden hide=\(hide)")
         userHidden = hide
         if hide {
             _exitActiveImpl(restore: false)
@@ -777,6 +786,8 @@ extension Controller: TreeController {
     // -- Focus
 
     func focusWindow(_ window: Window, postSwitch: Bool) {
+        Log.debug("focusWindow id=\(window.id.serverID) "
+            + "pid=\(window.pid) postSwitch=\(postSwitch)")
         cliQueue.async { [bk = backend] in
             if postSwitch {
                 Focus.assert(window, backend: bk)
