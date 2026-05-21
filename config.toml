@@ -54,9 +54,11 @@ theme = "terminal"
 [grid]
 
 # Number of columns in the overview grid. The row count is derived
-# from the number of workspaces (e.g. 15 workspaces with cols = 4
-# → 4/4/4/3 rows). Clamped 1..12.
-cols = 4
+# from the number of workspaces (e.g. 15 workspaces with cols = 5
+# → 5/5/5 rows). Clamped 1..12. Built-in fallback (when this file
+# is absent entirely) is 4; the install template ships with 5
+# because it's the sweet spot for typical workspace counts.
+cols = 5
 
 # Where the workspace label sits relative to its cell.
 #
