@@ -18,8 +18,80 @@ facet は [ws-tabs](https://github.com/akira-toriyama/ws-tabs) の
 アーキテクチャ後継。 ws-tabs v1.6 で完成した grid view の DnD
 （macOS が Big Sur で壊した TS3 "ウィンドウを別 Space にドラッグ"
 UX を rift-cli 経由で復活させたもの）を、 クリーンな三層構造に
-リストラクチャしながら持ち込んでる。 詳細は
+リストラクチャして持ち込み済み。 詳細は
 [docs/architecture.md](docs/architecture.md)。
+
+## 何ができるか
+
+facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
+ワークスペースを 2 種類の view で見せる。 起動時にどちらを表示する
+かは [`config.toml`](config.toml) の `default_view` で選ぶ:
+
+- **Tree** — 半透明・常時最前面のサイドバー。 rift 各ワークスペースと
+  その windows をツリー表示。 行クリックで focus、 行ドラッグで window
+  を別 ws に移動、 ホバーで実画面プレビュー。
+- **Grid** — フルスクリーンの TS3 風オーバービュー。 1 セル =
+  1 ワークスペース、 ScreenCaptureKit のリアルサムネイル、 セル間 DnD
+  (通常ドラッグで window 移動、 Shift+ドラッグでセル丸ごと内容
+  swap)。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
+  で閉じる。
+
+両 view は同じ backend (現状 `rift-cli`、 将来 swap 可) と同じ
+テーマ (terminal / cute / system、 ライブ切替) を共有。
+
+## 操作
+
+| 操作 | 結果 |
+|---|---|
+| window 行クリック (tree) | そのワークスペースに切替 + その window に focus |
+| ワークスペース header クリック (tree) | そのワークスペースに切替 |
+| window 行を別ワークスペースにドラッグ (tree) | その window を移動 |
+| 空白部分をドラッグ (tree) | パネル位置を変更 — 位置は永続 |
+| 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
+| window 行ホバー (tree、 macOS 14+) | その window の実画面位置でライブプレビュー |
+| セルクリック (grid) | そのワークスペースに切替 |
+| window サムネイルクリック (grid) | 切替 + その window に focus |
+| サムネイルを別セルにドラッグ (grid) | その window を移動 |
+| **Shift+ドラッグ** (grid) | source ↔ destination セルの内容を丸ごと swap |
+
+表示制御 / 非表示 / トグル / キーボードモードは全部 CLI 経由 —
+[CLI](#cli) 参照。
+
+### キーボードナビ (`facet --view=tree --active`)
+
+`--view=tree` 単体は passive (パネルは focus を奪わない)。
+`--active` を足すとパネルが key になりキーボード操作可。 hotkey
+ツールから `facet --view=tree --active` を bind:
+
+| キー | アクション |
+|---|---|
+| `↓`/`↑`, `Ctrl-N`/`Ctrl-P`, `j`/`k` | 行間移動 |
+| `Tab`/`⇧Tab`, `→`/`←`, `l`/`h` | 前/次ワークスペースへジャンプ |
+| `s` | type-to-filter: 全ワークスペース横断 fuzzy 検索 (本物の text field、 IME 動く) |
+| `Space` | 選択行のコンテキストメニュー (キーボード操作可: `↑↓`/`Return`/`Esc`) |
+| `Return` | 切替 + focus (クリックと同等) |
+| `Esc` | filter クリア → keyboard mode 抜ける (パネルは表示維持) |
+
+window タイトルは rift から取得、 rift が空を返す app
+(Chrome / Code 等) は Accessibility (`kAXTitle`、 CGWindowID で
+照合、 短 TTL キャッシュ) で解決。 タイトル解決できない行はコンパクト
+表示。 Accessibility 権限必要 (クリックと同じ grant)。
+
+### Grid オーバービューのキーボード操作
+
+| キー | アクション |
+|---|---|
+| 矢印 | セルカーソル移動 |
+| `Tab` / `⇧Tab` | 同一セル内で window 選択を循環 |
+| `Space` | 選択 window を持ち上げ (キーボード DnD)、 矢印で照準、 `Return` で確定 |
+| `Shift+Space` | セル丸ごと持ち上げ (swap) |
+| `Return` | 持ち上げ中なら確定 / 通常時は切替 |
+| `Esc` | 持ち上げをキャンセル / オーバービューを閉じる |
+
+セルは **ScreenCaptureKit サムネイル** (macOS 14+、 Screen Recording
+権限必要) で描画。 バックグラウンド refresh でキャッシュを温めるので、
+オーバービュー初回表示でアイコンフォールバックではなく実スクリーン
+ショットが出る。
 
 ## ステータス
 
@@ -126,6 +198,31 @@ bundle 化せずに verify だけ:
 swift build          # コンパイルのみ
 swift test           # XCTest — Xcode 必要 (CLT には入ってない)
 ```
+
+## 正直な制限事項
+
+- **Apple Silicon 専用**。 Intel Mac は対象外 (rift CLI path
+  `/opt/homebrew/bin/rift-cli` は意図的に固定 — M5+ で rift
+  adapter 自体を native adapter に丸ごと置き換える前提)。
+- **シングルディスプレイ前提** (rift が 1 つを返す)。 multi-display
+  での layout / preview 位置 は未検証。
+- **window preview は macOS 14+** + Screen Recording 権限が必要。
+  プレビューの表示位置に rift の論理 frame を使うため、 multi-display
+  の caveat はここにも適用。
+- **Ad-hoc 署名は rebuild ごとに Accessibility 再要求**。
+  `./setup-signing-cert.sh` を 1 度走らせると persistent な
+  self-signed identity ができ、 rebuild 跨ぎで TCC grant が維持
+  される (Homebrew install では install サブプロセスが login
+  keychain にアクセスできず ad-hoc になる — upgrade ごとに
+  再要求)。
+- **drop target はワークスペースの縦バンド単位** (tree view)。
+  空のワークスペースへのドロップも可 (header band が target)。
+- **WS 全体プレビュー** (ワークスペース header ホバー) は、 その
+  ワークスペースの window 数だけ overlay を並列キャプチャするので、
+  10+ window あると初回ホバーで CPU 一時 spike。
+- **チューニング定数は `Sources/Facet*/Tunables.swift`** に各
+  module ごと配置。 散らかった literal より、 これらの const を
+  調整するのを優先。
 
 ## 「facet」 という名前
 
