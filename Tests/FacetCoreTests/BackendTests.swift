@@ -5,6 +5,11 @@ import XCTest
 /// pure-logic tests. Adapters get their own contract tests under
 /// their module — this is just enough to prove the protocol compiles
 /// and that views/controller code can be written against it.
+///
+/// `@unchecked Sendable` is OK here because every test method touches
+/// this instance from a single thread (XCTest's test runner) — no
+/// real cross-actor sharing. Production conformers (`FacetAdapterRift`
+/// et al.) earn their Sendable conformance via internal serialization.
 private final class StubBackend: WindowBackend, @unchecked Sendable {
     let layoutModes = ["bsp", "stack"]
     var state: [Workspace] = []
@@ -37,7 +42,11 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
         items.append(.init("Close window", [], close: true))
         return items
     }
-    func startEvents(_ handler: @escaping @Sendable (BackendEvent) -> Void) {}
+    // Stream that never emits — sufficient for protocol-shape tests
+    // here. Adapter modules have their own event-plumbing tests.
+    var events: AsyncStream<BackendEvent> {
+        AsyncStream { _ in }
+    }
 }
 
 final class BackendTests: XCTestCase {

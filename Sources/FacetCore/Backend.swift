@@ -71,9 +71,13 @@ public protocol WindowBackend: Sendable {
     /// knowledge of which actions its layouts support.
     func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem]
 
-    /// Subscribe to backend state-change notifications. The handler
-    /// runs on a backend-owned background queue (not the main
-    /// thread). Call once at app start; there is no `stop` — adapters
-    /// tie the subscription to their own lifetime.
-    func startEvents(_ handler: @escaping @Sendable (BackendEvent) -> Void)
+    /// Stream of backend state-change notifications.
+    ///
+    /// Consumed once at app start by the controller — typically as
+    /// `for await event in backend.events { refresh() }` inside a
+    /// long-lived `Task`. Cancelling the task tears the subscription
+    /// down; the stream finishes when the adapter releases its
+    /// continuation. Single-subscriber by convention — each adapter
+    /// builds the stream once and replays nothing.
+    var events: AsyncStream<BackendEvent> { get }
 }
