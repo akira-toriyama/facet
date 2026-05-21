@@ -12,6 +12,12 @@ import CoreGraphics
 import Foundation
 import FacetCore
 
+/// Which corner of the panel a grip handle anchors. Drag from a
+/// corner keeps the opposite corner fixed.
+public enum GripCorner: Sendable {
+    case bottomRight, bottomLeft, topRight, topLeft
+}
+
 @MainActor
 public protocol TreeController: AnyObject, Sendable {
     /// Leave keyboard-nav (`--active`) mode. `restore == true` means
@@ -52,8 +58,10 @@ public protocol TreeController: AnyObject, Sendable {
     func gripResizeEnded()
 
     /// Per-mouseDragged-event resize delta from the grip. `dx` /
-    /// `dy` come straight from `NSEvent`.
-    func resizeBy(dx: CGFloat, dy: CGFloat)
+    /// `dy` come straight from `NSEvent`. `corner` identifies which
+    /// corner the user is dragging from — controller picks the
+    /// anchor (= the opposite corner stays put) and direction signs.
+    func resizeBy(dx: CGFloat, dy: CGFloat, corner: GripCorner)
 
     /// Move precise focus to `window`. Controller picks the retry
     /// strategy: bounded short retry for same-workspace clicks,

@@ -104,7 +104,7 @@ final class Controller: NSObject {
         self.panelHost = PanelHost(view: view)
         super.init()
         view.controller = self
-        panelHost.grip.controller = self
+        for g in panelHost.grips { g.controller = self }
         if #available(macOS 14.0, *) { winPreview = WindowPreview() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
@@ -223,7 +223,7 @@ final class Controller: NSObject {
         pal = paletteFor(key)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
-        panelHost.grip.needsDisplay = true
+        for g in panelHost.grips { g.needsDisplay = true }
     }
 
     // MARK: - Refresh / apply
@@ -807,8 +807,8 @@ extension Controller: TreeController {
         refresh()
     }
 
-    func resizeBy(dx: CGFloat, dy: CGFloat) {
-        panelHost.resizeBy(dx: dx, dy: dy)
+    func resizeBy(dx: CGFloat, dy: CGFloat, corner: GripCorner) {
+        panelHost.resizeBy(dx: dx, dy: dy, corner: corner)
     }
 
     // -- Refresh
