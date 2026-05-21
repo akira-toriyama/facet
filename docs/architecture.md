@@ -116,7 +116,7 @@ If a third / fourth view lands (dock, palette, hover-bar) **and**
 the same operation (e.g. "switch + focus this window") starts
 appearing in two view code paths, that's the signal to extract a
 `FacetUseCases` module. Until then, the rule is YAGNI (memory:
-[[yagni-kiss-no-compat]]).
+[[design-principles]]).
 
 ### Why no ViewModels
 
