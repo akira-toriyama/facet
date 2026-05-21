@@ -195,9 +195,25 @@ contributors (human or AI) reopening the repo cold.
   ``WindowBackend`` / ``Workspace`` / ``Window`` were designed
   (M2 step 1).
 - [Swift 6 Migration Guide](https://www.swift.org/migration/documentation/migrationguide/)
-  — strict-concurrency patterns (``Sendable``, ``AsyncStream``,
-  ``@MainActor`` globals). Consulted when ``BackendEvent`` moved
-  from callback to ``AsyncStream`` (M2 step 1 refactor).
+  — strict-concurrency migration patterns (``Sendable``,
+  ``AsyncStream``, ``@MainActor`` globals). Consulted when
+  ``BackendEvent`` moved from callback to ``AsyncStream`` (M2
+  step 1 refactor).
+- [Apple Developer — Swift Concurrency](https://developer.apple.com/documentation/swift/concurrency)
+  — authoritative reference for ``async`` / ``await`` /
+  ``Task`` / actor / ``Sendable``. Use when implementing a new
+  concurrent seam (e.g. extending ``Controller.start``'s event
+  loop, adding a new actor-isolated cache).
+- [Swift Package Manager docs](https://www.swift.org/documentation/package-manager/)
+  — ``Package.swift`` manifest, target / product / test-target
+  declarations, dependency rules. Use when adding a module or
+  test target (every new ``Sources/Facet*`` directory needs a
+  matching ``.target`` entry; new ``Tests/Facet*Tests`` needs a
+  ``.testTarget``).
+- [Swift Evolution](https://github.com/apple/swift-evolution)
+  — language proposal history. Look up an SE-NNNN when the
+  rationale behind a strict-concurrency / Sendable / actor /
+  isolation rule isn't obvious from the migration guide alone.
 
 ### CLI design
 - [POSIX Utility Conventions (IEEE 1003.1, XBD §12)](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)
