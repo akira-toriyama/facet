@@ -358,6 +358,23 @@ re-confirmation.
   release model relies on (no tag created until the maintainer
   Publishes manually).
 
+### Development environment (Claude Code)
+*Agent / IDE-specific: the tool driving the development loop.*
+
+- [Claude Code docs (ja)](https://code.claude.com/docs/ja/overview)
+  *(reviewed 2026-05-21)* — entry point for the agent /
+  toolchain facet is being built with. Sub-pages of immediate
+  interest:
+  ``/docs/ja/memory`` (CLAUDE.md + auto-memory semantics,
+  governs how rules in this file are loaded),
+  ``/docs/ja/skills`` (custom skills like ``grill-me``,
+  installed under ``~/.claude/skills/``),
+  ``/docs/ja/settings`` (per-project / per-user
+  ``settings.json``),
+  ``/docs/ja/hooks`` (workflow automation triggers — facet's
+  ``scripts/hooks/commit-msg`` is the local-git form, not the
+  Claude Code form).
+
 ### Packaging / Release
 *Distribution-specific: how the bundle reaches users.*
 
