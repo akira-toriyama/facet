@@ -224,7 +224,14 @@ contributors (human or AI) reopening the repo cold.
   — practical baseline for ``--long-options``, ``--help`` /
   ``--version`` conventions.
 
-### Architecture (Clean Architecture / DDD)
+### Architecture (Hexagonal / Clean Architecture / DDD)
+- [Hexagonal Architecture / Ports & Adapters (Alistair Cockburn)](https://alistair.cockburn.us/hexagonal-architecture/)
+  — the pattern facet's 3-layer split is literally implementing.
+  ``WindowBackend`` protocol = a Port; ``RiftAdapter`` = an
+  Adapter; ``FacetCore`` lives inside the hexagon. Clean
+  Architecture restates this idea with more layers; the
+  rosetta-stone table in
+  [docs/architecture.md](docs/architecture.md) shows the mapping.
 - [jasontaylordev/cleanarchitecture](https://github.com/jasontaylordev/cleanarchitecture)
   — canonical CA 4-layer template (.NET reference for the
   concept).
