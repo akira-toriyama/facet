@@ -122,6 +122,25 @@ a `main.swift` file** — same trap as ws-tabs.
 - **Typo rejection is loud**: unknown view / theme names
   ``exit 2`` with a stderr message. Silent fallback is the
   ws-tabs misfeature we deliberately don't reproduce.
+- **State-changing scripts honour ``--dry-run`` and tee a log
+  by default**. Any script that mutates the user's environment
+  (screen recording, mouse events, network posts, file writes
+  outside the repo) ships:
+  - ``--dry-run`` — print what would happen instead of executing
+    (clig.dev *robustness*: make state changes preview-able).
+  - tee of stdout/stderr to ``/tmp/<script>.log`` *on by default*
+    so reruns + agent inspection are easy; ``--silent`` opts
+    out. The inverted polarity (log-on by default, not
+    ``--debug``-gated like the app) reflects the different
+    audience: scripts are run rarely + interactively, the app
+    runs continuously. ``scripts/record-demo.py`` is the
+    canonical example.
+
+  The application CLI itself (``facet --view=*`` etc.) is
+  idempotent / DNC-broadcast and doesn't need ``--dry-run``;
+  its logging is ``--debug``-gated for the opposite reason
+  (long-lived server, default-quiet stderr). This rule applies
+  to repo-local automation, not to the app surface.
 
 ### Logging
 
