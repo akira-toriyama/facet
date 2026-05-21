@@ -215,6 +215,33 @@ contributors (human or AI) reopening the repo cold.
   rationale behind a strict-concurrency / Sendable / actor /
   isolation rule isn't obvious from the migration guide alone.
 
+### macOS / Apple platform
+- [Apple Developer Documentation (root)](https://developer.apple.com/documentation/)
+  — entry point for AppKit, Foundation, ScreenCaptureKit,
+  ApplicationServices (AX) docs. Use when looking up an API
+  signature or implementing against a new framework.
+- [macOS Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/macos)
+  — agent / menu-bar-extra app design conventions. The
+  ``LSUIElement = true`` choice (facet runs without a Dock icon)
+  and the never-steal-focus ``.nonactivatingPanel`` design
+  trace here.
+- [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
+  — macOS 14+ window capture API used by ``WindowPreview``
+  (sidebar hover preview + grid thumbnails). The Screen Recording
+  permission rationale and the ``SCStreamConfiguration`` /
+  ``SCContentFilter`` usage in ``Sources/FacetView/WindowPreview.swift``
+  follow the docs here.
+- [Hardened Runtime / Code Signing](https://developer.apple.com/documentation/security/hardened_runtime)
+  — why ``setup-signing-cert.sh`` exists: TCC keys the
+  Accessibility grant to the code-signing identity, so ad-hoc
+  signing loses the grant on every rebuild; a persistent
+  self-signed cert keeps the identity stable across rebuilds.
+- [NUIKit/CGSInternal (community)](https://github.com/NUIKit/CGSInternal)
+  — community-maintained header dump for private CGS / AX
+  symbols like ``_AXUIElementGetWindow`` (used in
+  ``AXFocus.swift`` via ``dlsym``). No official Apple equivalent
+  for these symbols; this is the de-facto reference.
+
 ### CLI design
 - [POSIX Utility Conventions (IEEE 1003.1, XBD §12)](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)
   — the source-of-truth specification every modern CLI inherits
