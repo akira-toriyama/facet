@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist for the LOCAL dev build only. Selected by `package.sh --dev`
+  (called from run.sh). Keeps a separate CFBundleIdentifier so the dev
+  build and a co-installed Homebrew release can each hold their own
+  Accessibility / Screen Recording grants — no re-prompts when switching
+  between them. CFBundleExecutable stays `facet` (same binary).
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>com.facet.app.dev</string>
+  <key>CFBundleName</key>
+  <string>facet (dev)</string>
+  <key>CFBundleDisplayName</key>
+  <string>facet (dev)</string>
+  <key>CFBundleExecutable</key>
+  <string>facet</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.0.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>13.0</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+</dict>
+</plist>
