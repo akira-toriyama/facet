@@ -10,9 +10,10 @@
 
 import CoreGraphics
 import Foundation
+import FacetCore
 
 @MainActor
-public protocol TreeController: AnyObject {
+public protocol TreeController: AnyObject, Sendable {
     /// Leave keyboard-nav (`--active`) mode. `restore == true` means
     /// the user dismissed without picking anything; the controller
     /// re-focuses the previously-frontmost app. `false` means a
@@ -53,4 +54,20 @@ public protocol TreeController: AnyObject {
     /// Per-mouseDragged-event resize delta from the grip. `dx` /
     /// `dy` come straight from `NSEvent`.
     func resizeBy(dx: CGFloat, dy: CGFloat)
+
+    /// Move precise focus to `window`. Controller picks the retry
+    /// strategy: bounded short retry for same-workspace clicks,
+    /// persistent assertion until the backend confirms for
+    /// cross-workspace clicks (`postSwitch == true`). View doesn't
+    /// know about AX or rift's post-switch default-focus race.
+    func focusWindow(_ window: Window, postSwitch: Bool)
+
+    /// Switch to `window`'s workspace if needed, focus it, then run
+    /// `ops` against the now-focused window. Used for right-click
+    /// menu items that operate on the focused window — keeps the
+    /// view ignorant of the inter-op timing required for the WM to
+    /// register each action before the next lands.
+    func runWindowOps(_ ops: [WindowAction],
+                      on window: Window,
+                      workspaceIndex: Int)
 }
