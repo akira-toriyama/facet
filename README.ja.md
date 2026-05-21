@@ -57,11 +57,18 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 表示制御 / 非表示 / トグル / キーボードモードは全部 CLI 経由 —
 [CLI](#cli) 参照。
 
-### キーボードナビ (`facet --view=tree --active`)
+### キーボードナビ
 
-`--view=tree` 単体は passive (パネルは focus を奪わない)。
-`--active` を足すとパネルが key になりキーボード操作可。 hotkey
-ツールから `facet --view=tree --active` を bind:
+tree パネルは focus を持っている間、 キー入力に反応する。 focus 取得
+方法は 2 通り:
+
+- **パネルクリック** — `facet --view=tree` 単体は passive (= 邪魔
+  しない)、 ユーザがクリックした瞬間にキーボードナビ ON。 他 app に
+  focus 移すと OFF、 キー漏れなし。
+- **`--active` フラグ** — `facet --view=tree --active` は即 focus 取得
+  (= hotkey から 1 発でナビ突入、 クリック不要)。 代償: ナビ中 facet
+  が active app になる (Dock + Cmd-Tab に表示)、 `Esc` で抜ければ元の
+  app に focus 戻る。
 
 | キー | アクション |
 |---|---|
@@ -144,9 +151,11 @@ facet --view=NAME [--active]      # NAME 開く (idempotent)
 facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
 
-# --active は修飾子 — --view=tree と組み合わせた時のみ意味あり
-# (kb モード)。 --view=grid と組み合わせると silent no-op (grid
-# は常に key/active)。
+# --active は修飾子 — --view=tree と組み合わせた時のみ意味あり。
+# --active なしでも tree パネルはクリックすればキーボードナビ ON
+# になる; --active は hotkey から 1 発で focus 取得したい場合用
+# (Spotlight 風起動)。 --view=grid と組み合わせると silent no-op
+# (grid は常に key/active)。
 
 # Server 制御
 facet --theme=NAME                # terminal | cute | system

@@ -107,7 +107,12 @@ a `main.swift` file** — same trap as ws-tabs.
 - **``--active`` is a modifier**, not a verb. Only meaningful
   combined with ``--view=tree`` (becomes ``view:tree+active`` on
   the DNC). For grid it's silently ignored — the overlay is
-  always key/active by construction.
+  always key/active by construction. Without ``--active`` the
+  tree panel still enables keyboard nav as soon as the user
+  clicks it (PanelHost's onKeyChanged → Controller's enterKbNav);
+  ``--active`` only differs by taking key focus *immediately*
+  (+ flipping activation policy so the local keyDown monitor can
+  fire before the user has clicked).
 - **No bare-flag tree aliases**. ``--show`` / ``--hide`` /
   ``--toggle`` / ``--active`` standalone were dropped — every
   view op specifies NAME explicitly. Keeps the canonical form

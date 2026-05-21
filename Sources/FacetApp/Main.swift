@@ -64,9 +64,11 @@ enum FacetApp {
           facet --hide=NAME                  close NAME
           facet --toggle=NAME                toggle NAME
 
-          --active is a modifier — meaningful only with --view=tree
-          (enters keyboard-nav mode). With --view=grid it's silently
-          ignored; the overlay is always key/active by construction.
+          --active is a modifier — meaningful only with --view=tree.
+          Tree alone enables keyboard nav as soon as you click the
+          panel; --active just takes focus immediately so a hotkey
+          can jump straight in (Spotlight-style). --view=grid
+          silently ignores; the overlay is always key/active.
 
           GEOMETRY MODIFIERS (--view=tree only; grid ignores)
             --pos-x=N --pos-y=N --width=N --height=N

@@ -57,11 +57,20 @@ toggleable).
 Show / hide / toggle and keyboard mode are driven entirely from
 the CLI — see [CLI](#cli) below.
 
-### Keyboard navigation (`facet --view=tree --active`)
+### Keyboard navigation
 
-`--view=tree` alone is passive (the panel never steals focus).
-Adding `--active` makes the panel key for keyboard control. Bind
-one key in your hotkey tool to `facet --view=tree --active`:
+The tree panel responds to keys whenever it has focus. Two ways
+to get focus:
+
+- **Click the panel** — passive `facet --view=tree` stays out of
+  your way until you actually click it; the click both promotes
+  the panel to key and enables keyboard nav. Releasing focus
+  (clicking another app) drops nav cleanly, no key leak.
+- **`--active` flag** — `facet --view=tree --active` takes focus
+  *immediately* (one shortcut from your hotkey tool, no extra
+  click). Trade-off: facet briefly becomes the active app
+  (Dock + Cmd-Tab) while you're in nav; `Esc` exits and restores
+  whatever was frontmost before.
 
 | Key | Action |
 |---|---|
@@ -147,9 +156,12 @@ facet --view=NAME [--active]      # open NAME (idempotent)
 facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
 
-# --active is a modifier — only meaningful with --view=tree
-# (enters keyboard-nav mode). With --view=grid it's silently
-# ignored; the overlay is always key/active by construction.
+# --active is a modifier — only meaningful with --view=tree.
+# Without it the tree panel still gains keyboard nav as soon as
+# you click it; --active just takes focus immediately so a hotkey
+# invocation jumps straight into nav (Spotlight-style). With
+# --view=grid it's silently ignored; the overlay is always
+# key/active by construction.
 
 # Server controls
 facet --theme=NAME                # terminal | cute | system
