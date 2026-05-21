@@ -23,7 +23,7 @@
 //   facet --theme=NAME              live re-theme
 //   facet --quit                    terminate server
 //   facet --debug                   verbose logging (server-mode)
-//   facet --help, -h                this help
+//   facet --help                    this help
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
@@ -82,7 +82,7 @@ enum FacetApp {
                                              /tmp/facet.log (server
                                              startup only)
 
-          facet --help, -h                   this help
+          facet --help                       this help
 
         EXIT CODES
           0   success (DNC posted or server started)
@@ -161,9 +161,7 @@ enum FacetApp {
         let argv = Array(CommandLine.arguments.dropFirst())
 
         // Help short-circuits everything else.
-        if argv.contains("--help") || argv.contains("-h") {
-            printHelp()
-        }
+        if argv.contains("--help") { printHelp() }
 
         // Set debug mode first so any subsequent code path (incl.
         // the validators that fire from client mode) can use
