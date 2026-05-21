@@ -26,6 +26,14 @@ public final class GripView: NSView {
         addCursorRect(bounds, cursor: .nwse)
     }
 
+    // Panel is non-key by default (LSUIElement + .nonactivatingPanel).
+    // Without this override the first click on the grip would only
+    // promote the panel to key — the mouseDown never reaches the view,
+    // so the user has to click twice to start a resize.
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     public override func draw(_ dirty: NSRect) {
         pal.dim.withAlphaComponent(0.8).setStroke()
         let p = NSBezierPath()

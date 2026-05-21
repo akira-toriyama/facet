@@ -101,6 +101,14 @@ public final class SidebarView: NSView {
     public override var isFlipped: Bool { true }
     public override var isOpaque: Bool { false }
 
+    // The host panel is non-key by default (LSUIElement +
+    // .nonactivatingPanel), so without this the first click on a row
+    // or empty band would only promote the panel to key — the
+    // mouseDown never reaches the row hit-test / drag tracking loop.
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     // MARK: - Optimistic state
 
     /// True while the optimistic highlight is still being held;
