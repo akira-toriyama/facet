@@ -68,6 +68,16 @@ enum FacetApp {
           (enters keyboard-nav mode). With --view=grid it's silently
           ignored; the overlay is always key/active by construction.
 
+          GEOMETRY MODIFIERS (--view=tree only; grid ignores)
+            --pos-x=N --pos-y=N --width=N --height=N
+              Place the tree panel at exact screen coords (AppKit
+              bottom-left origin) with explicit size. All four are
+              required together (none / all). Use case: screenshot
+              automation, deterministic UI tests.
+              Example:
+                facet --view=tree --pos-x=100 --pos-y=200 \\
+                       --width=400 --height=600
+
           NAME is required for every view op (no implicit "tree").
           Shell aliases handle shorthand if you want it:
             alias fa='facet --view=tree --active'
@@ -170,10 +180,18 @@ enum FacetApp {
         postControl("style:" + name)
     }
 
-    /// Post ``view:NAME`` (or ``view:NAME+active``). Name must
-    /// already be canonical.
-    static func postView(_ name: String, active: Bool) -> Never {
-        postControl(active ? "view:\(name)+active" : "view:\(name)")
+    /// Post ``view:NAME[+active][+geom:X,Y,W,H]``. Name must
+    /// already be canonical. Geom is optional and only meaningful
+    /// for tree (grid silently ignores it, same pattern as +active).
+    static func postView(_ name: String,
+                         active: Bool,
+                         geom: (Int, Int, Int, Int)?) -> Never {
+        var payload = "view:\(name)"
+        if active { payload += "+active" }
+        if let g = geom {
+            payload += "+geom:\(g.0),\(g.1),\(g.2),\(g.3)"
+        }
+        postControl(payload)
     }
 
     static func postHide(_ name: String) -> Never {
@@ -188,26 +206,53 @@ enum FacetApp {
     /// (``exit(2)``) so a fundamental error wins over later
     /// transient checks (e.g. server-not-running).
     static func canonicalView(_ name: String) -> String {
-        let n = name.trimmingCharacters(in: .whitespaces).lowercased()
-        guard canonicalViews.contains(n) else {
-            let msg = "facet: unknown view \"\(n)\" — expected one of: "
-                + canonicalViews.joined(separator: ", ") + "\n"
-            FileHandle.standardError.write(Data(msg.utf8))
-            exit(2)
+        switch canonicalize(name, allowed: canonicalViews) {
+        case .success(let n): return n
+        case .failure(.unknownValue(let v, let expected)):
+            die("unknown view \"\(v)\" — expected one of: "
+                + expected.joined(separator: ", "))
+        case .failure:
+            die("unknown view \"\(name)\"")
         }
-        return n
+    }
+
+    /// Parse a geometry integer flag (``--pos-x=100`` etc). Loud
+    /// reject on non-integer / out-of-range so the user doesn't
+    /// end up with a panel they can't see.
+    static func parseGeomInt(_ arg: String,
+                             _ prefix: String,
+                             requirePositive: Bool = false) -> Int {
+        let raw = String(arg.dropFirst(prefix.count))
+        let flag = String(prefix.dropLast())   // "--pos-x"
+        switch FacetCore.parseGeomInt(raw,
+                                      requirePositive: requirePositive) {
+        case .success(let n):
+            return n
+        case .failure(.notAnInteger(let v)):
+            die("\(flag) expects an integer (got \"\(v)\")")
+        case .failure(.notPositive(let n)):
+            die("\(flag) must be > 0 (got \(n))")
+        case .failure:
+            die("\(flag) parse error")
+        }
     }
 
     /// Validate + canonicalise a theme name.
     static func canonicalStyle(_ name: String) -> String {
-        let n = name.trimmingCharacters(in: .whitespaces).lowercased()
-        guard canonicalStyles.contains(n) else {
-            let msg = "facet: unknown theme \"\(n)\" — expected one of: "
-                + canonicalStyles.joined(separator: ", ") + "\n"
-            FileHandle.standardError.write(Data(msg.utf8))
-            exit(2)
+        switch canonicalize(name, allowed: canonicalStyles) {
+        case .success(let n): return n
+        case .failure(.unknownValue(let v, let expected)):
+            die("unknown theme \"\(v)\" — expected one of: "
+                + expected.joined(separator: ", "))
+        case .failure:
+            die("unknown theme \"\(name)\"")
         }
-        return n
+    }
+
+    /// stderr message + exit(2). Always prefixes with ``facet:``.
+    static func die(_ msg: String) -> Never {
+        FileHandle.standardError.write(Data("facet: \(msg)\n".utf8))
+        exit(2)
     }
 
     // MARK: - Entry
@@ -232,6 +277,7 @@ enum FacetApp {
         var styleArg: String?
         var activeFlag = false
         var quitFlag = false
+        var posX: Int?, posY: Int?, width: Int?, height: Int?
 
         var i = 0
         while i < argv.count {
@@ -261,6 +307,14 @@ enum FacetApp {
                 if i + 1 < argv.count {
                     styleArg = canonicalStyle(argv[i + 1]); i += 1
                 }
+            case a.hasPrefix("--pos-x="):
+                posX = parseGeomInt(a, "--pos-x=")
+            case a.hasPrefix("--pos-y="):
+                posY = parseGeomInt(a, "--pos-y=")
+            case a.hasPrefix("--width="):
+                width = parseGeomInt(a, "--width=", requirePositive: true)
+            case a.hasPrefix("--height="):
+                height = parseGeomInt(a, "--height=", requirePositive: true)
             default:
                 // Loud reject — typos / dropped legacy flags
                 // (``--show`` / ``--hide`` / ``--toggle`` /
@@ -283,6 +337,27 @@ enum FacetApp {
             exit(2)
         }
 
+        // Geom flags are all-or-nothing modifiers; only meaningful
+        // with --view=tree (grid silently ignores, same as --active).
+        // Partial sets (e.g. only --width) are rejected loudly so
+        // the user doesn't end up with a half-applied frame.
+        var geom: (Int, Int, Int, Int)? = nil
+        switch validateGeom(posX: posX, posY: posY,
+                            width: width, height: height) {
+        case .none:
+            break
+        case .complete(let x, let y, let w, let h):
+            if viewArg == nil {
+                die("geometry flags require --view=NAME — "
+                    + "see `facet --help`")
+            }
+            geom = (x, y, w, h)
+        case .partial(let count):
+            die("geometry flags are all-or-nothing — specify "
+                + "--pos-x, --pos-y, --width, --height together "
+                + "(got \(count)/4)")
+        }
+
         // Any client-mode action is about to fire — make sure a
         // server is actually listening, otherwise the DNC post
         // would silently broadcast to nobody and exit 0,
@@ -302,7 +377,7 @@ enum FacetApp {
         if let s = styleArg          { postStyle(s) }
         if quitFlag                  { postControl("quit") }
 
-        if let v = viewArg           { postView(v, active: activeFlag) }
+        if let v = viewArg           { postView(v, active: activeFlag, geom: geom) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
 

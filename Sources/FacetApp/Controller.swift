@@ -156,12 +156,16 @@ final class Controller: NSObject {
 
                 // Symmetric view ops — canonical-only, no aliases.
                 case let s where s.hasPrefix("view:"):
-                    // Payload: ``NAME`` or ``NAME+active``.
+                    // Payload: NAME[+active][+geom:X,Y,W,H]
                     let rest = String(s.dropFirst("view:".count))
-                    let parts = rest.split(separator: "+", maxSplits: 1)
+                    let parts = rest.split(separator: "+")
                     let name = String(parts.first ?? "")
-                    let active = parts.count > 1 && parts[1] == "active"
-                    self.dispatchView(name, active: active)
+                    let mods = parts.dropFirst().map(String.init)
+                    let active = mods.contains("active")
+                    let geom: NSRect? = mods
+                        .first(where: { $0.hasPrefix("geom:") })
+                        .flatMap { Self.parseGeom($0) }
+                    self.dispatchView(name, active: active, geom: geom)
                 case let s where s.hasPrefix("hide:"):
                     self.dispatchHide(
                         String(s.dropFirst("hide:".count)))
@@ -176,18 +180,33 @@ final class Controller: NSObject {
         }
     }
 
+    /// Parse a "geom:X,Y,W,H" payload modifier from the DNC. Returns
+    /// nil on malformed input (silently — Main.swift already validated
+    /// at parse time, this is a defensive check at the receiver).
+    static func parseGeom(_ s: String) -> NSRect? {
+        let body = s.dropFirst("geom:".count)
+        let parts = body.split(separator: ",").compactMap { Int($0) }
+        guard parts.count == 4 else { return nil }
+        return NSRect(x: parts[0], y: parts[1],
+                      width: parts[2], height: parts[3])
+    }
+
     // MARK: - Symmetric view dispatch
 
     /// Open (or activate) ``name``. Idempotent — re-issuing the
     /// same view doesn't toggle it off; use ``dispatchToggle`` /
     /// ``dispatchHide`` for that.
-    private func dispatchView(_ name: String, active: Bool) {
+    private func dispatchView(_ name: String, active: Bool, geom: NSRect?) {
         switch name {
         case "tree":
+            // Apply explicit geom BEFORE showing so the panel
+            // appears at the right place on the first paint.
+            if let g = geom { panelHost.setExplicitFrame(g) }
             if active { enterActive() } else { setHidden(false) }
         case "grid":
             // ``+active`` is silently a no-op for grid — the
-            // overlay is always key/active by nature.
+            // overlay is always key/active by nature. Geom is
+            // likewise ignored (grid is always full-screen).
             showGrid()
         default:
             Log.debug("dispatchView unknown=\(name) — ignored")

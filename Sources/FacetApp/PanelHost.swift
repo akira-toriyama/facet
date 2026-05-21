@@ -172,6 +172,19 @@ final class PanelHost: NSObject {
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
     }
 
+    /// Place the panel at an exact AppKit-screen rect (= bottom-left
+    /// origin, x/y/w/h all in screen points). Used by CLI geometry
+    /// flags so screenshot / automation scripts can pin the panel
+    /// deterministically.
+    func setExplicitFrame(_ frame: NSRect) {
+        userWidth = frame.width
+        userHeight = frame.height
+        anchorTL = NSPoint(x: frame.minX, y: frame.maxY)
+        layout(contentHeight: view.contentHeight,
+               searching: view.searching)
+        persistPosition()
+    }
+
     func persistPosition() {
         UserDefaults.standard.set(
             "\(anchorTL.x),\(anchorTL.y),\(userWidth),\(userHeight ?? -1)",
