@@ -220,6 +220,13 @@ final class PanelHost {
                             width: gripSize, height: gripSize)
         view.frame = NSRect(x: 0, y: 0, width: frame.width,
                             height: max(contentH, h - sh))
+        // Lock min == max == current to tell macOS this window
+        // isn't user-resizable. Without this, the system surfaces
+        // edge / corner auto resize cursors at the panel boundary
+        // even on .borderless / non-.resizable panels. Our own
+        // resizeBy uses setFrame() which bypasses these limits.
+        panel.minSize = frame.size
+        panel.maxSize = frame.size
         panel.invalidateShadow()
     }
 
