@@ -36,9 +36,9 @@ final class PanelHost {
     // MARK: - Tunables
 
     private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
-    private let gripSize: CGFloat = 80    // hit area — 60 was an improvement but still intermittent. 80 puts the chevron well inside the panel's round corner.
-    private let scrollerInset: CGFloat = 30   // shift grip left past the overlay scrollbar's hit-test reach (its visible width is ~15, but the hit-strip extends further when fading).
-    private let gripBottomInset: CGFloat = 12 // = effect.cornerRadius — keep the grip above the panel's round-corner pixels.
+    private let gripSize: CGFloat = 80         // hit area; chevron visual stays compact via GripView.draw
+    private let scrollerInset: CGFloat = 30    // grip clear of the overlay scroller's hit-strip
+    private let gripBottomInset: CGFloat = 12  // grip clear of effect.cornerRadius pixels
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160
@@ -138,13 +138,9 @@ final class PanelHost {
     func show() {
         layout(contentHeight: view.contentHeight,
                searching: view.searching)
-        // orderFrontRegardless (not orderFront): ws-tabs uses this
-        // and resize works there without any of the workarounds
-        // facet has accumulated. The "regardless" variant promotes
-        // the panel to front even when the app isn't active and
-        // primes it as a key-candidate, which appears to unblock
-        // the cursor-update / mouseDragged delivery path for
-        // .nonactivatingPanel LSUIElement agents.
+        // Regardless variant primes the panel as a key-candidate
+        // even when the app isn't active — required for cursor /
+        // mouseDragged delivery on a .nonactivatingPanel agent.
         panel.orderFrontRegardless()
     }
 
