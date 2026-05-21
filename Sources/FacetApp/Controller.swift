@@ -133,7 +133,57 @@ final class Controller: NSObject {
             MainActor.assumeIsolated { self?.refresh() }
         }
         rescheduleThumbnailTimer()
+        installCLIControl()
         refresh()
+    }
+
+    // MARK: - CLI ↔ GUI IPC + theme
+
+    private func installCLIControl() {
+        let dnc = DistributedNotificationCenter.default()
+        dnc.addObserver(
+            forName: .init(ctrlNotificationName),
+            object: nil, queue: .main
+        ) { [weak self] note in
+            let cmd = (note.object as? String) ?? ""
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                switch cmd {
+                case "show":   self.setHidden(false)
+                case "hide":   self.setHidden(true)
+                case "active": self.enterActive()
+                case "quit":   NSApp.terminate(nil)
+                case let s where s.hasPrefix("style:"):
+                    self.applyStyle(
+                        String(s.dropFirst("style:".count)))
+                case let s where s.hasPrefix("view:"):
+                    // Unknown view names are silently ignored (no
+                    // fallback to another view — matches the
+                    // ``--theme`` validator's policy of staying
+                    // out of the user's way).
+                    switch String(s.dropFirst("view:".count)) {
+                    case "grid": self.toggleGrid()
+                    default:     break
+                    }
+                default:
+                    // Bare `facet --toggle` (no qualifier): flip
+                    // the panel's hidden state.
+                    self.setHidden(!self.userHidden)
+                }
+            }
+        }
+    }
+
+    /// Live re-theme from `facet --theme=...`; persists the choice
+    /// so subsequent cold starts pick it up before any config TOML.
+    func applyStyle(_ name: String) {
+        let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        pal = paletteFor(key)
+        UserDefaults.standard.set(key, forKey: "style")
+        panelHost.applyTheme()
+        sidebarView.needsDisplay = true
+        panelHost.grip.needsDisplay = true
     }
 
     // MARK: - Refresh / apply
