@@ -36,7 +36,7 @@ final class PanelHost {
     // MARK: - Tunables
 
     private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
-    private let gripSize: CGFloat = 16
+    private let gripSize: CGFloat = 24    // touch target — 16 px too tight
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160

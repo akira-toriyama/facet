@@ -31,9 +31,14 @@ public final class GripView: NSView {
         let p = NSBezierPath()
         p.lineWidth = 1.5
         let b = bounds
-        for off in [CGFloat(3), 7, 11] {
-            p.move(to: NSPoint(x: b.maxX - off, y: b.minY + 3))
-            p.line(to: NSPoint(x: b.maxX - 3, y: b.minY + off))
+        // Chevron coords scale with bounds so the glyph still reads at
+        // larger touch targets (originally designed at 16px).
+        let unit = b.width / 16
+        let edge = 3 * unit
+        for off in [3.0, 7.0, 11.0] {
+            let o = CGFloat(off) * unit
+            p.move(to: NSPoint(x: b.maxX - o,    y: b.minY + edge))
+            p.line(to: NSPoint(x: b.maxX - edge, y: b.minY + o))
         }
         p.stroke()
     }
