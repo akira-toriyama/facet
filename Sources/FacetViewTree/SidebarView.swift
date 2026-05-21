@@ -101,13 +101,19 @@ public final class SidebarView: NSView {
     public override var isFlipped: Bool { true }
     public override var isOpaque: Bool { false }
 
-    // The host panel is non-key by default (LSUIElement +
-    // .nonactivatingPanel), so without this the first click on a row
-    // or empty band would only promote the panel to key — the
-    // mouseDown never reaches the row hit-test / drag tracking loop.
+    // Without this, the first click on a non-key panel only promotes
+    // the panel to key — mouseDown never reaches row hit-test, so the
+    // user has to click twice before a click registers.
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
+
+    // For NSPanel with becomesKeyOnlyIfNeeded=true, mouseDragged is
+    // only routed to a view if it returns true from BOTH of these.
+    // Without them the row click works but a drag (to-move panel /
+    // to-move window) silently no-ops on a non-key panel.
+    public override var acceptsFirstResponder: Bool { true }
+    public override var needsPanelToBecomeKey: Bool { true }
 
     // MARK: - Optimistic state
 
@@ -276,6 +282,17 @@ public final class SidebarView: NSView {
         if i != hoverIdx {
             hoverIdx = i; needsDisplay = true
             controller?.previewTargetChanged()
+        }
+        // Don't fight GripView for the cursor: SidebarView's tracking
+        // area covers the whole panel (scroll documentView), grip's
+        // area is a sub-rect at the bottom-right. Without this guard,
+        // every mouseMoved here flips the cursor back to arrow while
+        // the grip is trying to hold nwse — net visible: flicker / no
+        // cursor change at all.
+        if let grip = window?.contentView?.subviews
+            .first(where: { $0 is GripView }) {
+            let gripInWin = grip.convert(grip.bounds, to: nil)
+            if gripInWin.contains(e.locationInWindow) { return }
         }
         (i != nil ? NSCursor.pointingHand : NSCursor.arrow).set()
     }

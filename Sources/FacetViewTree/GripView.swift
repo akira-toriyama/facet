@@ -26,12 +26,50 @@ public final class GripView: NSView {
         addCursorRect(bounds, cursor: .nwse)
     }
 
-    // Panel is non-key by default (LSUIElement + .nonactivatingPanel).
-    // Without this override the first click on the grip would only
-    // promote the panel to key — the mouseDown never reaches the view,
-    // so the user has to click twice to start a resize.
+    // Without this, the first click on a non-key panel only promotes
+    // the panel to key — mouseDown never reaches the view, so the
+    // user has to click twice before resize starts working.
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    // For NSPanel with becomesKeyOnlyIfNeeded=true, a mouseDown only
+    // routes mouseDragged/mouseUp to a view if that view returns true
+    // from BOTH acceptsFirstResponder and needsPanelToBecomeKey.
+    // Without these the grip catches mouseDown but the drag stream
+    // never arrives — resize feels "intermittently dead".
+    public override var acceptsFirstResponder: Bool { true }
+    public override var needsPanelToBecomeKey: Bool { true }
+
+    // addCursorRect alone relies on AppKit's key-window polling, which
+    // gets unreliable on .nonactivatingPanel / LSUIElement agents.
+    // SidebarView uses NSTrackingArea + NSCursor.set() for the same
+    // reason ([Sources/FacetViewTree/SidebarView.swift:262]) — mirror
+    // that so the resize cursor actually shows over the grip.
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.activeAlways, .inVisibleRect,
+                      .mouseMoved, .mouseEnteredAndExited],
+            owner: self))
+    }
+
+    // push/pop instead of set: SidebarView covers the same window
+    // pixels (it's the scroll's documentView, panel-wide) and its
+    // mouseMoved sets arrow/pointingHand whenever its tracking area
+    // fires too. With set() the two views fight per-event and the
+    // resize cursor flickers. push() puts nwse on top of the stack
+    // so it stays visible even when SidebarView pushes arrow under it.
+    private var pushed = false
+
+    public override func mouseEntered(with e: NSEvent) {
+        if !pushed { NSCursor.nwse.push(); pushed = true }
+    }
+
+    public override func mouseExited(with e: NSEvent) {
+        if pushed && !resizing { NSCursor.pop(); pushed = false }
     }
 
     public override func draw(_ dirty: NSRect) {
@@ -39,10 +77,10 @@ public final class GripView: NSView {
         let p = NSBezierPath()
         p.lineWidth = 1.5
         let b = bounds
-        // Hit area is the whole bounds (large — gripSize in PanelHost);
-        // chevron stays compact in the bottom-right corner so it doesn't
-        // dominate the panel visually. Pixels outside the chevron still
-        // catch a click — that's the point.
+        // Chevron at the grip's bottom-right (= visual edge of the
+        // hit area). The grip's *frame* is already shifted left by
+        // PanelHost.scrollerInset so this position sits just left of
+        // the overlay scrollbar — guarantees visual == hit target.
         for off in [CGFloat(3), 7, 11] {
             p.move(to: NSPoint(x: b.maxX - off, y: b.minY + 3))
             p.line(to: NSPoint(x: b.maxX - 3, y: b.minY + off))
@@ -81,6 +119,8 @@ public final class GripView: NSView {
     public override func mouseUp(with e: NSEvent) {
         guard resizing else { return }
         resizing = false
+        // If mouseExited was deferred during resize, pop now.
+        if pushed { NSCursor.pop(); pushed = false }
         // gripResizeEnded persists the position AND runs a single
         // refresh so any backend events skipped during the drag
         // land now.

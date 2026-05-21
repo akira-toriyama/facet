@@ -36,7 +36,9 @@ final class PanelHost {
     // MARK: - Tunables
 
     private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
-    private let gripSize: CGFloat = 36    // hit area only — visual stays compact (see GripView.draw)
+    private let gripSize: CGFloat = 80    // hit area — 60 was an improvement but still intermittent. 80 puts the chevron well inside the panel's round corner.
+    private let scrollerInset: CGFloat = 30   // shift grip left past the overlay scrollbar's hit-test reach (its visible width is ~15, but the hit-strip extends further when fading).
+    private let gripBottomInset: CGFloat = 12 // = effect.cornerRadius — keep the grip above the panel's round-corner pixels.
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160
@@ -120,6 +122,10 @@ final class PanelHost {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.ignoresMouseEvents = false
+        // Required for mouseMoved + cursorUpdate delivery to views on
+        // a non-key panel. Without this, GripView's NSTrackingArea
+        // (cursor change on hover) silently doesn't fire.
+        panel.acceptsMouseMovedEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
                                     .fullScreenAuxiliary]
         panel.contentView = effect
@@ -132,7 +138,14 @@ final class PanelHost {
     func show() {
         layout(contentHeight: view.contentHeight,
                searching: view.searching)
-        panel.orderFront(nil)
+        // orderFrontRegardless (not orderFront): ws-tabs uses this
+        // and resize works there without any of the workarounds
+        // facet has accumulated. The "regardless" variant promotes
+        // the panel to front even when the app isn't active and
+        // primes it as a key-candidate, which appears to unblock
+        // the cursor-update / mouseDragged delivery path for
+        // .nonactivatingPanel LSUIElement agents.
+        panel.orderFrontRegardless()
     }
 
     func hide() {
@@ -202,7 +215,8 @@ final class PanelHost {
         searchBar.needsLayout = true               // re-centre glyph/field
         scroll.frame = NSRect(x: 0, y: 0,
                               width: frame.width, height: frame.height - sh)
-        grip.frame = NSRect(x: frame.width - gripSize, y: 0,
+        grip.frame = NSRect(x: frame.width - gripSize - scrollerInset,
+                            y: gripBottomInset,
                             width: gripSize, height: gripSize)
         view.frame = NSRect(x: 0, y: 0, width: frame.width,
                             height: max(contentH, h - sh))
