@@ -200,16 +200,29 @@ contributors (human or AI) reopening the repo cold.
   from callback to ``AsyncStream`` (M2 step 1 refactor).
 
 ### CLI design
+- [POSIX Utility Conventions (IEEE 1003.1, XBD §12)](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)
+  — the source-of-truth specification every modern CLI inherits
+  from. Argument syntax (`--long-option=VALUE`), exit-status
+  semantics (0 = success, 1+ = utility-specific failure, 2 =
+  usage / syntax error), option ordering rules. facet's exit
+  code split (0 / 2 / 3) maps directly here.
+- [The Art of Unix Programming — Ch.1 *Basics of the Unix Philosophy*](http://www.catb.org/~esr/writings/taoup/html/ch01s06.html)
+  — the 17 rules. The ones facet actively follows: *Rule of
+  Silence* (silent success on the happy path), *Rule of Repair*
+  (loud + immediate failure, never silent fallback), *Rule of
+  Composition* (stdout pipe-friendly), *Rule of Least Surprise*
+  (canonical-only flag surface, no aliases). Old (2003) but the
+  calibration still applies.
 - [Command Line Interface Guidelines (clig.dev)](https://clig.dev/)
-  — modern (2020+) CLI conventions: exit codes, stderr vs stdout,
-  silent success, loud typo reject, idempotence, human- vs
-  machine-readable output. The post-M2 "no aliases, NAME required
-  for every view op, typo wins over server-state check" decisions
-  trace directly to clig.dev's *consistency* and *robustness*
-  principles.
+  — modern (2020+) restatement of the above plus current
+  conventions: stderr vs stdout, human- vs machine-readable
+  output, idempotence. The post-M2 "no aliases, NAME required
+  for every view op, typo wins over server-state check"
+  decisions trace directly to clig.dev's *consistency* and
+  *robustness* sections.
 - [GNU Standards: Command-Line Interfaces](https://www.gnu.org/prep/standards/html_node/Command_002dLine-Interfaces.html)
-  — historical baseline for ``--long-options``, ``--help`` /
-  ``--version`` conventions, exit-code semantics.
+  — practical baseline for ``--long-options``, ``--help`` /
+  ``--version`` conventions.
 
 ### Architecture (Clean Architecture / DDD)
 - [jasontaylordev/cleanarchitecture](https://github.com/jasontaylordev/cleanarchitecture)
