@@ -293,10 +293,12 @@ enum FacetApp {
             || viewArg != nil || hideArg != nil || toggleArg != nil
         if anyClientAction { requireServerAlive() }
 
-        // Dispatch (each branch ``postControl``s, which exits).
-        // ``--theme`` and ``--quit`` are independent — applied
-        // first so they compose with the view dispatch below if
-        // both happen to be passed together.
+        // Dispatch. Each ``post*`` returns ``Never`` (calls
+        // ``exit``), so the FIRST matched branch wins — the rest
+        // is unreachable. Precedence below mirrors usual
+        // expectation: ``--theme`` / ``--quit`` are tried first,
+        // then view ops. To combine (e.g. theme + view in one
+        // call), the user issues two separate invocations.
         if let s = styleArg          { postStyle(s) }
         if quitFlag                  { postControl("quit") }
 

@@ -5,6 +5,10 @@
 import Foundation
 import FacetCore
 
+// ``@unchecked Sendable`` is safe here: every stored property is
+// ``let`` (immutable post-init). The only mutable state is
+// encapsulated inside ``EventSource``, which guards it with its
+// own serial dispatch queue (see EventSource.swift).
 public final class RiftAdapter: WindowBackend, @unchecked Sendable {
     public let layoutModes = [
         "master_stack", "traditional", "bsp", "stack", "scrolling",
