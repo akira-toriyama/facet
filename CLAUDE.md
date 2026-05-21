@@ -311,7 +311,3 @@ contributors (human or AI) reopening the repo cold.
   facet's rolling-draft release model relies on (no tag
   created until the maintainer Publishes manually).
 
-### Origin
-- [ws-tabs](https://github.com/akira-toriyama/ws-tabs)
-  — the architectural predecessor every view / adapter is lifted
-  from (memory [[ws-tabs-to-facet-migration]]).
