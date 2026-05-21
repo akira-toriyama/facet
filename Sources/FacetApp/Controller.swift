@@ -25,6 +25,7 @@ import AppKit
 import FacetCore
 import FacetView
 import FacetViewTree
+import FacetViewGrid
 import FacetAdapterRift
 
 @MainActor
@@ -33,14 +34,14 @@ final class Controller: NSObject {
     // MARK: - Wiring
 
     let backend: any WindowBackend
+    private let config: FacetConfig
     private let panelHost: PanelHost
     private let sidebarView: SidebarView
 
     // MARK: - State
 
-    /// Latest workspaces snapshot — held so the grid view (step 6f)
-    /// can render immediately on first show without round-tripping
-    /// the backend.
+    /// Latest workspaces snapshot — held so the grid view can render
+    /// immediately on first show without round-tripping the backend.
     private(set) var lastWorkspaces: [Workspace] = []
     private var userHidden = false
     /// Pauses refresh/apply while the user is mid-grip-drag, so a
@@ -48,6 +49,28 @@ final class Controller: NSObject {
     /// is about to read (memory: grid-branch-grip-intermittent).
     private var isGripResizing = false
     private var refreshPending = false
+
+    // MARK: - Preview (hover overlay + grid thumbnails)
+
+    private let previewPool = PreviewOverlayPool()
+    /// Held as ``Any`` so the class compiles on macOS 13 (the
+    /// ``WindowPreview`` type is gated on macOS 14+). Cast at use
+    /// site.
+    private var winPreview: Any?
+    private var previewTimer: Timer?
+    private var thumbnailTimer: Timer?
+    private var thumbnailTimerInterval: TimeInterval?
+
+    // MARK: - Grid overview
+
+    private var gridOverlay: GridOverlay?
+    private var gridView: GridView?
+    private var gridBackdrop: NSView?
+    private var gridKbMonitor: Any?
+    /// Remembered while the grid is up so we can restore exactly the
+    /// pre-show visibility state on dismiss.
+    private var treeWasHidden = false
+    var isGridVisible: Bool { gridOverlay != nil }
 
     // MARK: - Subscription / polling
 
@@ -63,8 +86,9 @@ final class Controller: NSObject {
 
     // MARK: - Init
 
-    init(backend: any WindowBackend) {
+    init(backend: any WindowBackend, config: FacetConfig) {
         self.backend = backend
+        self.config = config
         let view = SidebarView(
             frame: NSRect(x: 0, y: 0, width: sidebarWidth, height: 400),
             backend: backend)
@@ -73,6 +97,7 @@ final class Controller: NSObject {
         super.init()
         view.controller = self
         panelHost.grip.controller = self
+        if #available(macOS 14.0, *) { winPreview = WindowPreview() }
     }
 
     // MARK: - Lifecycle
@@ -93,6 +118,7 @@ final class Controller: NSObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        rescheduleThumbnailTimer()
         refresh()
     }
 
@@ -130,9 +156,23 @@ final class Controller: NSObject {
 
     private func apply(_ wss: [Workspace],
                        _ titles: [WindowID: String] = [:]) {
-        // Keep the snapshot fresh even when hidden so the grid (step
-        // 6f) can render immediately without a backend round-trip.
+        // First non-empty snapshot? Warm the thumbnail cache one-shot
+        // so the very first `--view=grid` (especially right after
+        // launch) shows screenshots instead of falling back to app
+        // icons. The background timer's first tick is `interval` s
+        // away — too late if the user opens the grid immediately.
+        let firstRealApply = lastWorkspaces.isEmpty && !wss.isEmpty
+        // Keep the snapshot fresh even when hidden so the grid can
+        // render immediately without a backend round-trip.
         lastWorkspaces = wss
+        if let g = gridView {
+            g.workspaces = wss
+            g.activeIndex = wss.first(where: { $0.isActive })?.index
+            g.layoutCells()       // refresh open grid on backend events
+        }
+        if firstRealApply, #available(macOS 14.0, *) {
+            refreshThumbnailCache()
+        }
         if userHidden { return }
         if isGripResizing { return }
         guard !wss.isEmpty, NSScreen.main != nil else {
@@ -144,6 +184,346 @@ final class Controller: NSObject {
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
+    }
+
+    // MARK: - Preview / thumbnail timer
+
+    /// Tear down + recreate the thumbnail timer so the interval
+    /// reflects the current config. ``nil`` interval = disabled (no
+    /// background capture; cells fall back to icons momentarily on
+    /// each grid open).
+    private func rescheduleThumbnailTimer() {
+        guard #available(macOS 14.0, *) else { return }
+        let want = config.effectiveThumbnailRefreshInterval
+        if thumbnailTimerInterval == want { return }
+        thumbnailTimer?.invalidate()
+        thumbnailTimer = nil
+        thumbnailTimerInterval = want
+        guard let interval = want else { return }
+        thumbnailTimer = Timer.scheduledTimer(
+            withTimeInterval: interval, repeats: true
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshThumbnailCache() }
+        }
+    }
+
+    /// Touch the WindowPreview cache for every known window so
+    /// captures stay fresh in the background. Cheap when within
+    /// TTL (one dict lookup per window, no capture work).
+    @available(macOS 14.0, *)
+    private func refreshThumbnailCache() {
+        guard let wp = winPreview as? WindowPreview else { return }
+        for ws in lastWorkspaces {
+            for win in ws.windows {
+                wp.request(win.id) { _, _, _ in /* warm only */ }
+            }
+        }
+    }
+
+    /// Force a re-capture for every window in the listed workspace
+    /// indices. Called after a DnD or workspace-swap so the cached
+    /// thumbnails (which may be old size / old crop after a BSP /
+    /// stack reflow) refresh instead of waiting for the 5 s TTL.
+    func refreshGridThumbnails(forWSIndices indices: [Int],
+                               in wss: [Workspace]) {
+        guard #available(macOS 14.0, *),
+              let wp = winPreview as? WindowPreview,
+              gridView != nil
+        else { return }
+        let want = Set(indices)
+        let ids: [WindowID] = wss
+            .filter { want.contains($0.index) }
+            .flatMap { $0.windows.map(\.id) }
+        // Invalidate first so any refresh tick firing before the
+        // delay below can't paint with the stale cache.
+        for id in ids { wp.invalidate(id) }
+        // 50 ms is the empirical floor where the WM's reflow has
+        // committed but the user still feels the refresh as "right
+        // after" the drop. Under 30 ms tends to grab the pre-move
+        // frame on BSP layouts.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            [weak self] in
+            guard self != nil else { return }
+            for id in ids {
+                wp.request(id) { [weak self] img, _, gotID in
+                    MainActor.assumeIsolated {
+                        self?.gridView?.setThumbnail(img, for: gotID)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Hover preview reconcile
+
+    /// Debounced reconciliation of `PreviewOverlay`s with whatever
+    /// the sidebar's hover / kb-selection currently points at.
+    func _previewTargetChangedImpl() {
+        previewTimer?.invalidate()
+        guard #available(macOS 14.0, *),
+              let wp = winPreview as? WindowPreview
+        else { return }
+        let targets = sidebarView.previewTargets()
+        let ids = Set(targets.map(\.window))
+        if ids.isEmpty {
+            wp.bump(); previewPool.hideAll(); return
+        }
+        if ids == previewPool.inUseWindows { return }  // exact set already up
+        // Drop now-irrelevant overlays immediately (don't wait for
+        // the dwell) so e.g. WS-wide previews vanish the instant the
+        // cursor moves into one window row. Overlays that survive
+        // into the new set are kept → no flicker for still-relevant
+        // targets.
+        previewPool.setActiveWindows(ids)
+        wp.bump()
+        previewTimer = Timer.scheduledTimer(
+            withTimeInterval: 0.18, repeats: false
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                // Re-resolve after the dwell (target may have moved).
+                let now = self.sidebarView.previewTargets()
+                let nowIDs = Set(now.map(\.window))
+                guard nowIDs == ids else { return }
+                for t in now {
+                    wp.request(t.window) { [weak self] img, _, gotID in
+                        MainActor.assumeIsolated {
+                            guard let self else { return }
+                            let cur = self.sidebarView.previewTargets()
+                            guard let nt = cur.first(where: {
+                                $0.window == gotID
+                            }), Set(cur.map(\.window)).contains(gotID)
+                            else { return }
+                            self.previewPool.show(
+                                gotID, img: img, frame: nt.frame)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Grid lifecycle
+
+    func toggleGrid() {
+        if isGridVisible { hideGrid() } else { showGrid() }
+    }
+
+    func showGrid() {
+        if isGridVisible { return }
+        guard let scr = NSScreen.main else { return }
+        // No snapshot yet (cold start, never queried): trigger an
+        // async fetch and re-enter once it lands. Keeps the UX
+        // consistent — pressing --view=grid always either shows or
+        // no-ops, never shows an empty grid.
+        if lastWorkspaces.isEmpty {
+            let bk = backend
+            cliQueue.async {
+                let wss = bk.workspaces()
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        self?.lastWorkspaces = wss
+                        self?.showGrid()
+                    }
+                }
+            }
+            return
+        }
+
+        // -- Build overlay --
+        let overlay = GridOverlay(
+            contentRect: scr.frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false)
+        overlay.isFloatingPanel = true
+        overlay.level = NSWindow.Level(
+            rawValue: NSWindow.Level.statusBar.rawValue + 2)   // above tree
+        overlay.backgroundColor = .clear
+        overlay.isOpaque = false
+        overlay.hasShadow = false
+        overlay.hidesOnDeactivate = false
+        overlay.collectionBehavior = [.canJoinAllSpaces, .stationary,
+                                      .fullScreenAuxiliary]
+
+        // Solid near-black backdrop (no vibrancy) — matches the TS3
+        // captures. The slight transparency keeps a hint of desktop
+        // visible during the fade so it reads as "overlay opening"
+        // not "screen blanked."
+        let host = NSView(frame: NSRect(origin: .zero,
+                                        size: scr.frame.size))
+        host.wantsLayer = true
+        host.layer?.backgroundColor = NSColor.black
+            .withAlphaComponent(gridBackdropAlpha).cgColor
+
+        let gv = GridView(frame: host.bounds)
+        gv.autoresizingMask = [.width, .height]
+        gv.workspaces = lastWorkspaces
+        gv.activeIndex = lastWorkspaces.first(where: {
+            $0.isActive
+        })?.index
+        gv.screenFrame = scr.frame
+        gv.config = GridConfig(
+            cols: config.effectiveGridCols,
+            labelPosition: config.effectiveGridLabelPosition,
+            labelSize: config.effectiveGridLabelSize)
+        gv.onDismiss = { [weak self] in self?.hideGrid() }
+        gv.onDrop = { [weak self, bk = backend] src, dst, _, id in
+            guard src != dst else { return }
+            cliQueue.async {
+                bk.moveWindow(id, toWorkspaceIndex: dst)
+                let wss = bk.workspaces()
+                let titles = AXTitles.resolve(wss)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.apply(wss, titles)
+                        self?.refreshGridThumbnails(
+                            forWSIndices: [src, dst], in: wss)
+                    }
+                }
+            }
+        }
+        gv.onSwap = { [weak self, bk = backend] src, dst, srcIDs, dstIDs in
+            // Workspace-swap: trade contents of src ↔ dst. WM's
+            // workspace index is left alone so each cell's grid
+            // position (= user's bound hotkey) stays put — only
+            // windows move. N+M moveWindow calls in sequence
+            // off-main, then a single apply at the end so the grid
+            // re-lays out in one pass.
+            guard src != dst else { return }
+            cliQueue.async {
+                for id in srcIDs {
+                    bk.moveWindow(id, toWorkspaceIndex: dst)
+                }
+                for id in dstIDs {
+                    bk.moveWindow(id, toWorkspaceIndex: src)
+                }
+                let wss = bk.workspaces()
+                let titles = AXTitles.resolve(wss)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.apply(wss, titles)
+                        self?.refreshGridThumbnails(
+                            forWSIndices: [src, dst], in: wss)
+                    }
+                }
+            }
+        }
+        gv.onPick = { [weak self, bk = backend] pick in
+            // Dispatch the WM action off-main and dismiss in
+            // parallel so the overlay clears immediately — the
+            // workspace-switch animation lands as the overlay fades
+            // out (matches the TS3 feel).
+            switch pick {
+            case .workspace(let ws):
+                cliQueue.async { bk.switchWorkspace(toIndex: ws) }
+            case .window(let ws, let pid, let id):
+                cliQueue.async {
+                    bk.switchWorkspace(toIndex: ws)
+                    // Re-assert until the WM's post-switch default
+                    // focus settles on our pick. Title is empty —
+                    // the grid doesn't surface titles, so focus
+                    // falls back to serverID match.
+                    let win = Window(
+                        id: id, pid: pid, appName: "",
+                        title: "", isFocused: false,
+                        isFloating: false, frame: nil)
+                    Focus.assert(win, backend: bk)
+                }
+            }
+            self?.hideGrid()
+        }
+        host.addSubview(gv)
+        overlay.contentView = host
+
+        // -- Hide tree panel, remember pre-show state --
+        treeWasHidden = userHidden
+        if panelHost.isVisible { panelHost.hide() }
+
+        // -- Present + fade in --
+        overlay.alphaValue = 0
+        overlay.makeKeyAndOrderFront(nil)
+        gv.layoutCells()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = gridFadeIn
+            overlay.animator().alphaValue = 1
+        }
+
+        // Initial keyboard selection: active workspace if visible,
+        // else first cell.
+        gv.kbSelectedWS = lastWorkspaces.first(where: {
+            $0.isActive
+        })?.index ?? lastWorkspaces.first?.index
+
+        // -- Local key monitor for grid kb input --
+        gridKbMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: .keyDown
+        ) { [weak self] e in
+            guard let gv = self?.gridView else { return e }
+            let shift = e.modifierFlags.contains(.shift)
+            switch e.keyCode {
+            case 53:  gv.kbEscape();                       return nil
+            case 36, 76:
+                gv.kbCommit();                             return nil
+            case 49:
+                // Shift+Space = lift the WHOLE cell for swap (kb
+                // counterpart of mouse Shift-drag). Cmd+Space is
+                // reserved by Spotlight system-wide; Shift+Space
+                // has the same "modifier escalates Space's scope"
+                // feel without the system conflict.
+                if shift { gv.kbLiftWorkspace() } else { gv.kbLift() }
+                return nil
+            case 48:
+                gv.kbCycleWindow(forward: !shift);         return nil
+            case 123: gv.kbMoveSelection(dx: -1, dy: 0);   return nil
+            case 124: gv.kbMoveSelection(dx:  1, dy: 0);   return nil
+            case 126: gv.kbMoveSelection(dx: 0, dy: -1);   return nil
+            case 125: gv.kbMoveSelection(dx: 0, dy:  1);   return nil
+            default:  return e
+            }
+        }
+
+        gridOverlay = overlay
+        gridView = gv
+        gridBackdrop = host
+
+        // Kick off captures for every window in every workspace.
+        // Each capture is async + independent — cells paint with
+        // app icons first and progressively swap to real thumbnails
+        // as captures land. Snapshot-on-show: no refresh during
+        // display.
+        if #available(macOS 14.0, *),
+           let wp = winPreview as? WindowPreview {
+            for ws in lastWorkspaces {
+                for win in ws.windows {
+                    let id = win.id
+                    wp.request(id) { [weak self] img, _, gotID in
+                        MainActor.assumeIsolated {
+                            self?.gridView?.setThumbnail(img, for: gotID)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func hideGrid() {
+        guard let overlay = gridOverlay else { return }
+        if let m = gridKbMonitor {
+            NSEvent.removeMonitor(m); gridKbMonitor = nil
+        }
+        gridView?.clearThumbnails()
+        let restoreTree = !treeWasHidden
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = gridFadeOut
+            overlay.animator().alphaValue = 0
+        }) { [weak self] in
+            guard let self else { return }
+            overlay.orderOut(nil)
+            self.gridOverlay = nil
+            self.gridView = nil
+            self.gridBackdrop = nil
+            if restoreTree { self.refresh() }       // re-shows the panel
+        }
     }
 
     // MARK: - Visibility
@@ -231,9 +611,7 @@ extension Controller: TreeController {
     // -- Stubs for follow-up steps
 
     func previewTargetChanged() {
-        // Implemented in step 6f (preview pool + WindowPreview
-        // wired alongside grid orchestration since both consume the
-        // same capture pipeline).
+        _previewTargetChangedImpl()
     }
 
     func exitActive(restore: Bool) {

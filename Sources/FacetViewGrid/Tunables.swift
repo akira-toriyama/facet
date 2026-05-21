@@ -11,9 +11,11 @@ let gridCellGap: CGFloat = 24           // gap between cell rows / cols
 let gridCellCornerRadius: CGFloat = 10  // rounded cell shape
 let gridLabelGap: CGFloat = 4           // breathing room: label → cell
 
-let gridBackdropAlpha: CGFloat = 0.98   // overlay opacity (TS3 ≈ pure black)
-let gridFadeIn: TimeInterval = 0.12     // overlay fade-in
-let gridFadeOut: TimeInterval = 0.10    // overlay fade-out
+// Public so FacetApp's Controller can configure the GridOverlay
+// fade timing without redefining the numbers.
+public let gridBackdropAlpha: CGFloat = 0.98   // overlay opacity (TS3 ≈ pure black)
+public let gridFadeIn: TimeInterval = 0.12     // overlay fade-in
+public let gridFadeOut: TimeInterval = 0.10    // overlay fade-out
 
 // dnd-kit-style "lift" feedback when a drag starts: ghost grows
 // slightly + soft shadow drops in so the user *feels* the thumb
