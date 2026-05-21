@@ -288,6 +288,29 @@ contributors (human or AI) reopening the repo cold.
 - [GitHub topic: domain-driven-design](https://github.com/topics/domain-driven-design)
   — entry point for cross-language DDD pattern examples.
 
+### GitHub / CI
+- [GitHub Docs (root)](https://docs.github.com)
+  — entry point for everything GitHub-related: Actions, REST
+  API, releases, packages, gh CLI.
+- [GitHub Actions documentation](https://docs.github.com/en/actions)
+  — workflow YAML syntax, events, contexts, expressions. Used
+  to write the four workflows under ``.github/workflows/``
+  (build / commit-lint / release / update-tap). Look up
+  ``on:`` events, ``concurrency:`` semantics, secret access
+  rules here.
+- [GitHub REST API](https://docs.github.com/en/rest)
+  — used indirectly via ``gh api`` in ``update-tap.yml`` (e.g.
+  release tag resolution). Reach here when the ``gh`` CLI lacks
+  a high-level wrapper for the operation you need.
+- [GitHub CLI manual (`gh`)](https://cli.github.com/manual/)
+  — ``gh release create`` / ``gh release edit`` / ``gh release
+  upload`` are the bones of ``release.yml``'s rolling-draft
+  flow; ``gh api`` shows up in ``update-tap.yml``.
+- [Releasing projects on GitHub](https://docs.github.com/en/repositories/releasing-projects-on-github)
+  — draft-vs-published, tag-at-publish-time semantics that
+  facet's rolling-draft release model relies on (no tag
+  created until the maintainer Publishes manually).
+
 ### Origin
 - [ws-tabs](https://github.com/akira-toriyama/ws-tabs)
   — the architectural predecessor every view / adapter is lifted
