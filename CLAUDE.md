@@ -133,8 +133,7 @@ a `main.swift` file** — same trap as ws-tabs.
     out. The inverted polarity (log-on by default, not
     ``--debug``-gated like the app) reflects the different
     audience: scripts are run rarely + interactively, the app
-    runs continuously. ``scripts/record-demo.py`` is the
-    canonical example.
+    runs continuously.
 
   The application CLI itself (``facet --view=*`` etc.) is
   idempotent / DNC-broadcast and doesn't need ``--dry-run``;
