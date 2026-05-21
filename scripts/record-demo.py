@@ -29,6 +29,11 @@ Prerequisites (install once)
 
   cliclick will request Accessibility on first click — grant it.
 
+The script invokes ``./run.sh`` before every recording so the
+captured bundle is always a fresh release build from current
+source (no "old Facet.app" surprises). ``./run.sh`` itself calls
+``./stop.sh``, so no separate kill step is needed.
+
 IMPORTANT: the coordinate defaults below assume the tree panel
 sits at its default top-left position and the display is wide
 enough for the grid cells used in grid-drag. If your layout
@@ -152,7 +157,9 @@ class Runner:
 # -----------------------------------------------------------------
 
 def check_prerequisites() -> None:
-    """Fail loud + actionable if required tools / bundle are missing."""
+    """Fail loud + actionable if required tools are missing.
+    ``Facet.app`` is built by ``./run.sh`` on every invocation,
+    so its presence is not a precondition here."""
     missing = [t for t in ("cliclick", "screencapture")
                if shutil.which(t) is None]
     if missing:
@@ -173,22 +180,12 @@ def check_prerequisites() -> None:
             "         (install: brew install ffmpeg)\n"
         )
 
-    bundle = REPO_ROOT / "Facet.app"
-    if not bundle.is_dir():
-        sys.stderr.write(
-            f"error: {bundle.name} not found in repo root.\n"
-            "       build first: ./package.sh   (or ./run.sh)\n"
-        )
-        sys.exit(1)
-
 
 def clean_facet_state(runner: Runner, timing: Timing) -> None:
-    """Kill any existing facet, launch a single fresh release bundle."""
-    print("[setup] killing existing facet instances...")
-    runner.run("./stop.sh")
-    runner.sleep(0.5)
-    print("[setup] launching clean Facet.app...")
-    runner.run("open", "Facet.app")
+    """Rebuild + launch a fresh release bundle (./run.sh internally
+    calls ./stop.sh, so a kill step here would be a duplicate)."""
+    print("[setup] ./run.sh — rebuild + clean relaunch...")
+    runner.run("./run.sh")
     # Wait for server + initial refresh + panel paint.
     runner.sleep(timing.long)
 
