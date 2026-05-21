@@ -28,3 +28,8 @@ let gridLiftShadowOpacity: Float = 0.45
 // window thumb whose rect changed slides from its old rect to its
 // new rect over this duration with an ease-out curve (FLIP).
 let gridReorderDuration: TimeInterval = 0.15
+
+// Pointer distance (px) before a mouseDown becomes a drag. Same
+// value as FacetViewTree's tunable — kept module-local in both
+// places to avoid a cross-module import for one constant.
+let dragThreshold: CGFloat = 5
