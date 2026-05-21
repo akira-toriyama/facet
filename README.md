@@ -3,7 +3,7 @@
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey)
 ![swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![status](https://img.shields.io/badge/status-bootstrap-yellow)
+![status](https://img.shields.io/badge/status-alpha-orange)
 
 **English** · [日本語](README.ja.md)
 
@@ -21,13 +21,14 @@ a clean three-layer split. See [docs/architecture.md](docs/architecture.md).
 
 ## Status
 
-**Bootstrap** — the multi-target SwiftPM scaffolding is in place
-but the views/adapters are not migrated yet. Track:
+**Alpha** — feature parity with ws-tabs v1.6 reached (M2);
+the bundle builds, both views work, the CLI is settled.
+Distribution path (Homebrew tap) lands at M3.
 
 | Milestone | Status |
 |---|---|
 | M1 — repo scaffolded, `swift build` green | ✅ |
-| M2 — tree + grid views working through `FacetAdapterRift` | 🚧 |
+| M2 — tree + grid views working through `FacetAdapterRift` | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ⏳ |
 | M4 — ws-tabs archived | ⏳ |
 | M5+ — `FacetAdapterNative` Phases α–ε | ⏳ |

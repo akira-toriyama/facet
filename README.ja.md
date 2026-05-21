@@ -3,7 +3,7 @@
 ![platform](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey)
 ![swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![status](https://img.shields.io/badge/status-bootstrap-yellow)
+![status](https://img.shields.io/badge/status-alpha-orange)
 
 [English](README.md) · **日本語**
 
@@ -23,13 +23,13 @@ UX を rift-cli 経由で復活させたもの）を、 クリーンな三層構
 
 ## ステータス
 
-**ブートストラップ中** — multi-target SwiftPM scaffold 配置済み、
-view / adapter は移植前。
+**Alpha** — ws-tabs v1.6 との feature parity を達成 (M2)。 bundle
+ビルド可、 両 view 動作、 CLI 確定。 配布 (Homebrew tap) は M3 で。
 
 | マイルストーン | 状態 |
 |---|---|
 | M1 — repo scaffold、 `swift build` green | ✅ |
-| M2 — tree + grid view が `FacetAdapterRift` 経由で動作 | 🚧 |
+| M2 — tree + grid view が `FacetAdapterRift` 経由で動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ⏳ |
 | M4 — ws-tabs を archive | ⏳ |
 | M5+ — `FacetAdapterNative` Phase α–ε | ⏳ |
