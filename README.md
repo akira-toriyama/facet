@@ -35,14 +35,37 @@ but the views/adapters are not migrated yet. Track:
 See [docs/architecture.md](docs/architecture.md) for the layer
 diagram and the migration plan.
 
-## Build
+## Install
+
+Once M3 lands (Homebrew tap available):
+
+```sh
+brew install akira-toriyama/tap/facet
+curl --create-dirs -o ~/.config/facet/config.toml \
+  https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
+```
+
+The `curl` line drops a fully-commented [config.toml](config.toml)
+into place; defaults are sane and the app starts in grid view
+straight away. Edit it to change theme, columns, label position,
+etc. — see the file's comments for each option.
+
+## Configuration
+
+facet reads `~/.config/facet/config.toml` (single source of truth)
+and never writes to it. See [config.toml](config.toml) at the repo
+root for every option + inline docs. Runtime CLI overrides
+(`facet --theme=cute` etc.) apply for the current session only;
+edit the file to make a change stick.
+
+## Build from source
 
 ```sh
 swift build
 swift test
 ```
 
-That's it for now — there's no app bundle until the views land in M2.
+That's it for now — there's no app bundle until M2 lands.
 
 ## Why "facet"
 

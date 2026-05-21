@@ -1,0 +1,75 @@
+# facet — user configuration
+# https://github.com/akira-toriyama/facet
+#
+# This file is the **single source of truth** for facet's settings.
+# Drop it (or your edited copy) at ~/.config/facet/config.toml:
+#
+#   curl --create-dirs -o ~/.config/facet/config.toml \
+#     https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
+#
+# facet only ever READS this file; runtime CLI overrides (e.g.
+# `facet --theme=cute`) apply for the current session only. To
+# make a change stick, edit the value here and restart facet.
+#
+# Out-of-range / unknown values are silently clamped to safe
+# defaults rather than rejected — a typo can't break the layout.
+
+
+# -----------------------------------------------------------------
+# Startup view
+# -----------------------------------------------------------------
+# What facet shows when it launches. Comment out (prefix with `#`)
+# to start in agent-only mode — facet stays running but draws no
+# panel until the CLI asks (`facet --view=grid` etc.).
+#
+#   "tree"  — translucent always-on-top sidebar listing every
+#             workspace and its windows as a tree
+#   "grid"  — full-screen TS3-style overview with DnD between cells
+#
+# Default for a fresh `curl` install: "grid" (works out of the box).
+default_view = "grid"
+
+
+# -----------------------------------------------------------------
+# Color / typography theme
+# -----------------------------------------------------------------
+# Picks the palette + font for the tree panel, grid overlay, and
+# popup menus.
+#
+#   "terminal" — dark near-black bg, Tokyo-Night-ish accents, mono
+#                font. The original look.
+#   "cute"     — soft pastel pink, rounded font.
+#   "system"   — native vibrancy + dynamic system colors. Adapts
+#                to macOS dark/light mode.
+#
+# CLI override (session only): `facet --theme=cute`
+theme = "terminal"
+
+
+# -----------------------------------------------------------------
+# Grid overview
+# -----------------------------------------------------------------
+[grid]
+
+# Number of columns in the overview grid. The row count is derived
+# from the number of workspaces (e.g. 15 workspaces with cols = 4
+# → 4/4/4/3 rows). Clamped 1..12.
+cols = 4
+
+# Where the workspace label sits relative to its cell.
+#
+#   "up"   — label above each cell (Mission Control / TS3 style).
+#   "down" — label below each cell (Stage Manager / dock style).
+label-position = "up"
+
+# Workspace label font size in points. Clamped 8..32. The label
+# band height tracks this so larger labels reserve more space.
+label-size = 15
+
+# Background ScreenCaptureKit refresh cadence (seconds) that keeps
+# grid-view thumbnails warm so `--view=grid` paints immediately
+# with real screenshots instead of icon-fallback. 0 disables the
+# background refresh entirely (cells still capture on demand the
+# first time the grid opens, just with a brief icon flash).
+# Clamped 1..60 when set.
+thumbnail-refresh-seconds = 4

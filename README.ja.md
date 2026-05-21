@@ -36,7 +36,30 @@ view / adapter は移植前。
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
 
-## ビルド
+## インストール
+
+M3 (Homebrew tap 整備) 完了後:
+
+```sh
+brew install akira-toriyama/tap/facet
+curl --create-dirs -o ~/.config/facet/config.toml \
+  https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
+```
+
+`curl` の行で詳細コメント付きの [config.toml](config.toml) が
+配置される。 デフォルト値は妥当で、 そのまま起動すれば grid view
+が立ち上がる。 テーマ・カラム数・ラベル位置等の変更はファイル内の
+コメントを参照。
+
+## 設定
+
+facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
+なし、 source of truth は 1 ファイル)。 設定可能な項目はリポジトリ
+ルートの [config.toml](config.toml) のコメントを参照。 CLI override
+(`facet --theme=cute` 等) はセッション中のみ有効; 永続化したい
+場合はファイルを編集。
+
+## ソースからビルド
 
 ```sh
 swift build

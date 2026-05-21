@@ -96,6 +96,27 @@ a `main.swift` file** — same trap as ws-tabs.
   — separate TCC grants, separate self-signed cert. Don't reuse
   ws-tabs's id even temporarily.
 
+### Configuration
+
+- **`config.toml` at the repo root is the source-of-truth template**.
+  Users `curl` it into `~/.config/facet/config.toml` (see
+  [README.md](README.md) Install section). **The app only reads it**
+  — never writes, never auto-generates an example, never persists
+  runtime overrides to disk. Don't reintroduce
+  `FacetConfig.writeExampleIfMissing()` or a UserDefaults theme
+  store; both were removed deliberately to keep the file the only
+  thing the user has to look at to know what facet will do.
+  Memory: [[config-default-behavior]].
+- **Runtime CLI overrides are session-only**.
+  `facet --theme=cute` swaps the palette in memory but does NOT
+  persist. To make it stick, edit `~/.config/facet/config.toml`.
+  Same goes for `--view=...` (toggles, doesn't change default).
+- **All TOML keys clamp out-of-range / unknown values to defaults**
+  rather than rejecting. A typo can never break the layout — the
+  user just gets the default for that one key. The `effective*`
+  accessors on `FacetConfig` are where the clamping lives; always
+  read through them, never the raw Optional fields.
+
 ### Workflow
 
 - **Don't push without explicit OK**. Quality-first phased
