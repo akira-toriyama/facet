@@ -44,9 +44,22 @@ public func parseTOMLSubset(_ text: String)
             .trimmingCharacters(in: .whitespaces)
         var val = String(trimmed[trimmed.index(after: eq)...])
             .trimmingCharacters(in: .whitespaces)
-        // Inline `# …` comment, but only when the value is not a
-        // quoted string (`#` inside `"…"` is data).
-        if !val.hasPrefix("\""), let h = val.firstIndex(of: "#") {
+        // Inline `# …` comment. Two cases:
+        //   - val starts with `"`: skip until the *closing* quote,
+        //     then strip any `# …` that follows. `#` inside the
+        //     quoted body stays as data.
+        //   - val unquoted: any `#` starts the inline comment.
+        if val.hasPrefix("\"") {
+            let afterOpen = val.index(after: val.startIndex)
+            if let closeIdx = val[afterOpen...].firstIndex(of: "\"") {
+                let afterClose = val.index(after: closeIdx)
+                if afterClose < val.endIndex,
+                   let h = val[afterClose...].firstIndex(of: "#") {
+                    val = String(val[..<h])
+                        .trimmingCharacters(in: .whitespaces)
+                }
+            }
+        } else if let h = val.firstIndex(of: "#") {
             val = String(val[..<h]).trimmingCharacters(in: .whitespaces)
         }
         guard !key.isEmpty, !val.isEmpty else { continue }

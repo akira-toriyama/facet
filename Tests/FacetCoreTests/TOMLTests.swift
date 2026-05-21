@@ -50,9 +50,18 @@ final class TOMLTests: XCTestCase {
         XCTAssertEqual(p[""]?["n"], .int(4))
     }
 
-    func testInlineHashInsideQuotedStringIsKept() {
-        // `#` inside "…" should stay as data, not be treated as a
-        // comment start.
+    func testHashInsideQuotedStringIsData() {
+        // `#` inside "…" must stay as data, not be treated as a
+        // comment start. (Tests data preservation alone — no
+        // trailing comment.)
+        let p = parseTOMLSubset(#"s = "a#b""#)
+        XCTAssertEqual(p[""]?["s"], .string("a#b"))
+    }
+
+    func testInlineCommentAfterQuotedStringStripped() {
+        // The closing quote terminates the value; anything after
+        // (`# tail`) is inline comment and dropped. The data
+        // `a#b` inside the quotes is preserved.
         let p = parseTOMLSubset(#"s = "a#b" # tail"#)
         XCTAssertEqual(p[""]?["s"], .string("a#b"))
     }
