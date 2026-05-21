@@ -48,6 +48,58 @@ enum FacetApp {
     /// ``Controller.dispatchView/Hide/Toggle`` switches.
     static let canonicalViews = ["tree", "grid"]
 
+    // MARK: - Help
+
+    static func printHelp() -> Never {
+        let help = """
+        facet — Swift workspace + window manager for macOS.
+
+        USAGE
+          facet [COMMAND]                    client mode (post to server)
+          facet                              server mode (start the app)
+
+        VIEW OPERATIONS                      NAME ∈ tree | grid
+          facet --view=NAME [--active]       open NAME (idempotent)
+          facet --hide=NAME                  close NAME
+          facet --toggle=NAME                toggle NAME
+
+          --active is a modifier — meaningful only with --view=tree
+          (enters keyboard-nav mode). With --view=grid it's silently
+          ignored; the overlay is always key/active by construction.
+
+        TREE ALIASES                         (shorthand for "tree")
+          facet --show                       = --view=tree
+          facet --hide                       = --hide=tree
+          facet --toggle                     = --toggle=tree
+          facet --active                     = --view=tree --active
+
+        SERVER CONTROLS
+          facet --theme=NAME                 terminal | cute | system
+                                             (session only; edit
+                                             config.toml to persist)
+          facet --quit                       terminate the server
+          facet --debug                      verbose log to stderr +
+                                             /tmp/facet.log (server
+                                             startup only)
+
+          facet --help, -h                   this help
+
+        EXIT CODES
+          0   success (DNC posted or server started)
+          2   unknown view / theme name (stderr lists expected values)
+
+        CONFIG
+          ~/.config/facet/config.toml is the single source of truth.
+          Install template:
+          https://github.com/akira-toriyama/facet/blob/main/config.toml
+
+        DOCS
+          https://github.com/akira-toriyama/facet
+        """
+        print(help)
+        exit(0)
+    }
+
     // MARK: - Client mode posting
 
     /// Post a raw control string to the running instance, then
@@ -107,6 +159,11 @@ enum FacetApp {
 
     static func main() {
         let argv = Array(CommandLine.arguments.dropFirst())
+
+        // Help short-circuits everything else.
+        if argv.contains("--help") || argv.contains("-h") {
+            printHelp()
+        }
 
         // Set debug mode first so any subsequent code path (incl.
         // the validators that fire from client mode) can use
