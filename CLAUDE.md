@@ -189,147 +189,182 @@ External material that informed facet's API / architecture
 decisions. Kept here so the rationale survives future
 contributors (human or AI) reopening the repo cold.
 
-### Swift / Apple
-- [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/)
-  — naming, doc-summary rules, protocol naming. Consulted when
-  ``WindowBackend`` / ``Workspace`` / ``Window`` were designed
-  (M2 step 1).
-- [Swift 6 Migration Guide](https://www.swift.org/migration/documentation/migrationguide/)
-  — strict-concurrency migration patterns (``Sendable``,
-  ``AsyncStream``, ``@MainActor`` globals). Consulted when
-  ``BackendEvent`` moved from callback to ``AsyncStream`` (M2
-  step 1 refactor).
-- [Apple Developer — Swift Concurrency](https://developer.apple.com/documentation/swift/concurrency)
-  — authoritative reference for ``async`` / ``await`` /
-  ``Task`` / actor / ``Sendable``. Use when implementing a new
-  concurrent seam (e.g. extending ``Controller.start``'s event
-  loop, adding a new actor-isolated cache).
-- [Swift Package Manager docs](https://www.swift.org/documentation/package-manager/)
-  — ``Package.swift`` manifest, target / product / test-target
-  declarations, dependency rules. Use when adding a module or
-  test target (every new ``Sources/Facet*`` directory needs a
-  matching ``.target`` entry; new ``Tests/Facet*Tests`` needs a
-  ``.testTarget``).
-- [Swift Evolution](https://github.com/apple/swift-evolution)
-  — language proposal history. Look up an SE-NNNN when the
-  rationale behind a strict-concurrency / Sendable / actor /
-  isolation rule isn't obvious from the migration guide alone.
-
-### macOS / Apple platform
-- [Apple Developer Documentation (root)](https://developer.apple.com/documentation/)
-  — entry point for AppKit, Foundation, ScreenCaptureKit,
-  ApplicationServices (AX) docs. Use when looking up an API
-  signature or implementing against a new framework.
-- [macOS Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/macos)
-  — agent / menu-bar-extra app design conventions. The
-  ``LSUIElement = true`` choice (facet runs without a Dock icon)
-  and the never-steal-focus ``.nonactivatingPanel`` design
-  trace here.
-- [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
-  — macOS 14+ window capture API used by ``WindowPreview``
-  (sidebar hover preview + grid thumbnails). The Screen Recording
-  permission rationale and the ``SCStreamConfiguration`` /
-  ``SCContentFilter`` usage in ``Sources/FacetView/WindowPreview.swift``
-  follow the docs here.
-- [Hardened Runtime / Code Signing](https://developer.apple.com/documentation/security/hardened_runtime)
-  — why ``setup-signing-cert.sh`` exists: TCC keys the
-  Accessibility grant to the code-signing identity, so ad-hoc
-  signing loses the grant on every rebuild; a persistent
-  self-signed cert keeps the identity stable across rebuilds.
-- [NUIKit/CGSInternal (community)](https://github.com/NUIKit/CGSInternal)
-  — community-maintained header dump for private CGS / AX
-  symbols like ``_AXUIElementGetWindow`` (used in
-  ``AXFocus.swift`` via ``dlsym``). No official Apple equivalent
-  for these symbols; this is the de-facto reference.
-
-### CLI design
-- [POSIX Utility Conventions (IEEE 1003.1, XBD §12)](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)
-  — the source-of-truth specification every modern CLI inherits
-  from. Argument syntax (`--long-option=VALUE`), exit-status
-  semantics (0 = success, 1+ = utility-specific failure, 2 =
-  usage / syntax error), option ordering rules. facet's exit
-  code split (0 / 2 / 3) maps directly here.
-- [The Art of Unix Programming — Ch.1 *Basics of the Unix Philosophy*](http://www.catb.org/~esr/writings/taoup/html/ch01s06.html)
-  — the 17 rules. The ones facet actively follows: *Rule of
-  Silence* (silent success on the happy path), *Rule of Repair*
-  (loud + immediate failure, never silent fallback), *Rule of
-  Composition* (stdout pipe-friendly), *Rule of Least Surprise*
-  (canonical-only flag surface, no aliases). Old (2003) but the
-  calibration still applies.
-- [Command Line Interface Guidelines (clig.dev)](https://clig.dev/)
-  — modern (2020+) restatement of the above plus current
-  conventions: stderr vs stdout, human- vs machine-readable
-  output, idempotence. The post-M2 "no aliases, NAME required
-  for every view op, typo wins over server-state check"
-  decisions trace directly to clig.dev's *consistency* and
-  *robustness* sections.
-- [GNU Standards: Command-Line Interfaces](https://www.gnu.org/prep/standards/html_node/Command_002dLine-Interfaces.html)
-  — practical baseline for ``--long-options``, ``--help`` /
-  ``--version`` conventions.
+Subsections ordered **broad → narrow / language-neutral →
+language-specific** (memory `external-reference-selection`'s
+application-priority rule). Each entry carries
+`(reviewed YYYY-MM-DD)` so the freshness lifecycle is visible
+at a glance; re-check on any 6+ month gap, refresh the date on
+re-confirmation.
 
 ### Architecture (Hexagonal / Clean Architecture / DDD)
+*Language-neutral, governs whole-system structure.*
+
 - [Hexagonal Architecture / Ports & Adapters (Alistair Cockburn)](https://alistair.cockburn.us/hexagonal-architecture/)
-  — the pattern facet's 3-layer split is literally implementing.
-  ``WindowBackend`` protocol = a Port; ``RiftAdapter`` = an
-  Adapter; ``FacetCore`` lives inside the hexagon. Clean
-  Architecture restates this idea with more layers; the
-  rosetta-stone table in
+  *(reviewed 2026-05-21)* — the pattern facet's 3-layer split
+  is literally implementing. ``WindowBackend`` protocol = a
+  Port; ``RiftAdapter`` = an Adapter; ``FacetCore`` lives
+  inside the hexagon. Clean Architecture restates this idea
+  with more layers; the rosetta-stone table in
   [docs/architecture.md](docs/architecture.md) shows the mapping.
 - [jasontaylordev/cleanarchitecture](https://github.com/jasontaylordev/cleanarchitecture)
-  — canonical CA 4-layer template (.NET reference for the
-  concept).
+  *(reviewed 2026-05-21)* — canonical CA 4-layer template
+  (.NET reference for the concept).
 - [sergdort/ModernCleanArchitectureSwiftUI](https://github.com/sergdort/ModernCleanArchitectureSwiftUI)
-  — Swift-native CA module layout. The Domain / Platform /
-  Features / Application split informed the rosetta-stone table
-  in [docs/architecture.md](docs/architecture.md).
+  *(reviewed 2026-05-21)* — Swift-native CA module layout. The
+  Domain / Platform / Features / Application split informed the
+  rosetta-stone table in
+  [docs/architecture.md](docs/architecture.md).
 - [tuan188/CleanArchitecture](https://github.com/tuan188/CleanArchitecture)
-  — second Swift-CA reference; consult if a fundamental
-  restructure is on the table.
+  *(reviewed 2026-05-21)* — second Swift-CA reference; consult
+  if a fundamental restructure is on the table.
 - [GitHub topic: domain-driven-design](https://github.com/topics/domain-driven-design)
-  — entry point for cross-language DDD pattern examples.
+  *(reviewed 2026-05-21)* — entry point for cross-language DDD
+  pattern examples.
 
 ### Conventions (commit / version)
+*Language-neutral, governs collaboration culture.*
+
 - [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
-  — the commit-message spec facet's
+  *(reviewed 2026-05-21)* — the commit-message spec facet's
   [docs/commit-convention.md](docs/commit-convention.md) is
   built on. ``cliff.toml`` parses ``<type>(<scope>)<!>:
   <subject>`` per this spec; git-cliff derives the next semver
   from the ``type`` field.
 - [gitmoji](https://gitmoji.dev/)
-  — emoji vocabulary the convention prepends. Use this site to
-  look up the ``:code:`` form (the convention requires the code
-  form, not the literal emoji glyph) and which emoji matches
-  which intent. carloscuesta/gitmoji repo + JSON are downstream
-  of this site; the site is the canonical reference.
+  *(reviewed 2026-05-21)* — emoji vocabulary the convention
+  prepends. Use this site to look up the ``:code:`` form (the
+  convention requires the code form, not the literal emoji
+  glyph) and which emoji matches which intent.
+  carloscuesta/gitmoji repo + JSON are downstream of this site;
+  the site is the canonical reference.
 
-### Packaging / Release
-- [Homebrew](https://brew.sh/ja/)
-  — the distribution channel for the M3+ release. ``brew
-  install akira-toriyama/tap/facet`` lands at M3;
-  ``.github/workflows/update-tap.yml`` automates formula bumps
-  on every published release. Consult when authoring or
-  modifying the formula at ``akira-toriyama/homebrew-tap``.
+### CLI design
+*Language-neutral UX principles for command-line tools.*
+
+- [POSIX Utility Conventions (IEEE 1003.1, XBD §12)](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html)
+  *(reviewed 2026-05-21)* — the source-of-truth specification
+  every modern CLI inherits from. Argument syntax
+  (`--long-option=VALUE`), exit-status semantics (0 = success,
+  1+ = utility-specific failure, 2 = usage / syntax error),
+  option ordering rules. facet's exit code split (0 / 2 / 3)
+  maps directly here.
+- [The Art of Unix Programming — Ch.1 *Basics of the Unix Philosophy*](http://www.catb.org/~esr/writings/taoup/html/ch01s06.html)
+  *(reviewed 2026-05-21)* — the 17 rules. The ones facet
+  actively follows: *Rule of Silence* (silent success on the
+  happy path), *Rule of Repair* (loud + immediate failure,
+  never silent fallback), *Rule of Composition* (stdout
+  pipe-friendly), *Rule of Least Surprise* (canonical-only flag
+  surface, no aliases). Old (2003) but the calibration still
+  applies.
+- [Command Line Interface Guidelines (clig.dev)](https://clig.dev/)
+  *(reviewed 2026-05-21)* — modern (2020+) restatement of the
+  above plus current conventions: stderr vs stdout, human- vs
+  machine-readable output, idempotence. The post-M2 "no
+  aliases, NAME required for every view op, typo wins over
+  server-state check" decisions trace directly to clig.dev's
+  *consistency* and *robustness* sections.
+- [GNU Standards: Command-Line Interfaces](https://www.gnu.org/prep/standards/html_node/Command_002dLine-Interfaces.html)
+  *(reviewed 2026-05-21)* — practical baseline for
+  ``--long-options``, ``--help`` / ``--version`` conventions.
+
+### Swift / Apple
+*Language-specific: API correctness, concurrency, build.*
+
+- [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/)
+  *(reviewed 2026-05-21)* — naming, doc-summary rules, protocol
+  naming. Consulted when ``WindowBackend`` / ``Workspace`` /
+  ``Window`` were designed (M2 step 1).
+- [Swift 6 Migration Guide](https://www.swift.org/migration/documentation/migrationguide/)
+  *(reviewed 2026-05-21)* — strict-concurrency migration
+  patterns (``Sendable``, ``AsyncStream``, ``@MainActor``
+  globals). Consulted when ``BackendEvent`` moved from callback
+  to ``AsyncStream`` (M2 step 1 refactor).
+- [Apple Developer — Swift Concurrency](https://developer.apple.com/documentation/swift/concurrency)
+  *(reviewed 2026-05-21)* — authoritative reference for
+  ``async`` / ``await`` / ``Task`` / actor / ``Sendable``. Use
+  when implementing a new concurrent seam (e.g. extending
+  ``Controller.start``'s event loop, adding a new
+  actor-isolated cache).
+- [Swift Package Manager docs](https://www.swift.org/documentation/package-manager/)
+  *(reviewed 2026-05-21)* — ``Package.swift`` manifest, target
+  / product / test-target declarations, dependency rules. Use
+  when adding a module or test target (every new
+  ``Sources/Facet*`` directory needs a matching ``.target``
+  entry; new ``Tests/Facet*Tests`` needs a ``.testTarget``).
+- [Swift Evolution](https://github.com/apple/swift-evolution)
+  *(reviewed 2026-05-21)* — language proposal history. Look up
+  an SE-NNNN when the rationale behind a strict-concurrency /
+  Sendable / actor / isolation rule isn't obvious from the
+  migration guide alone.
+
+### macOS / Apple platform
+*Platform-specific: AppKit, capture, signing, private symbols.*
+
+- [Apple Developer Documentation (root)](https://developer.apple.com/documentation/)
+  *(reviewed 2026-05-21)* — entry point for AppKit, Foundation,
+  ScreenCaptureKit, ApplicationServices (AX) docs. Use when
+  looking up an API signature or implementing against a new
+  framework.
+- [macOS Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/macos)
+  *(reviewed 2026-05-21)* — agent / menu-bar-extra app design
+  conventions. The ``LSUIElement = true`` choice (facet runs
+  without a Dock icon) and the never-steal-focus
+  ``.nonactivatingPanel`` design trace here.
+- [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
+  *(reviewed 2026-05-21)* — macOS 14+ window capture API used
+  by ``WindowPreview`` (sidebar hover preview + grid
+  thumbnails). The Screen Recording permission rationale and
+  the ``SCStreamConfiguration`` / ``SCContentFilter`` usage in
+  ``Sources/FacetView/WindowPreview.swift`` follow the docs
+  here.
+- [Hardened Runtime / Code Signing](https://developer.apple.com/documentation/security/hardened_runtime)
+  *(reviewed 2026-05-21)* — why ``setup-signing-cert.sh``
+  exists: TCC keys the Accessibility grant to the code-signing
+  identity, so ad-hoc signing loses the grant on every rebuild;
+  a persistent self-signed cert keeps the identity stable
+  across rebuilds.
+- [NUIKit/CGSInternal (community)](https://github.com/NUIKit/CGSInternal)
+  *(reviewed 2026-05-21)* — community-maintained header dump
+  for private CGS / AX symbols like ``_AXUIElementGetWindow``
+  (used in ``AXFocus.swift`` via ``dlsym``). No official Apple
+  equivalent for these symbols; this is the de-facto reference.
 
 ### GitHub / CI
+*Tool-specific: workflows, gh, releases.*
+
 - [GitHub Docs (root)](https://docs.github.com)
-  — entry point for everything GitHub-related: Actions, REST
-  API, releases, packages, gh CLI.
+  *(reviewed 2026-05-21)* — entry point for everything
+  GitHub-related: Actions, REST API, releases, packages, gh
+  CLI.
 - [GitHub Actions documentation](https://docs.github.com/en/actions)
-  — workflow YAML syntax, events, contexts, expressions. Used
-  to write the four workflows under ``.github/workflows/``
-  (build / commit-lint / release / update-tap). Look up
-  ``on:`` events, ``concurrency:`` semantics, secret access
-  rules here.
+  *(reviewed 2026-05-21)* — workflow YAML syntax, events,
+  contexts, expressions. Used to write the four workflows under
+  ``.github/workflows/`` (build / commit-lint / release /
+  update-tap). Look up ``on:`` events, ``concurrency:``
+  semantics, secret access rules here.
 - [GitHub REST API](https://docs.github.com/en/rest)
-  — used indirectly via ``gh api`` in ``update-tap.yml`` (e.g.
-  release tag resolution). Reach here when the ``gh`` CLI lacks
-  a high-level wrapper for the operation you need.
+  *(reviewed 2026-05-21)* — used indirectly via ``gh api`` in
+  ``update-tap.yml`` (e.g. release tag resolution). Reach here
+  when the ``gh`` CLI lacks a high-level wrapper for the
+  operation you need.
 - [GitHub CLI manual (`gh`)](https://cli.github.com/manual/)
-  — ``gh release create`` / ``gh release edit`` / ``gh release
-  upload`` are the bones of ``release.yml``'s rolling-draft
-  flow; ``gh api`` shows up in ``update-tap.yml``.
+  *(reviewed 2026-05-21)* — ``gh release create`` / ``gh
+  release edit`` / ``gh release upload`` are the bones of
+  ``release.yml``'s rolling-draft flow; ``gh api`` shows up in
+  ``update-tap.yml``.
 - [Releasing projects on GitHub](https://docs.github.com/en/repositories/releasing-projects-on-github)
-  — draft-vs-published, tag-at-publish-time semantics that
-  facet's rolling-draft release model relies on (no tag
-  created until the maintainer Publishes manually).
+  *(reviewed 2026-05-21)* — draft-vs-published,
+  tag-at-publish-time semantics that facet's rolling-draft
+  release model relies on (no tag created until the maintainer
+  Publishes manually).
+
+### Packaging / Release
+*Distribution-specific: how the bundle reaches users.*
+
+- [Homebrew](https://brew.sh/ja/)
+  *(reviewed 2026-05-21)* — the distribution channel for the
+  M3+ release. ``brew install akira-toriyama/tap/facet`` lands
+  at M3; ``.github/workflows/update-tap.yml`` automates formula
+  bumps on every published release. Consult when authoring or
+  modifying the formula at ``akira-toriyama/homebrew-tap``.
 
