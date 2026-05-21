@@ -86,7 +86,10 @@ enum FacetApp {
 
         EXIT CODES
           0   success (DNC posted or server started)
-          2   unknown view / theme name (stderr lists expected values)
+          2   unknown flag / view / theme name (stderr lists expected
+              values)
+          3   no server running for the requested client-mode action
+              (start one with ./run.sh)
 
         CONFIG
           ~/.config/facet/config.toml is the single source of truth.
@@ -98,6 +101,54 @@ enum FacetApp {
         """
         print(help)
         exit(0)
+    }
+
+    // MARK: - Server liveness
+
+    /// True when a facet server process (bundle or raw SwiftPM
+    /// binary) is currently running. Uses ``pgrep`` (part of
+    /// macOS — no Homebrew dependency). Self-aware: this process's
+    /// own PID is excluded so a CLI invocation doesn't mis-detect
+    /// itself as the server.
+    static func isServerRunning() -> Bool {
+        let myPid = ProcessInfo.processInfo.processIdentifier
+        // Covers both .app bundles (Facet.app / Facet-dev.app)
+        // and raw SwiftPM builds (.build/debug/facet etc.).
+        let patterns = ["/Contents/MacOS/facet", "\\.build/.*/facet"]
+        for pattern in patterns {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            p.arguments = ["-f", pattern]
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = FileHandle.nullDevice
+            do { try p.run() } catch {
+                // pgrep itself unavailable → can't tell; assume
+                // alive so we don't false-positive a missing
+                // server message on broken systems.
+                return true
+            }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            guard let text = String(data: data, encoding: .utf8)
+            else { continue }
+            let pids = text.split(separator: "\n")
+                .compactMap { Int32($0) }
+            if pids.contains(where: { $0 != myPid }) { return true }
+        }
+        return false
+    }
+
+    /// Exit (3) with a helpful stderr message when no server is
+    /// running. Called before every client-mode post so silent
+    /// DNC broadcasts to nobody don't leave the user wondering
+    /// why their hotkey did nothing.
+    static func requireServerAlive() {
+        if isServerRunning() { return }
+        let msg = "facet: server not running — start it with "
+            + "`./run.sh` (or `facet` alone for server mode)\n"
+        FileHandle.standardError.write(Data(msg.utf8))
+        exit(3)
     }
 
     // MARK: - Client mode posting
@@ -113,42 +164,46 @@ enum FacetApp {
         exit(0)
     }
 
-    /// Validate + post a ``style:NAME`` notification.
+    /// Post ``style:NAME``. Name must already be canonical
+    /// (validated by ``canonicalStyle`` at parse time).
     static func postStyle(_ name: String) -> Never {
-        let n = name.trimmingCharacters(in: .whitespaces)
-        guard canonicalStyles.contains(n.lowercased()) else {
-            let msg = "facet: unknown theme \"\(n)\" — expected one of: "
-                + canonicalStyles.joined(separator: ", ") + "\n"
-            FileHandle.standardError.write(Data(msg.utf8))
-            exit(2)
-        }
-        postControl("style:" + n)
+        postControl("style:" + name)
     }
 
-    /// Validate + post ``view:NAME`` (or ``view:NAME+active``).
+    /// Post ``view:NAME`` (or ``view:NAME+active``). Name must
+    /// already be canonical.
     static func postView(_ name: String, active: Bool) -> Never {
-        let n = canonicalView(name)
-        postControl(active ? "view:\(n)+active" : "view:\(n)")
+        postControl(active ? "view:\(name)+active" : "view:\(name)")
     }
 
     static func postHide(_ name: String) -> Never {
-        let n = canonicalView(name)
-        postControl("hide:\(n)")
+        postControl("hide:\(name)")
     }
 
     static func postToggle(_ name: String) -> Never {
-        let n = canonicalView(name)
-        postControl("toggle:\(n)")
+        postControl("toggle:\(name)")
     }
 
-    /// Loudly reject typos rather than silently fall through (same
-    /// principle as ``postStyle``). Returns the canonical name on
-    /// success; ``exit(2)`` with stderr message on failure.
-    private static func canonicalView(_ name: String) -> String {
+    /// Validate + canonicalise a view name. Loud reject on typo
+    /// (``exit(2)``) so a fundamental error wins over later
+    /// transient checks (e.g. server-not-running).
+    static func canonicalView(_ name: String) -> String {
         let n = name.trimmingCharacters(in: .whitespaces).lowercased()
         guard canonicalViews.contains(n) else {
             let msg = "facet: unknown view \"\(n)\" — expected one of: "
                 + canonicalViews.joined(separator: ", ") + "\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(2)
+        }
+        return n
+    }
+
+    /// Validate + canonicalise a theme name.
+    static func canonicalStyle(_ name: String) -> String {
+        let n = name.trimmingCharacters(in: .whitespaces).lowercased()
+        guard canonicalStyles.contains(n) else {
+            let msg = "facet: unknown theme \"\(n)\" — expected one of: "
+                + canonicalStyles.joined(separator: ", ") + "\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
         }
@@ -186,18 +241,26 @@ enum FacetApp {
             case a == "--quit":              quitFlag = true
             case a == "--active":            activeFlag = true
             case a == "--debug":             break          // handled above
+            // Names are canonicalised + validated at parse time
+            // (not at post time) so typos exit 2 BEFORE the server-
+            // alive check runs — a fundamental error should win
+            // over a transient one.
             case a.hasPrefix("--view="):
-                viewArg = String(a.dropFirst("--view=".count))
+                viewArg = canonicalView(String(a.dropFirst("--view=".count)))
             case a == "--view":
-                if i + 1 < argv.count { viewArg = argv[i + 1]; i += 1 }
+                if i + 1 < argv.count {
+                    viewArg = canonicalView(argv[i + 1]); i += 1
+                }
             case a.hasPrefix("--hide="):
-                hideArg = String(a.dropFirst("--hide=".count))
+                hideArg = canonicalView(String(a.dropFirst("--hide=".count)))
             case a.hasPrefix("--toggle="):
-                toggleArg = String(a.dropFirst("--toggle=".count))
+                toggleArg = canonicalView(String(a.dropFirst("--toggle=".count)))
             case a.hasPrefix("--theme="):
-                styleArg = String(a.dropFirst("--theme=".count))
+                styleArg = canonicalStyle(String(a.dropFirst("--theme=".count)))
             case a == "--theme":
-                if i + 1 < argv.count { styleArg = argv[i + 1]; i += 1 }
+                if i + 1 < argv.count {
+                    styleArg = canonicalStyle(argv[i + 1]); i += 1
+                }
             default:
                 // Loud reject — typos / dropped legacy flags
                 // (``--show`` / ``--hide`` / ``--toggle`` /
@@ -219,6 +282,16 @@ enum FacetApp {
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
         }
+
+        // Any client-mode action is about to fire — make sure a
+        // server is actually listening, otherwise the DNC post
+        // would silently broadcast to nobody and exit 0,
+        // leaving a dead-hotkey mystery. Server mode (no client
+        // flag at all) is unaffected; this process is the one
+        // about to become the server.
+        let anyClientAction = styleArg != nil || quitFlag
+            || viewArg != nil || hideArg != nil || toggleArg != nil
+        if anyClientAction { requireServerAlive() }
 
         // Dispatch (each branch ``postControl``s, which exits).
         // ``--theme`` and ``--quit`` are independent — applied
