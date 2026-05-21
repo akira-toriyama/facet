@@ -47,7 +47,6 @@ final class Controller: NSObject {
     /// Pauses refresh/apply while the user is mid-grip-drag, so a
     /// layout pass can't stomp the panel height the next mouseDragged
     /// is about to read (memory: grid-branch-grip-intermittent).
-    private var isGripResizing = false
     private var refreshPending = false
 
     // MARK: - Preview (hover overlay + grid thumbnails)
@@ -104,7 +103,6 @@ final class Controller: NSObject {
         self.panelHost = PanelHost(view: view)
         super.init()
         view.controller = self
-        for g in panelHost.grips { g.controller = self }
         if #available(macOS 14.0, *) { winPreview = WindowPreview() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
@@ -223,7 +221,6 @@ final class Controller: NSObject {
         pal = paletteFor(key)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
-        for g in panelHost.grips { g.needsDisplay = true }
     }
 
     // MARK: - Refresh / apply
@@ -240,11 +237,6 @@ final class Controller: NSObject {
     }
 
     private func refresh() {
-        // Skip backend round-trip while the user is mid-grip-drag —
-        // both this refresh's eventual `apply` and the grip's
-        // `resizeBy` mutate `panel.frame` on the main thread. The
-        // mouseUp re-runs refresh() so no backend snapshot is lost.
-        if isGripResizing { Log.debug("refresh skipped (gripResizing)"); return }
         Log.debug("refresh dispatch")
         let bk = backend
         cliQueue.async {
@@ -280,7 +272,6 @@ final class Controller: NSObject {
             refreshThumbnailCache()
         }
         if userHidden { return }
-        if isGripResizing { return }
         guard !wss.isEmpty, NSScreen.main != nil else {
             panelHost.hide(); return
         }
@@ -793,22 +784,6 @@ extension Controller: TreeController {
 
     func persistPosition() {
         panelHost.persistPosition()
-    }
-
-    func gripResizeBegan() {
-        isGripResizing = true
-    }
-
-    func gripResizeEnded() {
-        isGripResizing = false
-        panelHost.persistPosition()
-        // Re-run a refresh so any events skipped during the drag
-        // (gated by isGripResizing) land now.
-        refresh()
-    }
-
-    func resizeBy(dx: CGFloat, dy: CGFloat, corner: GripCorner) {
-        panelHost.resizeBy(dx: dx, dy: dy, corner: corner)
     }
 
     // -- Refresh

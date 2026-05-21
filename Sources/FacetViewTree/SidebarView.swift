@@ -24,9 +24,6 @@ public final class SidebarView: NSView {
     // MARK: - Wiring
 
     public weak var controller: TreeController?
-    /// Set by PanelHost. mouseMoved skips cursor handling over any
-    /// of these grip hit areas (each grip manages its own cursor).
-    public var grips: [NSView] = []
     private let backend: any WindowBackend
 
     public init(frame: NSRect, backend: any WindowBackend) {
@@ -285,13 +282,6 @@ public final class SidebarView: NSView {
         if i != hoverIdx {
             hoverIdx = i; needsDisplay = true
             controller?.previewTargetChanged()
-        }
-        // Skip cursor handling over any grip's hit area — each grip
-        // pushes its own diagonal cursor and this view's mouseMoved
-        // would flicker it back to arrow on every event.
-        for g in grips where !g.isHidden {
-            let r = g.convert(g.bounds, to: nil)
-            if r.contains(e.locationInWindow) { return }
         }
         (i != nil ? NSCursor.pointingHand : NSCursor.arrow).set()
     }

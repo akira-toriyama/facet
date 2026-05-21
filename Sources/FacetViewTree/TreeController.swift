@@ -12,12 +12,6 @@ import CoreGraphics
 import Foundation
 import FacetCore
 
-/// Which corner of the panel a grip handle anchors. Drag from a
-/// corner keeps the opposite corner fixed.
-public enum GripCorner: Sendable {
-    case bottomRight, bottomLeft, topRight, topLeft
-}
-
 @MainActor
 public protocol TreeController: AnyObject, Sendable {
     /// Leave keyboard-nav (`--active`) mode. `restore == true` means
@@ -44,24 +38,6 @@ public protocol TreeController: AnyObject, Sendable {
     /// Schedule a backend refresh + view reconcile after `delay`.
     /// Coalesces against any pending reconcile (debounce).
     func scheduleReconcile(after delay: TimeInterval)
-
-    /// Grip drag started — controller pauses background
-    /// refresh/apply ticks for the duration. Without this gate, a
-    /// refresh landing between two mouseDragged events can stomp
-    /// the panel height the next drag tick was about to read
-    /// (memory: grid-branch-grip-intermittent).
-    func gripResizeBegan()
-
-    /// Grip drag ended — controller persists the new size and runs
-    /// a single refresh to catch up on events skipped during the
-    /// drag.
-    func gripResizeEnded()
-
-    /// Per-mouseDragged-event resize delta from the grip. `dx` /
-    /// `dy` come straight from `NSEvent`. `corner` identifies which
-    /// corner the user is dragging from — controller picks the
-    /// anchor (= the opposite corner stays put) and direction signs.
-    func resizeBy(dx: CGFloat, dy: CGFloat, corner: GripCorner)
 
     /// Move precise focus to `window`. Controller picks the retry
     /// strategy: bounded short retry for same-workspace clicks,

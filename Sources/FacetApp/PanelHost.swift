@@ -1,9 +1,16 @@
 // Panel scaffolding for the tree view. Owns the `NSPanel`, the
 // `NSVisualEffectView` backdrop, the scroll view holding
-// `SidebarView`, the resize grip, and the search bar above the
-// list. Provides show / hide / move / resize / persist + the
-// single-source-of-truth `layout(contentHeight:searching:)` —
-// every geometry change inside the panel funnels through it.
+// `SidebarView`, and the search bar above the list. Provides
+// show / hide / move / resize / persist + the single-source-of-
+// truth `layout(contentHeight:searching:)` — every geometry change
+// inside the panel funnels through it.
+//
+// Resize is delegated to AppKit via `.resizable` in the styleMask;
+// drag from any edge / corner of the panel chrome triggers an OS
+// resize, which we mirror into our persisted geometry via
+// `windowDidResize`. No custom grip view — sandbox A/B testing
+// (sandbox/panel-resize-tester) showed the OS path is reliable on
+// .borderless + .nonactivatingPanel once .resizable is set.
 //
 // Knows nothing about backends, AX, refresh ticks, or the
 // distributed-notification IPC. Those live one layer up in
@@ -15,7 +22,7 @@ import FacetView
 import FacetViewTree
 
 @MainActor
-final class PanelHost {
+final class PanelHost: NSObject {
 
     // MARK: - Chrome
 
@@ -23,11 +30,6 @@ final class PanelHost {
     private let effect: NSVisualEffectView
     private let scroll: NSScrollView
     private let bgView = NSView()
-    let gripBR: GripView   // bottom-right (default, primary)
-    let gripBL: GripView   // bottom-left
-    let gripTR: GripView   // top-right
-    let gripTL: GripView   // top-left
-    var grips: [GripView] { [gripBR, gripBL, gripTR, gripTL] }
     let searchBar: SearchBar
     private let view: SidebarView
 
@@ -40,10 +42,6 @@ final class PanelHost {
     // MARK: - Tunables
 
     private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
-    private let gripSize: CGFloat = 80         // hit area; chevron visual stays compact via GripView.draw
-    private let sideInset: CGFloat = 0         // grips flush with panel edges; overlay scroller may briefly overlap right chevrons when visible
-    private let gripBottomInset: CGFloat = 0   // bottom grips flush with panel bottom; round-corner overlap accepted
-    private let topClearance: CGFloat = 16     // empty band at panel top so TL/TR grips don't sit over the WS-header row + master_stack pill
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160
@@ -71,6 +69,7 @@ final class PanelHost {
         scroll.hasVerticalScroller = true
         scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
+        scroll.autoresizingMask = [.width, .height]
         // Flipped clipView so the documentView (SidebarView) is
         // top-anchored — without this, shrinking the panel via the
         // grip leaves rows pinned to the bottom (the "top blank on
@@ -88,6 +87,7 @@ final class PanelHost {
         effect.layer?.cornerRadius = 12
         effect.layer?.cornerCurve = .continuous
         effect.layer?.masksToBounds = true
+        effect.autoresizingMask = [.width, .height]
         // Vibrancy isn't clipped by cornerRadius alone (faint square
         // edge); a rounded mask image actually clips the backdrop.
         effect.maskImage = Self.roundedMaskImage(12)
@@ -98,29 +98,25 @@ final class PanelHost {
         bgView.layer?.cornerCurve = .continuous
         bgView.layer?.masksToBounds = true
         bgView.layer?.backgroundColor = (pal.bg ?? .clear).cgColor
+        bgView.autoresizingMask = [.width, .height]
 
         searchBar = SearchBar(frame: .zero)
         searchBar.isHidden = true
         searchBar.applyTheme()
-
-        gripBR = GripView(frame: .zero, corner: .bottomRight)
-        gripBL = GripView(frame: .zero, corner: .bottomLeft)
-        gripTR = GripView(frame: .zero, corner: .topRight)
-        gripTL = GripView(frame: .zero, corner: .topLeft)
-        view.grips = [gripBR, gripBL, gripTR, gripTL]
+        searchBar.autoresizingMask = [.width, .minYMargin]
 
         effect.addSubview(bgView)
         effect.addSubview(scroll)
         effect.addSubview(searchBar)
-        effect.addSubview(gripBR)
-        effect.addSubview(gripBL)
-        effect.addSubview(gripTR)
-        effect.addSubview(gripTL)
 
+        // .resizable in the styleMask gives us OS-standard edge /
+        // corner resize on a borderless + .nonactivatingPanel. The
+        // sandbox (sandbox/panel-resize-tester branch) confirmed
+        // this works without a custom grip.
         panel = KeyablePanel(
             contentRect: NSRect(x: 0, y: 0,
                                 width: sidebarWidth, height: 400),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         // One above the preview overlay (also .statusBar) so the
@@ -133,13 +129,14 @@ final class PanelHost {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.ignoresMouseEvents = false
-        // Required for mouseMoved + cursorUpdate delivery to views on
-        // a non-key panel. Without this, GripView's NSTrackingArea
-        // (cursor change on hover) silently doesn't fire.
-        panel.acceptsMouseMovedEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
                                     .fullScreenAuxiliary]
+        panel.setContentSize(NSSize(width: userWidth,
+                                    height: userHeight ?? 400))
+        panel.minSize = NSSize(width: minWidth, height: minHeight)
         panel.contentView = effect
+        super.init()
+        panel.delegate = self
     }
 
     // MARK: - Show / hide
@@ -149,9 +146,6 @@ final class PanelHost {
     func show() {
         layout(contentHeight: view.contentHeight,
                searching: view.searching)
-        // Regardless variant primes the panel as a key-candidate
-        // even when the app isn't active — required for cursor /
-        // mouseDragged delivery on a .nonactivatingPanel agent.
         panel.orderFrontRegardless()
     }
 
@@ -178,49 +172,6 @@ final class PanelHost {
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
     }
 
-    /// Resize from any corner — the opposite corner stays anchored.
-    /// dx/dy come from NSEvent.delta*; sign multipliers + anchor
-    /// updates derive from `corner`.
-    func resizeBy(dx: CGFloat, dy: CGFloat, corner: GripCorner) {
-        let scr = NSScreen.main?.frame ?? panel.frame
-        let maxW = scr.width - 2 * screenMargin
-        let maxH = scr.height - 2 * screenMargin
-        let curW = userWidth
-        let curH = panel.frame.height
-
-        // sign: which direction of drag grows the panel
-        let dwSign: CGFloat = (corner == .bottomRight || corner == .topRight) ? 1 : -1
-        let dhSign: CGFloat = (corner == .bottomRight || corner == .bottomLeft) ? 1 : -1
-
-        let newW = min(max(curW + dx * dwSign, minWidth), maxW)
-        let newH = min(max(curH + dy * dhSign, minHeight), maxH)
-
-        userWidth = newW
-        userHeight = newH
-
-        // Anchor: keep the opposite corner of the drag fixed.
-        // anchorTL is the panel's top-left in screen coords.
-        switch corner {
-        case .bottomRight:
-            break // top-left already fixed
-        case .bottomLeft:
-            // top-right fixed → shift top-left.x so right edge stays
-            anchorTL.x = (anchorTL.x + curW) - newW
-        case .topRight:
-            // bottom-left fixed → shift top-left.y so bottom edge stays
-            anchorTL.y = anchorTL.y + (newH - curH)
-        case .topLeft:
-            // bottom-right fixed → shift both
-            anchorTL.x = (anchorTL.x + curW) - newW
-            anchorTL.y = anchorTL.y + (newH - curH)
-        }
-
-        view.frame.size.width = newW
-        view.relayout()
-        layout(contentHeight: view.contentHeight,
-               searching: view.searching)
-    }
-
     func persistPosition() {
         UserDefaults.standard.set(
             "\(anchorTL.x),\(anchorTL.y),\(userWidth),\(userHeight ?? -1)",
@@ -228,8 +179,10 @@ final class PanelHost {
     }
 
     /// Single source of truth for panel + subview frames. Called
-    /// from `show`, `resizeBy`, `enterSearch` / `exitSearch`, and
-    /// the refresh tick.
+    /// from `show`, `enterSearch` / `exitSearch`, and the refresh
+    /// tick. (Live OS resize is handled by autoresizingMask + the
+    /// `windowDidResize` callback, not by re-running layout per
+    /// drag event.)
     func layout(contentHeight contentH: CGFloat, searching: Bool) {
         guard let scr = NSScreen.main?.frame else { return }
         let maxH = scr.height - 2 * screenMargin
@@ -240,47 +193,25 @@ final class PanelHost {
         topY = min(max(topY, scr.minY + h), scr.maxY)
         let frame = NSRect(x: x, y: topY - h, width: w, height: h)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
-        effect.frame = NSRect(origin: .zero, size: frame.size)
-        bgView.frame = effect.bounds
-        // Reserve a top band for the search field when filtering.
+        applySubviewLayout(searching: searching, contentH: contentH)
+        panel.invalidateShadow()
+    }
+
+    /// Position the subviews to the panel's *current* size. Called
+    /// from layout() and from windowDidResize (OS-driven resize).
+    private func applySubviewLayout(searching: Bool, contentH: CGFloat) {
+        let f = effect.bounds
+        bgView.frame = f
         let sh: CGFloat = searching ? searchRowH : 0
         searchBar.isHidden = !searching
-        searchBar.frame = NSRect(x: 8, y: frame.height - sh + 5,
-                                 width: frame.width - 16,
+        searchBar.frame = NSRect(x: 8, y: f.height - sh + 5,
+                                 width: f.width - 16,
                                  height: max(sh - 9, 0))
-        searchBar.needsLayout = true               // re-centre glyph/field
-        // Top grips hide while searching (would overlap the search
-        // field band). When visible, reserve `topClearance` so they
-        // don't sit over the WS-header row inside the scroll content.
-        let topGripsVisible = !searching
-        let topClear: CGFloat = topGripsVisible ? topClearance : 0
-        scroll.frame = NSRect(x: sideInset, y: 0,
-                              width: frame.width - 2 * sideInset,
-                              height: frame.height - sh - topClear)
-        // 4 corner grips, symmetric L/R inset.
-        let rx = frame.width - gripSize - sideInset   // right grips x
-        let lx = sideInset                            // left grips x
-        let ty = frame.height - gripSize - sh         // top grips top-flush
-        gripBR.frame = NSRect(x: rx, y: gripBottomInset,
-                              width: gripSize, height: gripSize)
-        gripBL.frame = NSRect(x: lx, y: gripBottomInset,
-                              width: gripSize, height: gripSize)
-        gripTR.frame = NSRect(x: rx, y: ty,
-                              width: gripSize, height: gripSize)
-        gripTL.frame = NSRect(x: lx, y: ty,
-                              width: gripSize, height: gripSize)
-        gripTR.isHidden = !topGripsVisible
-        gripTL.isHidden = !topGripsVisible
-        view.frame = NSRect(x: 0, y: 0, width: frame.width - 2 * sideInset,
-                            height: max(contentH, h - sh - topClear))
-        // Lock min == max == current to tell macOS this window
-        // isn't user-resizable. Without this, the system surfaces
-        // edge / corner auto resize cursors at the panel boundary
-        // even on .borderless / non-.resizable panels. Our own
-        // resizeBy uses setFrame() which bypasses these limits.
-        panel.minSize = frame.size
-        panel.maxSize = frame.size
-        panel.invalidateShadow()
+        searchBar.needsLayout = true
+        scroll.frame = NSRect(x: 0, y: 0,
+                              width: f.width, height: f.height - sh)
+        view.frame = NSRect(x: 0, y: 0, width: f.width,
+                            height: max(contentH, f.height - sh))
     }
 
     // MARK: - Theme
@@ -307,5 +238,25 @@ final class PanelHost {
         img.capInsets = NSEdgeInsets(top: r, left: r, bottom: r, right: r)
         img.resizingMode = .stretch
         return img
+    }
+}
+
+// MARK: - NSWindowDelegate (mirror OS resize → our persisted state)
+
+extension PanelHost: NSWindowDelegate {
+    nonisolated func windowDidResize(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            let f = panel.frame
+            userWidth = f.width
+            userHeight = f.height
+            anchorTL = NSPoint(x: f.minX, y: f.maxY)
+            applySubviewLayout(searching: view.searching,
+                               contentH: view.contentHeight)
+            view.relayout()
+        }
+    }
+
+    nonisolated func windowDidEndLiveResize(_ notification: Notification) {
+        MainActor.assumeIsolated { persistPosition() }
     }
 }
