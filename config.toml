@@ -26,8 +26,10 @@
 #             workspace and its windows as a tree
 #   "grid"  — full-screen TS3-style overview with DnD between cells
 #
-# Default for a fresh `curl` install: "grid" (works out of the box).
-default_view = "grid"
+# Default for a fresh `curl` install: "tree" (the always-on-top
+# sidebar — facet's primary surface; the grid is a TS3-style
+# overview you summon on demand with `facet --view=grid`).
+default_view = "tree"
 
 
 # -----------------------------------------------------------------

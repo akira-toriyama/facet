@@ -46,9 +46,10 @@ curl --create-dirs -o ~/.config/facet/config.toml \
 ```
 
 The `curl` line drops a fully-commented [config.toml](config.toml)
-into place; defaults are sane and the app starts in grid view
-straight away. Edit it to change theme, columns, label position,
-etc. — see the file's comments for each option.
+into place; defaults are sane and the app starts with the tree
+sidebar straight away. Edit it to switch the default view, change
+theme, columns, label position, etc. — see the file's comments
+for each option.
 
 ## Configuration
 
