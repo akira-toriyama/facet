@@ -80,6 +80,55 @@ Each phase is gated by being usable end-to-end through the view layer
 — no Phase α–δ landings ship unless the existing UI still works
 against them.
 
+## Mapping to Clean Architecture / DDD
+
+facet's 3-layer split is **Hexagonal (Ports & Adapters)** —
+which is the same idea Clean Architecture distills into "the
+dependency rule: source code dependencies always point inward."
+The DDD tactical patterns also fit cleanly even though the code
+never spells them out. This table is the rosetta stone so the
+two vocabularies don't drift apart:
+
+| Pattern | facet implementation |
+|---|---|
+| **Clean Architecture — Domain** (Entity + Repository protocol) | `FacetCore` (`Workspace`, `Window`, `WindowID`, `WindowAction`, `WindowBackend` protocol) |
+| **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterRift` (`RiftAdapter`, `RFTypes`, `RiftMapper`, `EventSource`) |
+| **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid` (AppKit-bound) |
+| **Clean Architecture — Application** (DI + Coordinator) | `FacetApp` (`Controller` + `Main`) |
+| **Clean Architecture — Use Case (Interactor)** | *NOT a separate layer* — see below |
+| **DDD — Entity** | `Workspace`, `Window` |
+| **DDD — Value Object** | `WindowID`, `Palette`, `FontKind`, `CGRect`, `GridConfig` |
+| **DDD — Aggregate Root** | `Workspace` (owns its `windows`) |
+| **DDD — Repository** | `WindowBackend` protocol |
+| **DDD — Domain Service** | `Focus.assert` / `Focus.withRetry`, `AXTitles.resolve`, `RiftMapper.workspace(from:)`, `gridScaledWindowRect` |
+| **DDD — Domain Event** | `BackendEvent` (consumed via `AsyncStream`) |
+| **DDD — Bounded Context** | one binary = one context, no inter-context translation needed |
+
+### Why no explicit Use Case layer
+
+Strict Clean Architecture splits *application logic* (use cases /
+interactors) from *coordination* (controller). facet collapses
+both into `Controller` because at the current view count (2 — tree
++ grid) the use-case shapes are 1-line wrappers around backend
+calls plus AX retry — a separate layer would be 100% boilerplate.
+
+If a third / fourth view lands (dock, palette, hover-bar) **and**
+the same operation (e.g. "switch + focus this window") starts
+appearing in two view code paths, that's the signal to extract a
+`FacetUseCases` module. Until then, the rule is YAGNI (memory:
+[[yagni-kiss-no-compat]]).
+
+### Why no ViewModels
+
+Clean Architecture / MVVM patterns usually put a ViewModel
+between the View and the Use Case. facet's views are `NSView`
+subclasses (AppKit), not SwiftUI — the natural seam between
+view-state and command dispatch is the `TreeController` /
+GridView-callbacks protocol, which is doing the ViewModel's job
+without the boilerplate of a separate type. Same YAGNI logic
+applies; revisit when a view needs to be shared across multiple
+windows or hosts.
+
 ## Non-goals
 
 - **SIP-disabled features** (mouse-follows-focus via injection, etc.)
