@@ -1,8 +1,10 @@
-// User-facing config (`~/.config/facet/config.toml`). On first
-// install (no config file), `load()` writes `config.toml.example`
-// alongside and returns a default-init'd config — the Controller
-// then runs in agent-only mode (no panel) until the user copies
-// the example to `config.toml` and sets `default_view`.
+// User-facing config (`~/.config/facet/config.toml`). The app
+// READS only — never writes — so the file (or its absence) is the
+// single source of truth. Repo ships ``config.toml`` at its root
+// with defaults + comments; README instructs users to ``curl`` it
+// into `~/.config/facet/`. If the file is absent, ``effective*``
+// accessors below supply built-in defaults (agent-only mode, no
+// panel).
 //
 // All public fields are *raw* (Optional, as parsed from TOML).
 // `effective*` accessors apply defaults + clamping; consumers
@@ -106,86 +108,23 @@ public struct FacetConfig: Sendable {
         return "\(h)/.config/facet/config.toml"
     }
 
-    public static var examplePath: String { defaultPath + ".example" }
-
-    /// Read config from `path`. Returns default-init'd config if the
-    /// file is missing or unreadable. Side-effect: on missing
-    /// config (and missing example), writes the example template
-    /// alongside so first-run users have something to copy + edit.
+    /// Read config from `path`. Returns default-init'd config if
+    /// the file is missing or unreadable — the controller then
+    /// enters agent-only mode (no panel) since
+    /// ``effectiveDefaultView == nil``. Read-only by design: the
+    /// app never writes to the user's config file. Repo root
+    /// `config.toml` is the install template; users `curl` it
+    /// into place themselves (see README).
     public static func load(path: String = defaultPath) -> FacetConfig {
         let fm = FileManager.default
-        if fm.fileExists(atPath: path) {
-            let url = URL(fileURLWithPath: path)
-            if let data = try? Data(contentsOf: url),
-               let text = String(data: data, encoding: .utf8) {
-                return .from(toml: parseTOMLSubset(text))
-            }
-            FileHandle.standardError.write(Data(
-                "facet: could not read \(path)\n".utf8))
-            return .init()
+        guard fm.fileExists(atPath: path) else { return .init() }
+        let url = URL(fileURLWithPath: path)
+        if let data = try? Data(contentsOf: url),
+           let text = String(data: data, encoding: .utf8) {
+            return .from(toml: parseTOMLSubset(text))
         }
-        // No config file. Drop an example next to it (idempotent)
-        // and return defaults — Controller will enter agent-only
-        // mode since `effectiveDefaultView == nil`.
-        writeExampleIfMissing()
+        FileHandle.standardError.write(Data(
+            "facet: could not read \(path)\n".utf8))
         return .init()
     }
-
-    /// Idempotent: writes `config.toml.example` only when neither
-    /// `config.toml` nor `config.toml.example` already exists.
-    /// Creates the parent directory as needed.
-    public static func writeExampleIfMissing(
-        configPath: String = defaultPath,
-        examplePath examplePathOverride: String? = nil
-    ) {
-        let configURL = URL(fileURLWithPath: configPath)
-        let exURL = URL(fileURLWithPath:
-            examplePathOverride ?? (configPath + ".example"))
-        let fm = FileManager.default
-        if fm.fileExists(atPath: configURL.path) { return }
-        if fm.fileExists(atPath: exURL.path) { return }
-        try? fm.createDirectory(
-            at: configURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true)
-        try? exampleTemplate.write(
-            to: exURL, atomically: true, encoding: .utf8)
-    }
-
-    /// The example file's contents. Public so docs / installer
-    /// scripts can re-use it.
-    public static let exampleTemplate = """
-        # facet config — copy to config.toml and edit.
-        # https://github.com/akira-toriyama/facet
-
-        # Show this view on startup. Omit (or comment out) to start
-        # in agent-only mode — facet stays running but draws no panel
-        # until the CLI asks (`facet --view=tree`).
-        #
-        #   "tree"  — translucent sidebar list of workspaces + windows
-        #   "grid"  — full-screen TS3-style overview
-        #
-        # default_view = "tree"
-
-        # Color / typography preset. "terminal" (default), "cute", or
-        # "system" (native vibrancy + dynamic colors).
-        #
-        # theme = "terminal"
-
-        [grid]
-        # Number of columns. Clamped 1-12. Default 4.
-        cols = 4
-
-        # Workspace label position relative to its cell. "up" (default,
-        # Mission Control / TS3) or "down" (Stage Manager / dock).
-        label-position = "up"
-
-        # Workspace label font size (pt). Clamped 8-32. Default 15.
-        label-size = 15
-
-        # Background ScreenCaptureKit refresh cadence (seconds) for
-        # grid thumbnails. 0 disables background capture entirely
-        # (cells show app-icon fallback until on-demand captures
-        # land). Clamped 1-60 otherwise. Default 4.
-        thumbnail-refresh-seconds = 4
-        """
 }

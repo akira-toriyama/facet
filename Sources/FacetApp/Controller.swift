@@ -174,13 +174,14 @@ final class Controller: NSObject {
         }
     }
 
-    /// Live re-theme from `facet --theme=...`; persists the choice
-    /// so subsequent cold starts pick it up before any config TOML.
+    /// Live re-theme from `facet --theme=...`. Runtime-only —
+    /// the change does NOT persist across restarts. config.toml
+    /// is the single source of truth for theme; to make a runtime
+    /// pick stick, edit ``theme = "..."`` in the user's config.
     func applyStyle(_ name: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         pal = paletteFor(key)
-        UserDefaults.standard.set(key, forKey: "style")
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
         panelHost.grip.needsDisplay = true

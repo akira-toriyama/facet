@@ -92,41 +92,7 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveGridCols, 4)
     }
 
-    // MARK: - Disk loader (writeExampleIfMissing side-effect)
-
-    func testWriteExampleCreatesFileWhenAbsent() throws {
-        let tmp = NSTemporaryDirectory()
-            + "facet-test-\(UUID().uuidString)/config.toml"
-        defer {
-            let dir = (tmp as NSString).deletingLastPathComponent
-            try? FileManager.default.removeItem(atPath: dir)
-        }
-        let exPath = tmp + ".example"
-        FacetConfig.writeExampleIfMissing(configPath: tmp,
-                                          examplePath: exPath)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: exPath),
-                      "example should be created on first call")
-        // Content sanity: example mentions default_view.
-        let body = try String(contentsOfFile: exPath, encoding: .utf8)
-        XCTAssertTrue(body.contains("default_view"))
-        XCTAssertTrue(body.contains("[grid]"))
-    }
-
-    func testWriteExampleSkipsWhenConfigAlreadyExists() throws {
-        let dir = NSTemporaryDirectory()
-            + "facet-test-\(UUID().uuidString)"
-        let cfg = dir + "/config.toml"
-        let ex = cfg + ".example"
-        defer { try? FileManager.default.removeItem(atPath: dir) }
-        try FileManager.default.createDirectory(
-            atPath: dir, withIntermediateDirectories: true)
-        try "default_view = \"tree\"".write(
-            toFile: cfg, atomically: true, encoding: .utf8)
-        FacetConfig.writeExampleIfMissing(configPath: cfg,
-                                          examplePath: ex)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: ex),
-                       "config.toml present → example should NOT be written")
-    }
+    // MARK: - Disk loader
 
     func testLoadFallsBackToDefaultsForMissingConfig() {
         let tmp = NSTemporaryDirectory()

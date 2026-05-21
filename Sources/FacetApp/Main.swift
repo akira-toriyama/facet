@@ -70,15 +70,6 @@ enum FacetApp {
     // MARK: - Entry
 
     static func main() {
-        // Drop the config.toml.example next to the (eventual)
-        // config.toml on EVERY invocation — including client mode
-        // calls like `facet --show` before any server has run.
-        // Onboarding is "first time the user types `facet ...`,
-        // they get the example file to copy + edit" regardless of
-        // which CLI flag they happen to try first. Idempotent: no-
-        // op when the example or the real config already exists.
-        FacetConfig.writeExampleIfMissing()
-
         let argv = Array(CommandLine.arguments.dropFirst())
         for (i, a) in argv.enumerated() {
             switch true {
@@ -104,12 +95,11 @@ enum FacetApp {
         // matched above.
 
         let cfg = FacetConfig.load()
-        // UserDefaults "style" (set by a runtime --theme=) wins
-        // over the config TOML default — runtime change persists
-        // until explicitly overridden again.
-        let themeName = UserDefaults.standard.string(forKey: "style")
-            ?? cfg.effectiveTheme
-        pal = paletteFor(themeName)
+        // config.toml is the single source of truth for theme.
+        // Runtime `--theme=...` overrides this for the current
+        // session only (no UserDefaults persist); to make a theme
+        // stick, edit config.toml.
+        pal = paletteFor(cfg.effectiveTheme)
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
