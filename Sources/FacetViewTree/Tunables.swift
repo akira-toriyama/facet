@@ -4,7 +4,10 @@
 
 import CoreGraphics
 
-let sidebarWidth: CGFloat = 248          // default; user-resizable via grip
+/// Default sidebar width. Public so the panel host (FacetApp's
+/// PanelHost) can pick it up without redefining the number.
+/// User-resizable via grip at runtime.
+public let sidebarWidth: CGFloat = 248
 
 // Row heights for the different row kinds the sidebar emits.
 let headerRowH: CGFloat = 40             // workspace section heading (divider above)
