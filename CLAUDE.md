@@ -182,3 +182,50 @@ a `main.swift` file** — same trap as ws-tabs.
   user-visible behavior changes. Memory [[readme-bilingual]].
 - After source edits, **`swift build` must pass** before finishing
   a turn.
+
+## References
+
+External material that informed facet's API / architecture
+decisions. Kept here so the rationale survives future
+contributors (human or AI) reopening the repo cold.
+
+### Swift / Apple
+- [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/)
+  — naming, doc-summary rules, protocol naming. Consulted when
+  ``WindowBackend`` / ``Workspace`` / ``Window`` were designed
+  (M2 step 1).
+- [Swift 6 Migration Guide](https://www.swift.org/migration/documentation/migrationguide/)
+  — strict-concurrency patterns (``Sendable``, ``AsyncStream``,
+  ``@MainActor`` globals). Consulted when ``BackendEvent`` moved
+  from callback to ``AsyncStream`` (M2 step 1 refactor).
+
+### CLI design
+- [Command Line Interface Guidelines (clig.dev)](https://clig.dev/)
+  — modern (2020+) CLI conventions: exit codes, stderr vs stdout,
+  silent success, loud typo reject, idempotence, human- vs
+  machine-readable output. The post-M2 "no aliases, NAME required
+  for every view op, typo wins over server-state check" decisions
+  trace directly to clig.dev's *consistency* and *robustness*
+  principles.
+- [GNU Standards: Command-Line Interfaces](https://www.gnu.org/prep/standards/html_node/Command_002dLine-Interfaces.html)
+  — historical baseline for ``--long-options``, ``--help`` /
+  ``--version`` conventions, exit-code semantics.
+
+### Architecture (Clean Architecture / DDD)
+- [jasontaylordev/cleanarchitecture](https://github.com/jasontaylordev/cleanarchitecture)
+  — canonical CA 4-layer template (.NET reference for the
+  concept).
+- [sergdort/ModernCleanArchitectureSwiftUI](https://github.com/sergdort/ModernCleanArchitectureSwiftUI)
+  — Swift-native CA module layout. The Domain / Platform /
+  Features / Application split informed the rosetta-stone table
+  in [docs/architecture.md](docs/architecture.md).
+- [tuan188/CleanArchitecture](https://github.com/tuan188/CleanArchitecture)
+  — second Swift-CA reference; consult if a fundamental
+  restructure is on the table.
+- [GitHub topic: domain-driven-design](https://github.com/topics/domain-driven-design)
+  — entry point for cross-language DDD pattern examples.
+
+### Origin
+- [ws-tabs](https://github.com/akira-toriyama/ws-tabs)
+  — the architectural predecessor every view / adapter is lifted
+  from (memory [[ws-tabs-to-facet-migration]]).
