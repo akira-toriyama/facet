@@ -257,6 +257,45 @@ re-confirmation.
   carloscuesta/gitmoji repo + JSON are downstream of this site;
   the site is the canonical reference.
 
+### Debugging methodology
+*Language-neutral. How to investigate bugs — minimal reproduction,
+scientific debugging, bisection.*
+
+- [Minimal reproducible example — Stack Overflow](https://stackoverflow.com/help/minimal-reproducible-example)
+  *(reviewed 2026-05-22)* — the canonical MRE guide. Three rules:
+  **minimal** (least code that still triggers it), **complete**
+  (anyone can copy-paste-run), **reproducible** (you ran it
+  yourself and it failed). The single highest-leverage thing
+  you can do when stuck on a bug. facet's
+  [`sandbox/panel-resize-tester`][sandbox-branch] branch + the
+  `panel-sandbox` executable target are an applied example: when
+  the panel resize fix spiral hit 6 hours, isolating the AppKit
+  knobs in a pure-AppKit sandbox app (no FacetCore / View / etc.
+  dependencies) found the working `.resizable` config in 30
+  minutes. The pattern: **branch + `Sources/<Sandbox>` + new
+  `.executableTarget` in Package.swift** ([[gui-bug-sandbox-ab-test]]).
+- [Minimal reproducible example — Wikipedia](https://en.wikipedia.org/wiki/Minimal_reproducible_example)
+  *(reviewed 2026-05-22)* — cross-language overview; same idea
+  travels under MWE / MCVE / SSCCE / reprex. Useful when reading
+  bug reports / issues in other ecosystems.
+- [Scientific Debugging — Talin (Medium)](https://medium.com/machine-words/scientific-debugging-part-1-8890b73b6c4c)
+  *(reviewed 2026-05-22)* — observe → hypothesise → experiment →
+  repeat. The discipline that keeps a debugging session from
+  becoming "try things until it works." facet's panel-resize
+  post-mortem ([[panel-resize-postmortem]]) shows the cost of
+  skipping the hypothesise step: 5+ fixes were tried before the
+  underlying hypothesis ("AppKit `.resizable` works fine, our
+  SidebarView autoresizing was the failure mode") got named.
+- [Bisection (software engineering) — Grokipedia](https://grokipedia.com/page/Bisection_(software_engineering))
+  *(reviewed 2026-05-22)* — when a bug was introduced by a change
+  somewhere in history, `git bisect` finds it in O(log n) commits.
+  facet's commit history is gitmoji + Conventional so each commit
+  is a meaningful step — bisecting against it is cheap. Reach
+  here when a regression appears that worked "yesterday" or in
+  a pre-M2 build.
+
+[sandbox-branch]: https://github.com/akira-toriyama/facet/tree/sandbox/panel-resize-tester
+
 ### CLI design
 *Language-neutral UX principles for command-line tools.*
 
