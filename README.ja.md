@@ -108,11 +108,22 @@ retry、 grid DnD イベント等) を有効化:
 ## ソースからビルド
 
 ```sh
-swift build
-swift test
+./run.sh             # release ビルド → 起動中の instance kill → Facet.app 起動
+./run.sh --dev       # 同じだが Facet-dev.app を作る (bundle id 別、
+                     #   Homebrew 版と並行運用したい時用、 TCC 分離)
+./stop.sh            # 起動中の facet 全部 kill (release / dev / raw SwiftPM)
 ```
 
-M2 完了までは GUI バンドルは作られない。
+`./run.sh` が日常の rebuild ループ — bundle 差し替えて再起動まで
+1 コマンド。 `./stop.sh` は「どれが動いてるか分からなくなった時」
+の保険。
+
+bundle 化せずに verify だけ:
+
+```sh
+swift build          # コンパイルのみ
+swift test           # XCTest — Xcode 必要 (CLT には入ってない)
+```
 
 ## 「facet」 という名前
 

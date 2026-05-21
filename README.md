@@ -109,11 +109,22 @@ app stays quiet on stderr and `Log.debug` calls are zero-cost.
 ## Build from source
 
 ```sh
-swift build
-swift test
+./run.sh             # build release → kill any running instance → launch Facet.app
+./run.sh --dev       # same but builds Facet-dev.app (parallel bundle id;
+                     #   coexists with a Homebrew install for TCC isolation)
+./stop.sh            # kill any running facet (release / dev / raw SwiftPM)
 ```
 
-That's it for now — there's no app bundle until M2 lands.
+`./run.sh` is the day-to-day rebuild loop — bumps the bundle,
+swaps it in, brings it on screen. `./stop.sh` is the "I lost
+track of what's running" escape hatch.
+
+Just verifying without a bundle:
+
+```sh
+swift build          # compile only
+swift test           # XCTest — needs Xcode (CLT has none)
+```
 
 ## Why "facet"
 
