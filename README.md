@@ -103,16 +103,18 @@ so the overlay opens with real screenshots, not icon fallbacks.
 
 ## Status
 
-**Alpha** — feature parity with ws-tabs v1.6 reached (M2);
-the bundle builds, both views work, the CLI is settled.
-Distribution path (Homebrew tap) lands at M3.
+**Alpha** — feature parity with ws-tabs v1.6 reached (M2),
+shipping via Homebrew (M3), ws-tabs archived (M4). Both views
+work, the CLI is settled, `brew install akira-toriyama/tap/facet`
+is live. Next up: the native AX/CGS backend (M5+) to drop the
+rift-cli dependency.
 
 | Milestone | Status |
 |---|---|
 | M1 — repo scaffolded, `swift build` green | ✅ |
 | M2 — tree + grid views working through `FacetAdapterRift` | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
-| M4 — ws-tabs archived | ⏳ |
+| M4 — ws-tabs archived | ✅ |
 | M5+ — `FacetAdapterNative` Phases α–ε | ⏳ |
 
 See [docs/architecture.md](docs/architecture.md) for the layer
