@@ -111,7 +111,7 @@ Distribution path (Homebrew tap) lands at M3.
 |---|---|
 | M1 — repo scaffolded, `swift build` green | ✅ |
 | M2 — tree + grid views working through `FacetAdapterRift` | ✅ |
-| M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ⏳ |
+| M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs archived | ⏳ |
 | M5+ — `FacetAdapterNative` Phases α–ε | ⏳ |
 
@@ -120,13 +120,22 @@ diagram and the migration plan.
 
 ## Install
 
-Once M3 lands (Homebrew tap available):
-
 ```sh
 brew install akira-toriyama/tap/facet
+
+# facet is a GUI agent — installing doesn't launch it. Open the app once:
+open "$(brew --prefix)/opt/facet/Facet.app"
+
+# Drop a fully-commented config into place (sane defaults):
 curl --create-dirs -o ~/.config/facet/config.toml \
   https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
 ```
+
+On first launch, grant **Accessibility** to *facet* (System
+Settings → Privacy & Security → Accessibility) or clicks/drags
+won't work; grant **Screen Recording** too if you want grid-view
+thumbnails. Also requires [rift](https://github.com/acsandmann/rift)
++ `rift-cli` on PATH.
 
 The `curl` line drops a fully-commented [config.toml](config.toml)
 into place; defaults are sane and the app starts with the tree
@@ -173,12 +182,8 @@ facet --help                      # full reference
 
 Unknown flag / view / theme names exit `2` with a stderr
 message — typos fail loudly rather than silently no-op. Shorthand
-is your shell's problem, not facet's:
-
-```sh
-alias fa='facet --view=tree --active'
-alias fg='facet --view=grid'
-```
+(shell aliases / hotkey bindings) is your environment's job, not
+facet's.
 
 ## Debugging
 
