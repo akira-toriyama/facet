@@ -10,8 +10,8 @@
 //   - the focus retry state machine (``Focus.withRetry`` /
 //     ``Focus.assert``)
 //
-// Conforms to ``TreeController`` so ``SidebarView`` / ``GripView``
-// can talk to it without knowing about any of the above.
+// Conforms to ``TreeController`` so ``SidebarView`` can talk to it
+// without knowing about any of the above.
 //
 // Things explicitly NOT here:
 //   - grid view lifecycle              → step 6f
