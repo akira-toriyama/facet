@@ -109,7 +109,7 @@ window タイトルは rift から取得、 rift が空を返す app
 |---|---|
 | M1 — repo scaffold、 `swift build` green | ✅ |
 | M2 — tree + grid view が `FacetAdapterRift` 経由で動作 | ✅ |
-| M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ⏳ |
+| M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs を archive | ⏳ |
 | M5+ — `FacetAdapterNative` Phase α–ε | ⏳ |
 
@@ -117,13 +117,22 @@ window タイトルは rift から取得、 rift が空を返す app
 
 ## インストール
 
-M3 (Homebrew tap 整備) 完了後:
-
 ```sh
 brew install akira-toriyama/tap/facet
+
+# facet は GUI agent — install だけでは起動しない。 1 度 app を開く:
+open "$(brew --prefix)/opt/facet/Facet.app"
+
+# 詳細コメント付き config を配置 (デフォルト値は妥当):
 curl --create-dirs -o ~/.config/facet/config.toml \
   https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
 ```
+
+初回起動時、 *facet* に **Accessibility** 権限を付与 (System
+Settings → Privacy & Security → Accessibility)、 でないとクリック /
+ドラッグが効かない。 grid view のサムネイルが欲しければ **Screen
+Recording** も付与。 [rift](https://github.com/acsandmann/rift) +
+`rift-cli` が PATH 上に必要。
 
 `curl` の行で詳細コメント付きの [config.toml](config.toml) が
 配置される。 デフォルト値は妥当で、 そのまま起動すれば tree view
@@ -166,12 +175,8 @@ facet --help                      # 完全リファレンス
 ```
 
 不明な flag / view / theme 名は exit `2` + stderr メッセージ —
-typo は silent fail せず明示エラー。 短縮はシェル alias で対応:
-
-```sh
-alias fa='facet --view=tree --active'
-alias fg='facet --view=grid'
-```
+typo は silent fail せず明示エラー。 短縮 (シェル alias / hotkey
+バインド) は各自の環境の領分で、 facet 側では扱わない。
 
 ## デバッグ
 
