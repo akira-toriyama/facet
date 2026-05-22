@@ -102,15 +102,17 @@ window タイトルは rift から取得、 rift が空を返す app
 
 ## ステータス
 
-**Alpha** — ws-tabs v1.6 との feature parity を達成 (M2)。 bundle
-ビルド可、 両 view 動作、 CLI 確定。 配布 (Homebrew tap) は M3 で。
+**Alpha** — ws-tabs v1.6 との feature parity 達成 (M2)、 Homebrew
+配布 (M3)、 ws-tabs archive (M4) 完了。 両 view 動作、 CLI 確定、
+`brew install akira-toriyama/tap/facet` 稼働中。 次は native AX/CGS
+backend (M5+) で rift-cli 依存を外す。
 
 | マイルストーン | 状態 |
 |---|---|
 | M1 — repo scaffold、 `swift build` green | ✅ |
 | M2 — tree + grid view が `FacetAdapterRift` 経由で動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
-| M4 — ws-tabs を archive | ⏳ |
+| M4 — ws-tabs を archive | ✅ |
 | M5+ — `FacetAdapterNative` Phase α–ε | ⏳ |
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
