@@ -222,6 +222,17 @@ use:
   workflow inherited from ws-tabs (memory
   [[grid-view-work-style]]). Commit locally freely; pushing /
   merging waits for トミー's go.
+- **PR-based, no direct main push** (since v1.0.0). `main` has
+  branch protection: a PR is required to merge, `build` + `lint`
+  status checks must be green (strict / up-to-date), force-push
+  and deletion are blocked. `enforce_admins` is off, so the
+  maintainer can bypass for an emergency hotfix. Flow: feature
+  branch (`docs/` / `feat/` / `fix/` prefix) → push →
+  `gh pr create --assignee @me` → squash-merge
+  (`gh pr merge N --squash --delete-branch`). If you accidentally
+  commit on local `main`: `git branch <topic>` to save it, then
+  `git reset --hard origin/main`, then PR the branch. See memory
+  [[pr-conventions]].
 - **Migration is code copy + restructure**, NOT git history merge.
   ws-tabs gets archived (M4) — don't pull commits from it.
 
