@@ -1,9 +1,9 @@
 // Controller surface needed by the tree view.
 //
-// `SidebarView` and `GripView` hold a `weak var controller:
-// TreeController?` and call these methods for orchestration that
-// the view itself can't do alone (panel positioning, persistence,
-// preview reconcile timing, grip-resize gating).
+// `SidebarView` holds a `weak var controller: TreeController?` and
+// calls these methods for orchestration that the view itself can't
+// do alone (panel positioning, persistence, preview reconcile
+// timing).
 //
 // Defined in FacetViewTree so the view module owns its protocol;
 // `FacetApp.Controller` (step 6) imports FacetViewTree and conforms.
