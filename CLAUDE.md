@@ -30,6 +30,38 @@ top-level code in a `main.swift`) so XCTest's executable-target
 `@testable import` keeps working once tests land. **Don't reintroduce
 a `main.swift` file** — same trap as ws-tabs.
 
+### Debugging facet (the agent run loop)
+
+facet is a live GUI agent, so verifying a change means running the
+real app and watching it. The loop an AI agent (Claude Code) should
+use:
+
+```sh
+./run.sh          # build release → kill any running facet → launch Facet.app
+./stop.sh         # kill all facet instances (release / dev / raw SwiftPM)
+.build/release/facet --debug 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log &
+                  # foreground server with verbose log (timestamped so
+                  # runs don't pile up); read the file directly to inspect
+```
+
+- **The agent may run `./stop.sh` / `./run.sh` / `swift build`
+  freely while debugging** — it doesn't need to ask each time. The
+  human pilots the panel (clicks / drags / keys) and reports; the
+  agent drives build + relaunch. (This pairs with: the agent reads
+  `/tmp/facet*.log` directly rather than asking for pasted output.)
+- **GUI bugs: observe before theorising.** A screen recording can
+  be frame-extracted (`ffmpeg -i in.mov -vf fps=3 f_%02d.png`) and
+  the PNGs read directly; `--debug` logs every Controller / Adapter
+  hot-path event. Cursor shape + panel position in a frame tell you
+  whether a click hit its target — facts, not guesses.
+- **When ≥2 fixes haven't worked, isolate in a sandbox.** A pure-
+  AppKit `.executableTarget` (no FacetCore / View deps) that opens
+  the offending construct in several variant configs A/B-tests the
+  OS behaviour without facet's noise. The
+  [`sandbox/panel-resize-tester`](https://github.com/akira-toriyama/facet/tree/sandbox/panel-resize-tester)
+  branch is the worked example (it's how the chevron → `.resizable`
+  switch was found). See References → *Debugging methodology*.
+
 ## Non-obvious constraints — read before editing
 
 ### Layer rules (the spine of the project)
