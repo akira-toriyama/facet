@@ -34,7 +34,13 @@ final class Controller: NSObject {
     // MARK: - Wiring
 
     let backend: any WindowBackend
-    private let config: FacetConfig
+    /// Mutable so `reloadConfig()` can swap in fresh values when
+    /// the user edits config.toml (file watcher) or sends
+    /// `facet --reload`. Always read through `effective*`
+    /// accessors so clamping survives a typo'd reload.
+    private var config: FacetConfig
+    private let configPath: String
+    private var configWatcher: ConfigWatcher?
     private let panelHost: PanelHost
     private let sidebarView: SidebarView
 
@@ -100,9 +106,13 @@ final class Controller: NSObject {
 
     // MARK: - Init
 
-    init(backend: any WindowBackend, config: FacetConfig) {
+    init(backend: any WindowBackend,
+         config: FacetConfig,
+         configPath: String = FacetConfig.defaultPath)
+    {
         self.backend = backend
         self.config = config
+        self.configPath = configPath
         let view = SidebarView(
             frame: NSRect(x: 0, y: 0, width: sidebarWidth, height: 400),
             backend: backend)
@@ -159,7 +169,54 @@ final class Controller: NSObject {
         installCLIControl()
         writeStatus([])     // touch the file so `facet status` works
                             // even before the first backend reply
+        installConfigWatcher()
         refresh()
+    }
+
+    /// Spin up the FS watcher on ~/.config/facet/config.toml so
+    /// edits land without requiring `facet --reload`. Both the
+    /// watcher (A path) and the DNC `reload` command (B path)
+    /// converge on `reloadConfig()`.
+    private func installConfigWatcher() {
+        configWatcher = ConfigWatcher(path: configPath) {
+            [weak self] in
+            MainActor.assumeIsolated { self?.reloadConfig() }
+        }
+        configWatcher?.start()
+    }
+
+    /// Re-read config.toml and apply whatever changed. Idempotent:
+    /// calling it when nothing has changed is harmless (the
+    /// effective-accessor values are equal, the conditional
+    /// applyStyle / writeStatus calls become no-ops).
+    ///
+    /// Reload-on (memory facet-cli-surface N11):
+    ///   - theme           → applyStyle live
+    ///   - hide_method     → next reconcile sees the new value
+    ///                       (writeStatus refreshes the snapshot
+    ///                       immediately so `facet status`
+    ///                       reflects it without waiting)
+    ///   - [workspaces]    → reflected in writeStatus (the live
+    ///                       data-model overlay onto facet
+    ///                       workspaces lands at Phase α impl)
+    /// Reload-off (intentionally — restart required):
+    ///   - default_view, setupFiles
+    func reloadConfig() {
+        let fresh = FacetConfig.load(path: configPath)
+        let oldTheme = config.effectiveTheme
+        let oldHide = config.effectiveHideMethod
+        config = fresh
+        let newTheme = config.effectiveTheme
+        let newHide = config.effectiveHideMethod
+        Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
+            + "hide_method=\(oldHide)→\(newHide)")
+        if newTheme != oldTheme {
+            applyStyle(newTheme)
+        }
+        // Always refresh the snapshot — hide_method / workspaces
+        // changes need to surface in `facet status` without
+        // waiting for the next backend event.
+        writeStatus(lastWorkspaces)
     }
 
     // MARK: - CLI ↔ GUI IPC + theme
@@ -176,6 +233,7 @@ final class Controller: NSObject {
                 Log.debug("dnc cmd=\(cmd)")
                 switch cmd {
                 case "quit":     NSApp.terminate(nil)
+                case "reload":   self.reloadConfig()
                 case let s where s.hasPrefix("style:"):
                     self.applyStyle(
                         String(s.dropFirst("style:".count)))
