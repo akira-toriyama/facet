@@ -105,6 +105,12 @@ enum FacetApp {
           facet --debug                      verbose log to stderr +
                                              /tmp/facet.log (server
                                              startup only)
+          facet --resign                     re-sign Facet.app with the
+                                             persistent "facet Local
+                                             Signing" identity + restart
+                                             (run once after `brew install`
+                                             / upgrade — Homebrew sandbox
+                                             can't set up the cert itself)
 
           facet --help                       this help
 
@@ -293,6 +299,148 @@ enum FacetApp {
         exit(2)
     }
 
+    // MARK: - --resign
+
+    /// `facet --resign` re-signs the installed Facet.app with the
+    /// persistent ``facet Local Signing`` self-signed identity and
+    /// restarts the daemon. Necessary after every `brew install` /
+    /// `brew upgrade facet` — Homebrew's build sandbox blocks the
+    /// in-formula ``setup-signing-cert.sh`` from touching the user's
+    /// login keychain, so installs fall back to ad-hoc signing and
+    /// TCC re-prompts for Accessibility on every upgrade.
+    ///
+    /// Same pattern as chord 0.3.3 / stroke 2.3.0; mirror updates
+    /// across the three repos when this changes.
+    ///
+    /// Exit codes:
+    ///   0 — re-signed (restart attempted, best-effort)
+    ///   1 — codesign failed
+    ///   2 — no Facet.app found in any expected location
+    ///   3 — signing identity missing (run setup-signing-cert.sh first)
+    static func runResign() -> Never {
+        guard let appPath = findFacetApp() else {
+            let msg = "facet: no Facet.app found at "
+                + "/opt/homebrew/Cellar/facet/*/, /Applications, or "
+                + "~/Applications.\n"
+                + "       install via "
+                + "`brew install akira-toriyama/tap/facet` first.\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(2)
+        }
+        print("facet: detected Facet.app at \(appPath)")
+
+        let identity = "facet Local Signing"
+        guard hasSigningIdentity(identity) else {
+            let setupHint = setupCertHint()
+            let msg = "facet: no '\(identity)' identity in your "
+                + "login keychain.\n"
+                + "       run once:\n"
+                + "         \(setupHint)\n"
+                + "         facet --resign\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(3)
+        }
+
+        print("facet: signing with identity '\(identity)'")
+        let codesignExit = runProcess(
+            "/usr/bin/codesign",
+            args: ["--force", "--sign", identity, appPath])
+        guard codesignExit == 0 else {
+            FileHandle.standardError.write(Data(
+                "facet: codesign failed (exit \(codesignExit))\n".utf8))
+            exit(1)
+        }
+
+        print("facet: restarting daemon")
+        let brewExit = runProcess(
+            "/opt/homebrew/bin/brew",
+            args: ["services", "restart", "facet"],
+            captureOutput: true)
+        if brewExit == 0 {
+            print("facet: restarted via `brew services restart facet`")
+            exit(0)
+        }
+        for label in ["homebrew.mxcl.facet", "com.facet.app"] {
+            let kick = runProcess(
+                "/bin/launchctl",
+                args: ["kickstart", "-k", "gui/\(getuid())/\(label)"],
+                captureOutput: true)
+            if kick == 0 {
+                print("facet: restarted via `launchctl kickstart \(label)`")
+                exit(0)
+            }
+        }
+        FileHandle.standardError.write(Data((
+            "facet: re-signed, but couldn't restart the daemon — "
+            + "start it manually.\n"
+        ).utf8))
+        exit(0)
+    }
+
+    /// Pick the first existing Facet.app from the canonical install
+    /// locations. The brew Cellar is preferred over manual copies.
+    static func findFacetApp() -> String? {
+        let cellar = "/opt/homebrew/Cellar/facet"
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
+            for v in versions.sorted(by: >) {
+                let p = "\(cellar)/\(v)/Facet.app"
+                if FileManager.default.fileExists(atPath: p) { return p }
+            }
+        }
+        for candidate in [
+            "/Applications/Facet.app",
+            "\(NSHomeDirectory())/Applications/Facet.app",
+        ] {
+            if FileManager.default.fileExists(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    /// Untrusted self-signed certs don't appear in `find-identity`
+    /// (that filter lists trusted identities only). Use
+    /// `find-certificate` which surfaces untrusted entries too.
+    static func hasSigningIdentity(_ name: String) -> Bool {
+        runProcess(
+            "/usr/bin/security",
+            args: ["find-certificate", "-c", name,
+                   "\(NSHomeDirectory())/Library/Keychains/login.keychain-db"],
+            captureOutput: true
+        ) == 0
+    }
+
+    /// Best-effort guess at where `setup-signing-cert.sh` lives on
+    /// the user's machine. brew installs ship it under
+    /// `share/facet/`, dev installs have it at the repo root.
+    static func setupCertHint() -> String {
+        let brewShared = "/opt/homebrew/share/facet/setup-signing-cert.sh"
+        if FileManager.default.fileExists(atPath: brewShared) {
+            return brewShared
+        }
+        return "./setup-signing-cert.sh"
+    }
+
+    @discardableResult
+    static func runProcess(_ executable: String,
+                           args: [String],
+                           captureOutput: Bool = false) -> Int32 {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: executable)
+        p.arguments = args
+        if captureOutput {
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError  = FileHandle.nullDevice
+        }
+        do {
+            try p.run()
+            p.waitUntilExit()
+            return p.terminationStatus
+        } catch {
+            return -1
+        }
+    }
+
     // MARK: - Entry
 
     static func main() {
@@ -318,6 +466,17 @@ enum FacetApp {
         var quitFlag = false
         var posX: Int?, posY: Int?, width: Int?, height: Int?
 
+        // `--resign` is a one-shot maintenance subcommand. Handle it
+        // up-front (before the per-flag dispatcher) so a typo in
+        // another arg doesn't shadow the re-sign with the loud-reject
+        // path. Same workflow as chord 0.3.3 / stroke 2.3.0:
+        // Homebrew's build sandbox can't write to the user's login
+        // keychain, so brew installs ad-hoc-sign and TCC re-prompts
+        // on every upgrade; `facet --resign` swaps the ad-hoc
+        // signature for the persistent "facet Local Signing"
+        // identity and restarts the daemon, in one step.
+        if argv.contains("--resign") { runResign() }
+
         var i = 0
         while i < argv.count {
             defer { i += 1 }
@@ -326,6 +485,7 @@ enum FacetApp {
             case a == "--quit":              quitFlag = true
             case a == "--active":            activeFlag = true
             case a == "--debug":             break          // handled above
+            case a == "--resign":            break          // handled above
             // Names are canonicalised + validated at parse time
             // (not at post time) so typos exit 2 BEFORE the server-
             // alive check runs — a fundamental error should win
