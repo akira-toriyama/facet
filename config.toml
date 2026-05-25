@@ -77,3 +77,36 @@ label-size = 15
 # first time the grid opens, just with a brief icon flash).
 # Clamped 1..60 when set.
 thumbnail-refresh-seconds = 4
+
+
+# -----------------------------------------------------------------
+# Virtual-workspace behavior (M5 Phase α)
+# -----------------------------------------------------------------
+[workspace]
+
+# How facet hides the windows of a workspace you're not currently
+# looking at. macOS public APIs cannot truly remove a window from
+# the screen, so each method below is a different tradeoff between
+# instant switching, visual cleanliness, and crash safety.
+#
+#   "anchor"   — park each window at a 1×41 px sliver in the
+#                bottom-right corner (rift / AeroSpace's approach).
+#                Instant. No animation. Still appears in Mission
+#                Control (handy if facet crashes — you can pull
+#                windows back). Tiny sliver is visible at the corner.
+#                Recommended default. The 41 px is macOS's enforced
+#                title-bar guarantee — can't go smaller via public APIs.
+#
+#   "minimize" — AX kAXMinimized. Window goes to the Dock with the
+#                genie animation. Cleaner visually but slower; window
+#                vanishes from Mission Control. Crash-safe (recover
+#                from Dock). Best when "really hide this away" matters
+#                more than instant switching.
+#
+# True hide (gone from Mission Control + Cmd-Tab) needs SLS private
+# APIs + SIP off, which lives in the separate `facet-x` binary
+# (deep-core, M6+). The `facet` binary you're configuring here stays
+# inside macOS's public-API contract.
+#
+# Unknown values clamp to "anchor".
+hide_method = "anchor"

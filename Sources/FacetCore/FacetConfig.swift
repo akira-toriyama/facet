@@ -25,6 +25,13 @@ public struct FacetConfig: Sendable {
     public var gridLabelSize: Int?
     public var thumbnailRefreshSeconds: Int?
 
+    // [workspace]
+    /// How to hide non-active-workspace windows on switch. Enum is
+    /// extensible (memory [[native-window-hide-methods]] / [[facet-sip-off-core-plan]]).
+    /// Phase α implements "anchor" + "minimize"; future values
+    /// ("deep-tag" etc.) come with `facet-x` (deep-core, M6+).
+    public var hideMethod: String?          // "anchor" | "minimize"
+
     public init() {}
 
     // MARK: - Effective accessors (defaults + clamping)
@@ -73,6 +80,16 @@ public struct FacetConfig: Sendable {
         return TimeInterval(max(1, min(60, raw)))
     }
 
+    /// `"anchor"` (default) — instant 1×41 px corner park.
+    /// `"minimize"` — AX `kAXMinimized`, Dock genie animation.
+    /// Unknown / unset → `"anchor"`. Case-insensitive.
+    /// Frozen Phase α option set; extending the enum is a deep-core
+    /// (`facet-x`, M6+) concern.
+    public var effectiveHideMethod: String {
+        let raw = (hideMethod ?? "anchor").lowercased()
+        return ["anchor", "minimize"].contains(raw) ? raw : "anchor"
+    }
+
     // MARK: - Construction from parsed TOML
 
     public static func from(toml: [String: [String: TOMLValue]])
@@ -96,6 +113,10 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["grid"]?["thumbnail-refresh-seconds"] {
             c.thumbnailRefreshSeconds = n
+        }
+        // [workspace]
+        if case .string(let s)? = toml["workspace"]?["hide_method"] {
+            c.hideMethod = s
         }
         return c
     }

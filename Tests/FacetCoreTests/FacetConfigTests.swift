@@ -63,6 +63,22 @@ final class FacetConfigTests: XCTestCase {
                        "clamp high")
     }
 
+    func testEffectiveHideMethodFallsBackToAnchor() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveHideMethod, "anchor",
+                       "unset → default anchor")
+        c.hideMethod = "minimize"
+        XCTAssertEqual(c.effectiveHideMethod, "minimize")
+        c.hideMethod = "MINIMIZE"
+        XCTAssertEqual(c.effectiveHideMethod, "minimize",
+                       "case-insensitive")
+        c.hideMethod = "deep-tag"
+        XCTAssertEqual(c.effectiveHideMethod, "anchor",
+                       "unknown value → default (typo can't break layout)")
+        c.hideMethod = ""
+        XCTAssertEqual(c.effectiveHideMethod, "anchor")
+    }
+
     // MARK: - TOML mapping
 
     func testFromTOMLMapsAllRecognisedKeys() {
@@ -75,6 +91,9 @@ final class FacetConfigTests: XCTestCase {
             label-position = "down"
             label-size = 18
             thumbnail-refresh-seconds = 10
+
+            [workspace]
+            hide_method = "minimize"
             """)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.effectiveDefaultView, "tree")
@@ -83,6 +102,7 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveGridLabelPosition, "down")
         XCTAssertEqual(c.effectiveGridLabelSize, 18)
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
+        XCTAssertEqual(c.effectiveHideMethod, "minimize")
     }
 
     func testEmptyTOMLYieldsAllDefaults() {
