@@ -60,18 +60,22 @@ unaware which one is in use.
 | **M2** | tree + grid views + CLI working through `FacetAdapterRift` | feature parity with ws-tabs v1.6 |
 | **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
 | **M4** | ws-tabs **archived** (README links forward to facet) | ws-tabs README updated, repo archived on GitHub |
-| **M5+** | Native adapter Phase α–ε (long arc, no deadline) | see below |
+| **M5+** | Native adapter Phase α–ε (long arc, no deadline) — **surface-core** | see below |
+| **M6+** | **deep-core (`facet-x`) — SIP-off opt-in binary, MVP = 完全 hide のみ** | see [`facet-sip-off-core-plan` memory] |
 
 ## Native adapter phases
 
-The SIP-enable boundary is firm: facet runs in user space, using only
-public APIs + Accessibility. No yabai-style injection. This matches
-how rift / aerospace operate today.
+The SIP-enable boundary is firm **for surface-core (`facet`)**:
+runs in user space, using only public APIs + Accessibility. No
+yabai-style injection. This matches how rift / aerospace operate
+today. SIP-off opt-in lives in **deep-core (`facet-x`)** as a
+separate binary, scheduled for M6+ (see [Two-binary structure]
+below).
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking | rift `workspace` module |
-| **β** | window move across workspaces; off-screen park/unpark | rift `wm/window`, yabai window mgmt |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N` | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **β** | window move across workspaces; off-screen park/unpark; persistence (external sh hook) | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines) | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; geometry persistence | rift `display` |
 | **ε** | deprecate `FacetAdapterRift`; native becomes default | — |
@@ -79,6 +83,76 @@ how rift / aerospace operate today.
 Each phase is gated by being usable end-to-end through the view layer
 — no Phase α–δ landings ship unless the existing UI still works
 against them.
+
+### Phase α frozen decisions (2026-05-24)
+
+Phase α design is fully decided. Details live in memory; this list
+is the index. **Do not relitigate** without explicit grill round.
+
+- **Workspace model**: (b) rift-style hybrid (macOS Space × facet
+  Space, 2 dimensions). macOS Space co-use discouraged but not
+  rejected. Window-unit management (not app-rules). Default 5 WS,
+  dynamic add/remove via external `add_workspace.sh` + hot reload.
+- **Hide methods**: 7 candidates evaluated, only `anchor` (1×41 px
+  corner park) + `minimize` (Dock genie) adopted. Config:
+  `[workspace] hide_method = "anchor" | "minimize"`. Default
+  `anchor` (instant switching). True hide (MC/Cmd-Tab disappearance)
+  is impossible in public API — comes from deep-core (M6+).
+- **CLI surface**: `--workspace=N` switch, `window --move-to=N`
+  move, `--reload` explicit + auto FSEvents watcher, `status` for
+  state dump. TOML atomic write enforced in shipped templates.
+- **Shortcut**: out of scope. README recommends skhd / Karabiner /
+  hammerspoon (compose-friendly, like yabai + skhd).
+- **New window detection**: focus proxy via [focusfx]
+  (`kAXFocusedWindowChanged`), not `kAXWindowCreatedNotification`
+  self-hook (would overreach OS responsibility, see
+  `facet-buddha-palm-principle` memory).
+- **Multi-display**: independent WS sets per display. Untested
+  (developer has 1 display).
+- **Fullscreen apps**: excluded from facet management, left to
+  macOS.
+- **Persistence**: not in facet. External sh hook via
+  `setupFiles` config key (Vitest-style).
+- **Startup**: don't touch existing windows. **Shutdown**: restore
+  all hidden windows (treat shutdown = workspace feature OFF).
+
+Memory cross-references: `facet-workspace-model`,
+`native-window-hide-methods`, `facet-cli-surface`,
+`facet-scope-exclusions`, `facet-buddha-palm-principle`.
+
+## Two-binary structure (surface-core + deep-core)
+
+Decided 2026-05-24. facet is **1 repo / 2 products** rather than
+the original "1 product / many views" formulation. The view-multiplicity
+half is unchanged; the second product is the SIP-off opt-in cousin.
+
+```
+Sources/Facet{Surface,Deep}Core/   ← Domain logic, 2 parallel cores
+Sources/FacetAdapter{Rift,Native}/ ← surface-core adapters
+Sources/FacetAdapterDeep/          ← deep-core adapter (M6+)
+Sources/FacetView*/                ← shared by both cores
+Sources/FacetApp/                  ← `facet` binary (surface-core)
+Sources/FacetXApp/                 ← `facet-x` binary (deep-core, M6+)
+```
+
+| Aspect | surface-core (`facet`) | deep-core (`facet-x`) |
+|---|---|---|
+| API surface | public AX + CGS-light | private SLS + scripting addition |
+| SIP | enable | off (Dock.app injection on install) |
+| Distribution | `brew install facet` | `brew install facet-x` (depends on `facet`) |
+| Code signing | notarized | ad-hoc / self-signed |
+| Hide capability | 1×41 px sliver (anchor) or Dock minimize | true hide (MC + Cmd-Tab clean) |
+| Phase | M5 (now) | M6+ (after surface-core completes) |
+| Governs | `facet-buddha-palm-principle` (OS humility) | separate principle (TBD at M6) |
+
+The two cores share `FacetView*` + theme + palette + key
+monitor + config schema. They do **not** share Core logic — the
+workspace invariants differ (e.g. "hide" means different things).
+
+While implementing surface-core (now), keep adapter seams clean
+(DRY) so deep-core can slot in later without surface-core surgery —
+but **don't pre-implement deep-core features** (YAGNI). Details:
+`facet-sip-off-core-plan` memory.
 
 ## Mapping to Clean Architecture / DDD
 
@@ -131,16 +205,38 @@ windows or hosts.
 
 ## Non-goals
 
-- **SIP-disabled features** (mouse-follows-focus via injection, etc.)
-  — out of scope, by design.
+- **SIP-disabled features in `facet`** — out of scope for
+  surface-core. Mouse-follows-focus / true hide / programmable
+  Spaces / etc. all require SIP off + Dock.app injection. Such
+  features belong in the separate `facet-x` binary (deep-core,
+  M6+) so users can choose their threat model. See [Two-binary
+  structure] above.
 - **Cross-platform** — macOS-only. Swift + native APIs are the
   comfortable spot.
-- **Multi-app monorepo** — one product, multiple views, single
-  binary. Decided 2026-05-21 (the modular layout above achieves
-  separation without the overhead of multiple bundles / TCC grants).
+- **Single binary "do everything"** — explicitly rejected
+  2026-05-24. Two binaries (`facet` / `facet-x`) with brew
+  dependency keeps the surface-core install clean for users who
+  don't want SLS code on their machine.
 - **Migration path for ws-tabs Homebrew users** — explicit
   non-requirement (user decision 2026-05-21). They reinstall as
   facet when M3 lands.
+- **Keyboard shortcut management** — out of scope. facet exposes
+  CLI; users wire shortcuts via skhd / Karabiner-Elements /
+  hammerspoon (see `facet-cli-surface` memory). This mirrors
+  yabai's separation from skhd.
+- **App-based rules engine** ("Chrome → WS 2", etc.) — out of
+  scope. facet operates window-by-window. New windows land in the
+  current active WS; user moves them with `facet window
+  --move-to=N`.
+- **Persistence of workspace state across restart** — out of
+  scope for facet itself. External shell hooks (Vitest-style
+  `setupFiles` config) let users snapshot/restore if needed.
+- **Plugin / extension system, menubar icon, system notifications,
+  theme editor GUI, window snapping, global hotkey reservation,
+  screen recording, animation customization, UI translation
+  (i18n)** — all 9 explicitly rejected 2026-05-24
+  (`facet-scope-exclusions` memory). Compose with shell tools or
+  do without.
 
 ## Where pieces come from in ws-tabs
 
