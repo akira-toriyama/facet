@@ -85,6 +85,18 @@ enum FacetApp {
             alias fa='facet --view=tree --active'
             alias fg='facet --view=grid'
 
+        WORKSPACE
+          facet --workspace=N                switch to workspace N
+                                             (1-indexed; idempotent —
+                                             no-op if already there)
+
+          facet doesn't bind keyboard shortcuts. Wire one up with
+          your shortcut tool of choice (skhd, Karabiner-Elements,
+          hammerspoon, …):
+            # ~/.config/skhd/skhdrc
+            ctrl + alt - 1 : facet --workspace=1
+            ctrl + alt - 2 : facet --workspace=2
+
         SERVER CONTROLS
           facet --theme=NAME                 terminal | cute | system
                                              (session only; edit
@@ -204,6 +216,30 @@ enum FacetApp {
         postControl("toggle:\(name)")
     }
 
+    /// Post ``workspace:N`` (1-indexed). Switches to the Nth
+    /// workspace via the backend. Idempotent — if you're already
+    /// on N the backend treats it as a no-op.
+    static func postWorkspace(_ index: Int) -> Never {
+        postControl("workspace:\(index)")
+    }
+
+    /// Parse ``--workspace=N`` (positive integer, 1-indexed). Loud
+    /// reject on non-integer / non-positive so a typo can't pick
+    /// the wrong workspace silently.
+    static func parseWorkspaceInt(_ arg: String) -> Int {
+        let raw = String(arg.dropFirst("--workspace=".count))
+        switch FacetCore.parseGeomInt(raw, requirePositive: true) {
+        case .success(let n):
+            return n
+        case .failure(.notAnInteger(let v)):
+            die("--workspace expects an integer (got \"\(v)\")")
+        case .failure(.notPositive(let n)):
+            die("--workspace must be > 0 (1-indexed, got \(n))")
+        case .failure:
+            die("--workspace parse error")
+        }
+    }
+
     /// Validate + canonicalise a view name. Loud reject on typo
     /// (``exit(2)``) so a fundamental error wins over later
     /// transient checks (e.g. server-not-running).
@@ -277,6 +313,7 @@ enum FacetApp {
         var hideArg: String?
         var toggleArg: String?
         var styleArg: String?
+        var workspaceArg: Int?
         var activeFlag = false
         var quitFlag = false
         var posX: Int?, posY: Int?, width: Int?, height: Int?
@@ -309,6 +346,8 @@ enum FacetApp {
                 if i + 1 < argv.count {
                     styleArg = canonicalStyle(argv[i + 1]); i += 1
                 }
+            case a.hasPrefix("--workspace="):
+                workspaceArg = parseWorkspaceInt(a)
             case a.hasPrefix("--pos-x="):
                 posX = parseGeomInt(a, "--pos-x=")
             case a.hasPrefix("--pos-y="):
@@ -368,6 +407,7 @@ enum FacetApp {
         // about to become the server.
         let anyClientAction = styleArg != nil || quitFlag
             || viewArg != nil || hideArg != nil || toggleArg != nil
+            || workspaceArg != nil
         if anyClientAction { requireServerAlive() }
 
         // Dispatch. Each ``post*`` returns ``Never`` (calls
@@ -382,6 +422,7 @@ enum FacetApp {
         if let v = viewArg           { postView(v, active: activeFlag, geom: geom) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
+        if let w = workspaceArg      { postWorkspace(w) }
 
         // Server mode. Reached only when no client flag matched.
 

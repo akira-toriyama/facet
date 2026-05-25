@@ -190,6 +190,10 @@ final class Controller: NSObject {
                     self.dispatchToggle(
                         String(s.dropFirst("toggle:".count)))
 
+                case let s where s.hasPrefix("workspace:"):
+                    let n = Int(s.dropFirst("workspace:".count)) ?? 0
+                    self.dispatchWorkspace(n)
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }
@@ -236,6 +240,22 @@ final class Controller: NSObject {
         case "grid": hideGrid()
         default:     Log.debug("dispatchHide unknown=\(name) — ignored")
         }
+    }
+
+    /// Switch to the Nth workspace (1-indexed from the user; the
+    /// backend takes 0-indexed). Out-of-range silently no-ops (with
+    /// a debug log) — the DNC receiver shouldn't exit the server
+    /// just because a stale hotkey points past the current WS count.
+    /// Idempotent: switching to the current WS is a backend no-op.
+    private func dispatchWorkspace(_ n: Int) {
+        let count = backend.workspaces().count
+        guard n >= 1, n <= count else {
+            Log.debug("dispatchWorkspace out-of-range n=\(n) "
+                + "count=\(count) — ignored")
+            return
+        }
+        backend.switchWorkspace(toIndex: n - 1)
+        scheduleReconcile(after: 0.05)
     }
 
     private func dispatchToggle(_ name: String) {
