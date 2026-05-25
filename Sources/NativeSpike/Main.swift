@@ -385,10 +385,88 @@ func cmdFocus(_ cgID: CGWindowID) {
     guard let win = axWindow(for: cgID, pid: info.pid) else {
         print("could not get AXUIElement"); return
     }
+    let before = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+    print("[focus] target=\(info.owner) pid=\(info.pid) cgID=\(cgID)")
+    print("  before frontmost: \(before)")
     let raise = AXUIElementPerformAction(win, kAXRaiseAction as CFString)
-    NSRunningApplication(processIdentifier: info.pid)?
-        .activate(options: [])
-    print("focus [\(cgID)] \(info.owner): raise=\(raise == .success)")
+    let act = NSRunningApplication(processIdentifier: info.pid)?
+        .activate(options: []) ?? false
+    // give macOS a moment to update frontmostApplication
+    Thread.sleep(forTimeInterval: 0.3)
+    let after = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+    print("  AX raise:    \(raise == .success)")
+    print("  NSApp activate: \(act)")
+    print("  after frontmost:  \(after)")
+    let success = (after == info.owner)
+    print("  → focus moved to target? \(success ? "YES ✓" : "NO ✗")")
+}
+
+// MARK: - Multi-window park (app-grouped)
+
+/// Park every visible window owned by the same app as `cgID`. Used
+/// to validate the "hide one app at a time" path the workspace
+/// switcher will call. Restores all windows after observe time.
+func cmdParkApp(_ cgID: CGWindowID) {
+    let all = enumerateWindows()
+    guard let anchor = all.first(where: { $0.cgID == cgID }) else {
+        print("no window with id \(cgID)"); return
+    }
+    let sameApp = all.filter { $0.pid == anchor.pid }
+    print("[park-app] \(anchor.owner) (pid \(anchor.pid)) — \(sameApp.count) windows")
+    // Resolve AX element + original position + size for each.
+    var ctx: [(WinInfo, AXUIElement, CGPoint, CGSize)] = []
+    for w in sameApp {
+        guard let ax = axWindow(for: w.cgID, pid: w.pid),
+              let pos = axPosition(ax),
+              let sz = axSize(ax) else {
+            print("  skip [\(w.cgID)] (no AX)"); continue
+        }
+        ctx.append((w, ax, pos, sz))
+    }
+    // Park each at its display's bottom-right (1×41 sliver).
+    for (w, ax, _, sz) in ctx {
+        let s = displayContaining(CGPoint(x: w.bounds.midX, y: w.bounds.midY))
+        let hidden = CGPoint(x: s.maxX - 1, y: s.maxY - 1)
+        let ok = axSetPosition(ax, hidden)
+        print("  park [\(w.cgID)] \(Int(sz.width))x\(Int(sz.height)) → \(hidden): \(ok)")
+    }
+    print("  → OBSERVE 5s: all \(ctx.count) windows hidden in BR corner?")
+    Thread.sleep(forTimeInterval: 5)
+    for (w, ax, orig, _) in ctx {
+        _ = axSetPosition(ax, orig)
+        print("  restore [\(w.cgID)] → \(orig)")
+    }
+}
+
+// MARK: - Per-window space query (SLSCopySpacesForWindows)
+
+/// For each given CGWindowID, ask SLS which macOS Spaces it appears
+/// on. SLSCopySpacesForWindows takes (cid, mask, [windowIDs]) and
+/// returns an array of space ids. Mask 0x7 = all space types.
+func cmdSpaces(_ cgIDs: [CGWindowID]) {
+    let cid = SkyLight.mainConnectionID()
+    let active = SkyLight.getActiveSpace(cid)
+    print("[spaces] active space = \(active)")
+    print("  query mask = 0x7 (all space types)")
+    // Build a CFArray of NSNumber CGWindowIDs.
+    let nums = cgIDs.map { NSNumber(value: $0) }
+    let arr = nums as CFArray
+    guard let result = SkyLight.copySpacesForWindows(cid, 0x7, arr)?
+            .takeRetainedValue() as? [Any] else {
+        print("  SLSCopySpacesForWindows returned nil")
+        return
+    }
+    print("  raw result: \(result)")
+    print("  (one-to-one mapping by index; ids referencing single windows")
+    print("   typically return that window's space, but SLS coalesces —")
+    print("   so result.count may not equal cgIDs.count)")
+    for (i, id) in cgIDs.enumerated() {
+        // Find the window owner for nicer output.
+        let owner = enumerateWindows().first(where: { $0.cgID == id })?
+            .owner ?? "?"
+        print("  cgID \(id) (\(owner)): see raw result for actual space mapping")
+        _ = i
+    }
 }
 
 // MARK: - Entry
@@ -438,7 +516,21 @@ case "focus":
         print("usage: native-spike focus <cgWindowID>"); exit(2)
     }
     cmdFocus(id)
+case "park-app":
+    guard args.count >= 2, let id = UInt32(args[1]) else {
+        print("usage: native-spike park-app <cgWindowID>  (parks every window of that app)"); exit(2)
+    }
+    cmdParkApp(id)
+case "spaces":
+    guard args.count >= 2 else {
+        print("usage: native-spike spaces <cgWindowID> [<cgWindowID> ...]"); exit(2)
+    }
+    let ids = args.dropFirst().compactMap { UInt32($0) }
+    guard !ids.isEmpty else {
+        print("no valid CGWindowIDs given"); exit(2)
+    }
+    cmdSpaces(Array(ids))
 default:
-    print("usage: native-spike [list | park-1px <id> [BR|BL] | clamp-probe <id> | park-min <id> | park-zero <id> | park-tag <id> | focus <id>]")
+    print("usage: native-spike [list | park-1px <id> [BR|BL] | clamp-probe <id> | park-min <id> | park-zero <id> | park-tag <id> | park-app <id> | spaces <id...> | focus <id>]")
     exit(2)
 }
