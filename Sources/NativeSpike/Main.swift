@@ -66,7 +66,7 @@ enum SkyLight {
 /// `_AXUIElementGetWindow` — private ApplicationServices symbol that
 /// hands back the CGWindowID for an AX window element. facet's
 /// AXFocus.swift relies on the same one.
-nonisolated(unsafe) private let axGetWindow: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError)? = {
+private let axGetWindow: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError)? = {
     guard let h = dlopen(nil, RTLD_NOW),
           let p = dlsym(h, "_AXUIElementGetWindow") else { return nil }
     return unsafeBitCast(p, to: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError).self)
