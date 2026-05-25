@@ -360,15 +360,18 @@ enum FacetApp {
             print("facet: restarted via `brew services restart facet`")
             exit(0)
         }
-        for label in ["homebrew.mxcl.facet", "com.facet.app"] {
-            let kick = runProcess(
-                "/bin/launchctl",
-                args: ["kickstart", "-k", "gui/\(getuid())/\(label)"],
-                captureOutput: true)
-            if kick == 0 {
-                print("facet: restarted via `launchctl kickstart \(label)`")
-                exit(0)
-            }
+        // Only `homebrew.mxcl.facet` — facet doesn't ship an
+        // in-repo LaunchAgent template, so `com.facet.app` (the
+        // bundle id) wouldn't match any registered Label key.
+        // Adding it as a kickstart fallback was dead code.
+        let label = "homebrew.mxcl.facet"
+        let kick = runProcess(
+            "/bin/launchctl",
+            args: ["kickstart", "-k", "gui/\(getuid())/\(label)"],
+            captureOutput: true)
+        if kick == 0 {
+            print("facet: restarted via `launchctl kickstart \(label)`")
+            exit(0)
         }
         FileHandle.standardError.write(Data((
             "facet: re-signed, but couldn't restart the daemon — "
@@ -382,7 +385,13 @@ enum FacetApp {
     static func findFacetApp() -> String? {
         let cellar = "/opt/homebrew/Cellar/facet"
         if let versions = try? FileManager.default.contentsOfDirectory(atPath: cellar) {
-            for v in versions.sorted(by: >) {
+            // `.numeric` makes "1.10.0" > "1.2.0" — a plain string
+            // sort would silently pick the older 1.2.0 as "latest"
+            // once a 1.10 series ships.
+            let sorted = versions.sorted { a, b in
+                a.compare(b, options: .numeric) == .orderedDescending
+            }
+            for v in sorted {
                 let p = "\(cellar)/\(v)/Facet.app"
                 if FileManager.default.fileExists(atPath: p) { return p }
             }
@@ -421,6 +430,11 @@ enum FacetApp {
         return "./setup-signing-cert.sh"
     }
 
+    /// Spawn + wait. Returns the child's exit code on completion,
+    /// or `-1` when `Process.run()` itself failed (executable not
+    /// found, permission denied, etc.) — the catch path also emits
+    /// a stderr line so the caller's generic "exit -1" message
+    /// isn't the only signal.
     @discardableResult
     static func runProcess(_ executable: String,
                            args: [String],
@@ -437,6 +451,8 @@ enum FacetApp {
             p.waitUntilExit()
             return p.terminationStatus
         } catch {
+            FileHandle.standardError.write(Data(
+                "facet: couldn't launch \(executable): \(error)\n".utf8))
             return -1
         }
     }
