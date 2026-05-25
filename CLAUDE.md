@@ -5,18 +5,23 @@ Guidance for working in this repository.
 ## What this is
 
 `facet` — Swift workspace + window manager for macOS. **Architectural
-successor to [ws-tabs](https://github.com/akira-toriyama/ws-tabs)**: 1
-binary, multiple views (`--view=tree|grid|…`), 1 backend at a time
+successor to [ws-tabs](https://github.com/akira-toriyama/ws-tabs)**:
+multiple views (`--view=tree|grid|…`), 1 backend at a time
 (`rift-cli` adapter today, native AX/CGS adapter in M5+). Swift 6,
-macOS 13+. See [docs/architecture.md](docs/architecture.md) for the
-layer diagram.
+macOS 13+.
+
+**1 repo / 2 product** (decided 2026-05-24): `facet` (surface-core,
+SIP-on, M5 now) and `facet-x` (deep-core, SIP-off opt-in, M6+).
+Same Swift package, separate binaries, brew dependency
+`facet-x ⊃ facet`. See [docs/architecture.md](docs/architecture.md)
+"Two-binary structure" + Phase α frozen decisions.
 
 ## Build / run
 
 ```sh
 swift build                # compile (works on CommandLineTools)
 swift test                 # tests — needs Xcode (XCTest); fails on CLT
-.build/debug/facet         # bootstrap stub output until M2 wires views
+.build/debug/facet         # raw client (use ./run.sh for the .app bundle)
 ```
 
 `swift test` does NOT work on CommandLineTools-only setups (`no such
@@ -123,9 +128,9 @@ use:
   `FacetAccessibility` module when the native adapter arrives
   (M5+). Place new AX code there, marked with a `// MOVE-AT-M5`
   comment if it would belong in the shared module.
-- **Bundle id will be `com.facet.app`** once
-  [package.sh](packaging/) lands in M2 step 8. NOT `com.wstabs.app`
-  — separate TCC grants, separate self-signed cert. Don't reuse
+- **Bundle id is `com.facet.app`** (M2 done). See
+  [package.sh](package.sh) at repo root. NOT `com.wstabs.app` —
+  separate TCC grants, separate self-signed cert. Don't reuse
   ws-tabs's id even temporarily.
 
 ### CLI surface
@@ -242,7 +247,7 @@ use:
   `<:gitmoji:> <type>(<scope>)<!>: <subject>`. Full spec:
   [docs/commit-convention.md](docs/commit-convention.md). Enable
   the local hook: `git config core.hooksPath scripts/hooks` (script
-  lands in M2 step 8).
+  at [scripts/hooks/commit-msg](scripts/hooks/commit-msg)).
 - **README is bilingual** ([README.md](README.md) English +
   [README.ja.md](README.ja.md) Japanese). Keep them in sync when
   user-visible behavior changes. Memory [[readme-bilingual]].
