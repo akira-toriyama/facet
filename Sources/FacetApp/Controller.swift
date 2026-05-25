@@ -194,6 +194,10 @@ final class Controller: NSObject {
                     let n = Int(s.dropFirst("workspace:".count)) ?? 0
                     self.dispatchWorkspace(n)
 
+                case let s where s.hasPrefix("window-move:"):
+                    let n = Int(s.dropFirst("window-move:".count)) ?? 0
+                    self.dispatchWindowMove(n)
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }
@@ -255,6 +259,26 @@ final class Controller: NSObject {
             return
         }
         backend.switchWorkspace(toIndex: n - 1)
+        scheduleReconcile(after: 0.05)
+    }
+
+    /// Move the currently-focused window to the Nth workspace
+    /// (1-indexed from the user; backend takes 0-indexed). Silent
+    /// no-op (debug log only) when no focused window or N is out
+    /// of range — a stale hotkey on an empty desktop shouldn't
+    /// take down the server.
+    private func dispatchWindowMove(_ n: Int) {
+        let count = backend.workspaces().count
+        guard n >= 1, n <= count else {
+            Log.debug("dispatchWindowMove out-of-range n=\(n) "
+                + "count=\(count) — ignored")
+            return
+        }
+        guard let id = backend.focusedWindow() else {
+            Log.debug("dispatchWindowMove no focused window — ignored")
+            return
+        }
+        backend.moveWindow(id, toWorkspaceIndex: n - 1)
         scheduleReconcile(after: 0.05)
     }
 

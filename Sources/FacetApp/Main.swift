@@ -89,6 +89,8 @@ enum FacetApp {
           facet --workspace=N                switch to workspace N
                                              (1-indexed; idempotent —
                                              no-op if already there)
+          facet window --move-to=N           move the focused window
+                                             to workspace N (1-indexed)
 
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
@@ -96,6 +98,7 @@ enum FacetApp {
             # ~/.config/skhd/skhdrc
             ctrl + alt - 1 : facet --workspace=1
             ctrl + alt - 2 : facet --workspace=2
+            ctrl + shift + alt - 1 : facet window --move-to=1
 
         SERVER CONTROLS
           facet --theme=NAME                 terminal | cute | system
@@ -229,21 +232,68 @@ enum FacetApp {
         postControl("workspace:\(index)")
     }
 
+    /// Post ``window-move:N`` (1-indexed). Moves the focused
+    /// window to the Nth workspace via the backend.
+    static func postWindowMove(_ index: Int) -> Never {
+        postControl("window-move:\(index)")
+    }
+
     /// Parse ``--workspace=N`` (positive integer, 1-indexed). Loud
     /// reject on non-integer / non-positive so a typo can't pick
     /// the wrong workspace silently.
     static func parseWorkspaceInt(_ arg: String) -> Int {
-        let raw = String(arg.dropFirst("--workspace=".count))
+        parsePositiveInt(arg, prefix: "--workspace=", flag: "--workspace")
+    }
+
+    /// Parse ``--move-to=N`` (positive integer, 1-indexed).
+    /// Same shape as ``parseWorkspaceInt``; both target a workspace
+    /// index from the user's 1-based perspective.
+    static func parseMoveToInt(_ arg: String) -> Int {
+        parsePositiveInt(arg, prefix: "--move-to=", flag: "--move-to")
+    }
+
+    /// Generic 1-indexed positive-integer parser. Reused by every
+    /// ``--…=N`` flag whose value names a workspace slot.
+    private static func parsePositiveInt(_ arg: String,
+                                         prefix: String,
+                                         flag: String) -> Int {
+        let raw = String(arg.dropFirst(prefix.count))
         switch FacetCore.parseGeomInt(raw, requirePositive: true) {
         case .success(let n):
             return n
         case .failure(.notAnInteger(let v)):
-            die("--workspace expects an integer (got \"\(v)\")")
+            die("\(flag) expects an integer (got \"\(v)\")")
         case .failure(.notPositive(let n)):
-            die("--workspace must be > 0 (1-indexed, got \(n))")
+            die("\(flag) must be > 0 (1-indexed, got \(n))")
         case .failure:
-            die("--workspace parse error")
+            die("\(flag) parse error")
         }
+    }
+
+    /// Sub-command parser for ``facet window <flag>``. Subcommand
+    /// shape keeps room for future window-scoped ops
+    /// (``--close``, ``--float``, …) without polluting the flat
+    /// flag namespace.
+    static func runWindowCommand(_ args: [String]) -> Never {
+        var moveToArg: Int?
+        var i = 0
+        while i < args.count {
+            defer { i += 1 }
+            let a = args[i]
+            switch true {
+            case a.hasPrefix("--move-to="):
+                moveToArg = parseMoveToInt(a)
+            default:
+                die("unknown `window` flag \"\(a)\" — "
+                    + "see `facet --help`")
+            }
+        }
+        if let n = moveToArg {
+            requireServerAlive()
+            postWindowMove(n)
+        }
+        die("facet window: no action specified — "
+            + "see `facet --help`")
     }
 
     /// Validate + canonicalise a view name. Loud reject on typo
@@ -492,6 +542,14 @@ enum FacetApp {
         // signature for the persistent "facet Local Signing"
         // identity and restarts the daemon, in one step.
         if argv.contains("--resign") { runResign() }
+
+        // Sub-command dispatch: `facet window <flag>` opens a
+        // window-scoped flag namespace so window ops don't share
+        // surface area with workspace / view flags. Keeps the door
+        // open for `--close` / `--float` / etc. later.
+        if argv.first == "window" {
+            runWindowCommand(Array(argv.dropFirst()))
+        }
 
         var i = 0
         while i < argv.count {
