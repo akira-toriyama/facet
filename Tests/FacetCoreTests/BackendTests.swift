@@ -11,6 +11,7 @@ import XCTest
 /// real cross-actor sharing. Production conformers (`FacetAdapterRift`
 /// et al.) earn their Sendable conformance via internal serialization.
 private final class StubBackend: WindowBackend, @unchecked Sendable {
+    let name = "stub"
     let layoutModes = ["bsp", "stack"]
     var state: [Workspace] = []
     var focused: WindowID?

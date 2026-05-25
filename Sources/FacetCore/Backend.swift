@@ -50,6 +50,10 @@ public enum BackendEvent: Sendable {
 /// each implement it; the UI, AX focus glue, themes and DnD are all
 /// WM-agnostic.
 public protocol WindowBackend: Sendable {
+    /// Short identifier shown in `facet status` and debug logs
+    /// (e.g. `"rift"`, `"native"`). Lower-case, no spaces.
+    var name: String { get }
+
     /// Backend-defined layout-mode names that may appear on
     /// `Workspace.layoutMode` (e.g. rift returns
     /// `["master_stack", "traditional", "bsp", "stack", "scrolling"]`).
