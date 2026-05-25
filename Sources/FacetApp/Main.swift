@@ -115,6 +115,16 @@ enum FacetApp {
                                              (session only; edit
                                              config.toml to persist)
           facet --quit                       terminate the server
+          facet --reload                     re-read config.toml + apply
+                                             (theme / hide_method /
+                                             [workspaces]). Default_view
+                                             and setupFiles need a real
+                                             restart. The server also
+                                             auto-reloads on file edits
+                                             via FSEvents — this flag is
+                                             the explicit trigger for
+                                             scripts that want a
+                                             deterministic moment.
           facet --debug                      verbose log to stderr +
                                              /tmp/facet.log (server
                                              startup only)
@@ -575,6 +585,7 @@ enum FacetApp {
         var workspaceArg: Int?
         var activeFlag = false
         var quitFlag = false
+        var reloadFlag = false
         var posX: Int?, posY: Int?, width: Int?, height: Int?
 
         // `--resign` is a one-shot maintenance subcommand. Handle it
@@ -607,6 +618,7 @@ enum FacetApp {
             let a = argv[i]
             switch true {
             case a == "--quit":              quitFlag = true
+            case a == "--reload":            reloadFlag = true
             case a == "--active":            activeFlag = true
             case a == "--debug":             break          // handled above
             case a == "--resign":            break          // handled above
@@ -689,7 +701,7 @@ enum FacetApp {
         // leaving a dead-hotkey mystery. Server mode (no client
         // flag at all) is unaffected; this process is the one
         // about to become the server.
-        let anyClientAction = styleArg != nil || quitFlag
+        let anyClientAction = styleArg != nil || quitFlag || reloadFlag
             || viewArg != nil || hideArg != nil || toggleArg != nil
             || workspaceArg != nil
         if anyClientAction { requireServerAlive() }
@@ -702,6 +714,7 @@ enum FacetApp {
         // call), the user issues two separate invocations.
         if let s = styleArg          { postStyle(s) }
         if quitFlag                  { postControl("quit") }
+        if reloadFlag                { postControl("reload") }
 
         if let v = viewArg           { postView(v, active: activeFlag, geom: geom) }
         if let h = hideArg           { postHide(h) }
