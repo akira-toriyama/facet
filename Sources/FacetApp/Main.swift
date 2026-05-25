@@ -100,6 +100,16 @@ enum FacetApp {
             ctrl + alt - 2 : facet --workspace=2
             ctrl + shift + alt - 1 : facet window --move-to=1
 
+        STATUS
+          facet status                       print server's view of the
+                                             world: backend, hide_method,
+                                             workspaces (active marker +
+                                             window counts), last error,
+                                             snapshot timestamp. Reads
+                                             /tmp/facet-status.json
+                                             (server writes atomically).
+                                             Greppable line format.
+
         SERVER CONTROLS
           facet --theme=NAME                 terminal | cute | system
                                              (session only; edit
@@ -118,11 +128,14 @@ enum FacetApp {
           facet --help                       this help
 
         EXIT CODES
-          0   success (DNC posted or server started)
+          0   success (DNC posted, server started, or status printed)
           2   unknown flag / view / theme name (stderr lists expected
               values)
           3   no server running for the requested client-mode action
-              (start one with ./run.sh)
+              (start one with ./run.sh); also: `facet status` when
+              the status file is missing
+          4   status file present but malformed (server bug —
+              `./stop.sh && ./run.sh`)
 
         CONFIG
           ~/.config/facet/config.toml is the single source of truth.
@@ -267,6 +280,38 @@ enum FacetApp {
             die("\(flag) must be > 0 (1-indexed, got \(n))")
         case .failure:
             die("\(flag) parse error")
+        }
+    }
+
+    /// `facet status` — print the server's current view of the
+    /// world: backend identity, hide method, workspaces with
+    /// active marker + window counts, last error (if any),
+    /// snapshot timestamp.
+    ///
+    /// Reads `/tmp/facet-status.json` written atomically by the
+    /// running server (Controller.writeStatus). Three exit codes:
+    ///
+    ///   0 — printed
+    ///   3 — file missing (server not running, or never reconciled)
+    ///   4 — file present but malformed (server bug — restart)
+    static func runStatus() -> Never {
+        do {
+            let snap = try StatusSnapshot.read()
+            print(snap.render())
+            exit(0)
+        } catch let CocoaError as CocoaError
+            where CocoaError.code == .fileReadNoSuchFile
+        {
+            let msg = "facet: no status file at "
+                + "\(StatusSnapshot.defaultPath) — server not running?\n"
+                + "       start with `./run.sh` (or `facet` for server mode)\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(3)
+        } catch {
+            let msg = "facet: status file malformed — \(error)\n"
+                + "       restart the server with `./stop.sh && ./run.sh`\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(4)
         }
     }
 
@@ -549,6 +594,11 @@ enum FacetApp {
         // open for `--close` / `--float` / etc. later.
         if argv.first == "window" {
             runWindowCommand(Array(argv.dropFirst()))
+        }
+        // Read-only query sub-command. Plain noun (no `--`)
+        // because it returns data rather than triggering a verb.
+        if argv == ["status"] {
+            runStatus()
         }
 
         var i = 0

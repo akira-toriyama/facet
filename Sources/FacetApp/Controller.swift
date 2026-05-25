@@ -150,6 +150,8 @@ final class Controller: NSObject {
         }
         rescheduleThumbnailTimer()
         installCLIControl()
+        writeStatus([])     // touch the file so `facet status` works
+                            // even before the first backend reply
         refresh()
     }
 
@@ -361,6 +363,35 @@ final class Controller: NSObject {
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
+        writeStatus(wss)
+    }
+
+    /// Snapshot the current workspace state to
+    /// `/tmp/facet-status.json` so `facet status` (client mode)
+    /// has something to read. Atomic write — partial-file races
+    /// are impossible.
+    ///
+    /// Called from `apply()` (every reconcile) and once during
+    /// `start()` so the file exists even before the first backend
+    /// event lands. Errors are swallowed: the status file is a
+    /// debugging convenience, not a correctness path.
+    private func writeStatus(_ wss: [Workspace]) {
+        let entries = wss.map { w in
+            WorkspaceStatusEntry(
+                index: w.index + 1,     // 1-indexed for the CLI surface
+                name: w.name,
+                active: w.isActive,
+                windowCount: w.windows.count)
+        }
+        let snap = StatusSnapshot(
+            backend: backend.name,
+            hideMethod: config.effectiveHideMethod,
+            workspaces: entries,
+            lastError: nil,
+            timestamp: ISO8601DateFormatter().string(from: Date()))
+        do { try snap.write() } catch {
+            Log.debug("writeStatus failed: \(error)")
+        }
     }
 
     // MARK: - Preview / thumbnail timer
