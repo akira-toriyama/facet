@@ -263,7 +263,8 @@ final class Controller: NSObject {
     private func dispatchWorkspace(_ n: Int) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {
-            setError("workspace \(n) out of range (1..\(count))")
+            setError("workspace \(n) out of range "
+                + "(\(rangeHint(count: count)))")
             return
         }
         backend.switchWorkspace(toIndex: n - 1)
@@ -278,7 +279,8 @@ final class Controller: NSObject {
     private func dispatchWindowMove(_ n: Int) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {
-            setError("window --move-to=\(n) out of range (1..\(count))")
+            setError("window --move-to=\(n) out of range "
+                + "(\(rangeHint(count: count)))")
             return
         }
         guard let id = backend.focusedWindow() else {
@@ -414,6 +416,14 @@ final class Controller: NSObject {
         lastError = "\(message) at \(ts)"
         Log.line("error: \(lastError ?? "")")
         writeStatus(lastWorkspaces)
+    }
+
+    /// Human-readable range hint for out-of-range error messages.
+    /// `(1..15)` for the normal case; `no workspaces available` when
+    /// the backend returned an empty list (= rift not activated,
+    /// startup race, etc.) — much clearer than the cryptic `(1..0)`.
+    private func rangeHint(count: Int) -> String {
+        count > 0 ? "1..\(count)" : "no workspaces available"
     }
 
     // MARK: - Preview / thumbnail timer
