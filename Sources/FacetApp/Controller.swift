@@ -44,6 +44,13 @@ final class Controller: NSObject {
     /// immediately on first show without round-tripping the backend.
     private(set) var lastWorkspaces: [Workspace] = []
     private var userHidden = false
+
+    /// Last surfaced operational error (e.g. out-of-range workspace
+    /// switch, no-focused-window window move). Held in-memory and
+    /// folded into the next `writeStatus()` snapshot so `facet
+    /// status` can surface it to the user. Single-slot — newest
+    /// overwrites — keeps the status output bounded.
+    private var lastError: String?
     /// Pauses refresh/apply while the user is mid-grip-drag, so a
     /// layout pass can't stomp the panel height the next mouseDragged
     /// is about to read (memory: grid-branch-grip-intermittent).
@@ -256,8 +263,7 @@ final class Controller: NSObject {
     private func dispatchWorkspace(_ n: Int) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {
-            Log.debug("dispatchWorkspace out-of-range n=\(n) "
-                + "count=\(count) — ignored")
+            setError("workspace \(n) out of range (1..\(count))")
             return
         }
         backend.switchWorkspace(toIndex: n - 1)
@@ -272,12 +278,11 @@ final class Controller: NSObject {
     private func dispatchWindowMove(_ n: Int) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {
-            Log.debug("dispatchWindowMove out-of-range n=\(n) "
-                + "count=\(count) — ignored")
+            setError("window --move-to=\(n) out of range (1..\(count))")
             return
         }
         guard let id = backend.focusedWindow() else {
-            Log.debug("dispatchWindowMove no focused window — ignored")
+            setError("window --move-to=\(n): no focused window")
             return
         }
         backend.moveWindow(id, toWorkspaceIndex: n - 1)
@@ -387,11 +392,28 @@ final class Controller: NSObject {
             backend: backend.name,
             hideMethod: config.effectiveHideMethod,
             workspaces: entries,
-            lastError: nil,
+            lastError: lastError,
             timestamp: ISO8601DateFormatter().string(from: Date()))
         do { try snap.write() } catch {
             Log.debug("writeStatus failed: \(error)")
         }
+    }
+
+    /// Record an operational error so the next `writeStatus()` —
+    /// and therefore `facet status` — surfaces it. Single-slot
+    /// (newest overwrites): the status file shows the most recent
+    /// thing that went wrong, not a history. Re-snapshots
+    /// immediately so the file reflects the new error without
+    /// waiting for the next reconcile.
+    ///
+    /// Call sites are intentionally narrow today (dispatch
+    /// out-of-range only). Broaden later — AX focus failure,
+    /// backend command failure, etc. — as the seam proves out.
+    private func setError(_ message: String) {
+        let ts = ISO8601DateFormatter().string(from: Date())
+        lastError = "\(message) at \(ts)"
+        Log.line("error: \(lastError ?? "")")
+        writeStatus(lastWorkspaces)
     }
 
     // MARK: - Preview / thumbnail timer
