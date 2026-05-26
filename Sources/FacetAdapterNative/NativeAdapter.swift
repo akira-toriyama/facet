@@ -89,6 +89,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         self.errorStream = AsyncStream { c in errC = c }
         self.errorContinuation = errC
 
+        Log.debug("native: init workspaces="
+            + "\(config.effectiveWorkspaceList.count) "
+            + "hide_method=\(config.effectiveHideMethod)")
+
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
         // Same surface as RiftAdapter so the user sees the same
@@ -123,6 +127,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func refreshCatalog() {
         let live = enumerateCGWindows()
         let liveIDs = Set(live.map(\.id))
+
+        // Count diffs for trace, then apply.
+        let removed = windowMap.keys.filter {
+            !liveIDs.contains($0)
+        }.count
+        let added = live.filter { windowMap[$0.id] == nil }.count
+        if removed > 0 || added > 0 {
+            Log.debug("native: refreshCatalog "
+                + "added=\(added) removed=\(removed) "
+                + "total=\(live.count)")
+        }
 
         // Forget windows that have closed.
         windowMap = windowMap.filter { liveIDs.contains($0.key) }
@@ -219,6 +234,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
               target != activeIndex else { return }
         let oldActive = activeIndex
         activeIndex = target
+        Log.debug("native: switchWorkspace \(oldActive) -> \(target) "
+            + "(hide_method=\(config.effectiveHideMethod))")
 
         // Apply hide / show side-effects via the configured method.
         // Today only `"anchor"` is wired; `"minimize"` lands in the
@@ -238,7 +255,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard isValidWorkspace(target),
               windowMap[id] != nil,
               windowMap[id] != target else { return }
+        let oldWS = windowMap[id]!
         windowMap[id] = target
+        Log.debug("native: moveWindow \(id.serverID) WS "
+            + "\(oldWS) -> \(target)")
         // Hide / show side-effect for this single window.
         if config.effectiveHideMethod == "anchor",
            let w = enumerateCGWindows().first(where: { $0.id == id }) {
@@ -285,12 +305,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func applyAnchorHide(oldActive: Int, newActive: Int) {
         let live = enumerateCGWindows()
         let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
+        var parked = 0, restored = 0
         for (wid, ws) in windowMap where ws == oldActive {
-            if let w = byID[wid] { parkWindow(w) }
+            if let w = byID[wid] {
+                parkWindow(w)
+                parked += 1
+            }
         }
         for (wid, ws) in windowMap where ws == newActive {
-            if let w = byID[wid] { restoreWindow(w) }
+            if let w = byID[wid] {
+                restoreWindow(w)
+                restored += 1
+            }
         }
+        Log.debug("native: anchor parked=\(parked) restored=\(restored)")
     }
 
     /// Move `w` to a 1×41 px sliver in the bottom-right corner of
