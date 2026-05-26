@@ -51,24 +51,40 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testReconcileAssignsNewWindowsToActive() {
         var c = WorkspaceCatalog()
-        let r = c.reconcile(liveIDs: [wid(10), wid(20)])
+        let r = c.reconcile(live: [window(10), window(20)])
         XCTAssertEqual(r, .init(added: 2, removed: 0))
-        XCTAssertEqual(c.windowMap[wid(10)], 1)
-        XCTAssertEqual(c.windowMap[wid(20)], 1)
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+        XCTAssertEqual(c.windowMap[wid(20)]?.workspace, 1)
+    }
+
+    func testReconcileRecordsPidFromLiveWindow() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10, pid: 4242)])
+        XCTAssertEqual(c.windowMap[wid(10)]?.pid, 4242)
+    }
+
+    func testReconcileRefreshesPidWhenItChangesUnderTheSameID() {
+        // Defensive: if a wsid is ever reused after its owner dies,
+        // the fresh pid should win so subsequent AX calls don't
+        // target a stale (or now-different) process.
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10, pid: 1000)])
+        _ = c.reconcile(live: [window(10, pid: 2000)])
+        XCTAssertEqual(c.windowMap[wid(10)]?.pid, 2000)
     }
 
     func testReconcileNewWindowsLandInCurrentActive() {
         // Switch to WS 3 first; new windows should land in 3.
         var c = WorkspaceCatalog()
         _ = c.setActive(3, configuredIndexes: defaultConfigured)
-        _ = c.reconcile(liveIDs: [wid(10)])
-        XCTAssertEqual(c.windowMap[wid(10)], 3)
+        _ = c.reconcile(live: [window(10)])
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3)
     }
 
     func testReconcileDropsGoneWindows() {
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10), wid(20)])
-        let r = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10), window(20)])
+        let r = c.reconcile(live: [window(10)])
         XCTAssertEqual(r, .init(added: 0, removed: 1))
         XCTAssertNil(c.windowMap[wid(20)])
     }
@@ -77,26 +93,38 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Window assigned to WS 3 must stay there even after
         // active flips back to 1 and reconcile runs.
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10)])
         _ = c.moveWindow(wid(10), to: 3,
                          configuredIndexes: defaultConfigured)
         _ = c.setActive(2, configuredIndexes: defaultConfigured)
-        _ = c.reconcile(liveIDs: [wid(10)])
-        XCTAssertEqual(c.windowMap[wid(10)], 3,
+        _ = c.reconcile(live: [window(10)])
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3,
                        "reconcile must not reassign existing windows")
     }
 
     func testReconcileSweepsParkedSetsAndOriginalPositions() {
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10), wid(20)])
+        _ = c.reconcile(live: [window(10), window(20)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
         c.markMinimized(wid(20))
         // wid(10) disappears (e.g. user closed the window).
-        _ = c.reconcile(liveIDs: [wid(20)])
+        _ = c.reconcile(live: [window(20)])
         XCTAssertFalse(c.anchorParked.contains(wid(10)))
         XCTAssertNil(c.originalPositions[wid(10)])
         // wid(20) still alive → minimize state preserved.
         XCTAssertTrue(c.minimizeParked.contains(wid(20)))
+    }
+
+    // MARK: - pid lookup
+
+    func testPidForUnknownWindowIsNil() {
+        XCTAssertNil(WorkspaceCatalog().pid(for: wid(10)))
+    }
+
+    func testPidForKnownWindowMatchesLiveValue() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10, pid: 1234)])
+        XCTAssertEqual(c.pid(for: wid(10)), 1234)
     }
 
     // MARK: - isValid (sparse-aware)
@@ -141,7 +169,9 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testSetActiveReturnsSwitchPlanWithCorrectSets() {
         // Three windows: 10 in WS1, 20 in WS2, 30 in WS2.
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10), wid(20), wid(30)])
+        _ = c.reconcile(live: [window(10, pid: 100),
+                               window(20, pid: 200),
+                               window(30, pid: 300)])
         _ = c.moveWindow(wid(20), to: 2,
                          configuredIndexes: defaultConfigured)
         _ = c.moveWindow(wid(30), to: 2,
@@ -151,9 +181,22 @@ final class WorkspaceCatalogTests: XCTestCase {
                                configuredIndexes: defaultConfigured)
         XCTAssertEqual(plan?.oldActive, 1)
         XCTAssertEqual(plan?.newActive, 2)
-        XCTAssertEqual(plan?.toPark, [wid(10)])
-        XCTAssertEqual(plan?.toRestore, [wid(20), wid(30)])
+        XCTAssertEqual(plan?.toPark, [WindowRef(id: wid(10), pid: 100)])
+        XCTAssertEqual(Set(plan?.toRestore ?? []),
+                       [WindowRef(id: wid(20), pid: 200),
+                        WindowRef(id: wid(30), pid: 300)])
         XCTAssertEqual(c.activeIndex, 2)
+    }
+
+    func testSwitchPlanCarriesPidFromCatalog() {
+        // Specifically asserting the pid threading — even if pid
+        // wasn't passed into setActive, the plan must include it
+        // so the adapter can dispatch AX directly.
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10, pid: 9999)])
+        let plan = c.setActive(2,
+                               configuredIndexes: defaultConfigured)
+        XCTAssertEqual(plan?.toPark.first?.pid, 9999)
     }
 
     // MARK: - moveWindow
@@ -167,17 +210,17 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testMoveWindowRejectsInvalidTarget() {
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10)])
         let outcome = c.moveWindow(wid(10), to: 2,
                                    configuredIndexes: sparseConfigured)
         XCTAssertEqual(outcome, .rejected)
-        XCTAssertEqual(c.windowMap[wid(10)], 1,
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1,
                        "rejected move must not mutate")
     }
 
     func testMoveWindowRejectsAlreadyOnTarget() {
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10)])
         let outcome = c.moveWindow(wid(10), to: 1,
                                    configuredIndexes: defaultConfigured)
         XCTAssertEqual(outcome, .rejected)
@@ -186,35 +229,39 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testMoveAwayFromActiveIsPark() {
         // Active = 1, window in 1 → move to 2 → park.
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10, pid: 777)])
         let outcome = c.moveWindow(wid(10), to: 2,
                                    configuredIndexes: defaultConfigured)
-        XCTAssertEqual(outcome, .park(wid(10)))
-        XCTAssertEqual(c.windowMap[wid(10)], 2)
+        XCTAssertEqual(outcome,
+                       .park(WindowRef(id: wid(10), pid: 777)))
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 2)
+        XCTAssertEqual(c.windowMap[wid(10)]?.pid, 777,
+                       "pid must survive workspace reassignment")
     }
 
     func testMoveIntoActiveIsRestore() {
         // Window starts in WS 2 (non-active). Move it to active=1.
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10, pid: 555)])
         _ = c.moveWindow(wid(10), to: 2,
                          configuredIndexes: defaultConfigured)
         let outcome = c.moveWindow(wid(10), to: 1,
                                    configuredIndexes: defaultConfigured)
-        XCTAssertEqual(outcome, .restore(wid(10)))
+        XCTAssertEqual(outcome,
+                       .restore(WindowRef(id: wid(10), pid: 555)))
     }
 
     func testMoveBetweenInactiveWorkspacesIsStateOnly() {
         // Active = 1. Window in WS 2 → move to WS 3 → invisible to
         // user, only the assignment changes.
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10)])
         _ = c.moveWindow(wid(10), to: 2,
                          configuredIndexes: defaultConfigured)
         let outcome = c.moveWindow(wid(10), to: 3,
                                    configuredIndexes: defaultConfigured)
         XCTAssertEqual(outcome, .stateOnly)
-        XCTAssertEqual(c.windowMap[wid(10)], 3)
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3)
     }
 
     // MARK: - Anchor park bookkeeping
@@ -267,7 +314,7 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testDropClearsAllTracesForWindow() {
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10)])
+        _ = c.reconcile(live: [window(10)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
         c.markMinimized(wid(10))
         c.drop(wid(10))
@@ -308,7 +355,7 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testSnapshotPlacesWindowsInAssignedWorkspace() {
         var c = WorkspaceCatalog()
-        _ = c.reconcile(liveIDs: [wid(10), wid(20)])
+        _ = c.reconcile(live: [window(10), window(20)])
         _ = c.moveWindow(wid(20), to: 3,
                          configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
