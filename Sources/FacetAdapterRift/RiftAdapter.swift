@@ -18,11 +18,18 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
 
     private let eventSource: EventSource
 
+    private let errorStream: AsyncStream<String>
+    private let errorContinuation: AsyncStream<String>.Continuation
+
     public init() {
         self.eventSource = EventSource()
+        var cont: AsyncStream<String>.Continuation!
+        self.errorStream = AsyncStream { c in cont = c }
+        self.errorContinuation = cont
     }
 
     public var events: AsyncStream<BackendEvent> { eventSource.stream }
+    public var errors: AsyncStream<String> { errorStream }
 
     // MARK: - Queries
 
@@ -30,7 +37,12 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
         guard
             let data = RiftCLI.run(["query", "workspaces"]),
             let raw = try? JSONDecoder().decode([RFWorkspace].self, from: data)
-        else { return [] }
+        else {
+            errorContinuation.yield(
+                "rift-cli query workspaces failed — is rift running? "
+                + "(`rift service start` or activate with Alt+Z)")
+            return []
+        }
         return raw
             .sorted { $0.index < $1.index }
             .map(RiftMapper.workspace(from:))

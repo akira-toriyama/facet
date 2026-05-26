@@ -95,6 +95,7 @@ final class Controller: NSObject {
     // MARK: - Subscription / polling
 
     private var eventTask: Task<Void, Never>?
+    private var errorTask: Task<Void, Never>?
     private var pollTimer: Timer?
     /// Catches backends that don't emit events for some changes
     /// (workspace renames, layout-mode switches via external CLI).
@@ -158,6 +159,19 @@ final class Controller: NSObject {
             guard let self else { return }
             for await _ in self.backend.events {
                 await MainActor.run { self.requestRefresh() }
+            }
+        }
+        // Adapter error stream → lastError slot in facet status.
+        // De-dupe consecutive identical messages so a long stream
+        // of "rift dead" doesn't keep refreshing the snapshot;
+        // setError already rewrites the file each call.
+        errorTask = Task { [weak self] in
+            guard let self else { return }
+            var last: String?
+            for await msg in self.backend.errors {
+                if msg == last { continue }
+                last = msg
+                await MainActor.run { self.setError(msg) }
             }
         }
         pollTimer = Timer.scheduledTimer(
