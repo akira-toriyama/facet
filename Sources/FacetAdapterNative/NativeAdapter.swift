@@ -221,11 +221,28 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func focusedWindow() -> WindowID? {
-        // Phase α: NSWorkspace.frontmostApplication → AX focused
-        // window → private `_AXUIElementGetWindow` (already used in
-        // `FacetAdapterRift/AXFocus.swift`, moves to a shared
-        // `FacetAccessibility` module at Phase α impl time).
-        nil
+        // Frontmost app → its AX focused-window attribute →
+        // CGWindowID via the private _AXUIElementGetWindow we
+        // already dlsym'd. nil when:
+        //   - no frontmost app (rare; transient between apps)
+        //   - app refuses AX (sandboxed / non-cooperative)
+        //   - AX has no focused window for this app right now
+        //   - the private symbol moved (we'd notice everywhere
+        //     else first, so this case stays silent)
+        guard let app = NSWorkspace.shared.frontmostApplication
+        else { return nil }
+        let pid = pid_t(app.processIdentifier)
+        let axApp = AXUIElementCreateApplication(pid)
+        var winRef: CFTypeRef?
+        let err = AXUIElementCopyAttributeValue(
+            axApp, kAXFocusedWindowAttribute as CFString, &winRef)
+        guard err == .success, let raw = winRef else { return nil }
+        // `kAXFocusedWindowAttribute` always returns an
+        // AXUIElement; the cast is unconditional (Swift warns on
+        // `as?`). force-cast here matches the AX type contract.
+        let element = raw as! AXUIElement
+        guard let cgID = cgWindowID(of: element) else { return nil }
+        return WindowID(serverID: Int(cgID))
     }
 
     // MARK: - Commands (Phase α-2 lands the state mutations;
