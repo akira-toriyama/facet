@@ -85,12 +85,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // operation (focus, title resolution, window enumeration).
         // Same surface as RiftAdapter so the user sees the same
         // hint regardless of which backend is active.
-        if !AXIsProcessTrusted() {
+        if let msg = AXPermission.errorMessageIfMissing() {
             DispatchQueue.main.async { [errorContinuation] in
-                errorContinuation.yield(
-                    "Accessibility permission not granted — open "
-                    + "System Settings → Privacy & Security → "
-                    + "Accessibility, enable facet, then restart")
+                errorContinuation.yield(msg)
             }
         }
 
@@ -191,29 +188,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func focusedWindow() -> WindowID? {
-        // Frontmost app → its AX focused-window attribute →
-        // CGWindowID via the private _AXUIElementGetWindow we
-        // already dlsym'd. nil when:
-        //   - no frontmost app (rare; transient between apps)
-        //   - app refuses AX (sandboxed / non-cooperative)
-        //   - AX has no focused window for this app right now
-        //   - the private symbol moved (we'd notice everywhere
-        //     else first, so this case stays silent)
-        guard let app = NSWorkspace.shared.frontmostApplication
-        else { return nil }
-        let pid = pid_t(app.processIdentifier)
-        let axApp = AXUIElementCreateApplication(pid)
-        var winRef: CFTypeRef?
-        let err = AXUIElementCopyAttributeValue(
-            axApp, kAXFocusedWindowAttribute as CFString, &winRef)
-        guard err == .success, let raw = winRef else { return nil }
-        // `kAXFocusedWindowAttribute` always returns an
-        // AXUIElement; the cast is unconditional (Swift warns on
-        // `as?`). force-cast here matches the AX type contract.
-        let element = raw as! AXUIElement
-        guard let cgID = AXGeom.cgWindowID(of: element) else {
-            return nil
-        }
+        // Frontmost-app → AX focused-window → CGWindowID is the
+        // same dance the rift adapter would need; lives in
+        // `AX.frontmostFocusedCGID` so the adapters share it.
+        guard let cgID = AX.frontmostFocusedCGID() else { return nil }
         return WindowID(serverID: Int(cgID))
     }
 

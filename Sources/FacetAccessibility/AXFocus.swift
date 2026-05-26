@@ -101,6 +101,37 @@ public enum AX {
         return true
     }
 
+    /// CGWindowID of the currently focused window across the
+    /// system, resolved via NSWorkspace's frontmost app + that
+    /// app's `kAXFocusedWindowAttribute`. `nil` when:
+    ///   - no frontmost app (rare; transient between apps)
+    ///   - app refuses AX (sandboxed / non-cooperative)
+    ///   - AX has no focused window for this app right now
+    ///   - `_AXUIElementGetWindow` (looked up via dlsym in
+    ///     `AXGeom.cgWindowID`) returns failure
+    ///
+    /// Both adapters need this seam — `NativeAdapter.focusedWindow`
+    /// to stamp `Window.isFocused` in its snapshot, and any future
+    /// adapter that wants the same answer without re-implementing
+    /// the dance.
+    public static func frontmostFocusedCGID() -> CGWindowID? {
+        guard let app = NSWorkspace.shared.frontmostApplication
+        else { return nil }
+        let axApp = AXUIElementCreateApplication(
+            pid_t(app.processIdentifier))
+        var winRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                axApp, kAXFocusedWindowAttribute as CFString,
+                &winRef) == .success,
+              let raw = winRef
+        else { return nil }
+        // `kAXFocusedWindowAttribute` always returns an
+        // AXUIElement; the cast is unconditional (Swift warns on
+        // `as?`). force-cast here matches the AX type contract.
+        let element = raw as! AXUIElement
+        return AXGeom.cgWindowID(of: element)
+    }
+
     /// Prompt the user to grant Accessibility if not already trusted.
     /// Idempotent — system shows the alert once and remembers.
     public static func ensureTrusted() {
