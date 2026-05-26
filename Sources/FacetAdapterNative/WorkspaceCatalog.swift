@@ -51,7 +51,7 @@ public struct WindowSlot: Equatable, Sendable {
 /// A window referenced by id + pid — the minimum the adapter needs
 /// to call `AXGeom.window(for:pid:)` on it. Plans and move
 /// outcomes use this so the adapter never has to look pid up again.
-public struct WindowRef: Equatable, Sendable {
+public struct WindowRef: Hashable, Sendable {
     public let id: WindowID
     public let pid: Int
     public init(id: WindowID, pid: Int) {
