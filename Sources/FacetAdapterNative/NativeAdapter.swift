@@ -32,6 +32,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// supported modes at startup.
     public let layoutModes = ["bsp", "stack"]
 
+    // MARK: - Self-managed workspace state (Phase α)
+
+    /// Index (1-based, user-facing) of the active workspace.
+    /// Phase α implements `switchWorkspace` by mutating this and
+    /// re-emitting `BackendEvent.refreshNeeded`.
+    private var activeIndex: Int = 1
+
+    /// Snapshot of workspaces, rebuilt from config on reload.
+    /// Each entry's `windows` is empty in this PR — populating it
+    /// from CGWindowList comes with the next phase slice
+    /// (Phase α window-catalog).
+    private var workspaceList: [Workspace] = []
+
     // MARK: - Event / error streams
 
     private let eventStream: AsyncStream<BackendEvent>
@@ -39,13 +52,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private let errorStream: AsyncStream<String>
     private let errorContinuation: AsyncStream<String>.Continuation
 
-    public init() {
+    /// Init with config so workspace count + names come from the
+    /// user's `[workspace]` section. The (default = 5) fallback in
+    /// FacetConfig keeps a vanilla `~/.config/facet/config.toml`
+    /// usable out of the box.
+    public init(config: FacetConfig) {
         var ec: AsyncStream<BackendEvent>.Continuation!
         self.eventStream = AsyncStream { c in ec = c }
         self.eventContinuation = ec
         var errC: AsyncStream<String>.Continuation!
         self.errorStream = AsyncStream { c in errC = c }
         self.errorContinuation = errC
+
+        self.workspaceList = Self.buildWorkspaces(
+            from: config, activeIndex: 1)
 
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
@@ -61,16 +81,34 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
+    /// Build the Workspace snapshot from the config's
+    /// `effectiveWorkspaceList`. Each workspace starts with no
+    /// windows (population is the next slice) and the matching
+    /// `isActive` flag.
+    private static func buildWorkspaces(
+        from config: FacetConfig,
+        activeIndex: Int
+    ) -> [Workspace] {
+        config.effectiveWorkspaceList.map { entry in
+            // FacetCore's index is 0-based on the wire (matches
+            // backend convention); the user-facing 1-based number
+            // is `entry.index`. Translate at the seam.
+            Workspace(
+                index: entry.index - 1,
+                name: entry.name,
+                isActive: entry.index == activeIndex,
+                layoutMode: "bsp",   // Phase γ revisits per-WS layout
+                windows: [])
+        }
+    }
+
     public var events: AsyncStream<BackendEvent> { eventStream }
     public var errors: AsyncStream<String> { errorStream }
 
     // MARK: - Queries (Phase α implements; skeleton returns empty)
 
     public func workspaces() -> [Workspace] {
-        // Phase α: query CGWindowList + facet's own workspace model
-        // (a self-managed [Workspace] state machine that survives
-        // backend events).
-        []
+        workspaceList
     }
 
     public func focusedWindow() -> WindowID? {

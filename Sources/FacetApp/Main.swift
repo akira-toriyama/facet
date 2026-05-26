@@ -751,7 +751,7 @@ enum FacetApp {
         switch backendName {
         case "native":
             Log.line("backend: native (FACET_BACKEND=native)")
-            backend = NativeAdapter()
+            backend = NativeAdapter(config: cfg)
         case "rift", "", nil:
             backend = RiftAdapter()
         case let other?:

@@ -63,6 +63,44 @@ final class FacetConfigTests: XCTestCase {
                        "clamp high")
     }
 
+    func testEffectiveWorkspaceListDefaultWhenUnset() {
+        let c = FacetConfig()
+        let list = c.effectiveWorkspaceList
+        XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
+        XCTAssertEqual(list.map(\.index), [1, 2, 3, 4, 5])
+        XCTAssertTrue(list.allSatisfy { $0.name.isEmpty })
+    }
+
+    func testEffectiveWorkspaceListReadsConfiguredEntries() {
+        var c = FacetConfig()
+        c.workspaceNames = [1: "dev", 3: "sns", 5: ""]
+        let list = c.effectiveWorkspaceList
+        XCTAssertEqual(list.map(\.index), [1, 3, 5])
+        XCTAssertEqual(list.map(\.name), ["dev", "sns", ""])
+    }
+
+    func testEffectiveWorkspaceListDropsNonPositiveKeys() {
+        var c = FacetConfig()
+        c.workspaceNames = [0: "zero", -1: "neg", 2: "ok"]
+        let list = c.effectiveWorkspaceList
+        XCTAssertEqual(list.map(\.index), [2])
+        XCTAssertEqual(list.map(\.name), ["ok"])
+    }
+
+    func testFromTOMLPopulatesWorkspaceNames() {
+        let parsed = parseTOMLSubset("""
+            [workspace]
+            hide_method = "anchor"
+            1 = "dev"
+            2 = "sns"
+            """)
+        let c = FacetConfig.from(toml: parsed)
+        XCTAssertEqual(c.workspaceNames[1], "dev")
+        XCTAssertEqual(c.workspaceNames[2], "sns")
+        // hide_method must not bleed into workspaceNames
+        XCTAssertNil(c.workspaceNames["hide_method".hashValue])
+    }
+
     func testEffectiveHideMethodFallsBackToAnchor() {
         var c = FacetConfig()
         XCTAssertEqual(c.effectiveHideMethod, "anchor",

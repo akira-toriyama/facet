@@ -32,6 +32,13 @@ public struct FacetConfig: Sendable {
     /// ("deep-tag" etc.) come with `facet-x` (deep-core, M6+).
     public var hideMethod: String?          // "anchor" | "minimize"
 
+    /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
+    /// Keys are 1-indexed integers matching what the user types
+    /// into `facet --workspace=N`. Empty string values are
+    /// permitted (= name-less slot, renders as "(N)" in status).
+    /// Read through `effectiveWorkspaceNames` for clamped values.
+    public var workspaceNames: [Int: String] = [:]
+
     public init() {}
 
     // MARK: - Effective accessors (defaults + clamping)
@@ -90,6 +97,32 @@ public struct FacetConfig: Sendable {
         return ["anchor", "minimize"].contains(raw) ? raw : "anchor"
     }
 
+    /// Facet workspace defaults when the user hasn't (yet) edited
+    /// `[workspace]` at all. 5 is the memory-confirmed
+    /// (`facet-workspace-model` N2) "control above zero, easy to
+    /// expand" starting point.
+    public static let defaultWorkspaceCount = 5
+
+    /// Effective workspace list as `(index, name)` pairs, 1-indexed,
+    /// sorted by index. Returns `defaultWorkspaceCount` empty-name
+    /// slots when the user hasn't configured any.
+    ///
+    /// Negative / zero / duplicate keys are dropped (clamping;
+    /// `facet-workspace-model` N2.2 = no upper bound). Adapters
+    /// build their workspace state from this list.
+    public var effectiveWorkspaceList: [(index: Int, name: String)] {
+        let valid = workspaceNames
+            .filter { $0.key >= 1 }
+        if valid.isEmpty {
+            return (1...Self.defaultWorkspaceCount).map {
+                ($0, "")
+            }
+        }
+        return valid
+            .sorted { $0.key < $1.key }
+            .map { ($0.key, $0.value) }
+    }
+
     // MARK: - Construction from parsed TOML
 
     public static func from(toml: [String: [String: TOMLValue]])
@@ -117,6 +150,17 @@ public struct FacetConfig: Sendable {
         // [workspace]
         if case .string(let s)? = toml["workspace"]?["hide_method"] {
             c.hideMethod = s
+        }
+        // [workspace] inline mapping (e.g. `1 = "dev"`). Any int
+        // key inside the section that isn't a known meta-field
+        // (`hide_method` etc.) is treated as a workspace name slot.
+        if let section = toml["workspace"] {
+            for (key, value) in section {
+                guard let idx = Int(key),
+                      case .string(let name) = value
+                else { continue }
+                c.workspaceNames[idx] = name
+            }
         }
         return c
     }
