@@ -88,4 +88,35 @@ final class TOMLTests: XCTestCase {
             """)
         XCTAssertEqual(p[""]?["n"], .int(1))
     }
+
+    // MARK: - String arrays (added for setupFiles)
+
+    func testStringArraySingleElement() {
+        let p = parseTOMLSubset(#"xs = ["one"]"#)
+        XCTAssertEqual(p[""]?["xs"], .stringArray(["one"]))
+    }
+
+    func testStringArrayMultipleElementsAndSpacing() {
+        let p = parseTOMLSubset(#"xs = [ "a" ,  "b","c" ]"#)
+        XCTAssertEqual(p[""]?["xs"],
+                       .stringArray(["a", "b", "c"]))
+    }
+
+    func testStringArrayEmpty() {
+        let p = parseTOMLSubset(#"xs = []"#)
+        XCTAssertEqual(p[""]?["xs"], .stringArray([]))
+    }
+
+    func testStringArrayMalformedSkippedKeepsOtherKeys() {
+        // A bad element (unquoted `b`) drops the whole line,
+        // matching the parser's "lose one line on typo" rule.
+        let p = parseTOMLSubset("""
+            ok = 1
+            bad = ["a", b, "c"]
+            also = 2
+            """)
+        XCTAssertEqual(p[""]?["ok"], .int(1))
+        XCTAssertNil(p[""]?["bad"])
+        XCTAssertEqual(p[""]?["also"], .int(2))
+    }
 }

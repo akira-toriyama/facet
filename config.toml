@@ -110,3 +110,28 @@ thumbnail-refresh-seconds = 4
 #
 # Unknown values clamp to "anchor".
 hide_method = "anchor"
+
+# External shell-hook setup scripts, run once at startup AFTER
+# facet's CLI listener (DNC) is live so the script can immediately
+# call `facet --workspace=N` / `facet window --move-to=N` /
+# `facet status`. Vitest-style: facet itself never persists window
+# assignments — this hook is your escape hatch to recreate the
+# layout you want on launch.
+#
+# Use it for, e.g.:
+#   - Pin Slack to WS 3, Safari to WS 1 (after they auto-launch).
+#   - Pre-open a terminal in WS 2 (via `open -na Terminal`) then
+#     move it.
+#
+# Notes:
+#   - Each script must be executable (`chmod +x`).
+#   - `~` and `$VAR` / `${VAR}` are expanded.
+#   - Fire-and-forget after spawn — a hung script can't stall
+#     facet startup. Errors (missing file, non-executable,
+#     non-zero exit) surface in `facet status` lastError.
+#   - Re-invoked on full restart only, NOT on `facet --reload`.
+#   - stdout / stderr is captured into /tmp/facet.log (visible
+#     under `facet --debug`).
+#
+# Default (unset) = no scripts.
+# setupFiles = ["~/.config/facet/setup.sh"]

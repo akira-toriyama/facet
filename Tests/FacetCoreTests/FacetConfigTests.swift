@@ -154,6 +154,61 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveGridCols, 4)
     }
 
+    // MARK: - setupFiles + expandPath
+
+    func testSetupFilesParseFromTOML() {
+        let parsed = parseTOMLSubset(#"""
+            [workspace]
+            setupFiles = ["~/foo.sh", "/etc/bar.sh"]
+            """#)
+        let c = FacetConfig.from(toml: parsed)
+        XCTAssertEqual(c.setupFiles, ["~/foo.sh", "/etc/bar.sh"])
+    }
+
+    func testEffectiveSetupFilesEmptyWhenUnset() {
+        XCTAssertEqual(FacetConfig().effectiveSetupFiles, [])
+    }
+
+    func testEffectiveSetupFilesExpandsTilde() {
+        var c = FacetConfig()
+        c.setupFiles = ["~/foo.sh"]
+        let home = ProcessInfo.processInfo.environment["HOME"]
+            ?? NSHomeDirectory()
+        XCTAssertEqual(c.effectiveSetupFiles, ["\(home)/foo.sh"])
+    }
+
+    func testEffectiveSetupFilesDropsEmptyAfterExpansion() {
+        var c = FacetConfig()
+        c.setupFiles = ["", "  ", "/keep.sh"]
+        XCTAssertEqual(c.effectiveSetupFiles, ["/keep.sh"])
+    }
+
+    func testExpandPathDollarVar() {
+        setenv("FACET_TEST_VAR", "/from-env", 1)
+        defer { unsetenv("FACET_TEST_VAR") }
+        XCTAssertEqual(expandPath("$FACET_TEST_VAR/x"),
+                       "/from-env/x")
+    }
+
+    func testExpandPathBracedVar() {
+        setenv("FACET_TEST_VAR", "/from-env", 1)
+        defer { unsetenv("FACET_TEST_VAR") }
+        XCTAssertEqual(expandPath("${FACET_TEST_VAR}-suffix"),
+                       "/from-env-suffix")
+    }
+
+    func testExpandPathUnsetVarBecomesEmpty() {
+        unsetenv("FACET_DEFINITELY_UNSET")
+        XCTAssertEqual(expandPath("$FACET_DEFINITELY_UNSET/x"),
+                       "/x")
+    }
+
+    func testExpandPathLiteralTildeMidString() {
+        // Only `~` at start or `~/` expands; mid-path `~` stays
+        // literal (matches sh).
+        XCTAssertEqual(expandPath("/foo/~bar"), "/foo/~bar")
+    }
+
     // MARK: - Disk loader
 
     func testLoadFallsBackToDefaultsForMissingConfig() {
