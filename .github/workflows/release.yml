@@ -1,6 +1,6 @@
 name: Release
 
-# Mirrors the capsule-corp rolling-draft model: a push to main (PR merge)
+# Mirrors the canon rolling-draft model: a push to main (PR merge)
 # makes git-cliff compute the next version from Conventional Commits and
 # create/update a single DRAFT GitHub Release. No tag is created here —
 # GitHub generates the tag on the target commit when you manually Publish
