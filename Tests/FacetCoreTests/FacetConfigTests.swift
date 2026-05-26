@@ -97,8 +97,12 @@ final class FacetConfigTests: XCTestCase {
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.workspaceNames[1], "dev")
         XCTAssertEqual(c.workspaceNames[2], "sns")
-        // hide_method must not bleed into workspaceNames
-        XCTAssertNil(c.workspaceNames["hide_method".hashValue])
+        // hide_method must not bleed into workspaceNames — a parser
+        // bug that coerced unparseable string keys to 0 would fail
+        // this count check (and would also surface as a phantom
+        // index-0 entry).
+        XCTAssertEqual(c.workspaceNames.count, 2)
+        XCTAssertNil(c.workspaceNames[0])
     }
 
     func testEffectiveHideMethodFallsBackToAnchor() {

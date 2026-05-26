@@ -20,9 +20,45 @@
 //   `index - 1` on snapshot emit). Keeping the catalog 1-based
 //   internally matches what the user sees in `facet status` and
 //   `config.toml`'s `[workspace]` table.
+//
+// Why `WindowSlot` carries `pid` alongside `workspace`
+//
+//   AX operations (`AXGeom.window(for:pid:)`, the close-button
+//   press) all need pid_t to construct an `AXUIElementCreateApplication`.
+//   Without storing pid in `windowMap`, every `moveWindow` /
+//   `closeWindow` re-enumerated CGWindowList just to recover pid.
+//   With pid stored, the catalog can hand the adapter a
+//   `WindowRef(id:, pid:)` directly and the AX dispatch is one
+//   lookup.
 
 import CoreGraphics
 import FacetCore
+
+/// One entry in `WorkspaceCatalog.windowMap`. Workspace assignment
+/// plus the owning app's pid; pid is needed by every AX operation
+/// the adapter performs on the window, so caching it here avoids
+/// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
+public struct WindowSlot: Equatable, Sendable {
+    /// 1-based workspace index.
+    public let workspace: Int
+    public let pid: Int
+    public init(workspace: Int, pid: Int) {
+        self.workspace = workspace
+        self.pid = pid
+    }
+}
+
+/// A window referenced by id + pid — the minimum the adapter needs
+/// to call `AXGeom.window(for:pid:)` on it. Plans and move
+/// outcomes use this so the adapter never has to look pid up again.
+public struct WindowRef: Equatable, Sendable {
+    public let id: WindowID
+    public let pid: Int
+    public init(id: WindowID, pid: Int) {
+        self.id = id
+        self.pid = pid
+    }
+}
 
 /// Self-managed workspace state for the native adapter.
 ///
@@ -37,16 +73,15 @@ public struct WorkspaceCatalog {
     /// 1-based index of the active workspace.
     public private(set) var activeIndex: Int = 1
 
-    /// Window → 1-based workspace assignment. Survives across
-    /// reconciles so a window the user moved stays where they put
-    /// it; new windows land in `activeIndex` on the next reconcile.
-    public private(set) var windowMap: [WindowID: Int] = [:]
+    /// Window → slot (workspace + pid). Survives across reconciles
+    /// so a window the user moved stays where they put it; new
+    /// windows land in `activeIndex` on the next reconcile.
+    public private(set) var windowMap: [WindowID: WindowSlot] = [:]
 
     /// Windows currently parked at the bottom-right anchor sliver.
-    /// `markAnchorParked` populates; `markAnchorRestored` clears.
-    /// The adapter checks `shouldParkAnchor` / `shouldRestoreAnchor`
-    /// before invoking AX so a poll-driven refresh can't re-park
-    /// on top of a park.
+    /// `markAnchorParked` populates; `consumeAnchorRestore` clears.
+    /// The adapter checks `shouldParkAnchor` before invoking AX so
+    /// a poll-driven refresh can't re-park on top of a park.
     public private(set) var anchorParked: Set<WindowID> = []
 
     /// Windows currently minimized via AX `kAXMinimized`. Mirrors
@@ -70,15 +105,21 @@ public struct WorkspaceCatalog {
         public let removed: Int
     }
 
-    /// Reconcile `windowMap` against the live CGWindowList ID set.
-    /// Gone IDs are dropped from `windowMap`, `anchorParked`,
+    /// Reconcile `windowMap` against the live CGWindowList. Gone
+    /// IDs are dropped from `windowMap`, `anchorParked`,
     /// `minimizeParked`, and `originalPositions` in one sweep.
-    /// New IDs are assigned to `activeIndex` (memory:
-    /// `facet-workspace-model` — "newly opened windows → current
-    /// active facet WS").
+    /// New IDs land in `activeIndex` with their owning pid recorded
+    /// (memory: `facet-workspace-model` — "newly opened windows →
+    /// current active facet WS").
+    ///
+    /// Pid is refreshed on every reconcile even for known windows;
+    /// pid is stable across a process's lifetime, but if a window
+    /// id is ever reused after its owner died the fresh value wins.
     @discardableResult
-    public mutating func reconcile(liveIDs: Set<WindowID>) -> ReconcileResult {
-        let goneIDs = windowMap.keys.filter { !liveIDs.contains($0) }
+    public mutating func reconcile(live: [Window]) -> ReconcileResult {
+        let liveByID = Dictionary(uniqueKeysWithValues:
+                                  live.map { ($0.id, $0.pid) })
+        let goneIDs = windowMap.keys.filter { liveByID[$0] == nil }
         for id in goneIDs {
             windowMap.removeValue(forKey: id)
             anchorParked.remove(id)
@@ -86,9 +127,17 @@ public struct WorkspaceCatalog {
             originalPositions.removeValue(forKey: id)
         }
         var added = 0
-        for id in liveIDs where windowMap[id] == nil {
-            windowMap[id] = activeIndex
-            added += 1
+        for (id, pid) in liveByID {
+            if let existing = windowMap[id] {
+                if existing.pid != pid {
+                    windowMap[id] = WindowSlot(
+                        workspace: existing.workspace, pid: pid)
+                }
+            } else {
+                windowMap[id] = WindowSlot(
+                    workspace: activeIndex, pid: pid)
+                added += 1
+            }
         }
         return ReconcileResult(added: added, removed: goneIDs.count)
     }
@@ -100,6 +149,13 @@ public struct WorkspaceCatalog {
         anchorParked.remove(id)
         minimizeParked.remove(id)
         originalPositions.removeValue(forKey: id)
+    }
+
+    /// Resolve the cached pid for a window, or nil if it's not in
+    /// `windowMap`. Used by `closeWindow` so it can skip a
+    /// CGWindowList re-enumeration just to recover pid.
+    public func pid(for id: WindowID) -> Int? {
+        windowMap[id]?.pid
     }
 
     // MARK: - Validation
@@ -118,16 +174,16 @@ public struct WorkspaceCatalog {
         public let newActive: Int
         /// Windows currently in the old-active workspace that
         /// should be parked by whichever hide method is active.
-        public let toPark: Set<WindowID>
+        public let toPark: [WindowRef]
         /// Windows in the new-active workspace that should be
         /// restored back into view.
-        public let toRestore: Set<WindowID>
+        public let toRestore: [WindowRef]
     }
 
     /// Switch to `n1Based`. Returns the plan when the switch is
     /// valid and meaningful; nil when target is invalid or already
     /// active. Caller applies AX side-effects against the
-    /// returned ID sets.
+    /// returned `WindowRef` lists.
     @discardableResult
     public mutating func setActive(_ n1Based: Int,
                                    configuredIndexes: [Int]) -> SwitchPlan? {
@@ -135,8 +191,12 @@ public struct WorkspaceCatalog {
               n1Based != activeIndex else { return nil }
         let old = activeIndex
         activeIndex = n1Based
-        let toPark = Set(windowMap.compactMap { $1 == old ? $0 : nil })
-        let toRestore = Set(windowMap.compactMap { $1 == n1Based ? $0 : nil })
+        let toPark = windowMap
+            .filter { $0.value.workspace == old }
+            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
+        let toRestore = windowMap
+            .filter { $0.value.workspace == n1Based }
+            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
     }
@@ -145,10 +205,10 @@ public struct WorkspaceCatalog {
 
     public enum MoveOutcome: Equatable, Sendable {
         /// Window left the active workspace — adapter should park it.
-        case park(WindowID)
+        case park(WindowRef)
         /// Window entered the active workspace — adapter should
         /// restore (un-hide) it.
-        case restore(WindowID)
+        case restore(WindowRef)
         /// Window moved between two non-active workspaces — no
         /// visible change needed (window stays parked / hidden).
         case stateOnly
@@ -162,10 +222,11 @@ public struct WorkspaceCatalog {
                                     configuredIndexes: [Int]) -> MoveOutcome {
         guard isValid(n1Based, configuredIndexes: configuredIndexes),
               let current = windowMap[id],
-              current != n1Based else { return .rejected }
-        windowMap[id] = n1Based
-        if n1Based == activeIndex { return .restore(id) }
-        if current == activeIndex { return .park(id) }
+              current.workspace != n1Based else { return .rejected }
+        windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
+        let ref = WindowRef(id: id, pid: current.pid)
+        if n1Based == activeIndex { return .restore(ref) }
+        if current.workspace == activeIndex { return .park(ref) }
         return .stateOnly
     }
 
@@ -237,7 +298,7 @@ public struct WorkspaceCatalog {
                    frame: w.frame)
         }
         let byWS = Dictionary(grouping: stamped) { w in
-            windowMap[w.id] ?? activeIndex
+            windowMap[w.id]?.workspace ?? activeIndex
         }
         return configured.map { entry in
             Workspace(

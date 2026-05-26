@@ -116,12 +116,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     /// Refresh the cached snapshot. Re-enumerates CGWindowList,
-    /// asks the catalog to reconcile against the live ID set, and
-    /// builds the `[Workspace]` snapshot through the catalog.
+    /// asks the catalog to reconcile against the live list (which
+    /// also records each window's owning pid for later AX calls),
+    /// and builds the `[Workspace]` snapshot through the catalog.
     private func refreshCatalog() {
         let live = enumerateCGWindows()
-        let liveIDs = Set(live.map(\.id))
-        let result = catalog.reconcile(liveIDs: liveIDs)
+        let result = catalog.reconcile(live: live)
         if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
@@ -208,31 +208,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) (hide_method="
             + "\(config.effectiveHideMethod))")
-
-        // Apply hide / show side-effects via the configured method.
-        let live = enumerateCGWindows()
-        let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
-        var parked = 0, restored = 0
-        switch config.effectiveHideMethod {
-        case "anchor":
-            for id in plan.toPark {
-                if let w = byID[id] { parkAnchor(w); parked += 1 }
-            }
-            for id in plan.toRestore {
-                if let w = byID[id] { restoreAnchor(w); restored += 1 }
-            }
-            Log.debug("native: anchor parked=\(parked) restored=\(restored)")
-        case "minimize":
-            for id in plan.toPark {
-                if let w = byID[id] { parkMinimize(w); parked += 1 }
-            }
-            for id in plan.toRestore {
-                if let w = byID[id] { restoreMinimize(w); restored += 1 }
-            }
-            Log.debug("native: minimize parked=\(parked) restored=\(restored)")
-        default:
-            break
-        }
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -241,20 +217,49 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let configured = config.effectiveWorkspaceList.map(\.index)
         let outcome = catalog.moveWindow(id, to: target,
                                          configuredIndexes: configured)
-        guard outcome != .rejected else { return }
-        Log.debug("native: moveWindow \(id.serverID) -> WS \(target) "
-            + "outcome=\(outcome)")
-        // Hide / show side-effect for this single window.
-        if let w = enumerateCGWindows().first(where: { $0.id == id }) {
-            switch (config.effectiveHideMethod, outcome) {
-            case ("anchor", .park):    parkAnchor(w)
-            case ("anchor", .restore): restoreAnchor(w)
-            case ("minimize", .park):    parkMinimize(w)
-            case ("minimize", .restore): restoreMinimize(w)
-            default: break
-            }
+        switch outcome {
+        case .rejected:
+            return
+        case .stateOnly:
+            Log.debug("native: moveWindow \(id.serverID) -> WS "
+                + "\(target) outcome=stateOnly")
+        case .park(let ref):
+            Log.debug("native: moveWindow \(id.serverID) -> WS "
+                + "\(target) outcome=park")
+            applyHide(toPark: [ref], toRestore: [])
+        case .restore(let ref):
+            Log.debug("native: moveWindow \(id.serverID) -> WS "
+                + "\(target) outcome=restore")
+            applyHide(toPark: [], toRestore: [ref])
         }
         eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Apply the configured hide method to two `WindowRef` lists.
+    /// Centralises the anchor / minimize branch so callers (workspace
+    /// switch, single-window move) don't repeat the switch. Unknown
+    /// `hide_method` values silently no-op — matches the
+    /// FacetConfig clamping rule that any out-of-set value falls
+    /// back to the default at config-read time.
+    private func applyHide(toPark: [WindowRef],
+                           toRestore: [WindowRef]) {
+        let method = config.effectiveHideMethod
+        let park: (WindowRef) -> Void
+        let restore: (WindowRef) -> Void
+        switch method {
+        case "anchor":
+            park = parkAnchor(_:); restore = restoreAnchor(_:)
+        case "minimize":
+            park = parkMinimize(_:); restore = restoreMinimize(_:)
+        default:
+            return
+        }
+        for ref in toPark { park(ref) }
+        for ref in toRestore { restore(ref) }
+        if !toPark.isEmpty || !toRestore.isEmpty {
+            Log.debug("native: \(method) "
+                + "parked=\(toPark.count) restored=\(toRestore.count)")
+        }
     }
 
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
@@ -262,18 +267,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func closeWindow(_ id: WindowID) {
-        // Look up pid via the live CGWindowList (we don't cache
-        // pid in catalog.windowMap — keeping the map narrow). Few-ms
-        // cost, close is rare enough that this is acceptable.
-        guard let w = enumerateCGWindows()
-                .first(where: { $0.id == id }) else {
+        // pid comes from `catalog.windowMap[id]` — recorded at
+        // reconcile time, so no fresh CGWindowList sweep is needed.
+        // Misses only if the window was never reconciled (e.g.
+        // closeWindow racing a brand-new window before refresh).
+        guard let pid = catalog.pid(for: id) else {
             Log.debug("native: closeWindow \(id.serverID) "
-                + "— not in live catalog")
+                + "— not in catalog")
             return
         }
-        let pid = pid_t(w.pid)
         guard let ax = AXGeom.window(
-                for: CGWindowID(id.serverID), pid: pid) else {
+                for: CGWindowID(id.serverID), pid: pid_t(pid)) else {
             Log.debug("native: closeWindow \(id.serverID) — no AX")
             return
         }
@@ -302,18 +306,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     // MARK: - Anchor hide / show (AX side-effects)
 
-    /// Move `w` to a 1×41 px sliver in the bottom-right corner of
-    /// the display it currently sits on. macOS's clamp guarantees
-    /// 41 px of title-bar stays on-screen (memory:
+    /// Move the window to a 1×41 px sliver in the bottom-right
+    /// corner of the display it currently sits on. macOS's clamp
+    /// guarantees 41 px of title-bar stays on-screen (memory:
     /// native-window-hide-methods), so we can't fully hide via
     /// public APIs — anchor minimises the visible footprint while
     /// keeping the window recoverable from Mission Control if
     /// facet crashes (memory: facet-buddha-palm-principle).
-    private func parkAnchor(_ w: Window) {
-        guard catalog.shouldParkAnchor(w.id) else { return }
-        let pid = pid_t(w.pid)
+    private func parkAnchor(_ ref: WindowRef) {
+        guard catalog.shouldParkAnchor(ref.id) else { return }
         guard
-            let ax = AXGeom.window(for: CGWindowID(w.id.serverID), pid: pid),
+            let ax = AXGeom.window(for: CGWindowID(ref.id.serverID),
+                                   pid: pid_t(ref.pid)),
             let pos = AXGeom.position(ax),
             let size = AXGeom.size(ax)
         else { return }
@@ -322,17 +326,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let screen = Displays.containing(center)
         let hidden = CGPoint(x: screen.maxX - 1, y: screen.maxY - 1)
         AXGeom.setPosition(ax, hidden)
-        catalog.markAnchorParked(w.id, originalPosition: pos)
+        catalog.markAnchorParked(ref.id, originalPosition: pos)
     }
 
     /// Reverse of `parkAnchor`: place the window back at its
     /// pre-park position. No-ops when the window isn't currently
     /// parked (defensive against double-restore on rapid switch).
-    private func restoreAnchor(_ w: Window) {
-        guard let orig = catalog.consumeAnchorRestore(w.id) else { return }
-        let pid = pid_t(w.pid)
+    private func restoreAnchor(_ ref: WindowRef) {
+        guard let orig = catalog.consumeAnchorRestore(ref.id) else { return }
         guard let ax = AXGeom.window(
-                for: CGWindowID(w.id.serverID), pid: pid)
+                for: CGWindowID(ref.id.serverID), pid: pid_t(ref.pid))
         else { return }
         AXGeom.setPosition(ax, orig)
     }
@@ -341,26 +344,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     /// Minimize via AX. macOS remembers the un-minimized rect, so
     /// no equivalent of `originalPositions` is needed here.
-    private func parkMinimize(_ w: Window) {
-        guard catalog.shouldMinimize(w.id) else { return }
-        let pid = pid_t(w.pid)
+    private func parkMinimize(_ ref: WindowRef) {
+        guard catalog.shouldMinimize(ref.id) else { return }
         guard let ax = AXGeom.window(
-                for: CGWindowID(w.id.serverID), pid: pid)
+                for: CGWindowID(ref.id.serverID), pid: pid_t(ref.pid))
         else { return }
         AXUIElementSetAttributeValue(
             ax, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
-        catalog.markMinimized(w.id)
+        catalog.markMinimized(ref.id)
     }
 
-    private func restoreMinimize(_ w: Window) {
-        guard catalog.shouldUnminimize(w.id) else { return }
-        let pid = pid_t(w.pid)
+    private func restoreMinimize(_ ref: WindowRef) {
+        guard catalog.shouldUnminimize(ref.id) else { return }
         guard let ax = AXGeom.window(
-                for: CGWindowID(w.id.serverID), pid: pid)
+                for: CGWindowID(ref.id.serverID), pid: pid_t(ref.pid))
         else { return }
         AXUIElementSetAttributeValue(
             ax, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-        catalog.markUnminimized(w.id)
+        catalog.markUnminimized(ref.id)
     }
 
     // AX helpers (window lookup, position / size, display match)
