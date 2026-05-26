@@ -346,7 +346,29 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func closeWindow(_ id: WindowID) {
-        // Phase β: AX `kAXCloseButtonAttribute` perform action.
+        // Look up pid via the live CGWindowList (we don't cache
+        // pid in windowMap — keeping the map narrow). Few-ms cost,
+        // close is rare enough that this is acceptable.
+        guard let w = enumerateCGWindows()
+                .first(where: { $0.id == id }) else {
+            Log.debug("native: closeWindow \(id.serverID) "
+                + "— not in live catalog")
+            return
+        }
+        let pid = pid_t(w.pid)
+        guard let ax = AXGeom.window(
+                for: CGWindowID(id.serverID), pid: pid) else {
+            Log.debug("native: closeWindow \(id.serverID) — no AX")
+            return
+        }
+        let pressed = AXGeom.closeButton(ax)
+        Log.debug("native: closeWindow \(id.serverID) "
+            + "pressed=\(pressed)")
+        // Best-effort eviction from windowMap — the next event /
+        // poll reconcile will fix it anyway if the app intercepted
+        // (e.g. unsaved-changes dialog) and the window survives.
+        if pressed { windowMap.removeValue(forKey: id) }
+        eventContinuation.yield(.refreshNeeded)
     }
 
     public func perform(_ action: WindowAction) {
