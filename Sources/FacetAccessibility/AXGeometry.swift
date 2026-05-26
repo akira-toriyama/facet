@@ -72,6 +72,24 @@ public enum AXGeom {
         var wid: CGWindowID = 0
         return fn(ax, &wid) == .success ? wid : nil
     }
+
+    /// Press the window's close button via AX. Equivalent to
+    /// clicking the red traffic-light close button — apps may
+    /// intercept with a "save changes?" dialog, so success here
+    /// means "press dispatched", not "window gone".
+    /// Returns false when the window has no close button (rare —
+    /// utility windows, sheets in some modes) or AX rejected.
+    @discardableResult
+    public static func closeButton(_ win: AXUIElement) -> Bool {
+        var btnRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                win, kAXCloseButtonAttribute as CFString, &btnRef
+              ) == .success,
+              let raw = btnRef else { return false }
+        let btn = raw as! AXUIElement
+        return AXUIElementPerformAction(
+            btn, kAXPressAction as CFString) == .success
+    }
 }
 
 public enum Displays {
