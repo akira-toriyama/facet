@@ -16,6 +16,14 @@
 //                       directly. Phase-α onward — empty for now
 //                       and grown alongside the rift adapter.
 //
+//   FacetAccessibility  AX / CGS helpers shared by both adapters
+//                       (focus, title resolution, geometry, the
+//                       private `_AXUIElementGetWindow` dlsym).
+//                       Used to live inside FacetAdapterRift with
+//                       `// MOVE-AT-M5` markers; lifted out when
+//                       the native adapter became the second
+//                       consumer.
+//
 //   FacetView           shared view primitives (theme, palette,
 //                       fonts, common key monitor).
 //
@@ -42,8 +50,11 @@ let package = Package(
     ],
     targets: [
         .target(name: "FacetCore"),
-        .target(name: "FacetAdapterRift", dependencies: ["FacetCore"]),
-        .target(name: "FacetAdapterNative", dependencies: ["FacetCore"]),
+        .target(name: "FacetAccessibility", dependencies: ["FacetCore"]),
+        .target(name: "FacetAdapterRift",
+                dependencies: ["FacetCore", "FacetAccessibility"]),
+        .target(name: "FacetAdapterNative",
+                dependencies: ["FacetCore", "FacetAccessibility"]),
         .target(name: "FacetView", dependencies: ["FacetCore"]),
         .target(name: "FacetViewTree", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
@@ -51,6 +62,7 @@ let package = Package(
             name: "FacetApp",
             dependencies: [
                 "FacetCore",
+                "FacetAccessibility",
                 "FacetAdapterRift",
                 "FacetAdapterNative",
                 "FacetView",

@@ -7,10 +7,8 @@
 // **Call only from `cliQueue`** (serial, off-main); the cache is
 // single-threaded by that contract.
 //
-// MOVE-AT-M5: same story as AXFocus.swift — not actually
-// rift-specific, the native adapter will want this too. Extract to
-// a shared FacetAccessibility module when the second consumer
-// arrives.
+// Shared with FacetAdapterNative via this module (extracted out
+// of FacetAdapterRift at M5).
 
 import ApplicationServices
 import Foundation

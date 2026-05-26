@@ -3,12 +3,10 @@
 // only brings the app frontmost — for multi-window apps it picks
 // the last-focused window, which is the wrong one half the time.
 //
-// MOVE-AT-M5: this is not actually rift-specific. The native
-// adapter (Phase α+) will need the same primitive. When
-// FacetAdapterNative lands, extract this file and AXTitles to a
-// shared FacetAccessibility module. Keeping it in
-// FacetAdapterRift for M2 to avoid spinning up an empty module
-// before there's a second consumer.
+// Lives in FacetAccessibility (lifted out of FacetAdapterRift at
+// M5 when the native adapter became the second consumer). Both
+// FacetAdapterRift and FacetAdapterNative call into the same
+// primitive now.
 
 import AppKit
 import ApplicationServices
