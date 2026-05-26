@@ -174,11 +174,20 @@ facet --toggle=NAME               # toggle NAME
 # --view=grid it's silently ignored; the overlay is always
 # key/active by construction.
 
+# Workspace ops (M5 Phase α)
+facet --workspace=N               # switch to workspace N (1-indexed)
+facet window --move-to=N          # move focused window to workspace N
+facet status                      # snapshot: backend, hide_method,
+                                  # workspaces, lastError, timestamp
+
 # Server controls
 facet --theme=NAME                # terminal | cute | system
+facet --reload                    # re-read config.toml + apply
+                                  # (theme / hide_method / [workspaces])
 facet --quit                      # terminate the running server
 facet --debug                     # verbose log to stderr +
                                   # /tmp/facet.log (server-mode)
+facet --resign                    # re-sign Facet.app (after brew install)
 facet --help                      # full reference
 ```
 
@@ -186,6 +195,44 @@ Unknown flag / view / theme names exit `2` with a stderr
 message — typos fail loudly rather than silently no-op. Shorthand
 (shell aliases / hotkey bindings) is your environment's job, not
 facet's.
+
+### Hotkey integration
+
+facet exposes only a CLI surface — pick whatever hotkey tool
+you already trust. Quick examples:
+
+**skhd** (`~/.config/skhd/skhdrc`):
+
+```
+ctrl + alt - 1          : facet --workspace=1
+ctrl + alt - 2          : facet --workspace=2
+ctrl + shift + alt - 1  : facet window --move-to=1
+ctrl + shift + alt - 2  : facet window --move-to=2
+```
+
+**Karabiner-Elements**: bind shell commands via the *Complex
+Modifications* JSON (`shell_command`: `/opt/homebrew/bin/facet
+--workspace=1`).
+
+**Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
+hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`.
+
+### Workspace shell helpers
+
+facet itself never writes to your `config.toml`. Repo-local
+shell scripts handle the writes atomically (memory contract:
+`mktemp` + `mv` so the auto-reloader never sees half-written
+state):
+
+```sh
+./scripts/add_workspace.sh 1 dev      # adds 1 = "dev" to [workspace]
+./scripts/add_workspace.sh 5          # empty name, just creates slot
+./scripts/remove_workspace.sh 2       # removes entry 2 (idempotent)
+```
+
+facet's `ConfigWatcher` picks up the change automatically;
+`facet --reload` is the explicit-trigger alternative if your
+script wants a deterministic moment.
 
 ## Debugging
 
