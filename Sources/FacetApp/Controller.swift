@@ -162,16 +162,27 @@ final class Controller: NSObject {
             }
         }
         // Adapter error stream → lastError slot in facet status.
-        // De-dupe consecutive identical messages so a long stream
-        // of "rift dead" doesn't keep refreshing the snapshot;
-        // setError already rewrites the file each call.
+        // De-dupe against the *Controller's current* lastError so:
+        //  - a long stream of identical "rift dead" messages still
+        //    collapses (they all match the live slot, skip).
+        //  - but if another path (e.g. dispatch setError) has
+        //    overwritten the slot in the meantime, a subsequent
+        //    identical adapter message gets through and restores
+        //    the recurring fault as the visible one.
+        //
+        // Previous version used a local `var last` here, which
+        // kept dedupe-state out of sync with the real lastError
+        // — once a dispatch error overwrote the slot, the
+        // backend's still-recurring error stayed silenced forever.
         errorTask = Task { [weak self] in
             guard let self else { return }
-            var last: String?
             for await msg in self.backend.errors {
-                if msg == last { continue }
-                last = msg
-                await MainActor.run { self.setError(msg) }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    if let cur = self.lastError,
+                       cur.hasPrefix(msg) { return }
+                    self.setError(msg)
+                }
             }
         }
         pollTimer = Timer.scheduledTimer(
