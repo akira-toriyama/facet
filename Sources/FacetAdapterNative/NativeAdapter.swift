@@ -18,7 +18,9 @@
 // `Main.swift` still constructs `RiftAdapter()`. The selection
 // flip lands in the PR that fills in the Phase α queries.
 
+import AppKit
 import ApplicationServices
+import CoreGraphics
 import Foundation
 import FacetCore
 
@@ -39,11 +41,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// re-emitting `BackendEvent.refreshNeeded`.
     private var activeIndex: Int = 1
 
-    /// Snapshot of workspaces, rebuilt from config on reload.
-    /// Each entry's `windows` is empty in this PR — populating it
-    /// from CGWindowList comes with the next phase slice
-    /// (Phase α window-catalog).
+    /// Snapshot of workspaces, rebuilt every `workspaces()` call
+    /// from the current CGWindowList enumeration + windowMap.
     private var workspaceList: [Workspace] = []
+
+    /// Window → 1-based workspace index. Survives across
+    /// reconciles so a window the user moved stays where they put
+    /// it (Phase α-2 will give them the means to move; today
+    /// every new window lands in `activeIndex`).
+    private var windowMap: [WindowID: Int] = [:]
+
+    /// Held so `refreshCatalog` can read the configured workspace
+    /// list each tick (handles config hot-reload once the
+    /// Controller starts piping it through, future PR).
+    private let config: FacetConfig
 
     // MARK: - Event / error streams
 
@@ -57,15 +68,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// FacetConfig keeps a vanilla `~/.config/facet/config.toml`
     /// usable out of the box.
     public init(config: FacetConfig) {
+        self.config = config
         var ec: AsyncStream<BackendEvent>.Continuation!
         self.eventStream = AsyncStream { c in ec = c }
         self.eventContinuation = ec
         var errC: AsyncStream<String>.Continuation!
         self.errorStream = AsyncStream { c in errC = c }
         self.errorContinuation = errC
-
-        self.workspaceList = Self.buildWorkspaces(
-            from: config, activeIndex: 1)
 
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
@@ -81,34 +90,100 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// Build the Workspace snapshot from the config's
-    /// `effectiveWorkspaceList`. Each workspace starts with no
-    /// windows (population is the next slice) and the matching
-    /// `isActive` flag.
-    private static func buildWorkspaces(
-        from config: FacetConfig,
-        activeIndex: Int
-    ) -> [Workspace] {
-        config.effectiveWorkspaceList.map { entry in
-            // FacetCore's index is 0-based on the wire (matches
-            // backend convention); the user-facing 1-based number
-            // is `entry.index`. Translate at the seam.
-            Workspace(
-                index: entry.index - 1,
-                name: entry.name,
-                isActive: entry.index == activeIndex,
-                layoutMode: "bsp",   // Phase γ revisits per-WS layout
-                windows: [])
-        }
-    }
-
     public var events: AsyncStream<BackendEvent> { eventStream }
     public var errors: AsyncStream<String> { errorStream }
 
     // MARK: - Queries (Phase α implements; skeleton returns empty)
 
     public func workspaces() -> [Workspace] {
-        workspaceList
+        refreshCatalog()
+        return workspaceList
+    }
+
+    /// Re-enumerate CGWindowList, reconcile against `windowMap`
+    /// (new windows → `activeIndex`, gone windows → dropped), and
+    /// rebuild `workspaceList` from the current state.
+    ///
+    /// Called from `workspaces()` so the caller's natural reconcile
+    /// cadence drives refresh. CGWindowList costs a few ms on a
+    /// busy desktop — fine for facet's 2 s poll interval.
+    private func refreshCatalog() {
+        let live = enumerateCGWindows()
+        let liveIDs = Set(live.map(\.id))
+
+        // Forget windows that have closed.
+        windowMap = windowMap.filter { liveIDs.contains($0.key) }
+        // New windows land in the active workspace (memory:
+        // facet-workspace-model "newly opened windows → current
+        // active facet WS" rule).
+        for w in live where windowMap[w.id] == nil {
+            windowMap[w.id] = activeIndex
+        }
+
+        // Build [Workspace] snapshot — each configured entry gets
+        // the live windows currently assigned to its 1-based index.
+        let byWS = Dictionary(grouping: live) { w in
+            windowMap[w.id] ?? activeIndex
+        }
+        workspaceList = config.effectiveWorkspaceList.map { entry in
+            Workspace(
+                index: entry.index - 1,             // 0-based on the wire
+                name: entry.name,
+                isActive: entry.index == activeIndex,
+                layoutMode: "bsp",                  // Phase γ revisits
+                windows: byWS[entry.index] ?? [])
+        }
+    }
+
+    /// Enumerate visible windows via the public CGWindowList API.
+    /// Skips:
+    ///   - facet's own process (avoid managing our own panel)
+    ///   - Window Server scaffolding (StatusIndicator etc.)
+    ///   - the `borders` companion app (decorative outlines, AX
+    ///     element returns nil so we couldn't operate on them
+    ///     anyway)
+    /// `isFocused` is left as `false` for now — fills in at
+    /// Phase α-1.5 (`focusedWindow()`).
+    private func enumerateCGWindows() -> [Window] {
+        let opts: CGWindowListOption = [
+            .optionOnScreenOnly, .excludeDesktopElements,
+        ]
+        guard let raw = CGWindowListCopyWindowInfo(opts, kCGNullWindowID)
+                as? [[String: Any]] else { return [] }
+        let myPid = Int(ProcessInfo.processInfo.processIdentifier)
+        return raw.compactMap { dict in
+            guard
+                let cgID = dict[kCGWindowNumber as String] as? CGWindowID,
+                let pid = dict[kCGWindowOwnerPID as String] as? Int,
+                pid != myPid
+            else { return nil }
+            let owner = dict[kCGWindowOwnerName as String]
+                as? String ?? ""
+            // Skip OS scaffolding + the borders companion. The
+            // borders app paints decoration overlays that facet
+            // shouldn't try to manage; rejecting by name is a
+            // pragmatic match given there's no AX handle for them.
+            if owner == "Window Server" || owner == "borders" {
+                return nil
+            }
+            let title = dict[kCGWindowName as String] as? String ?? ""
+            var frame: CGRect?
+            if let b = dict[kCGWindowBounds as String] as? [String: Any] {
+                frame = CGRect(
+                    x: b["X"]      as? CGFloat ?? 0,
+                    y: b["Y"]      as? CGFloat ?? 0,
+                    width: b["Width"]  as? CGFloat ?? 0,
+                    height: b["Height"] as? CGFloat ?? 0)
+            }
+            return Window(
+                id: WindowID(serverID: Int(cgID)),
+                pid: pid,
+                appName: owner,
+                title: title,
+                isFocused: false,     // Phase α-1.5
+                isFloating: false,
+                frame: frame)
+        }
     }
 
     public func focusedWindow() -> WindowID? {
