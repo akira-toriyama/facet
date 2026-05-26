@@ -108,6 +108,14 @@ public struct WorkspaceCatalog {
     /// the explicit `setMode` migration path.
     public private(set) var layoutTrees: [Int: LayoutTree] = [:]
 
+    /// Per-WS stack-member order. Only present for WSs in
+    /// `"stack"` mode. The element at index 0 is the *visible
+    /// top* (the single window that fills the display); the rest
+    /// are parked via the configured `hide_method`. New windows
+    /// land at index 0 (Q7c: new = top); `cycleStack` rotates
+    /// the array.
+    public private(set) var stackOrders: [Int: [WindowID]] = [:]
+
     /// Windows the user (or AX role detector) flagged as floating.
     /// Floating windows are skipped by the tiler and stay at the
     /// user's last-set position. Independent of `anchorParked` /
@@ -157,6 +165,15 @@ public struct WorkspaceCatalog {
                 tree.remove(id)
                 layoutTrees[ws] = tree
             }
+            // Stack-order maintenance — a closed window simply
+            // exits the list; the next array element naturally
+            // becomes the new top.
+            for (ws, var order) in stackOrders
+                where order.contains(id)
+            {
+                order.removeAll { $0 == id }
+                stackOrders[ws] = order
+            }
         }
         var added = 0
         for (id, pid) in liveByID {
@@ -169,11 +186,18 @@ public struct WorkspaceCatalog {
                 windowMap[id] = WindowSlot(
                     workspace: activeIndex, pid: pid)
                 added += 1
-                if mode(of: activeIndex) == "bsp",
-                   !floatingWindows.contains(id) {
+                let m = mode(of: activeIndex)
+                if m == "bsp", !floatingWindows.contains(id) {
                     var tree = layoutTrees[activeIndex] ?? LayoutTree()
                     tree.insert(id, focused: focused, in: activeRect)
                     layoutTrees[activeIndex] = tree
+                } else if m == "stack",
+                          !floatingWindows.contains(id) {
+                    // New window becomes the visible top (Q7c).
+                    var order = stackOrders[activeIndex] ?? []
+                    order.removeAll { $0 == id }
+                    order.insert(id, at: 0)
+                    stackOrders[activeIndex] = order
                 }
             }
         }
@@ -192,6 +216,21 @@ public struct WorkspaceCatalog {
             tree.remove(id)
             layoutTrees[ws] = tree
         }
+        for (ws, var order) in stackOrders where order.contains(id) {
+            order.removeAll { $0 == id }
+            stackOrders[ws] = order
+        }
+    }
+
+    /// Clear all hide-state bookkeeping for `id` without
+    /// returning the originalPosition. Used by stack-top apply
+    /// where the AX setPosition + setSize sweeps the window to
+    /// a fresh rect, so the recorded pre-park position has no
+    /// further meaning.
+    public mutating func clearParkedState(of id: WindowID) {
+        anchorParked.remove(id)
+        minimizeParked.remove(id)
+        originalPositions.removeValue(forKey: id)
     }
 
     // MARK: - Layout mode (Phase γ)
@@ -202,39 +241,82 @@ public struct WorkspaceCatalog {
         layoutModes[n1Based] ?? "float"
     }
 
-    /// Change the mode of a workspace. Side-effects on tree
+    /// Change the mode of a workspace. Side-effects on layout
     /// state:
     ///   - → `"bsp"`: build a fresh tree from the WS's current
     ///     non-floating windows (auto-balance order, sorted by
     ///     `WindowID.serverID` for deterministic insertion).
-    ///   - → `"float"` / anything else: discard the tree (the
-    ///     adapter leaves the windows wherever they were last
-    ///     placed; the user can drag freely from then on).
+    ///     Discards any existing stack order.
+    ///   - → `"stack"`: build a fresh stack-order list from the
+    ///     WS's current non-floating windows (id-sorted; caller
+    ///     can promote a different top via `cycleStack` if the
+    ///     starting top matters). Discards any existing tree.
+    ///   - → `"float"` / anything else: discard both tree and
+    ///     stack-order entries. Adapter leaves the windows
+    ///     wherever they were last placed.
     ///
-    /// Caller drives the AX side-effects (re-tile or no-op).
-    /// Returns the new mode so the caller can branch.
+    /// Caller drives the AX side-effects (re-tile / re-stack /
+    /// no-op). Returns the normalised mode so the caller can
+    /// branch.
     @discardableResult
     public mutating func setMode(workspace n1Based: Int,
                                  to mode: String,
                                  in rect: CGRect = .zero) -> String {
         let normalised = mode.lowercased()
         layoutModes[n1Based] = normalised
+        let members = windowMap
+            .filter { $0.value.workspace == n1Based
+                && !floatingWindows.contains($0.key) }
+            .map(\.key)
+            .sorted { $0.serverID < $1.serverID }
         switch normalised {
         case "bsp":
             var tree = LayoutTree()
-            let members = windowMap
-                .filter { $0.value.workspace == n1Based
-                    && !floatingWindows.contains($0.key) }
-                .map(\.key)
-                .sorted { $0.serverID < $1.serverID }
             for id in members {
                 tree.insert(id, focused: nil, in: rect)
             }
             layoutTrees[n1Based] = tree
+            stackOrders.removeValue(forKey: n1Based)
+        case "stack":
+            stackOrders[n1Based] = members
+            layoutTrees.removeValue(forKey: n1Based)
         default:
             layoutTrees.removeValue(forKey: n1Based)
+            stackOrders.removeValue(forKey: n1Based)
         }
         return normalised
+    }
+
+    // MARK: - Stack ops (Phase γ.2)
+
+    /// Ordered stack members of `n1Based` (top first), or empty
+    /// when the WS isn't in `"stack"` mode.
+    public func stackOrder(of n1Based: Int) -> [WindowID] {
+        stackOrders[n1Based] ?? []
+    }
+
+    public enum CycleDirection: Sendable { case next, prev }
+
+    /// Rotate the stack array of `n1Based` so a different member
+    /// becomes the top. `next` rotates left (current top goes to
+    /// the end); `prev` rotates right (last member jumps to top).
+    /// Returns the new top, or nil when the WS has fewer than 2
+    /// stack members (cycle is a no-op).
+    @discardableResult
+    public mutating func cycleStack(workspace n1Based: Int,
+                                    direction: CycleDirection)
+        -> WindowID?
+    {
+        guard var order = stackOrders[n1Based],
+              order.count >= 2 else { return nil }
+        switch direction {
+        case .next:
+            order.append(order.removeFirst())
+        case .prev:
+            order.insert(order.removeLast(), at: 0)
+        }
+        stackOrders[n1Based] = order
+        return order.first
     }
 
     // MARK: - Floating
@@ -258,16 +340,28 @@ public struct WorkspaceCatalog {
         let wasFloating = floatingWindows.contains(id)
         if wasFloating {
             floatingWindows.remove(id)
-            if mode(of: slot.workspace) == "bsp" {
+            switch mode(of: slot.workspace) {
+            case "bsp":
                 var tree = layoutTrees[slot.workspace] ?? LayoutTree()
                 tree.insert(id, focused: focused, in: rect)
                 layoutTrees[slot.workspace] = tree
+            case "stack":
+                var order = stackOrders[slot.workspace] ?? []
+                order.removeAll { $0 == id }
+                order.insert(id, at: 0)
+                stackOrders[slot.workspace] = order
+            default:
+                break
             }
         } else {
             floatingWindows.insert(id)
             if var tree = layoutTrees[slot.workspace] {
                 tree.remove(id)
                 layoutTrees[slot.workspace] = tree
+            }
+            if var order = stackOrders[slot.workspace] {
+                order.removeAll { $0 == id }
+                stackOrders[slot.workspace] = order
             }
         }
     }
@@ -368,19 +462,34 @@ public struct WorkspaceCatalog {
               let current = windowMap[id],
               current.workspace != n1Based else { return .rejected }
         windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
-        // Tree maintenance: remove from source tree (if any),
-        // insert into destination tree (if dest is bsp and the
-        // window isn't floating).
+        // Layout maintenance: remove from source side (tree or
+        // stack), insert into destination side (when dest mode
+        // applies and the window isn't floating).
         if var srcTree = layoutTrees[current.workspace],
            srcTree.contains(id) {
             srcTree.remove(id)
             layoutTrees[current.workspace] = srcTree
         }
-        if mode(of: n1Based) == "bsp",
-           !floatingWindows.contains(id) {
-            var destTree = layoutTrees[n1Based] ?? LayoutTree()
-            destTree.insert(id, focused: nil, in: rect)
-            layoutTrees[n1Based] = destTree
+        if var srcOrder = stackOrders[current.workspace],
+           srcOrder.contains(id) {
+            srcOrder.removeAll { $0 == id }
+            stackOrders[current.workspace] = srcOrder
+        }
+        if !floatingWindows.contains(id) {
+            switch mode(of: n1Based) {
+            case "bsp":
+                var destTree = layoutTrees[n1Based] ?? LayoutTree()
+                destTree.insert(id, focused: nil, in: rect)
+                layoutTrees[n1Based] = destTree
+            case "stack":
+                // Q7c: window entering a stack WS lands on top.
+                var destOrder = stackOrders[n1Based] ?? []
+                destOrder.removeAll { $0 == id }
+                destOrder.insert(id, at: 0)
+                stackOrders[n1Based] = destOrder
+            default:
+                break
+            }
         }
         let ref = WindowRef(id: id, pid: current.pid)
         if n1Based == activeIndex { return .restore(ref) }

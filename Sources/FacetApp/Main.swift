@@ -96,15 +96,17 @@ enum FacetApp {
 
         TILING (M5 Phase γ — FACET_BACKEND=native only)
           facet --set-layout=NAME            set active WS's layout mode
-                                             (bsp | float). "stack" lands
-                                             in γ.2.
-          facet --retile                     re-apply active WS's BSP tree
-                                             (drift recovery; no-op when
-                                             not in bsp mode)
+                                             (bsp | stack | float)
+          facet --retile                     re-apply active WS's layout
+                                             (BSP re-tile / stack re-stack;
+                                             no-op when float)
           facet window --toggle-float        flip focused window's float
-                                             flag (skips the tile tree)
+                                             flag (skips tile / stack)
           facet window --toggle-orientation  rotate focused window's
                                              parent split 90° (bsp only)
+          facet window --cycle-stack=next    rotate stack to next member
+          facet window --cycle-stack=prev    rotate stack to previous
+                                             member (stack only)
 
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
@@ -299,13 +301,16 @@ enum FacetApp {
         postControl("window-toggle-orientation")
     }
 
+    /// Post ``window-cycle-stack:next`` / ``:prev``. Direction
+    /// already canonical by parse time (`parseCycleStack`).
+    static func postWindowCycleStack(_ direction: String) -> Never {
+        postControl("window-cycle-stack:" + direction)
+    }
+
     /// Validate + canonicalise a layout-mode name. Loud reject on
     /// typo (`exit(2)`) — same pattern as `canonicalView` /
     /// `canonicalStyle`.
-    static let canonicalLayoutModes = ["bsp", "float"]
-    // "stack" lands in γ.2 — left out of the canonical set for
-    // γ.1 so attempts now fail loudly rather than silently
-    // setting an unsupported mode.
+    static let canonicalLayoutModes = ["bsp", "stack", "float"]
 
     static func canonicalLayoutMode(_ name: String) -> String {
         switch canonicalize(name, allowed: canonicalLayoutModes) {
@@ -390,6 +395,7 @@ enum FacetApp {
         var moveToArg: Int?
         var toggleFloat = false
         var toggleOrientation = false
+        var cycleStackDir: String?
         var i = 0
         while i < args.count {
             defer { i += 1 }
@@ -401,6 +407,8 @@ enum FacetApp {
                 toggleFloat = true
             case a == "--toggle-orientation":
                 toggleOrientation = true
+            case a.hasPrefix("--cycle-stack="):
+                cycleStackDir = parseCycleStack(a)
             default:
                 die("unknown `window` flag \"\(a)\" — "
                     + "see `facet --help`")
@@ -413,6 +421,7 @@ enum FacetApp {
         let count = (moveToArg != nil ? 1 : 0)
             + (toggleFloat ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
+            + (cycleStackDir != nil ? 1 : 0)
         guard count > 0 else {
             die("facet window: no action specified — "
                 + "see `facet --help`")
@@ -425,8 +434,21 @@ enum FacetApp {
         if let n = moveToArg { postWindowMove(n) }
         if toggleFloat { postWindowToggleFloat() }
         if toggleOrientation { postWindowToggleOrientation() }
+        if let d = cycleStackDir { postWindowCycleStack(d) }
         // Unreachable — `count == 1` guarantees one branch fired.
         die("facet window: dispatch fell through (bug)")
+    }
+
+    /// Parse `--cycle-stack=next|prev`. Loud reject on anything
+    /// else (same pattern as `canonicalView` / `canonicalStyle`).
+    static func parseCycleStack(_ arg: String) -> String {
+        let raw = String(arg.dropFirst("--cycle-stack=".count))
+        let lower = raw.lowercased()
+        guard ["next", "prev"].contains(lower) else {
+            die("--cycle-stack: expected next | prev, got "
+                + "\"\(raw)\"")
+        }
+        return lower
     }
 
     /// Validate + canonicalise a view name. Loud reject on typo

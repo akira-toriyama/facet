@@ -183,8 +183,8 @@ not relitigate** without explicit grill round.
   - **γ.1 BSP core** — `LayoutTree`, per-WS mode field, BSP
     auto-tile, manual `toggleFloat`, `toggleOrientation`, four
     of the five CLI verbs + this `architecture.md` section.
-  - **γ.2 Stack mode** — stack implementation + cycle ops +
-    the `--cycle-stack` CLI.
+  - **γ.2 Stack mode (shipped)** — stack implementation +
+    cycle ops + the `--cycle-stack` CLI.
   - **γ.3 AX role auto-float** — populate `isFloating` on new
     windows whose AX role is in the floating set.
 
