@@ -76,6 +76,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Controller starts piping it through, future PR).
     private let config: FacetConfig
 
+    /// AX-driven event observer. Cuts the lag between "user
+    /// opened a window" and "facet sees it" from the Controller's
+    /// 2 s poll cadence to the system's own AX latency.
+    /// Held here for the adapter's lifetime; never `stop()`d.
+    private var eventObserver: WindowEventObserver?
+
     // MARK: - Event / error streams
 
     private let eventStream: AsyncStream<BackendEvent>
@@ -111,6 +117,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     + "System Settings → Privacy & Security → "
                     + "Accessibility, enable facet, then restart")
             }
+        }
+
+        // AX event subscription. start() must run on main; init
+        // is not MainActor-isolated, so hop. Throughput: each
+        // observed event yields a single refreshNeeded — Controller
+        // already debounces, so a focus burst collapses into one
+        // backend.workspaces() round-trip.
+        let observer = WindowEventObserver { [eventContinuation] in
+            eventContinuation.yield(.refreshNeeded)
+        }
+        self.eventObserver = observer
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { observer.start() }
         }
     }
 
