@@ -194,18 +194,39 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         nil
     }
 
-    // MARK: - Commands (Phase β implements; skeleton no-ops)
+    // MARK: - Commands (Phase α-2 lands the state mutations;
+    // Phase β adds hide / show side-effects on top.)
 
     public func switchWorkspace(toIndex index: Int) {
-        // Phase α: flip the active workspace in the self-managed
-        // state, then Phase β actually parks the non-active
-        // workspace's windows via the hide method from
-        // config.toml [workspace] hide_method.
+        // Backend protocol convention is 0-based; internal state
+        // (matching the user-facing CLI) is 1-based. Translate
+        // at the seam.
+        let target = index + 1
+        guard isValidWorkspace(target),
+              target != activeIndex else { return }
+        activeIndex = target
+        // Phase β: dispatch the hide method here — park non-active
+        // workspace's windows via config.effectiveHideMethod.
+        eventContinuation.yield(.refreshNeeded)
     }
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
-        // Phase α: update self-managed [Workspace] state.
-        // Phase β: park the window if the target is non-active.
+        let target = index + 1
+        guard isValidWorkspace(target),
+              windowMap[id] != nil,
+              windowMap[id] != target else { return }
+        windowMap[id] = target
+        // Phase β: if target ≠ activeIndex, park the window now;
+        // if target == activeIndex, restore from anchor.
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// True when `n` is a 1-based index that exists in the
+    /// configured workspace set. Sparse configs (e.g. user only
+    /// declared `1 = "dev", 3 = "sns"`) are honoured — N=2 is
+    /// invalid in that case even though raw count >= 2.
+    private func isValidWorkspace(_ n: Int) -> Bool {
+        config.effectiveWorkspaceList.contains { $0.index == n }
     }
 
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
