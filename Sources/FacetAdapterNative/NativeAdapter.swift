@@ -136,7 +136,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public var events: AsyncStream<BackendEvent> { eventStream }
     public var errors: AsyncStream<String> { errorStream }
 
-    // MARK: - Queries (Phase α implements; skeleton returns empty)
+    // MARK: - Queries
 
     public func workspaces() -> [Workspace] {
         refreshCatalog()
@@ -208,8 +208,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///   - the `borders` companion app (decorative outlines, AX
     ///     element returns nil so we couldn't operate on them
     ///     anyway)
-    /// `isFocused` is left as `false` for now — fills in at
-    /// Phase α-1.5 (`focusedWindow()`).
+    /// `isFocused` is stamped by the caller (`refreshCatalog`) against
+    /// `focusedWindow()` so this helper stays a pure CGWindowList
+    /// adapter with no AX dependency.
     private func enumerateCGWindows() -> [Window] {
         let opts: CGWindowListOption = [
             .optionOnScreenOnly, .excludeDesktopElements,
@@ -246,7 +247,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 pid: pid,
                 appName: owner,
                 title: title,
-                isFocused: false,     // Phase α-1.5
+                isFocused: false,
                 isFloating: false,
                 frame: frame)
         }

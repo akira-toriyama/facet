@@ -74,8 +74,8 @@ below).
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N` | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
-| **β** | window move across workspaces; off-screen park/unpark; persistence (external sh hook) | rift `wm/window`, yabai window mgmt |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. **Status (2026-05-26)**: workspace state + reconcile + focusedWindow + AX-driven event subscription landed (`FACET_BACKEND=native` opt-in usable) | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close landed; persistence pending | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines) | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; geometry persistence | rift `display` |
 | **ε** | deprecate `FacetAdapterRift`; native becomes default | — |
@@ -103,10 +103,14 @@ is the index. **Do not relitigate** without explicit grill round.
   state dump. TOML atomic write enforced in shipped templates.
 - **Shortcut**: out of scope. README recommends skhd / Karabiner /
   hammerspoon (compose-friendly, like yabai + skhd).
-- **New window detection**: focus proxy via [focusfx]
-  (`kAXFocusedWindowChanged`), not `kAXWindowCreatedNotification`
-  self-hook (would overreach OS responsibility, see
-  `facet-buddha-palm-principle` memory).
+- **New window detection**: per-app AX subscription via
+  `WindowEventObserver` (pattern lifted from [focusfx]). Wires
+  `kAXFocusedWindowChanged` + `kAXWindowCreated` +
+  `kAXUIElementDestroyed` on every running app, folded with
+  `NSWorkspace` launch / terminate. Public AX notifications are
+  the OS-blessed seam — not a self-hook in the buddha-palm sense
+  (`facet-buddha-palm-principle`); that line is reserved for
+  swizzling / private SLS injection.
 - **Multi-display**: independent WS sets per display. Untested
   (developer has 1 display).
 - **Fullscreen apps**: excluded from facet management, left to

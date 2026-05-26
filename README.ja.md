@@ -104,8 +104,10 @@ window タイトルは rift から取得、 rift が空を返す app
 
 **Alpha** — ws-tabs v1.6 との feature parity 達成 (M2)、 Homebrew
 配布 (M3)、 ws-tabs archive (M4) 完了。 両 view 動作、 CLI 確定、
-`brew install akira-toriyama/tap/facet` 稼働中。 次は native AX/CGS
-backend (M5+) で rift-cli 依存を外す。
+`brew install akira-toriyama/tap/facet` 稼働中。 **native AX
+backend** (M5 Phase α/β) は opt-in: `FACET_BACKEND=native` で
+rift-cli 無しに workspace 切替 + window park (anchor / minimize)
+が動く。 default は rift のまま。
 
 | マイルストーン | 状態 |
 |---|---|
@@ -113,7 +115,9 @@ backend (M5+) で rift-cli 依存を外す。
 | M2 — tree + grid view が `FacetAdapterRift` 経由で動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs を archive | ✅ |
-| M5+ — `FacetAdapterNative` Phase α–ε | ⏳ |
+| M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
+| M5 Phase β — anchor / minimize hide、 closeWindow | ✅ opt-in |
+| M5 Phase γ–ε — tiling / display reconfigure / rift retire | ⏳ |
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
 
@@ -148,6 +152,31 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 ルートの [config.toml](config.toml) のコメントを参照。 CLI override
 (`facet --theme=cute` 等) はセッション中のみ有効; 永続化したい
 場合はファイルを編集。
+
+よく触る key:
+
+- `[appearance] theme` — `terminal` (default) / `cute` / `system`
+- `[layout] default_view` — `tree` / `grid`
+- `[workspace] hide_method` — `anchor` (default、 1×41 px corner park、
+  即座) / `minimize` (Dock genie、 見栄え良いが遅い)。 `FACET_BACKEND=native`
+  時のみ使用。
+- `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
+  sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
+
+### Native backend (M5 alpha)
+
+native AX backend は env var で opt-in、 `config.toml` からは
+選択しない。
+
+```sh
+FACET_BACKEND=native ./run.sh                      # .app バンドル
+FACET_BACKEND=native .build/release/facet --debug  # 生プロセス
+# unset または =rift で default RiftAdapter
+```
+
+`./run.sh` は `open --env` でバンドルに env を引き渡す。 選択後、
+`--workspace=N` と `window --move-to=N` は rift 経由ではなく
+facet 自前の workspace state を操作する。
 
 ## CLI
 
