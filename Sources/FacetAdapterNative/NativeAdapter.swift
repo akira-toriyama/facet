@@ -376,9 +376,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem] {
-        // Phase γ: layout-mode-specific items. Empty stub is fine
-        // for now — the right-click menu hides when items.isEmpty.
-        []
+        // Phase γ adds the layout-mode-specific items (toggle stack /
+        // promote to master / etc). Close stays applicable across
+        // every layout mode so it's safe to land today; without it
+        // the right-click menu would be empty and the user couldn't
+        // reach `closeWindow` from the tree view.
+        [WindowMenuItem("Close window", [], close: true)]
     }
 
     // MARK: - Anchor hide / show (Phase β preview)
