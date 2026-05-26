@@ -33,6 +33,8 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
     }
     func closeWindow(_ id: WindowID) { closed.append(id) }
     func perform(_ action: WindowAction) { performed.append(action) }
+    func retileActiveWorkspace() { retileCalls += 1 }
+    var retileCalls = 0
 
     func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem] {
         var items: [WindowMenuItem] = []
