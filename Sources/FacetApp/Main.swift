@@ -34,6 +34,7 @@
 import AppKit
 import FacetCore
 import FacetAdapterRift
+import FacetAdapterNative
 import FacetView
 import FacetViewTree
 import FacetViewGrid
@@ -734,7 +735,32 @@ enum FacetApp {
         app.setActivationPolicy(.accessory)
         AX.ensureTrusted()
 
-        let backend = RiftAdapter()
+        // Backend selection: env var opt-in for the in-progress
+        // native adapter, default = rift (the only feature-complete
+        // backend until Phase α–ε fills in NativeAdapter). Pinned
+        // to env (not config / not CLI) on purpose:
+        //   - env is the lightest switch for "let me try the
+        //     half-built backend without touching the install"
+        //   - config would imply parity / stability we don't have
+        //   - CLI flag would need server-mode re-parsing each run
+        // The env path retires at Phase ε when NativeAdapter
+        // becomes the only option and the rift adapter is deleted.
+        let backendName = ProcessInfo.processInfo
+            .environment["FACET_BACKEND"]?.lowercased()
+        let backend: any WindowBackend
+        switch backendName {
+        case "native":
+            Log.line("backend: native (FACET_BACKEND=native)")
+            backend = NativeAdapter()
+        case "rift", "", nil:
+            backend = RiftAdapter()
+        case let other?:
+            FileHandle.standardError.write(Data((
+                "facet: FACET_BACKEND=\(other) unknown, "
+                + "falling back to rift\n"
+            ).utf8))
+            backend = RiftAdapter()
+        }
         let controller = Controller(backend: backend, config: cfg)
         controller.start()
 
