@@ -475,6 +475,8 @@ final class Controller: NSObject {
         }
         let snap = StatusSnapshot(
             backend: backend.name,
+            theme: config.effectiveTheme,
+            defaultView: config.effectiveDefaultView,
             hideMethod: config.effectiveHideMethod,
             workspaces: entries,
             lastError: lastError,

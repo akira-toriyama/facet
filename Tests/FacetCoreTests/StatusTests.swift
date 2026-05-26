@@ -9,6 +9,8 @@ final class StatusTests: XCTestCase {
     func testSnapshotRoundTripsThroughJSON() throws {
         let snap = StatusSnapshot(
             backend: "rift",
+            theme: "terminal",
+            defaultView: "tree",
             hideMethod: "anchor",
             workspaces: [
                 .init(index: 1, name: "dev",
@@ -31,6 +33,8 @@ final class StatusTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: path) }
         let snap = StatusSnapshot(
             backend: "stub",
+            theme: "cute",
+            defaultView: nil,
             hideMethod: "minimize",
             workspaces: [
                 .init(index: 1, name: "main",
@@ -54,21 +58,40 @@ final class StatusTests: XCTestCase {
     func testRenderIncludesAllHeaderFields() {
         let snap = StatusSnapshot(
             backend: "rift",
+            theme: "terminal",
+            defaultView: "tree",
             hideMethod: "anchor",
             workspaces: [],
             lastError: nil,
             timestamp: "2026-05-25T12:00:00Z")
         let out = snap.render()
         XCTAssertTrue(out.contains("backend: rift"))
+        XCTAssertTrue(out.contains("theme: terminal"))
+        XCTAssertTrue(out.contains("default_view: tree"))
         XCTAssertTrue(out.contains("hide_method: anchor"))
         XCTAssertTrue(out.contains("last error: (none)"))
         XCTAssertTrue(out.contains("timestamp: 2026-05-25T12:00:00Z"))
         XCTAssertTrue(out.contains("workspaces:\n  (none)"))
     }
 
+    func testRenderAgentModeWhenDefaultViewNil() {
+        let snap = StatusSnapshot(
+            backend: "rift",
+            theme: "system",
+            defaultView: nil,
+            hideMethod: "anchor",
+            workspaces: [],
+            lastError: nil,
+            timestamp: "ts")
+        XCTAssertTrue(snap.render().contains("default_view: (agent)"),
+                      "nil defaultView renders as (agent)")
+    }
+
     func testRenderMarksActiveAndPluralisesWindowCount() {
         let snap = StatusSnapshot(
             backend: "rift",
+            theme: "terminal",
+            defaultView: "grid",
             hideMethod: "anchor",
             workspaces: [
                 .init(index: 1, name: "dev",
@@ -92,6 +115,8 @@ final class StatusTests: XCTestCase {
     func testRenderSurfacesLastError() {
         let snap = StatusSnapshot(
             backend: "rift",
+            theme: "terminal",
+            defaultView: "tree",
             hideMethod: "anchor",
             workspaces: [],
             lastError: "Window 7: AX permission failed",
