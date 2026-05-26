@@ -118,7 +118,9 @@ is live. The **native AX backend** (M5 Phase α/β) is opt-in:
 | M4 — ws-tabs archived | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
 | M5 Phase β — anchor / minimize hide, closeWindow, setupFiles | ✅ opt-in |
-| M5 Phase γ–ε — tiling, display reconfigure, rift retire | ⏳ |
+| M5 Phase γ.1 — BSP tiling core (auto-balance, toggleFloat / toggleOrientation, CLI) | ✅ opt-in |
+| M5 Phase γ.2–γ.3 — stack mode, AX role auto-float | ⏳ |
+| M5 Phase δ–ε — display reconfigure, rift retire | ⏳ |
 
 See [docs/architecture.md](docs/architecture.md) for the layer
 diagram and the migration plan.
@@ -240,6 +242,12 @@ Hammerspoon, macOS Shortcuts, …). Full cheatsheet:
 facet --view=NAME [--active]      # open NAME (idempotent)
 facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
+
+# Tiling (M5 Phase γ.1 — FACET_BACKEND=native only)
+facet --set-layout=NAME           # active WS mode (bsp | float)
+facet --retile                    # re-apply active WS's BSP tree
+facet window --toggle-float       # flip focused window float flag
+facet window --toggle-orientation # rotate focused window's parent split
 
 # --active is a modifier — only meaningful with --view=tree.
 # Without it the tree panel still gains keyboard nav as soon as

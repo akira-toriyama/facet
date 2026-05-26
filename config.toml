@@ -135,3 +135,20 @@ hide_method = "anchor"
 #
 # Default (unset) = no scripts.
 # setupFiles = ["~/.config/facet/setup.sh"]
+
+# Tiling (M5 Phase γ.1) is opt-in per workspace via the CLI; no
+# config key. Each WS defaults to "float" so existing users see
+# zero behaviour change on upgrade. Opt in with, e.g.:
+#
+#     facet --workspace=1
+#     facet --set-layout=bsp     # this WS now auto-tiles
+#
+# Other tiling-related verbs:
+#     facet --retile              # recompute + reapply active WS tree
+#     facet window --toggle-float
+#     facet window --toggle-orientation
+#
+# Frozen scope: bsp + float only in γ.1. "stack" lands in γ.2.
+# Per-WS mode is *runtime* state (not persisted in config); use
+# `setupFiles` above if you want a specific WS to come up in BSP
+# at every launch.

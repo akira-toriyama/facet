@@ -117,7 +117,9 @@ rift-cli 無しに workspace 切替 + window park (anchor / minimize)
 | M4 — ws-tabs を archive | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
 | M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ opt-in |
-| M5 Phase γ–ε — tiling / display reconfigure / rift retire | ⏳ |
+| M5 Phase γ.1 — BSP tiling core (auto-balance、 toggleFloat / toggleOrientation、 CLI) | ✅ opt-in |
+| M5 Phase γ.2–γ.3 — stack mode、 AX role auto-float | ⏳ |
+| M5 Phase δ–ε — display reconfigure、 rift retire | ⏳ |
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
 
@@ -233,6 +235,12 @@ Karabiner / Raycast / Hammerspoon / macOS Shortcuts 等) からこれら
 facet --view=NAME [--active]      # NAME 開く (idempotent)
 facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
+
+# Tiling (M5 Phase γ.1 — FACET_BACKEND=native のみ)
+facet --set-layout=NAME           # active WS の mode (bsp | float)
+facet --retile                    # active WS の BSP tree を再適用
+facet window --toggle-float       # focused window の float flag flip
+facet window --toggle-orientation # focused window の親 split を 90 度回転
 
 # --active は修飾子 — --view=tree と組み合わせた時のみ意味あり。
 # --active なしでも tree パネルはクリックすればキーボードナビ ON
