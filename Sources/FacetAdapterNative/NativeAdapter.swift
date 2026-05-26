@@ -51,6 +51,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// every new window lands in `activeIndex`).
     private var windowMap: [WindowID: Int] = [:]
 
+    /// Position the window held *before* facet parked it. Recorded
+    /// at the moment of park so the matching `restoreWindow` puts
+    /// it back exactly. macOS-side window-state shenanigans (user
+    /// drag while parked, etc.) would lose accuracy here — Phase β
+    /// proper will cache `axSize` too so we can offer a sanity
+    /// "if size changed, leave at park position" branch.
+    private var originalPositions: [WindowID: CGPoint] = [:]
+
+    /// Windows currently parked at the bottom-right sliver.
+    /// `parkWindow` early-exits when a window is already in this
+    /// set so a poll-driven refresh can't re-park-on-top-of-park.
+    private var parkedWindows: Set<WindowID> = []
+
     /// Held so `refreshCatalog` can read the configured workspace
     /// list each tick (handles config hot-reload once the
     /// Controller starts piping it through, future PR).
@@ -204,9 +217,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let target = index + 1
         guard isValidWorkspace(target),
               target != activeIndex else { return }
+        let oldActive = activeIndex
         activeIndex = target
-        // Phase β: dispatch the hide method here — park non-active
-        // workspace's windows via config.effectiveHideMethod.
+
+        // Apply hide / show side-effects via the configured method.
+        // Today only `"anchor"` is wired; `"minimize"` lands in the
+        // next slice (Phase β-2) and any future deep-core methods
+        // come with `facet-x` (M6+).
+        switch config.effectiveHideMethod {
+        case "anchor":
+            applyAnchorHide(oldActive: oldActive, newActive: target)
+        default:
+            break
+        }
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -216,8 +239,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
               windowMap[id] != nil,
               windowMap[id] != target else { return }
         windowMap[id] = target
-        // Phase β: if target ≠ activeIndex, park the window now;
-        // if target == activeIndex, restore from anchor.
+        // Hide / show side-effect for this single window.
+        if config.effectiveHideMethod == "anchor",
+           let w = enumerateCGWindows().first(where: { $0.id == id }) {
+            if target == activeIndex {
+                restoreWindow(w)
+            } else {
+                parkWindow(w)
+            }
+        }
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -246,4 +276,143 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // for now — the right-click menu hides when items.isEmpty.
         []
     }
+
+    // MARK: - Anchor hide / show (Phase β preview)
+
+    /// Park every window of `oldActive`, restore every window of
+    /// `newActive`. Called from `switchWorkspace` after the
+    /// `activeIndex` swap.
+    private func applyAnchorHide(oldActive: Int, newActive: Int) {
+        let live = enumerateCGWindows()
+        let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
+        for (wid, ws) in windowMap where ws == oldActive {
+            if let w = byID[wid] { parkWindow(w) }
+        }
+        for (wid, ws) in windowMap where ws == newActive {
+            if let w = byID[wid] { restoreWindow(w) }
+        }
+    }
+
+    /// Move `w` to a 1×41 px sliver in the bottom-right corner of
+    /// the display it currently sits on. macOS's clamp guarantees
+    /// 41 px of title-bar stays on-screen (memory:
+    /// native-window-hide-methods), so we can't fully hide via
+    /// public APIs — anchor minimises the visible footprint while
+    /// keeping the window recoverable from Mission Control if
+    /// facet crashes (memory: facet-buddha-palm-principle).
+    private func parkWindow(_ w: Window) {
+        guard !parkedWindows.contains(w.id) else { return }
+        let pid = pid_t(w.pid)
+        guard
+            let ax = axWindow(for: CGWindowID(w.id.serverID), pid: pid),
+            let pos = axPosition(ax),
+            let size = axSize(ax)
+        else { return }
+        originalPositions[w.id] = pos
+        let center = CGPoint(x: pos.x + size.width / 2,
+                             y: pos.y + size.height / 2)
+        let screen = displayContaining(center)
+        let hidden = CGPoint(x: screen.maxX - 1, y: screen.maxY - 1)
+        _ = axSetPosition(ax, hidden)
+        parkedWindows.insert(w.id)
+    }
+
+    /// Reverse of `parkWindow`: place the window back at its
+    /// pre-park position. No-ops when the window isn't currently
+    /// parked (defensive against double-restore on rapid switch).
+    private func restoreWindow(_ w: Window) {
+        guard parkedWindows.contains(w.id),
+              let orig = originalPositions[w.id] else { return }
+        let pid = pid_t(w.pid)
+        guard let ax = axWindow(for: CGWindowID(w.id.serverID), pid: pid)
+        else { return }
+        _ = axSetPosition(ax, orig)
+        parkedWindows.remove(w.id)
+        originalPositions[w.id] = nil
+    }
+
+    // MARK: - AX helpers (Phase β preview)
+    //
+    // Lifted verbatim from sandbox/native-spike. MOVE-AT-M5: these
+    // belong in a shared FacetAccessibility module alongside
+    // FacetAdapterRift/AXFocus.swift once the second consumer
+    // (the lifted helpers' first caller) makes the duplication
+    // visible. Today this is the second consumer — extraction is
+    // the next refactor opportunity.
+
+    private func axWindow(for cgID: CGWindowID, pid: pid_t)
+        -> AXUIElement?
+    {
+        let app = AXUIElementCreateApplication(pid)
+        var winsRef: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                app, kAXWindowsAttribute as CFString, &winsRef
+            ) == .success,
+            let wins = winsRef as? [AXUIElement]
+        else { return nil }
+        return wins.first { cgWindowID(of: $0) == cgID }
+    }
+
+    private func axPosition(_ win: AXUIElement) -> CGPoint? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                win, kAXPositionAttribute as CFString, &ref
+              ) == .success else { return nil }
+        var pt = CGPoint.zero
+        AXValueGetValue(ref as! AXValue, .cgPoint, &pt)
+        return pt
+    }
+
+    private func axSetPosition(_ win: AXUIElement, _ pt: CGPoint) -> Bool {
+        var p = pt
+        guard let v = AXValueCreate(.cgPoint, &p) else { return false }
+        return AXUIElementSetAttributeValue(
+            win, kAXPositionAttribute as CFString, v) == .success
+    }
+
+    private func axSize(_ win: AXUIElement) -> CGSize? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                win, kAXSizeAttribute as CFString, &ref
+              ) == .success else { return nil }
+        var sz = CGSize.zero
+        AXValueGetValue(ref as! AXValue, .cgSize, &sz)
+        return sz
+    }
+
+    /// Pick the display whose bounds contain `point`, or fall back
+    /// to the nearest display by centre distance. Quartz coords
+    /// (top-left origin) match AX position / size.
+    private func displayContaining(_ point: CGPoint) -> CGRect {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &ids, &count)
+        let screens = ids.map { CGDisplayBounds($0) }
+        if let hit = screens.first(where: { $0.contains(point) }) {
+            return hit
+        }
+        return screens.min(by: {
+            hypot($0.midX - point.x, $0.midY - point.y) <
+            hypot($1.midX - point.x, $1.midY - point.y)
+        }) ?? CGDisplayBounds(CGMainDisplayID())
+    }
+}
+
+// Private API: `_AXUIElementGetWindow` translates an `AXUIElement`
+// to its CGWindowID. Looked up via `dlsym` so we don't link
+// against the private symbol at build time. Mirrors the binding
+// in FacetAdapterRift/AXFocus.swift; MOVE-AT-M5 to a shared
+// FacetAccessibility module.
+private let axGetWindow: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError)? = {
+    guard let h = dlopen(nil, RTLD_NOW),
+          let p = dlsym(h, "_AXUIElementGetWindow") else { return nil }
+    return unsafeBitCast(p, to: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError).self)
+}()
+
+private func cgWindowID(of ax: AXUIElement) -> CGWindowID? {
+    guard let fn = axGetWindow else { return nil }
+    var wid: CGWindowID = 0
+    return fn(ax, &wid) == .success ? wid : nil
 }
