@@ -131,7 +131,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// cadence drives refresh. CGWindowList costs a few ms on a
     /// busy desktop — fine for facet's 2 s poll interval.
     private func refreshCatalog() {
-        let live = enumerateCGWindows()
+        let rawLive = enumerateCGWindows()
+        // Single focusedWindow() query per refresh — caller's
+        // poll cadence (2 s) keeps this cheap. Stamping isFocused
+        // here means tree / grid views get the marker without
+        // taking on AX knowledge themselves.
+        let focusedID = focusedWindow()
+        let live = rawLive.map { w in
+            Window(id: w.id, pid: w.pid, appName: w.appName,
+                   title: w.title,
+                   isFocused: w.id == focusedID,
+                   isFloating: w.isFloating,
+                   frame: w.frame)
+        }
         let liveIDs = Set(live.map(\.id))
 
         // Count diffs for trace, then apply.
