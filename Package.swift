@@ -77,6 +77,8 @@ let package = Package(
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
         .testTarget(name: "FacetAdapterRiftTests",
                     dependencies: ["FacetAdapterRift", "FacetCore"]),
+        .testTarget(name: "FacetAdapterNativeTests",
+                    dependencies: ["FacetAdapterNative", "FacetCore"]),
         .testTarget(name: "FacetViewGridTests",
                     dependencies: ["FacetViewGrid"]),
     ]

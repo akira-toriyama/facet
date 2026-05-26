@@ -12,11 +12,11 @@
 //   δ  — display reconfigure handling, geometry persistence
 //   ε  — `FacetAdapterRift` deprecation
 //
-// Today (this file's birthday) we land a skeleton: every
-// `WindowBackend` requirement is satisfied so the type is usable
-// where `RiftAdapter` is. No backend selection wiring yet —
-// `Main.swift` still constructs `RiftAdapter()`. The selection
-// flip lands in the PR that fills in the Phase α queries.
+// State lives in `WorkspaceCatalog` (pure value type, AX-free,
+// unit-testable). This file owns only the effects: CGWindowList
+// enumeration, AX focus / position / minimize / close, AX event
+// subscription wiring, and the AsyncStream plumbing for events
+// and errors.
 
 import AppKit
 import ApplicationServices
@@ -35,41 +35,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// supported modes at startup.
     public let layoutModes = ["bsp", "stack"]
 
-    // MARK: - Self-managed workspace state (Phase α)
+    // MARK: - State (delegated to catalog)
 
-    /// Index (1-based, user-facing) of the active workspace.
-    /// Phase α implements `switchWorkspace` by mutating this and
-    /// re-emitting `BackendEvent.refreshNeeded`.
-    private var activeIndex: Int = 1
+    /// Self-managed workspace state. All mutations go through here
+    /// so the state machine stays pure and testable; this file
+    /// only applies the AX side-effects the catalog hands back.
+    private var catalog = WorkspaceCatalog()
 
-    /// Snapshot of workspaces, rebuilt every `workspaces()` call
-    /// from the current CGWindowList enumeration + windowMap.
+    /// Snapshot of the last `workspaces()` build, returned as-is on
+    /// the next call. Rebuilt every `refreshCatalog()` invocation.
     private var workspaceList: [Workspace] = []
-
-    /// Window → 1-based workspace index. Survives across
-    /// reconciles so a window the user moved stays where they put
-    /// it (Phase α-2 will give them the means to move; today
-    /// every new window lands in `activeIndex`).
-    private var windowMap: [WindowID: Int] = [:]
-
-    /// Position the window held *before* facet parked it. Recorded
-    /// at the moment of park so the matching `restoreAnchor` puts
-    /// it back exactly. macOS-side window-state shenanigans (user
-    /// drag while parked, etc.) would lose accuracy here — Phase β
-    /// proper will cache `axSize` too so we can offer a sanity
-    /// "if size changed, leave at park position" branch.
-    private var originalPositions: [WindowID: CGPoint] = [:]
-
-    /// Windows currently parked at the bottom-right sliver.
-    /// `parkAnchor` early-exits when a window is already in this
-    /// set so a poll-driven refresh can't re-park-on-top-of-park.
-    private var parkedAnchorWindows: Set<WindowID> = []
-
-    /// Windows currently minimized by facet. Mirrors the anchor
-    /// set but tracks a different OS state (Dock minimization vs
-    /// off-screen position). Separate so a runtime hide_method
-    /// flip wouldn't conflate the two.
-    private var parkedMinimizedWindows: Set<WindowID> = []
 
     /// Held so `refreshCatalog` can read the configured workspace
     /// list each tick (handles config hot-reload once the
@@ -143,62 +118,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return workspaceList
     }
 
-    /// Re-enumerate CGWindowList, reconcile against `windowMap`
-    /// (new windows → `activeIndex`, gone windows → dropped), and
-    /// rebuild `workspaceList` from the current state.
-    ///
-    /// Called from `workspaces()` so the caller's natural reconcile
-    /// cadence drives refresh. CGWindowList costs a few ms on a
-    /// busy desktop — fine for facet's 2 s poll interval.
+    /// Refresh the cached snapshot. Re-enumerates CGWindowList,
+    /// asks the catalog to reconcile against the live ID set, and
+    /// builds the `[Workspace]` snapshot through the catalog.
     private func refreshCatalog() {
-        let rawLive = enumerateCGWindows()
-        // Single focusedWindow() query per refresh — caller's
-        // poll cadence (2 s) keeps this cheap. Stamping isFocused
-        // here means tree / grid views get the marker without
-        // taking on AX knowledge themselves.
-        let focusedID = focusedWindow()
-        let live = rawLive.map { w in
-            Window(id: w.id, pid: w.pid, appName: w.appName,
-                   title: w.title,
-                   isFocused: w.id == focusedID,
-                   isFloating: w.isFloating,
-                   frame: w.frame)
-        }
+        let live = enumerateCGWindows()
         let liveIDs = Set(live.map(\.id))
-
-        // Count diffs for trace, then apply.
-        let removed = windowMap.keys.filter {
-            !liveIDs.contains($0)
-        }.count
-        let added = live.filter { windowMap[$0.id] == nil }.count
-        if removed > 0 || added > 0 {
+        let result = catalog.reconcile(liveIDs: liveIDs)
+        if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
-                + "added=\(added) removed=\(removed) "
+                + "added=\(result.added) removed=\(result.removed) "
                 + "total=\(live.count)")
         }
-
-        // Forget windows that have closed.
-        windowMap = windowMap.filter { liveIDs.contains($0.key) }
-        // New windows land in the active workspace (memory:
-        // facet-workspace-model "newly opened windows → current
-        // active facet WS" rule).
-        for w in live where windowMap[w.id] == nil {
-            windowMap[w.id] = activeIndex
-        }
-
-        // Build [Workspace] snapshot — each configured entry gets
-        // the live windows currently assigned to its 1-based index.
-        let byWS = Dictionary(grouping: live) { w in
-            windowMap[w.id] ?? activeIndex
-        }
-        workspaceList = config.effectiveWorkspaceList.map { entry in
-            Workspace(
-                index: entry.index - 1,             // 0-based on the wire
-                name: entry.name,
-                isActive: entry.index == activeIndex,
-                layoutMode: "bsp",                  // Phase γ revisits
-                windows: byWS[entry.index] ?? [])
-        }
+        let focused = focusedWindow()
+        workspaceList = catalog.snapshot(
+            live: live,
+            focused: focused,
+            configured: config.effectiveWorkspaceList,
+            layoutMode: "bsp")
     }
 
     /// Enumerate visible windows via the public CGWindowList API.
@@ -208,9 +145,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///   - the `borders` companion app (decorative outlines, AX
     ///     element returns nil so we couldn't operate on them
     ///     anyway)
-    /// `isFocused` is stamped by the caller (`refreshCatalog`) against
-    /// `focusedWindow()` so this helper stays a pure CGWindowList
-    /// adapter with no AX dependency.
+    /// `isFocused` is stamped by `WorkspaceCatalog.snapshot` against
+    /// the focused-window query, so this helper stays a pure
+    /// CGWindowList adapter with no AX dependency.
     private func enumerateCGWindows() -> [Window] {
         let opts: CGWindowListOption = [
             .optionOnScreenOnly, .excludeDesktopElements,
@@ -280,30 +217,41 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return WindowID(serverID: Int(cgID))
     }
 
-    // MARK: - Commands (Phase α-2 lands the state mutations;
-    // Phase β adds hide / show side-effects on top.)
+    // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int) {
-        // Backend protocol convention is 0-based; internal state
-        // (matching the user-facing CLI) is 1-based. Translate
-        // at the seam.
+        // Backend protocol convention is 0-based; catalog (matching
+        // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
-        guard isValidWorkspace(target),
-              target != activeIndex else { return }
-        let oldActive = activeIndex
-        activeIndex = target
-        Log.debug("native: switchWorkspace \(oldActive) -> \(target) "
-            + "(hide_method=\(config.effectiveHideMethod))")
+        let configured = config.effectiveWorkspaceList.map(\.index)
+        guard let plan = catalog.setActive(target,
+                                           configuredIndexes: configured)
+        else { return }
+        Log.debug("native: switchWorkspace \(plan.oldActive) -> "
+            + "\(plan.newActive) (hide_method="
+            + "\(config.effectiveHideMethod))")
 
         // Apply hide / show side-effects via the configured method.
-        // Today only `"anchor"` is wired; `"minimize"` lands in the
-        // next slice (Phase β-2) and any future deep-core methods
-        // come with `facet-x` (M6+).
+        let live = enumerateCGWindows()
+        let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
+        var parked = 0, restored = 0
         switch config.effectiveHideMethod {
         case "anchor":
-            applyAnchorHide(oldActive: oldActive, newActive: target)
+            for id in plan.toPark {
+                if let w = byID[id] { parkAnchor(w); parked += 1 }
+            }
+            for id in plan.toRestore {
+                if let w = byID[id] { restoreAnchor(w); restored += 1 }
+            }
+            Log.debug("native: anchor parked=\(parked) restored=\(restored)")
         case "minimize":
-            applyMinimizeHide(oldActive: oldActive, newActive: target)
+            for id in plan.toPark {
+                if let w = byID[id] { parkMinimize(w); parked += 1 }
+            }
+            for id in plan.toRestore {
+                if let w = byID[id] { restoreMinimize(w); restored += 1 }
+            }
+            Log.debug("native: minimize parked=\(parked) restored=\(restored)")
         default:
             break
         }
@@ -312,34 +260,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
         let target = index + 1
-        guard isValidWorkspace(target),
-              windowMap[id] != nil,
-              windowMap[id] != target else { return }
-        let oldWS = windowMap[id]!
-        windowMap[id] = target
-        Log.debug("native: moveWindow \(id.serverID) WS "
-            + "\(oldWS) -> \(target)")
+        let configured = config.effectiveWorkspaceList.map(\.index)
+        let outcome = catalog.moveWindow(id, to: target,
+                                         configuredIndexes: configured)
+        guard outcome != .rejected else { return }
+        Log.debug("native: moveWindow \(id.serverID) -> WS \(target) "
+            + "outcome=\(outcome)")
         // Hide / show side-effect for this single window.
         if let w = enumerateCGWindows().first(where: { $0.id == id }) {
-            let movingToActive = (target == activeIndex)
-            switch config.effectiveHideMethod {
-            case "anchor":
-                movingToActive ? restoreAnchor(w) : parkAnchor(w)
-            case "minimize":
-                movingToActive ? restoreMinimize(w) : parkMinimize(w)
-            default:
-                break
+            switch (config.effectiveHideMethod, outcome) {
+            case ("anchor", .park):    parkAnchor(w)
+            case ("anchor", .restore): restoreAnchor(w)
+            case ("minimize", .park):    parkMinimize(w)
+            case ("minimize", .restore): restoreMinimize(w)
+            default: break
             }
         }
         eventContinuation.yield(.refreshNeeded)
-    }
-
-    /// True when `n` is a 1-based index that exists in the
-    /// configured workspace set. Sparse configs (e.g. user only
-    /// declared `1 = "dev", 3 = "sns"`) are honoured — N=2 is
-    /// invalid in that case even though raw count >= 2.
-    private func isValidWorkspace(_ n: Int) -> Bool {
-        config.effectiveWorkspaceList.contains { $0.index == n }
     }
 
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
@@ -348,8 +285,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     public func closeWindow(_ id: WindowID) {
         // Look up pid via the live CGWindowList (we don't cache
-        // pid in windowMap — keeping the map narrow). Few-ms cost,
-        // close is rare enough that this is acceptable.
+        // pid in catalog.windowMap — keeping the map narrow). Few-ms
+        // cost, close is rare enough that this is acceptable.
         guard let w = enumerateCGWindows()
                 .first(where: { $0.id == id }) else {
             Log.debug("native: closeWindow \(id.serverID) "
@@ -365,10 +302,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let pressed = AXGeom.closeButton(ax)
         Log.debug("native: closeWindow \(id.serverID) "
             + "pressed=\(pressed)")
-        // Best-effort eviction from windowMap — the next event /
+        // Best-effort eviction from catalog — the next event /
         // poll reconcile will fix it anyway if the app intercepted
         // (e.g. unsaved-changes dialog) and the window survives.
-        if pressed { windowMap.removeValue(forKey: id) }
+        if pressed { catalog.drop(id) }
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -385,29 +322,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         [WindowMenuItem("Close window", [], close: true)]
     }
 
-    // MARK: - Anchor hide / show (Phase β preview)
-
-    /// Park every window of `oldActive`, restore every window of
-    /// `newActive`. Called from `switchWorkspace` after the
-    /// `activeIndex` swap.
-    private func applyAnchorHide(oldActive: Int, newActive: Int) {
-        let live = enumerateCGWindows()
-        let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
-        var parked = 0, restored = 0
-        for (wid, ws) in windowMap where ws == oldActive {
-            if let w = byID[wid] {
-                parkAnchor(w)
-                parked += 1
-            }
-        }
-        for (wid, ws) in windowMap where ws == newActive {
-            if let w = byID[wid] {
-                restoreAnchor(w)
-                restored += 1
-            }
-        }
-        Log.debug("native: anchor parked=\(parked) restored=\(restored)")
-    }
+    // MARK: - Anchor hide / show (AX side-effects)
 
     /// Move `w` to a 1×41 px sliver in the bottom-right corner of
     /// the display it currently sits on. macOS's clamp guarantees
@@ -417,87 +332,60 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// keeping the window recoverable from Mission Control if
     /// facet crashes (memory: facet-buddha-palm-principle).
     private func parkAnchor(_ w: Window) {
-        guard !parkedAnchorWindows.contains(w.id) else { return }
+        guard catalog.shouldParkAnchor(w.id) else { return }
         let pid = pid_t(w.pid)
         guard
             let ax = AXGeom.window(for: CGWindowID(w.id.serverID), pid: pid),
             let pos = AXGeom.position(ax),
             let size = AXGeom.size(ax)
         else { return }
-        originalPositions[w.id] = pos
         let center = CGPoint(x: pos.x + size.width / 2,
                              y: pos.y + size.height / 2)
         let screen = Displays.containing(center)
         let hidden = CGPoint(x: screen.maxX - 1, y: screen.maxY - 1)
         AXGeom.setPosition(ax, hidden)
-        parkedAnchorWindows.insert(w.id)
+        catalog.markAnchorParked(w.id, originalPosition: pos)
     }
 
     /// Reverse of `parkAnchor`: place the window back at its
     /// pre-park position. No-ops when the window isn't currently
     /// parked (defensive against double-restore on rapid switch).
     private func restoreAnchor(_ w: Window) {
-        guard parkedAnchorWindows.contains(w.id),
-              let orig = originalPositions[w.id] else { return }
+        guard let orig = catalog.consumeAnchorRestore(w.id) else { return }
         let pid = pid_t(w.pid)
         guard let ax = AXGeom.window(
                 for: CGWindowID(w.id.serverID), pid: pid)
         else { return }
         AXGeom.setPosition(ax, orig)
-        parkedAnchorWindows.remove(w.id)
-        originalPositions[w.id] = nil
     }
 
-    /// Apply the `minimize` hide method: AX `kAXMinimized = true`
-    /// on every window of `oldActive`, `false` on every window of
-    /// `newActive`. Goes to / comes from the Dock with the genie
-    /// animation. Cleaner visually than `anchor` but slower —
-    /// trade-off documented in config.toml's [workspace]
-    /// hide_method block.
-    private func applyMinimizeHide(oldActive: Int, newActive: Int) {
-        let live = enumerateCGWindows()
-        let byID = Dictionary(uniqueKeysWithValues: live.map { ($0.id, $0) })
-        var parked = 0, restored = 0
-        for (wid, ws) in windowMap where ws == oldActive {
-            if let w = byID[wid] {
-                parkMinimize(w)
-                parked += 1
-            }
-        }
-        for (wid, ws) in windowMap where ws == newActive {
-            if let w = byID[wid] {
-                restoreMinimize(w)
-                restored += 1
-            }
-        }
-        Log.debug("native: minimize parked=\(parked) restored=\(restored)")
-    }
+    // MARK: - Minimize hide / show (AX side-effects)
 
     /// Minimize via AX. macOS remembers the un-minimized rect, so
-    /// we don't need a `originalPositions`-equivalent here.
+    /// no equivalent of `originalPositions` is needed here.
     private func parkMinimize(_ w: Window) {
-        guard !parkedMinimizedWindows.contains(w.id) else { return }
+        guard catalog.shouldMinimize(w.id) else { return }
         let pid = pid_t(w.pid)
         guard let ax = AXGeom.window(
                 for: CGWindowID(w.id.serverID), pid: pid)
         else { return }
         AXUIElementSetAttributeValue(
             ax, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
-        parkedMinimizedWindows.insert(w.id)
+        catalog.markMinimized(w.id)
     }
 
     private func restoreMinimize(_ w: Window) {
-        guard parkedMinimizedWindows.contains(w.id) else { return }
+        guard catalog.shouldUnminimize(w.id) else { return }
         let pid = pid_t(w.pid)
         guard let ax = AXGeom.window(
                 for: CGWindowID(w.id.serverID), pid: pid)
         else { return }
         AXUIElementSetAttributeValue(
             ax, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-        parkedMinimizedWindows.remove(w.id)
+        catalog.markUnminimized(w.id)
     }
 
     // AX helpers (window lookup, position / size, display match)
-    // now live in FacetAccessibility.AXGeom / .Displays — both
-    // adapters share the same code path.
+    // live in FacetAccessibility.AXGeom / .Displays — both adapters
+    // share the same code path.
 }
