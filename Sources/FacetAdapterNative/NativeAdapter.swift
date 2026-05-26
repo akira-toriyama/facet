@@ -22,6 +22,7 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import FacetAccessibility
 import FacetCore
 
 public final class NativeAdapter: WindowBackend, @unchecked Sendable {
@@ -253,7 +254,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // AXUIElement; the cast is unconditional (Swift warns on
         // `as?`). force-cast here matches the AX type contract.
         let element = raw as! AXUIElement
-        guard let cgID = cgWindowID(of: element) else { return nil }
+        guard let cgID = AXGeom.cgWindowID(of: element) else {
+            return nil
+        }
         return WindowID(serverID: Int(cgID))
     }
 
@@ -372,16 +375,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard !parkedAnchorWindows.contains(w.id) else { return }
         let pid = pid_t(w.pid)
         guard
-            let ax = axWindow(for: CGWindowID(w.id.serverID), pid: pid),
-            let pos = axPosition(ax),
-            let size = axSize(ax)
+            let ax = AXGeom.window(for: CGWindowID(w.id.serverID), pid: pid),
+            let pos = AXGeom.position(ax),
+            let size = AXGeom.size(ax)
         else { return }
         originalPositions[w.id] = pos
         let center = CGPoint(x: pos.x + size.width / 2,
                              y: pos.y + size.height / 2)
-        let screen = displayContaining(center)
+        let screen = Displays.containing(center)
         let hidden = CGPoint(x: screen.maxX - 1, y: screen.maxY - 1)
-        _ = axSetPosition(ax, hidden)
+        AXGeom.setPosition(ax, hidden)
         parkedAnchorWindows.insert(w.id)
     }
 
@@ -392,9 +395,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard parkedAnchorWindows.contains(w.id),
               let orig = originalPositions[w.id] else { return }
         let pid = pid_t(w.pid)
-        guard let ax = axWindow(for: CGWindowID(w.id.serverID), pid: pid)
+        guard let ax = AXGeom.window(
+                for: CGWindowID(w.id.serverID), pid: pid)
         else { return }
-        _ = axSetPosition(ax, orig)
+        AXGeom.setPosition(ax, orig)
         parkedAnchorWindows.remove(w.id)
         originalPositions[w.id] = nil
     }
@@ -429,7 +433,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func parkMinimize(_ w: Window) {
         guard !parkedMinimizedWindows.contains(w.id) else { return }
         let pid = pid_t(w.pid)
-        guard let ax = axWindow(for: CGWindowID(w.id.serverID), pid: pid)
+        guard let ax = AXGeom.window(
+                for: CGWindowID(w.id.serverID), pid: pid)
         else { return }
         AXUIElementSetAttributeValue(
             ax, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
@@ -439,95 +444,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func restoreMinimize(_ w: Window) {
         guard parkedMinimizedWindows.contains(w.id) else { return }
         let pid = pid_t(w.pid)
-        guard let ax = axWindow(for: CGWindowID(w.id.serverID), pid: pid)
+        guard let ax = AXGeom.window(
+                for: CGWindowID(w.id.serverID), pid: pid)
         else { return }
         AXUIElementSetAttributeValue(
             ax, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
         parkedMinimizedWindows.remove(w.id)
     }
 
-    // MARK: - AX helpers (Phase β preview)
-    //
-    // Lifted verbatim from sandbox/native-spike. MOVE-AT-M5: these
-    // belong in a shared FacetAccessibility module alongside
-    // FacetAdapterRift/AXFocus.swift once the second consumer
-    // (the lifted helpers' first caller) makes the duplication
-    // visible. Today this is the second consumer — extraction is
-    // the next refactor opportunity.
-
-    private func axWindow(for cgID: CGWindowID, pid: pid_t)
-        -> AXUIElement?
-    {
-        let app = AXUIElementCreateApplication(pid)
-        var winsRef: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                app, kAXWindowsAttribute as CFString, &winsRef
-            ) == .success,
-            let wins = winsRef as? [AXUIElement]
-        else { return nil }
-        return wins.first { cgWindowID(of: $0) == cgID }
-    }
-
-    private func axPosition(_ win: AXUIElement) -> CGPoint? {
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-                win, kAXPositionAttribute as CFString, &ref
-              ) == .success else { return nil }
-        var pt = CGPoint.zero
-        AXValueGetValue(ref as! AXValue, .cgPoint, &pt)
-        return pt
-    }
-
-    private func axSetPosition(_ win: AXUIElement, _ pt: CGPoint) -> Bool {
-        var p = pt
-        guard let v = AXValueCreate(.cgPoint, &p) else { return false }
-        return AXUIElementSetAttributeValue(
-            win, kAXPositionAttribute as CFString, v) == .success
-    }
-
-    private func axSize(_ win: AXUIElement) -> CGSize? {
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-                win, kAXSizeAttribute as CFString, &ref
-              ) == .success else { return nil }
-        var sz = CGSize.zero
-        AXValueGetValue(ref as! AXValue, .cgSize, &sz)
-        return sz
-    }
-
-    /// Pick the display whose bounds contain `point`, or fall back
-    /// to the nearest display by centre distance. Quartz coords
-    /// (top-left origin) match AX position / size.
-    private func displayContaining(_ point: CGPoint) -> CGRect {
-        var count: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &count)
-        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        CGGetActiveDisplayList(count, &ids, &count)
-        let screens = ids.map { CGDisplayBounds($0) }
-        if let hit = screens.first(where: { $0.contains(point) }) {
-            return hit
-        }
-        return screens.min(by: {
-            hypot($0.midX - point.x, $0.midY - point.y) <
-            hypot($1.midX - point.x, $1.midY - point.y)
-        }) ?? CGDisplayBounds(CGMainDisplayID())
-    }
-}
-
-// Private API: `_AXUIElementGetWindow` translates an `AXUIElement`
-// to its CGWindowID. Looked up via `dlsym` so we don't link
-// against the private symbol at build time. Mirrors the binding
-// in FacetAdapterRift/AXFocus.swift; MOVE-AT-M5 to a shared
-// FacetAccessibility module.
-private let axGetWindow: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError)? = {
-    guard let h = dlopen(nil, RTLD_NOW),
-          let p = dlsym(h, "_AXUIElementGetWindow") else { return nil }
-    return unsafeBitCast(p, to: (@convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError).self)
-}()
-
-private func cgWindowID(of ax: AXUIElement) -> CGWindowID? {
-    guard let fn = axGetWindow else { return nil }
-    var wid: CGWindowID = 0
-    return fn(ax, &wid) == .success ? wid : nil
+    // AX helpers (window lookup, position / size, display match)
+    // now live in FacetAccessibility.AXGeom / .Displays — both
+    // adapters share the same code path.
 }
