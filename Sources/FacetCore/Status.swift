@@ -36,17 +36,23 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
 /// so the file is also greppable / inspectable by other tools.
 public struct StatusSnapshot: Codable, Sendable, Equatable {
     public let backend: String           // e.g. "rift", "native"
+    public let theme: String             // e.g. "terminal", "cute"
+    public let defaultView: String?      // "tree" / "grid" / nil = agent
     public let hideMethod: String        // e.g. "anchor", "minimize"
     public let workspaces: [WorkspaceStatusEntry]
     public let lastError: String?        // nil = no error since startup
     public let timestamp: String         // ISO8601, for staleness check
 
     public init(backend: String,
+                theme: String,
+                defaultView: String?,
                 hideMethod: String,
                 workspaces: [WorkspaceStatusEntry],
                 lastError: String?,
                 timestamp: String) {
         self.backend = backend
+        self.theme = theme
+        self.defaultView = defaultView
         self.hideMethod = hideMethod
         self.workspaces = workspaces
         self.lastError = lastError
@@ -92,6 +98,8 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
     public func render() -> String {
         var lines: [String] = []
         lines.append("backend: \(backend)")
+        lines.append("theme: \(theme)")
+        lines.append("default_view: \(defaultView ?? "(agent)")")
         lines.append("hide_method: \(hideMethod)")
         lines.append("workspaces:")
         if workspaces.isEmpty {
