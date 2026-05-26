@@ -96,6 +96,25 @@ public struct WorkspaceCatalog {
     /// remembers the un-minimized rect on its own.
     public private(set) var originalPositions: [WindowID: CGPoint] = [:]
 
+    /// Per-WS layout mode. Missing entries default to `"float"`
+    /// (Phase γ frozen decision: existing users see no surprise
+    /// behaviour on upgrade). Valid values for γ.1: `"float"`,
+    /// `"bsp"`. `"stack"` lands in γ.2.
+    public private(set) var layoutModes: [Int: String] = [:]
+
+    /// Per-WS BSP tree. Only present for WSs in `"bsp"` mode;
+    /// other modes have no entry. Tree IDs are kept in sync with
+    /// `windowMap` by `reconcile` / `moveWindow` / `drop` and by
+    /// the explicit `setMode` migration path.
+    public private(set) var layoutTrees: [Int: LayoutTree] = [:]
+
+    /// Windows the user (or AX role detector) flagged as floating.
+    /// Floating windows are skipped by the tiler and stay at the
+    /// user's last-set position. Independent of `anchorParked` /
+    /// `minimizeParked` (which are *hide-method* state, not
+    /// per-window opt-out).
+    public private(set) var floatingWindows: Set<WindowID> = []
+
     public init() {}
 
     // MARK: - Reconcile
@@ -107,16 +126,22 @@ public struct WorkspaceCatalog {
 
     /// Reconcile `windowMap` against the live CGWindowList. Gone
     /// IDs are dropped from `windowMap`, `anchorParked`,
-    /// `minimizeParked`, and `originalPositions` in one sweep.
-    /// New IDs land in `activeIndex` with their owning pid recorded
-    /// (memory: `facet-workspace-model` — "newly opened windows →
-    /// current active facet WS").
+    /// `minimizeParked`, `originalPositions`, `floatingWindows`,
+    /// and from any `layoutTrees` that held them. New IDs land in
+    /// `activeIndex` with their owning pid recorded; if the
+    /// active WS is in `"bsp"` mode and the new window isn't
+    /// flagged floating, it's also inserted into that WS's tree
+    /// (memory: `facet-workspace-model` + `facet-phase-gamma-decisions`).
     ///
     /// Pid is refreshed on every reconcile even for known windows;
     /// pid is stable across a process's lifetime, but if a window
     /// id is ever reused after its owner died the fresh value wins.
     @discardableResult
-    public mutating func reconcile(live: [Window]) -> ReconcileResult {
+    public mutating func reconcile(live: [Window],
+                                   focused: WindowID? = nil,
+                                   activeRect: CGRect = .zero)
+        -> ReconcileResult
+    {
         let liveByID = Dictionary(uniqueKeysWithValues:
                                   live.map { ($0.id, $0.pid) })
         let goneIDs = windowMap.keys.filter { liveByID[$0] == nil }
@@ -125,6 +150,13 @@ public struct WorkspaceCatalog {
             anchorParked.remove(id)
             minimizeParked.remove(id)
             originalPositions.removeValue(forKey: id)
+            floatingWindows.remove(id)
+            // Tree healing: a closed leaf's sibling absorbs the
+            // space (LayoutTree.remove handles the recursion).
+            for (ws, var tree) in layoutTrees where tree.contains(id) {
+                tree.remove(id)
+                layoutTrees[ws] = tree
+            }
         }
         var added = 0
         for (id, pid) in liveByID {
@@ -137,6 +169,12 @@ public struct WorkspaceCatalog {
                 windowMap[id] = WindowSlot(
                     workspace: activeIndex, pid: pid)
                 added += 1
+                if mode(of: activeIndex) == "bsp",
+                   !floatingWindows.contains(id) {
+                    var tree = layoutTrees[activeIndex] ?? LayoutTree()
+                    tree.insert(id, focused: focused, in: activeRect)
+                    layoutTrees[activeIndex] = tree
+                }
             }
         }
         return ReconcileResult(added: added, removed: goneIDs.count)
@@ -149,6 +187,111 @@ public struct WorkspaceCatalog {
         anchorParked.remove(id)
         minimizeParked.remove(id)
         originalPositions.removeValue(forKey: id)
+        floatingWindows.remove(id)
+        for (ws, var tree) in layoutTrees where tree.contains(id) {
+            tree.remove(id)
+            layoutTrees[ws] = tree
+        }
+    }
+
+    // MARK: - Layout mode (Phase γ)
+
+    /// 1-based WS index → mode string. Missing entries default
+    /// to `"float"` (Phase γ frozen default).
+    public func mode(of n1Based: Int) -> String {
+        layoutModes[n1Based] ?? "float"
+    }
+
+    /// Change the mode of a workspace. Side-effects on tree
+    /// state:
+    ///   - → `"bsp"`: build a fresh tree from the WS's current
+    ///     non-floating windows (auto-balance order, sorted by
+    ///     `WindowID.serverID` for deterministic insertion).
+    ///   - → `"float"` / anything else: discard the tree (the
+    ///     adapter leaves the windows wherever they were last
+    ///     placed; the user can drag freely from then on).
+    ///
+    /// Caller drives the AX side-effects (re-tile or no-op).
+    /// Returns the new mode so the caller can branch.
+    @discardableResult
+    public mutating func setMode(workspace n1Based: Int,
+                                 to mode: String,
+                                 in rect: CGRect = .zero) -> String {
+        let normalised = mode.lowercased()
+        layoutModes[n1Based] = normalised
+        switch normalised {
+        case "bsp":
+            var tree = LayoutTree()
+            let members = windowMap
+                .filter { $0.value.workspace == n1Based
+                    && !floatingWindows.contains($0.key) }
+                .map(\.key)
+                .sorted { $0.serverID < $1.serverID }
+            for id in members {
+                tree.insert(id, focused: nil, in: rect)
+            }
+            layoutTrees[n1Based] = tree
+        default:
+            layoutTrees.removeValue(forKey: n1Based)
+        }
+        return normalised
+    }
+
+    // MARK: - Floating
+
+    public func isFloating(_ id: WindowID) -> Bool {
+        floatingWindows.contains(id)
+    }
+
+    /// Flip the floating flag on `id` and adjust the tree of the
+    /// owning WS (if it's in `"bsp"` mode): a window flipping to
+    /// floating is removed from the tree; flipping back inserts
+    /// it (auto-balance against the focused leaf).
+    ///
+    /// `rect` is the active display's `visibleFrame` — only used
+    /// for the *orientation choice* when re-inserting; tile
+    /// frames are recomputed every time `tiledFrames` runs.
+    public mutating func toggleFloat(_ id: WindowID,
+                                     focused: WindowID? = nil,
+                                     in rect: CGRect = .zero) {
+        guard let slot = windowMap[id] else { return }
+        let wasFloating = floatingWindows.contains(id)
+        if wasFloating {
+            floatingWindows.remove(id)
+            if mode(of: slot.workspace) == "bsp" {
+                var tree = layoutTrees[slot.workspace] ?? LayoutTree()
+                tree.insert(id, focused: focused, in: rect)
+                layoutTrees[slot.workspace] = tree
+            }
+        } else {
+            floatingWindows.insert(id)
+            if var tree = layoutTrees[slot.workspace] {
+                tree.remove(id)
+                layoutTrees[slot.workspace] = tree
+            }
+        }
+    }
+
+    // MARK: - Tree operations
+
+    /// Rotate the parent split of `id`. Looks up the owning WS,
+    /// then defers to `LayoutTree.toggleOrientation`. No-op when
+    /// the window isn't in any tree (float / unknown / stack WS).
+    public mutating func toggleOrientation(of id: WindowID) {
+        guard let slot = windowMap[id],
+              var tree = layoutTrees[slot.workspace] else { return }
+        tree.toggleOrientation(of: id)
+        layoutTrees[slot.workspace] = tree
+    }
+
+    /// Tree-computed frames for every tiled window in the WS,
+    /// keyed by `WindowID`. Empty when the WS isn't in `"bsp"`
+    /// mode or has no tree.
+    public func tiledFrames(for n1Based: Int,
+                            in rect: CGRect) -> [WindowID: CGRect] {
+        guard mode(of: n1Based) == "bsp",
+              let tree = layoutTrees[n1Based] else { return [:] }
+        return tree.frames(in: rect)
     }
 
     /// Resolve the cached pid for a window, or nil if it's not in
@@ -219,11 +362,26 @@ public struct WorkspaceCatalog {
 
     @discardableResult
     public mutating func moveWindow(_ id: WindowID, to n1Based: Int,
-                                    configuredIndexes: [Int]) -> MoveOutcome {
+                                    configuredIndexes: [Int],
+                                    in rect: CGRect = .zero) -> MoveOutcome {
         guard isValid(n1Based, configuredIndexes: configuredIndexes),
               let current = windowMap[id],
               current.workspace != n1Based else { return .rejected }
         windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
+        // Tree maintenance: remove from source tree (if any),
+        // insert into destination tree (if dest is bsp and the
+        // window isn't floating).
+        if var srcTree = layoutTrees[current.workspace],
+           srcTree.contains(id) {
+            srcTree.remove(id)
+            layoutTrees[current.workspace] = srcTree
+        }
+        if mode(of: n1Based) == "bsp",
+           !floatingWindows.contains(id) {
+            var destTree = layoutTrees[n1Based] ?? LayoutTree()
+            destTree.insert(id, focused: nil, in: rect)
+            layoutTrees[n1Based] = destTree
+        }
         let ref = WindowRef(id: id, pid: current.pid)
         if n1Based == activeIndex { return .restore(ref) }
         if current.workspace == activeIndex { return .park(ref) }
@@ -288,13 +446,14 @@ public struct WorkspaceCatalog {
     /// wire convention of the `WindowBackend` protocol — translation
     /// happens here at the seam.
     public func snapshot(live: [Window], focused: WindowID?,
-                         configured: [(index: Int, name: String)],
-                         layoutMode: String) -> [Workspace] {
+                         configured: [(index: Int, name: String)])
+        -> [Workspace]
+    {
         let stamped = live.map { w in
             Window(id: w.id, pid: w.pid, appName: w.appName,
                    title: w.title,
                    isFocused: w.id == focused,
-                   isFloating: w.isFloating,
+                   isFloating: floatingWindows.contains(w.id),
                    frame: w.frame)
         }
         let byWS = Dictionary(grouping: stamped) { w in
@@ -305,7 +464,7 @@ public struct WorkspaceCatalog {
                 index: entry.index - 1,
                 name: entry.name,
                 isActive: entry.index == activeIndex,
-                layoutMode: layoutMode,
+                layoutMode: mode(of: entry.index),
                 windows: byWS[entry.index] ?? [])
         }
     }

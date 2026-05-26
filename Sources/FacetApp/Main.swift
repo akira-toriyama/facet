@@ -94,6 +94,18 @@ enum FacetApp {
           facet window --move-to=N           move the focused window
                                              to workspace N (1-indexed)
 
+        TILING (M5 Phase γ — FACET_BACKEND=native only)
+          facet --set-layout=NAME            set active WS's layout mode
+                                             (bsp | float). "stack" lands
+                                             in γ.2.
+          facet --retile                     re-apply active WS's BSP tree
+                                             (drift recovery; no-op when
+                                             not in bsp mode)
+          facet window --toggle-float        flip focused window's float
+                                             flag (skips the tile tree)
+          facet window --toggle-orientation  rotate focused window's
+                                             parent split 90° (bsp only)
+
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
           hammerspoon, …):
@@ -263,6 +275,49 @@ enum FacetApp {
         postControl("window-move:\(index)")
     }
 
+    /// Post ``set-layout:NAME``. NAME must be one of
+    /// ``canonicalLayoutModes`` (validated by ``canonicalLayoutMode``
+    /// at parse time). Targets the currently-active workspace.
+    static func postSetLayout(_ name: String) -> Never {
+        postControl("set-layout:" + name)
+    }
+
+    /// Post ``retile``. Re-apply the active WS's layout — only
+    /// meaningful for backends with their own layout engine
+    /// (NativeAdapter); rift no-ops.
+    static func postRetile() -> Never {
+        postControl("retile")
+    }
+
+    /// Post ``window-toggle-float`` / ``window-toggle-orientation``.
+    /// Target is the focused window.
+    static func postWindowToggleFloat() -> Never {
+        postControl("window-toggle-float")
+    }
+
+    static func postWindowToggleOrientation() -> Never {
+        postControl("window-toggle-orientation")
+    }
+
+    /// Validate + canonicalise a layout-mode name. Loud reject on
+    /// typo (`exit(2)`) — same pattern as `canonicalView` /
+    /// `canonicalStyle`.
+    static let canonicalLayoutModes = ["bsp", "float"]
+    // "stack" lands in γ.2 — left out of the canonical set for
+    // γ.1 so attempts now fail loudly rather than silently
+    // setting an unsupported mode.
+
+    static func canonicalLayoutMode(_ name: String) -> String {
+        switch canonicalize(name, allowed: canonicalLayoutModes) {
+        case .success(let n): return n
+        case .failure(.unknownValue(let v, let expected)):
+            die("unknown layout \"\(v)\" — expected one of: "
+                + expected.joined(separator: ", "))
+        case .failure:
+            die("unknown layout \"\(name)\"")
+        }
+    }
+
     /// Parse ``--workspace=N`` (positive integer, 1-indexed). Loud
     /// reject on non-integer / non-positive so a typo can't pick
     /// the wrong workspace silently.
@@ -333,6 +388,8 @@ enum FacetApp {
     /// flag namespace.
     static func runWindowCommand(_ args: [String]) -> Never {
         var moveToArg: Int?
+        var toggleFloat = false
+        var toggleOrientation = false
         var i = 0
         while i < args.count {
             defer { i += 1 }
@@ -340,17 +397,36 @@ enum FacetApp {
             switch true {
             case a.hasPrefix("--move-to="):
                 moveToArg = parseMoveToInt(a)
+            case a == "--toggle-float":
+                toggleFloat = true
+            case a == "--toggle-orientation":
+                toggleOrientation = true
             default:
                 die("unknown `window` flag \"\(a)\" — "
                     + "see `facet --help`")
             }
         }
-        if let n = moveToArg {
-            requireServerAlive()
-            postWindowMove(n)
+        // Sequence-of-flags forms are out (a single `window`
+        // subcommand drives one action); pick the first that
+        // was set, in declaration order. Loud reject if zero or
+        // multiple were specified to keep behaviour unambiguous.
+        let count = (moveToArg != nil ? 1 : 0)
+            + (toggleFloat ? 1 : 0)
+            + (toggleOrientation ? 1 : 0)
+        guard count > 0 else {
+            die("facet window: no action specified — "
+                + "see `facet --help`")
         }
-        die("facet window: no action specified — "
-            + "see `facet --help`")
+        guard count == 1 else {
+            die("facet window: pick one action per invocation — "
+                + "see `facet --help`")
+        }
+        requireServerAlive()
+        if let n = moveToArg { postWindowMove(n) }
+        if toggleFloat { postWindowToggleFloat() }
+        if toggleOrientation { postWindowToggleOrientation() }
+        // Unreachable — `count == 1` guarantees one branch fired.
+        die("facet window: dispatch fell through (bug)")
     }
 
     /// Validate + canonicalise a view name. Loud reject on typo
@@ -585,6 +661,8 @@ enum FacetApp {
         var toggleArg: String?
         var styleArg: String?
         var workspaceArg: Int?
+        var setLayoutArg: String?
+        var retileFlag = false
         var activeFlag = false
         var quitFlag = false
         var reloadFlag = false
@@ -646,6 +724,11 @@ enum FacetApp {
                 }
             case a.hasPrefix("--workspace="):
                 workspaceArg = parseWorkspaceInt(a)
+            case a.hasPrefix("--set-layout="):
+                setLayoutArg = canonicalLayoutMode(
+                    String(a.dropFirst("--set-layout=".count)))
+            case a == "--retile":
+                retileFlag = true
             case a.hasPrefix("--pos-x="):
                 posX = parseGeomInt(a, "--pos-x=")
             case a.hasPrefix("--pos-y="):
@@ -705,7 +788,7 @@ enum FacetApp {
         // about to become the server.
         let anyClientAction = styleArg != nil || quitFlag || reloadFlag
             || viewArg != nil || hideArg != nil || toggleArg != nil
-            || workspaceArg != nil
+            || workspaceArg != nil || setLayoutArg != nil || retileFlag
         if anyClientAction { requireServerAlive() }
 
         // Dispatch. Each ``post*`` returns ``Never`` (calls
@@ -722,6 +805,8 @@ enum FacetApp {
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
         if let w = workspaceArg      { postWorkspace(w) }
+        if let l = setLayoutArg      { postSetLayout(l) }
+        if retileFlag                { postRetile() }
 
         // Server mode. Reached only when no client flag matched.
 

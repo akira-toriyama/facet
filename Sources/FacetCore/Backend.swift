@@ -75,6 +75,13 @@ public protocol WindowBackend: Sendable {
     /// knowledge of which actions its layouts support.
     func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem]
 
+    /// Re-apply the active workspace's layout. Phase γ escape
+    /// hatch: when the on-screen state has drifted from what the
+    /// backend thinks (external resize / unexpected move), the
+    /// user runs `facet --retile` to force a fresh tile pass.
+    /// Backends that delegate layout (rift) silently no-op.
+    func retileActiveWorkspace()
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as

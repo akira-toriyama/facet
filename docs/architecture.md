@@ -76,7 +76,7 @@ below).
 |---|---|---|
 | **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. **Status (2026-05-26)**: workspace state + reconcile + focusedWindow + AX-driven event subscription landed (`FACET_BACKEND=native` opt-in usable) | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook all landed | rift `wm/window`, yabai window mgmt |
-| **γ** | window tiling (BSP / stack layout engines) | rift `layout`, AeroSpace tree |
+| **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 new CLI verbs, 3-PR phasing (γ.1 BSP core / γ.2 stack / γ.3 AX-role auto-float) | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; geometry persistence | rift `display` |
 | **ε** | deprecate `FacetAdapterRift`; native becomes default | — |
 
@@ -123,6 +123,72 @@ is the index. **Do not relitigate** without explicit grill round.
 Memory cross-references: `facet-workspace-model`,
 `native-window-hide-methods`, `facet-cli-surface`,
 `facet-scope-exclusions`, `facet-buddha-palm-principle`.
+
+### Phase γ frozen decisions (2026-05-26)
+
+Phase γ design is fully decided. Details live in memory
+(`facet-phase-gamma-decisions`); this list is the index. **Do
+not relitigate** without explicit grill round.
+
+- **Layout modes**: `bsp` + `stack` only. `master_stack` /
+  `scrolling` / `traditional` are out of scope; future opt-ins.
+- **BSP auto-tile**: always-on. A WS in `bsp` mode auto-splits
+  the focused window on every new-window event.
+- **Split direction**: auto-balance (wider window → vertical
+  split, taller → horizontal). New window lands on the
+  bottom / right of the resulting split.
+- **Floating opt-out**: AX role auto-detection (`AXSheet`,
+  `AXDialog`, `AXSystemDialog`, `kAXFloatingWindowSubrole`)
+  plus manual `toggleFloat`. Floating windows skip the tree.
+- **Manual resize**: lazy retile. facet only re-applies
+  tree-computed frames on *tree-changing events* (new window,
+  close, mode flip, `--retile`, WS switch). User drags survive
+  until the next such event — drag observation + ratio update
+  (yabai-style) is a later increment.
+- **WS switch (active flip)**: tiled windows go to
+  tree-computed frames; floating windows restore from
+  `originalPosition` per existing hide flow.
+- **Stack mode**: focused window fills the display; others are
+  parked via the configured `hide_method`. `cycleStackNext` /
+  `cycleStackPrev` actions move focus; a new window in a stack
+  WS becomes the focused / top member.
+- **Layout state**: `LayoutTree` value type in
+  `FacetAdapterNative`, peer to `WorkspaceCatalog`. Catalog
+  composes `layoutTrees: [Int: LayoutTree]` (per-WS, only
+  present for `bsp` WSs). Same pattern as the PR-B
+  `WorkspaceCatalog` extraction — pure data, no AX, fully
+  unit-testable.
+- **Multi-display**: unchanged from Phase α. Tree is per-WS,
+  WS is per-display; the root rect is the active display's
+  `visibleFrame`. No cross-display tree, no display-move action.
+- **Gaps / padding**: zero, hardcoded. Config key reserved for
+  later if demand surfaces.
+- **Directional movement**: only `toggleOrientation` (rotate
+  the focused window's parent split). `moveLeft/Right/Up/Down`
+  are out of γ.1 scope; tree pathfinding adds enough complexity
+  to deserve its own increment.
+- **Mode change**: smooth migration — `toggleStack` from BSP
+  parks all but focused (via `hide_method`); the reverse
+  re-inserts members in focus order via auto-balance. **Default
+  mode for a new WS = `"float"`** (not `"bsp"`) so existing
+  users see no surprise behaviour; opt-in per WS via
+  `facet --set-layout=bsp`.
+- **CLI surface (5 new verbs)**:
+  - `facet --set-layout=NAME` — active WS mode (`bsp` / `stack` / `float`)
+  - `facet --retile` — recompute + re-apply the active WS layout
+  - `facet window --toggle-float`
+  - `facet window --toggle-orientation`
+  - `facet window --cycle-stack=next|prev`
+- **Phasing**: ships as three PRs.
+  - **γ.1 BSP core** — `LayoutTree`, per-WS mode field, BSP
+    auto-tile, manual `toggleFloat`, `toggleOrientation`, four
+    of the five CLI verbs + this `architecture.md` section.
+  - **γ.2 Stack mode** — stack implementation + cycle ops +
+    the `--cycle-stack` CLI.
+  - **γ.3 AX role auto-float** — populate `isFloating` on new
+    windows whose AX role is in the floating set.
+
+Memory cross-reference: `facet-phase-gamma-decisions`.
 
 ## Two-binary structure (surface-core + deep-core)
 

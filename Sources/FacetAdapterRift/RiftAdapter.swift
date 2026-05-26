@@ -187,4 +187,8 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
         items.append(.init("Close window", [], close: true))
         return items
     }
+
+    /// rift owns its own layout engine; facet has no business
+    /// re-tiling on its behalf. No-op.
+    public func retileActiveWorkspace() {}
 }

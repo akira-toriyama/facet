@@ -336,8 +336,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         let c = WorkspaceCatalog()
         let snap = c.snapshot(
             live: [], focused: nil,
-            configured: defaultConfiguredPairs(),
-            layoutMode: "bsp")
+            configured: defaultConfiguredPairs())
         XCTAssertEqual(snap.map(\.index), [0, 1, 2, 3, 4],
                        "snapshot must emit 0-based indexes")
     }
@@ -347,8 +346,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setActive(3, configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [], focused: nil,
-            configured: defaultConfiguredPairs(),
-            layoutMode: "bsp")
+            configured: defaultConfiguredPairs())
         XCTAssertEqual(snap.filter(\.isActive).map(\.index), [2],
                        "0-based index 2 = 1-based 3")
     }
@@ -360,8 +358,7 @@ final class WorkspaceCatalogTests: XCTestCase {
                          configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [window(10), window(20)], focused: nil,
-            configured: defaultConfiguredPairs(),
-            layoutMode: "bsp")
+            configured: defaultConfiguredPairs())
         XCTAssertEqual(snap[0].windows.map(\.id), [wid(10)])
         XCTAssertEqual(snap[2].windows.map(\.id), [wid(20)])
         XCTAssertEqual(snap[1].windows.count, 0)
@@ -372,8 +369,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         let snap = c.snapshot(
             live: [window(10), window(20)],
             focused: wid(20),
-            configured: defaultConfiguredPairs(),
-            layoutMode: "bsp")
+            configured: defaultConfiguredPairs())
         let allWindows = snap.flatMap(\.windows)
         XCTAssertEqual(allWindows.first { $0.id == wid(20) }?.isFocused,
                        true)
@@ -388,17 +384,164 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setActive(2, configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [window(99)], focused: nil,
-            configured: defaultConfiguredPairs(),
-            layoutMode: "bsp")
+            configured: defaultConfiguredPairs())
         XCTAssertEqual(snap[1].windows.map(\.id), [wid(99)])
+    }
+
+    // MARK: - Phase γ.1 — layout modes + floating + tile
+
+    private let displayRect = CGRect(x: 0, y: 0,
+                                     width: 1600, height: 900)
+
+    func testDefaultModeIsFloatForUnsetWorkspace() {
+        XCTAssertEqual(WorkspaceCatalog().mode(of: 1), "float")
+    }
+
+    func testSetModeBspCreatesTreeFromCurrentMembers() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        XCTAssertEqual(c.mode(of: 1), "bsp")
+        let frames = c.tiledFrames(for: 1, in: displayRect)
+        XCTAssertEqual(Set(frames.keys), [wid(10), wid(20)])
+    }
+
+    func testSetModeFloatDiscardsTree() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        XCTAssertNotNil(c.layoutTrees[1])
+        _ = c.setMode(workspace: 1, to: "float", in: displayRect)
+        XCTAssertNil(c.layoutTrees[1])
+        XCTAssertEqual(c.tiledFrames(for: 1, in: displayRect), [:])
+    }
+
+    func testSetModeLowercasesInput() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "BSP", in: displayRect)
+        XCTAssertEqual(c.mode(of: 1), "bsp")
+    }
+
+    func testReconcileAutoInsertsNewWindowsIntoActiveBspTree() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        let frames = c.tiledFrames(for: 1, in: displayRect)
+        XCTAssertEqual(Set(frames.keys), [wid(10), wid(20)])
+    }
+
+    func testReconcileSkipsFloatingWindowsFromTree() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        c.toggleFloat(wid(10))
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        XCTAssertTrue(c.tiledFrames(for: 1, in: displayRect).isEmpty)
+    }
+
+    func testToggleFloatRemovesFromTreeAndReinserts() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        c.toggleFloat(wid(20))
+        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+                       [wid(10)])
+        XCTAssertTrue(c.isFloating(wid(20)))
+        c.toggleFloat(wid(20), focused: wid(10), in: displayRect)
+        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+                       [wid(10), wid(20)])
+    }
+
+    func testDropAlsoEvictsFromTree() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        c.drop(wid(10))
+        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+                       [wid(20)])
+    }
+
+    func testReconcileGoneSweepHealsTree() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        _ = c.reconcile(live: [window(20)],
+                        focused: nil, activeRect: displayRect)
+        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+                       [wid(20)])
+    }
+
+    func testMoveWindowBetweenBspWorkspacesMaintainsBothTrees() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        let outcome = c.moveWindow(wid(20), to: 2,
+                                   configuredIndexes: defaultConfigured,
+                                   in: displayRect)
+        XCTAssertEqual(outcome,
+                       .park(WindowRef(id: wid(20), pid: 1000)))
+        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+                       [wid(10)])
+        XCTAssertEqual(Set(c.tiledFrames(for: 2, in: displayRect).keys),
+                       [wid(20)])
+    }
+
+    func testToggleOrientationDelegatesToOwningTree() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        let before = c.tiledFrames(for: 1, in: displayRect)
+        XCTAssertEqual(before[wid(10)]?.width, 800,
+                       "starts vertical-split")
+        c.toggleOrientation(of: wid(10))
+        let after = c.tiledFrames(for: 1, in: displayRect)
+        XCTAssertEqual(after[wid(10)]?.width, 1600,
+                       "horizontal-split after flip")
+    }
+
+    func testTiledFramesEmptyForFloatMode() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        XCTAssertEqual(c.tiledFrames(for: 1, in: displayRect), [:])
+    }
+
+    func testSnapshotPicksModePerWorkspace() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
+        let snap = c.snapshot(
+            live: [], focused: nil,
+            configured: defaultConfiguredPairs())
+        XCTAssertEqual(snap[0].layoutMode, "float",
+                       "WS 1 unset → float")
+        XCTAssertEqual(snap[1].layoutMode, "bsp",
+                       "WS 2 set to bsp")
+    }
+
+    func testSnapshotStampsIsFloating() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        c.toggleFloat(wid(10))
+        let snap = c.snapshot(
+            live: [window(10), window(20)], focused: nil,
+            configured: defaultConfiguredPairs())
+        let allWindows = snap.flatMap(\.windows)
+        XCTAssertEqual(allWindows.first { $0.id == wid(10) }?.isFloating,
+                       true)
+        XCTAssertEqual(allWindows.first { $0.id == wid(20) }?.isFloating,
+                       false)
     }
 
     func testSnapshotRespectsSparseConfig() {
         let c = WorkspaceCatalog()
         let snap = c.snapshot(
             live: [], focused: nil,
-            configured: [(1, "dev"), (3, "ide"), (5, "sns")],
-            layoutMode: "bsp")
+            configured: [(1, "dev"), (3, "ide"), (5, "sns")])
         XCTAssertEqual(snap.map(\.index), [0, 2, 4])
         XCTAssertEqual(snap.map(\.name), ["dev", "ide", "sns"])
     }

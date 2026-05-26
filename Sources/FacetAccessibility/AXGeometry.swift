@@ -63,6 +63,16 @@ public enum AXGeom {
         return sz
     }
 
+    @discardableResult
+    public static func setSize(_ win: AXUIElement, _ size: CGSize)
+        -> Bool
+    {
+        var s = size
+        guard let v = AXValueCreate(.cgSize, &s) else { return false }
+        return AXUIElementSetAttributeValue(
+            win, kAXSizeAttribute as CFString, v) == .success
+    }
+
     /// CGWindowID for an AX window element via the private
     /// `_AXUIElementGetWindow` (dlsym-bound in AXFocus.swift —
     /// the symbol is module-internal, so the wrapper lives here
@@ -112,5 +122,37 @@ public enum Displays {
             hypot($0.midX - point.x, $0.midY - point.y) <
             hypot($1.midX - point.x, $1.midY - point.y)
         }) ?? CGDisplayBounds(CGMainDisplayID())
+    }
+
+    /// Visible rect (display bounds minus menu bar / Dock) for
+    /// the display containing `point`, in **Quartz coords**
+    /// (top-left origin), to match what AX `kAXPositionAttribute`
+    /// expects. Looks up the matching `NSScreen` and converts
+    /// `visibleFrame` (which is in NSScreen coords / bottom-left)
+    /// using the primary screen's height as the conversion
+    /// reference. Falls back to `containing(point)` (full
+    /// bounds) when no NSScreen match — better to tile into the
+    /// full display than to no-op.
+    @MainActor
+    public static func visibleFrame(containing point: CGPoint)
+        -> CGRect
+    {
+        let screen = NSScreen.screens.first {
+            $0.frame.contains(point)
+        } ?? NSScreen.main
+        guard let s = screen,
+              let primary = NSScreen.screens.first else {
+            return containing(point)
+        }
+        let v = s.visibleFrame
+        // Convert NS bottom-left → Quartz top-left, against the
+        // primary display's height (the reference frame for the
+        // global NS coordinate system).
+        let primaryHeight = primary.frame.height
+        return CGRect(
+            x: v.origin.x,
+            y: primaryHeight - v.origin.y - v.height,
+            width: v.width,
+            height: v.height)
     }
 }

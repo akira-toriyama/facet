@@ -296,6 +296,19 @@ final class Controller: NSObject {
                     let n = Int(s.dropFirst("window-move:".count)) ?? 0
                     self.dispatchWindowMove(n)
 
+                case let s where s.hasPrefix("set-layout:"):
+                    let name = String(s.dropFirst("set-layout:".count))
+                    self.dispatchSetLayout(name)
+
+                case "retile":
+                    self.dispatchRetile()
+
+                case "window-toggle-float":
+                    self.dispatchWindowAction(.toggleFloat)
+
+                case "window-toggle-orientation":
+                    self.dispatchWindowAction(.toggleOrientation)
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }
@@ -386,6 +399,41 @@ final class Controller: NSObject {
         case "grid": toggleGrid()
         default:     Log.debug("dispatchToggle unknown=\(name) — ignored")
         }
+    }
+
+    /// Set the active workspace's layout mode. The CLI validates
+    /// the name (`canonicalLayoutMode`); a stray name landing
+    /// here would silently no-op via the backend's own mode
+    /// gate, but logging the receiver-side rejection makes
+    /// `--debug` traces clearer.
+    private func dispatchSetLayout(_ name: String) {
+        guard let active = lastWorkspaces.first(where: \.isActive)
+        else {
+            setError("set-layout=\(name): no active workspace")
+            return
+        }
+        backend.setLayoutMode(workspaceIndex: active.index,
+                              mode: name)
+        scheduleReconcile(after: 0.05)
+    }
+
+    /// `facet --retile`: ask the backend to re-apply the active
+    /// workspace's layout. Backends without tiling (rift) treat
+    /// this as a no-op.
+    private func dispatchRetile() {
+        backend.retileActiveWorkspace()
+        scheduleReconcile(after: 0.05)
+    }
+
+    /// `facet window --toggle-float` / `--toggle-orientation`:
+    /// thin wrapper around `backend.perform`. The "no focused
+    /// window" guard lives in the backend (NativeAdapter exits
+    /// early when `focusedWindow()` is nil); we just log the
+    /// dispatch here for `--debug` tracing.
+    private func dispatchWindowAction(_ action: WindowAction) {
+        Log.debug("dispatchWindowAction \(action)")
+        backend.perform(action)
+        scheduleReconcile(after: 0.05)
     }
 
     /// Live re-theme from `facet --theme=...`. Runtime-only —
