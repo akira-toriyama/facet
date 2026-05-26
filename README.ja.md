@@ -116,7 +116,7 @@ rift-cli 無しに workspace 切替 + window park (anchor / minimize)
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs を archive | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
-| M5 Phase β — anchor / minimize hide、 closeWindow | ✅ opt-in |
+| M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ opt-in |
 | M5 Phase γ–ε — tiling / display reconfigure / rift retire | ⏳ |
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
@@ -162,6 +162,49 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   時のみ使用。
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
+- `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
+  実行可能 script のパス配列（Vitest 流）。 詳細は下の
+  「Workspace setup hooks」 を参照。
+
+### Workspace setup hooks
+
+facet 自身は window-to-workspace の割当を永続化しない。
+`setupFiles` config key で、 起動時に「あなたの好みのレイアウト」
+を再構築する script を自分で書ける — script は facet の CLI
+listener が立ち上がった **後** に発火するので、 そのまま
+`facet status` / `facet --workspace=N` / `facet window --move-to=N`
+を呼べる (hotkey と同じ仕組み)。
+
+```toml
+[workspace]
+setupFiles = ["~/.config/facet/setup.sh"]
+```
+
+```sh
+# ~/.config/facet/setup.sh (chmod +x)
+#!/usr/bin/env bash
+# アプリを希望の WS に予め立ち上げる。 新しい window は常に
+# 「現在アクティブな facet WS」 に landing するので、 先に
+# `facet --workspace=N` で切り替えてから `open` するのがコツ。
+facet --workspace=2 && open -ga Slack
+sleep 0.4               # Slack の window 登録を少し待つ
+facet --workspace=1 && open -ga "Safari"
+sleep 0.4
+facet --workspace=1     # 最後に「見たい WS」 に戻して終了
+```
+
+(`facet window --move-to=N` は focused window 専用、 `--id` flag
+は現状ない。 だから「事前に WS を切り替えてから open」 が
+今正直に書ける唯一の起動 staging パターン。)
+
+注意点:
+- パス内の `~` / `$VAR` / `${VAR}` は展開される。
+- script は実行可能 (`chmod +x`) であること。
+- spawn 後は fire-and-forget — hung script で facet 起動が
+  止まる事はない。 エラー (file 無し / 非実行 / non-zero exit)
+  は `facet status` の `lastError` スロットに出る。
+- full restart 時のみ再実行、 `facet --reload` では走らない (意図的)。
+- stdout / stderr は `/tmp/facet.log` に記録される (`facet --debug` で可視化)。
 
 ### Native backend (M5 alpha)
 

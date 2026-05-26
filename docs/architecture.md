@@ -75,7 +75,7 @@ below).
 | Phase | Scope | Reference reading |
 |---|---|---|
 | **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. **Status (2026-05-26)**: workspace state + reconcile + focusedWindow + AX-driven event subscription landed (`FACET_BACKEND=native` opt-in usable) | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
-| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close landed; persistence pending | rift `wm/window`, yabai window mgmt |
+| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook all landed | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines) | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; geometry persistence | rift `display` |
 | **ε** | deprecate `FacetAdapterRift`; native becomes default | — |

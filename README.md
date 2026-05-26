@@ -117,7 +117,7 @@ is live. The **native AX backend** (M5 Phase α/β) is opt-in:
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs archived | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
-| M5 Phase β — anchor / minimize hide, closeWindow | ✅ opt-in |
+| M5 Phase β — anchor / minimize hide, closeWindow, setupFiles | ✅ opt-in |
 | M5 Phase γ–ε — tiling, display reconfigure, rift retire | ⏳ |
 
 See [docs/architecture.md](docs/architecture.md) for the layer
@@ -165,6 +165,52 @@ Frequently-touched keys:
   when `FACET_BACKEND=native` is active.
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
+- `[workspace] setupFiles = [...]` — array of executable script
+  paths run once at startup, Vitest-style. See "Workspace setup
+  hooks" below.
+
+### Workspace setup hooks
+
+facet itself never persists window-to-workspace assignments. The
+`setupFiles` config key lets your own scripts recreate whatever
+layout you want on launch — they fire **after** facet's CLI
+listener is up, so they can immediately call `facet status` /
+`facet --workspace=N` / `facet window --move-to=N` like any other
+hotkey would.
+
+```toml
+[workspace]
+setupFiles = ["~/.config/facet/setup.sh"]
+```
+
+```sh
+# ~/.config/facet/setup.sh (chmod +x)
+#!/usr/bin/env bash
+# Pre-stage apps into the workspaces they belong in. New windows
+# always land in the currently-active facet WS, so the trick is:
+# switch first, then `open` — the launched app's first window
+# inherits the current WS.
+facet --workspace=2 && open -ga Slack
+sleep 0.4               # let Slack's window register
+facet --workspace=1 && open -ga "Safari"
+sleep 0.4
+facet --workspace=1     # finish on the WS you want to look at
+```
+
+(`facet window --move-to=N` operates on the focused window only —
+there's no `--id` flag today, so the pre-stage pattern is the
+honest tool for shaping startup state.)
+
+Notes:
+- `~` and `$VAR` / `${VAR}` in paths are expanded.
+- Each script must be executable (`chmod +x`).
+- Fire-and-forget after spawn — a hung script can't stall facet
+  startup. Errors (missing file, non-executable, non-zero exit)
+  show up in `facet status`'s `lastError` slot.
+- Re-invoked on full restart only; `facet --reload` skips them
+  by design.
+- stdout / stderr is captured to `/tmp/facet.log` (visible under
+  `facet --debug`).
 
 ### Native backend (M5 alpha)
 

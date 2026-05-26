@@ -191,6 +191,17 @@ final class Controller: NSObject {
                             // even before the first backend reply
         installConfigWatcher()
         refresh()
+        // setupFiles fires AFTER DNC is listening + status file is
+        // touched, so hooks can call `facet status` / `facet
+        // --workspace=N` immediately without racing the server's
+        // own readiness. Fire-and-forget; errors land in the
+        // status file via `setError`.
+        SetupRunner.runAll(paths: config.effectiveSetupFiles) {
+            [weak self] msg in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.setError(msg) }
+            }
+        }
     }
 
     /// Spin up the FS watcher on ~/.config/facet/config.toml so

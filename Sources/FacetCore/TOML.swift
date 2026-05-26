@@ -18,6 +18,12 @@ public enum TOMLValue: Sendable, Equatable {
     case int(Int)
     case string(String)
     case bool(Bool)
+    /// Inline array of strings: `key = ["a", "b"]`. Only the
+    /// homogeneous string-array form is parsed; mixed-type arrays
+    /// and multi-line arrays are silently skipped (consistent with
+    /// the rest of this parser's "skip what we don't recognise"
+    /// policy). Empty array `[]` is permitted.
+    case stringArray([String])
 }
 
 /// Pure-function TOML subset parser. Output keyed by section name
@@ -66,11 +72,36 @@ public func parseTOMLSubset(_ text: String)
         let parsed: TOMLValue
         if val.hasPrefix("\""), val.hasSuffix("\""), val.count >= 2 {
             parsed = .string(String(val.dropFirst().dropLast()))
+        } else if val.hasPrefix("["), val.hasSuffix("]") {
+            // Inline string array: `["a", "b"]`. Strict: every
+            // element must be double-quoted; any malformed element
+            // skips the whole line (matches the parser's existing
+            // "lose one line on typo" failure mode).
+            guard let strs = parseStringArray(val) else { continue }
+            parsed = .stringArray(strs)
         } else if val == "true"  { parsed = .bool(true) }
         else  if val == "false" { parsed = .bool(false) }
         else  if let i = Int(val) { parsed = .int(i) }
         else  { continue }                          // skip unknown shapes
         out[section, default: [:]][key] = parsed
+    }
+    return out
+}
+
+/// Parse `["a", "b"]` → `["a", "b"]`. Returns nil if any element
+/// isn't a double-quoted string. Whitespace inside the brackets is
+/// tolerated; commas inside string bodies are not (no escaping —
+/// matches the rest of this parser's "subset" stance).
+private func parseStringArray(_ raw: String) -> [String]? {
+    let inner = raw.dropFirst().dropLast()
+        .trimmingCharacters(in: .whitespaces)
+    if inner.isEmpty { return [] }
+    var out: [String] = []
+    for piece in inner.split(separator: ",") {
+        let p = piece.trimmingCharacters(in: .whitespaces)
+        guard p.hasPrefix("\""), p.hasSuffix("\""), p.count >= 2
+        else { return nil }
+        out.append(String(p.dropFirst().dropLast()))
     }
     return out
 }
