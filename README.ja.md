@@ -168,17 +168,63 @@ facet --toggle=NAME               # NAME トグル
 # (Spotlight 風起動)。 --view=grid と組み合わせると silent no-op
 # (grid は常に key/active)。
 
+# Workspace 操作 (M5 Phase α)
+facet --workspace=N               # workspace N に切替 (1-indexed)
+facet window --move-to=N          # focus 中の window を WS N へ
+facet status                      # スナップショット: backend /
+                                  # hide_method / workspaces /
+                                  # lastError / timestamp
+
 # Server 制御
 facet --theme=NAME                # terminal | cute | system
+facet --reload                    # config.toml 再読込 + 反映
+                                  # (theme / hide_method / [workspaces])
 facet --quit                      # server 終了
 facet --debug                     # verbose log (stderr +
                                   # /tmp/facet.log、 server-mode)
+facet --resign                    # Facet.app 再 sign (brew install 後)
 facet --help                      # 完全リファレンス
 ```
 
 不明な flag / view / theme 名は exit `2` + stderr メッセージ —
 typo は silent fail せず明示エラー。 短縮 (シェル alias / hotkey
 バインド) は各自の環境の領分で、 facet 側では扱わない。
+
+### ホットキー連携
+
+facet は CLI のみ提供 — ホットキーは使い慣れたツールで。 例:
+
+**skhd** (`~/.config/skhd/skhdrc`):
+
+```
+ctrl + alt - 1          : facet --workspace=1
+ctrl + alt - 2          : facet --workspace=2
+ctrl + shift + alt - 1  : facet window --move-to=1
+ctrl + shift + alt - 2  : facet window --move-to=2
+```
+
+**Karabiner-Elements**: *Complex Modifications* の JSON で
+`shell_command` に `/opt/homebrew/bin/facet --workspace=1` 等を
+指定。
+
+**Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
+hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`。
+
+### Workspace shell ヘルパー
+
+facet 本体は `config.toml` に書き込まない方針。 repo 同梱の
+shell スクリプトで atomic write (`mktemp` + `mv`、 ConfigWatcher
+が中途半端な状態を見ない契約):
+
+```sh
+./scripts/add_workspace.sh 1 dev      # [workspace] に 1 = "dev" 追加
+./scripts/add_workspace.sh 5          # 名前空、 スロットだけ作る
+./scripts/remove_workspace.sh 2       # エントリ 2 を削除 (冪等)
+```
+
+facet の `ConfigWatcher` が変更を自動 pick up。 `facet --reload`
+は明示 trigger 版で、 スクリプトが反映タイミングを確実に制御
+したい時に使う。
 
 ## デバッグ
 
