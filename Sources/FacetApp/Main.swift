@@ -33,6 +33,7 @@
 
 import AppKit
 import FacetCore
+import FacetAccessibility
 import FacetAdapterRift
 import FacetAdapterNative
 import FacetView

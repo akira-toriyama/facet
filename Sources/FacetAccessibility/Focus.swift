@@ -16,9 +16,8 @@
 //                    AX focus and stops only when the backend agrees
 //                    the target window is focused.
 //
-// MOVE-AT-M5: same as AXFocus.swift / AXTitles.swift — not really
-// rift-specific; the native adapter will need identical helpers.
-// Move alongside those when FacetAccessibility lands.
+// Shared with FacetAdapterNative via this module (extracted out
+// of FacetAdapterRift at M5).
 
 import Foundation
 import FacetCore

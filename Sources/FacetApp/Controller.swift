@@ -23,6 +23,7 @@
 
 import AppKit
 import FacetCore
+import FacetAccessibility
 import FacetView
 import FacetViewTree
 import FacetViewGrid

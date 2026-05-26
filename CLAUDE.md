@@ -122,12 +122,11 @@ use:
   Don't add configurability — M5+ replaces this entire module with
   `FacetAdapterNative` (Phases α–ε). Engineering effort on this
   module has a sunset date.
-- **AX helpers (focus + title resolution) live in
-  `FacetAdapterRift` for now**. They aren't actually rift-specific
-  (any backend benefits from AX) — they'll move to a shared
-  `FacetAccessibility` module when the native adapter arrives
-  (M5+). Place new AX code there, marked with a `// MOVE-AT-M5`
-  comment if it would belong in the shared module.
+- **AX helpers live in `FacetAccessibility`** (extracted from
+  `FacetAdapterRift` at M5 once the native adapter became the
+  second consumer). `AXFocus`, `AXTitles`, `Focus.assert` /
+  `withRetry` are shared by both adapters. New AX code goes here
+  unless it's truly backend-specific.
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. NOT `com.wstabs.app` —
   separate TCC grants, separate self-signed cert. Don't reuse
