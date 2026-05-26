@@ -4,6 +4,7 @@
 
 import ApplicationServices
 import Foundation
+import FacetAccessibility
 import FacetCore
 
 // ``@unchecked Sendable`` is safe here: every stored property is
@@ -35,12 +36,9 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
         // Deferred one runloop tick so Controller.start() has
         // subscribed by the time we yield (AsyncStream buffers
         // anyway, but explicit is friendlier).
-        if !AXIsProcessTrusted() {
+        if let msg = AXPermission.errorMessageIfMissing() {
             DispatchQueue.main.async { [errorContinuation] in
-                errorContinuation.yield(
-                    "Accessibility permission not granted — open "
-                    + "System Settings → Privacy & Security → "
-                    + "Accessibility, enable facet, then restart")
+                errorContinuation.yield(msg)
             }
         }
     }
