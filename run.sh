@@ -5,8 +5,9 @@
 # (com.facet.app.dev) for verification alongside a Homebrew
 # install without TCC grant collisions.
 #
-#   ./run.sh             release → Facet.app
-#   ./run.sh --dev       dev     → Facet-dev.app
+#   ./run.sh                            release → Facet.app
+#   ./run.sh --dev                      dev     → Facet-dev.app
+#   FACET_BACKEND=native ./run.sh       opt into the native adapter
 #
 # Always kills any currently-running facet first (via stop.sh) so
 # the new bundle takes over cleanly. Quit later: ``./stop.sh`` or
@@ -24,5 +25,19 @@ fi
 ./package.sh $MODE
 ./stop.sh
 sleep 0.5
-open "./$APP"
+
+# Forward facet-specific env vars into the bundle. `open` doesn't
+# inherit the calling shell's environment (macOS Launch Services
+# starts the .app in its own context), so anything set on the
+# command line — most importantly FACET_BACKEND for the in-progress
+# native adapter — has to be passed through explicitly via
+# `open --env KEY=VALUE`.
+OPEN_ARGS=()
+for VAR in FACET_BACKEND; do
+    if [[ -n "${(P)VAR:-}" ]]; then
+        OPEN_ARGS+=(--env "$VAR=${(P)VAR}")
+    fi
+done
+open "./$APP" "${OPEN_ARGS[@]}"
 echo "$APP launched. Grant Accessibility + Screen Recording on first run."
+[[ ${#OPEN_ARGS[@]} -gt 0 ]] && echo "forwarded env: ${OPEN_ARGS[*]}"
