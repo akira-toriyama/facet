@@ -48,6 +48,9 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
     var events: AsyncStream<BackendEvent> {
         AsyncStream { _ in }
     }
+    var errors: AsyncStream<String> {
+        AsyncStream { _ in }
+    }
 }
 
 final class BackendTests: XCTestCase {

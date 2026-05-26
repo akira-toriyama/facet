@@ -84,4 +84,14 @@ public protocol WindowBackend: Sendable {
     /// continuation. Single-subscriber by convention — each adapter
     /// builds the stream once and replays nothing.
     var events: AsyncStream<BackendEvent> { get }
+
+    /// Stream of human-readable operational errors the adapter
+    /// surfaced (e.g. `rift-cli` returned non-zero, AX permission
+    /// failure). The Controller subscribes and routes each
+    /// message into `facet status`'s lastError slot.
+    ///
+    /// Single-subscriber, same lifetime as `events`. Adapters
+    /// only push messages a *user* could act on — internal
+    /// debugging chatter belongs in `Log.debug` instead.
+    var errors: AsyncStream<String> { get }
 }
