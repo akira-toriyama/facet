@@ -2,6 +2,7 @@
 // string lives in this file — the rest of the app talks to
 // `WindowBackend` and never sees rift again.
 
+import ApplicationServices
 import Foundation
 import FacetCore
 
@@ -26,6 +27,22 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
         var cont: AsyncStream<String>.Continuation!
         self.errorStream = AsyncStream { c in cont = c }
         self.errorContinuation = cont
+
+        // AX permission: rift adapter touches AX heavily (focus,
+        // title resolution, etc). A missing grant is silently
+        // fatal — every focus attempt no-ops. Push a hint into
+        // the errors stream so `facet status` surfaces it.
+        // Deferred one runloop tick so Controller.start() has
+        // subscribed by the time we yield (AsyncStream buffers
+        // anyway, but explicit is friendlier).
+        if !AXIsProcessTrusted() {
+            DispatchQueue.main.async { [errorContinuation] in
+                errorContinuation.yield(
+                    "Accessibility permission not granted — open "
+                    + "System Settings → Privacy & Security → "
+                    + "Accessibility, enable facet, then restart")
+            }
+        }
     }
 
     public var events: AsyncStream<BackendEvent> { eventSource.stream }
