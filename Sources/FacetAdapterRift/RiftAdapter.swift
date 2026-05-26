@@ -31,6 +31,25 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
     public var events: AsyncStream<BackendEvent> { eventSource.stream }
     public var errors: AsyncStream<String> { errorStream }
 
+    /// Push a user-actionable failure into the errors stream. Every
+    /// rift-cli failure routes through here so `facet status` users
+    /// see a consistent "is rift running?" hint.
+    private func pushError(_ command: String) {
+        errorContinuation.yield(
+            "rift-cli \(command) failed — is rift running? "
+            + "(`rift service start` or activate with Alt+Z)")
+    }
+
+    /// Run a rift-cli command and push an error if it fails. Used by
+    /// every void-returning execute method below so the noise stays
+    /// in one place.
+    @discardableResult
+    private func runOrReport(_ args: [String], label: String) -> Data? {
+        let data = RiftCLI.run(args)
+        if data == nil { pushError(label) }
+        return data
+    }
+
     // MARK: - Queries
 
     public func workspaces() -> [Workspace] {
@@ -38,9 +57,7 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
             let data = RiftCLI.run(["query", "workspaces"]),
             let raw = try? JSONDecoder().decode([RFWorkspace].self, from: data)
         else {
-            errorContinuation.yield(
-                "rift-cli query workspaces failed — is rift running? "
-                + "(`rift service start` or activate with Alt+Z)")
+            pushError("query workspaces")
             return []
         }
         return raw
@@ -49,7 +66,10 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func focusedWindow() -> WindowID? {
-        guard let data = RiftCLI.run(["query", "windows"]) else { return nil }
+        guard let data = RiftCLI.run(["query", "windows"]) else {
+            pushError("query windows")
+            return nil
+        }
         // rift-cli's `query windows` shape has shifted across releases —
         // sometimes a flat [RFWindow], sometimes [RFWorkspace]. Accept
         // either; this is what ws-tabs did, kept verbatim.
@@ -68,49 +88,61 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
     // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int) {
-        RiftCLI.run(["execute", "workspace", "switch", String(index)])
+        runOrReport(
+            ["execute", "workspace", "switch", String(index)],
+            label: "workspace switch \(index)")
     }
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
-        RiftCLI.run([
-            "execute", "workspace", "move-window",
-            String(index), String(id.serverID),
-        ])
+        runOrReport(
+            ["execute", "workspace", "move-window",
+             String(index), String(id.serverID)],
+            label: "workspace move-window \(index)")
     }
 
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
-        RiftCLI.run([
-            "execute", "workspace", "set-layout",
-            "--workspace-id", String(index), mode,
-        ])
+        runOrReport(
+            ["execute", "workspace", "set-layout",
+             "--workspace-id", String(index), mode],
+            label: "workspace set-layout \(mode)")
     }
 
     public func closeWindow(_ id: WindowID) {
-        RiftCLI.run([
-            "execute", "window", "close",
-            "--window-id", String(id.serverID),
-        ])
+        runOrReport(
+            ["execute", "window", "close",
+             "--window-id", String(id.serverID)],
+            label: "window close")
     }
 
     public func perform(_ action: WindowAction) {
+        let (args, label): ([String], String)
         switch action {
         case .toggleFloat:
-            RiftCLI.run(["execute", "window", "toggle-float"])
+            (args, label) = (["execute", "window", "toggle-float"],
+                             "window toggle-float")
         case .toggleFullscreen:
-            RiftCLI.run(["execute", "window", "toggle-fullscreen"])
+            (args, label) = (["execute", "window", "toggle-fullscreen"],
+                             "window toggle-fullscreen")
         case .promoteToMaster:
-            RiftCLI.run(["execute", "layout", "promote-to-master"])
+            (args, label) = (["execute", "layout", "promote-to-master"],
+                             "layout promote-to-master")
         case .swapMasterStack:
-            RiftCLI.run(["execute", "layout", "swap-master-stack"])
+            (args, label) = (["execute", "layout", "swap-master-stack"],
+                             "layout swap-master-stack")
         case .toggleStack:
-            RiftCLI.run(["execute", "layout", "toggle-stack"])
+            (args, label) = (["execute", "layout", "toggle-stack"],
+                             "layout toggle-stack")
         case .toggleOrientation:
-            RiftCLI.run(["execute", "layout", "toggle-orientation"])
+            (args, label) = (["execute", "layout", "toggle-orientation"],
+                             "layout toggle-orientation")
         case .centerColumn:
-            RiftCLI.run(["execute", "layout", "center-selection"])
+            (args, label) = (["execute", "layout", "center-selection"],
+                             "layout center-selection")
         case .snapStrip:
-            RiftCLI.run(["execute", "layout", "snap-strip"])
+            (args, label) = (["execute", "layout", "snap-strip"],
+                             "layout snap-strip")
         }
+        runOrReport(args, label: label)
     }
 
     // MARK: - Menu
