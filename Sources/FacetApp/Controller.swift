@@ -309,6 +309,13 @@ final class Controller: NSObject {
                 case "window-toggle-orientation":
                     self.dispatchWindowAction(.toggleOrientation)
 
+                case let s where s.hasPrefix("window-cycle-stack:"):
+                    let dir = String(
+                        s.dropFirst("window-cycle-stack:".count))
+                    self.dispatchWindowAction(
+                        dir == "prev" ? .cycleStackPrev
+                                      : .cycleStackNext)
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }

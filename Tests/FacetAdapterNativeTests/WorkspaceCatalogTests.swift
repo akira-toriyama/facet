@@ -523,6 +523,141 @@ final class WorkspaceCatalogTests: XCTestCase {
                        "WS 2 set to bsp")
     }
 
+    // MARK: - Phase γ.2 — stack mode
+
+    func testSetModeStackCreatesOrderFromCurrentMembers() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(20), window(10)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        // Members sort by id (deterministic) → [10, 20].
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
+    }
+
+    func testSetModeStackSkipsFloatingMembers() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        c.toggleFloat(wid(20))
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10)])
+    }
+
+    func testStackOrderEmptyForNonStackMode() {
+        let c = WorkspaceCatalog()
+        XCTAssertEqual(c.stackOrder(of: 1), [])
+    }
+
+    func testReconcileNewWindowBecomesStackTop() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        // New window 20 must land at index 0 (Q7c).
+        XCTAssertEqual(c.stackOrder(of: 1).first, wid(20))
+    }
+
+    func testCycleStackNextRotatesLeft() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        XCTAssertEqual(c.stackOrder(of: 1),
+                       [wid(10), wid(20), wid(30)])
+        let top = c.cycleStack(workspace: 1, direction: .next)
+        XCTAssertEqual(top, wid(20))
+        XCTAssertEqual(c.stackOrder(of: 1),
+                       [wid(20), wid(30), wid(10)])
+    }
+
+    func testCycleStackPrevRotatesRight() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        let top = c.cycleStack(workspace: 1, direction: .prev)
+        XCTAssertEqual(top, wid(30))
+        XCTAssertEqual(c.stackOrder(of: 1),
+                       [wid(30), wid(10), wid(20)])
+    }
+
+    func testCycleStackSingleMemberIsNoop() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        XCTAssertNil(c.cycleStack(workspace: 1, direction: .next))
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10)])
+    }
+
+    func testCycleStackEmptyIsNoop() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        XCTAssertNil(c.cycleStack(workspace: 1, direction: .next))
+    }
+
+    func testDropEvictsFromStackOrder() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        c.drop(wid(10))
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(20)])
+    }
+
+    func testToggleFloatRemovesFromStackAndReadds() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "stack",
+                      in: displayRect)
+        c.toggleFloat(wid(20))
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10)])
+        // Unfloat → returns to stack at top.
+        c.toggleFloat(wid(20), focused: nil, in: displayRect)
+        XCTAssertEqual(c.stackOrder(of: 1).first, wid(20))
+    }
+
+    func testMoveWindowIntoStackPutsItOnTop() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 2, to: "stack",
+                      in: displayRect)
+        _ = c.reconcile(live: [window(10)])
+        // 10 is in WS 1 (active default). Move into WS 2 stack.
+        _ = c.moveWindow(wid(10), to: 2,
+                         configuredIndexes: defaultConfigured,
+                         in: displayRect)
+        XCTAssertEqual(c.stackOrder(of: 2), [wid(10)])
+    }
+
+    func testSetModeFlipReplacesLayoutKind() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        // BSP → stack: tree gone, order built.
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        XCTAssertNotNil(c.layoutTrees[1])
+        _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
+        XCTAssertNil(c.layoutTrees[1])
+        XCTAssertEqual(c.stackOrder(of: 1).sorted { $0.serverID < $1.serverID },
+                       [wid(10), wid(20)])
+        // Stack → BSP: order gone, tree built.
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        XCTAssertNil(c.stackOrders[1])
+        XCTAssertNotNil(c.layoutTrees[1])
+    }
+
+    func testClearParkedStateDropsAllHideFlags() {
+        var c = WorkspaceCatalog()
+        c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
+        c.markMinimized(wid(10))
+        c.clearParkedState(of: wid(10))
+        XCTAssertFalse(c.anchorParked.contains(wid(10)))
+        XCTAssertFalse(c.minimizeParked.contains(wid(10)))
+        XCTAssertNil(c.originalPositions[wid(10)])
+    }
+
     func testSnapshotStampsIsFloating() {
         var c = WorkspaceCatalog()
         _ = c.reconcile(live: [window(10), window(20)])

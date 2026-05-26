@@ -139,9 +139,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
                 + "total=\(live.count)")
-            if catalog.mode(of: catalog.activeIndex) == "bsp" {
+            switch catalog.mode(of: catalog.activeIndex) {
+            case "bsp":
                 applyTile(workspace: catalog.activeIndex,
                           rect: rect)
+            case "stack":
+                applyStack(workspace: catalog.activeIndex,
+                           rect: rect)
+            default:
+                break
             }
         }
         workspaceList = catalog.snapshot(
@@ -249,14 +255,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             + "\(plan.newActive) (hide_method="
             + "\(config.effectiveHideMethod))")
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
-        // Phase γ: if the newly-active WS is in `"bsp"` mode,
-        // overlay tree-computed frames on top of the per-mode
-        // restore. Floating windows in the same WS keep the
-        // restoreAnchor / restoreMinimize position; tiled
-        // windows snap to their tree slot.
-        if catalog.mode(of: plan.newActive) == "bsp" {
-            applyTile(workspace: plan.newActive,
-                      rect: activeDisplayRect())
+        // Phase γ: overlay layout-specific frames on top of the
+        // per-mode hide_method restore. Floating windows in the
+        // same WS keep the restoreAnchor / restoreMinimize
+        // position; tiled / stacked windows snap to their
+        // computed frame.
+        let rect = activeDisplayRect()
+        switch catalog.mode(of: plan.newActive) {
+        case "bsp":
+            applyTile(workspace: plan.newActive, rect: rect)
+        case "stack":
+            applyStack(workspace: plan.newActive, rect: rect)
+        default:
+            break
         }
         eventContinuation.yield(.refreshNeeded)
     }
@@ -283,12 +294,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "\(target) outcome=restore")
             applyHide(toPark: [], toRestore: [ref])
         }
-        // Tree changed for source AND/OR destination — both need
-        // a retile if they're in bsp mode and currently active.
-        // Inactive WSs get re-tiled on their next switchWorkspace
-        // (Phase γ: lazy retile).
-        if catalog.mode(of: catalog.activeIndex) == "bsp" {
+        // Layout changed for source AND/OR destination — re-apply
+        // the active WS if its mode produces an on-screen layout.
+        // Inactive WSs catch up on their next switchWorkspace
+        // (Phase γ: lazy retile / re-stack).
+        switch catalog.mode(of: catalog.activeIndex) {
+        case "bsp":
             applyTile(workspace: catalog.activeIndex, rect: rect)
+        case "stack":
+            applyStack(workspace: catalog.activeIndex, rect: rect)
+        default:
+            break
         }
         eventContinuation.yield(.refreshNeeded)
     }
@@ -323,33 +339,87 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
         let target = index + 1
         let rect = activeDisplayRect()
+        // BSP → Stack migration uses the hide_method to park all
+        // but the focused window. To respect that flow, call the
+        // hide_method's park helper for departing tiled members
+        // BEFORE catalog state flips — but the catalog's setMode
+        // already discards layoutTrees / stackOrders entries, so
+        // we instead rely on applyStack post-flip to park
+        // non-top members. Symmetric for Stack → BSP.
         let applied = catalog.setMode(workspace: target,
                                       to: mode, in: rect)
         Log.debug("native: setLayoutMode WS \(target) -> \(applied)")
-        // Re-tile only when the affected WS is currently active —
-        // inactive WSs catch up on next switchWorkspace (Phase γ
-        // lazy retile rule).
-        if target == catalog.activeIndex, applied == "bsp" {
-            applyTile(workspace: target, rect: rect)
+        guard target == catalog.activeIndex else {
+            eventContinuation.yield(.refreshNeeded)
+            return
+        }
+        switch applied {
+        case "bsp":   applyTile(workspace: target, rect: rect)
+        case "stack": applyStack(workspace: target, rect: rect)
+        default:      break
         }
         eventContinuation.yield(.refreshNeeded)
     }
 
     /// `WindowBackend.retileActiveWorkspace` implementation:
-    /// recompute + reapply the active workspace's BSP tree.
-    /// No-op when the active WS isn't in bsp mode. Useful when an
-    /// external resize or a drift from facet's view of the world
-    /// needs a manual fix (`facet --retile`).
+    /// recompute + reapply the active workspace's layout. For
+    /// BSP this re-tiles the tree; for stack this re-stacks
+    /// (top fills, others park). No-op for float mode.
     public func retileActiveWorkspace() {
         let rect = activeDisplayRect()
-        guard catalog.mode(of: catalog.activeIndex) == "bsp"
-        else {
+        switch catalog.mode(of: catalog.activeIndex) {
+        case "bsp":
+            applyTile(workspace: catalog.activeIndex, rect: rect)
+        case "stack":
+            applyStack(workspace: catalog.activeIndex, rect: rect)
+        default:
             Log.debug("native: retile noop "
-                + "(WS \(catalog.activeIndex) not bsp)")
+                + "(WS \(catalog.activeIndex) is float)")
             return
         }
-        applyTile(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Apply stack mode to `n1Based`: the catalog's
+    /// `stackOrder[0]` fills `rect` (un-parked from whichever
+    /// hide_method last held it), all other members are parked
+    /// via the configured hide_method. Floating windows are
+    /// excluded entirely (they live outside the stack). No-op
+    /// when the WS isn't in stack mode or has no members.
+    private func applyStack(workspace n1Based: Int, rect: CGRect) {
+        let order = catalog.stackOrder(of: n1Based)
+        guard let top = order.first else { return }
+        // Top: force visible, full rect. Bypass the regular
+        // restore flow (which would use the recorded
+        // originalPosition); the stack contract is that top
+        // fills the display.
+        if let pid = catalog.pid(for: top),
+           let ax = AXGeom.window(for: CGWindowID(top.serverID),
+                                  pid: pid_t(pid))
+        {
+            if config.effectiveHideMethod == "minimize" {
+                AXUIElementSetAttributeValue(
+                    ax, kAXMinimizedAttribute as CFString,
+                    kCFBooleanFalse)
+            }
+            AXGeom.setPosition(ax, rect.origin)
+            AXGeom.setSize(ax, rect.size)
+            catalog.clearParkedState(of: top)
+        }
+        // Others: park via hide_method (parkAnchor /
+        // parkMinimize own the "skip if already parked" guard).
+        for id in order.dropFirst() {
+            guard let pid = catalog.pid(for: id) else { continue }
+            let ref = WindowRef(id: id, pid: pid)
+            switch config.effectiveHideMethod {
+            case "anchor":   parkAnchor(ref)
+            case "minimize": parkMinimize(ref)
+            default:         break
+            }
+        }
+        Log.debug("native: stack WS \(n1Based) "
+            + "top=\(top.serverID) members=\(order.count) "
+            + "rect=\(rect)")
     }
 
     /// Iterate the WS's tree-computed frames and push each one
@@ -399,55 +469,74 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func perform(_ action: WindowAction) {
-        // Phase γ.1 wires the two BSP-relevant actions:
-        //   - toggleFloat: flip the focused window's float flag;
-        //     non-floating ↔ tile-tree membership shifts in the
-        //     catalog. Re-tile the active WS if it's bsp.
-        //   - toggleOrientation: rotate the focused window's
-        //     parent split (no-op when the WS is not bsp). Then
-        //     re-tile so the new orientation lands on AX.
-        // master_stack / scrolling / cycleStack actions are γ.2+;
-        // they no-op here.
-        guard let id = focusedWindow() else { return }
+        // Phase γ.1 wires toggleFloat + toggleOrientation;
+        // γ.2 adds cycleStackNext / cycleStackPrev. Everything
+        // else (master_stack / scrolling / toggleStack /
+        // toggleFullscreen) is out of γ scope and no-ops here.
         let rect = activeDisplayRect()
         switch action {
         case .toggleFloat:
+            guard let id = focusedWindow() else { return }
             catalog.toggleFloat(id, focused: id, in: rect)
             Log.debug("native: perform toggleFloat "
                 + "\(id.serverID) → "
                 + "isFloating=\(catalog.isFloating(id))")
-            if catalog.mode(of: catalog.activeIndex) == "bsp" {
-                applyTile(workspace: catalog.activeIndex,
-                          rect: rect)
-            }
+            reapplyActive(rect: rect)
             eventContinuation.yield(.refreshNeeded)
         case .toggleOrientation:
+            guard let id = focusedWindow() else { return }
             catalog.toggleOrientation(of: id)
             Log.debug("native: perform toggleOrientation "
                 + "\(id.serverID)")
-            if catalog.mode(of: catalog.activeIndex) == "bsp" {
-                applyTile(workspace: catalog.activeIndex,
-                          rect: rect)
-            }
+            reapplyActive(rect: rect)
             eventContinuation.yield(.refreshNeeded)
+        case .cycleStackNext, .cycleStackPrev:
+            // Cycle is per-active-WS; no need for `focusedWindow`
+            // — the catalog owns "who's the current top" via the
+            // stack-order array, not via OS focus.
+            let direction: WorkspaceCatalog.CycleDirection =
+                action == .cycleStackNext ? .next : .prev
+            let newTop = catalog.cycleStack(
+                workspace: catalog.activeIndex,
+                direction: direction)
+            Log.debug("native: perform \(action) → newTop="
+                + "\(newTop?.serverID.description ?? "nil")")
+            if newTop != nil {
+                applyStack(workspace: catalog.activeIndex,
+                           rect: rect)
+                eventContinuation.yield(.refreshNeeded)
+            }
         default:
-            // toggleFullscreen / promoteToMaster / swapMasterStack /
-            // toggleStack / centerColumn / snapStrip — out of γ.1
-            // scope. No-op rather than no-op-with-error, since the
-            // menu builder hides these from the user; we only
-            // reach this case if a script invokes them directly.
             break
         }
     }
 
+    /// Re-apply the active workspace's mode-specific layout (tile
+    /// or stack). Shared tail of every `perform` mutation that
+    /// can affect on-screen geometry.
+    private func reapplyActive(rect: CGRect) {
+        switch catalog.mode(of: catalog.activeIndex) {
+        case "bsp":   applyTile(workspace: catalog.activeIndex,
+                                rect: rect)
+        case "stack": applyStack(workspace: catalog.activeIndex,
+                                 rect: rect)
+        default:      break
+        }
+    }
+
     public func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem] {
-        // γ.1 surfaces toggleFloat (always applicable) and
-        // toggleOrientation (bsp only). Stack-mode items
-        // (cycleStack, promoteToMaster) come with γ.2+.
+        // γ.1 surfaced toggleFloat + toggleOrientation; γ.2 adds
+        // the cycle-stack items when the WS is in stack mode.
         var items: [WindowMenuItem] = []
         if mode == "bsp", !floating {
             items.append(.init("Toggle orientation",
                                [.toggleOrientation]))
+        }
+        if mode == "stack", !floating {
+            items.append(.init("Next stack window",
+                               [.cycleStackNext]))
+            items.append(.init("Previous stack window",
+                               [.cycleStackPrev]))
         }
         items.append(.init(floating ? "Unfloat" : "Float",
                            [.toggleFloat]))
