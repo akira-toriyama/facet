@@ -1,25 +1,19 @@
 // Top-level orchestrator. Wires:
-//   - a ``WindowBackend`` (rift adapter today)
+//   - a ``WindowBackend`` (rift or native, selected at startup)
 //   - the tree view (``SidebarView``) + its panel chrome
 //     (``PanelHost``)
+//   - the grid view + its overlay lifecycle
 //   - the event stream (``backend.events`` → AsyncStream Task →
-//     debounced refresh)
-//   - the periodic poll fallback (catches backends that don't emit
-//     events, e.g. rift before subscribe lands)
+//     debounced refresh) and a periodic poll fallback for backends
+//     that don't emit
 //   - ``AXTitles`` resolve to fill in titles the backend left blank
 //   - the focus retry state machine (``Focus.withRetry`` /
 //     ``Focus.assert``)
+//   - keyboard-nav (``--active``) + search
+//   - distributed-notification CLI IPC
 //
 // Conforms to ``TreeController`` so ``SidebarView`` can talk to it
 // without knowing about any of the above.
-//
-// Things explicitly NOT here:
-//   - grid view lifecycle              → step 6f
-//   - keyboard-nav (--active) + search → step 6g
-//   - distributed-notification CLI IPC → step 6h
-//
-// ``previewTargetChanged`` / ``exitActive`` are stubbed here and
-// wired up in those follow-up steps.
 
 import AppKit
 import FacetCore

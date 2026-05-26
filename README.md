@@ -106,8 +106,9 @@ so the overlay opens with real screenshots, not icon fallbacks.
 **Alpha** — feature parity with ws-tabs v1.6 reached (M2),
 shipping via Homebrew (M3), ws-tabs archived (M4). Both views
 work, the CLI is settled, `brew install akira-toriyama/tap/facet`
-is live. Next up: the native AX/CGS backend (M5+) to drop the
-rift-cli dependency.
+is live. The **native AX backend** (M5 Phase α/β) is opt-in:
+`FACET_BACKEND=native` enables workspace switching + window park
+(anchor / minimize) without `rift-cli`. Default still rift.
 
 | Milestone | Status |
 |---|---|
@@ -115,7 +116,9 @@ rift-cli dependency.
 | M2 — tree + grid views working through `FacetAdapterRift` | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs archived | ✅ |
-| M5+ — `FacetAdapterNative` Phases α–ε | ⏳ |
+| M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
+| M5 Phase β — anchor / minimize hide, closeWindow | ✅ opt-in |
+| M5 Phase γ–ε — tiling, display reconfigure, rift retire | ⏳ |
 
 See [docs/architecture.md](docs/architecture.md) for the layer
 diagram and the migration plan.
@@ -152,6 +155,31 @@ and never writes to it. See [config.toml](config.toml) at the repo
 root for every option + inline docs. Runtime CLI overrides
 (`facet --theme=cute` etc.) apply for the current session only;
 edit the file to make a change stick.
+
+Frequently-touched keys:
+
+- `[appearance] theme` — `terminal` (default) / `cute` / `system`
+- `[layout] default_view` — `tree` / `grid`
+- `[workspace] hide_method` — `anchor` (default, 1×41 px corner park,
+  instant) / `minimize` (Dock genie, cleaner but slower). Only used
+  when `FACET_BACKEND=native` is active.
+- `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
+  sparse OK; missing slots → `N` invalid for `--workspace=N`).
+
+### Native backend (M5 alpha)
+
+The native AX backend is opt-in via env var; nothing in
+`config.toml` selects it.
+
+```sh
+FACET_BACKEND=native ./run.sh                      # .app bundle
+FACET_BACKEND=native .build/release/facet --debug  # raw
+# unset or set =rift for the default RiftAdapter
+```
+
+`./run.sh` forwards the env into the bundle via `open --env`.
+Once selected, `--workspace=N` and `window --move-to=N` operate
+on facet-managed workspace state instead of rift's.
 
 ## CLI
 

@@ -47,6 +47,13 @@ use:
 .build/release/facet --debug 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log &
                   # foreground server with verbose log (timestamped so
                   # runs don't pile up); read the file directly to inspect
+
+# Backend selection (M5 Phase α/β opt-in)
+FACET_BACKEND=native ./run.sh                          # .app bundle
+FACET_BACKEND=native .build/release/facet --debug      # raw
+# omit env (or set =rift) for the default RiftAdapter. run.sh
+# forwards FACET_BACKEND into the .app via `open --env`
+# (Sources/FacetApp/Main.swift reads it at startup).
 ```
 
 - **The agent may run `./stop.sh` / `./run.sh` / `swift build`
@@ -125,8 +132,11 @@ use:
 - **AX helpers live in `FacetAccessibility`** (extracted from
   `FacetAdapterRift` at M5 once the native adapter became the
   second consumer). `AXFocus`, `AXTitles`, `Focus.assert` /
-  `withRetry` are shared by both adapters. New AX code goes here
-  unless it's truly backend-specific.
+  `withRetry`, `AXGeom` (window lookup / position / size / close
+  button), `Displays` (screen-containing-point), and
+  `WindowEventObserver` (per-app AX subscription) are all shared
+  by both adapters. New AX code goes here unless it's truly
+  backend-specific.
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. NOT `com.wstabs.app` —
   separate TCC grants, separate self-signed cert. Don't reuse
