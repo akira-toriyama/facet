@@ -378,7 +378,8 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testSnapshotStampsFocusedFlag() {
-        let c = WorkspaceCatalog()
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
         let snap = c.snapshot(
             live: [window(10), window(20)],
             focused: wid(20),
@@ -391,16 +392,19 @@ final class WorkspaceCatalogTests: XCTestCase {
                        false)
     }
 
-    func testSnapshotFallsBackToActiveForUnmappedWindow() {
-        // Window not in windowMap → snapshot puts it in activeIndex
-        // (covers the race where snapshot runs before reconcile).
+    func testSnapshotSkipsWindowsNotInMap() {
+        // Live windows that reconcile hasn't accepted (off-screen on
+        // first sight, marked pre-existing at startup / Space change,
+        // etc.) are filtered out of the per-WS snapshot. Previously
+        // they fell back to `activeIndex` — that surfaced as the
+        // "145 windows in WS1" bug after the `.optionAll` switch.
         var c = WorkspaceCatalog()
         _ = c.setActive(2, configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [window(99)], focused: nil,
             activeRect: .zero,
             configured: defaultConfiguredPairs())
-        XCTAssertEqual(snap[1].windows.map(\.id), [wid(99)])
+        XCTAssertEqual(snap.flatMap(\.windows).count, 0)
     }
 
     // MARK: - Phase γ.1 — layout modes + floating + tile
