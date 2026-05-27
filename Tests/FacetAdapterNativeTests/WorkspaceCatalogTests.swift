@@ -325,9 +325,19 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testDropIsIdempotent() {
+        // Two paths: drop on a never-known id, and drop twice on
+        // the same id. Both must leave the catalog in an empty
+        // / consistent state (no crash, no stale entries).
         var c = WorkspaceCatalog()
         c.drop(wid(10))
-        c.drop(wid(10))
+        XCTAssertNil(c.windowMap[wid(10)])
+        XCTAssertFalse(c.anchorParked.contains(wid(10)))
+
+        _ = c.reconcile(live: [window(20)])
+        c.drop(wid(20))
+        c.drop(wid(20))
+        XCTAssertNil(c.windowMap[wid(20)])
+        XCTAssertEqual(c.windowMap.count, 0)
     }
 
     // MARK: - Snapshot (0-based wire convention)
@@ -597,6 +607,8 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
         XCTAssertNil(c.cycleStack(workspace: 1, direction: .next))
+        XCTAssertEqual(c.stackOrder(of: 1), [],
+                       "empty order must stay empty post-cycle")
     }
 
     func testDropEvictsFromStackOrder() {
@@ -630,6 +642,26 @@ final class WorkspaceCatalogTests: XCTestCase {
                          configuredIndexes: defaultConfigured,
                          in: displayRect)
         XCTAssertEqual(c.stackOrder(of: 2), [wid(10)])
+    }
+
+    func testSetModeFlipWithFiveMembersPreservesAllAcrossBspStackBsp() {
+        // Mode flipping a populated WS shouldn't drop members.
+        // BSP → Stack → BSP with 5 windows: every id survives,
+        // and the final BSP tree contains the same id set.
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: (10...14).map { window($0) })
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        let bspIDs = Set(c.tiledFrames(for: 1, in: displayRect).keys)
+        XCTAssertEqual(bspIDs.count, 5)
+        _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
+        XCTAssertEqual(Set(c.stackOrder(of: 1)),
+                       Set((10...14).map(wid)),
+                       "stack must inherit all bsp members")
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        let bspIDs2 = Set(c.tiledFrames(for: 1, in: displayRect).keys)
+        XCTAssertEqual(bspIDs2, bspIDs,
+                       "round-trip bsp→stack→bsp preserves the "
+                       + "id set in the tree")
     }
 
     func testSetModeFlipReplacesLayoutKind() {
@@ -693,6 +725,23 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertFalse(c.isFloating(wid(10)),
                        "autoFloat is a first-sight hint, not a "
                        + "policy override")
+    }
+
+    func testReconcileAutoFloatTakesEffectInNonActiveWorkspace() {
+        // Per Phase γ.3: autoFloat applies to every new window
+        // regardless of which WS landed it. If the user opens a
+        // dialog while not on WS 1 (e.g. they're on WS 3 and
+        // window appears there), it should still auto-float.
+        var c = WorkspaceCatalog()
+        _ = c.setActive(3, configuredIndexes: defaultConfigured)
+        _ = c.setMode(workspace: 3, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10)],
+                        focused: nil, activeRect: displayRect,
+                        autoFloat: [wid(10)])
+        XCTAssertTrue(c.isFloating(wid(10)),
+                      "autoFloat must work in non-WS-1 contexts")
+        XCTAssertEqual(c.tiledFrames(for: 3, in: displayRect), [:],
+                       "floating new window must skip the WS3 tree")
     }
 
     // MARK: - Misc state helpers
