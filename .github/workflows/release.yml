@@ -92,9 +92,7 @@ jobs:
 
           Then grant **Accessibility** to *facet* (System Settings →
           Privacy & Security → Accessibility), and **Screen Recording**
-          if you want grid-view thumbnails. Requires
-          [rift](https://github.com/acsandmann/rift) + `rift-cli` on
-          PATH.
+          if you want grid-view thumbnails.
           EOF
 
       - name: Build Facet.app + zip
