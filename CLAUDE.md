@@ -497,3 +497,33 @@ scientific debugging, bisection.*
   bumps on every published release. Consult when authoring or
   modifying the formula at ``akira-toriyama/homebrew-tap``.
 
+### Sandbox / VM testing
+*Clean-environment verification for host-affecting changes.*
+
+- [Tart](https://github.com/cirruslabs/tart)
+  *(reviewed 2026-05-27)* — Apple Virtualization.Framework-based
+  macOS VM tool. facet uses it for clean-environment
+  verification (v1→v2 upgrade smoke, fresh AX-permission grant
+  flow, destructive `--set-layout=bsp` sweeps that would
+  scramble the host's real windows, future facet-x SIP-off
+  isolation). Subcommands relied on: ``clone`` (APFS COW —
+  fast, only differences claim space), ``run`` (with
+  ``--no-graphics`` for headless + ``tart ip`` for SSH, or
+  ``--vnc`` for GUI capture), ``suspend`` (pauses execution
+  preserving state — combined with ``clone`` gives
+  snapshot-equivalent operation), ``exec`` (run a command in
+  the VM without going through SSH), ``set`` (post-creation
+  config including display resolution; default is
+  ``1024x768``), ``delete`` / ``prune`` (cleanup).
+  Trust boundary + standard workflow: ``tart-vm-testing-workflow``
+  memory; specific verification cycles:
+  ``tart-vm-verification-results-2026-05-27``.
+- [tart.run](https://tart.run/quick-start/)
+  *(reviewed 2026-05-27)* — official quick-start. Base image
+  catalog is ``ghcr.io/cirruslabs/macos-<release>-base``
+  (e.g. ``macos-sequoia-base``); SSH defaults to
+  ``admin``/``admin`` with NOPASSWD sudo. The quick-start
+  mostly documents the happy path — for sharper operational
+  detail (esp. snapshot / suspend / exec / clone semantics),
+  reach for ``tart help <subcommand>`` directly.
+
