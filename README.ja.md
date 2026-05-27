@@ -10,14 +10,13 @@
 macOS 向け Swift 製ワークスペース + ウィンドウマネージャ。 同じ
 ワークスペースモデルを **複数の view から切り替えて見る**
 （半透明ツリーサイドバー、 TS3 風フルスクリーンオーバービュー、
-将来の dock / hover / palette 等）。 backend も差し替え可能で、
-現状は `rift-cli`、 将来は AX/CGS を直接叩く native adapter へ
-段階移行する。
+将来の dock / hover / palette 等）。 backend は AX/CGS を直接叩く
+native 実装、 外部依存なし。
 
 facet は [ws-tabs](https://github.com/akira-toriyama/ws-tabs) の
 アーキテクチャ後継。 ws-tabs v1.6 で完成した grid view の DnD
 （macOS が Big Sur で壊した TS3 "ウィンドウを別 Space にドラッグ"
-UX を rift-cli 経由で復活させたもの）を、 クリーンな三層構造に
+UX を復活させたもの）を、 クリーンな三層構造に
 リストラクチャして持ち込み済み。 詳細は
 [docs/architecture.md](docs/architecture.md)。
 
@@ -27,7 +26,7 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 ワークスペースを 2 種類の view で見せる。 起動時にどちらを表示する
 かは [`config.toml`](config.toml) の `default_view` で選ぶ:
 
-- **Tree** — 半透明・常時最前面のサイドバー。 rift 各ワークスペースと
+- **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
   その windows をツリー表示。 行クリックで focus、 行ドラッグで window
   を別 ws に移動、 ホバーで実画面プレビュー。
 - **Grid** — フルスクリーンの TS3 風オーバービュー。 1 セル =
@@ -36,8 +35,8 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   swap)。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
   で閉じる。
 
-両 view は同じ backend (現状 `rift-cli`、 将来 swap 可) と同じ
-テーマ (terminal / cute / system、 ライブ切替) を共有。
+両 view は同じ backend と同じテーマ (terminal / cute / system、
+ライブ切替) を共有。
 
 ## 操作
 
@@ -79,10 +78,9 @@ tree パネルは focus を持っている間、 キー入力に反応する。 
 | `Return` | 切替 + focus (クリックと同等) |
 | `Esc` | filter クリア → keyboard mode 抜ける (パネルは表示維持) |
 
-window タイトルは rift から取得、 rift が空を返す app
-(Chrome / Code 等) は Accessibility (`kAXTitle`、 CGWindowID で
-照合、 短 TTL キャッシュ) で解決。 タイトル解決できない行はコンパクト
-表示。 Accessibility 権限必要 (クリックと同じ grant)。
+window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
+照合、 短 TTL キャッシュ) で解決。 タイトル解決できない行は
+コンパクト表示。 Accessibility 権限必要 (クリックと同じ grant)。
 
 ### Grid オーバービューのキーボード操作
 
@@ -102,25 +100,22 @@ window タイトルは rift から取得、 rift が空を返す app
 
 ## ステータス
 
-**Alpha** — ws-tabs v1.6 との feature parity 達成 (M2)、 Homebrew
-配布 (M3)、 ws-tabs archive (M4) 完了。 両 view 動作、 CLI 確定、
-`brew install akira-toriyama/tap/facet` 稼働中。 **native AX
-backend** (M5 Phase α〜γ) は opt-in: `FACET_BACKEND=native` で
-rift-cli 無しに workspace 切替 / window park (anchor / minimize) /
-BSP・stack tiling / AX role auto-float が動く。 default は rift。
+**Alpha** — native AX backend、 外部依存なし。 workspace 切替 /
+window park (anchor / minimize) / BSP・stack tiling / AX role
+auto-float / display reconfigure 処理が全て default で動作。
+`brew install akira-toriyama/tap/facet` 稼働中。
 
 | マイルストーン | 状態 |
 |---|---|
 | M1 — repo scaffold、 `swift build` green | ✅ |
-| M2 — tree + grid view が `FacetAdapterRift` 経由で動作 | ✅ |
+| M2 — tree + grid view 動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs を archive | ✅ |
-| M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
-| M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ opt-in |
-| M5 Phase γ.1 — BSP tiling core (auto-balance、 toggleFloat / toggleOrientation、 CLI) | ✅ opt-in |
-| M5 Phase γ.2 — stack mode (focused-fills + cycle next/prev) | ✅ opt-in |
-| M5 Phase γ.3 — AX role auto-float (sheet / dialog は tiler に乗らない) | ✅ opt-in |
-| M5 Phase δ–ε — display reconfigure、 rift retire | ⏳ |
+| M5 Phase α — native workspaces + focus + AX events | ✅ |
+| M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ |
+| M5 Phase γ — BSP + stack tiling、 AX-role auto-float、 tiling CLI | ✅ |
+| M5 Phase δ — display reconfigure | ✅ |
+| M5 Phase ε — native sole backend (v2.0.0) | ✅ |
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
 
@@ -140,8 +135,7 @@ curl --create-dirs -o ~/.config/facet/config.toml \
 初回起動時、 *facet* に **Accessibility** 権限を付与 (System
 Settings → Privacy & Security → Accessibility)、 でないとクリック /
 ドラッグが効かない。 grid view のサムネイルが欲しければ **Screen
-Recording** も付与。 [rift](https://github.com/acsandmann/rift) +
-`rift-cli` が PATH 上に必要。
+Recording** も付与。
 
 `curl` の行で詳細コメント付きの [config.toml](config.toml) が
 配置される。 デフォルト値は妥当で、 そのまま起動すれば tree view
@@ -161,8 +155,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[appearance] theme` — `terminal` (default) / `cute` / `system`
 - `[layout] default_view` — `tree` / `grid`
 - `[workspace] hide_method` — `anchor` (default、 1×41 px corner park、
-  即座) / `minimize` (Dock genie、 見栄え良いが遅い)。 `FACET_BACKEND=native`
-  時のみ使用。
+  即座) / `minimize` (Dock genie、 見栄え良いが遅い)。
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
 - `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
@@ -209,21 +202,6 @@ facet --workspace=1     # 最後に「見たい WS」 に戻して終了
 - full restart 時のみ再実行、 `facet --reload` では走らない (意図的)。
 - stdout / stderr は `/tmp/facet.log` に記録される (`facet --debug` で可視化)。
 
-### Native backend (M5 alpha)
-
-native AX backend は env var で opt-in、 `config.toml` からは
-選択しない。
-
-```sh
-FACET_BACKEND=native ./run.sh                      # .app バンドル
-FACET_BACKEND=native .build/release/facet --debug  # 生プロセス
-# unset または =rift で default RiftAdapter
-```
-
-`./run.sh` は `open --env` でバンドルに env を引き渡す。 選択後、
-`--workspace=N` と `window --move-to=N` は rift 経由ではなく
-facet 自前の workspace state を操作する。
-
 ## CLI
 
 facet は **CLI 駆動**: 小さな flag set が稼働中の server に
@@ -237,7 +215,7 @@ facet --view=NAME [--active]      # NAME 開く (idempotent)
 facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
 
-# Tiling (M5 Phase γ — FACET_BACKEND=native のみ)
+# Tiling (M5 Phase γ)
 facet --set-layout=NAME              # active WS の mode (bsp | stack | float)
 facet --retile                       # active WS のレイアウトを再適用 (bsp / stack)
 facet window --toggle-float          # focused window の float flag flip
@@ -345,14 +323,11 @@ swift test           # XCTest — Xcode 必要 (CLT には入ってない)
 
 ## 正直な制限事項
 
-- **Apple Silicon 専用**。 Intel Mac は対象外 (rift CLI path
-  `/opt/homebrew/bin/rift-cli` は意図的に固定 — M5+ で rift
-  adapter 自体を native adapter に丸ごと置き換える前提)。
-- **シングルディスプレイ前提** (rift が 1 つを返す)。 multi-display
-  での layout / preview 位置 は未検証。
+- **Apple Silicon 専用**。 Intel Mac は対象外。
+- **multi-display の layout / preview 位置は軽くしかテストして
+  いない** — 主開発機がシングルディスプレイ。 multi-monitor 環境
+  で挙動がおかしい場合は再現手順付きで issue 報告を。
 - **window preview は macOS 14+** + Screen Recording 権限が必要。
-  プレビューの表示位置に rift の論理 frame を使うため、 multi-display
-  の caveat はここにも適用。
 - **Ad-hoc 署名は rebuild ごとに Accessibility 再要求**。
   `./setup-signing-cert.sh` を 1 度走らせると persistent な
   self-signed identity ができ、 rebuild 跨ぎで TCC grant が維持

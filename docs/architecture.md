@@ -5,8 +5,10 @@ spiritual successor to [ws-tabs](https://github.com/akira-toriyama/ws-tabs).
 The split into **Core / Adapter / View** is the central design idea:
 the same pure-logic core can drive multiple UI surfaces (tree
 sidebar, full-screen overview grid, future docks/hovers), and the
-same UI works against multiple backends (`rift-cli` today, native
-AX/CGS later).
+same UI works against the native AX / CGS backend
+(`FacetAdapterNative`). The `WindowBackend` protocol seam stays in
+place so the deep-core (`facet-x`, M6+) adapter can slot in later
+without surface-core surgery.
 
 ## Layers
 
@@ -25,18 +27,18 @@ AX/CGS later).
               │                 │  GUI / OS / backend non-依存
               └────────┬────────┘
                        │
-       ┌───────────────┴───────────────┐
-       │                               │
-┌──────┴────────────┐         ┌────────┴──────────┐
-│  FacetAdapterRift │         │ FacetAdapterNative│  adapter
-│   (rift-cli IPC)  │         │  (AX / CGS / SLS) │
-└───────────────────┘         └───────────────────┘
+              ┌────────┴──────────┐
+              │ FacetAdapterNative│  adapter
+              │  (AX / CGS / dlsym private symbols) │
+              └───────────────────┘
 ```
 
 `FacetCore` defines a `WindowBackend` protocol (workspaces, move,
-focus, switch, layout, display, event stream, …). Adapters implement
-it. The app picks an adapter at startup and the rest of the code is
-unaware which one is in use.
+focus, switch, layout, display, event stream, …) — single
+implementation today (`FacetAdapterNative`), but the protocol
+seam is preserved so the deep-core (`facet-x`, M6+) adapter can
+plug in alongside without surface-core changes
+(`facet-sip-off-core-plan` memory).
 
 ## Why three layers, not two
 
@@ -57,10 +59,10 @@ unaware which one is in use.
 | Phase | Goal | Done when |
 |---|---|---|
 | **M1** | Repo scaffolded, multi-target Package.swift builds | `swift build` / `swift test` green |
-| **M2** | tree + grid views + CLI working through `FacetAdapterRift` | feature parity with ws-tabs v1.6 |
+| **M2** | tree + grid views + CLI working (originally via rift adapter, retired at ε) | feature parity with ws-tabs v1.6 |
 | **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
 | **M4** | ws-tabs **archived** (README links forward to facet) | ws-tabs README updated, repo archived on GitHub |
-| **M5+** | Native adapter Phase α–ε (long arc, no deadline) — **surface-core**. α/β/γ shipped, δ/ε pending | see below |
+| **M5+** | Native adapter Phase α–ε — **surface-core**. All five phases shipped (α/β/γ.1/γ.2/γ.3/δ/ε); v2.0.0 retired rift, native is the only backend | see below |
 | **M6+** | **deep-core (`facet-x`) — SIP-off opt-in binary, MVP = 完全 hide のみ** | see [`facet-sip-off-core-plan` memory] |
 
 ## Native adapter phases
@@ -74,11 +76,11 @@ below).
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. **Status (2026-05-26)**: workspace state + reconcile + focusedWindow + AX-driven event subscription landed (`FACET_BACKEND=native` opt-in usable) | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
-| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook all landed | rift `wm/window`, yabai window mgmt |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Shipped 2026-05-26**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
-| **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen 2026-05-27**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | rift `display` |
-| **ε** | deprecate `FacetAdapterRift`; native becomes default | — |
+| **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
+| **ε** | `FacetAdapterRift` retire; native becomes the only backend. **Frozen + shipped 2026-05-27 (v2.0.0 major bump)**: rift module deleted, `FACET_BACKEND` env var removed (kept as warning hint only), `WindowBackend` protocol preserved for `facet-x` (M6+) seam. M5 surface-core completes here. | — |
 
 Each phase is gated by being usable end-to-end through the view layer
 — no Phase α–δ landings ship unless the existing UI still works
@@ -257,6 +259,48 @@ report — the response logic is already there.
 
 Memory cross-reference: `facet-phase-delta-decisions`.
 
+### Phase ε frozen decisions (2026-05-27)
+
+Phase ε is the M5 surface-core finisher: retire the rift
+adapter, make native the only backend, bump to v2.0.0. Details
+live in memory (`facet-phase-epsilon-decisions`); this section
+is the index. **Do not relitigate** without explicit grill
+round.
+
+- **End state**: `FacetAdapterRift` module is **fully deleted**.
+  `FACET_BACKEND` env var is removed as a switch — kept *only*
+  as a startup-warning hint so users who had
+  `FACET_BACKEND=rift` set in their shell see a `Log.line`
+  explaining v2.0 dropped the rift adapter. `rift-cli`
+  dependency is gone; the brew formula was always runtime-dep
+  free so no formula change.
+- **Phasing**: single PR. Deletion-heavy (~1500 line churn,
+  almost all subtractions); no intermediate state.
+- **`WindowBackend` protocol**: **preserved**. surface-core
+  ships with one implementation (`FacetAdapterNative`) but the
+  seam stays for `facet-x` (M6+) and for unit-test stubs.
+  Surface (`name`, `layoutModes`, etc.) kept — simplifying now
+  would force re-adding when `facet-x` arrives. Per
+  `facet-sip-off-core-plan` memory.
+- **Versioning**: major bump v1.x.y → **v2.0.0**. Commit
+  message carries `BREAKING CHANGE:` footer so `git-cliff`
+  derives the bump automatically. README milestone row
+  records "v2.0.0: rift retired".
+- **Migration messaging**: friendly hint, not error.
+  `FACET_BACKEND=rift` upgrade case prints one `Log.line`
+  ("FACET_BACKEND is no longer used; native is the only
+  backend"). Silent ignore considered (less helpful) and
+  hard error considered (too disruptive); hint is the
+  Goldilocks. Warning code itself is removable in a later
+  polish PR once v2.0 has settled.
+- **Memory**: `rift-restart-gotcha` and
+  `rift-workspace-names-config-reapply` are kept as
+  historical (`applies to facet ≤ v1.x` banner added); the
+  ws-tabs-era knowledge they carry stays useful for users
+  running rift standalone.
+
+Memory cross-reference: `facet-phase-epsilon-decisions`.
+
 ## Two-binary structure (surface-core + deep-core)
 
 Decided 2026-05-24. facet is **1 repo / 2 products** rather than
@@ -303,7 +347,7 @@ two vocabularies don't drift apart:
 | Pattern | facet implementation |
 |---|---|
 | **Clean Architecture — Domain** (Entity + Repository protocol) | `FacetCore` (`Workspace`, `Window`, `WindowID`, `WindowAction`, `WindowBackend` protocol) |
-| **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterRift` (`RiftAdapter`, `RFTypes`, `RiftMapper`, `EventSource`) |
+| **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterNative` (`NativeAdapter`, `WorkspaceCatalog`, `LayoutTree`) + `FacetAccessibility` (AX helpers) |
 | **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid` (AppKit-bound) |
 | **Clean Architecture — Application** (DI + Coordinator) | `FacetApp` (`Controller` + `Main`) |
 | **Clean Architecture — Use Case (Interactor)** | *NOT a separate layer* — see below |
@@ -311,7 +355,7 @@ two vocabularies don't drift apart:
 | **DDD — Value Object** | `WindowID`, `Palette`, `FontKind`, `CGRect`, `GridConfig` |
 | **DDD — Aggregate Root** | `Workspace` (owns its `windows`) |
 | **DDD — Repository** | `WindowBackend` protocol |
-| **DDD — Domain Service** | `Focus.assert` / `Focus.withRetry`, `AXTitles.resolve`, `RiftMapper.workspace(from:)`, `gridScaledWindowRect` |
+| **DDD — Domain Service** | `Focus.assert` / `Focus.withRetry`, `AXTitles.resolve`, `WorkspaceCatalog` reconciliation, `DisplayGeometry` queries, `gridScaledWindowRect` |
 | **DDD — Domain Event** | `BackendEvent` (consumed via `AsyncStream`) |
 | **DDD — Bounded Context** | one binary = one context, no inter-context translation needed |
 
@@ -381,7 +425,7 @@ windows or hosts.
 |---|---|
 | `SidebarView` + handle drag / DnD logic | `FacetViewTree` |
 | `GridView` + GridOverlay, `FacetCore` drag-state lifecycle | `FacetViewGrid` |
-| `Controller`, `RiftBackend` (rift-cli spawn / event subscribe) | `FacetAdapterRift` + `FacetApp` |
+| `Controller`, `RiftBackend` (rift-cli spawn / event subscribe) | originally `FacetAdapterRift` + `FacetApp`; rift adapter retired at Phase ε (v2.0.0) — `FacetApp` only |
 | `Palette`, `pal`, theme system, `uiFont` | `FacetView` |
 | `WsTabsConfig` (TOML), `parseTOMLSubset` | `FacetCore` |
 | `WindowPreview` (ScreenCaptureKit), AX titles | `FacetView` (capture) + `FacetCore` (state) |
