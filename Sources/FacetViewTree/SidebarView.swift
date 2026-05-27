@@ -674,7 +674,13 @@ public final class SidebarView: NSView {
                 ?? WindowID(serverID: -1)
             setOptimistic(windowID: pred, workspaceIndex: i)
             let bk = backend
-            cliQueue.async { bk.switchWorkspace(toIndex: i) }
+            // Header click = no explicit window pick. Auto-focus
+            // the same `pred` chain the optimistic highlight just
+            // settled on (catalog.autoFocusTarget matches this
+            // logic), or activate Finder when the WS is empty.
+            cliQueue.async {
+                bk.switchWorkspace(toIndex: i, autoFocus: true)
+            }
         case .window(let i, let pid, let id, let title):
             // Off main so the click never hitches; skip the switch
             // round-trip when the window is already on the active

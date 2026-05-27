@@ -24,7 +24,9 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
     func workspaces() -> [Workspace] { state }
     func focusedWindow() -> WindowID? { focused }
 
-    func switchWorkspace(toIndex index: Int) { switched.append(index) }
+    func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
+        switched.append(index)
+    }
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
         moved.append((id, index))
     }

@@ -63,7 +63,19 @@ public protocol WindowBackend: Sendable {
     func workspaces() -> [Workspace]
     func focusedWindow() -> WindowID?
 
-    func switchWorkspace(toIndex index: Int)
+    /// Switch the active workspace.
+    /// - Parameters:
+    ///   - index: 0-based workspace index (CLI / catalog use 1-based;
+    ///     translation happens at the seam).
+    ///   - autoFocus: when `true`, the backend should focus the
+    ///     window the user was last on in the destination WS — or,
+    ///     when the destination is empty, defocus the source WS's
+    ///     window (e.g. activate Finder). Callers that already
+    ///     pick an explicit window to focus right after the switch
+    ///     (tree window-row click, grid window-thumb click, etc.)
+    ///     should leave this `false` to avoid a redundant AX write
+    ///     plus a brief flicker before the explicit pick wins.
+    func switchWorkspace(toIndex index: Int, autoFocus: Bool)
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)
@@ -102,4 +114,13 @@ public protocol WindowBackend: Sendable {
     /// only push messages a *user* could act on — internal
     /// debugging chatter belongs in `Log.debug` instead.
     var errors: AsyncStream<String> { get }
+}
+
+public extension WindowBackend {
+    /// Convenience for callers that don't care about auto-focus
+    /// (the majority). Keeps the call sites that already follow
+    /// up with `Focus.assert` etc. terse.
+    func switchWorkspace(toIndex index: Int) {
+        switchWorkspace(toIndex: index, autoFocus: false)
+    }
 }
