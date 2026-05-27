@@ -9,15 +9,10 @@
 
 A Swift workspace + window manager for macOS. The same workspace
 model viewed through pluggable surfaces — a translucent tree
-sidebar, a TS3-style full-screen overview grid, and future docks /
-hovers / palettes — all driven by a native AX/CGS backend with no
-external dependency.
-
-facet is the architectural successor to
-[ws-tabs](https://github.com/akira-toriyama/ws-tabs). The grid view
-DnD from ws-tabs v1.6 (which revived TS3's "drag windows between
-Spaces" UX that macOS broke in Big Sur) is lifted in alongside
-a clean three-layer split. See [docs/architecture.md](docs/architecture.md).
+sidebar, a full-screen overview grid, and future docks / hovers /
+palettes — all driven by a native AX/CGS backend with no external
+dependency. See [docs/architecture.md](docs/architecture.md) for
+the layer diagram.
 
 ## What it does
 
@@ -29,11 +24,11 @@ via [`config.toml`](config.toml):
   workspace and its windows as a tree. Click rows to focus,
   drag rows to move windows between workspaces, hover for a live
   on-screen preview.
-- **Grid** — a full-screen TS3-style overview with one cell per
-  workspace, real ScreenCaptureKit thumbnails, and DnD between
-  cells (window move on plain drag; entire-cell swap on
-  Shift+Drag). The grid is summoned on demand
-  (`facet --view=grid`) and dismissed with Esc / backdrop click.
+- **Grid** — a full-screen overview with one cell per workspace,
+  real ScreenCaptureKit thumbnails, and DnD between cells (window
+  move on plain drag; entire-cell swap on Shift+Drag). The grid is
+  summoned on demand (`facet --view=grid`) and dismissed with Esc /
+  backdrop click.
 
 Both views share the same backend and the same theme
 (terminal / cute / system, live toggleable).
@@ -112,7 +107,6 @@ is live.
 | M1 — repo scaffolded, `swift build` green | ✅ |
 | M2 — tree + grid views working | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
-| M4 — ws-tabs archived | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
 | M5 Phase β — anchor / minimize hide, closeWindow, setupFiles | ✅ |
 | M5 Phase γ — BSP + stack tiling, AX-role auto-float, tiling CLI | ✅ |
@@ -263,6 +257,22 @@ facet's.
 
 facet exposes only a CLI surface — pick whatever hotkey tool
 you already trust. Quick examples:
+
+**[chord](https://github.com/akira-toriyama/chord)** — sibling
+TOML-driven keyboard + mouse hotkey daemon for macOS. Same
+hexagonal Swift shape as facet; one config file, no GUI.
+
+```toml
+[[bindings]]
+name   = "facet workspace 1"
+input  = "ctrl + alt - 1"
+action-shell = "/opt/homebrew/bin/facet --workspace=1"
+
+[[bindings]]
+name   = "move focused window to workspace 1"
+input  = "ctrl + shift + alt - 1"
+action-shell = "/opt/homebrew/bin/facet window --move-to=1"
+```
 
 **skhd** (`~/.config/skhd/skhdrc`):
 

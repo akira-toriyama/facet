@@ -9,15 +9,9 @@
 
 macOS 向け Swift 製ワークスペース + ウィンドウマネージャ。 同じ
 ワークスペースモデルを **複数の view から切り替えて見る**
-（半透明ツリーサイドバー、 TS3 風フルスクリーンオーバービュー、
+（半透明ツリーサイドバー、 フルスクリーンオーバービュー、
 将来の dock / hover / palette 等）。 backend は AX/CGS を直接叩く
-native 実装、 外部依存なし。
-
-facet は [ws-tabs](https://github.com/akira-toriyama/ws-tabs) の
-アーキテクチャ後継。 ws-tabs v1.6 で完成した grid view の DnD
-（macOS が Big Sur で壊した TS3 "ウィンドウを別 Space にドラッグ"
-UX を復活させたもの）を、 クリーンな三層構造に
-リストラクチャして持ち込み済み。 詳細は
+native 実装、 外部依存なし。 レイヤー図は
 [docs/architecture.md](docs/architecture.md)。
 
 ## 何ができるか
@@ -29,7 +23,7 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 - **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
   その windows をツリー表示。 行クリックで focus、 行ドラッグで window
   を別 ws に移動、 ホバーで実画面プレビュー。
-- **Grid** — フルスクリーンの TS3 風オーバービュー。 1 セル =
+- **Grid** — フルスクリーンのオーバービュー。 1 セル =
   1 ワークスペース、 ScreenCaptureKit のリアルサムネイル、 セル間 DnD
   (通常ドラッグで window 移動、 Shift+ドラッグでセル丸ごと内容
   swap)。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
@@ -110,7 +104,6 @@ auto-float / display reconfigure 処理が全て default で動作。
 | M1 — repo scaffold、 `swift build` green | ✅ |
 | M2 — tree + grid view 動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
-| M4 — ws-tabs を archive | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
 | M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ |
 | M5 Phase γ — BSP + stack tiling、 AX-role auto-float、 tiling CLI | ✅ |
@@ -253,6 +246,23 @@ typo は silent fail せず明示エラー。 短縮 (シェル alias / hotkey
 ### ホットキー連携
 
 facet は CLI のみ提供 — ホットキーは使い慣れたツールで。 例:
+
+**[chord](https://github.com/akira-toriyama/chord)** — facet の
+兄弟プロジェクト。 TOML 駆動のキーボード + マウス hotkey daemon
+for macOS。 facet と同じ hexagonal Swift 構造、 GUI なし、
+config 1 ファイル。
+
+```toml
+[[bindings]]
+name   = "facet workspace 1"
+input  = "ctrl + alt - 1"
+action-shell = "/opt/homebrew/bin/facet --workspace=1"
+
+[[bindings]]
+name   = "move focused window to workspace 1"
+input  = "ctrl + shift + alt - 1"
+action-shell = "/opt/homebrew/bin/facet window --move-to=1"
+```
 
 **skhd** (`~/.config/skhd/skhdrc`):
 
