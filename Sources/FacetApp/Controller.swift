@@ -39,6 +39,14 @@ final class Controller: NSObject {
     private let panelHost: PanelHost
     private let sidebarView: SidebarView
 
+    /// Phase δ: panel-side response to display reconfigure
+    /// (resolution / hot-plug / lid / sleep wake). Lives here
+    /// — not on the backend — because the panel is a view-layer
+    /// concern; the backend has its OWN `DisplayChangeObserver`
+    /// for the tile / anchor-rescue side. Two observers, each
+    /// scoped to its layer.
+    private var displayObserver: DisplayChangeObserver?
+
     // MARK: - State
 
     /// Latest workspaces snapshot — held so the grid view can render
@@ -190,6 +198,7 @@ final class Controller: NSObject {
         writeStatus([])     // touch the file so `facet status` works
                             // even before the first backend reply
         installConfigWatcher()
+        installDisplayObserver()
         refresh()
         // setupFiles fires AFTER DNC is listening + status file is
         // touched, so hooks can call `facet status` / `facet
@@ -214,6 +223,19 @@ final class Controller: NSObject {
             MainActor.assumeIsolated { self?.reloadConfig() }
         }
         configWatcher?.start()
+    }
+
+    /// Phase δ: panel-side reconfigure handler. Fires once
+    /// 0.5 s after the OS settles on a new display layout;
+    /// `PanelHost.handleDisplayReconfigure` validates the
+    /// persisted panel rect against the new screen state and
+    /// snaps if needed.
+    private func installDisplayObserver() {
+        let obs = DisplayChangeObserver { [weak self] in
+            self?.panelHost.handleDisplayReconfigure()
+        }
+        displayObserver = obs
+        obs.start()
     }
 
     /// Re-read config.toml and apply whatever changed. Idempotent:

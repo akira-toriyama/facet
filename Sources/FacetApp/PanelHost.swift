@@ -17,6 +17,7 @@
 // `Controller`.
 
 import AppKit
+import FacetAccessibility
 import FacetCore
 import FacetView
 import FacetViewTree
@@ -195,6 +196,38 @@ final class PanelHost: NSObject {
         UserDefaults.standard.set(
             "\(anchorTL.x),\(anchorTL.y),\(userWidth),\(userHeight ?? -1)",
             forKey: Self.defaultsKey)
+    }
+
+    /// Phase δ: respond to a display reconfiguration. When the
+    /// persisted anchor / size no longer overlaps any visible
+    /// display (external monitor unplugged, resolution change
+    /// shrank a screen, etc.), snap the anchor to the nearest
+    /// surviving display's centre (size preserved). Otherwise
+    /// just re-run layout against the fresh NSScreen state —
+    /// `layout()` already clamps to the main display, which
+    /// re-validates against any updated bounds.
+    @MainActor
+    func handleDisplayReconfigure() {
+        let h = (userHeight ?? view.contentHeight)
+        // Convert anchorTL (top-left) → NSScreen-coord rect
+        // (bottom-left origin: y = topY - height).
+        let panelRect = NSRect(x: anchorTL.x,
+                               y: anchorTL.y - h,
+                               width: userWidth,
+                               height: h)
+        let displays = NSScreen.screens.map(\.frame)
+        if !DisplayGeometry.isVisible(panelRect, in: displays),
+           let dest = DisplayGeometry.nearestDisplay(
+            to: panelRect, in: displays)
+        {
+            // Snap anchor to dest centre, preserving size.
+            let newX = dest.midX - userWidth / 2
+            let newTopY = dest.midY + h / 2
+            anchorTL = NSPoint(x: newX, y: newTopY)
+            persistPosition()
+        }
+        layout(contentHeight: view.contentHeight,
+               searching: view.searching)
     }
 
     /// Single source of truth for panel + subview frames. Called
