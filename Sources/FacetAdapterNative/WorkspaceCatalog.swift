@@ -147,7 +147,8 @@ public struct WorkspaceCatalog {
     @discardableResult
     public mutating func reconcile(live: [Window],
                                    focused: WindowID? = nil,
-                                   activeRect: CGRect = .zero)
+                                   activeRect: CGRect = .zero,
+                                   autoFloat: Set<WindowID> = [])
         -> ReconcileResult
     {
         let liveByID = Dictionary(uniqueKeysWithValues:
@@ -186,6 +187,13 @@ public struct WorkspaceCatalog {
                 windowMap[id] = WindowSlot(
                     workspace: activeIndex, pid: pid)
                 added += 1
+                // Phase γ.3: AX role pre-flag — if the adapter
+                // told us this id should be floating (sheet /
+                // dialog / palette), mark it BEFORE the tile /
+                // stack insert below so it skips both.
+                if autoFloat.contains(id) {
+                    floatingWindows.insert(id)
+                }
                 let m = mode(of: activeIndex)
                 if m == "bsp", !floatingWindows.contains(id) {
                     var tree = layoutTrees[activeIndex] ?? LayoutTree()

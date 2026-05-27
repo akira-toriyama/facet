@@ -185,8 +185,13 @@ not relitigate** without explicit grill round.
     of the five CLI verbs + this `architecture.md` section.
   - **γ.2 Stack mode (shipped)** — stack implementation +
     cycle ops + the `--cycle-stack` CLI.
-  - **γ.3 AX role auto-float** — populate `isFloating` on new
-    windows whose AX role is in the floating set.
+  - **γ.3 AX role auto-float (shipped)** — populate
+    `isFloating` on new windows whose AX role / subrole is in
+    the floating set (`AXSheet`, `AXDrawer`,
+    `kAXFloatingWindowSubrole`, `kAXSystemDialogSubrole`,
+    `kAXSystemFloatingWindowSubrole`, `kAXDialogSubrole`).
+    First-sight hint only — user's manual `toggleFloat` stays
+    authoritative.
 
 Memory cross-reference: `facet-phase-gamma-decisions`.
 
