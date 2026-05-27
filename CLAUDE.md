@@ -4,17 +4,10 @@ Guidance for working in this repository.
 
 ## What this is
 
-`facet` — Swift workspace + window manager for macOS. **Architectural
-successor to [ws-tabs](https://github.com/akira-toriyama/ws-tabs)**:
-multiple views (`--view=tree|grid|…`), native AX/CGS backend
-(`FacetAdapterNative`, sole backend since v2.0.0). Swift 6,
-macOS 13+.
-
-**1 repo / 2 product** (decided 2026-05-24): `facet` (surface-core,
-SIP-on, M5 now) and `facet-x` (deep-core, SIP-off opt-in, M6+).
-Same Swift package, separate binaries, brew dependency
-`facet-x ⊃ facet`. See [docs/architecture.md](docs/architecture.md)
-"Two-binary structure" + Phase α frozen decisions.
+`facet` — Swift workspace + window manager for macOS. Multiple
+views (`--view=tree|grid|…`), native AX/CGS backend
+(`FacetAdapterNative`, sole backend since v2.0.0). SIP-on,
+public API + AX only. Swift 6, macOS 13+.
 
 ## Build / run
 
@@ -25,7 +18,7 @@ swift test                 # tests — needs Xcode (XCTest); fails on CLT
 ```
 
 `swift test` does NOT work on CommandLineTools-only setups (`no such
-module 'XCTest'`). Same constraint as ws-tabs — tests run in CI
+module 'XCTest'`); tests run in CI
 ([build workflow lands in M2 step 7](docs/architecture.md)). Locally,
 `swift build` is the bar; let CI cover XCTest.
 
@@ -33,7 +26,7 @@ module 'XCTest'`). Same constraint as ws-tabs — tests run in CI
 [Sources/FacetApp/Main.swift](Sources/FacetApp/Main.swift) (NOT
 top-level code in a `main.swift`) so XCTest's executable-target
 `@testable import` keeps working once tests land. **Don't reintroduce
-a `main.swift` file** — same trap as ws-tabs.
+a `main.swift` file** — the `@testable import` would break.
 
 ### Debugging facet (the agent run loop)
 
@@ -86,14 +79,13 @@ use:
   retirement a one-module swap, and is what lets future adapters
   land without touching view code.
 
-### Ported from ws-tabs — keep the contracts intact
+### View-layer contracts — keep them intact
 
 - **`pal` is a `@MainActor` module-level var in
   [Sources/FacetView/Theme.swift](Sources/FacetView/Theme.swift)**.
-  The symbol name is preserved deliberately — every lifted view file
-  references `pal.text`, `pal.dim`, etc. in dozens of places. Don't
-  rename it to `Theme.current` or similar; it would touch ~hundreds
-  of view-side lines for zero behavior gain.
+  Every view file references `pal.text`, `pal.dim`, etc. in dozens
+  of places. Don't rename it to `Theme.current` or similar; it
+  would touch ~hundreds of view-side lines for zero behavior gain.
 - **`Palette` presets (`.terminal` / `.cute` / `.system`) are
   `@MainActor`** because `NSColor` is not `Sendable` under Swift 6
   strict concurrency. Don't try to make them ordinary top-level
@@ -102,11 +94,10 @@ use:
   `kAXTitle` directly, short-TTL cached, only off-main. Don't
   assume `Window.title` is populated by the backend alone.
   (Memory: [[window-titles-AX-resolved]].)
-- **`FlippedClipView` is used from day one**. ws-tabs's 2026-05-21
-  "intermittent grip drag failure" traced back to a non-flipped
-  `NSClipView` (memory [[grid-branch-grip-intermittent]]). Adopt
-  `FlippedClipView` for every scroll view, not "once we hit the
-  same bug."
+- **`FlippedClipView` is used for every scroll view from day
+  one**. Non-flipped `NSClipView` causes intermittent grip-drag
+  failures (memory [[grid-branch-grip-intermittent]]). Don't wait
+  to "hit the bug" before adopting it.
 - **The drag-state lifecycle is a backend round-trip flag**, not a
   mouse-event flag. Don't clear it on `mouseUp` — clear it when the
   backend confirms the move. Memory:
@@ -115,7 +106,7 @@ use:
 ### M2 / M5 boundaries
 
 - **Native adapter is the sole backend** (v2.0.0 retired rift).
-  M5 surface-core complete: Phase α (workspaces + focus + AX
+  M5 complete: Phase α (workspaces + focus + AX
   events), β (anchor / minimize hide, closeWindow, setupFiles
   startup hook), γ (BSP + stack tiling, AX-role auto-float for
   sheets / dialogs / palettes, 5 CLI verbs: `--set-layout=NAME`,
@@ -131,9 +122,8 @@ use:
   `WindowEventObserver` (per-app AX subscription) all live here.
   New AX code goes here unless it's truly backend-specific.
 - **Bundle id is `com.facet.app`** (M2 done). See
-  [package.sh](package.sh) at repo root. NOT `com.wstabs.app` —
-  separate TCC grants, separate self-signed cert. Don't reuse
-  ws-tabs's id even temporarily.
+  [package.sh](package.sh) at repo root. The id keys the TCC grant
+  and self-signed cert identity — don't change it.
 
 ### CLI surface
 
@@ -161,11 +151,10 @@ use:
   flags also means reintroducing per-view dispatch ambiguity
   when a new view (dock, palette, …) lands.
 - **``--view=NAME`` is idempotent (show)**, not toggle. To
-  toggle, use ``--toggle=NAME``. This is the one behaviour
-  change vs ws-tabs; do not regress it back to toggle-on-show.
+  toggle, use ``--toggle=NAME``. Do not regress to toggle-on-show.
 - **Typo rejection is loud**: unknown view / theme names
-  ``exit 2`` with a stderr message. Silent fallback is the
-  ws-tabs misfeature we deliberately don't reproduce.
+  ``exit 2`` with a stderr message. Silent fallback is
+  deliberately not offered — typos should fail visibly.
 - **State-changing scripts honour ``--dry-run`` and tee a log
   by default**. Any script that mutates the user's environment
   (screen recording, mouse events, network posts, file writes
@@ -226,9 +215,8 @@ use:
 ### Workflow
 
 - **Don't push without explicit OK**. Quality-first phased
-  workflow inherited from ws-tabs (memory
-  [[grid-view-work-style]]). Commit locally freely; pushing /
-  merging waits for トミー's go.
+  workflow (memory [[grid-view-work-style]]). Commit locally
+  freely; pushing / merging waits for トミー's go.
 - **PR-based, no direct main push** (since v1.0.0). `main` has
   branch protection: a PR is required to merge, `build` + `lint`
   status checks must be green (strict / up-to-date), force-push
@@ -240,9 +228,6 @@ use:
   commit on local `main`: `git branch <topic>` to save it, then
   `git reset --hard origin/main`, then PR the branch. See memory
   [[pr-conventions]].
-- **Migration is code copy + restructure**, NOT git history merge.
-  ws-tabs gets archived (M4) — don't pull commits from it.
-
 ## Conventions
 
 - **Commit messages**: gitmoji + Conventional Commits —
@@ -505,7 +490,7 @@ scientific debugging, bisection.*
   macOS VM tool. facet uses it for clean-environment
   verification (v1→v2 upgrade smoke, fresh AX-permission grant
   flow, destructive `--set-layout=bsp` sweeps that would
-  scramble the host's real windows, future facet-x SIP-off
+  scramble the host's real windows, private-API spike
   isolation). Subcommands relied on: ``clone`` (APFS COW —
   fast, only differences claim space), ``run`` (with
   ``--no-graphics`` for headless + ``tart ip`` for SSH, or
