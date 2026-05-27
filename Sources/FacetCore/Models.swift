@@ -22,6 +22,24 @@ public struct WindowID: Hashable, Sendable {
 ///
 /// `pid` and `title` are kept on the model because AX focus needs
 /// both alongside `serverID` to disambiguate same-id race conditions.
+public extension Sequence where Element == Window {
+    /// Auto-pick a sensible focus target within this window list:
+    /// the already-focused window first, then the oldest by
+    /// `serverID` (= the WS's longest-resident window, a stable
+    /// fallback). `nil` for an empty input.
+    ///
+    /// Shared between the sidebar's optimistic header-click
+    /// highlight and `WorkspaceCatalog.autoFocusTarget`'s fallback
+    /// so the two routes can't drift — when the catalog's
+    /// `lastFocusedOnLeave` snapshot misses (stale / never
+    /// recorded), the window the user lands on is the same one
+    /// the sidebar pre-highlighted.
+    func predictedFocus() -> Window? {
+        if let focused = first(where: { $0.isFocused }) { return focused }
+        return self.min(by: { $0.id.serverID < $1.id.serverID })
+    }
+}
+
 public struct Window: Sendable {
     public let id: WindowID
     public let pid: Int

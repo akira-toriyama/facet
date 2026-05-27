@@ -164,13 +164,7 @@ struct WorkspaceCatalog {
         let liveByID = Dictionary(uniqueKeysWithValues:
                                   live.map { ($0.id, $0.pid) })
         let goneIDs = windowMap.keys.filter { liveByID[$0] == nil }
-        for id in goneIDs {
-            windowMap.removeValue(forKey: id)
-            clearParkedState(of: id)
-            floatingWindows.remove(id)
-            detachFromLayouts(id)
-            clearLeaveFocus(of: id)
-        }
+        for id in goneIDs { forgetWindow(id) }
         var added = 0
         for (id, pid) in liveByID {
             if let existing = windowMap[id] {
@@ -200,6 +194,16 @@ struct WorkspaceCatalog {
     /// Forget a window (called by `closeWindow` after AX press
     /// succeeded). Idempotent.
     mutating func drop(_ id: WindowID) {
+        forgetWindow(id)
+    }
+
+    /// Drop every per-window bookkeeping entry for `id`. Shared
+    /// by `reconcile` (window gone from the live CGWindowList)
+    /// and `drop` (explicit close). New per-window state (Phase ζ
+    /// onward) should be cleared here too rather than at each
+    /// call site — that's the invariant this helper exists to
+    /// hold.
+    private mutating func forgetWindow(_ id: WindowID) {
         windowMap.removeValue(forKey: id)
         clearParkedState(of: id)
         floatingWindows.remove(id)
@@ -376,25 +380,17 @@ struct WorkspaceCatalog {
     /// (caller passes the filtered subset so this method stays
     /// pure on the snapshot). Returns:
     ///   1. `lastFocusedOnLeave[ws]` if still present in `windows`
-    ///   2. else the existing `pred` chain from sidebar header
-    ///      click — `windows.first(where: \.isFocused)?.id ?? min(serverID)`
-    ///      — so optimistic highlight and auto-focus always
-    ///      settle on the same window.
+    ///   2. else `Sequence<Window>.predictedFocus()` — the same
+    ///      chain the sidebar's optimistic header highlight uses,
+    ///      so the two never drift.
     /// `nil` only when `windows` is empty (= the 2-b empty-WS
     /// branch the caller handles with a defocus instead).
-    func autoFocusTarget(in ws: Int,
-                                windows: [Window]) -> WindowID?
-    {
+    func autoFocusTarget(in ws: Int, windows: [Window]) -> Window? {
         if let recorded = lastFocusedOnLeave[ws],
-           windows.contains(where: { $0.id == recorded }) {
-            return recorded
+           let hit = windows.first(where: { $0.id == recorded }) {
+            return hit
         }
-        if let focused = windows.first(where: { $0.isFocused })?.id {
-            return focused
-        }
-        return windows.map(\.id).min(by: {
-            $0.serverID < $1.serverID
-        })
+        return windows.predictedFocus()
     }
 
     // MARK: - Floating

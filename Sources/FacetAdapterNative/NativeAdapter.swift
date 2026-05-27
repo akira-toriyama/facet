@@ -358,19 +358,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
         let configured = config.effectiveWorkspaceList.map(\.index)
-
-        // Leave-snapshot: unconditional (regardless of autoFocus).
-        // Explicit-pick callers still benefit — next time a no-pick
-        // path lands on the WS we just left, it can restore the
-        // window the user was on.
-        let leavingWS = catalog.activeIndex
-        if let cur = focusedWindow() {
-            catalog.recordLeaveFocus(cur, in: leavingWS)
-        }
-
         guard let plan = catalog.setActive(target,
                                            configuredIndexes: configured)
         else { return }
+
+        // Leave-snapshot only fires on a real transition: setActive
+        // already returned nil for the no-op `target == activeIndex`
+        // case, so we'd otherwise be writing the *current* focused
+        // window into `currentWS`'s slot and clobber the real
+        // "last time we left here" value.
+        if let cur = focusedWindow() {
+            catalog.recordLeaveFocus(cur, in: plan.oldActive)
+        }
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) (hide_method="
             + "\(config.effectiveHideMethod)) autoFocus=\(autoFocus)")
@@ -399,21 +398,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// — when the WS has no windows — bounce focus to Finder so
     /// the source app doesn't linger as frontmost. Window pick
     /// goes through `WorkspaceCatalog.autoFocusTarget`, which
-    /// matches the same `pred` chain the sidebar's optimistic
+    /// matches the same pred chain the sidebar's optimistic
     /// highlight uses (memory `facet-ws-switch-focus-management`).
     private func applyAutoFocus(newActiveWS: Int) {
-        let live = enumerateCGWindows()
-        let wsWindows = live.filter {
+        let wsWindows = enumerateCGWindows().filter {
             catalog.windowMap[$0.id]?.workspace == newActiveWS
         }
-        if wsWindows.isEmpty {
+        guard let pick = catalog.autoFocusTarget(
+                in: newActiveWS, windows: wsWindows)
+        else {
             activateFinder()
             return
         }
-        guard let pickID = catalog.autoFocusTarget(
-                in: newActiveWS, windows: wsWindows),
-              let pick = wsWindows.first(where: { $0.id == pickID })
-        else { return }
         Log.debug("native: autoFocus WS=\(newActiveWS) "
             + "pick=\(pick.id.serverID) app=\(pick.appName)")
         Focus.assert(pick, backend: self)
