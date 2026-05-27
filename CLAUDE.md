@@ -129,6 +129,16 @@ FACET_BACKEND=native .build/release/facet --debug      # raw
   Don't add configurability — M5+ replaces this entire module with
   `FacetAdapterNative` (Phases α–ε). Engineering effort on this
   module has a sunset date.
+- **Native adapter status (2026-05-27)**: M5 Phase α / β / γ all
+  shipped (`FACET_BACKEND=native` opt-in). Workspace switching,
+  anchor / minimize hide, closeWindow, setupFiles startup hook,
+  BSP + stack tiling, AX-role auto-float for sheets / dialogs /
+  palettes. γ added 5 CLI verbs: `--set-layout=NAME`, `--retile`,
+  and three `facet window` flags (`--toggle-float`,
+  `--toggle-orientation`, `--cycle-stack=next|prev`). Phase δ
+  (display reconfigure) and ε (rift retire) are pending. See
+  `facet --help` and [docs/architecture.md](docs/architecture.md)
+  "Phase γ frozen decisions" for the contracts.
 - **AX helpers live in `FacetAccessibility`** (extracted from
   `FacetAdapterRift` at M5 once the native adapter became the
   second consumer). `AXFocus`, `AXTitles`, `Focus.assert` /

@@ -157,7 +157,7 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
             (args, label) = (["execute", "layout", "snap-strip"],
                              "layout snap-strip")
         case .cycleStackNext, .cycleStackPrev:
-            // facet-native concept (Phase γ.2). rift owns its
+            // facet-native concept. rift owns its
             // own stack semantics — no-op here so a hotkey hit
             // while on the rift backend doesn't error.
             return

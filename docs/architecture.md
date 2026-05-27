@@ -60,7 +60,7 @@ unaware which one is in use.
 | **M2** | tree + grid views + CLI working through `FacetAdapterRift` | feature parity with ws-tabs v1.6 |
 | **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
 | **M4** | ws-tabs **archived** (README links forward to facet) | ws-tabs README updated, repo archived on GitHub |
-| **M5+** | Native adapter Phase α–ε (long arc, no deadline) — **surface-core** | see below |
+| **M5+** | Native adapter Phase α–ε (long arc, no deadline) — **surface-core**. α/β/γ shipped, δ/ε pending | see below |
 | **M6+** | **deep-core (`facet-x`) — SIP-off opt-in binary, MVP = 完全 hide のみ** | see [`facet-sip-off-core-plan` memory] |
 
 ## Native adapter phases
@@ -76,7 +76,7 @@ below).
 |---|---|---|
 | **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. **Status (2026-05-26)**: workspace state + reconcile + focusedWindow + AX-driven event subscription landed (`FACET_BACKEND=native` opt-in usable) | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook all landed | rift `wm/window`, yabai window mgmt |
-| **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 new CLI verbs, 3-PR phasing (γ.1 BSP core / γ.2 stack / γ.3 AX-role auto-float) | rift `layout`, AeroSpace tree |
+| **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; geometry persistence | rift `display` |
 | **ε** | deprecate `FacetAdapterRift`; native becomes default | — |
 
@@ -180,9 +180,10 @@ not relitigate** without explicit grill round.
   - `facet window --toggle-orientation`
   - `facet window --cycle-stack=next|prev`
 - **Phasing**: ships as three PRs.
-  - **γ.1 BSP core** — `LayoutTree`, per-WS mode field, BSP
-    auto-tile, manual `toggleFloat`, `toggleOrientation`, four
-    of the five CLI verbs + this `architecture.md` section.
+  - **γ.1 BSP core (shipped)** — `LayoutTree`, per-WS mode
+    field, BSP auto-tile, manual `toggleFloat`,
+    `toggleOrientation`, four of the five CLI verbs + this
+    `architecture.md` section.
   - **γ.2 Stack mode (shipped)** — stack implementation +
     cycle ops + the `--cycle-stack` CLI.
   - **γ.3 AX role auto-float (shipped)** — populate

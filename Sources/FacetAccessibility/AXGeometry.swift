@@ -1,7 +1,7 @@
 // AX geometry primitives — get / set window position + size, look
 // up an AX window element by CGWindowID, and resolve which display
-// a point sits on. Shared by FacetAdapterNative's hide / move
-// paths and any future consumer (Phase γ tiling, etc.).
+// a point sits on. Shared by FacetAdapterNative's hide / move /
+// tile / stack paths.
 //
 // Lives next to AXFocus / AXTitles in FacetAccessibility so all
 // AX-touching code stays in one module. Lifted out of
@@ -98,7 +98,11 @@ public enum AXGeom {
 
     /// True when the window's AX role / subrole identifies it
     /// as a transient / floating-style window (system dialog,
-    /// sheet, floating palette). Phase γ.3 auto-float source.
+    /// sheet, floating palette). The native adapter consumes
+    /// this as a first-sight hint for its auto-float
+    /// (`facet-phase-gamma-decisions` Q4): once a window is
+    /// known to the catalog, the user's manual `toggleFloat`
+    /// is authoritative — we do NOT re-promote on every refresh.
     /// Conservative: only the well-known role / subrole values
     /// are treated as floating — unknown roles fall through to
     /// regular tiling.

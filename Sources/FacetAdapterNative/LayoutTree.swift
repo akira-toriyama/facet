@@ -23,7 +23,7 @@
 //   - Gaps: zero, hardcoded. Tree math returns flush rects.
 //   - Directional movement: only `toggleOrientation` (rotate
 //     the focused leaf's parent split). `moveLeft/Right/Up/Down`
-//     are out of scope for γ.1.
+//     are out of Phase γ scope.
 //
 // Indexing convention
 //

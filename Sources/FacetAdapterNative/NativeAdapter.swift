@@ -1,22 +1,23 @@
 // `WindowBackend` conformance using only AX + public macOS APIs
-// (no `rift-cli`, no SLS, no SIP-off injection). Phase α–ε grows
-// each method from a no-op stub into a real implementation; this
-// file is the seam.
+// (no `rift-cli`, no SLS, no SIP-off injection). This file is the
+// seam between facet and the OS for the native backend.
 //
-// Phase plan (memory: facet-architecture-decisions):
-//   α  — virtual workspace state self-managed; focus
-//   β  — window move across workspaces; off-screen park/unpark
-//        (`anchor` + `minimize` hide methods, memory:
-//        native-window-hide-methods)
-//   γ  — tiling layout engines
-//   δ  — display reconfigure handling, geometry persistence
-//   ε  — `FacetAdapterRift` deprecation
+// Phase progression (memory: facet-architecture-decisions):
+//   α (shipped) — virtual workspace state self-managed; focus
+//   β (shipped) — window move across workspaces; off-screen
+//                 park/unpark (`anchor` + `minimize` hide methods,
+//                 memory: native-window-hide-methods)
+//   γ (shipped) — tiling layout engines (BSP + stack, AX-role
+//                 auto-float). Frozen 2026-05-26, memory:
+//                 facet-phase-gamma-decisions.
+//   δ (pending) — display reconfigure handling, geometry persistence
+//   ε (pending) — `FacetAdapterRift` deprecation
 //
 // State lives in `WorkspaceCatalog` (pure value type, AX-free,
 // unit-testable). This file owns only the effects: CGWindowList
 // enumeration, AX focus / position / minimize / close, AX event
-// subscription wiring, and the AsyncStream plumbing for events
-// and errors.
+// subscription wiring, tile / stack frame application, and the
+// AsyncStream plumbing for events and errors.
 
 import AppKit
 import ApplicationServices
@@ -28,11 +29,12 @@ import FacetCore
 public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public let name = "native"
 
-    /// Tentative layout-mode set — revisited at Phase γ when the
-    /// tiling engines land. Keeping non-empty so the right-click
-    /// menu builder doesn't trip over an empty list during the
-    /// transition window where some views ask the backend's
-    /// supported modes at startup.
+    /// Phase γ frozen layout-mode set. `float` is the per-WS
+    /// default but isn't advertised here because it isn't a
+    /// *user-pickable mode* in the menu sense — it's the
+    /// "no tiling applied" baseline. master_stack / scrolling /
+    /// traditional are explicitly out of γ scope (memory:
+    /// facet-phase-gamma-decisions Q1).
     public let layoutModes = ["bsp", "stack"]
 
     // MARK: - State (delegated to catalog)
@@ -47,8 +49,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var workspaceList: [Workspace] = []
 
     /// Held so `refreshCatalog` can read the configured workspace
-    /// list each tick (handles config hot-reload once the
-    /// Controller starts piping it through, future PR).
+    /// list each tick. Note: this captures the config at adapter
+    /// init time; `Controller.reloadConfig()` re-reads
+    /// `config.toml` but does NOT push the fresh value back to
+    /// the adapter, so `[workspace]` table edits during a session
+    /// take effect only on restart. Wiring a config-push channel
+    /// is a known follow-up.
     private let config: FacetConfig
 
     /// AX-driven event observer. Cuts the lag between "user
@@ -495,10 +501,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func perform(_ action: WindowAction) {
-        // Phase γ.1 wires toggleFloat + toggleOrientation;
-        // γ.2 adds cycleStackNext / cycleStackPrev. Everything
-        // else (master_stack / scrolling / toggleStack /
-        // toggleFullscreen) is out of γ scope and no-ops here.
+        // BSP: toggleFloat, toggleOrientation. Stack:
+        // cycleStackNext, cycleStackPrev. Everything else
+        // (master_stack / scrolling / toggleStack /
+        // toggleFullscreen) is out of Phase γ scope and no-ops.
         let rect = activeDisplayRect()
         switch action {
         case .toggleFloat:
@@ -551,8 +557,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem] {
-        // γ.1 surfaced toggleFloat + toggleOrientation; γ.2 adds
-        // the cycle-stack items when the WS is in stack mode.
+        // Menu items per layout mode (Phase γ): BSP non-floating
+        // gets Toggle orientation; stack non-floating gets
+        // cycle-next / cycle-prev; everyone gets Float/Unfloat
+        // and Close. master_stack / scrolling actions stay out
+        // of the menu (out of γ scope).
         var items: [WindowMenuItem] = []
         if mode == "bsp", !floating {
             items.append(.init("Toggle orientation",
