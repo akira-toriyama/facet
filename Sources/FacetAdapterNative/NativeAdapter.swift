@@ -253,10 +253,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Enumerate visible windows via the public CGWindowList API.
     /// Skips:
     ///   - facet's own process (avoid managing our own panel)
-    ///   - Window Server scaffolding (StatusIndicator etc.)
-    ///   - the `borders` companion app (decorative outlines, AX
-    ///     element returns nil so we couldn't operate on them
-    ///     anyway)
+    ///   - non-normal `kCGWindowLayer` values — wallpapers
+    ///     (negative), floating panels / Dock / menu-bar /
+    ///     status overlays (positive), and any third-party
+    ///     overlay tool (e.g. wand / Übersicht / Sketchybar
+    ///     custom panels). User app windows live at layer 0;
+    ///     anything else is structural OS chrome or a tool
+    ///     that won't play nicely with tiling. Auto-detected
+    ///     rather than hard-coded so new overlay tools don't
+    ///     require a code change.
+    ///   - explicit app-name guards for `Window Server` and
+    ///     `borders` — both happen to ALSO fall outside layer 0
+    ///     (Window Server is huge int, borders draws decoration
+    ///     overlays via a child window-server process), but the
+    ///     name guard is belt-and-braces against an OS change
+    ///     that ever floats them onto layer 0.
     /// `isFocused` is stamped by `WorkspaceCatalog.snapshot` against
     /// the focused-window query, so this helper stays a pure
     /// CGWindowList adapter with no AX dependency.
@@ -273,12 +284,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 let pid = dict[kCGWindowOwnerPID as String] as? Int,
                 pid != myPid
             else { return nil }
+            // Normal user windows live at layer 0. Everything
+            // else (wallpaper, status overlays, third-party
+            // chrome) gets skipped automatically.
+            let layer = dict[kCGWindowLayer as String] as? Int ?? 0
+            if layer != 0 { return nil }
             let owner = dict[kCGWindowOwnerName as String]
                 as? String ?? ""
-            // Skip OS scaffolding + the borders companion. The
-            // borders app paints decoration overlays that facet
-            // shouldn't try to manage; rejecting by name is a
-            // pragmatic match given there's no AX handle for them.
+            // Belt-and-braces: even if either of these ever
+            // shows up at layer 0, we still don't want to manage
+            // them.
             if owner == "Window Server" || owner == "borders" {
                 return nil
             }
