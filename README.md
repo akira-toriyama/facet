@@ -106,9 +106,10 @@ so the overlay opens with real screenshots, not icon fallbacks.
 **Alpha** — feature parity with ws-tabs v1.6 reached (M2),
 shipping via Homebrew (M3), ws-tabs archived (M4). Both views
 work, the CLI is settled, `brew install akira-toriyama/tap/facet`
-is live. The **native AX backend** (M5 Phase α/β) is opt-in:
-`FACET_BACKEND=native` enables workspace switching + window park
-(anchor / minimize) without `rift-cli`. Default still rift.
+is live. The **native AX backend** (M5 Phase α through γ) is
+opt-in: `FACET_BACKEND=native` enables workspace switching,
+window park (anchor / minimize), and BSP / stack tiling with
+AX-role auto-float — all without `rift-cli`. Default still rift.
 
 | Milestone | Status |
 |---|---|

@@ -105,9 +105,9 @@ window タイトルは rift から取得、 rift が空を返す app
 **Alpha** — ws-tabs v1.6 との feature parity 達成 (M2)、 Homebrew
 配布 (M3)、 ws-tabs archive (M4) 完了。 両 view 動作、 CLI 確定、
 `brew install akira-toriyama/tap/facet` 稼働中。 **native AX
-backend** (M5 Phase α/β) は opt-in: `FACET_BACKEND=native` で
-rift-cli 無しに workspace 切替 + window park (anchor / minimize)
-が動く。 default は rift のまま。
+backend** (M5 Phase α〜γ) は opt-in: `FACET_BACKEND=native` で
+rift-cli 無しに workspace 切替 / window park (anchor / minimize) /
+BSP・stack tiling / AX role auto-float が動く。 default は rift。
 
 | マイルストーン | 状態 |
 |---|---|

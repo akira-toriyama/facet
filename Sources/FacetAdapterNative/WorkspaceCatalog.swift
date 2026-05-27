@@ -98,8 +98,8 @@ public struct WorkspaceCatalog {
 
     /// Per-WS layout mode. Missing entries default to `"float"`
     /// (Phase γ frozen decision: existing users see no surprise
-    /// behaviour on upgrade). Valid values for γ.1: `"float"`,
-    /// `"bsp"`. `"stack"` lands in γ.2.
+    /// behaviour on upgrade). Valid values: `"float"` / `"bsp"`
+    /// / `"stack"`.
     public private(set) var layoutModes: [Int: String] = [:]
 
     /// Per-WS BSP tree. Only present for WSs in `"bsp"` mode;
@@ -241,7 +241,7 @@ public struct WorkspaceCatalog {
         originalPositions.removeValue(forKey: id)
     }
 
-    // MARK: - Layout mode (Phase γ)
+    // MARK: - Layout mode
 
     /// 1-based WS index → mode string. Missing entries default
     /// to `"float"` (Phase γ frozen default).
@@ -295,7 +295,7 @@ public struct WorkspaceCatalog {
         return normalised
     }
 
-    // MARK: - Stack ops (Phase γ.2)
+    // MARK: - Stack ops
 
     /// Ordered stack members of `n1Based` (top first), or empty
     /// when the WS isn't in `"stack"` mode.

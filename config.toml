@@ -136,19 +136,26 @@ hide_method = "anchor"
 # Default (unset) = no scripts.
 # setupFiles = ["~/.config/facet/setup.sh"]
 
-# Tiling (M5 Phase γ.1) is opt-in per workspace via the CLI; no
+# Tiling (M5 Phase γ) is opt-in per workspace via the CLI; no
 # config key. Each WS defaults to "float" so existing users see
 # zero behaviour change on upgrade. Opt in with, e.g.:
 #
 #     facet --workspace=1
-#     facet --set-layout=bsp     # this WS now auto-tiles
+#     facet --set-layout=bsp     # this WS now auto-tiles BSP
+#     facet --set-layout=stack   # or single-window stack mode
 #
 # Other tiling-related verbs:
-#     facet --retile              # recompute + reapply active WS tree
-#     facet window --toggle-float
-#     facet window --toggle-orientation
+#     facet --retile                       # recompute + reapply layout
+#     facet window --toggle-float          # exclude window from layout
+#     facet window --toggle-orientation    # rotate parent split (bsp)
+#     facet window --cycle-stack=next|prev # rotate stack focus
 #
-# Frozen scope: bsp + float only in γ.1. "stack" lands in γ.2.
+# Frozen scope: bsp / stack / float. master_stack / scrolling /
+# traditional are out (see docs/architecture.md "Phase γ frozen
+# decisions"). System dialogs / sheets / floating palettes get
+# auto-floated on first sight via AX role detection — your
+# manual `--toggle-float` is always authoritative once set.
+#
 # Per-WS mode is *runtime* state (not persisted in config); use
 # `setupFiles` above if you want a specific WS to come up in BSP
 # at every launch.

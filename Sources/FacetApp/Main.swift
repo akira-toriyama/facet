@@ -15,15 +15,19 @@
 // the act of importing the executable spawning a panel. Same trap
 // CLAUDE.md flags for ws-tabs — don't reintroduce main.swift.
 //
-// CLI surface (case D, canonical-only — no aliases):
+// CLI surface (canonical-only — no aliases). See `printHelp()`
+// for the user-facing reference; the categories below are the
+// quick orientation:
 //
-//   facet --view=NAME [--active]    open NAME, optionally active
-//   facet --hide=NAME               close NAME
-//   facet --toggle=NAME             toggle NAME
-//   facet --theme=NAME              live re-theme
-//   facet --quit                    terminate server
-//   facet --debug                   verbose logging (server-mode)
-//   facet --help                    this help
+//   Views   : --view=NAME [--active] / --hide=NAME / --toggle=NAME
+//   Theme   : --theme=NAME
+//   Server  : --quit / --reload / --debug / --resign / --help
+//   Status  : facet status (read-only, no `--`)
+//   Workspace : --workspace=N / facet window --move-to=N
+//   Tiling    : --set-layout=NAME / --retile
+//               facet window --toggle-float
+//               facet window --toggle-orientation
+//               facet window --cycle-stack=next|prev
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
