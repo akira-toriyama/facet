@@ -204,29 +204,30 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Display rect to anchor tile / stack math against.
     /// Determined by the focused window's centre point (or the
     /// origin when nothing is focused — startup, mid-switch).
+    /// Always returns `Displays.visibleFrame` (full display
+    /// *minus menu bar / Dock*), the correct rect for tile
+    /// geometry.
     ///
-    /// Two branches with intentionally different rect semantics:
+    /// `visibleFrame` is `@MainActor` because it talks to
+    /// `NSScreen`. Two call contexts:
     ///
-    ///   - **Main thread** (the normal path — `refreshCatalog` /
-    ///     `applyLayout` callers all run on main via the
-    ///     Controller's `MainActor`-isolated `requestRefresh` /
-    ///     poll timer): returns `Displays.visibleFrame` (full
-    ///     display *minus menu bar / Dock*), the correct rect
-    ///     for tile geometry. `visibleFrame` is `@MainActor`
-    ///     because it talks to `NSScreen`.
+    ///   - **Main thread** (CLI dispatch: `switchWorkspace` /
+    ///     `moveWindow` / `setLayoutMode` / `retileActive` /
+    ///     `perform`, all called from `Controller.dispatch*`
+    ///     under `MainActor.assumeIsolated`): direct call, no
+    ///     hop.
     ///
-    ///   - **Off-main** (defensive — facet doesn't currently
-    ///     call this path, but `WindowBackend.workspaces()` has
-    ///     no MainActor contract, so a future caller from a
-    ///     background task wouldn't crash): returns
-    ///     `Displays.containing` (full display *including* menu
-    ///     bar / Dock). Tiled windows would briefly cover those
-    ///     regions but `applyLayout` is idempotent, so the next
-    ///     main-thread tick re-tiles against the right rect.
-    ///     If we ever observe this branch firing in production,
-    ///     `MainActor.assumeIsolated` + a contract requirement
-    ///     is the upgrade path (would crash callers instead of
-    ///     silently degrading geometry).
+    ///   - **Off-main** (`Controller.refresh` dispatches
+    ///     `workspaces()` to its serial `cliQueue` so AX-title
+    ///     resolution can run off-main — see
+    ///     `Controller.swift:472`. `refreshCatalog` →
+    ///     `applyLayout` chain therefore runs off-main too):
+    ///     synchronously hop to main to read `visibleFrame`,
+    ///     then return. Deadlock-free: main is not blocked
+    ///     waiting on cliQueue (the dispatch is `.async`),
+    ///     so main is always free to service the hop. Cost:
+    ///     ~1 ms per refresh tick, acceptable at the current
+    ///     2 s poll cadence.
     private func activeDisplayRect() -> CGRect {
         let probe: CGPoint
         if let id = focusedWindow(),
@@ -245,9 +246,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 Displays.visibleFrame(containing: probe)
             }
         }
-        Log.debug("native: activeDisplayRect off-main — "
-            + "using full display bounds (no visibleFrame)")
-        return Displays.containing(probe)
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                Displays.visibleFrame(containing: probe)
+            }
+        }
     }
 
     /// Enumerate visible windows via the public CGWindowList API.
