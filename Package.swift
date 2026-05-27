@@ -8,21 +8,18 @@
 //                       layout engines, event types. No AppKit,
 //                       no backend. Fully testable.
 //
-//   FacetAdapterRift    speaks `rift-cli`. Conforms to the backend
-//                       protocol declared in FacetCore so the rest
-//                       of the app doesn't know rift exists.
+//   FacetAdapterNative  Swift implementation using AX / CGS + the
+//                       private `_AXUIElementGetWindow` dlsym.
+//                       Sole `WindowBackend` implementation since
+//                       Phase ε (v2.0.0) retired the rift adapter.
 //
-//   FacetAdapterNative  Swift implementation using AX / CGS / SLS
-//                       directly. Phase-α onward — empty for now
-//                       and grown alongside the rift adapter.
-//
-//   FacetAccessibility  AX / CGS helpers shared by both adapters
-//                       (focus, title resolution, geometry, the
-//                       private `_AXUIElementGetWindow` dlsym).
-//                       Used to live inside FacetAdapterRift with
-//                       `// MOVE-AT-M5` markers; lifted out when
-//                       the native adapter became the second
-//                       consumer.
+//   FacetAccessibility  AX / CGS helpers (focus, title resolution,
+//                       geometry, display change detection).
+//                       Originally extracted at M5 to share between
+//                       the (then-coexisting) rift and native
+//                       adapters; ε kept it as the single home
+//                       for AX-touching code outside the adapter
+//                       itself.
 //
 //   FacetView           shared view primitives (theme, palette,
 //                       fonts, common key monitor).
@@ -51,8 +48,6 @@ let package = Package(
     targets: [
         .target(name: "FacetCore"),
         .target(name: "FacetAccessibility", dependencies: ["FacetCore"]),
-        .target(name: "FacetAdapterRift",
-                dependencies: ["FacetCore", "FacetAccessibility"]),
         .target(name: "FacetAdapterNative",
                 dependencies: ["FacetCore", "FacetAccessibility"]),
         .target(name: "FacetView", dependencies: ["FacetCore"]),
@@ -63,7 +58,6 @@ let package = Package(
             dependencies: [
                 "FacetCore",
                 "FacetAccessibility",
-                "FacetAdapterRift",
                 "FacetAdapterNative",
                 "FacetView",
                 "FacetViewTree",
@@ -75,8 +69,6 @@ let package = Package(
         // and CGS/SLS space queries via dlsym. No facet deps.
         .executableTarget(name: "NativeSpike"),
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
-        .testTarget(name: "FacetAdapterRiftTests",
-                    dependencies: ["FacetAdapterRift", "FacetCore"]),
         .testTarget(name: "FacetAdapterNativeTests",
                     dependencies: ["FacetAdapterNative", "FacetCore"]),
         .testTarget(name: "FacetAccessibilityTests",

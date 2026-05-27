@@ -10,8 +10,8 @@
 A Swift workspace + window manager for macOS. The same workspace
 model viewed through pluggable surfaces — a translucent tree
 sidebar, a TS3-style full-screen overview grid, and future docks /
-hovers / palettes — all driven by a swappable backend (`rift-cli`
-today, native AX/CGS later).
+hovers / palettes — all driven by a native AX/CGS backend with no
+external dependency.
 
 facet is the architectural successor to
 [ws-tabs](https://github.com/akira-toriyama/ws-tabs). The grid view
@@ -26,7 +26,7 @@ your workspaces through one of two views — your choice at startup
 via [`config.toml`](config.toml):
 
 - **Tree** — a translucent always-on-top sidebar listing every
-  rift workspace and its windows as a tree. Click rows to focus,
+  workspace and its windows as a tree. Click rows to focus,
   drag rows to move windows between workspaces, hover for a live
   on-screen preview.
 - **Grid** — a full-screen TS3-style overview with one cell per
@@ -35,9 +35,8 @@ via [`config.toml`](config.toml):
   Shift+Drag). The grid is summoned on demand
   (`facet --view=grid`) and dismissed with Esc / backdrop click.
 
-Both views share the same backend (`rift-cli` today, swappable
-later) and the same theme (terminal / cute / system, live
-toggleable).
+Both views share the same backend and the same theme
+(terminal / cute / system, live toggleable).
 
 ## Interactions
 
@@ -81,10 +80,9 @@ to get focus:
 | `Return` | switch + focus (same as a click) |
 | `Esc` | clear filter → leave keyboard mode (panel stays visible) |
 
-Window titles come from rift when populated, otherwise resolved
-via Accessibility (`kAXTitle`, matched by CGWindowID, short-TTL
-cached). Rows without a resolvable title stay compact.
-Requires Accessibility (same grant as clicks).
+Window titles are resolved via Accessibility (`kAXTitle`, matched
+by CGWindowID, short-TTL cached). Rows without a resolvable title
+stay compact. Requires Accessibility (same grant as clicks).
 
 ### Grid overview keyboard
 
@@ -103,26 +101,23 @@ so the overlay opens with real screenshots, not icon fallbacks.
 
 ## Status
 
-**Alpha** — feature parity with ws-tabs v1.6 reached (M2),
-shipping via Homebrew (M3), ws-tabs archived (M4). Both views
-work, the CLI is settled, `brew install akira-toriyama/tap/facet`
-is live. The **native AX backend** (M5 Phase α through γ) is
-opt-in: `FACET_BACKEND=native` enables workspace switching,
-window park (anchor / minimize), and BSP / stack tiling with
-AX-role auto-float — all without `rift-cli`. Default still rift.
+**Alpha** — native AX backend, no external dependency. Workspace
+switching, window park (anchor / minimize), BSP / stack tiling
+with AX-role auto-float, and display reconfigure handling all
+ship in the default build. `brew install akira-toriyama/tap/facet`
+is live.
 
 | Milestone | Status |
 |---|---|
 | M1 — repo scaffolded, `swift build` green | ✅ |
-| M2 — tree + grid views working through `FacetAdapterRift` | ✅ |
+| M2 — tree + grid views working | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M4 — ws-tabs archived | ✅ |
-| M5 Phase α — native workspaces + focus + AX events | ✅ opt-in |
-| M5 Phase β — anchor / minimize hide, closeWindow, setupFiles | ✅ opt-in |
-| M5 Phase γ.1 — BSP tiling core (auto-balance, toggleFloat / toggleOrientation, CLI) | ✅ opt-in |
-| M5 Phase γ.2 — stack mode (focused-fills + cycle next/prev) | ✅ opt-in |
-| M5 Phase γ.3 — AX role auto-float (sheets / dialogs skip the tiler) | ✅ opt-in |
-| M5 Phase δ–ε — display reconfigure, rift retire | ⏳ |
+| M5 Phase α — native workspaces + focus + AX events | ✅ |
+| M5 Phase β — anchor / minimize hide, closeWindow, setupFiles | ✅ |
+| M5 Phase γ — BSP + stack tiling, AX-role auto-float, tiling CLI | ✅ |
+| M5 Phase δ — display reconfigure | ✅ |
+| M5 Phase ε — native sole backend (v2.0.0) | ✅ |
 
 See [docs/architecture.md](docs/architecture.md) for the layer
 diagram and the migration plan.
@@ -143,8 +138,7 @@ curl --create-dirs -o ~/.config/facet/config.toml \
 On first launch, grant **Accessibility** to *facet* (System
 Settings → Privacy & Security → Accessibility) or clicks/drags
 won't work; grant **Screen Recording** too if you want grid-view
-thumbnails. Also requires [rift](https://github.com/acsandmann/rift)
-+ `rift-cli` on PATH.
+thumbnails.
 
 The `curl` line drops a fully-commented [config.toml](config.toml)
 into place; defaults are sane and the app starts with the tree
@@ -165,8 +159,7 @@ Frequently-touched keys:
 - `[appearance] theme` — `terminal` (default) / `cute` / `system`
 - `[layout] default_view` — `tree` / `grid`
 - `[workspace] hide_method` — `anchor` (default, 1×41 px corner park,
-  instant) / `minimize` (Dock genie, cleaner but slower). Only used
-  when `FACET_BACKEND=native` is active.
+  instant) / `minimize` (Dock genie, cleaner but slower).
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
 - `[workspace] setupFiles = [...]` — array of executable script
@@ -216,21 +209,6 @@ Notes:
 - stdout / stderr is captured to `/tmp/facet.log` (visible under
   `facet --debug`).
 
-### Native backend (M5 alpha)
-
-The native AX backend is opt-in via env var; nothing in
-`config.toml` selects it.
-
-```sh
-FACET_BACKEND=native ./run.sh                      # .app bundle
-FACET_BACKEND=native .build/release/facet --debug  # raw
-# unset or set =rift for the default RiftAdapter
-```
-
-`./run.sh` forwards the env into the bundle via `open --env`.
-Once selected, `--workspace=N` and `window --move-to=N` operate
-on facet-managed workspace state instead of rift's.
-
 ## CLI
 
 facet is **CLI-driven**: a small set of flags posts a distributed
@@ -245,7 +223,7 @@ facet --view=NAME [--active]      # open NAME (idempotent)
 facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
 
-# Tiling (M5 Phase γ — FACET_BACKEND=native only)
+# Tiling (M5 Phase γ)
 facet --set-layout=NAME              # active WS mode (bsp | stack | float)
 facet --retile                       # re-apply active WS's layout (bsp or stack)
 facet window --toggle-float          # flip focused window float flag
@@ -357,15 +335,11 @@ swift test           # XCTest — needs Xcode (CLT has none)
 
 ## Honest limitations
 
-- **Apple Silicon only**. Intel Macs are out of scope (rift
-  CLI path is `/opt/homebrew/bin/rift-cli` and is not made
-  configurable on purpose — M5+ replaces the rift adapter
-  entirely with a native one).
-- **Single display assumed** (rift currently reports one). Multi-
-  display layout / preview positioning untested.
+- **Apple Silicon only**. Intel Macs are out of scope.
+- **Multi-display layout / preview positioning is lightly tested**
+  — the primary dev box is single-display. File issues with repro
+  steps if you hit oddness on multi-monitor setups.
 - **Window preview is macOS 14+** and needs Screen Recording.
-  The preview overlay uses rift's logical frame for placement,
-  so the multi-display caveat applies here too.
 - **Ad-hoc signed builds re-prompt** for Accessibility on every
   rebuild. Run `./setup-signing-cert.sh` once for a persistent
   self-signed identity that keeps the TCC grant stable across

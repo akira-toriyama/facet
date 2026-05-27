@@ -6,8 +6,8 @@ Guidance for working in this repository.
 
 `facet` — Swift workspace + window manager for macOS. **Architectural
 successor to [ws-tabs](https://github.com/akira-toriyama/ws-tabs)**:
-multiple views (`--view=tree|grid|…`), 1 backend at a time
-(`rift-cli` adapter today, native AX/CGS adapter in M5+). Swift 6,
+multiple views (`--view=tree|grid|…`), native AX/CGS backend
+(`FacetAdapterNative`, sole backend since v2.0.0). Swift 6,
 macOS 13+.
 
 **1 repo / 2 product** (decided 2026-05-24): `facet` (surface-core,
@@ -47,13 +47,6 @@ use:
 .build/release/facet --debug 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log &
                   # foreground server with verbose log (timestamped so
                   # runs don't pile up); read the file directly to inspect
-
-# Backend selection (M5 Phase α/β opt-in)
-FACET_BACKEND=native ./run.sh                          # .app bundle
-FACET_BACKEND=native .build/release/facet --debug      # raw
-# omit env (or set =rift) for the default RiftAdapter. run.sh
-# forwards FACET_BACKEND into the .app via `open --env`
-# (Sources/FacetApp/Main.swift reads it at startup).
 ```
 
 - **The agent may run `./stop.sh` / `./run.sh` / `swift build`
@@ -80,19 +73,18 @@ FACET_BACKEND=native .build/release/facet --debug      # raw
 
 - **3 layers are non-negotiable**: `FacetCore` is pure logic
   (CoreGraphics OK, NO AppKit / NO backend / NO OS interaction).
-  `FacetAdapter*` wraps a backend (rift-cli, AX, …) and is the
+  `FacetAdapter*` wraps a backend (AX/CGS today) and is the
   *only* place those types appear. `FacetView*` is GUI-only.
   Crossing layers always means there's a missing protocol.
-- **`RF*` types stay inside `FacetAdapterRift`**.
-  [Sources/FacetAdapterRift/RFTypes.swift](Sources/FacetAdapterRift/RFTypes.swift)
-  is internal-by-design.
-  [Sources/FacetAdapterRift/Mapper.swift](Sources/FacetAdapterRift/Mapper.swift)
-  converts to the backend-neutral
+- **Backend-specific types stay inside their adapter module**.
+  Conversion to the backend-neutral
   [Sources/FacetCore/Models.swift](Sources/FacetCore/Models.swift)
-  types at the seam. Views and controller must never see `RFWorkspace`.
-- **Views talk to the `WindowBackend` protocol, never to
-  `RiftAdapter` directly**. This is what lets M5+ swap in
-  `FacetAdapterNative` without touching a single view file.
+  types happens at the seam. Views and controller must never see
+  adapter-internal types.
+- **Views talk to the `WindowBackend` protocol, never to a
+  concrete adapter directly**. This is what kept the Phase ε rift
+  retirement a one-module swap, and is what lets future adapters
+  land without touching view code.
 
 ### Ported from ws-tabs — keep the contracts intact
 
@@ -106,12 +98,10 @@ FACET_BACKEND=native .build/release/facet --debug      # raw
   `@MainActor`** because `NSColor` is not `Sendable` under Swift 6
   strict concurrency. Don't try to make them ordinary top-level
   `let`s.
-- **Window titles are AX-resolved when rift returns blank**. rift's
-  `query workspaces` returns empty `title` for many apps (Chrome,
-  Code, …). `AXTitles.resolve` reads `kAXTitle` directly, short-TTL
-  cached, only off-main. Don't assume `Window.title` is populated by
-  the backend alone. (Memory:
-  [[window-titles-AX-resolved]].)
+- **Window titles are AX-resolved**. `AXTitles.resolve` reads
+  `kAXTitle` directly, short-TTL cached, only off-main. Don't
+  assume `Window.title` is populated by the backend alone.
+  (Memory: [[window-titles-AX-resolved]].)
 - **`FlippedClipView` is used from day one**. ws-tabs's 2026-05-21
   "intermittent grip drag failure" traced back to a non-flipped
   `NSClipView` (memory [[grid-branch-grip-intermittent]]). Adopt
@@ -124,29 +114,22 @@ FACET_BACKEND=native .build/release/facet --debug      # raw
 
 ### M2 / M5 boundaries
 
-- **`/opt/homebrew/bin/rift-cli` is hard-coded** in
-  [Sources/FacetAdapterRift/RiftCLI.swift](Sources/FacetAdapterRift/RiftCLI.swift).
-  Don't add configurability — M5+ replaces this entire module with
-  `FacetAdapterNative` (Phases α–ε). Engineering effort on this
-  module has a sunset date.
-- **Native adapter status (2026-05-27)**: M5 Phase α / β / γ all
-  shipped (`FACET_BACKEND=native` opt-in). Workspace switching,
-  anchor / minimize hide, closeWindow, setupFiles startup hook,
-  BSP + stack tiling, AX-role auto-float for sheets / dialogs /
-  palettes. γ added 5 CLI verbs: `--set-layout=NAME`, `--retile`,
-  and three `facet window` flags (`--toggle-float`,
-  `--toggle-orientation`, `--cycle-stack=next|prev`). Phase δ
-  (display reconfigure) and ε (rift retire) are pending. See
-  `facet --help` and [docs/architecture.md](docs/architecture.md)
-  "Phase γ frozen decisions" for the contracts.
-- **AX helpers live in `FacetAccessibility`** (extracted from
-  `FacetAdapterRift` at M5 once the native adapter became the
-  second consumer). `AXFocus`, `AXTitles`, `Focus.assert` /
+- **Native adapter is the sole backend** (v2.0.0 retired rift).
+  M5 surface-core complete: Phase α (workspaces + focus + AX
+  events), β (anchor / minimize hide, closeWindow, setupFiles
+  startup hook), γ (BSP + stack tiling, AX-role auto-float for
+  sheets / dialogs / palettes, 5 CLI verbs: `--set-layout=NAME`,
+  `--retile`, and three `facet window` flags `--toggle-float`,
+  `--toggle-orientation`, `--cycle-stack=next|prev`), δ (display
+  reconfigure), ε (rift retire) all shipped. See `facet --help`
+  and [docs/architecture.md](docs/architecture.md) for the contracts.
+- **AX helpers live in `FacetAccessibility`** (extracted at M5;
+  sole consumer now is `FacetAdapterNative` after Phase ε
+  retired rift). `AXFocus`, `AXTitles`, `Focus.assert` /
   `withRetry`, `AXGeom` (window lookup / position / size / close
   button), `Displays` (screen-containing-point), and
-  `WindowEventObserver` (per-app AX subscription) are all shared
-  by both adapters. New AX code goes here unless it's truly
-  backend-specific.
+  `WindowEventObserver` (per-app AX subscription) all live here.
+  New AX code goes here unless it's truly backend-specific.
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. NOT `com.wstabs.app` —
   separate TCC grants, separate self-signed cert. Don't reuse
@@ -292,7 +275,7 @@ re-confirmation.
 - [Hexagonal Architecture / Ports & Adapters (Alistair Cockburn)](https://alistair.cockburn.us/hexagonal-architecture/)
   *(reviewed 2026-05-21)* — the pattern facet's 3-layer split
   is literally implementing. ``WindowBackend`` protocol = a
-  Port; ``RiftAdapter`` = an Adapter; ``FacetCore`` lives
+  Port; ``FacetAdapterNative`` = an Adapter; ``FacetCore`` lives
   inside the hexagon. Clean Architecture restates this idea
   with more layers; the rosetta-stone table in
   [docs/architecture.md](docs/architecture.md) shows the mapping.

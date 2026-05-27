@@ -38,7 +38,6 @@
 import AppKit
 import FacetCore
 import FacetAccessibility
-import FacetAdapterRift
 import FacetAdapterNative
 import FacetView
 import FacetViewTree
@@ -98,7 +97,7 @@ enum FacetApp {
           facet window --move-to=N           move the focused window
                                              to workspace N (1-indexed)
 
-        TILING (M5 Phase γ — FACET_BACKEND=native only)
+        TILING (M5 Phase γ)
           facet --set-layout=NAME            set active WS's layout mode
                                              (bsp | stack | float)
           facet --retile                     re-apply active WS's layout
@@ -847,32 +846,24 @@ enum FacetApp {
         app.setActivationPolicy(.accessory)
         AX.ensureTrusted()
 
-        // Backend selection: env var opt-in for the in-progress
-        // native adapter, default = rift (the only feature-complete
-        // backend until Phase α–ε fills in NativeAdapter). Pinned
-        // to env (not config / not CLI) on purpose:
-        //   - env is the lightest switch for "let me try the
-        //     half-built backend without touching the install"
-        //   - config would imply parity / stability we don't have
-        //   - CLI flag would need server-mode re-parsing each run
-        // The env path retires at Phase ε when NativeAdapter
-        // becomes the only option and the rift adapter is deleted.
-        let backendName = ProcessInfo.processInfo
-            .environment["FACET_BACKEND"]?.lowercased()
-        let backend: any WindowBackend
-        switch backendName {
-        case "native":
-            Log.line("backend: native (FACET_BACKEND=native)")
-            backend = NativeAdapter(config: cfg)
-        case "rift", "", nil:
-            backend = RiftAdapter()
-        case let other?:
-            FileHandle.standardError.write(Data((
-                "facet: FACET_BACKEND=\(other) unknown, "
-                + "falling back to rift\n"
-            ).utf8))
-            backend = RiftAdapter()
+        // Single backend since Phase ε (v2.0.0). The
+        // `WindowBackend` protocol is preserved as the seam for
+        // facet-x (M6+ deep-core), but surface-core ships with
+        // exactly one implementation now.
+        //
+        // `FACET_BACKEND` was the env switch during the
+        // multi-PR α→ε rollout; we still read it once for a
+        // friendly migration hint to users who carried the env
+        // var over from v1.x and would otherwise wonder why
+        // their shell setting "did nothing".
+        if let legacy = ProcessInfo.processInfo
+            .environment["FACET_BACKEND"], !legacy.isEmpty
+        {
+            Log.line("FACET_BACKEND=\(legacy) is no longer used "
+                + "(v2.0 retired the rift adapter; native is "
+                + "the only backend) — safe to unset")
         }
+        let backend: any WindowBackend = NativeAdapter(config: cfg)
         let controller = Controller(backend: backend, config: cfg)
         controller.start()
 
