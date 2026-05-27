@@ -648,6 +648,55 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertNotNil(c.layoutTrees[1])
     }
 
+    // MARK: - Phase γ.3 — autoFloat reconcile hint
+
+    func testReconcileAutoFloatMarksNewWindowFloating() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)],
+                        autoFloat: [wid(10)])
+        XCTAssertTrue(c.isFloating(wid(10)))
+    }
+
+    func testReconcileAutoFloatSkipsTreeInsert() {
+        // BSP active WS. A new auto-floating window must NOT
+        // enter the tree.
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
+        _ = c.reconcile(live: [window(10)],
+                        focused: nil, activeRect: displayRect,
+                        autoFloat: [wid(10)])
+        XCTAssertTrue(c.isFloating(wid(10)))
+        XCTAssertTrue(c.tiledFrames(for: 1, in: displayRect).isEmpty)
+    }
+
+    func testReconcileAutoFloatSkipsStackInsert() {
+        var c = WorkspaceCatalog()
+        _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
+        _ = c.reconcile(live: [window(10)],
+                        focused: nil, activeRect: displayRect,
+                        autoFloat: [wid(10)])
+        XCTAssertTrue(c.isFloating(wid(10)))
+        XCTAssertEqual(c.stackOrder(of: 1), [])
+    }
+
+    func testReconcileAutoFloatIsNoopForKnownWindow() {
+        // autoFloat hint must NOT flip floating state on a
+        // window the catalog already knows about — user's
+        // toggleFloat decision stays authoritative.
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        XCTAssertFalse(c.isFloating(wid(10)))
+        // Subsequent reconcile with autoFloat set should NOT
+        // promote a known-non-floating window to floating.
+        _ = c.reconcile(live: [window(10)],
+                        autoFloat: [wid(10)])
+        XCTAssertFalse(c.isFloating(wid(10)),
+                       "autoFloat is a first-sight hint, not a "
+                       + "policy override")
+    }
+
+    // MARK: - Misc state helpers
+
     func testClearParkedStateDropsAllHideFlags() {
         var c = WorkspaceCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))

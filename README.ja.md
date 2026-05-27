@@ -119,7 +119,7 @@ rift-cli 無しに workspace 切替 + window park (anchor / minimize)
 | M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ opt-in |
 | M5 Phase γ.1 — BSP tiling core (auto-balance、 toggleFloat / toggleOrientation、 CLI) | ✅ opt-in |
 | M5 Phase γ.2 — stack mode (focused-fills + cycle next/prev) | ✅ opt-in |
-| M5 Phase γ.3 — AX role auto-float | ⏳ |
+| M5 Phase γ.3 — AX role auto-float (sheet / dialog は tiler に乗らない) | ✅ opt-in |
 | M5 Phase δ–ε — display reconfigure、 rift retire | ⏳ |
 
 レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。

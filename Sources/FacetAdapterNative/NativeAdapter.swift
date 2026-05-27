@@ -132,9 +132,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
+        // Phase γ.3: probe AX role for every live ID that the
+        // catalog hasn't seen yet — sheets / dialogs / floating
+        // panels auto-float on first sight so they don't fight
+        // the tiler.
+        let autoFloat = detectAutoFloating(live: live)
         let result = catalog.reconcile(live: live,
                                        focused: focused,
-                                       activeRect: rect)
+                                       activeRect: rect,
+                                       autoFloat: autoFloat)
         if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
@@ -154,6 +160,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             live: live,
             focused: focused,
             configured: config.effectiveWorkspaceList)
+    }
+
+    /// Phase γ.3: which live windows should default to floating
+    /// (sheet / dialog / palette). Only checks windows the
+    /// catalog hasn't seen yet — known windows keep whatever
+    /// `floatingWindows` state the user has set (toggleFloat
+    /// must remain authoritative once they've explicitly chosen).
+    private func detectAutoFloating(live: [Window]) -> Set<WindowID> {
+        var out: Set<WindowID> = []
+        for w in live where catalog.windowMap[w.id] == nil {
+            guard let ax = AXGeom.window(
+                for: CGWindowID(w.id.serverID),
+                pid: pid_t(w.pid)) else { continue }
+            if AXGeom.isFloatingByRole(ax) {
+                out.insert(w.id)
+                Log.debug("native: auto-float wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+            }
+        }
+        return out
     }
 
     /// Visible rect (display bounds minus menu bar / Dock) of

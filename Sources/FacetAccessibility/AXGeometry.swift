@@ -73,6 +73,54 @@ public enum AXGeom {
             win, kAXSizeAttribute as CFString, v) == .success
     }
 
+    /// AX `kAXRoleAttribute` of a window element, or nil when
+    /// the attribute is missing / the app refuses AX. Used by
+    /// the native adapter to auto-detect floating windows
+    /// (sheets, dialogs, palettes) on first sight.
+    public static func role(_ win: AXUIElement) -> String? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                win, kAXRoleAttribute as CFString, &ref
+              ) == .success else { return nil }
+        return ref as? String
+    }
+
+    /// AX `kAXSubroleAttribute` of a window element, or nil
+    /// when missing. macOS uses subroles to mark floating
+    /// panels (`kAXFloatingWindowSubrole`, `kAXSystemDialogSubrole`).
+    public static func subrole(_ win: AXUIElement) -> String? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                win, kAXSubroleAttribute as CFString, &ref
+              ) == .success else { return nil }
+        return ref as? String
+    }
+
+    /// True when the window's AX role / subrole identifies it
+    /// as a transient / floating-style window (system dialog,
+    /// sheet, floating palette). Phase γ.3 auto-float source.
+    /// Conservative: only the well-known role / subrole values
+    /// are treated as floating — unknown roles fall through to
+    /// regular tiling.
+    public static func isFloatingByRole(_ win: AXUIElement) -> Bool {
+        if let r = role(win),
+           r == kAXSheetRole as String
+           || r == kAXDrawerRole as String {
+            return true
+        }
+        // SystemDialog / SystemFloatingWindow are *sub*roles
+        // (`AXSystemDialog` / `AXSystemFloatingWindow`), not
+        // top-level roles — they live in the subrole check.
+        if let sub = subrole(win),
+           sub == kAXFloatingWindowSubrole as String
+           || sub == kAXSystemDialogSubrole as String
+           || sub == kAXSystemFloatingWindowSubrole as String
+           || sub == kAXDialogSubrole as String {
+            return true
+        }
+        return false
+    }
+
     /// CGWindowID for an AX window element via the private
     /// `_AXUIElementGetWindow` (dlsym-bound in AXFocus.swift —
     /// the symbol is module-internal, so the wrapper lives here
