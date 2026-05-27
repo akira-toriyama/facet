@@ -57,6 +57,17 @@ public struct Window: Sendable {
     /// when no would-be info is available (fresh window never
     /// parked). `nil` when the backend cannot supply geometry.
     public let frame: CGRect?
+    /// Whether the window currently has a visible spot on any
+    /// display — equivalent to `CGWindowList`'s
+    /// `kCGWindowIsOnscreen`. `false` when the window lives on a
+    /// different macOS Space, is minimized to the Dock, or has
+    /// been hidden via Cmd+H. The catalog uses this to gate **new
+    /// window entries** only (off-screen-on-first-sight windows
+    /// stay unmanaged); existing windows in the map are kept
+    /// regardless of this flag so a Space switch / minimize
+    /// doesn't lose the WS assignment. See memory
+    /// `facet-macos-spaces-coexistence`.
+    public let isOnscreen: Bool
 
     public init(id: WindowID,
                 pid: Int,
@@ -64,7 +75,8 @@ public struct Window: Sendable {
                 title: String,
                 isFocused: Bool,
                 isFloating: Bool,
-                frame: CGRect?) {
+                frame: CGRect?,
+                isOnscreen: Bool = true) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -72,6 +84,7 @@ public struct Window: Sendable {
         self.isFocused = isFocused
         self.isFloating = isFloating
         self.frame = frame
+        self.isOnscreen = isOnscreen
     }
 }
 

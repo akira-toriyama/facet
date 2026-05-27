@@ -133,6 +133,28 @@ struct WorkspaceCatalog {
     /// focus to a now-missing window.
     private(set) var lastFocusedOnLeave: [Int: WindowID] = [:]
 
+    /// IDs reconcile has decided NOT to auto-manage on a later
+    /// `isOnscreen` flip. Populated two ways:
+    ///   1. **Bulk-marked as pre-existing** via `markPreExisting`
+    ///      — called at startup with the initial enumeration and
+    ///      on every `activeSpaceDidChange` with the post-switch
+    ///      enumeration. Every CGWindowList ID at that moment is
+    ///      flagged, so a window already alive when facet (or the
+    ///      Space change) appeared can never grab a slot in
+    ///      `activeIndex` later when its on-screen state flips.
+    ///   2. **Self-marked on successful add** — when reconcile
+    ///      genuinely adds a window to `windowMap` (saw it as
+    ///      `isOnscreen=true` for the first time), it also marks
+    ///      that ID examined so a subsequent close + replay
+    ///      can't get added twice.
+    /// Critical invariant: a window first observed `isOnscreen=
+    /// false` is NOT auto-examined. Some windows (Chrome's first
+    /// new window after launch, for example) briefly report
+    /// `isOnscreen=false` during creation; the next reconcile
+    /// catches them with `true` and adds them. See memory
+    /// `facet-macos-spaces-coexistence`.
+    private(set) var examinedIDs: Set<WindowID> = []
+
     init() {}
 
     // MARK: - Reconcile
@@ -162,33 +184,64 @@ struct WorkspaceCatalog {
         -> ReconcileResult
     {
         let liveByID = Dictionary(uniqueKeysWithValues:
-                                  live.map { ($0.id, $0.pid) })
-        let goneIDs = windowMap.keys.filter { liveByID[$0] == nil }
+                                  live.map { ($0.id, $0) })
+        let liveIDs = Set(liveByID.keys)
+        // Truly-gone IDs only: a window absent from the full
+        // CGWindowList enumeration (which now includes off-screen
+        // windows via .optionAll). A window that's merely on a
+        // different macOS Space, minimized to the Dock, or Cmd+H'd
+        // stays in `liveByID` with `isOnscreen=false` — we keep
+        // its WS assignment so the user gets it back where they
+        // left it.
+        let goneIDs = windowMap.keys.filter { !liveIDs.contains($0) }
         for id in goneIDs { forgetWindow(id) }
         var added = 0
-        for (id, pid) in liveByID {
+        for (id, w) in liveByID {
             if let existing = windowMap[id] {
-                if existing.pid != pid {
+                if existing.pid != w.pid {
                     windowMap[id] = WindowSlot(
-                        workspace: existing.workspace, pid: pid)
+                        workspace: existing.workspace, pid: w.pid)
                 }
-            } else {
-                windowMap[id] = WindowSlot(
-                    workspace: activeIndex, pid: pid)
-                added += 1
-                // Phase γ.3: AX role pre-flag — if the adapter
-                // told us this id should be floating (sheet /
-                // dialog / palette), mark it BEFORE the tile /
-                // stack insert below so it skips both.
-                if autoFloat.contains(id) {
-                    floatingWindows.insert(id)
-                }
-                attachToLayout(id, workspace: activeIndex,
-                               focused: focused,
-                               in: activeRect)
+                continue
             }
+            // Bulk-marked pre-existing (other Space at startup /
+            // Space-change snapshot, Cmd+H'd window seen at
+            // startup, etc.). Stay out of `windowMap` even if
+            // the OS later flips them on-screen.
+            if examinedIDs.contains(id) { continue }
+            // First-sight off-screen: defer the decision. Don't
+            // mark examined yet — newly-opened windows (e.g.
+            // Chrome's first window post-launch) can briefly
+            // report `isOnscreen=false` during creation, and a
+            // premature examined-mark here would lock them out
+            // for good.
+            guard w.isOnscreen else { continue }
+            windowMap[id] = WindowSlot(
+                workspace: activeIndex, pid: w.pid)
+            examinedIDs.insert(id)
+            added += 1
+            // Phase γ.3: AX role pre-flag — if the adapter
+            // told us this id should be floating (sheet /
+            // dialog / palette), mark it BEFORE the tile /
+            // stack insert below so it skips both.
+            if autoFloat.contains(id) {
+                floatingWindows.insert(id)
+            }
+            attachToLayout(id, workspace: activeIndex,
+                           focused: focused,
+                           in: activeRect)
         }
         return ReconcileResult(added: added, removed: goneIDs.count)
+    }
+
+    /// Bulk-mark every id in `live` as pre-existing (don't
+    /// auto-add later on an `isOnscreen` flip). Called from the
+    /// adapter at startup (with the first enumeration) and on
+    /// every `activeSpaceDidChange` (with the post-switch
+    /// enumeration) — so windows revealed by a Space transition
+    /// stay out of `activeIndex`. Idempotent.
+    mutating func markPreExisting(_ ids: some Sequence<WindowID>) {
+        examinedIDs.formUnion(ids)
     }
 
     /// Forget a window (called by `closeWindow` after AX press
@@ -209,6 +262,7 @@ struct WorkspaceCatalog {
         floatingWindows.remove(id)
         detachFromLayouts(id)
         clearLeaveFocus(of: id)
+        examinedIDs.remove(id)
     }
 
     /// Clear all hide-state bookkeeping for `id` without
@@ -601,8 +655,15 @@ struct WorkspaceCatalog {
     {
         // Group raw live windows by WS first so per-WS layout
         // queries (tiledFrames / stackOrders) only run once.
-        let byWS = Dictionary(grouping: live) { w in
-            windowMap[w.id]?.workspace ?? activeIndex
+        // `windowMap` is the authority on which windows facet
+        // manages — drop anything else (the `.optionAll`
+        // enumeration deliberately returns Cmd+H'd /
+        // other-Space / minimized windows we never accepted as
+        // entries, and falling those back to `activeIndex`
+        // would pile them all into WS1).
+        let tracked = live.filter { windowMap[$0.id] != nil }
+        let byWS = Dictionary(grouping: tracked) { w in
+            windowMap[w.id]!.workspace
         }
         return configured.map { entry in
             let isActive = entry.index == activeIndex
@@ -622,7 +683,8 @@ struct WorkspaceCatalog {
                            for: w, isActiveWS: isActive,
                            mode: m, tileFrames: tileF,
                            stackSet: stackSet,
-                           activeRect: activeRect))
+                           activeRect: activeRect),
+                       isOnscreen: w.isOnscreen)
             }
             return Workspace(
                 index: entry.index - 1,

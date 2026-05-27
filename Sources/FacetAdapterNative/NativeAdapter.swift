@@ -131,7 +131,30 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         DispatchQueue.main.async {
             MainActor.assumeIsolated { dObs.start() }
         }
+
+        // macOS Space switch observer. The post-switch
+        // enumeration includes the new Space's windows with
+        // `isOnscreen=true` — reconcile would otherwise see them
+        // as fresh user-opened windows and pile them into
+        // `activeIndex`. Flag refreshCatalog so it bulk-marks the
+        // current enumeration as pre-existing before evaluating
+        // any of them. See memory
+        // `facet-macos-spaces-coexistence`.
+        let nc = NSWorkspace.shared.notificationCenter
+        spaceChangeToken = nc.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self, eventContinuation] _ in
+            MainActor.assumeIsolated {
+                self?.spaceChangePending = true
+            }
+            eventContinuation.yield(.refreshNeeded)
+        }
     }
+
+    /// Observer token for `NSWorkspace.activeSpaceDidChange`;
+    /// retained so the observer survives init and is releasable.
+    private var spaceChangeToken: NSObjectProtocol?
 
     public var events: AsyncStream<BackendEvent> { eventStream }
     public var errors: AsyncStream<String> { errorStream }
@@ -165,6 +188,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // panels auto-float on first sight so they don't fight
         // the tiler.
         let autoFloat = detectAutoFloating(live: live)
+        // Space-change snapshot: mark every currently-enumerated
+        // ID as pre-existing BEFORE reconcile sees them. The
+        // post-switch enumeration includes the new macOS Space's
+        // windows with `isOnscreen=true`; without this flagging,
+        // reconcile would treat each as a fresh user-opened
+        // window and pile them into `activeIndex` (WS1).
+        // See memory `facet-macos-spaces-coexistence`.
+        if spaceChangePending {
+            spaceChangePending = false
+            catalog.markPreExisting(live.map(\.id))
+        }
         let result = catalog.reconcile(live: live,
                                        focused: focused,
                                        activeRect: rect,
@@ -180,7 +214,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             focused: focused,
             activeRect: rect,
             configured: config.effectiveWorkspaceList)
+        // Bootstrap snapshot: after the very first reconcile
+        // populates `windowMap` with the initially-visible
+        // windows, lock every other live ID (Cmd+H'd, other
+        // macOS Space, minimized to Dock) as pre-existing so a
+        // later `isOnscreen` flip doesn't sweep them into
+        // `activeIndex`.
+        if !didBootstrap {
+            didBootstrap = true
+            catalog.markPreExisting(live.map(\.id))
+        }
     }
+
+    /// Set by the `activeSpaceDidChange` observer; consumed by
+    /// the next `refreshCatalog` to bulk-mark the post-switch
+    /// enumeration as pre-existing before reconcile evaluates it.
+    private var spaceChangePending = false
+    /// Cleared after the first successful `refreshCatalog`. Used
+    /// to bulk-mark the initial CGWindowList as pre-existing so
+    /// off-screen windows alive at launch can't sneak in later.
+    private var didBootstrap = false
 
     /// Cap on `detectAutoFloating`'s per-refresh AX probes. The
     /// role check costs ~3 AX round-trips per window (window
@@ -276,7 +329,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// Enumerate visible windows via the public CGWindowList API.
+    /// Enumerate windows via the public CGWindowList API.
+    /// Returns **every** window in the user session, not just the
+    /// ones currently on-screen — each entry carries an
+    /// `isOnscreen` flag (= `kCGWindowIsOnscreen`) instead. The
+    /// catalog uses that flag to gate new-window entry while
+    /// keeping the WS assignment of existing windows that
+    /// temporarily go off-screen (different macOS Space,
+    /// minimized to Dock, Cmd+H'd). Without this split, a Space
+    /// switch made every previously-managed window look "gone",
+    /// `forgetWindow` dropped them, and they re-landed in the
+    /// current activeIndex on next sight. See memory
+    /// `facet-macos-spaces-coexistence`.
+    ///
     /// Skips:
     ///   - facet's own process (avoid managing our own panel)
     ///   - non-normal `kCGWindowLayer` values — wallpapers
@@ -299,7 +364,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// CGWindowList adapter with no AX dependency.
     private func enumerateCGWindows() -> [Window] {
         let opts: CGWindowListOption = [
-            .optionOnScreenOnly, .excludeDesktopElements,
+            .optionAll, .excludeDesktopElements,
         ]
         guard let raw = CGWindowListCopyWindowInfo(opts, kCGNullWindowID)
                 as? [[String: Any]] else { return [] }
@@ -310,16 +375,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 let pid = dict[kCGWindowOwnerPID as String] as? Int,
                 pid != myPid
             else { return nil }
-            // Normal user windows live at layer 0. Everything
-            // else (wallpaper, status overlays, third-party
-            // chrome) gets skipped automatically.
             let layer = dict[kCGWindowLayer as String] as? Int ?? 0
             if layer != 0 { return nil }
             let owner = dict[kCGWindowOwnerName as String]
                 as? String ?? ""
-            // Belt-and-braces: even if either of these ever
-            // shows up at layer 0, we still don't want to manage
-            // them.
             if owner == "Window Server" || owner == "borders" {
                 return nil
             }
@@ -332,6 +391,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     width: b["Width"]  as? CGFloat ?? 0,
                     height: b["Height"] as? CGFloat ?? 0)
             }
+            let isOnscreen = (dict[kCGWindowIsOnscreen as String]
+                as? Bool) ?? false
             return Window(
                 id: WindowID(serverID: Int(cgID)),
                 pid: pid,
@@ -339,7 +400,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 title: title,
                 isFocused: false,
                 isFloating: false,
-                frame: frame)
+                frame: frame,
+                isOnscreen: isOnscreen)
         }
     }
 
