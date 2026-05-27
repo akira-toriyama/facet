@@ -80,6 +80,9 @@ final class BackendTests: XCTestCase {
         b.setLayoutMode(workspaceIndex: 2, mode: "stack")
         b.closeWindow(win)
         b.perform(.toggleFullscreen)
+        b.perform(.cycleStackNext)
+        b.perform(.cycleStackPrev)
+        b.retileActiveWorkspace()
 
         XCTAssertEqual(b.switched, [3])
         XCTAssertEqual(b.moved.count, 1)
@@ -89,7 +92,12 @@ final class BackendTests: XCTestCase {
         XCTAssertEqual(b.layoutChanges[0].0, 2)
         XCTAssertEqual(b.layoutChanges[0].1, "stack")
         XCTAssertEqual(b.closed, [win])
-        XCTAssertEqual(b.performed, [.toggleFullscreen])
+        // perform passes the enum through unchanged, in order.
+        XCTAssertEqual(b.performed,
+                       [.toggleFullscreen,
+                        .cycleStackNext,
+                        .cycleStackPrev])
+        XCTAssertEqual(b.retileCalls, 1)
     }
 
     func testWindowMenuVariesByMode() {
