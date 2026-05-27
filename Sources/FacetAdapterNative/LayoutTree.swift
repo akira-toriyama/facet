@@ -41,21 +41,21 @@ import FacetCore
 /// triggering Swift's "recursive enum needs `indirect`" cycle —
 /// we want value semantics throughout (each mutation returns a
 /// new tree) so equality + tests behave like data, not references.
-public enum LayoutNode: Equatable, Sendable {
+enum LayoutNode: Equatable, Sendable {
     case leaf(WindowID)
     case split(Split)
 
-    public struct Split: Equatable, Sendable {
-        public enum Orientation: Sendable { case horizontal, vertical }
-        public let orientation: Orientation
+    struct Split: Equatable, Sendable {
+        enum Orientation: Sendable { case horizontal, vertical }
+        let orientation: Orientation
         /// Fraction of the parent rect that the *first* child
         /// receives (0…1). Defaults to 0.5 at insert time;
         /// future drag-resize work will update this in place.
-        public let ratio: CGFloat
-        public let first: Box
-        public let second: Box
+        let ratio: CGFloat
+        let first: Box
+        let second: Box
 
-        public init(orientation: Orientation, ratio: CGFloat,
+        init(orientation: Orientation, ratio: CGFloat,
                     first: LayoutNode, second: LayoutNode) {
             self.orientation = orientation
             self.ratio = max(0.05, min(0.95, ratio))
@@ -68,10 +68,10 @@ public enum LayoutNode: Equatable, Sendable {
     /// rule without polluting the public API with `indirect`.
     /// Compared by underlying value, which keeps `Equatable`
     /// honest on tree-shape comparisons.
-    public final class Box: Equatable, @unchecked Sendable {
-        public let node: LayoutNode
-        public init(_ node: LayoutNode) { self.node = node }
-        public static func == (lhs: Box, rhs: Box) -> Bool {
+    final class Box: Equatable, @unchecked Sendable {
+        let node: LayoutNode
+        init(_ node: LayoutNode) { self.node = node }
+        static func == (lhs: Box, rhs: Box) -> Bool {
             lhs.node == rhs.node
         }
     }
@@ -82,10 +82,10 @@ public enum LayoutNode: Equatable, Sendable {
 /// `nil` root means the workspace has no tiled windows yet;
 /// the first `insert` populates it with a leaf, the second
 /// with a 50/50 split, and so on.
-public struct LayoutTree: Equatable, Sendable {
-    public private(set) var root: LayoutNode?
+struct LayoutTree: Equatable, Sendable {
+    private(set) var root: LayoutNode?
 
-    public init(root: LayoutNode? = nil) {
+    init(root: LayoutNode? = nil) {
         self.root = root
     }
 
@@ -104,7 +104,7 @@ public struct LayoutTree: Equatable, Sendable {
     ///   layout is recomputed every time `frames(in:)` runs,
     ///   so the actual `rect` passed here only matters for the
     ///   *orientation choice* at this specific insertion.
-    public mutating func insert(_ id: WindowID,
+    mutating func insert(_ id: WindowID,
                                 focused: WindowID?,
                                 in rect: CGRect) {
         guard root != nil else {
@@ -179,7 +179,7 @@ public struct LayoutTree: Equatable, Sendable {
     /// Remove `id` from the tree. The sibling subtree absorbs
     /// the freed space (standard BSP healing). When the root
     /// itself is the only leaf, the tree becomes empty.
-    public mutating func remove(_ id: WindowID) {
+    mutating func remove(_ id: WindowID) {
         guard let r = root else { return }
         root = removed(from: r, id: id)
     }
@@ -210,7 +210,7 @@ public struct LayoutTree: Equatable, Sendable {
     /// Rotate the *parent split* of `id` 90°. No-op when:
     ///   - `id` isn't in the tree
     ///   - `id` is the root leaf (no parent split exists)
-    public mutating func toggleOrientation(of id: WindowID) {
+    mutating func toggleOrientation(of id: WindowID) {
         guard let r = root else { return }
         root = toggled(in: r, target: id).0
     }
@@ -265,7 +265,7 @@ public struct LayoutTree: Equatable, Sendable {
 
     // MARK: - Queries
 
-    public func contains(_ id: WindowID) -> Bool {
+    func contains(_ id: WindowID) -> Bool {
         guard let r = root else { return false }
         return contains(r, id: id)
     }
@@ -282,7 +282,7 @@ public struct LayoutTree: Equatable, Sendable {
 
     /// Flat list of every leaf id in left-to-right / top-to-bottom
     /// order. Useful for `snapshot` ordering + reconcile diffs.
-    public var leaves: [WindowID] {
+    var leaves: [WindowID] {
         guard let r = root else { return [] }
         return collectLeaves(r)
     }
@@ -301,7 +301,7 @@ public struct LayoutTree: Equatable, Sendable {
     /// Recursively compute the on-screen rect for every leaf
     /// against `rect` (typically the active display's
     /// `visibleFrame`). Empty tree → empty dictionary.
-    public func frames(in rect: CGRect) -> [WindowID: CGRect] {
+    func frames(in rect: CGRect) -> [WindowID: CGRect] {
         guard let r = root else { return [:] }
         var out: [WindowID: CGRect] = [:]
         compute(r, in: rect, into: &out)
