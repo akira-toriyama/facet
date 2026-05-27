@@ -21,7 +21,6 @@ import FacetAccessibility
 import FacetView
 import FacetViewTree
 import FacetViewGrid
-import FacetAdapterRift
 
 @MainActor
 final class Controller: NSObject {
