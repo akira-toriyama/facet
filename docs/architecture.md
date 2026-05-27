@@ -77,7 +77,7 @@ below).
 | **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. **Status (2026-05-26)**: workspace state + reconcile + focusedWindow + AX-driven event subscription landed (`FACET_BACKEND=native` opt-in usable) | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Status (2026-05-26)**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook all landed | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
-| **δ** | display reconfigure handling; geometry persistence | rift `display` |
+| **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen 2026-05-27**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | rift `display` |
 | **ε** | deprecate `FacetAdapterRift`; native becomes default | — |
 
 Each phase is gated by being usable end-to-end through the view layer
@@ -195,6 +195,67 @@ not relitigate** without explicit grill round.
     authoritative.
 
 Memory cross-reference: `facet-phase-gamma-decisions`.
+
+### Phase δ frozen decisions (2026-05-27)
+
+Phase δ design is fully decided. Details live in memory
+(`facet-phase-delta-decisions`); this list is the index. **Do
+not relitigate** without explicit grill round.
+
+- **Scope interpretation**: `display reconfigure handling +
+  persistence-aware geometry`. The "persistence" half does
+  NOT add new facet-managed state — it means making sure
+  *existing* persisted geometry (panel position) survives
+  display reconfiguration without breaking. WS state
+  persistence stays out of scope (Phase α frozen "no state
+  persistence, setupFiles only" is preserved).
+- **Trigger**: `NSApplication.didChangeScreenParametersNotification`
+  only. Covers resolution change, arrangement, hot-plug, lid
+  open/close, sleep wake — one signal, one handler.
+  Fine-grained `CGDisplayRegisterReconfigurationCallback` is
+  YAGNI; the response is the same regardless of cause.
+- **Handler**: re-tile *active WS only* (lazy retile invariant
+  preserved, `facet-phase-gamma-lessons`). Plus: rescue
+  `anchorParked` windows whose recorded `originalPosition` is
+  no longer on any visible display — move to the nearest
+  visible display's anchor sliver. Inactive WS layouts are
+  not touched (catch up on next switch).
+- **Panel snap fallback**: when the persisted panel rect is
+  fully off-screen after a reconfig, snap to the nearest
+  visible display's centre (preserving size). Main-display
+  reset and default-position reset both rejected — nearest
+  matches user intent best.
+- **Architecture**: `Sources/FacetAccessibility/DisplayChangeObserver.swift`
+  mirrors `WindowEventObserver` (same `init(onChange:)` /
+  `start()` / `stop()` shape). Pure geometry helpers in
+  `Sources/FacetAccessibility/DisplayGeometry.swift`
+  (`orphanedPoints`, `nearestDisplay`, `isVisible`).
+  Controller and NativeAdapter each own their own observer
+  instance — backend doesn't notify the controller, each
+  handles its own concern (separation maintained).
+- **Debounce**: 0.5 s. Reconfig events fire in bursts of 2–3
+  notifications; debounce coalesces them into a single
+  handler invocation via `DispatchWorkItem` cancel /
+  reschedule.
+- **Testing strategy**: pure `DisplayGeometry` helpers get
+  full unit coverage. `DisplayChangeObserver` lifecycle gets
+  1–2 cases (start/stop + debounce). The AX-touching parts
+  (NativeAdapter `handleDisplayReconfigure`, PanelHost
+  reconfigure response) are acknowledged as untested on the
+  current 1-display dev environment; production smoke is
+  deferred to multi-display users.
+- **PR phasing**: single PR (≈600–800 lines incl. tests).
+  Same pattern as γ.1 — pure value type + first consumer in
+  one mergeable unit, no orphan-consumer split.
+
+**Single-display dev environment note**: The developer
+machine has one display. Multi-display polish isn't pursued
+beyond what the rescue helpers naturally cover. The geometry
+helpers ARE implemented (they're pure, unit-testable, cheap)
+so when multi-display use surfaces — own setup change, user
+report — the response logic is already there.
+
+Memory cross-reference: `facet-phase-delta-decisions`.
 
 ## Two-binary structure (surface-core + deep-core)
 
