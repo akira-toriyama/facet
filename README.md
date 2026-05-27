@@ -42,7 +42,7 @@ Both views share the same backend and the same theme
 | Drag a window row onto another workspace (tree) | move that window |
 | Drag empty space (tree) | reposition the panel — position persists |
 | Right-click (tree) | context menu — window actions / workspace layout picker |
-| Hover a window row (tree, macOS 14+) | live preview at the window's real position |
+| Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview_mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
 | Drag a thumb to another cell (grid) | move that window to that workspace |

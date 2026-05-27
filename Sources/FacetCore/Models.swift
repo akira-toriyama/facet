@@ -29,10 +29,15 @@ public struct Window: Sendable {
     public let title: String
     public let isFocused: Bool
     public let isFloating: Bool
-    /// Logical on-screen frame for the window's owning workspace.
-    /// For inactive workspaces this is where the window *would* sit
-    /// after a switch — rift parks them far off-screen meanwhile.
-    /// `nil` when the backend cannot supply geometry.
+    /// Where the user perceives the window on its owning workspace.
+    /// For the active WS this is the live on-screen frame. For
+    /// inactive WSs the adapter computes the would-be frame the
+    /// window will occupy on next switch — BSP tile slot in
+    /// `"bsp"` mode, full active rect in `"stack"` mode, the
+    /// recorded pre-park position (+ current size) in `"float"`
+    /// mode or for floating windows. Falls back to the live frame
+    /// when no would-be info is available (fresh window never
+    /// parked). `nil` when the backend cannot supply geometry.
     public let frame: CGRect?
 
     public init(id: WindowID,
