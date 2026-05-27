@@ -157,9 +157,17 @@ public final class RiftAdapter: WindowBackend, @unchecked Sendable {
             (args, label) = (["execute", "layout", "snap-strip"],
                              "layout snap-strip")
         case .cycleStackNext, .cycleStackPrev:
-            // facet-native concept. rift owns its
-            // own stack semantics — no-op here so a hotkey hit
-            // while on the rift backend doesn't error.
+            // facet-native concept (`facet window --cycle-stack=…`).
+            // rift owns its own stack semantics, so we can't
+            // dispatch this verb to rift-cli. Surface a hint
+            // through the errors stream so the user sees *why*
+            // the hotkey did nothing in `facet status` — a
+            // silent no-op is the previous failure mode this
+            // is fixing.
+            errorContinuation.yield(
+                "window --cycle-stack: not supported on the "
+                + "rift backend (use FACET_BACKEND=native, "
+                + "or rift's own keybinds for its stack mode)")
             return
         }
         runOrReport(args, label: label)

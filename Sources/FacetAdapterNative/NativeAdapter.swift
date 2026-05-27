@@ -159,14 +159,36 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             configured: config.effectiveWorkspaceList)
     }
 
+    /// Cap on `detectAutoFloating`'s per-refresh AX probes. The
+    /// role check costs ~3 AX round-trips per window (window
+    /// lookup + role + subrole), and each round-trip has a
+    /// default 6s timeout — a 100-window startup with one busy
+    /// app could otherwise stall reconcile for minutes. Beyond
+    /// the cap, new windows simply enter the tiler without the
+    /// auto-float hint; the user can `--toggle-float` them
+    /// manually. Tuned so a normal session start (≤16 new
+    /// windows per refresh tick) is fully covered.
+    private let maxAutoFloatProbes = 16
+
     /// Phase γ.3: which live windows should default to floating
     /// (sheet / dialog / palette). Only checks windows the
     /// catalog hasn't seen yet — known windows keep whatever
     /// `floatingWindows` state the user has set (toggleFloat
     /// must remain authoritative once they've explicitly chosen).
+    /// Capped at `maxAutoFloatProbes` AX queries per call so a
+    /// busy startup can't burn an unbounded number of AX
+    /// round-trips on the foreground reconcile.
     private func detectAutoFloating(live: [Window]) -> Set<WindowID> {
         var out: Set<WindowID> = []
+        var probed = 0
         for w in live where catalog.windowMap[w.id] == nil {
+            if probed >= maxAutoFloatProbes {
+                Log.debug("native: auto-float probe cap "
+                    + "(\(maxAutoFloatProbes)) hit — "
+                    + "remaining new windows skip role check")
+                break
+            }
+            probed += 1
             guard let ax = AXGeom.window(
                 for: CGWindowID(w.id.serverID),
                 pid: pid_t(w.pid)) else { continue }
@@ -179,10 +201,32 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return out
     }
 
-    /// Visible rect (display bounds minus menu bar / Dock) of
-    /// the display the focused window currently sits on. Falls
-    /// back to the main display when nothing is focused — keeps
-    /// tile math meaningful even at startup.
+    /// Display rect to anchor tile / stack math against.
+    /// Determined by the focused window's centre point (or the
+    /// origin when nothing is focused — startup, mid-switch).
+    ///
+    /// Two branches with intentionally different rect semantics:
+    ///
+    ///   - **Main thread** (the normal path — `refreshCatalog` /
+    ///     `applyLayout` callers all run on main via the
+    ///     Controller's `MainActor`-isolated `requestRefresh` /
+    ///     poll timer): returns `Displays.visibleFrame` (full
+    ///     display *minus menu bar / Dock*), the correct rect
+    ///     for tile geometry. `visibleFrame` is `@MainActor`
+    ///     because it talks to `NSScreen`.
+    ///
+    ///   - **Off-main** (defensive — facet doesn't currently
+    ///     call this path, but `WindowBackend.workspaces()` has
+    ///     no MainActor contract, so a future caller from a
+    ///     background task wouldn't crash): returns
+    ///     `Displays.containing` (full display *including* menu
+    ///     bar / Dock). Tiled windows would briefly cover those
+    ///     regions but `applyLayout` is idempotent, so the next
+    ///     main-thread tick re-tiles against the right rect.
+    ///     If we ever observe this branch firing in production,
+    ///     `MainActor.assumeIsolated` + a contract requirement
+    ///     is the upgrade path (would crash callers instead of
+    ///     silently degrading geometry).
     private func activeDisplayRect() -> CGRect {
         let probe: CGPoint
         if let id = focusedWindow(),
@@ -201,6 +245,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 Displays.visibleFrame(containing: probe)
             }
         }
+        Log.debug("native: activeDisplayRect off-main — "
+            + "using full display bounds (no visibleFrame)")
         return Displays.containing(probe)
     }
 
@@ -446,21 +492,33 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public func closeWindow(_ id: WindowID) {
         // pid comes from `catalog.windowMap[id]` — recorded at
         // reconcile time, so no fresh CGWindowList sweep is needed.
-        // Misses only if the window was never reconciled (e.g.
-        // closeWindow racing a brand-new window before refresh).
+        // Failures here all surface in the errors stream so
+        // `facet status` lastError tells the user *why* the
+        // right-click "Close window" appeared to do nothing —
+        // a debug-log-only failure would be invisible.
         guard let pid = catalog.pid(for: id) else {
-            Log.debug("native: closeWindow \(id.serverID) "
-                + "— not in catalog")
+            let msg = "closeWindow \(id.serverID): not in catalog "
+                + "(window may have just opened — try again)"
+            Log.debug("native: \(msg)")
+            errorContinuation.yield(msg)
             return
         }
         guard let ax = AXGeom.window(
                 for: CGWindowID(id.serverID), pid: pid_t(pid)) else {
-            Log.debug("native: closeWindow \(id.serverID) — no AX")
+            let msg = "closeWindow \(id.serverID): AX element "
+                + "unavailable (app may have died, or has no AX)"
+            Log.debug("native: \(msg)")
+            errorContinuation.yield(msg)
             return
         }
         let pressed = AXGeom.closeButton(ax)
         Log.debug("native: closeWindow \(id.serverID) "
             + "pressed=\(pressed)")
+        if !pressed {
+            errorContinuation.yield(
+                "closeWindow \(id.serverID): close button "
+                + "missing or refused (app dialog intercepted?)")
+        }
         // Best-effort eviction from catalog — the next event /
         // poll reconcile will fix it anyway if the app intercepted
         // (e.g. unsaved-changes dialog) and the window survives.
