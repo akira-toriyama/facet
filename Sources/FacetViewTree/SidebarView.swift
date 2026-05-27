@@ -667,17 +667,15 @@ public final class SidebarView: NSView {
             // stays selected until the next backend query, then
             // jumps.
             let tgt = lastWorkspaces.first { $0.index == i }
-            let pred = tgt?.windows.first(where: { $0.isFocused })?.id
-                ?? tgt?.windows.map(\.id).min(by: {
-                    $0.serverID < $1.serverID
-                })
+            let pred = tgt?.windows.predictedFocus()?.id
                 ?? WindowID(serverID: -1)
             setOptimistic(windowID: pred, workspaceIndex: i)
             let bk = backend
-            // Header click = no explicit window pick. Auto-focus
-            // the same `pred` chain the optimistic highlight just
-            // settled on (catalog.autoFocusTarget matches this
-            // logic), or activate Finder when the WS is empty.
+            // Header click = no explicit window pick. The backend's
+            // `autoFocus: true` path uses the same `predictedFocus`
+            // helper as fallback, so the window highlighted above
+            // is the same one that ends up focused (or Finder
+            // activated when the WS is empty).
             cliQueue.async {
                 bk.switchWorkspace(toIndex: i, autoFocus: true)
             }
