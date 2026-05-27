@@ -38,11 +38,11 @@ import FacetCore
 /// plus the owning app's pid; pid is needed by every AX operation
 /// the adapter performs on the window, so caching it here avoids
 /// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
-public struct WindowSlot: Equatable, Sendable {
+struct WindowSlot: Equatable, Sendable {
     /// 1-based workspace index.
-    public let workspace: Int
-    public let pid: Int
-    public init(workspace: Int, pid: Int) {
+    let workspace: Int
+    let pid: Int
+    init(workspace: Int, pid: Int) {
         self.workspace = workspace
         self.pid = pid
     }
@@ -51,10 +51,10 @@ public struct WindowSlot: Equatable, Sendable {
 /// A window referenced by id + pid — the minimum the adapter needs
 /// to call `AXGeom.window(for:pid:)` on it. Plans and move
 /// outcomes use this so the adapter never has to look pid up again.
-public struct WindowRef: Hashable, Sendable {
-    public let id: WindowID
-    public let pid: Int
-    public init(id: WindowID, pid: Int) {
+struct WindowRef: Hashable, Sendable {
+    let id: WindowID
+    let pid: Int
+    init(id: WindowID, pid: Int) {
         self.id = id
         self.pid = pid
     }
@@ -66,47 +66,47 @@ public struct WindowRef: Hashable, Sendable {
 /// park / restore) rather than performing the AX side-effects
 /// themselves. This lets the AX side stay completely separate and
 /// keeps the catalog unit-testable.
-public struct WorkspaceCatalog {
+struct WorkspaceCatalog {
 
     // MARK: - State
 
     /// 1-based index of the active workspace.
-    public private(set) var activeIndex: Int = 1
+    private(set) var activeIndex: Int = 1
 
     /// Window → slot (workspace + pid). Survives across reconciles
     /// so a window the user moved stays where they put it; new
     /// windows land in `activeIndex` on the next reconcile.
-    public private(set) var windowMap: [WindowID: WindowSlot] = [:]
+    private(set) var windowMap: [WindowID: WindowSlot] = [:]
 
     /// Windows currently parked at the bottom-right anchor sliver.
     /// `markAnchorParked` populates; `consumeAnchorRestore` clears.
     /// The adapter checks `shouldParkAnchor` before invoking AX so
     /// a poll-driven refresh can't re-park on top of a park.
-    public private(set) var anchorParked: Set<WindowID> = []
+    private(set) var anchorParked: Set<WindowID> = []
 
     /// Windows currently minimized via AX `kAXMinimized`. Mirrors
     /// `anchorParked` but tracks a different OS state (Dock vs
     /// off-screen position). Kept separate so a runtime hide-method
     /// flip wouldn't conflate the two.
-    public private(set) var minimizeParked: Set<WindowID> = []
+    private(set) var minimizeParked: Set<WindowID> = []
 
     /// Position the window held before facet parked it via the
     /// anchor method. Recorded at park time, consumed at restore
     /// time. The minimize method doesn't need this — macOS
     /// remembers the un-minimized rect on its own.
-    public private(set) var originalPositions: [WindowID: CGPoint] = [:]
+    private(set) var originalPositions: [WindowID: CGPoint] = [:]
 
     /// Per-WS layout mode. Missing entries default to `"float"`
     /// (Phase γ frozen decision: existing users see no surprise
     /// behaviour on upgrade). Valid values: `"float"` / `"bsp"`
     /// / `"stack"`.
-    public private(set) var layoutModes: [Int: String] = [:]
+    private(set) var layoutModes: [Int: String] = [:]
 
     /// Per-WS BSP tree. Only present for WSs in `"bsp"` mode;
     /// other modes have no entry. Tree IDs are kept in sync with
     /// `windowMap` by `reconcile` / `moveWindow` / `drop` and by
     /// the explicit `setMode` migration path.
-    public private(set) var layoutTrees: [Int: LayoutTree] = [:]
+    private(set) var layoutTrees: [Int: LayoutTree] = [:]
 
     /// Per-WS stack-member order. Only present for WSs in
     /// `"stack"` mode. The element at index 0 is the *visible
@@ -114,22 +114,22 @@ public struct WorkspaceCatalog {
     /// are parked via the configured `hide_method`. New windows
     /// land at index 0 (Q7c: new = top); `cycleStack` rotates
     /// the array.
-    public private(set) var stackOrders: [Int: [WindowID]] = [:]
+    private(set) var stackOrders: [Int: [WindowID]] = [:]
 
     /// Windows the user (or AX role detector) flagged as floating.
     /// Floating windows are skipped by the tiler and stay at the
     /// user's last-set position. Independent of `anchorParked` /
     /// `minimizeParked` (which are *hide-method* state, not
     /// per-window opt-out).
-    public private(set) var floatingWindows: Set<WindowID> = []
+    private(set) var floatingWindows: Set<WindowID> = []
 
-    public init() {}
+    init() {}
 
     // MARK: - Reconcile
 
-    public struct ReconcileResult: Equatable, Sendable {
-        public let added: Int
-        public let removed: Int
+    struct ReconcileResult: Equatable, Sendable {
+        let added: Int
+        let removed: Int
     }
 
     /// Reconcile `windowMap` against the live CGWindowList. Gone
@@ -145,7 +145,7 @@ public struct WorkspaceCatalog {
     /// pid is stable across a process's lifetime, but if a window
     /// id is ever reused after its owner died the fresh value wins.
     @discardableResult
-    public mutating func reconcile(live: [Window],
+    mutating func reconcile(live: [Window],
                                    focused: WindowID? = nil,
                                    activeRect: CGRect = .zero,
                                    autoFloat: Set<WindowID> = [])
@@ -156,25 +156,9 @@ public struct WorkspaceCatalog {
         let goneIDs = windowMap.keys.filter { liveByID[$0] == nil }
         for id in goneIDs {
             windowMap.removeValue(forKey: id)
-            anchorParked.remove(id)
-            minimizeParked.remove(id)
-            originalPositions.removeValue(forKey: id)
+            clearParkedState(of: id)
             floatingWindows.remove(id)
-            // Tree healing: a closed leaf's sibling absorbs the
-            // space (LayoutTree.remove handles the recursion).
-            for (ws, var tree) in layoutTrees where tree.contains(id) {
-                tree.remove(id)
-                layoutTrees[ws] = tree
-            }
-            // Stack-order maintenance — a closed window simply
-            // exits the list; the next array element naturally
-            // becomes the new top.
-            for (ws, var order) in stackOrders
-                where order.contains(id)
-            {
-                order.removeAll { $0 == id }
-                stackOrders[ws] = order
-            }
+            detachFromLayouts(id)
         }
         var added = 0
         for (id, pid) in liveByID {
@@ -194,19 +178,9 @@ public struct WorkspaceCatalog {
                 if autoFloat.contains(id) {
                     floatingWindows.insert(id)
                 }
-                let m = mode(of: activeIndex)
-                if m == "bsp", !floatingWindows.contains(id) {
-                    var tree = layoutTrees[activeIndex] ?? LayoutTree()
-                    tree.insert(id, focused: focused, in: activeRect)
-                    layoutTrees[activeIndex] = tree
-                } else if m == "stack",
-                          !floatingWindows.contains(id) {
-                    // New window becomes the visible top (Q7c).
-                    var order = stackOrders[activeIndex] ?? []
-                    order.removeAll { $0 == id }
-                    order.insert(id, at: 0)
-                    stackOrders[activeIndex] = order
-                }
+                attachToLayout(id, workspace: activeIndex,
+                               focused: focused,
+                               in: activeRect)
             }
         }
         return ReconcileResult(added: added, removed: goneIDs.count)
@@ -214,12 +188,32 @@ public struct WorkspaceCatalog {
 
     /// Forget a window (called by `closeWindow` after AX press
     /// succeeded). Idempotent.
-    public mutating func drop(_ id: WindowID) {
+    mutating func drop(_ id: WindowID) {
         windowMap.removeValue(forKey: id)
+        clearParkedState(of: id)
+        floatingWindows.remove(id)
+        detachFromLayouts(id)
+    }
+
+    /// Clear all hide-state bookkeeping for `id` without
+    /// returning the originalPosition. Used by stack-top apply
+    /// where the AX setPosition + setSize sweeps the window to
+    /// a fresh rect, so the recorded pre-park position has no
+    /// further meaning.
+    mutating func clearParkedState(of id: WindowID) {
         anchorParked.remove(id)
         minimizeParked.remove(id)
         originalPositions.removeValue(forKey: id)
-        floatingWindows.remove(id)
+    }
+
+    // MARK: - Layout maintenance (internal)
+
+    /// Remove `id` from any layout container (`layoutTrees` and
+    /// `stackOrders`) that holds it. Memory: lessons file
+    /// "stackOrders / layoutTrees 並列メンテ" — every mutator
+    /// must touch both, this is the one place to forget.
+    /// Idempotent.
+    private mutating func detachFromLayouts(_ id: WindowID) {
         for (ws, var tree) in layoutTrees where tree.contains(id) {
             tree.remove(id)
             layoutTrees[ws] = tree
@@ -230,22 +224,36 @@ public struct WorkspaceCatalog {
         }
     }
 
-    /// Clear all hide-state bookkeeping for `id` without
-    /// returning the originalPosition. Used by stack-top apply
-    /// where the AX setPosition + setSize sweeps the window to
-    /// a fresh rect, so the recorded pre-park position has no
-    /// further meaning.
-    public mutating func clearParkedState(of id: WindowID) {
-        anchorParked.remove(id)
-        minimizeParked.remove(id)
-        originalPositions.removeValue(forKey: id)
+    /// Insert `id` into the layout container appropriate to
+    /// `n1Based`'s mode (bsp → tree, stack → order at index 0,
+    /// anything else → no-op). Skips when `id` is floating.
+    /// `focused` / `rect` only matter for the bsp path (passed
+    /// to `LayoutTree.insert` for orientation choice).
+    private mutating func attachToLayout(_ id: WindowID,
+                                         workspace n1Based: Int,
+                                         focused: WindowID?,
+                                         in rect: CGRect) {
+        guard !floatingWindows.contains(id) else { return }
+        switch mode(of: n1Based) {
+        case "bsp":
+            var tree = layoutTrees[n1Based] ?? LayoutTree()
+            tree.insert(id, focused: focused, in: rect)
+            layoutTrees[n1Based] = tree
+        case "stack":
+            var order = stackOrders[n1Based] ?? []
+            order.removeAll { $0 == id }
+            order.insert(id, at: 0)
+            stackOrders[n1Based] = order
+        default:
+            break
+        }
     }
 
     // MARK: - Layout mode
 
     /// 1-based WS index → mode string. Missing entries default
     /// to `"float"` (Phase γ frozen default).
-    public func mode(of n1Based: Int) -> String {
+    func mode(of n1Based: Int) -> String {
         layoutModes[n1Based] ?? "float"
     }
 
@@ -267,7 +275,7 @@ public struct WorkspaceCatalog {
     /// no-op). Returns the normalised mode so the caller can
     /// branch.
     @discardableResult
-    public mutating func setMode(workspace n1Based: Int,
+    mutating func setMode(workspace n1Based: Int,
                                  to mode: String,
                                  in rect: CGRect = .zero) -> String {
         let normalised = mode.lowercased()
@@ -299,11 +307,11 @@ public struct WorkspaceCatalog {
 
     /// Ordered stack members of `n1Based` (top first), or empty
     /// when the WS isn't in `"stack"` mode.
-    public func stackOrder(of n1Based: Int) -> [WindowID] {
+    func stackOrder(of n1Based: Int) -> [WindowID] {
         stackOrders[n1Based] ?? []
     }
 
-    public enum CycleDirection: Sendable { case next, prev }
+    enum CycleDirection: Sendable { case next, prev }
 
     /// Rotate the stack array of `n1Based` so a different member
     /// becomes the top. `next` rotates left (current top goes to
@@ -311,7 +319,7 @@ public struct WorkspaceCatalog {
     /// Returns the new top, or nil when the WS has fewer than 2
     /// stack members (cycle is a no-op).
     @discardableResult
-    public mutating func cycleStack(workspace n1Based: Int,
+    mutating func cycleStack(workspace n1Based: Int,
                                     direction: CycleDirection)
         -> WindowID?
     {
@@ -329,7 +337,7 @@ public struct WorkspaceCatalog {
 
     // MARK: - Floating
 
-    public func isFloating(_ id: WindowID) -> Bool {
+    func isFloating(_ id: WindowID) -> Bool {
         floatingWindows.contains(id)
     }
 
@@ -341,36 +349,19 @@ public struct WorkspaceCatalog {
     /// `rect` is the active display's `visibleFrame` — only used
     /// for the *orientation choice* when re-inserting; tile
     /// frames are recomputed every time `tiledFrames` runs.
-    public mutating func toggleFloat(_ id: WindowID,
+    mutating func toggleFloat(_ id: WindowID,
                                      focused: WindowID? = nil,
                                      in rect: CGRect = .zero) {
         guard let slot = windowMap[id] else { return }
         let wasFloating = floatingWindows.contains(id)
         if wasFloating {
             floatingWindows.remove(id)
-            switch mode(of: slot.workspace) {
-            case "bsp":
-                var tree = layoutTrees[slot.workspace] ?? LayoutTree()
-                tree.insert(id, focused: focused, in: rect)
-                layoutTrees[slot.workspace] = tree
-            case "stack":
-                var order = stackOrders[slot.workspace] ?? []
-                order.removeAll { $0 == id }
-                order.insert(id, at: 0)
-                stackOrders[slot.workspace] = order
-            default:
-                break
-            }
+            // Re-enter the WS's layout (no-op if mode is float).
+            attachToLayout(id, workspace: slot.workspace,
+                           focused: focused, in: rect)
         } else {
             floatingWindows.insert(id)
-            if var tree = layoutTrees[slot.workspace] {
-                tree.remove(id)
-                layoutTrees[slot.workspace] = tree
-            }
-            if var order = stackOrders[slot.workspace] {
-                order.removeAll { $0 == id }
-                stackOrders[slot.workspace] = order
-            }
+            detachFromLayouts(id)
         }
     }
 
@@ -379,7 +370,7 @@ public struct WorkspaceCatalog {
     /// Rotate the parent split of `id`. Looks up the owning WS,
     /// then defers to `LayoutTree.toggleOrientation`. No-op when
     /// the window isn't in any tree (float / unknown / stack WS).
-    public mutating func toggleOrientation(of id: WindowID) {
+    mutating func toggleOrientation(of id: WindowID) {
         guard let slot = windowMap[id],
               var tree = layoutTrees[slot.workspace] else { return }
         tree.toggleOrientation(of: id)
@@ -389,7 +380,7 @@ public struct WorkspaceCatalog {
     /// Tree-computed frames for every tiled window in the WS,
     /// keyed by `WindowID`. Empty when the WS isn't in `"bsp"`
     /// mode or has no tree.
-    public func tiledFrames(for n1Based: Int,
+    func tiledFrames(for n1Based: Int,
                             in rect: CGRect) -> [WindowID: CGRect] {
         guard mode(of: n1Based) == "bsp",
               let tree = layoutTrees[n1Based] else { return [:] }
@@ -399,7 +390,7 @@ public struct WorkspaceCatalog {
     /// Resolve the cached pid for a window, or nil if it's not in
     /// `windowMap`. Used by `closeWindow` so it can skip a
     /// CGWindowList re-enumeration just to recover pid.
-    public func pid(for id: WindowID) -> Int? {
+    func pid(for id: WindowID) -> Int? {
         windowMap[id]?.pid
     }
 
@@ -408,21 +399,21 @@ public struct WorkspaceCatalog {
     /// True when `n1Based` is a slot in the configured workspace
     /// list. Sparse configs (only `1`, `3`, `5` declared) are
     /// honoured: `2` is invalid even though raw count ≥ 2.
-    public func isValid(_ n1Based: Int, configuredIndexes: [Int]) -> Bool {
+    func isValid(_ n1Based: Int, configuredIndexes: [Int]) -> Bool {
         configuredIndexes.contains(n1Based)
     }
 
     // MARK: - Switch workspace
 
-    public struct SwitchPlan: Equatable, Sendable {
-        public let oldActive: Int
-        public let newActive: Int
+    struct SwitchPlan: Equatable, Sendable {
+        let oldActive: Int
+        let newActive: Int
         /// Windows currently in the old-active workspace that
         /// should be parked by whichever hide method is active.
-        public let toPark: [WindowRef]
+        let toPark: [WindowRef]
         /// Windows in the new-active workspace that should be
         /// restored back into view.
-        public let toRestore: [WindowRef]
+        let toRestore: [WindowRef]
     }
 
     /// Switch to `n1Based`. Returns the plan when the switch is
@@ -430,7 +421,7 @@ public struct WorkspaceCatalog {
     /// active. Caller applies AX side-effects against the
     /// returned `WindowRef` lists.
     @discardableResult
-    public mutating func setActive(_ n1Based: Int,
+    mutating func setActive(_ n1Based: Int,
                                    configuredIndexes: [Int]) -> SwitchPlan? {
         guard isValid(n1Based, configuredIndexes: configuredIndexes),
               n1Based != activeIndex else { return nil }
@@ -448,7 +439,7 @@ public struct WorkspaceCatalog {
 
     // MARK: - Move window
 
-    public enum MoveOutcome: Equatable, Sendable {
+    enum MoveOutcome: Equatable, Sendable {
         /// Window left the active workspace — adapter should park it.
         case park(WindowRef)
         /// Window entered the active workspace — adapter should
@@ -463,42 +454,20 @@ public struct WorkspaceCatalog {
     }
 
     @discardableResult
-    public mutating func moveWindow(_ id: WindowID, to n1Based: Int,
+    mutating func moveWindow(_ id: WindowID, to n1Based: Int,
                                     configuredIndexes: [Int],
                                     in rect: CGRect = .zero) -> MoveOutcome {
         guard isValid(n1Based, configuredIndexes: configuredIndexes),
               let current = windowMap[id],
               current.workspace != n1Based else { return .rejected }
         windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
-        // Layout maintenance: remove from source side (tree or
-        // stack), insert into destination side (when dest mode
-        // applies and the window isn't floating).
-        if var srcTree = layoutTrees[current.workspace],
-           srcTree.contains(id) {
-            srcTree.remove(id)
-            layoutTrees[current.workspace] = srcTree
-        }
-        if var srcOrder = stackOrders[current.workspace],
-           srcOrder.contains(id) {
-            srcOrder.removeAll { $0 == id }
-            stackOrders[current.workspace] = srcOrder
-        }
-        if !floatingWindows.contains(id) {
-            switch mode(of: n1Based) {
-            case "bsp":
-                var destTree = layoutTrees[n1Based] ?? LayoutTree()
-                destTree.insert(id, focused: nil, in: rect)
-                layoutTrees[n1Based] = destTree
-            case "stack":
-                // Q7c: window entering a stack WS lands on top.
-                var destOrder = stackOrders[n1Based] ?? []
-                destOrder.removeAll { $0 == id }
-                destOrder.insert(id, at: 0)
-                stackOrders[n1Based] = destOrder
-            default:
-                break
-            }
-        }
+        // Detach from source's layout container (if any), then
+        // attach to dest's. Both helpers are no-ops when the
+        // window isn't in the relevant container / mode, so the
+        // call is unconditional.
+        detachFromLayouts(id)
+        attachToLayout(id, workspace: n1Based,
+                       focused: nil, in: rect)
         let ref = WindowRef(id: id, pid: current.pid)
         if n1Based == activeIndex { return .restore(ref) }
         if current.workspace == activeIndex { return .park(ref) }
@@ -510,11 +479,11 @@ public struct WorkspaceCatalog {
     /// True when the anchor park should actually run (the window
     /// isn't already parked). Caller uses this as the early-exit
     /// guard before invoking AX.
-    public func shouldParkAnchor(_ id: WindowID) -> Bool {
+    func shouldParkAnchor(_ id: WindowID) -> Bool {
         !anchorParked.contains(id)
     }
 
-    public mutating func markAnchorParked(_ id: WindowID,
+    mutating func markAnchorParked(_ id: WindowID,
                                           originalPosition: CGPoint) {
         anchorParked.insert(id)
         originalPositions[id] = originalPosition
@@ -523,7 +492,7 @@ public struct WorkspaceCatalog {
     /// Consume the recorded pre-park position. Returns nil when the
     /// window isn't currently parked (defensive against double-
     /// restore on rapid switch); side-effect-free in that case.
-    public mutating func consumeAnchorRestore(_ id: WindowID) -> CGPoint? {
+    mutating func consumeAnchorRestore(_ id: WindowID) -> CGPoint? {
         guard anchorParked.contains(id),
               let pos = originalPositions[id] else { return nil }
         anchorParked.remove(id)
@@ -531,19 +500,19 @@ public struct WorkspaceCatalog {
         return pos
     }
 
-    public func shouldMinimize(_ id: WindowID) -> Bool {
+    func shouldMinimize(_ id: WindowID) -> Bool {
         !minimizeParked.contains(id)
     }
 
-    public func shouldUnminimize(_ id: WindowID) -> Bool {
+    func shouldUnminimize(_ id: WindowID) -> Bool {
         minimizeParked.contains(id)
     }
 
-    public mutating func markMinimized(_ id: WindowID) {
+    mutating func markMinimized(_ id: WindowID) {
         minimizeParked.insert(id)
     }
 
-    public mutating func markUnminimized(_ id: WindowID) {
+    mutating func markUnminimized(_ id: WindowID) {
         minimizeParked.remove(id)
     }
 
@@ -562,7 +531,7 @@ public struct WorkspaceCatalog {
     /// The returned `Workspace.index` is **0-based** to match the
     /// wire convention of the `WindowBackend` protocol — translation
     /// happens here at the seam.
-    public func snapshot(live: [Window], focused: WindowID?,
+    func snapshot(live: [Window], focused: WindowID?,
                          configured: [(index: Int, name: String)])
         -> [Workspace]
     {

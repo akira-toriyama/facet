@@ -151,16 +151,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
                 + "total=\(live.count)")
-            switch catalog.mode(of: catalog.activeIndex) {
-            case "bsp":
-                applyTile(workspace: catalog.activeIndex,
-                          rect: rect)
-            case "stack":
-                applyStack(workspace: catalog.activeIndex,
-                           rect: rect)
-            default:
-                break
-            }
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
         }
         workspaceList = catalog.snapshot(
             live: live,
@@ -292,15 +283,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // same WS keep the restoreAnchor / restoreMinimize
         // position; tiled / stacked windows snap to their
         // computed frame.
-        let rect = activeDisplayRect()
-        switch catalog.mode(of: plan.newActive) {
-        case "bsp":
-            applyTile(workspace: plan.newActive, rect: rect)
-        case "stack":
-            applyStack(workspace: plan.newActive, rect: rect)
-        default:
-            break
-        }
+        applyLayout(workspace: plan.newActive,
+                    rect: activeDisplayRect())
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -330,14 +314,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // the active WS if its mode produces an on-screen layout.
         // Inactive WSs catch up on their next switchWorkspace
         // (Phase γ: lazy retile / re-stack).
-        switch catalog.mode(of: catalog.activeIndex) {
-        case "bsp":
-            applyTile(workspace: catalog.activeIndex, rect: rect)
-        case "stack":
-            applyStack(workspace: catalog.activeIndex, rect: rect)
-        default:
-            break
-        }
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -381,14 +358,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let applied = catalog.setMode(workspace: target,
                                       to: mode, in: rect)
         Log.debug("native: setLayoutMode WS \(target) -> \(applied)")
-        guard target == catalog.activeIndex else {
-            eventContinuation.yield(.refreshNeeded)
-            return
-        }
-        switch applied {
-        case "bsp":   applyTile(workspace: target, rect: rect)
-        case "stack": applyStack(workspace: target, rect: rect)
-        default:      break
+        if target == catalog.activeIndex {
+            applyLayout(workspace: target, rect: rect)
         }
         eventContinuation.yield(.refreshNeeded)
     }
@@ -398,17 +369,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// BSP this re-tiles the tree; for stack this re-stacks
     /// (top fills, others park). No-op for float mode.
     public func retileActiveWorkspace() {
-        let rect = activeDisplayRect()
-        switch catalog.mode(of: catalog.activeIndex) {
-        case "bsp":
-            applyTile(workspace: catalog.activeIndex, rect: rect)
-        case "stack":
-            applyStack(workspace: catalog.activeIndex, rect: rect)
-        default:
+        let mode = catalog.mode(of: catalog.activeIndex)
+        guard mode == "bsp" || mode == "stack" else {
             Log.debug("native: retile noop "
-                + "(WS \(catalog.activeIndex) is float)")
+                + "(WS \(catalog.activeIndex) is \(mode))")
             return
         }
+        applyLayout(workspace: catalog.activeIndex,
+                    rect: activeDisplayRect())
         eventContinuation.yield(.refreshNeeded)
     }
 
@@ -513,14 +481,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: perform toggleFloat "
                 + "\(id.serverID) → "
                 + "isFloating=\(catalog.isFloating(id))")
-            reapplyActive(rect: rect)
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
             eventContinuation.yield(.refreshNeeded)
         case .toggleOrientation:
             guard let id = focusedWindow() else { return }
             catalog.toggleOrientation(of: id)
             Log.debug("native: perform toggleOrientation "
                 + "\(id.serverID)")
-            reapplyActive(rect: rect)
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
             eventContinuation.yield(.refreshNeeded)
         case .cycleStackNext, .cycleStackPrev:
             // Cycle is per-active-WS; no need for `focusedWindow`
@@ -538,20 +506,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                            rect: rect)
                 eventContinuation.yield(.refreshNeeded)
             }
-        default:
+        // rift-only / out-of-γ-scope cases — no-op, but listed
+        // explicitly so the compiler enforces a handling
+        // decision on every future enum addition.
+        case .toggleFullscreen,
+             .promoteToMaster, .swapMasterStack,
+             .toggleStack,
+             .centerColumn, .snapStrip:
             break
         }
     }
 
-    /// Re-apply the active workspace's mode-specific layout (tile
-    /// or stack). Shared tail of every `perform` mutation that
-    /// can affect on-screen geometry.
-    private func reapplyActive(rect: CGRect) {
-        switch catalog.mode(of: catalog.activeIndex) {
-        case "bsp":   applyTile(workspace: catalog.activeIndex,
-                                rect: rect)
-        case "stack": applyStack(workspace: catalog.activeIndex,
-                                 rect: rect)
+    /// Apply the workspace's mode-specific layout (tile / stack /
+    /// no-op). Single dispatch site — every callsite that mutates
+    /// the catalog and might need to push fresh frames through AX
+    /// (refresh / switch / move / setMode / retile / perform)
+    /// funnels through here.
+    private func applyLayout(workspace n1Based: Int, rect: CGRect) {
+        switch catalog.mode(of: n1Based) {
+        case "bsp":   applyTile(workspace: n1Based, rect: rect)
+        case "stack": applyStack(workspace: n1Based, rect: rect)
         default:      break
         }
     }
