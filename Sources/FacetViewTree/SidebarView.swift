@@ -1,18 +1,8 @@
 // Tree-view sidebar — the translucent always-on-top panel that
-// lists workspaces and their windows. Lifted from ws-tabs's
-// `SidebarView` essentially 1:1; adapted to FacetCore neutral
-// types and route AX / focus orchestration through `TreeController`
-// instead of touching globals.
-//
-// Major API/data shifts from the ws-tabs original:
-//   - `[RFWorkspace]` → `[Workspace]` (backend-neutral)
-//   - `window_server_id: Int` handles → `WindowID` typed
-//   - keyboard selection identity uses `TreeKbSel` (TreeRow.swift)
-//   - `backend` is held on the view (injected via init) rather than
-//     a module global
-//   - AX focus calls route through `controller?.focusWindow` /
-//     `controller?.runWindowOps` — view never imports
-//     FacetAdapterRift directly (CLAUDE.md layer rules).
+// lists workspaces and their windows. AX / focus orchestration
+// routes through `TreeController` rather than touching globals,
+// and the view talks to `WindowBackend` only (no concrete adapter
+// imports — see CLAUDE.md layer rules).
 
 import AppKit
 import CoreGraphics

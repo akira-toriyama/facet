@@ -1,7 +1,6 @@
-// Layout / animation constants for the overview grid. Same values
-// as ws-tabs v1.6 — tuned to match the TS3 screenshots the user
-// supplied: solid near-black backdrop, thin cell strokes, one
-// compact label per cell, no extra index badge.
+// Layout / animation constants for the overview grid: solid
+// near-black backdrop, thin cell strokes, one compact label per
+// cell, no extra index badge.
 
 import CoreGraphics
 import Foundation
@@ -13,7 +12,7 @@ let gridLabelGap: CGFloat = 4           // breathing room: label → cell
 
 // Public so FacetApp's Controller can configure the GridOverlay
 // fade timing without redefining the numbers.
-public let gridBackdropAlpha: CGFloat = 0.98   // overlay opacity (TS3 ≈ pure black)
+public let gridBackdropAlpha: CGFloat = 0.98   // overlay opacity (near-pure black)
 public let gridFadeIn: TimeInterval = 0.12     // overlay fade-in
 public let gridFadeOut: TimeInterval = 0.10    // overlay fade-out
 

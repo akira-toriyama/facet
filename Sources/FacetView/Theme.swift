@@ -1,9 +1,7 @@
 // Module-level theme state. Set once at app start from `--theme=`,
 // read from every view's `draw` and layout code as `pal.text` etc.
-//
-// Carries the name from ws-tabs deliberately — every lifted view file
-// already references `pal.*` in dozens of places, and the symbol is
-// short enough not to warrant renaming during the migration.
+// The `pal` symbol is intentionally short — it appears in dozens
+// of view-side call sites.
 
 import AppKit
 

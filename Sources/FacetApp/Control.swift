@@ -5,9 +5,8 @@
 //
 // Name is intentionally **shared between dev and release** so one
 // running instance handles the CLI regardless of which build is
-// active — same trick ws-tabs used with ``com.wstabs.app.control``
-// (memory: ws-tabs CLAUDE.md notes this is NOT a bundle id, so it
-// stays put even if the bundle id changes between dev/release).
+// active. This is a DNC channel name, NOT a bundle id, so it stays
+// put even if the bundle id changes between dev/release.
 
 import Foundation
 

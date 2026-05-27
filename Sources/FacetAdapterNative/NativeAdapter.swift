@@ -1,5 +1,5 @@
 // `WindowBackend` conformance using only AX + public macOS APIs
-// (no `rift-cli`, no SLS, no SIP-off injection). This file is the
+// (no `rift-cli`, no private-API injection). This file is the
 // seam between facet and the OS for the native backend.
 //
 // Phase progression (memory: facet-architecture-decisions):

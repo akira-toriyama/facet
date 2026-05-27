@@ -24,10 +24,10 @@
 #
 #   "tree"  — translucent always-on-top sidebar listing every
 #             workspace and its windows as a tree
-#   "grid"  — full-screen TS3-style overview with DnD between cells
+#   "grid"  — full-screen overview with DnD between cells
 #
 # Default for a fresh `curl` install: "tree" (the always-on-top
-# sidebar — facet's primary surface; the grid is a TS3-style
+# sidebar — facet's primary surface; the grid is a full-screen
 # overview you summon on demand with `facet --view=grid`).
 default_view = "tree"
 
@@ -62,7 +62,7 @@ cols = 5
 
 # Where the workspace label sits relative to its cell.
 #
-#   "up"   — label above each cell (Mission Control / TS3 style).
+#   "up"   — label above each cell (Mission Control style).
 #   "down" — label below each cell (Stage Manager / dock style).
 label-position = "up"
 
@@ -103,10 +103,8 @@ thumbnail-refresh-seconds = 4
 #                from Dock). Best when "really hide this away" matters
 #                more than instant switching.
 #
-# True hide (gone from Mission Control + Cmd-Tab) needs SLS private
-# APIs + SIP off, which lives in the separate `facet-x` binary
-# (deep-core, M6+). The `facet` binary you're configuring here stays
-# inside macOS's public-API contract.
+# True hide (gone from Mission Control + Cmd-Tab) is impossible
+# via macOS public APIs — facet stays inside that contract.
 #
 # Unknown values clamp to "anchor".
 hide_method = "anchor"

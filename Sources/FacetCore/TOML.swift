@@ -1,6 +1,5 @@
-// Minimal TOML parser. Lifted verbatim from ws-tabs's
-// `parseTOMLSubset` — keeps facet zero-dep (no SwiftPM TOML library
-// pulled in). Supports just what the schema needs today:
+// Minimal TOML parser — keeps facet zero-dep (no SwiftPM TOML
+// library pulled in). Supports just what the schema needs today:
 //
 //   - `[section]` headers
 //   - `key = value` lines, where value is int / "string" / bool

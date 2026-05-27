@@ -50,9 +50,8 @@ public enum Focus {
                               left: Int = assertAttempts) {
         AX.focus(window)
         // Confirm against backend truth every few attempts (bounds
-        // query cost). The "% 3 == 2" cadence is what ws-tabs ran
-        // and the 50-attempt cap means ~17 ground-truth checks per
-        // assertion, plenty.
+        // query cost). The "% 3 == 2" cadence × 50-attempt cap means
+        // ~17 ground-truth checks per assertion, plenty.
         if (assertAttempts - left) % 3 == 2,
            backend.focusedWindow() == window.id {
             return

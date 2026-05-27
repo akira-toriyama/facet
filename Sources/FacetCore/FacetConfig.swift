@@ -26,10 +26,8 @@ public struct FacetConfig: Sendable {
     public var thumbnailRefreshSeconds: Int?
 
     // [workspace]
-    /// How to hide non-active-workspace windows on switch. Enum is
-    /// extensible (memory [[native-window-hide-methods]] / [[facet-sip-off-core-plan]]).
-    /// Phase α implements "anchor" + "minimize"; future values
-    /// ("deep-tag" etc.) come with `facet-x` (deep-core, M6+).
+    /// How to hide non-active-workspace windows on switch.
+    /// See memory [[native-window-hide-methods]] for the choice rationale.
     public var hideMethod: String?          // "anchor" | "minimize"
 
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
@@ -99,8 +97,6 @@ public struct FacetConfig: Sendable {
     /// `"anchor"` (default) — instant 1×41 px corner park.
     /// `"minimize"` — AX `kAXMinimized`, Dock genie animation.
     /// Unknown / unset → `"anchor"`. Case-insensitive.
-    /// Frozen Phase α option set; extending the enum is a deep-core
-    /// (`facet-x`, M6+) concern.
     public var effectiveHideMethod: String {
         let raw = (hideMethod ?? "anchor").lowercased()
         return ["anchor", "minimize"].contains(raw) ? raw : "anchor"

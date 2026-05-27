@@ -41,6 +41,15 @@ enum SkyLight {
         @convention(c) (Int32, UInt32, UnsafePointer<UInt64>, Int32) -> Int32
     typealias ClearWindowTagsFn =
         @convention(c) (Int32, UInt32, UnsafePointer<UInt64>, Int32) -> Int32
+    typealias CopyManagedDisplaySpacesFn =
+        @convention(c) (Int32) -> Unmanaged<CFArray>?
+    typealias MoveWindowsToManagedSpaceFn =
+        @convention(c) (Int32, CFArray, UInt64) -> Void
+    // Add/remove pair — yabai's main path for cross-Space window move.
+    typealias AddWindowsToSpacesFn =
+        @convention(c) (Int32, CFArray, CFArray) -> Void
+    typealias RemoveWindowsFromSpacesFn =
+        @convention(c) (Int32, CFArray, CFArray) -> Void
 
     nonisolated(unsafe) static let mainConnectionID: MainConnFn =
         sym("SLSMainConnectionID")
@@ -52,6 +61,20 @@ enum SkyLight {
         sym("SLSSetWindowTags")
     nonisolated(unsafe) static let clearWindowTags: ClearWindowTagsFn =
         sym("SLSClearWindowTags")
+    nonisolated(unsafe) static let copyManagedDisplaySpaces: CopyManagedDisplaySpacesFn =
+        sym("SLSCopyManagedDisplaySpaces")
+    nonisolated(unsafe) static let moveWindowsToManagedSpace: MoveWindowsToManagedSpaceFn =
+        sym("SLSMoveWindowsToManagedSpace")
+    // optSym: nil if symbol missing on this macOS — for variants that may
+    // not exist on all versions.
+    private static func optSym<T>(_ name: String) -> T? {
+        guard let p = dlsym(handle, name) else { return nil }
+        return unsafeBitCast(p, to: T.self)
+    }
+    nonisolated(unsafe) static let addWindowsToSpaces: AddWindowsToSpacesFn? =
+        optSym("SLSAddWindowsToSpaces") ?? optSym("CGSAddWindowsToSpaces")
+    nonisolated(unsafe) static let removeWindowsFromSpaces: RemoveWindowsFromSpacesFn? =
+        optSym("SLSRemoveWindowsFromSpaces") ?? optSym("CGSRemoveWindowsFromSpaces")
 
     private static func sym<T>(_ name: String) -> T {
         guard let p = dlsym(handle, name) else {
@@ -469,6 +492,208 @@ func cmdSpaces(_ cgIDs: [CGWindowID]) {
     }
 }
 
+// MARK: - macOS Spaces enumeration + move
+
+/// `SLSCopyManagedDisplaySpaces(cid)` returns an array of
+/// per-display dicts; each dict has a "Spaces" key whose value is
+/// an array of space dicts (each with "id64", "type", "uuid",
+/// "ManagedSpaceID"). type = 0 (user) / 4 (fullscreen).
+func cmdListSpaces() {
+    let cid = SkyLight.mainConnectionID()
+    let active = SkyLight.getActiveSpace(cid)
+    print("[spaces] SLS connection id: \(cid)")
+    print("[spaces] active space id:   \(active)")
+    guard let result = SkyLight.copyManagedDisplaySpaces(cid)?
+            .takeRetainedValue() as? [[String: Any]] else {
+        print("[spaces] SLSCopyManagedDisplaySpaces returned nil")
+        return
+    }
+    for (di, disp) in result.enumerated() {
+        let dispID = disp["Display Identifier"] as? String ?? "?"
+        print("[spaces] display [\(di)] id=\(dispID)")
+        guard let spaces = disp["Spaces"] as? [[String: Any]] else {
+            print("    (no Spaces key)"); continue
+        }
+        for (si, sp) in spaces.enumerated() {
+            let id64 = sp["id64"] as? UInt64 ?? 0
+            let type = sp["type"] as? Int ?? -1
+            let uuid = sp["uuid"] as? String ?? "?"
+            let mgd = sp["ManagedSpaceID"] as? Int ?? -1
+            let typeStr: String = {
+                switch type {
+                case 0: return "user"
+                case 4: return "fullscreen"
+                default: return "type=\(type)"
+                }
+            }()
+            let activeMark = (id64 == active) ? " ← ACTIVE" : ""
+            print("    [\(si)] id64=\(id64) ManagedSpaceID=\(mgd) (\(typeStr)) uuid=\(uuid)\(activeMark)")
+        }
+    }
+}
+
+/// Test the cross-Space window move under SIP-on.
+///
+/// Calls `SLSMoveWindowsToManagedSpace(cid, [cgID], spaceID)`. The
+/// function is `void` so we can't read a return code; we verify by
+/// re-querying `SLSCopySpacesForWindows` afterwards and reporting
+/// whether the window now reports the target Space.
+func cmdMoveSpace(_ cgID: CGWindowID, _ spaceID: UInt64) {
+    let cid = SkyLight.mainConnectionID()
+    let active = SkyLight.getActiveSpace(cid)
+
+    // Find window for the nicer output.
+    let info = enumerateWindows().first(where: { $0.cgID == cgID })
+    let owner = info?.owner ?? "?"
+    print("[move-space] cgID=\(cgID) owner=\(owner)")
+    print("[move-space] active space id:   \(active)")
+    print("[move-space] target  space id:  \(spaceID)")
+
+    // Query current Space(s) before move.
+    let nums = [NSNumber(value: cgID)] as CFArray
+    let before = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[move-space] BEFORE: SLSCopySpacesForWindows → \(before)")
+
+    print("[move-space] calling SLSMoveWindowsToManagedSpace …")
+    SkyLight.moveWindowsToManagedSpace(cid, [NSNumber(value: cgID)] as CFArray, spaceID)
+    print("[move-space] call returned (no rc — this is a void API)")
+
+    // Give the system a moment, then re-query.
+    Thread.sleep(forTimeInterval: 0.5)
+    let after = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[move-space] AFTER:  SLSCopySpacesForWindows → \(after)")
+
+    let beforeSet = Set((before as? [UInt64]) ?? before.compactMap { ($0 as? NSNumber)?.uint64Value })
+    let afterSet = Set((after as? [UInt64]) ?? after.compactMap { ($0 as? NSNumber)?.uint64Value })
+    if beforeSet == afterSet {
+        print("[move-space] ❌ NO CHANGE — Space membership did not move")
+        print("              (Apple likely no-ops this API for non-Apple processes,")
+        print("               or requires SIP off + scripting addition for cross-app moves)")
+    } else if afterSet.contains(spaceID) {
+        print("[move-space] ✅ MOVED — window now reports target space \(spaceID)")
+    } else {
+        print("[move-space] ⚠️  CHANGED but not to target: before=\(beforeSet) after=\(afterSet)")
+    }
+}
+
+/// yabai's main path: pair-call CGS{Add,Remove}WindowsToSpaces with
+/// from/to Space arrays. Tests whether the ADD/REMOVE variant gets
+/// past the SkyLight gate that silently no-op'd
+/// `SLSMoveWindowsToManagedSpace`.
+func cmdAddRemoveSpace(_ cgID: CGWindowID, from: UInt64, to: UInt64) {
+    let cid = SkyLight.mainConnectionID()
+    let active = SkyLight.getActiveSpace(cid)
+    let info = enumerateWindows().first(where: { $0.cgID == cgID })
+    let owner = info?.owner ?? "?"
+
+    guard let addFn = SkyLight.addWindowsToSpaces,
+          let removeFn = SkyLight.removeWindowsFromSpaces else {
+        print("[add-remove] symbols not found on this macOS — abort")
+        print("  add:    \(SkyLight.addWindowsToSpaces == nil ? "MISSING" : "OK")")
+        print("  remove: \(SkyLight.removeWindowsFromSpaces == nil ? "MISSING" : "OK")")
+        return
+    }
+
+    print("[add-remove] cgID=\(cgID) owner=\(owner)")
+    print("[add-remove] active space id:   \(active)")
+    print("[add-remove] FROM space id:     \(from)")
+    print("[add-remove] TO   space id:     \(to)")
+
+    let nums = [NSNumber(value: cgID)] as CFArray
+    let fromArr = [NSNumber(value: from)] as CFArray
+    let toArr = [NSNumber(value: to)] as CFArray
+
+    let before = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[add-remove] BEFORE: SLSCopySpacesForWindows → \(before)")
+
+    print("[add-remove] calling SLSAddWindowsToSpaces([\(cgID)], [\(to)]) …")
+    addFn(cid, nums, toArr)
+    print("[add-remove] calling SLSRemoveWindowsFromSpaces([\(cgID)], [\(from)]) …")
+    removeFn(cid, nums, fromArr)
+
+    Thread.sleep(forTimeInterval: 0.5)
+    let after = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[add-remove] AFTER:  SLSCopySpacesForWindows → \(after)")
+
+    let beforeSet = Set((before as? [UInt64]) ?? before.compactMap { ($0 as? NSNumber)?.uint64Value })
+    let afterSet = Set((after as? [UInt64]) ?? after.compactMap { ($0 as? NSNumber)?.uint64Value })
+    if beforeSet == afterSet {
+        print("[add-remove] ❌ NO CHANGE — Space membership did not move")
+    } else if afterSet.contains(to) && !afterSet.contains(from) {
+        print("[add-remove] ✅ MOVED — window now reports target space \(to)")
+    } else {
+        print("[add-remove] ⚠️  CHANGED but unexpected: before=\(beforeSet) after=\(afterSet)")
+    }
+}
+
+/// Try the singular variant if it exists. Many macOS versions only
+/// have the plural `SLSMoveWindowsToManagedSpace`; this is a probe.
+func cmdMoveSpaceSingular(_ cgID: CGWindowID, _ spaceID: UInt64) {
+    typealias SingularFn =
+        @convention(c) (Int32, UInt32, UInt64) -> Void
+    guard let p = dlsym(SkyLight.handle, "SLSMoveWindowToManagedSpace") else {
+        print("[singular] SLSMoveWindowToManagedSpace not found on this macOS")
+        return
+    }
+    let fn = unsafeBitCast(p, to: SingularFn.self)
+    let cid = SkyLight.mainConnectionID()
+    let nums = [NSNumber(value: cgID)] as CFArray
+    let before = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[singular] BEFORE: SLSCopySpacesForWindows → \(before)")
+    print("[singular] calling SLSMoveWindowToManagedSpace(cid, \(cgID), \(spaceID)) …")
+    fn(cid, cgID, spaceID)
+    Thread.sleep(forTimeInterval: 0.5)
+    let after = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[singular] AFTER:  SLSCopySpacesForWindows → \(after)")
+    let beforeSet = Set((before as? [UInt64]) ?? before.compactMap { ($0 as? NSNumber)?.uint64Value })
+    let afterSet = Set((after as? [UInt64]) ?? after.compactMap { ($0 as? NSNumber)?.uint64Value })
+    if beforeSet == afterSet {
+        print("[singular] ❌ NO CHANGE")
+    } else if afterSet.contains(spaceID) {
+        print("[singular] ✅ MOVED")
+    } else {
+        print("[singular] ⚠️  CHANGED but not to target")
+    }
+}
+
+/// macOS 14+ combined add+remove call. Symbol may not exist on older
+/// systems — skip cleanly if so.
+func cmdCombinedSpace(_ cgID: CGWindowID, from: UInt64, to: UInt64) {
+    typealias CombinedFn =
+        @convention(c) (Int32, UInt64, CFArray, UInt64) -> Void
+    guard let p = dlsym(SkyLight.handle, "SLSSpaceAddWindowsAndRemoveFromSpaces") else {
+        print("[combined] SLSSpaceAddWindowsAndRemoveFromSpaces not found — abort")
+        return
+    }
+    let fn = unsafeBitCast(p, to: CombinedFn.self)
+    let cid = SkyLight.mainConnectionID()
+    let nums = [NSNumber(value: cgID)] as CFArray
+    let before = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[combined] BEFORE: SLSCopySpacesForWindows → \(before)")
+    print("[combined] calling SLSSpaceAddWindowsAndRemoveFromSpaces(cid, \(to), [\(cgID)], \(from)) …")
+    fn(cid, to, nums, from)
+    Thread.sleep(forTimeInterval: 0.5)
+    let after = SkyLight.copySpacesForWindows(cid, 0x7, nums)?
+        .takeRetainedValue() as? [Any] ?? []
+    print("[combined] AFTER:  SLSCopySpacesForWindows → \(after)")
+    let beforeSet = Set((before as? [UInt64]) ?? before.compactMap { ($0 as? NSNumber)?.uint64Value })
+    let afterSet = Set((after as? [UInt64]) ?? after.compactMap { ($0 as? NSNumber)?.uint64Value })
+    if beforeSet == afterSet {
+        print("[combined] ❌ NO CHANGE")
+    } else if afterSet.contains(to) && !afterSet.contains(from) {
+        print("[combined] ✅ MOVED")
+    } else {
+        print("[combined] ⚠️  CHANGED but unexpected")
+    }
+}
+
 // MARK: - Entry
 
 let args = Array(CommandLine.arguments.dropFirst())
@@ -530,7 +755,44 @@ case "spaces":
         print("no valid CGWindowIDs given"); exit(2)
     }
     cmdSpaces(Array(ids))
+case "list-spaces":
+    cmdListSpaces()
+case "move-space":
+    guard args.count >= 3,
+          let cgID = UInt32(args[1]),
+          let target = UInt64(args[2]) else {
+        print("usage: native-spike move-space <cgWindowID> <targetSpaceID>")
+        print("  (run `native-spike list-spaces` first to get target Space id64)")
+        exit(2)
+    }
+    cmdMoveSpace(cgID, target)
+case "add-remove-space":
+    guard args.count >= 4,
+          let cgID = UInt32(args[1]),
+          let from = UInt64(args[2]),
+          let to = UInt64(args[3]) else {
+        print("usage: native-spike add-remove-space <cgID> <fromSpaceID> <toSpaceID>")
+        exit(2)
+    }
+    cmdAddRemoveSpace(cgID, from: from, to: to)
+case "move-singular":
+    guard args.count >= 3,
+          let cgID = UInt32(args[1]),
+          let target = UInt64(args[2]) else {
+        print("usage: native-spike move-singular <cgID> <targetSpaceID>")
+        exit(2)
+    }
+    cmdMoveSpaceSingular(cgID, target)
+case "combined-space":
+    guard args.count >= 4,
+          let cgID = UInt32(args[1]),
+          let from = UInt64(args[2]),
+          let to = UInt64(args[3]) else {
+        print("usage: native-spike combined-space <cgID> <fromSpaceID> <toSpaceID>")
+        exit(2)
+    }
+    cmdCombinedSpace(cgID, from: from, to: to)
 default:
-    print("usage: native-spike [list | park-1px <id> [BR|BL] | clamp-probe <id> | park-min <id> | park-zero <id> | park-tag <id> | park-app <id> | spaces <id...> | focus <id>]")
+    print("usage: native-spike [list | list-spaces | park-1px <id> [BR|BL] | clamp-probe <id> | park-min <id> | park-zero <id> | park-tag <id> | park-app <id> | spaces <id...> | move-space <id> <spaceID> | add-remove-space <id> <from> <to> | move-singular <id> <spaceID> | combined-space <id> <from> <to> | focus <id>]")
     exit(2)
 }

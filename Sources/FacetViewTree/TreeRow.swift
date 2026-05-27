@@ -1,8 +1,7 @@
 // Row types shared between `SidebarView` and the keyboard-nav free
-// functions in `KbNav.swift`. Extracted to module scope (vs nested
-// in SidebarView like in ws-tabs) so the kb-nav helpers can take
-// `[TreeRow]` without needing SidebarView in scope — that's what
-// keeps them pure-logic and unit-testable.
+// functions in `KbNav.swift`. Module-scoped (not nested inside
+// `SidebarView`) so the kb-nav helpers can take `[TreeRow]` without
+// pulling SidebarView in — keeps them pure-logic + unit-testable.
 
 import AppKit
 import FacetCore

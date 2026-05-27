@@ -101,7 +101,6 @@ final class Controller: NSObject {
     private var pollTimer: Timer?
     /// Catches backends that don't emit events for some changes
     /// (workspace renames, layout-mode switches via external CLI).
-    /// 2 s mirrors ws-tabs's `fallbackPoll`.
     private let pollInterval: TimeInterval = 2.0
     /// Debounce window for event-driven refreshes — coalesces a
     /// burst of events into a single backend query.
@@ -753,10 +752,9 @@ final class Controller: NSObject {
         overlay.collectionBehavior = [.canJoinAllSpaces, .stationary,
                                       .fullScreenAuxiliary]
 
-        // Solid near-black backdrop (no vibrancy) — matches the TS3
-        // captures. The slight transparency keeps a hint of desktop
-        // visible during the fade so it reads as "overlay opening"
-        // not "screen blanked."
+        // Solid near-black backdrop (no vibrancy). The slight
+        // transparency keeps a hint of desktop visible during the
+        // fade so it reads as "overlay opening" not "screen blanked."
         let host = NSView(frame: NSRect(origin: .zero,
                                         size: scr.frame.size))
         host.wantsLayer = true
@@ -820,7 +818,7 @@ final class Controller: NSObject {
             // Dispatch the WM action off-main and dismiss in
             // parallel so the overlay clears immediately — the
             // workspace-switch animation lands as the overlay fades
-            // out (matches the TS3 feel).
+            // out.
             switch pick {
             case .workspace(let ws):
                 cliQueue.async { bk.switchWorkspace(toIndex: ws) }
@@ -919,8 +917,8 @@ final class Controller: NSObject {
     // `--show` stays passive (non-activating, never steals focus).
     // `--active` additionally makes the app/panel key so a plain
     // local NSEvent monitor receives ↑↓/Enter/Esc — no Input
-    // Monitoring, no CGEventTap (that path was the silent-failure
-    // trap ws-tabs deleted with the old hotkey).
+    // Monitoring, no CGEventTap (those paths fail silently when
+    // permissions are not granted, which is too easy a footgun).
 
     func enterActive() {
         Log.debug("enterActive")

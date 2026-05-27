@@ -5,9 +5,9 @@
 // Without this, growing the panel via the grip would leave blank
 // space at the top and shove rows toward the bottom edge.
 //
-// Memory [[grid-branch-grip-intermittent]]: the 2026-05-21 ws-tabs
-// "intermittent grip drag failure" turned out to be a non-flipped
-// clipView issue. facet uses flipped from day one.
+// Memory [[grid-branch-grip-intermittent]]: non-flipped NSClipView
+// caused an intermittent grip-drag failure in a prior project;
+// facet uses flipped from day one.
 
 import AppKit
 

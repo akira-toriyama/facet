@@ -12,8 +12,8 @@
 //
 // ``@main enum FacetApp`` (NOT top-level code in main.swift) so
 // XCTest can ``@testable import FacetApp`` once tests land without
-// the act of importing the executable spawning a panel. Same trap
-// CLAUDE.md flags for ws-tabs — don't reintroduce main.swift.
+// the act of importing the executable spawning a panel. **Don't
+// reintroduce main.swift.**
 //
 // CLI surface (canonical-only — no aliases). See `printHelp()`
 // for the user-facing reference; the categories below are the
@@ -846,10 +846,9 @@ enum FacetApp {
         app.setActivationPolicy(.accessory)
         AX.ensureTrusted()
 
-        // Single backend since Phase ε (v2.0.0). The
-        // `WindowBackend` protocol is preserved as the seam for
-        // facet-x (M6+ deep-core), but surface-core ships with
-        // exactly one implementation now.
+        // Single backend since Phase ε (v2.0.0). `WindowBackend`
+        // remains as a unit-test stub seam (BackendTests), but
+        // ships with one implementation.
         //
         // `FACET_BACKEND` was the env switch during the
         // multi-PR α→ε rollout; we still read it once for a
