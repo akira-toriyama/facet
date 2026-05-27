@@ -353,17 +353,27 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     // MARK: - Commands
 
-    public func switchWorkspace(toIndex index: Int) {
+    public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
         let configured = config.effectiveWorkspaceList.map(\.index)
+
+        // Leave-snapshot: unconditional (regardless of autoFocus).
+        // Explicit-pick callers still benefit — next time a no-pick
+        // path lands on the WS we just left, it can restore the
+        // window the user was on.
+        let leavingWS = catalog.activeIndex
+        if let cur = focusedWindow() {
+            catalog.recordLeaveFocus(cur, in: leavingWS)
+        }
+
         guard let plan = catalog.setActive(target,
                                            configuredIndexes: configured)
         else { return }
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) (hide_method="
-            + "\(config.effectiveHideMethod))")
+            + "\(config.effectiveHideMethod)) autoFocus=\(autoFocus)")
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
         // Phase γ: overlay layout-specific frames on top of the
         // per-mode hide_method restore. Floating windows in the
@@ -372,7 +382,58 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // computed frame.
         applyLayout(workspace: plan.newActive,
                     rect: activeDisplayRect())
+
+        // 2-a / 2-b: no-pick callers (CLI --workspace, sidebar
+        // header click, grid workspace cell click) opt in to
+        // auto-focus the destination's last-touched window — or
+        // deactivate the source app when the destination is
+        // empty.
+        if autoFocus {
+            applyAutoFocus(newActiveWS: plan.newActive)
+        }
+
         eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Focus the window the user was last on in `newActiveWS`, or
+    /// — when the WS has no windows — bounce focus to Finder so
+    /// the source app doesn't linger as frontmost. Window pick
+    /// goes through `WorkspaceCatalog.autoFocusTarget`, which
+    /// matches the same `pred` chain the sidebar's optimistic
+    /// highlight uses (memory `facet-ws-switch-focus-management`).
+    private func applyAutoFocus(newActiveWS: Int) {
+        let live = enumerateCGWindows()
+        let wsWindows = live.filter {
+            catalog.windowMap[$0.id]?.workspace == newActiveWS
+        }
+        if wsWindows.isEmpty {
+            activateFinder()
+            return
+        }
+        guard let pickID = catalog.autoFocusTarget(
+                in: newActiveWS, windows: wsWindows),
+              let pick = wsWindows.first(where: { $0.id == pickID })
+        else { return }
+        Log.debug("native: autoFocus WS=\(newActiveWS) "
+            + "pick=\(pick.id.serverID) app=\(pick.appName)")
+        Focus.assert(pick, backend: self)
+    }
+
+    /// 2-b defocus: when the destination WS is empty, push the
+    /// frontmost-app crown to Finder. Public API only — facet
+    /// stays inside the macOS sandbox ([[facet-buddha-palm-principle]]).
+    /// Finder is always running; the menu bar swapping to it is
+    /// the user-visible "this WS is empty" signal.
+    private func activateFinder() {
+        let finders = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "com.apple.finder")
+        guard let finder = finders.first else {
+            Log.debug("native: autoFocus defocus skipped "
+                + "(Finder not running, unexpected)")
+            return
+        }
+        finder.activate()
+        Log.debug("native: autoFocus defocus -> Finder")
     }
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {

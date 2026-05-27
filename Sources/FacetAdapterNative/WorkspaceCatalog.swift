@@ -123,6 +123,16 @@ struct WorkspaceCatalog {
     /// per-window opt-out).
     private(set) var floatingWindows: Set<WindowID> = []
 
+    /// Per-WS snapshot of which window was focused at the moment
+    /// the user left that WS. Written by `recordLeaveFocus`
+    /// (called unconditionally on every `switchWorkspace`),
+    /// consumed by `autoFocusTarget` when a no-pick switch lands
+    /// on this WS — restores the user back to the same window
+    /// they were on. Cleared when the recorded window is closed
+    /// or moved to a different WS, so a stale entry can't pin
+    /// focus to a now-missing window.
+    private(set) var lastFocusedOnLeave: [Int: WindowID] = [:]
+
     init() {}
 
     // MARK: - Reconcile
@@ -159,6 +169,7 @@ struct WorkspaceCatalog {
             clearParkedState(of: id)
             floatingWindows.remove(id)
             detachFromLayouts(id)
+            clearLeaveFocus(of: id)
         }
         var added = 0
         for (id, pid) in liveByID {
@@ -193,6 +204,7 @@ struct WorkspaceCatalog {
         clearParkedState(of: id)
         floatingWindows.remove(id)
         detachFromLayouts(id)
+        clearLeaveFocus(of: id)
     }
 
     /// Clear all hide-state bookkeeping for `id` without
@@ -335,6 +347,56 @@ struct WorkspaceCatalog {
         return order.first
     }
 
+    // MARK: - Leave-focus snapshot (auto-focus on re-entry)
+
+    /// Remember which window was focused on `ws` at leave time.
+    /// Called unconditionally on every `switchWorkspace` so the
+    /// snapshot is fresh regardless of whether the next entry to
+    /// `ws` will auto-focus or not. `id` is whatever
+    /// `frontmostFocusedCGID` reported at leave time — even if it
+    /// turns out to belong to a different WS (rare race), the
+    /// stale entry self-cleans on the next reconcile / drop /
+    /// move that touches `id`.
+    mutating func recordLeaveFocus(_ id: WindowID, in ws: Int) {
+        lastFocusedOnLeave[ws] = id
+    }
+
+    /// Drop `id` from every WS's leave-focus snapshot. Called
+    /// from `reconcile` / `drop` / `moveWindow` so a closed or
+    /// relocated window can't keep pinning auto-focus on a
+    /// no-longer-valid target.
+    mutating func clearLeaveFocus(of id: WindowID) {
+        for (ws, recorded) in lastFocusedOnLeave where recorded == id {
+            lastFocusedOnLeave.removeValue(forKey: ws)
+        }
+    }
+
+    /// Pick the window an auto-focus switch into `ws` should
+    /// settle on. `windows` is the live window list of that WS
+    /// (caller passes the filtered subset so this method stays
+    /// pure on the snapshot). Returns:
+    ///   1. `lastFocusedOnLeave[ws]` if still present in `windows`
+    ///   2. else the existing `pred` chain from sidebar header
+    ///      click — `windows.first(where: \.isFocused)?.id ?? min(serverID)`
+    ///      — so optimistic highlight and auto-focus always
+    ///      settle on the same window.
+    /// `nil` only when `windows` is empty (= the 2-b empty-WS
+    /// branch the caller handles with a defocus instead).
+    func autoFocusTarget(in ws: Int,
+                                windows: [Window]) -> WindowID?
+    {
+        if let recorded = lastFocusedOnLeave[ws],
+           windows.contains(where: { $0.id == recorded }) {
+            return recorded
+        }
+        if let focused = windows.first(where: { $0.isFocused })?.id {
+            return focused
+        }
+        return windows.map(\.id).min(by: {
+            $0.serverID < $1.serverID
+        })
+    }
+
     // MARK: - Floating
 
     func isFloating(_ id: WindowID) -> Bool {
@@ -468,6 +530,11 @@ struct WorkspaceCatalog {
         detachFromLayouts(id)
         attachToLayout(id, workspace: n1Based,
                        focused: nil, in: rect)
+        // The window is no longer a valid leave-focus target for
+        // the source WS — clear so the next return to that WS
+        // falls back to pred instead of pointing at a window
+        // that's now elsewhere.
+        clearLeaveFocus(of: id)
         let ref = WindowRef(id: id, pid: current.pid)
         if n1Based == activeIndex { return .restore(ref) }
         if current.workspace == activeIndex { return .park(ref) }

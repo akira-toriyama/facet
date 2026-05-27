@@ -400,7 +400,11 @@ final class Controller: NSObject {
                 + "(\(rangeHint(count: count)))")
             return
         }
-        backend.switchWorkspace(toIndex: n - 1)
+        // CLI `--workspace=N`: no explicit window pick, so let the
+        // backend auto-focus the last-touched window of the
+        // destination (or activate Finder if empty). See memory
+        // [[facet-ws-switch-focus-management]].
+        backend.switchWorkspace(toIndex: n - 1, autoFocus: true)
         scheduleReconcile(after: 0.05)
     }
 
@@ -899,7 +903,12 @@ final class Controller: NSObject {
             // out.
             switch pick {
             case .workspace(let ws):
-                cliQueue.async { bk.switchWorkspace(toIndex: ws) }
+                // Grid cell click without a specific window — let
+                // the backend auto-focus the destination's
+                // last-touched window (or activate Finder if empty).
+                cliQueue.async {
+                    bk.switchWorkspace(toIndex: ws, autoFocus: true)
+                }
             case .window(let ws, let pid, let id):
                 cliQueue.async {
                     bk.switchWorkspace(toIndex: ws)
