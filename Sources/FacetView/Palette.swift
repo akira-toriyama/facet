@@ -1,7 +1,5 @@
 // Theme palette. CLI flag `--theme=terminal|cute|system` picks one
 // at startup; views read it from the module-level `pal` (Theme.swift).
-// Lifted from ws-tabs essentially verbatim — colors are the canonical
-// look that v1.x users already know.
 
 import AppKit
 

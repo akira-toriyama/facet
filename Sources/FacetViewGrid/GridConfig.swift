@@ -1,9 +1,6 @@
-// User-facing configuration for the overview grid.
-//
-// In ws-tabs this lived inside the larger `WsTabsConfig` TOML
-// loader. For facet M2 the config is a plain struct with sensible
-// defaults; the Controller (step 6) wires it up from `~/.config/`
-// at app start.
+// User-facing configuration for the overview grid. Plain struct
+// with sensible defaults; the Controller wires it up from
+// `~/.config/facet/config.toml` at app start.
 
 import CoreGraphics
 
@@ -12,8 +9,8 @@ public struct GridConfig: Sendable {
     /// reads fall back to the default rather than throwing.
     public var cols: Int
     /// Where the workspace label sits relative to its cell. Accepts
-    /// the two strings ws-tabs accepted: "up" (Mission Control / TS3
-    /// convention, default) or "down" (Stage Manager / dock style).
+    /// two strings: "up" (Mission Control convention, default) or
+    /// "down" (Stage Manager / dock style).
     public var labelPosition: String
     /// Label font size in points.
     public var labelSize: CGFloat

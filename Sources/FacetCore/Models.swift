@@ -20,9 +20,8 @@ public struct WindowID: Hashable, Sendable {
 
 /// One window in a workspace.
 ///
-/// `pid` and `title` are kept on the model because AX focus needs both
-/// alongside `serverID` to disambiguate same-id race conditions —
-/// see `AX.focus` in ws-tabs WsTabs.swift.
+/// `pid` and `title` are kept on the model because AX focus needs
+/// both alongside `serverID` to disambiguate same-id race conditions.
 public struct Window: Sendable {
     public let id: WindowID
     public let pid: Int

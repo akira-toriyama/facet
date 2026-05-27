@@ -1,15 +1,9 @@
-// Full-screen overview grid — TS3-style cells, one per workspace,
-// arranged in `cols × rows`. Each cell mirrors the screen aspect
-// so window mini-rects map cleanly. Lifted from ws-tabs's
-// `GridView` essentially 1:1; type / API shifts are the same as
-// the SidebarView lift: ``[Workspace]`` instead of
-// ``[RFWorkspace]``, ``WindowID`` end-to-end, ``GridConfig``
-// instance property in place of the ws-tabs global ``WsTabsConfig.
-// current.effectiveGrid*`` accessors.
-//
-// The view stays controller-free: orchestration plugs in via the
-// four callback closures (``onDismiss`` / ``onPick`` / ``onDrop`` /
-// ``onSwap``). Controller decides what those mean.
+// Full-screen overview grid — one cell per workspace, arranged in
+// `cols × rows`. Each cell mirrors the screen aspect so window
+// mini-rects map cleanly. The view stays controller-free:
+// orchestration plugs in via the four callback closures
+// (``onDismiss`` / ``onPick`` / ``onDrop`` / ``onSwap``).
+// Controller decides what those mean.
 
 import AppKit
 import CoreGraphics
@@ -262,8 +256,8 @@ public final class GridView: NSView {
             ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
         let aspect = scr.width / max(1, scr.height)
         // Each row reserves a label band on the configured side.
-        // Default "up" (Mission Control / TS3 convention); "down"
-        // puts the label below each cell (Stage Manager / dock).
+        // Default "up" (Mission Control convention); "down" puts
+        // the label below each cell (Stage Manager / dock).
         let labelPos = config.labelPosition
         let labelH = config.labelBandHeight
         let labelBand = labelH + gridLabelGap
@@ -409,9 +403,8 @@ public final class GridView: NSView {
     // MARK: - Draw
 
     public override func draw(_ dirty: NSRect) {
-        // Phase 1e palette: dialed back to match TS3 captures —
-        // very faint cell fills + strokes so window thumbs do the
-        // visual work, accent reserved for active / drop-target.
+        // Palette: very faint cell fills + strokes so window thumbs
+        // do the visual work, accent reserved for active / drop-target.
         let activeColor = pal.accent
         let cellFill    = pal.dim.withAlphaComponent(0.08)
         let cellStroke  = pal.dim.withAlphaComponent(0.22)

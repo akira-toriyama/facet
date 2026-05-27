@@ -26,7 +26,9 @@
 //
 //   FacetViewTree       sidebar view (translucent tree panel).
 //
-//   FacetViewGrid       full-screen overview overlay (TS3-style).
+//   FacetViewGrid       full-screen overview overlay (Mission
+//                       Control-style cells with ScreenCaptureKit
+//                       thumbnails).
 //
 //   FacetApp            executable target: @main, CLI argv,
 //                       Controller orchestration.

@@ -278,7 +278,7 @@ final class PanelHost: NSObject {
     // MARK: - Helpers
 
     /// Resizable rounded-rect mask (cap insets keep corners crisp
-    /// at any panel size). Lifted from ws-tabs's `roundedMaskImage`.
+    /// at any panel size).
     private static func roundedMaskImage(_ r: CGFloat) -> NSImage {
         let d = r * 2 + 1
         let img = NSImage(size: NSSize(width: d, height: d))

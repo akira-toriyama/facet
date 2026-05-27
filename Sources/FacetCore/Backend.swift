@@ -40,9 +40,9 @@ public struct WindowMenuItem: Sendable {
 /// Coarse-grained event emitted by the backend when its state has
 /// likely changed (a window opened / closed, workspace switched, …).
 ///
-/// Deliberately coarse: subscribers re-query via `workspaces()` rather
-/// than diffing — that's how ws-tabs operated and it's plenty for the
-/// frame rates the view layer runs at.
+/// Deliberately coarse: subscribers re-query via `workspaces()`
+/// rather than diffing — plenty for the frame rates the view
+/// layer runs at.
 public enum BackendEvent: Sendable {
     case refreshNeeded
 }

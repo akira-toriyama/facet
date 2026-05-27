@@ -14,7 +14,7 @@ import FacetCore
 /// `SCWindow.frame` is in global display points, top-left origin
 /// (Quartz). AppKit window frames are bottom-left, measured from
 /// the primary screen. Convert for the primary display; multi-
-/// display untested — see ws-tabs README limitations.
+/// display arrangements are not yet handled here.
 @MainActor
 public func cgFrameToAppKit(_ r: CGRect) -> NSRect {
     let primaryH = (NSScreen.screens.first { $0.frame.origin == .zero }?

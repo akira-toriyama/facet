@@ -56,7 +56,7 @@ public func gridScaledWindowRect(windowFrame: CGRect,
 
 /// Short label for a workspace cell. Strips a leading "workspace "
 /// prefix (case-insensitive) so a user named workspace
-/// "WORKSPACE Q" displays as "Q" — matches the TS3 / MissionControl
+/// "WORKSPACE Q" displays as "Q" — matches the Mission Control
 /// convention of single-letter cell captions. Empty name → "WS<n>".
 public func gridLabel(name: String, idx: Int) -> String {
     if name.isEmpty { return "WS\(idx + 1)" }
