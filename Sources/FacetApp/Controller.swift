@@ -247,6 +247,7 @@ final class Controller: NSObject {
     ///                       (writeStatus refreshes the snapshot
     ///                       immediately so `facet status`
     ///                       reflects it without waiting)
+    ///   - preview_mode    → next hover-preview reads the new value
     ///   - [workspaces]    → reflected in writeStatus (the live
     ///                       data-model overlay onto facet
     ///                       workspaces lands at Phase α impl)
@@ -256,11 +257,14 @@ final class Controller: NSObject {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
         let oldHide = config.effectiveHideMethod
+        let oldPrev = config.effectiveTreePreviewMode
         config = fresh
         let newTheme = config.effectiveTheme
         let newHide = config.effectiveHideMethod
+        let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
-            + "hide_method=\(oldHide)→\(newHide)")
+            + "hide_method=\(oldHide)→\(newHide) "
+            + "preview_mode=\(oldPrev)→\(newPrev)")
         if newTheme != oldTheme {
             applyStyle(newTheme)
         }
@@ -691,6 +695,7 @@ final class Controller: NSObject {
                 let now = self.sidebarView.previewTargets()
                 let nowIDs = Set(now.map(\.window))
                 guard nowIDs == ids else { return }
+                let mode = self.config.effectiveTreePreviewMode
                 for t in now {
                     wp.request(t.window) { [weak self] img, _, gotID in
                         MainActor.assumeIsolated {
@@ -698,15 +703,88 @@ final class Controller: NSObject {
                             let cur = self.sidebarView.previewTargets()
                             guard let nt = cur.first(where: {
                                 $0.window == gotID
-                            }), Set(cur.map(\.window)).contains(gotID)
-                            else { return }
+                            }) else { return }
+                            let frame: NSRect
+                            if mode == "mirror", let wf = nt.windowFrame {
+                                frame = Self.cgFrameToAppKit(wf)
+                            } else {
+                                // Stack index = position in the current
+                                // ordered list (WS-header hover yields
+                                // several targets sharing one anchor).
+                                let pos = cur.firstIndex(where: {
+                                    $0.window == gotID
+                                }) ?? 0
+                                frame = Self.popoverFrame(
+                                    anchor: nt.rowAnchor,
+                                    image: img, stackIndex: pos)
+                            }
                             self.previewPool.show(
-                                gotID, img: img, frame: nt.frame)
+                                gotID, img: img, screenFrame: frame)
                         }
                     }
                 }
             }
         }
+    }
+
+    /// Mirror-mode: convert a Quartz (top-left origin) backend
+    /// window frame to an AppKit (bottom-left, primary-screen
+    /// origin) screen rect. Multi-display arrangements where the
+    /// secondary screen sits above the primary aren't handled
+    /// here — the conversion uses the primary screen's height
+    /// only. (Same behaviour as the pre-popover code; if it
+    /// matters, `tree.preview_mode = "popover"` sidesteps it.)
+    static func cgFrameToAppKit(_ r: CGRect) -> NSRect {
+        let primaryH = (NSScreen.screens.first { $0.frame.origin == .zero }?
+            .frame.height) ?? NSScreen.main?.frame.height ?? r.maxY
+        return NSRect(x: r.minX, y: primaryH - r.maxY,
+                      width: r.width, height: r.height)
+    }
+
+    /// Place the preview popover next to a sidebar row.
+    ///
+    /// - Sizes the panel to the image aspect, capped at
+    ///   `popoverMaxSize` so a 4K window doesn't fill the screen.
+    /// - Prefers the right side of the row; auto-flips left if
+    ///   that overflows the screen (e.g. sidebar parked on the
+    ///   right edge).
+    /// - For workspace-header hover the caller passes the same
+    ///   anchor for every window of the WS and varies `stackIndex`
+    ///   — popovers stack downward with a small gap.
+    /// - Clamps to the anchor screen's `visibleFrame` (menu bar +
+    ///   Dock excluded).
+    static func popoverFrame(
+        anchor: NSRect, image: NSImage?, stackIndex: Int
+    ) -> NSRect {
+        let maxSize = NSSize(width: 320, height: 220)
+        let gap: CGFloat = 8
+        let stackGap: CGFloat = 4
+
+        let imgSize = image?.size ?? NSSize(width: 16, height: 10)
+        let aspect = imgSize.width / max(imgSize.height, 1)
+        var w = maxSize.width
+        var h = w / aspect
+        if h > maxSize.height {
+            h = maxSize.height; w = h * aspect
+        }
+
+        var x = anchor.maxX + gap
+        let stackDrop = CGFloat(stackIndex) * (h + stackGap)
+        // AppKit screen coords: maxY = top of anchor. Place popover
+        // top-aligned with the row's top, then push down for stack.
+        var y = anchor.maxY - h - stackDrop
+
+        let mid = NSPoint(x: anchor.midX, y: anchor.midY)
+        let screen = NSScreen.screens.first { $0.frame.contains(mid) }
+            ?? NSScreen.main
+        if let vis = screen?.visibleFrame {
+            if x + w > vis.maxX {
+                x = anchor.minX - gap - w     // flip to left
+            }
+            x = max(vis.minX, min(vis.maxX - w, x))
+            y = max(vis.minY, min(vis.maxY - h, y))
+        }
+        return NSRect(x: x, y: y, width: w, height: h)
     }
 
     // MARK: - Grid lifecycle

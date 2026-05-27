@@ -178,6 +178,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         workspaceList = catalog.snapshot(
             live: live,
             focused: focused,
+            activeRect: rect,
             configured: config.effectiveWorkspaceList)
     }
 

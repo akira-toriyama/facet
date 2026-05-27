@@ -25,6 +25,12 @@ public struct FacetConfig: Sendable {
     public var gridLabelSize: Int?
     public var thumbnailRefreshSeconds: Int?
 
+    // [tree]
+    /// How the sidebar's hover-preview overlay is sized + placed.
+    /// `"popover"` (default) keeps it next to the source row;
+    /// `"mirror"` puts it at the window's own on-screen frame.
+    public var treePreviewMode: String?     // "popover" | "mirror"
+
     // [workspace]
     /// How to hide non-active-workspace windows on switch.
     /// See memory [[native-window-hide-methods]] for the choice rationale.
@@ -102,6 +108,18 @@ public struct FacetConfig: Sendable {
         return ["anchor", "minimize"].contains(raw) ? raw : "anchor"
     }
 
+    /// `"popover"` (default) — small thumbnail next to the source
+    /// row, capped + auto-flipped to stay on-screen.
+    /// `"mirror"` — preview at the window's own on-screen frame
+    /// (the pre-bug behaviour). Best paired with `hide_method =
+    /// "minimize"`; with `"anchor"` the preview lands in the same
+    /// 1×41 corner sliver the window itself occupies.
+    /// Unknown / unset → `"popover"`. Case-insensitive.
+    public var effectiveTreePreviewMode: String {
+        let raw = (treePreviewMode ?? "popover").lowercased()
+        return ["popover", "mirror"].contains(raw) ? raw : "popover"
+    }
+
     /// Facet workspace defaults when the user hasn't (yet) edited
     /// `[workspace]` at all. 5 is the memory-confirmed
     /// (`facet-workspace-model` N2) "control above zero, easy to
@@ -165,6 +183,10 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["grid"]?["thumbnail-refresh-seconds"] {
             c.thumbnailRefreshSeconds = n
+        }
+        // [tree]
+        if case .string(let s)? = toml["tree"]?["preview_mode"] {
+            c.treePreviewMode = s
         }
         // [workspace]
         if case .string(let s)? = toml["workspace"]?["hide_method"] {

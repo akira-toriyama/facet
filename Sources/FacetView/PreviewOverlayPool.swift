@@ -15,10 +15,11 @@ public final class PreviewOverlayPool {
 
     public var inUseWindows: Set<WindowID> { Set(inUse.keys) }
 
-    /// Show / update a single window's overlay.
-    public func show(_ id: WindowID, img: NSImage, frame: CGRect) {
+    /// Show / update a single window's overlay. `screenFrame` is
+    /// the final on-screen panel rect (AppKit coords).
+    public func show(_ id: WindowID, img: NSImage, screenFrame: NSRect) {
         if let o = inUse[id] {
-            o.show(img, at: frame, for: id); return
+            o.show(img, at: screenFrame, for: id); return
         }
         let o: PreviewOverlay
         if let free = all.first(where: { ov in
@@ -29,7 +30,7 @@ public final class PreviewOverlayPool {
             o = PreviewOverlay(); all.append(o)
         }
         inUse[id] = o
-        o.show(img, at: frame, for: id)
+        o.show(img, at: screenFrame, for: id)
     }
 
     /// Hide overlays whose window id is not in the target set

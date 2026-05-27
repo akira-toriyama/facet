@@ -532,26 +532,87 @@ struct WorkspaceCatalog {
     /// wire convention of the `WindowBackend` protocol — translation
     /// happens here at the seam.
     func snapshot(live: [Window], focused: WindowID?,
+                         activeRect: CGRect,
                          configured: [(index: Int, name: String)])
         -> [Workspace]
     {
-        let stamped = live.map { w in
-            Window(id: w.id, pid: w.pid, appName: w.appName,
-                   title: w.title,
-                   isFocused: w.id == focused,
-                   isFloating: floatingWindows.contains(w.id),
-                   frame: w.frame)
-        }
-        let byWS = Dictionary(grouping: stamped) { w in
+        // Group raw live windows by WS first so per-WS layout
+        // queries (tiledFrames / stackOrders) only run once.
+        let byWS = Dictionary(grouping: live) { w in
             windowMap[w.id]?.workspace ?? activeIndex
         }
         return configured.map { entry in
-            Workspace(
+            let isActive = entry.index == activeIndex
+            let m = mode(of: entry.index)
+            let tileF = (m == "bsp")
+                ? tiledFrames(for: entry.index, in: activeRect)
+                : [:]
+            let stackSet: Set<WindowID> = (m == "stack")
+                ? Set(stackOrders[entry.index] ?? [])
+                : []
+            let wins = (byWS[entry.index] ?? []).map { w in
+                Window(id: w.id, pid: w.pid, appName: w.appName,
+                       title: w.title,
+                       isFocused: w.id == focused,
+                       isFloating: floatingWindows.contains(w.id),
+                       frame: wouldBeFrame(
+                           for: w, isActiveWS: isActive,
+                           mode: m, tileFrames: tileF,
+                           stackSet: stackSet,
+                           activeRect: activeRect))
+            }
+            return Workspace(
                 index: entry.index - 1,
                 name: entry.name,
-                isActive: entry.index == activeIndex,
-                layoutMode: mode(of: entry.index),
-                windows: byWS[entry.index] ?? [])
+                isActive: isActive,
+                layoutMode: m,
+                windows: wins)
         }
+    }
+
+    /// Compute the frame the user *perceives* for `w`:
+    ///   - Active WS: the raw CG bounds — the window is on-screen
+    ///     right there.
+    ///   - Inactive WS, floating or float-mode: the pre-anchor
+    ///     position (recorded in `originalPositions` when we
+    ///     parked it), combined with the current size. Falls back
+    ///     to the raw frame when nothing was recorded (window
+    ///     never parked, fresh app, …).
+    ///   - Inactive WS, bsp-mode: the tile slot the window will
+    ///     occupy when the WS becomes active.
+    ///   - Inactive WS, stack-mode: the active rect (stack members
+    ///     all fill the display once cycled to the top).
+    ///
+    /// This is what makes the tree-view "mirror" preview show the
+    /// window where it *will be* after a switch instead of where
+    /// it's been parked (a 1×41 corner sliver under
+    /// `hide_method = "anchor"`).
+    private func wouldBeFrame(for w: Window,
+                              isActiveWS: Bool,
+                              mode m: String,
+                              tileFrames: [WindowID: CGRect],
+                              stackSet: Set<WindowID>,
+                              activeRect: CGRect) -> CGRect?
+    {
+        if isActiveWS { return w.frame }
+        if floatingWindows.contains(w.id) {
+            return preParkFrame(for: w)
+        }
+        switch m {
+        case "bsp":
+            return tileFrames[w.id] ?? preParkFrame(for: w)
+        case "stack":
+            return stackSet.contains(w.id)
+                ? activeRect : preParkFrame(for: w)
+        default:
+            return preParkFrame(for: w)
+        }
+    }
+
+    private func preParkFrame(for w: Window) -> CGRect? {
+        if let origin = originalPositions[w.id], let size = w.frame?.size {
+            return CGRect(origin: origin, size: size)
+        }
+        return w.frame
     }
 }

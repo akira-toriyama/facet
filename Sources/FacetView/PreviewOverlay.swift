@@ -1,8 +1,8 @@
 // Borderless, click-through overlay panel that shows a captured
-// window image at that window's real on-screen position. Never key
-// / never active — the facet panel stays fully operable on top of
-// it. Used by the tree view (hover preview of off-screen windows)
-// and the grid view (TBD).
+// window image as a popover next to the sidebar row that triggered
+// it. Never key / never active — the facet panel stays fully
+// operable on top of it. Used by the tree view (hover preview of
+// off-screen windows) and the grid view (TBD).
 //
 // `level = .statusBar` puts the overlay above ordinary windows but
 // the facet panel itself is raised above `.statusBar`, so the
@@ -10,18 +10,6 @@
 
 import AppKit
 import FacetCore
-
-/// `SCWindow.frame` is in global display points, top-left origin
-/// (Quartz). AppKit window frames are bottom-left, measured from
-/// the primary screen. Convert for the primary display; multi-
-/// display arrangements are not yet handled here.
-@MainActor
-public func cgFrameToAppKit(_ r: CGRect) -> NSRect {
-    let primaryH = (NSScreen.screens.first { $0.frame.origin == .zero }?
-        .frame.height) ?? NSScreen.main?.frame.height ?? r.maxY
-    return NSRect(x: r.minX, y: primaryH - r.maxY,
-                  width: r.width, height: r.height)
-}
 
 @MainActor
 public final class PreviewOverlay {
@@ -52,11 +40,14 @@ public final class PreviewOverlay {
         panel.contentView = iv
     }
 
-    public func show(_ img: NSImage, at cgFrame: CGRect, for id: WindowID) {
+    /// `screenFrame` is the final on-screen panel rect in AppKit
+    /// coords (bottom-left origin). Caller is responsible for
+    /// sizing + positioning — see `Controller.popoverFrame`.
+    public func show(_ img: NSImage, at screenFrame: NSRect, for id: WindowID) {
         shownWindow = id
         iv.image = img
         iv.layer?.borderColor = pal.accent.cgColor
-        panel.setFrame(cgFrameToAppKit(cgFrame), display: true)
+        panel.setFrame(screenFrame, display: true)
         panel.orderFront(nil)                 // not makeKey: never steals focus
     }
 

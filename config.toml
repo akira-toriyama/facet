@@ -80,6 +80,35 @@ thumbnail-refresh-seconds = 4
 
 
 # -----------------------------------------------------------------
+# Tree-view (sidebar) options
+# -----------------------------------------------------------------
+[tree]
+
+# How the hover-preview overlay of a non-active workspace window
+# is sized and placed.
+#
+#   "popover" — small thumbnail anchored next to the source row,
+#               auto-sized to image aspect (capped ~320x220) and
+#               auto-flipped to the row's left if the right side
+#               would overflow. Always on-screen regardless of
+#               where the window actually lives.
+#               Recommended default.
+#
+#   "mirror"  — preview at the window's own on-screen frame
+#               (position + size). Useful with hide_method =
+#               "minimize" (windows keep their pre-minimize frame
+#               in AX, so the preview shows where they'll reappear).
+#               With hide_method = "anchor" (default) the window
+#               is parked in a 1x41 corner sliver — the mirror
+#               preview lands in that same sliver and is mostly
+#               off-screen. Pick this only if you know that's
+#               what you want.
+#
+# Unknown values clamp to "popover".
+preview_mode = "popover"
+
+
+# -----------------------------------------------------------------
 # Virtual-workspace behavior (M5 Phase α)
 # -----------------------------------------------------------------
 [workspace]

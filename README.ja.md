@@ -41,7 +41,7 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 | window 行を別ワークスペースにドラッグ (tree) | その window を移動 |
 | 空白部分をドラッグ (tree) | パネル位置を変更 — 位置は永続 |
 | 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
-| window 行ホバー (tree、 macOS 14+) | その window の実画面位置でライブプレビュー |
+| window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview_mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
 | サムネイルを別セルにドラッグ (grid) | その window を移動 |

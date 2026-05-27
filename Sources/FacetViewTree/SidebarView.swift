@@ -284,12 +284,23 @@ public final class SidebarView: NSView {
         NSCursor.arrow.set()
     }
 
-    /// Windows whose previews should show, with their backend
-    /// logical frames. Empty = no preview. A window row → 1 item;
-    /// a workspace header → every window of that workspace (a "WS
-    /// preview"). The active workspace is always skipped — would
-    /// just overlay the visible windows on themselves.
-    public func previewTargets() -> [(window: WindowID, frame: CGRect)] {
+    /// Windows whose previews should show, paired with:
+    /// - `rowAnchor` — screen rect of the source row (popover mode
+    ///   anchor; keeps the preview on-screen even when the window
+    ///   is anchor-hidden in a 1×41 corner sliver).
+    /// - `windowFrame` — the window's own backend frame in Quartz
+    ///   coords (mirror mode), or `nil` if the backend hasn't
+    ///   reported one. The caller picks between anchor and frame
+    ///   based on the `tree.preview_mode` config.
+    ///
+    /// Empty = no preview. A window row → 1 item; a workspace
+    /// header → every window of that workspace, all sharing the
+    /// header row as their popover anchor (the caller stacks
+    /// them). The active workspace is always skipped — would just
+    /// overlay the visible windows on themselves.
+    public func previewTargets()
+        -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
+    {
         enum T { case win(WindowID); case ws(Int) }
         var t: T?
         if kbNav, let s = kbSel {
@@ -304,21 +315,35 @@ public final class SidebarView: NSView {
             default:                            break
             }
         }
-        guard let t else { return [] }
+        guard let t, let win = self.window else { return [] }
+        func screen(_ r: NSRect) -> NSRect {
+            win.convertToScreen(convert(r, to: nil))
+        }
         switch t {
         case .win(let id):
             guard let ws = lastWorkspaces.first(where: { w in
                 w.windows.contains { $0.id == id }
             }), !ws.isActive,
-                  let win = ws.windows.first(where: { $0.id == id }),
-                  let f = win.frame
+                  let winModel = ws.windows.first(where: { $0.id == id }),
+                  let rowIdx = rows.firstIndex(where: { r in
+                      if case .window(_, _, let wid, _) = r.kind {
+                          return wid == id
+                      }
+                      return false
+                  })
             else { return [] }
-            return [(id, f)]
+            return [(id, screen(rows[rowIdx].rect), winModel.frame)]
         case .ws(let wi):
             guard let ws = lastWorkspaces.first(where: { $0.index == wi }),
-                  !ws.isActive else { return [] }
-            return ws.windows.compactMap { w in
-                w.frame.map { (w.id, $0) }
+                  !ws.isActive,
+                  let hdrIdx = rows.firstIndex(where: { r in
+                      if case .header(let w) = r.kind { return w == wi }
+                      return false
+                  })
+            else { return [] }
+            let anchor = screen(rows[hdrIdx].rect)
+            return ws.windows.map {
+                (window: $0.id, rowAnchor: anchor, windowFrame: $0.frame)
             }
         }
     }
