@@ -346,6 +346,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         let c = WorkspaceCatalog()
         let snap = c.snapshot(
             live: [], focused: nil,
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         XCTAssertEqual(snap.map(\.index), [0, 1, 2, 3, 4],
                        "snapshot must emit 0-based indexes")
@@ -356,6 +357,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setActive(3, configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [], focused: nil,
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         XCTAssertEqual(snap.filter(\.isActive).map(\.index), [2],
                        "0-based index 2 = 1-based 3")
@@ -368,6 +370,7 @@ final class WorkspaceCatalogTests: XCTestCase {
                          configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [window(10), window(20)], focused: nil,
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         XCTAssertEqual(snap[0].windows.map(\.id), [wid(10)])
         XCTAssertEqual(snap[2].windows.map(\.id), [wid(20)])
@@ -379,6 +382,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         let snap = c.snapshot(
             live: [window(10), window(20)],
             focused: wid(20),
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         let allWindows = snap.flatMap(\.windows)
         XCTAssertEqual(allWindows.first { $0.id == wid(20) }?.isFocused,
@@ -394,6 +398,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setActive(2, configuredIndexes: defaultConfigured)
         let snap = c.snapshot(
             live: [window(99)], focused: nil,
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         XCTAssertEqual(snap[1].windows.map(\.id), [wid(99)])
     }
@@ -526,6 +531,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
         let snap = c.snapshot(
             live: [], focused: nil,
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         XCTAssertEqual(snap[0].layoutMode, "float",
                        "WS 1 unset → float")
@@ -762,6 +768,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         c.toggleFloat(wid(10))
         let snap = c.snapshot(
             live: [window(10), window(20)], focused: nil,
+            activeRect: .zero,
             configured: defaultConfiguredPairs())
         let allWindows = snap.flatMap(\.windows)
         XCTAssertEqual(allWindows.first { $0.id == wid(10) }?.isFloating,
@@ -774,6 +781,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         let c = WorkspaceCatalog()
         let snap = c.snapshot(
             live: [], focused: nil,
+            activeRect: .zero,
             configured: [(1, "dev"), (3, "ide"), (5, "sns")])
         XCTAssertEqual(snap.map(\.index), [0, 2, 4])
         XCTAssertEqual(snap.map(\.name), ["dev", "ide", "sns"])
