@@ -670,6 +670,11 @@ public final class SidebarView: NSView {
             let pred = tgt?.windows.predictedFocus()?.id
                 ?? WindowID(serverID: -1)
             setOptimistic(windowID: pred, workspaceIndex: i)
+            // Carry the kb-nav cursor with the click so the
+            // outline (drawn when `kbNav` is on, which a panel
+            // click enables) doesn't strand on the previously
+            // selected row beside the new sel fill.
+            kbSel = .hdr(workspaceIndex: i)
             let bk = backend
             // Header click = no explicit window pick. The backend's
             // `autoFocus: true` path uses the same `predictedFocus`
@@ -685,6 +690,11 @@ public final class SidebarView: NSView {
             // workspace.
             let needSwitch = (i != activeWS)
             setOptimistic(windowID: id, workspaceIndex: i)
+            // Keep the kb-nav cursor (drawn whenever `kbNav` is
+            // on — a panel click flips that on passively) in sync
+            // with the click target, otherwise the outline strands
+            // on the previous selection beside the new sel fill.
+            kbSel = .win(id)
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
