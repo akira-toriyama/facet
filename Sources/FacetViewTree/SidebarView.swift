@@ -333,7 +333,24 @@ public final class SidebarView: NSView {
             hoverIdx = i; needsDisplay = true
             controller?.previewTargetChanged()
         }
-        (i != nil ? NSCursor.pointingHand : NSCursor.arrow).set()
+        hoverCursor(forRow: i).set()
+    }
+
+    /// Header rows are swap drag-handles → open-hand "grab" cursor
+    /// (matches the grid header); other rows are click targets →
+    /// pointing-hand; off-rows → arrow.
+    ///
+    /// NOTE: cursor changes only take effect while facet is the
+    /// active app (i.e. `--active`). In passive `--view=tree` the
+    /// panel is a non-activating background accessory, and macOS lets
+    /// only the active app own the cursor — `NSCursor.set()` here is a
+    /// harmless no-op then. Passive affordance is carried by the
+    /// always-drawn grip (which also brightens on hover), so this is
+    /// an OS limitation we accept rather than fight.
+    private func hoverCursor(forRow i: Int?) -> NSCursor {
+        guard let i, rows.indices.contains(i) else { return .arrow }
+        if case .header = rows[i].kind { return .openHand }
+        return .pointingHand
     }
 
     public override func mouseExited(with e: NSEvent) {
@@ -410,8 +427,7 @@ public final class SidebarView: NSView {
 
     public override func cursorUpdate(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
-        (rows.contains { $0.rect.contains(p) }
-            ? NSCursor.pointingHand : NSCursor.arrow).set()
+        hoverCursor(forRow: rows.firstIndex { $0.rect.contains(p) }).set()
     }
 
     // MARK: - Draw
