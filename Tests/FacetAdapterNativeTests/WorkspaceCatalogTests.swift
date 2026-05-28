@@ -43,7 +43,6 @@ final class WorkspaceCatalogTests: XCTestCase {
         let c = WorkspaceCatalog()
         XCTAssertTrue(c.windowMap.isEmpty)
         XCTAssertTrue(c.anchorParked.isEmpty)
-        XCTAssertTrue(c.minimizeParked.isEmpty)
         XCTAssertTrue(c.originalPositions.isEmpty)
     }
 
@@ -106,13 +105,14 @@ final class WorkspaceCatalogTests: XCTestCase {
         var c = WorkspaceCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
-        c.markMinimized(wid(20))
+        c.markAnchorParked(wid(20), originalPosition: .init(x: 3, y: 4))
         // wid(10) disappears (e.g. user closed the window).
         _ = c.reconcile(live: [window(20)])
         XCTAssertFalse(c.anchorParked.contains(wid(10)))
         XCTAssertNil(c.originalPositions[wid(10)])
-        // wid(20) still alive → minimize state preserved.
-        XCTAssertTrue(c.minimizeParked.contains(wid(20)))
+        // wid(20) still alive → park state preserved.
+        XCTAssertTrue(c.anchorParked.contains(wid(20)))
+        XCTAssertNotNil(c.originalPositions[wid(20)])
     }
 
     // MARK: - pid lookup
@@ -293,34 +293,15 @@ final class WorkspaceCatalogTests: XCTestCase {
                      "defensive against double-restore")
     }
 
-    // MARK: - Minimize bookkeeping
-
-    func testShouldMinimizeFlipsAfterMark() {
-        var c = WorkspaceCatalog()
-        XCTAssertTrue(c.shouldMinimize(wid(10)))
-        c.markMinimized(wid(10))
-        XCTAssertFalse(c.shouldMinimize(wid(10)))
-        XCTAssertTrue(c.shouldUnminimize(wid(10)))
-    }
-
-    func testMarkUnminimizedClears() {
-        var c = WorkspaceCatalog()
-        c.markMinimized(wid(10))
-        c.markUnminimized(wid(10))
-        XCTAssertFalse(c.shouldUnminimize(wid(10)))
-    }
-
     // MARK: - drop (closeWindow eviction)
 
     func testDropClearsAllTracesForWindow() {
         var c = WorkspaceCatalog()
         _ = c.reconcile(live: [window(10)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
-        c.markMinimized(wid(10))
         c.drop(wid(10))
         XCTAssertNil(c.windowMap[wid(10)])
         XCTAssertFalse(c.anchorParked.contains(wid(10)))
-        XCTAssertFalse(c.minimizeParked.contains(wid(10)))
         XCTAssertNil(c.originalPositions[wid(10)])
     }
 
@@ -759,10 +740,8 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testClearParkedStateDropsAllHideFlags() {
         var c = WorkspaceCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
-        c.markMinimized(wid(10))
         c.clearParkedState(of: wid(10))
         XCTAssertFalse(c.anchorParked.contains(wid(10)))
-        XCTAssertFalse(c.minimizeParked.contains(wid(10)))
         XCTAssertNil(c.originalPositions[wid(10)])
     }
 

@@ -97,10 +97,9 @@ so the overlay opens with real screenshots, not icon fallbacks.
 ## Status
 
 **Alpha** — native AX backend, no external dependency. Workspace
-switching, window park (anchor / minimize), BSP / stack tiling
-with AX-role auto-float, and display reconfigure handling all
-ship in the default build. `brew install akira-toriyama/tap/facet`
-is live.
+switching, window park, BSP / stack tiling with AX-role
+auto-float, and display reconfigure handling all ship in the
+default build. `brew install akira-toriyama/tap/facet` is live.
 
 | Milestone | Status |
 |---|---|
@@ -108,7 +107,7 @@ is live.
 | M2 — tree + grid views working | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor / minimize hide, closeWindow, setupFiles | ✅ |
+| M5 Phase β — anchor hide, closeWindow, setupFiles | ✅ |
 | M5 Phase γ — BSP + stack tiling, AX-role auto-float, tiling CLI | ✅ |
 | M5 Phase δ — display reconfigure | ✅ |
 | M5 Phase ε — native sole backend (v2.0.0) | ✅ |
@@ -152,8 +151,6 @@ Frequently-touched keys:
 
 - `[appearance] theme` — `terminal` (default) / `cute` / `system`
 - `[layout] default_view` — `tree` / `grid`
-- `[workspace] hide_method` — `anchor` (default, 1×41 px corner park,
-  instant) / `minimize` (Dock genie, cleaner but slower).
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
 - `[workspace] setupFiles = [...]` — array of executable script
@@ -234,13 +231,13 @@ facet window --cycle-stack=next|prev # rotate stack to next / previous member
 # Workspace ops (M5 Phase α)
 facet --workspace=N               # switch to workspace N (1-indexed)
 facet window --move-to=N          # move focused window to workspace N
-facet status                      # snapshot: backend, hide_method,
+facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp
 
 # Server controls
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # re-read config.toml + apply
-                                  # (theme / hide_method / [workspaces])
+                                  # (theme / preview_mode / [workspaces])
 facet --quit                      # terminate the running server
 facet --debug                     # verbose log to stderr +
                                   # /tmp/facet.log (server-mode)

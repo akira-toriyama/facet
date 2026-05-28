@@ -5,7 +5,7 @@
 // Phase progression (memory: facet-architecture-decisions):
 //   α (shipped) — virtual workspace state self-managed; focus
 //   β (shipped) — window move across workspaces; off-screen
-//                 park/unpark (`anchor` + `minimize` hide methods,
+//                 park/unpark (`anchor` hide method,
 //                 memory: native-window-hide-methods)
 //   γ (shipped) — tiling layout engines (BSP + stack, AX-role
 //                 auto-float). Frozen 2026-05-26, memory:
@@ -15,7 +15,7 @@
 //
 // State lives in `WorkspaceCatalog` (pure value type, AX-free,
 // unit-testable). This file owns only the effects: CGWindowList
-// enumeration, AX focus / position / minimize / close, AX event
+// enumeration, AX focus / position / close, AX event
 // subscription wiring, tile / stack frame application, and the
 // AsyncStream plumbing for events and errors.
 
@@ -92,8 +92,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         self.errorContinuation = errC
 
         Log.debug("native: init workspaces="
-            + "\(config.effectiveWorkspaceList.count) "
-            + "hide_method=\(config.effectiveHideMethod)")
+            + "\(config.effectiveWorkspaceList.count)")
 
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
@@ -530,14 +529,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             catalog.recordLeaveFocus(cur, in: plan.oldActive)
         }
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
-            + "\(plan.newActive) (hide_method="
-            + "\(config.effectiveHideMethod)) autoFocus=\(autoFocus)")
+            + "\(plan.newActive) autoFocus=\(autoFocus)")
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
         // Phase γ: overlay layout-specific frames on top of the
-        // per-mode hide_method restore. Floating windows in the
-        // same WS keep the restoreAnchor / restoreMinimize
-        // position; tiled / stacked windows snap to their
-        // computed frame.
+        // anchor restore. Floating windows in the same WS keep the
+        // restoreAnchor position; tiled / stacked windows snap to
+        // their computed frame.
         applyLayout(workspace: plan.newActive,
                     rect: activeDisplayRect())
 
@@ -621,29 +618,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         eventContinuation.yield(.refreshNeeded)
     }
 
-    /// Apply the configured hide method to two `WindowRef` lists.
-    /// Centralises the anchor / minimize branch so callers (workspace
-    /// switch, single-window move) don't repeat the switch. Unknown
-    /// `hide_method` values silently no-op — matches the
-    /// FacetConfig clamping rule that any out-of-set value falls
-    /// back to the default at config-read time.
+    /// Park / restore two `WindowRef` lists at the anchor sliver.
+    /// Centralises the call so callers (workspace switch,
+    /// single-window move) don't repeat it.
     private func applyHide(toPark: [WindowRef],
                            toRestore: [WindowRef]) {
-        let method = config.effectiveHideMethod
-        let park: (WindowRef) -> Void
-        let restore: (WindowRef) -> Void
-        switch method {
-        case "anchor":
-            park = parkAnchor(_:); restore = restoreAnchor(_:)
-        case "minimize":
-            park = parkMinimize(_:); restore = restoreMinimize(_:)
-        default:
-            return
-        }
-        for ref in toPark { park(ref) }
-        for ref in toRestore { restore(ref) }
+        for ref in toPark { parkAnchor(ref) }
+        for ref in toRestore { restoreAnchor(ref) }
         if !toPark.isEmpty || !toRestore.isEmpty {
-            Log.debug("native: \(method) "
+            Log.debug("native: anchor "
                 + "parked=\(toPark.count) restored=\(toRestore.count)")
         }
     }
@@ -651,13 +634,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
         let target = index + 1
         let rect = activeDisplayRect()
-        // BSP → Stack migration uses the hide_method to park all
-        // but the focused window. To respect that flow, call the
-        // hide_method's park helper for departing tiled members
-        // BEFORE catalog state flips — but the catalog's setMode
-        // already discards layoutTrees / stackOrders entries, so
-        // we instead rely on applyStack post-flip to park
-        // non-top members. Symmetric for Stack → BSP.
+        // BSP → Stack migration parks all but the focused window
+        // at the anchor sliver. The catalog's setMode discards
+        // layoutTrees / stackOrders entries, so we rely on
+        // applyStack post-flip to park non-top members. Symmetric
+        // for Stack → BSP.
         let applied = catalog.setMode(workspace: target,
                                       to: mode, in: rect)
         Log.debug("native: setLayoutMode WS \(target) -> \(applied)")
@@ -678,9 +659,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///   2. Rescue anchor-parked windows whose recorded
     ///      `originalPosition` is no longer on any visible
     ///      display: AX setPosition to the bottom-right anchor
-    ///      sliver of the nearest surviving display. Minimize-
-    ///      parked windows don't need this (the OS auto-restores
-    ///      the un-minimized rect into a visible region).
+    ///      sliver of the nearest surviving display.
     ///   3. (PanelHost handles its own reconfigure response —
     ///      Controller owns its own `DisplayChangeObserver`,
     ///      we don't notify it from here.)
@@ -753,11 +732,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     /// Apply stack mode to `n1Based`: the catalog's
-    /// `stackOrder[0]` fills `rect` (un-parked from whichever
-    /// hide_method last held it), all other members are parked
-    /// via the configured hide_method. Floating windows are
-    /// excluded entirely (they live outside the stack). No-op
-    /// when the WS isn't in stack mode or has no members.
+    /// `stackOrder[0]` fills `rect` (un-parked from the anchor
+    /// sliver), all other members are parked there. Floating
+    /// windows are excluded entirely (they live outside the
+    /// stack). No-op when the WS isn't in stack mode or has no
+    /// members.
     private func applyStack(workspace n1Based: Int, rect: CGRect) {
         let order = catalog.stackOrder(of: n1Based)
         guard let top = order.first else { return }
@@ -769,25 +748,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
            let ax = AXGeom.window(for: CGWindowID(top.serverID),
                                   pid: pid_t(pid))
         {
-            if config.effectiveHideMethod == "minimize" {
-                AXUIElementSetAttributeValue(
-                    ax, kAXMinimizedAttribute as CFString,
-                    kCFBooleanFalse)
-            }
             AXGeom.setPosition(ax, rect.origin)
             AXGeom.setSize(ax, rect.size)
             catalog.clearParkedState(of: top)
         }
-        // Others: park via hide_method (parkAnchor /
-        // parkMinimize own the "skip if already parked" guard).
+        // Others: park at the anchor sliver (parkAnchor owns the
+        // "skip if already parked" guard).
         for id in order.dropFirst() {
             guard let pid = catalog.pid(for: id) else { continue }
-            let ref = WindowRef(id: id, pid: pid)
-            switch config.effectiveHideMethod {
-            case "anchor":   parkAnchor(ref)
-            case "minimize": parkMinimize(ref)
-            default:         break
-            }
+            parkAnchor(WindowRef(id: id, pid: pid))
         }
         Log.debug("native: stack WS \(n1Based) "
             + "top=\(top.serverID) members=\(order.count) "
@@ -973,31 +942,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         AXGeom.setPosition(ax, orig)
     }
 
-    // MARK: - Minimize hide / show (AX side-effects)
-
-    /// Minimize via AX. macOS remembers the un-minimized rect, so
-    /// no equivalent of `originalPositions` is needed here.
-    private func parkMinimize(_ ref: WindowRef) {
-        guard catalog.shouldMinimize(ref.id) else { return }
-        guard let ax = AXGeom.window(
-                for: CGWindowID(ref.id.serverID), pid: pid_t(ref.pid))
-        else { return }
-        AXUIElementSetAttributeValue(
-            ax, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
-        catalog.markMinimized(ref.id)
-    }
-
-    private func restoreMinimize(_ ref: WindowRef) {
-        guard catalog.shouldUnminimize(ref.id) else { return }
-        guard let ax = AXGeom.window(
-                for: CGWindowID(ref.id.serverID), pid: pid_t(ref.pid))
-        else { return }
-        AXUIElementSetAttributeValue(
-            ax, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-        catalog.markUnminimized(ref.id)
-    }
-
     // AX helpers (window lookup, position / size, display match)
-    // live in FacetAccessibility.AXGeom / .Displays — both adapters
-    // share the same code path.
+    // live in FacetAccessibility.AXGeom / .Displays.
 }

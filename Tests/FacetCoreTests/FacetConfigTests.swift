@@ -90,35 +90,19 @@ final class FacetConfigTests: XCTestCase {
     func testFromTOMLPopulatesWorkspaceNames() {
         let parsed = parseTOMLSubset("""
             [workspace]
-            hide_method = "anchor"
+            setupFiles = ["x.sh"]
             1 = "dev"
             2 = "sns"
             """)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.workspaceNames[1], "dev")
         XCTAssertEqual(c.workspaceNames[2], "sns")
-        // hide_method must not bleed into workspaceNames — a parser
-        // bug that coerced unparseable string keys to 0 would fail
-        // this count check (and would also surface as a phantom
-        // index-0 entry).
+        // Non-int meta keys (setupFiles etc.) must not bleed into
+        // workspaceNames — a parser bug that coerced unparseable
+        // string keys to 0 would fail this count check (and would
+        // also surface as a phantom index-0 entry).
         XCTAssertEqual(c.workspaceNames.count, 2)
         XCTAssertNil(c.workspaceNames[0])
-    }
-
-    func testEffectiveHideMethodFallsBackToAnchor() {
-        var c = FacetConfig()
-        XCTAssertEqual(c.effectiveHideMethod, "anchor",
-                       "unset → default anchor")
-        c.hideMethod = "minimize"
-        XCTAssertEqual(c.effectiveHideMethod, "minimize")
-        c.hideMethod = "MINIMIZE"
-        XCTAssertEqual(c.effectiveHideMethod, "minimize",
-                       "case-insensitive")
-        c.hideMethod = "deep-tag"
-        XCTAssertEqual(c.effectiveHideMethod, "anchor",
-                       "unknown value → default (typo can't break layout)")
-        c.hideMethod = ""
-        XCTAssertEqual(c.effectiveHideMethod, "anchor")
     }
 
     // MARK: - TOML mapping
@@ -133,9 +117,6 @@ final class FacetConfigTests: XCTestCase {
             label-position = "down"
             label-size = 18
             thumbnail-refresh-seconds = 10
-
-            [workspace]
-            hide_method = "minimize"
             """)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.effectiveDefaultView, "tree")
@@ -144,7 +125,6 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveGridLabelPosition, "down")
         XCTAssertEqual(c.effectiveGridLabelSize, 18)
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
-        XCTAssertEqual(c.effectiveHideMethod, "minimize")
     }
 
     func testEmptyTOMLYieldsAllDefaults() {

@@ -7,9 +7,9 @@
 //     workspace, parked-window bookkeeping) is testable without
 //     AX permission, CGWindowList, or any AppKit thread.
 //   - `NativeAdapter` keeps only the effects (CGWindowList
-//     enumeration, AX position / minimize, event stream
-//     plumbing); it owns one `WorkspaceCatalog` and delegates
-//     every state decision to it.
+//     enumeration, AX position, event stream plumbing); it owns
+//     one `WorkspaceCatalog` and delegates every state decision
+//     to it.
 //
 // Indexing convention
 //
@@ -84,16 +84,9 @@ struct WorkspaceCatalog {
     /// a poll-driven refresh can't re-park on top of a park.
     private(set) var anchorParked: Set<WindowID> = []
 
-    /// Windows currently minimized via AX `kAXMinimized`. Mirrors
-    /// `anchorParked` but tracks a different OS state (Dock vs
-    /// off-screen position). Kept separate so a runtime hide-method
-    /// flip wouldn't conflate the two.
-    private(set) var minimizeParked: Set<WindowID> = []
-
-    /// Position the window held before facet parked it via the
-    /// anchor method. Recorded at park time, consumed at restore
-    /// time. The minimize method doesn't need this — macOS
-    /// remembers the un-minimized rect on its own.
+    /// Position the window held before facet parked it at the
+    /// anchor sliver. Recorded at park time, consumed at restore
+    /// time.
     private(set) var originalPositions: [WindowID: CGPoint] = [:]
 
     /// Per-WS layout mode. Missing entries default to `"float"`
@@ -111,16 +104,14 @@ struct WorkspaceCatalog {
     /// Per-WS stack-member order. Only present for WSs in
     /// `"stack"` mode. The element at index 0 is the *visible
     /// top* (the single window that fills the display); the rest
-    /// are parked via the configured `hide_method`. New windows
-    /// land at index 0 (Q7c: new = top); `cycleStack` rotates
-    /// the array.
+    /// are parked at the anchor sliver. New windows land at index
+    /// 0 (Q7c: new = top); `cycleStack` rotates the array.
     private(set) var stackOrders: [Int: [WindowID]] = [:]
 
     /// Windows the user (or AX role detector) flagged as floating.
     /// Floating windows are skipped by the tiler and stay at the
-    /// user's last-set position. Independent of `anchorParked` /
-    /// `minimizeParked` (which are *hide-method* state, not
-    /// per-window opt-out).
+    /// user's last-set position. Independent of `anchorParked`
+    /// (which is hide state, not a per-window opt-out).
     private(set) var floatingWindows: Set<WindowID> = []
 
     /// Per-WS snapshot of which window was focused at the moment
@@ -177,8 +168,8 @@ struct WorkspaceCatalog {
 
     /// Reconcile `windowMap` against the live CGWindowList. Gone
     /// IDs are dropped from `windowMap`, `anchorParked`,
-    /// `minimizeParked`, `originalPositions`, `floatingWindows`,
-    /// and from any `layoutTrees` that held them. New IDs land in
+    /// `originalPositions`, `floatingWindows`, and from any
+    /// `layoutTrees` that held them. New IDs land in
     /// `activeIndex` with their owning pid recorded; if the
     /// active WS is in `"bsp"` mode and the new window isn't
     /// flagged floating, it's also inserted into that WS's tree
@@ -335,7 +326,6 @@ struct WorkspaceCatalog {
     /// further meaning.
     mutating func clearParkedState(of id: WindowID) {
         anchorParked.remove(id)
-        minimizeParked.remove(id)
         originalPositions.removeValue(forKey: id)
     }
 
@@ -680,22 +670,6 @@ struct WorkspaceCatalog {
         return pos
     }
 
-    func shouldMinimize(_ id: WindowID) -> Bool {
-        !minimizeParked.contains(id)
-    }
-
-    func shouldUnminimize(_ id: WindowID) -> Bool {
-        minimizeParked.contains(id)
-    }
-
-    mutating func markMinimized(_ id: WindowID) {
-        minimizeParked.insert(id)
-    }
-
-    mutating func markUnminimized(_ id: WindowID) {
-        minimizeParked.remove(id)
-    }
-
     // MARK: - Snapshot
 
     /// Build the `WindowBackend.workspaces()` return value from
@@ -773,8 +747,7 @@ struct WorkspaceCatalog {
     ///
     /// This is what makes the tree-view "mirror" preview show the
     /// window where it *will be* after a switch instead of where
-    /// it's been parked (a 1×41 corner sliver under
-    /// `hide_method = "anchor"`).
+    /// it's been parked (a 1×41 corner sliver).
     private func wouldBeFrame(for w: Window,
                               isActiveWS: Bool,
                               mode m: String,

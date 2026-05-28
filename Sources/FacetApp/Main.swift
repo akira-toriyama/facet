@@ -121,7 +121,7 @@ enum FacetApp {
 
         STATUS
           facet status                       print server's view of the
-                                             world: backend, hide_method,
+                                             world: backend, theme,
                                              workspaces (active marker +
                                              window counts), last error,
                                              snapshot timestamp. Reads
@@ -135,7 +135,7 @@ enum FacetApp {
                                              config.toml to persist)
           facet --quit                       terminate the server
           facet --reload                     re-read config.toml + apply
-                                             (theme / hide_method /
+                                             (theme / preview_mode /
                                              [workspaces]). Default_view
                                              and setupFiles need a real
                                              restart. The server also

@@ -245,10 +245,6 @@ final class Controller: NSObject {
     ///
     /// Reload-on (memory facet-cli-surface N11):
     ///   - theme           → applyStyle live
-    ///   - hide_method     → next reconcile sees the new value
-    ///                       (writeStatus refreshes the snapshot
-    ///                       immediately so `facet status`
-    ///                       reflects it without waiting)
     ///   - preview_mode    → next hover-preview reads the new value
     ///   - [workspaces]    → reflected in writeStatus (the live
     ///                       data-model overlay onto facet
@@ -258,21 +254,18 @@ final class Controller: NSObject {
     func reloadConfig() {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
-        let oldHide = config.effectiveHideMethod
         let oldPrev = config.effectiveTreePreviewMode
         config = fresh
         let newTheme = config.effectiveTheme
-        let newHide = config.effectiveHideMethod
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
-            + "hide_method=\(oldHide)→\(newHide) "
             + "preview_mode=\(oldPrev)→\(newPrev)")
         if newTheme != oldTheme {
             applyStyle(newTheme)
         }
-        // Always refresh the snapshot — hide_method / workspaces
-        // changes need to surface in `facet status` without
-        // waiting for the next backend event.
+        // Always refresh the snapshot — [workspaces] changes need
+        // to surface in `facet status` without waiting for the
+        // next backend event.
         writeStatus(lastWorkspaces)
     }
 
@@ -568,7 +561,6 @@ final class Controller: NSObject {
             backend: backend.name,
             theme: config.effectiveTheme,
             defaultView: config.effectiveDefaultView,
-            hideMethod: config.effectiveHideMethod,
             workspaces: entries,
             lastError: lastError,
             timestamp: ISO8601DateFormatter().string(from: Date()))
