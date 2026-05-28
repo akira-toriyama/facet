@@ -52,6 +52,12 @@ public final class SidebarView: NSView {
     private var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public private(set) var signature = ""
     public private(set) var contentHeight: CGFloat = 40
+
+    /// While true, `draw` renders placeholder rows instead of the
+    /// (stale) tree. Set by `showSkeleton` on a native-Space switch
+    /// and cleared by the next real `update`. Memory:
+    /// facet-per-native-space-ws.
+    private var skeleton = false
     public private(set) var activeWS: Int?    // REAL active WS (skip-switch)
 
     // Optimistic selection: on click we move the highlight
@@ -133,6 +139,7 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(_ workspaces: [Workspace],
                        titles: [WindowID: String]? = nil) -> CGFloat {
+        skeleton = false        // real content arrived → drop placeholder
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         activeWS = workspaces.first(where: { $0.isActive })?.index   // always REAL
@@ -221,6 +228,21 @@ public final class SidebarView: NSView {
     }
 
     public func forceRedraw() { signature = "" }
+
+    /// Show placeholder rows until the next real `update`. Used while
+    /// a native-Space switch settles so the panel never flashes the
+    /// previous desktop's tree.
+    public func showSkeleton() {
+        skeleton = true
+        signature = ""          // force the next real update to redraw
+        needsDisplay = true
+    }
+
+    /// Panel height to request while the skeleton is on screen —
+    /// three placeholder sections (header + two rows each).
+    public var skeletonHeight: CGFloat {
+        headerFirstRowH + headerRowH * 2 + windowRowH * 6 + 12
+    }
     public func relayout() { signature = ""; _ = update(lastWorkspaces) }
 
     // MARK: - type-to-filter (entered with `s` in --active)
@@ -356,7 +378,36 @@ public final class SidebarView: NSView {
 
     // MARK: - Draw
 
+    /// Placeholder rows shown while a native-Space switch settles.
+    /// Mirrors the real layout's rhythm (caption + two window rows
+    /// per section) with muted, theme-aware rounded bars — calmer
+    /// than flashing the previous desktop's tree.
+    private func drawSkeleton() {
+        func bar(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
+                 _ alpha: CGFloat, _ radius: CGFloat = 4.5) {
+            pal.dim.withAlphaComponent(alpha).setFill()
+            NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
+                         xRadius: radius, yRadius: radius).fill()
+        }
+        var y: CGFloat = 6
+        let widths: [CGFloat] = [0.60, 0.44, 0.52]
+        for s in 0..<3 {
+            let hh = s == 0 ? headerFirstRowH : headerRowH
+            let capY = s == 0 ? y + 8 : y + 20
+            bar(rowPadX, capY, bounds.width * 0.34, 9, 0.80)
+            y += hh
+            for r in 0..<2 {
+                bar(rowPadX + 2, y + (windowRowH - 14) / 2, 14, 14, 0.45, 4)
+                let tw = max(bounds.width * widths[(s + r) % widths.count] - 40, 40)
+                bar(rowPadX + 24, y + (windowRowH - 9) / 2, tw, 9, 0.45)
+                y += windowRowH
+            }
+            y += 3
+        }
+    }
+
     public override func draw(_ dirty: NSRect) {
+        if skeleton { drawSkeleton(); return }
         // Strong drop-target highlight: only a *different* workspace
         // band is a valid drop target — fill + outline it so "drop
         // here" is unmistakable.

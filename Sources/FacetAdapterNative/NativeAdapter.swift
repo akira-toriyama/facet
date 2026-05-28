@@ -175,6 +175,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             object: nil, queue: .main
         ) { [weak self, eventContinuation] _ in
             MainActor.assumeIsolated {
+                // Tell the UI the desktop changed (+ whether it's
+                // managed) BEFORE the refresh, so it can show a
+                // skeleton / hide the panel immediately instead of
+                // flashing the previous desktop's tree.
+                if let self {
+                    let managed = self.config.isSpaceManaged(
+                        ordinal: Spaces.activeSpaceOrdinal())
+                    eventContinuation.yield(.spaceChanged(managed: managed))
+                }
                 // After the Space transition settles (~500 ms
                 // covers the swipe animation +
                 // `kCGWindowIsOnscreen` flip), nudge focus onto a

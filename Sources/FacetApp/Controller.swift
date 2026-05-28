@@ -160,8 +160,15 @@ final class Controller: NSObject {
         Log.debug("controller start")
         eventTask = Task { [weak self] in
             guard let self else { return }
-            for await _ in self.backend.events {
-                await MainActor.run { self.requestRefresh() }
+            for await ev in self.backend.events {
+                await MainActor.run {
+                    switch ev {
+                    case .refreshNeeded:
+                        self.requestRefresh()
+                    case .spaceChanged(let managed):
+                        self.handleNativeSpaceChanged(managed: managed)
+                    }
+                }
             }
         }
         // Adapter error stream → lastError slot in facet status.
@@ -480,6 +487,28 @@ final class Controller: NSObject {
     }
 
     // MARK: - Refresh / apply
+
+    /// React to a native macOS Space switch (emitted by the backend
+    /// before its refresh). For a managed desktop, show the tree
+    /// skeleton at once so the panel never flashes the previous
+    /// desktop's content while the new one settles; for an
+    /// unmanaged desktop, hide the panel immediately. The following
+    /// `refreshNeeded` delivers the real snapshot, which clears the
+    /// skeleton (managed) or keeps it hidden (unmanaged).
+    private func handleNativeSpaceChanged(managed: Bool) {
+        Log.debug("controller: nativeSpaceChanged managed=\(managed) "
+            + "-> \(managed ? "skeleton" : "hide panel")")
+        if userHidden || isGridVisible { return }   // grid owns its own view
+        if managed {
+            sidebarView.frame.size.width = panelHost.userWidth
+            sidebarView.showSkeleton()
+            panelHost.layout(contentHeight: sidebarView.skeletonHeight,
+                             searching: false)
+            if !panelHost.isVisible { panelHost.show() }
+        } else {
+            panelHost.hide()
+        }
+    }
 
     private func requestRefresh() {
         if refreshPending { return }
