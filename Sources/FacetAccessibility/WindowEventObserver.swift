@@ -43,12 +43,22 @@ public final class WindowEventObserver: @unchecked Sendable {
     public typealias Callback = @MainActor () -> Void
 
     private let onChange: Callback
+    /// Optional fast-path fired ONLY on `kAXUIElementDestroyed`,
+    /// in addition to `onChange`. Lets a subscriber arm
+    /// close-specific logic the instant a window goes away —
+    /// before the slower CGWindowList enumeration reflects the
+    /// removal. Used by the native adapter's post-close focus
+    /// redirect so it beats the focus-change refresh race
+    /// (memory `facet-ws-switch-focus-management`).
+    private let onDestroy: Callback?
     private var observers: [pid_t: AXObserver] = [:]
     private var launchToken: NSObjectProtocol?
     private var terminateToken: NSObjectProtocol?
 
-    public init(onChange: @escaping Callback) {
+    public init(onChange: @escaping Callback,
+                onDestroy: Callback? = nil) {
         self.onChange = onChange
+        self.onDestroy = onDestroy
     }
 
     /// Attach AX observers to every currently-running app and
@@ -106,7 +116,10 @@ public final class WindowEventObserver: @unchecked Sendable {
     /// Public so the C-style AX callback can route in. Do not
     /// call directly from adapter code.
     @MainActor
-    fileprivate func fire() {
+    fileprivate func fire(notification: String) {
+        if notification == kAXUIElementDestroyedNotification {
+            onDestroy?()
+        }
         onChange()
     }
 
@@ -157,5 +170,6 @@ private func axObserverCallback(
     guard let refcon else { return }
     let obs = Unmanaged<WindowEventObserver>
         .fromOpaque(refcon).takeUnretainedValue()
-    MainActor.assumeIsolated { obs.fire() }
+    let name = notification as String
+    MainActor.assumeIsolated { obs.fire(notification: name) }
 }

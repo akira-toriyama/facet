@@ -110,9 +110,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // observed event yields a single refreshNeeded — Controller
         // already debounces, so a focus burst collapses into one
         // backend.workspaces() round-trip.
-        let observer = WindowEventObserver { [eventContinuation] in
-            eventContinuation.yield(.refreshNeeded)
-        }
+        let observer = WindowEventObserver(
+            onChange: { [eventContinuation] in
+                eventContinuation.yield(.refreshNeeded)
+            },
+            onDestroy: { [weak self] in
+                // Arm the post-close redirect the instant AX
+                // reports a destruction — this beats the
+                // focus-change refresh that would otherwise
+                // snapshot the wrong-WS window macOS auto-focused
+                // before the CGWindowList enumeration catches up.
+                self?.recentCloseAt = Date()
+            })
         self.eventObserver = observer
         DispatchQueue.main.async {
             MainActor.assumeIsolated { observer.start() }
@@ -246,9 +255,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "total=\(live.count)")
             applyLayout(workspace: catalog.activeIndex, rect: rect)
         }
+        if result.removed > 0 { recentCloseAt = Date() }
+        // Post-close focus redirect. When a managed window closes
+        // (Cmd+W, app quit), macOS hands focus to the next
+        // z-ordered window of the same app, which often sits in a
+        // DIFFERENT facet WS — the user sees the wrong window flash
+        // selected. We compute the focus the sidebar should SHOW
+        // (= a visible window in the active WS) and feed THAT to
+        // the snapshot, so the highlight never lands on the
+        // wrong-WS window even for a frame. `Focus.assert` then
+        // makes the AX reality catch up. See memory
+        // `facet-ws-switch-focus-management`.
+        let displayFocus = redirectedFocus(live: live, axFocus: focused)
         workspaceList = catalog.snapshot(
             live: live,
-            focused: focused,
+            focused: displayFocus,
             activeRect: rect,
             configured: config.effectiveWorkspaceList)
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
@@ -273,6 +294,52 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// to bulk-mark the initial CGWindowList as pre-existing so
     /// off-screen windows alive at launch can't sneak in later.
     private var didBootstrap = false
+    /// Last time a managed window vanished (Cmd+W, app quit).
+    /// Bounds the post-close redirect so it only kicks in right
+    /// after a close — Cmd+Tab and other deliberate focus moves
+    /// outside this window are left untouched.
+    private var recentCloseAt: Date?
+    /// How long after a close the redirect stays armed. Long
+    /// enough to cover the AX-event + reconcile settling, short
+    /// enough not to hijack the user's next deliberate action.
+    private let closeFocusWindow: TimeInterval = 0.6
+
+    /// What the sidebar should show as focused. Normally the AX
+    /// frontmost (`axFocus`). But within `closeFocusWindow` after
+    /// a managed window closed, if the AX frontmost drifted to a
+    /// window OUTSIDE the active WS, returns the active WS's
+    /// would-be focus instead — and fires `Focus.assert` so the
+    /// real AX state catches up. Feeding this to `snapshot` means
+    /// the highlight lands on the right window from the first
+    /// frame, with no wrong-WS flash. Empty active WS → bounce
+    /// to Finder (matches the WS-switch defocus, memory
+    /// `facet-ws-switch-focus-management`).
+    private func redirectedFocus(live: [Window],
+                                 axFocus: WindowID?) -> WindowID? {
+        let armed = recentCloseAt.map {
+            Date().timeIntervalSince($0) < closeFocusWindow
+        } ?? false
+        guard armed else { return axFocus }
+        // Already on an active-WS window → nothing to redirect.
+        if let f = axFocus,
+           catalog.windowMap[f]?.workspace == catalog.activeIndex {
+            return axFocus
+        }
+        let visibleActive = live.filter { w in
+            catalog.windowMap[w.id]?.workspace == catalog.activeIndex
+                && w.isOnscreen
+        }
+        guard let pick = catalog.autoFocusTarget(
+                in: catalog.activeIndex, windows: visibleActive)
+        else {
+            activateFinder()
+            return axFocus
+        }
+        Log.debug("native: post-close redirect "
+            + "pick=\(pick.id.serverID) app=\(pick.appName)")
+        Focus.assert(pick, backend: self)
+        return pick.id
+    }
 
     /// Cap on `detectAutoFloating`'s per-refresh AX probes. The
     /// role check costs ~3 AX round-trips per window (window
