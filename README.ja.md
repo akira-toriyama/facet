@@ -150,9 +150,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
-  Mission Control 順の位置。 各 native macOS Space は自動で独立した
-  workspace 群を持ち、 `[space.N]` はその Space の名前を上書きするだけ。
-  セクション未定義の Space は `[workspace]` にフォールバック。
+  Mission Control 順の位置。 `[space.N]` が**1つも無ければ**全 native
+  Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
+  セクションのある Space だけ facet が管理し、 無い Space は完全に
+  ノータッチ（窓そのまま・パネル非表示）。
 - `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
   実行可能 script のパス配列（Vitest 流）。 詳細は下の
   「Workspace setup hooks」 を参照。

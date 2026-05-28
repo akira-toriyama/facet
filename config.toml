@@ -176,24 +176,31 @@ preview_mode = "popover"
 # Space. Switch native Spaces (Mission Control / Ctrl+arrow) and the
 # tree shows that Space's own facet workspaces; a window stays in the
 # Space it was opened on (facet never moves windows across Spaces).
-# This needs no config — it just works.
 #
-# Optionally give a specific native Space its own workspace names /
-# count with a `[space.N]` section, where N is the Space's position
-# in Mission Control order (1-based, user Spaces only — fullscreen
-# Spaces don't count). The body is `index = "name"`, identical to a
-# `[workspace]` mapping. A native Space without a section uses the
-# default 5 workspaces. Edits take effect on restart.
+# `[space.N]` gives the Nth native Space (Mission Control order,
+# 1-based, user Spaces only — fullscreen Spaces don't count) its own
+# workspace names / count. The body is `index = "name"`, identical
+# to a `[workspace]` mapping. Edits take effect on restart.
+#
+# Two modes, decided by whether ANY [space.N] section exists:
+#   - NO [space.N] anywhere → every native Space is managed with the
+#     default 5 workspaces. Zero config, just works.
+#   - ANY [space.N] present → OPT-IN. facet manages ONLY the Spaces
+#     that have a section. A Space without one is left completely
+#     untouched: no facet workspaces, windows stay as-is, and the
+#     facet panel is hidden on that desktop.
 #
 # Caveat: the mapping is by Mission Control position. Reordering your
 # Spaces re-points these sections (names/counts only — your windows
 # stay correctly scoped to their real Space).
 #
-#   [space.1]            # 1st native Space
+#   [space.1]            # 1st native Space — managed, 3 workspaces
 #   1 = "dev"
 #   2 = "build"
 #   3 = "logs"
 #
-#   [space.2]            # 2nd native Space
+#   [space.2]            # 2nd native Space — managed, 2 workspaces
 #   1 = "mail"
 #   2 = "chat"
+#
+#   # 3rd+ native Spaces: no section -> facet hands-off (panel hidden)

@@ -174,6 +174,23 @@ public struct FacetConfig: Sendable {
             .map { ($0.key, $0.value) }
     }
 
+    /// Whether facet manages the native Space at `ordinal`.
+    ///
+    /// - With **any** `[space.N]` section present, facet is opt-in:
+    ///   it manages ONLY the Spaces that have a section. A Space
+    ///   without one is left untouched — no facet workspaces, no
+    ///   window parking, and the panel hides there.
+    /// - With **no** `[space.N]` sections at all, every native Space
+    ///   is managed via the global `[workspace]` default (the
+    ///   automatic per-Space behaviour).
+    /// - `nil` ordinal (SkyLight unavailable / single-space mode) is
+    ///   always managed.
+    public func isSpaceManaged(ordinal: Int?) -> Bool {
+        if spaceWorkspaceNames.isEmpty { return true }
+        guard let ordinal else { return true }
+        return spaceWorkspaceNames[ordinal] != nil
+    }
+
     // MARK: - Construction from parsed TOML
 
     public static func from(toml: [String: [String: TOMLValue]])

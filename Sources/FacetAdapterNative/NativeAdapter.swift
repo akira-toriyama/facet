@@ -254,6 +254,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // catalog mutation) rather than from the main-thread Space
         // observer, so catalog access stays single-threaded.
         swapCatalogIfSpaceChanged()
+        // Unmanaged native desktop (no `[space.N]` in opt-in mode):
+        // facet stays completely hands-off — adopt no windows, park
+        // nothing, and return an empty workspace list so the
+        // Controller hides the panel (its empty-list guard in
+        // `apply`). Windows on the desktop are left exactly as the
+        // user arranged them.
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal) else {
+            if !workspaceList.isEmpty {
+                Log.debug("native: desktop ordinal="
+                    + "\(activeSpaceOrdinal.map(String.init) ?? "-") "
+                    + "unmanaged -> hands-off, panel hidden")
+            }
+            workspaceList = []
+            return
+        }
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
@@ -560,6 +575,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
+        // No facet workspaces on an unmanaged native desktop.
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
@@ -638,6 +656,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
         let target = index + 1
         let configured = config.effectiveWorkspaceList(
             forSpaceOrdinal: activeSpaceOrdinal).map(\.index)

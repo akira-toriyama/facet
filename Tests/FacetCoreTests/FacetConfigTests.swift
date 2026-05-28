@@ -144,6 +144,25 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertNil(c.spaceWorkspaceNames[3])
     }
 
+    func testIsSpaceManagedOptInVsDefault() {
+        // No [space.N] anywhere → every Space managed (default).
+        let none = FacetConfig()
+        XCTAssertTrue(none.isSpaceManaged(ordinal: 1))
+        XCTAssertTrue(none.isSpaceManaged(ordinal: 99))
+        XCTAssertTrue(none.isSpaceManaged(ordinal: nil))
+
+        // Any [space.N] present → opt-in: only configured ordinals.
+        var optIn = FacetConfig()
+        optIn.spaceWorkspaceNames = [1: [1: "a"], 3: [1: "b"]]
+        XCTAssertTrue(optIn.isSpaceManaged(ordinal: 1))
+        XCTAssertTrue(optIn.isSpaceManaged(ordinal: 3))
+        XCTAssertFalse(optIn.isSpaceManaged(ordinal: 2),
+                       "unconfigured ordinal is hands-off in opt-in mode")
+        XCTAssertFalse(optIn.isSpaceManaged(ordinal: 6))
+        XCTAssertTrue(optIn.isSpaceManaged(ordinal: nil),
+                      "SkyLight-unavailable always managed")
+    }
+
     func testEffectiveWorkspaceListForSpaceOrdinalFallsBack() {
         var c = FacetConfig()
         c.workspaceNames = [1: "g1", 2: "g2", 3: "g3"]   // global = 3

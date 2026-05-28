@@ -155,10 +155,11 @@ Frequently-touched keys:
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
 - `[space.N]` table — per-native-Space workspace names/count, where
-  `N` is the Space's Mission Control position. Each native macOS
-  Space gets its own independent workspaces automatically; a
-  `[space.N]` section just customises that Space's names. Spaces
-  without one fall back to `[workspace]`.
+  `N` is the Space's Mission Control position. With **no** `[space.N]`
+  sections, every native macOS Space gets the default workspaces
+  automatically. With **any** `[space.N]` present it's **opt-in**:
+  facet manages only the Spaces that have a section; a Space without
+  one is left untouched (windows as-is, panel hidden there).
 - `[workspace] setupFiles = [...]` — array of executable script
   paths run once at startup, Vitest-style. See "Workspace setup
   hooks" below.

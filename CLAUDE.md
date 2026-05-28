@@ -134,7 +134,11 @@ use:
   unavailable → `activeSpaceID == 0` → one shared catalog
   (pre-feature behaviour). `[space.N]` config keys by ordinal;
   catalog state is session-only (never persisted), rebuilt from
-  live windows on restart.
+  live windows on restart. **Opt-in rule**: any `[space.N]` section
+  makes facet manage ONLY configured desktops — others are
+  hands-off (no adopt/park, empty `workspaces()` → Controller's
+  empty-list guard hides the panel). No `[space.N]` at all → every
+  desktop managed with the global default. `FacetConfig.isSpaceManaged`.
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. The id keys the TCC grant
   and self-signed cert identity — don't change it.
