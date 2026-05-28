@@ -41,14 +41,21 @@ your workspaces through one of two views — your choice at startup
 via [`config.toml`](config.toml):
 
 - **Tree** — a translucent always-on-top sidebar listing every
-  workspace and its windows as a tree. Click rows to focus,
-  drag rows to move windows between workspaces, hover for a live
-  on-screen preview.
+  workspace and its windows as a tree. Click rows to focus, drag a
+  window row to move it between workspaces, drag a workspace header
+  (grip on the left) to swap two workspaces' contents, hover for a
+  live on-screen preview.
 - **Grid** — a full-screen overview with one cell per workspace,
-  real ScreenCaptureKit thumbnails, and DnD between cells (window
-  move on plain drag; entire-cell swap on Shift+Drag). The grid is
-  summoned on demand (`facet --view=grid`) and dismissed with Esc /
-  backdrop click.
+  real ScreenCaptureKit thumbnails, and DnD between cells: drag a
+  window thumb to move it, drag a cell's header to swap whole cells.
+  The grid is summoned on demand (`facet --view=grid`) and dismissed
+  with Esc / backdrop click.
+
+Drag-and-drop follows one model across both views: the **grabbed
+target decides the action** — drag a window to move it, drag a
+workspace header to swap the two workspaces' contents (the workspace
+slots themselves don't move, so hotkey numbering is preserved). No
+modifier keys.
 
 Both views share the same backend and the same theme
 (terminal / cute / system, live toggleable).
@@ -60,13 +67,14 @@ Both views share the same backend and the same theme
 | Click a window row (tree) | switch to its workspace + focus that exact window |
 | Click a workspace header (tree) | switch to that workspace |
 | Drag a window row onto another workspace (tree) | move that window |
-| Drag empty space (tree) | reposition the panel — position persists |
+| Drag a workspace header onto another (tree) | swap the two workspaces' contents |
+| Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel — position persists |
 | Right-click (tree) | context menu — window actions / workspace layout picker |
 | Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview_mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
 | Drag a thumb to another cell (grid) | move that window to that workspace |
-| **Shift+Drag** a thumb (grid) | swap the entire contents of source ↔ destination cells |
+| Drag a workspace header onto another cell (grid) | swap the entire contents of the two cells |
 
 Show / hide / toggle and keyboard mode are driven entirely from
 the CLI — see [CLI](#cli) below.
@@ -91,9 +99,10 @@ to get focus:
 | `↓`/`↑`, `Ctrl-N`/`Ctrl-P`, `j`/`k` | move between rows |
 | `Tab`/`⇧Tab`, `→`/`←`, `l`/`h` | jump to the prev/next workspace |
 | `s` | type-to-filter: fuzzy-search windows across all workspaces (real text field, IME works) |
-| `Space` | open the selected row's context menu (keyboard-navigable: `↑↓`/`Return`/`Esc`) |
-| `Return` | switch + focus (same as a click) |
-| `Esc` | clear filter → leave keyboard mode (panel stays visible) |
+| `Space` | lift the selected row for drag-and-drop — a window row moves, a workspace header swaps; then arrows aim the target workspace, `Return`/`Space` commits, `Esc` cancels |
+| `m` | open the selected row's context menu (keyboard-navigable: `↑↓`/`Return`/`Esc`) |
+| `Return` | commit a lift, or (not lifting) switch + focus like a click |
+| `Esc` | cancel a lift → clear filter → leave keyboard mode (panel stays visible) |
 
 Window titles are resolved via Accessibility (`kAXTitle`, matched
 by CGWindowID, short-TTL cached). Rows without a resolvable title
@@ -104,9 +113,8 @@ stay compact. Requires Accessibility (same grant as clicks).
 | Key | Action |
 |---|---|
 | Arrows | move the cell cursor |
-| `Tab` / `⇧Tab` | cycle window selection within the current cell |
-| `Space` | lift the selected window for keyboard DnD; arrows re-aim, `Return` commits |
-| `Shift+Space` | lift the entire cell's contents for swap |
+| `Tab` / `⇧Tab` | cycle the cursor through the header + windows of the current cell |
+| `Space` | lift the selection for keyboard DnD — a window (move) or the header slot (whole-cell swap); arrows re-aim, `Return` commits |
 | `Return` | commit a lift / switch when not lifted |
 | `Esc` | cancel a lift / dismiss the overlay |
 

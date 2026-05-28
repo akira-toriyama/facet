@@ -60,15 +60,15 @@ theme = "terminal"
 # because it's the sweet spot for typical workspace counts.
 cols = 5
 
-# Where the workspace label sits relative to its cell.
+# Where the workspace header sits relative to its cell.
 #
-#   "up"   — label above each cell (Mission Control style).
-#   "down" — label below each cell (Stage Manager / dock style).
+#   "up"   — header above each cell (Mission Control style).
+#   "down" — header below each cell (Stage Manager / dock style).
+#
+# The header's size is automatic: it scales with the cell (fewer
+# workspaces → bigger cells → a taller header), so there is no
+# size knob to set.
 label-position = "up"
-
-# Workspace label font size in points. Clamped 8..32. The label
-# band height tracks this so larger labels reserve more space.
-label-size = 15
 
 # Background ScreenCaptureKit refresh cadence (seconds) that keeps
 # grid-view thumbnails warm so `--view=grid` paints immediately

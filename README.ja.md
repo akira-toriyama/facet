@@ -41,13 +41,19 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 かは [`config.toml`](config.toml) の `default_view` で選ぶ:
 
 - **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
-  その windows をツリー表示。 行クリックで focus、 行ドラッグで window
-  を別 ws に移動、 ホバーで実画面プレビュー。
+  その windows をツリー表示。 行クリックで focus、 window 行ドラッグで
+  window を別 ws に移動、 ワークスペース header (左にグリップ) ドラッグ
+  で 2 つのワークスペースの中身を swap、 ホバーで実画面プレビュー。
 - **Grid** — フルスクリーンのオーバービュー。 1 セル =
-  1 ワークスペース、 ScreenCaptureKit のリアルサムネイル、 セル間 DnD
-  (通常ドラッグで window 移動、 Shift+ドラッグでセル丸ごと内容
-  swap)。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
+  1 ワークスペース、 ScreenCaptureKit のリアルサムネイル、 セル間 DnD:
+  window サムネイルドラッグで移動、 セル header ドラッグでセル丸ごと
+  swap。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
   で閉じる。
+
+DnD は両 view 共通のモデル — **掴んだ対象が動作を決める**: window を
+掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を
+swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾
+キーは使わない。
 
 両 view は同じ backend と同じテーマ (terminal / cute / system、
 ライブ切替) を共有。
@@ -59,13 +65,14 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 | window 行クリック (tree) | そのワークスペースに切替 + その window に focus |
 | ワークスペース header クリック (tree) | そのワークスペースに切替 |
 | window 行を別ワークスペースにドラッグ (tree) | その window を移動 |
-| 空白部分をドラッグ (tree) | パネル位置を変更 — 位置は永続 |
+| ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
+| 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 — 位置は永続 |
 | 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
 | window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview_mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
 | サムネイルを別セルにドラッグ (grid) | その window を移動 |
-| **Shift+ドラッグ** (grid) | source ↔ destination セルの内容を丸ごと swap |
+| ワークスペース header を別セルにドラッグ (grid) | 2 セルの内容を丸ごと swap |
 
 表示制御 / 非表示 / トグル / キーボードモードは全部 CLI 経由 —
 [CLI](#cli) 参照。
@@ -88,9 +95,10 @@ tree パネルは focus を持っている間、 キー入力に反応する。 
 | `↓`/`↑`, `Ctrl-N`/`Ctrl-P`, `j`/`k` | 行間移動 |
 | `Tab`/`⇧Tab`, `→`/`←`, `l`/`h` | 前/次ワークスペースへジャンプ |
 | `s` | type-to-filter: 全ワークスペース横断 fuzzy 検索 (本物の text field、 IME 動く) |
-| `Space` | 選択行のコンテキストメニュー (キーボード操作可: `↑↓`/`Return`/`Esc`) |
-| `Return` | 切替 + focus (クリックと同等) |
-| `Esc` | filter クリア → keyboard mode 抜ける (パネルは表示維持) |
+| `Space` | 選択行を持ち上げて DnD — window 行は移動、 ワークスペース header は swap。 矢印で行き先ワークスペースを照準、 `Return`/`Space` で確定、 `Esc` でキャンセル |
+| `m` | 選択行のコンテキストメニュー (キーボード操作可: `↑↓`/`Return`/`Esc`) |
+| `Return` | 持ち上げ確定、 または (非持ち上げ時) クリックと同等に切替 + focus |
+| `Esc` | 持ち上げキャンセル → filter クリア → keyboard mode 抜ける (パネルは表示維持) |
 
 window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 照合、 短 TTL キャッシュ) で解決。 タイトル解決できない行は
@@ -101,9 +109,8 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 | キー | アクション |
 |---|---|
 | 矢印 | セルカーソル移動 |
-| `Tab` / `⇧Tab` | 同一セル内で window 選択を循環 |
-| `Space` | 選択 window を持ち上げ (キーボード DnD)、 矢印で照準、 `Return` で確定 |
-| `Shift+Space` | セル丸ごと持ち上げ (swap) |
+| `Tab` / `⇧Tab` | 同一セル内の header + windows をカーソル循環 |
+| `Space` | 選択を持ち上げて DnD — window (移動) か header スロット (セル丸ごと swap)。 矢印で照準、 `Return` で確定 |
 | `Return` | 持ち上げ中なら確定 / 通常時は切替 |
 | `Esc` | 持ち上げをキャンセル / オーバービューを閉じる |
 

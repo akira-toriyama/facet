@@ -22,7 +22,6 @@ public struct FacetConfig: Sendable {
     // [grid]
     public var gridCols: Int?
     public var gridLabelPosition: String?   // "up" | "down"
-    public var gridLabelSize: Int?
     public var thumbnailRefreshSeconds: Int?
 
     // [tree]
@@ -82,16 +81,6 @@ public struct FacetConfig: Sendable {
     /// "up" | "down". Any other input → "up". Case-insensitive.
     public var effectiveGridLabelPosition: String {
         (gridLabelPosition?.lowercased() == "down") ? "down" : "up"
-    }
-
-    /// 8-32 pt clamp. Default 15.
-    public var effectiveGridLabelSize: CGFloat {
-        CGFloat(max(8, min(32, gridLabelSize ?? 15)))
-    }
-
-    /// Pre-computed once for the grid view's layout math.
-    public var effectiveGridLabelBandHeight: CGFloat {
-        effectiveGridLabelSize + 7
     }
 
     /// Effective background-capture interval for grid thumbnails.
@@ -209,9 +198,6 @@ public struct FacetConfig: Sendable {
         if case .int(let n)? = toml["grid"]?["cols"] { c.gridCols = n }
         if case .string(let s)? = toml["grid"]?["label-position"] {
             c.gridLabelPosition = s
-        }
-        if case .int(let n)? = toml["grid"]?["label-size"] {
-            c.gridLabelSize = n
         }
         if case .int(let n)? = toml["grid"]?["thumbnail-refresh-seconds"] {
             c.thumbnailRefreshSeconds = n

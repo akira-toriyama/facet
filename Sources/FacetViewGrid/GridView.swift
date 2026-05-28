@@ -68,26 +68,32 @@ public final class GridView: NSView {
     struct Cell {
         let wsIndex: Int
         let rect: NSRect
+        // Label/header band (above or below the cell per config). The
+        // drag handle for a workspace-content swap: drag = swap,
+        // click = switch (Theme A — same model as the tree header).
+        let headerRect: NSRect
         let isActive: Bool
         let label: String
+        let mode: String          // layout engine (bsp / stack), shown in header
         let windows: [WindowHit]
     }
     private var cells: [Cell] = []
 
     // MARK: - Drag state
 
-    /// `.window` is the original Phase 1d gesture (single thumb →
-    /// moveWindow to another WS). `.workspace` (Shift-modifier)
-    /// means the user is dragging a window thumb with Shift held —
-    /// the SOURCE workspace's entire contents swap with the
-    /// destination cell's. The backend's workspace index never
-    /// changes; only the windows inside trade places.
+    /// `.window` — dragging a window thumb moves that window to
+    /// another WS. `.workspace` — dragging a cell's HEADER swaps the
+    /// SOURCE workspace's entire contents with the destination
+    /// cell's. The backend's workspace index never changes; only the
+    /// windows inside trade places. Theme A: the grabbed target (not
+    /// a modifier key) decides which gesture runs.
     enum DragKind { case window, workspace }
 
-    /// Drag-and-drop state. Captured on mouseDown over a window
-    /// thumb; promoted from a pending-click to a real drag once
-    /// the cursor moves past `dragThreshold`. `kind` decided at
-    /// promotion time from the Shift modifier.
+    /// Drag-and-drop state. Captured on mouseDown over a window thumb
+    /// or a cell header; promoted from a pending-click to a real drag
+    /// once the cursor moves past `dragThreshold`. `kind` is decided
+    /// at promotion time by which target was grabbed (header =
+    /// `.workspace`, thumb = `.window`).
     struct Drag {
         let sourceWS: Int
         let kind: DragKind
@@ -99,6 +105,13 @@ public final class GridView: NSView {
         var dropTargetWS: Int?          // cell != sourceWS under cursor
     }
     private var pendingDown: (point: NSPoint, hit: WindowHit, ws: Int)?
+    // Header band pressed: a workspace drag-or-switch candidate
+    // (Theme A). Promoted to a `.workspace` swap drag past threshold,
+    // else resolved as a WS switch on mouseUp.
+    private var pendingHeaderDown: (point: NSPoint, ws: Int)?
+    // Workspace whose header the pointer is hovering — brightens the
+    // header band + grip (mirrors the tree header hover affordance).
+    private var hoverHeaderWS: Int?
     private var drag: Drag?
     private var dragGhost: NSView?
     private var isDragging: Bool { drag != nil }
@@ -265,11 +278,21 @@ public final class GridView: NSView {
             ?? NSScreen.main?.frame
             ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
         let aspect = scr.width / max(1, scr.height)
-        // Each row reserves a label band on the configured side.
+        // Each row reserves a header band on the configured side.
         // Default "up" (Mission Control convention); "down" puts
-        // the label below each cell (Stage Manager / dock).
+        // the header below each cell (Stage Manager / dock).
         let labelPos = config.labelPosition
-        let labelH = config.labelBandHeight
+        // Proportional header: scale the band to the cell's nominal
+        // height (cell height before the band is carved out) so the
+        // header grows with big cells / shrinks with small ones,
+        // clamped to a grabbable-yet-unobtrusive range. Derived from
+        // the *nominal* height (not the final cellSize) to avoid a
+        // circular dependency — the band reservation feeds cellSize.
+        let nominalCellH = max(1, (usableH - gridCellGap * CGFloat(rows - 1))
+                               / CGFloat(rows))
+        let labelH = min(gridHeaderMaxH,
+                         max(gridHeaderMinH,
+                             (nominalCellH * gridHeaderRatio).rounded()))
         let labelBand = labelH + gridLabelGap
         let usableForCells = usableH - CGFloat(rows) * labelBand
         let cellSize = gridCellSize(usableW: usableW,
@@ -311,11 +334,20 @@ public final class GridView: NSView {
                         rect: wr))
                 }
             }
+            // Header band rect (matches the label draw position) —
+            // hit target for header drag (swap) / click (switch).
+            let headerY = labelPos == "down"
+                ? cellRect.maxY + gridLabelGap - 2
+                : cellRect.minY - labelH - gridLabelGap + 2
+            let headerRect = NSRect(x: cellRect.minX, y: headerY,
+                                    width: cellRect.width, height: labelH)
             cells.append(Cell(
                 wsIndex: ws.index,
                 rect: cellRect,
+                headerRect: headerRect,
                 isActive: ws.index == activeIndex,
                 label: gridLabel(name: ws.name, idx: ws.index),
+                mode: ws.layoutMode,
                 windows: hits))
         }
         // FLIP: any id whose rect changed since the snapshot above
@@ -424,7 +456,7 @@ public final class GridView: NSView {
         let winFocused  = pal.accent.withAlphaComponent(0.32)
         let winStroke   = pal.text.withAlphaComponent(0.45)
         // Drop target: accent stroke + tint when a drag is over a
-        // cell different from source. Workspace swap (Shift-held)
+        // cell different from source. A workspace swap (header drag)
         // uses text-color instead so the user can tell at a glance
         // whether a plain window-move or a whole-cell-swap is in
         // flight.
@@ -519,28 +551,87 @@ public final class GridView: NSView {
                 NSGraphicsContext.restoreGraphicsState()
             }
 
-            // Short label (e.g. "Q" from "WORKSPACE Q"). Position
-            // (above / below) and font size come from `config`.
-            let label = cell.label as NSString
+            // Workspace header bar — the swap drag handle. Theme A:
+            // drag the header = swap this WS's contents with the drop
+            // target; click = switch. A faint rounded fill + a grip
+            // glyph read as grabbable (same model / affordance as the
+            // tree header). `kbSelectedWindowIdx == -1` = the header
+            // is the keyboard selection (Space lifts it for a swap).
+            let hb = cell.headerRect
+            let headerSel = (drag == nil && kbSelectedWS == cell.wsIndex
+                             && kbSelectedWindowIdx == -1)
+            let headerHover = (drag == nil && hoverHeaderWS == cell.wsIndex)
+            let headerHot = cell.isActive || headerSel || headerHover
+            (cell.isActive
+                ? activeColor.withAlphaComponent(headerHover ? 0.20 : 0.12)
+                : pal.dim.withAlphaComponent(headerHover ? 0.20 : 0.10))
+                .setFill()
+            NSBezierPath(roundedRect: hb.insetBy(dx: 0, dy: 1),
+                         xRadius: 4, yRadius: 4).fill()
+            if headerSel {
+                pal.text.withAlphaComponent(0.85).setStroke()
+                let ho = NSBezierPath(
+                    roundedRect: hb.insetBy(dx: 0.75, dy: 1.25),
+                    xRadius: 4, yRadius: 4)
+                ho.lineWidth = 1.5
+                ho.stroke()
+            }
+            drawGridGrip(
+                in: NSRect(x: hb.minX + 4, y: hb.minY,
+                           width: gridHeaderGripW, height: hb.height),
+                color: headerHot ? activeColor : labelColor,
+                alpha: headerHot ? 0.85 : 0.5)
+            // WS name (line 1) + layout mode (line 2, accent), stacked
+            // and vertically centred. Two lines give the header a
+            // natural thickness and surface the same layout-mode info
+            // the tree header shows. Fonts track the band height.
             let lp = NSMutableParagraphStyle()
             lp.alignment = .left
             lp.lineBreakMode = .byTruncatingTail
-            let lblSize = config.labelSize
-            let lblBandH = config.labelBandHeight
-            let labelAttrs: [NSAttributedString.Key: Any] = [
-                .font: uiFont(lblSize, .semibold),
-                .foregroundColor: cell.isActive ? activeColor : labelColor,
-                .paragraphStyle: lp,
-            ]
-            let labelY: CGFloat = config.labelPosition == "down"
-                ? cell.rect.maxY + gridLabelGap - 2
-                : cell.rect.minY - lblBandH - gridLabelGap + 2
-            let labelRect = NSRect(
-                x: cell.rect.minX,
-                y: labelY,
-                width: cell.rect.width,
-                height: lblBandH)
-            label.draw(in: labelRect, withAttributes: labelAttrs)
+            let nameX = hb.minX + 4 + gridHeaderGripW + 5
+            let nameW = max(hb.maxX - nameX - 4, 0)
+            let nameFont = min(gridHeaderNameMaxFont,
+                               max(gridHeaderNameMinFont,
+                                   (hb.height * gridHeaderNameFrac).rounded()))
+            let nameColor = cell.isActive ? activeColor : labelColor
+            if cell.mode.isEmpty {
+                let nameH = nameFont * 1.3
+                drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
+                               color: nameColor, para: lp,
+                               in: NSRect(x: nameX,
+                                          y: hb.minY + (hb.height - nameH) / 2,
+                                          width: nameW, height: nameH))
+            } else {
+                let modeFont = min(gridHeaderModeMaxFont,
+                                   max(gridHeaderModeMinFont,
+                                       (hb.height * gridHeaderModeFrac).rounded()))
+                let mAttrs: [NSAttributedString.Key: Any] = [
+                    .font: uiFont(modeFont, .semibold),
+                    .foregroundColor: activeColor,
+                    .paragraphStyle: lp,
+                ]
+                let mStr = cell.mode as NSString
+                let padH: CGFloat = 5
+                let chipH = (modeFont + 7).rounded()
+                let nameH = nameFont * 1.25
+                let gap: CGFloat = 3
+                let startY = hb.minY + (hb.height - (nameH + gap + chipH)) / 2
+                drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
+                               color: nameColor, para: lp,
+                               in: NSRect(x: nameX, y: startY,
+                                          width: nameW, height: nameH))
+                // Layout-mode badge — accent pill, mirroring the tree
+                // header's mode chip.
+                let tw = min(mStr.size(withAttributes: mAttrs).width,
+                             max(nameW - padH * 2, 0))
+                let chip = NSRect(x: nameX, y: startY + nameH + gap,
+                                  width: tw + padH * 2, height: chipH)
+                activeColor.withAlphaComponent(0.16).setFill()
+                NSBezierPath(roundedRect: chip, xRadius: 5, yRadius: 5).fill()
+                mStr.draw(in: chip.insetBy(dx: padH,
+                                           dy: (chipH - modeFont * 1.2) / 2),
+                          withAttributes: mAttrs)
+            }
         }
 
         // In-transit windows (FLIP reorder): drawn last, NO cell
@@ -555,6 +646,39 @@ public final class GridView: NSView {
                                     fill: w.isFocused ? winFocused : winFill,
                                     stroke: winStroke)
                 }
+            }
+        }
+    }
+
+    /// One left-aligned text line of the workspace header.
+    private func drawHeaderLine(_ s: String, font: CGFloat,
+                                weight: NSFont.Weight, color: NSColor,
+                                para: NSParagraphStyle, in rect: NSRect) {
+        (s as NSString).draw(in: rect, withAttributes: [
+            .font: uiFont(font, weight),
+            .foregroundColor: color,
+            .paragraphStyle: para,
+        ])
+    }
+
+    /// A 2-column dot grid — the "drag handle" affordance at the left
+    /// of each workspace header band (header drag = WS-swap). The row
+    /// count fills ~64% of the band height (≥3 rows), so the grip
+    /// grows with the two-line header instead of floating small.
+    private func drawGridGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
+        let dotR: CGFloat = 1.5
+        let spacing: CGFloat = 4
+        let xs = [r.minX + dotR + 2, r.minX + dotR + 7]
+        let rows = max(3, Int((r.height * 0.8 / spacing).rounded()))
+        let span = CGFloat(rows - 1) * spacing
+        let y0 = r.midY - span / 2
+        color.withAlphaComponent(alpha).setFill()
+        for i in 0..<rows {
+            let y = y0 + CGFloat(i) * spacing
+            for x in xs {
+                NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
+                                            width: dotR * 2,
+                                            height: dotR * 2)).fill()
             }
         }
     }
@@ -595,10 +719,45 @@ public final class GridView: NSView {
         wp.stroke()
     }
 
+    // MARK: - Hover (header highlight)
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.activeAlways, .inVisibleRect,
+                      .mouseMoved, .mouseEnteredAndExited],
+            owner: self))
+    }
+
+    public override func mouseMoved(with e: NSEvent) {
+        let p = convert(e.locationInWindow, from: nil)
+        let ws = cells.first(where: { $0.headerRect.contains(p) })?.wsIndex
+        if ws != hoverHeaderWS {
+            hoverHeaderWS = ws
+            needsDisplay = true
+        }
+        (ws != nil ? NSCursor.openHand : NSCursor.arrow).set()
+    }
+
+    public override func mouseExited(with e: NSEvent) {
+        if hoverHeaderWS != nil {
+            hoverHeaderWS = nil
+            needsDisplay = true
+        }
+        NSCursor.arrow.set()
+    }
+
     // MARK: - Mouse
 
     public override func mouseDown(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
+        // Header band → workspace drag (swap) or click (switch).
+        if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            pendingHeaderDown = (point: p, ws: cell.wsIndex)
+            return
+        }
         // No cell under cursor → backdrop click → immediate dismiss.
         guard let cell = cells.first(where: { $0.rect.contains(p) }) else {
             onDismiss?(); return
@@ -617,19 +776,20 @@ public final class GridView: NSView {
 
     public override func mouseDragged(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
-        if drag == nil, let pd = pendingDown {
-            let dx = p.x - pd.point.x, dy = p.y - pd.point.y
-            if (dx * dx + dy * dy) < dragThreshold * dragThreshold {
-                return
-            }
-            // Promote to drag. Shift promotes to workspace-swap.
-            // Shift (vs Cmd) avoids conflict with Spotlight's
-            // Cmd+Space and matches the kb counterpart Shift+Space.
-            if e.modifierFlags.contains(.shift),
-               let srcCell = cells.first(where: { $0.wsIndex == pd.ws })
-            {
+        if drag == nil {
+            // Theme A: the grabbed target decides the gesture — a
+            // header drag swaps the whole workspace, a window-thumb
+            // drag moves that window. No modifier keys.
+            if let ph = pendingHeaderDown {
+                let dx = p.x - ph.point.x, dy = p.y - ph.point.y
+                if (dx * dx + dy * dy) < dragThreshold * dragThreshold {
+                    return
+                }
+                guard let srcCell = cells.first(where: {
+                    $0.wsIndex == ph.ws
+                }) else { return }
                 drag = Drag(
-                    sourceWS: pd.ws,
+                    sourceWS: ph.ws,
                     kind: .workspace,
                     pid: -1, id: WindowID(serverID: -1),
                     sourceRect: srcCell.rect,
@@ -638,7 +798,12 @@ public final class GridView: NSView {
                     dropTargetWS: nil)
                 layoutSuppressed = true
                 installWorkspaceGhost(for: srcCell)
-            } else {
+                NSCursor.closedHand.set()
+            } else if let pd = pendingDown {
+                let dx = p.x - pd.point.x, dy = p.y - pd.point.y
+                if (dx * dx + dy * dy) < dragThreshold * dragThreshold {
+                    return
+                }
                 drag = Drag(
                     sourceWS: pd.ws,
                     kind: .window,
@@ -649,12 +814,16 @@ public final class GridView: NSView {
                     dropTargetWS: nil)
                 layoutSuppressed = true
                 installDragGhost(for: pd.hit)
+                NSCursor.closedHand.set()
+            } else {
+                return
             }
-            NSCursor.closedHand.set()
         }
         guard var d = drag else { return }
         d.current = p
-        d.dropTargetWS = cells.first(where: { $0.rect.contains(p) })
+        d.dropTargetWS = cells.first(where: {
+            $0.rect.contains(p) || $0.headerRect.contains(p)
+        })
             .map(\.wsIndex)
             .flatMap { $0 == d.sourceWS ? nil : $0 }
         drag = d
@@ -663,12 +832,16 @@ public final class GridView: NSView {
     }
 
     public override func mouseUp(with e: NSEvent) {
-        defer { pendingDown = nil; NSCursor.arrow.set() }
+        defer { pendingDown = nil; pendingHeaderDown = nil; NSCursor.arrow.set() }
         // Resolve as click when the gesture never crossed threshold.
-        if drag == nil, let pd = pendingDown {
-            onPick?(.window(workspaceIndex: pd.ws,
-                            pid: pd.hit.pid,
-                            windowID: pd.hit.id))
+        if drag == nil {
+            if let pd = pendingDown {
+                onPick?(.window(workspaceIndex: pd.ws,
+                                pid: pd.hit.pid,
+                                windowID: pd.hit.id))
+            } else if let ph = pendingHeaderDown {
+                onPick?(.workspace(workspaceIndex: ph.ws))
+            }
             return
         }
         // Drag path: commit or cancel.
@@ -786,7 +959,7 @@ public final class GridView: NSView {
 
         if cell.windows.isEmpty {
             let label = NSTextField(labelWithString: cell.label)
-            label.font = uiFont(config.labelSize * 2.0, .bold)
+            label.font = uiFont(gridGhostLabelSize, .bold)
             label.textColor = pal.text.withAlphaComponent(0.95)
             label.alignment = .center
             label.sizeToFit()
@@ -940,36 +1113,39 @@ public final class GridView: NSView {
         let ni = nr * cols + nc
         guard ni < cells.count else { return }
         kbSelectedWS = cells[ni].wsIndex
-        // Reset window cursor inside the new cell: focused first,
-        // else 0.
+        // Reset cursor inside the new cell: focused window first, else
+        // window 0; an empty cell selects its header (-1).
         let dst = cells[ni]
-        kbSelectedWindowIdx = dst.windows.firstIndex(
-            where: { $0.isFocused }) ?? 0
+        kbSelectedWindowIdx = dst.windows.isEmpty
+            ? -1
+            : (dst.windows.firstIndex(where: { $0.isFocused }) ?? 0)
         // While dragging via keyboard, the selection IS the drop
         // target.
         if drag != nil { syncKbDragToSelection() }
         needsDisplay = true
     }
 
-    /// Tab / Shift-Tab: cycle the window cursor within the
-    /// currently selected cell. Wraps at the ends; no-op for empty
-    /// cells. No effect while a lift is in flight.
+    /// Tab / Shift-Tab: cycle the cursor through the cell's slots —
+    /// the header (-1) then each window (0…n-1), wrapping at the
+    /// ends. An empty cell has only the header slot. No effect while
+    /// a lift is in flight.
     public func kbCycleWindow(forward: Bool) {
         guard drag == nil,
               let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel }),
-              !cell.windows.isEmpty
+              let cell = cells.first(where: { $0.wsIndex == sel })
         else { return }
         let n = cell.windows.count
-        let cur = max(0, min(n - 1, kbSelectedWindowIdx))
-        kbSelectedWindowIdx = forward
-            ? (cur + 1) % n
-            : (cur - 1 + n) % n
+        let slots = n + 1                       // header + windows
+        let cur = max(-1, min(n - 1, kbSelectedWindowIdx)) + 1
+        let next = forward ? (cur + 1) % slots
+                           : (cur - 1 + slots) % slots
+        kbSelectedWindowIdx = next - 1          // back to -1…n-1
         needsDisplay = true
     }
 
     private func kbSelectedWindow() -> (cell: Cell, hit: WindowHit)? {
         guard let sel = kbSelectedWS,
+              kbSelectedWindowIdx >= 0,
               let cell = cells.first(where: { $0.wsIndex == sel }),
               !cell.windows.isEmpty
         else { return nil }
@@ -989,8 +1165,16 @@ public final class GridView: NSView {
         positionDragGhost(at: at)
     }
 
-    /// Space: lift the keyboard-selected window into the drag
-    /// state, identically to a mouse-initiated drag.
+    /// Space: lift the keyboard selection — the selected window for a
+    /// move, or (header slot, `kbSelectedWindowIdx == -1`) the whole
+    /// workspace for a swap. Theme A: no Shift; the selected target
+    /// decides. Tab moves between the header and the windows.
+    public func kbSpaceLift() {
+        if kbSelectedWindowIdx == -1 { kbLiftWorkspace() } else { kbLift() }
+    }
+
+    /// Lift the keyboard-selected window into the drag state,
+    /// identically to a mouse-initiated drag.
     public func kbLift() {
         guard drag == nil, let s = kbSelectedWindow() else { return }
         let at = NSPoint(x: s.cell.rect.midX, y: s.cell.rect.midY)
@@ -1008,11 +1192,11 @@ public final class GridView: NSView {
         needsDisplay = true
     }
 
-    /// Shift+Space: lift the keyboard-selected cell's WHOLE
-    /// contents for a workspace swap. Arrow keys then re-aim,
-    /// Return commits. Empty source cells can still lift — the
-    /// user might intend "move WS-X's contents here, leaving X
-    /// empty in return".
+    /// Lift the keyboard-selected cell's WHOLE contents for a
+    /// workspace swap (header slot selected). Arrow keys then re-aim,
+    /// Return commits. Empty source cells can still lift — the user
+    /// might intend "move WS-X's contents here, leaving X empty in
+    /// return".
     public func kbLiftWorkspace() {
         guard drag == nil, let sel = kbSelectedWS,
               let cell = cells.first(where: { $0.wsIndex == sel })

@@ -900,8 +900,7 @@ final class Controller: NSObject {
         gv.screenFrame = scr.frame
         gv.config = GridConfig(
             cols: config.effectiveGridCols,
-            labelPosition: config.effectiveGridLabelPosition,
-            labelSize: config.effectiveGridLabelSize)
+            labelPosition: config.effectiveGridLabelPosition)
         gv.onDismiss = { [weak self] in self?.hideGrid() }
         gv.onDrop = { [weak self, bk = backend] src, dst, _, id in
             guard src != dst else { return }
@@ -1006,13 +1005,10 @@ final class Controller: NSObject {
             case 36, 76:
                 gv.kbCommit();                             return nil
             case 49:
-                // Shift+Space = lift the WHOLE cell for swap (kb
-                // counterpart of mouse Shift-drag). Cmd+Space is
-                // reserved by Spotlight system-wide; Shift+Space
-                // has the same "modifier escalates Space's scope"
-                // feel without the system conflict.
-                if shift { gv.kbLiftWorkspace() } else { gv.kbLift() }
-                return nil
+                // Space lifts the selection — a window (move) or the
+                // header slot (whole-WS swap). Theme A: no Shift; Tab
+                // moves between the header and the windows.
+                gv.kbSpaceLift();                          return nil
             case 48:
                 gv.kbCycleWindow(forward: !shift);         return nil
             case 123: gv.kbMoveSelection(dx: -1, dy: 0);   return nil
