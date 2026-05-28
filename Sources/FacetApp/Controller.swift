@@ -399,6 +399,19 @@ final class Controller: NSObject {
 
     private func dispatchView(_ name: String, active: Bool, geom: NSRect?,
                               loadingMs: Int? = nil) {
+        // Views are mutually exclusive: requesting any non-grid view
+        // drops the full-screen grid overlay first. This is also how
+        // the grid closes on a native-Space switch — the chord ctrl+→
+        // binding fires `--view=tree --loading` just *before* the
+        // switch, so the grid is gone before the OS slide. (Keeping it
+        // open across the slide only ever flickers: macOS composites
+        // no app window during the ~0.7s Space animation, regardless
+        // of level / collectionBehavior — proven by a 9-variant
+        // sandbox A/B, memory facet-space-slide-overlay-flicker. A
+        // clean close beats an involuntary blink-and-return.) Immediate
+        // teardown also un-gates `showLoading` (which no-ops while the
+        // grid is up) so the tree skeleton paints on the new desktop.
+        if name != "grid" && isGridVisible { hideGrid(immediate: true) }
         switch name {
         case "tree":
             // Apply explicit geom BEFORE showing so the panel
@@ -1171,14 +1184,27 @@ final class Controller: NSObject {
                          searching: sidebarView.searching)
     }
 
-    func hideGrid() {
-        Log.debug("hideGrid")
+    /// Dismiss the grid overlay. `immediate` tears it down
+    /// synchronously (no fade): used when switching to another view,
+    /// where the grid must be gone *this turn* — both so it doesn't
+    /// ride a native-Space slide (the `--view=tree` chord binding
+    /// fires right before the switch) and so `isGridVisible` is false
+    /// by the time the caller's `showLoading` / panel logic runs. The
+    /// caller owns what shows next, so the immediate path skips the
+    /// tree-restore refresh.
+    func hideGrid(immediate: Bool = false) {
+        Log.debug("hideGrid\(immediate ? " (immediate)" : "")")
         guard let overlay = gridOverlay else { return }
         if let m = gridKbMonitor {
             NSEvent.removeMonitor(m); gridKbMonitor = nil
         }
         gridView?.clearThumbnails()
         let restoreTree = !treeWasHidden
+        if immediate {
+            overlay.orderOut(nil)
+            gridOverlay = nil; gridView = nil; gridBackdrop = nil
+            return
+        }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = gridFadeOut
             overlay.animator().alphaValue = 0

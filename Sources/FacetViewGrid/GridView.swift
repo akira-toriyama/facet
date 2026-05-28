@@ -172,6 +172,16 @@ public final class GridView: NSView {
 
     // MARK: - Layout
 
+    /// Columns actually used for layout. Capped at the workspace
+    /// count so a desktop with fewer workspaces than the configured
+    /// `cols` fills the width with larger cells (the row is centered
+    /// by the existing `originX` math) instead of leaving a big empty
+    /// gap on the right. Only shrinks: when `count >= cols` the
+    /// configured value stands and rows wrap as before.
+    private var effectiveCols: Int {
+        max(1, min(config.cols, workspaces.count))
+    }
+
     public func layoutCells() {
         // Drop-in-flight gate (runs *before* layoutSuppressed
         // check because a landed drop needs to release suppression
@@ -244,7 +254,7 @@ public final class GridView: NSView {
             reordering.removeAll(); stopReorderTimer()
             needsDisplay = true; return
         }
-        let cols = config.cols
+        let cols = effectiveCols
         let rows = gridRowCount(wsCount: workspaces.count, cols: cols)
         let usableW = bounds.width  - 2 * gridOuterPad
         let usableH = bounds.height - 2 * gridOuterPad
@@ -919,7 +929,7 @@ public final class GridView: NSView {
     /// drag target + repositions ghost to the new selection's
     /// centre.
     public func kbMoveSelection(dx: Int, dy: Int) {
-        let cols = config.cols
+        let cols = effectiveCols
         let rows = gridRowCount(wsCount: workspaces.count, cols: cols)
         guard let sel = kbSelectedWS,
               let cur = cells.firstIndex(where: { $0.wsIndex == sel })
