@@ -110,18 +110,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // observed event yields a single refreshNeeded — Controller
         // already debounces, so a focus burst collapses into one
         // backend.workspaces() round-trip.
-        let observer = WindowEventObserver(
-            onChange: { [eventContinuation] in
-                eventContinuation.yield(.refreshNeeded)
-            },
-            onDestroy: { [weak self] in
-                // Arm the post-close redirect the instant AX
-                // reports a destruction — this beats the
-                // focus-change refresh that would otherwise
-                // snapshot the wrong-WS window macOS auto-focused
-                // before the CGWindowList enumeration catches up.
-                self?.recentCloseAt = Date()
-            })
+        let observer = WindowEventObserver { [eventContinuation] in
+            eventContinuation.yield(.refreshNeeded)
+        }
         self.eventObserver = observer
         DispatchQueue.main.async {
             MainActor.assumeIsolated { observer.start() }
