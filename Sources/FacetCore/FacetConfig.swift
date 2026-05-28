@@ -39,6 +39,14 @@ public struct FacetConfig: Sendable {
     /// Read through `effectiveWorkspaceNames` for clamped values.
     public var workspaceNames: [Int: String] = [:]
 
+    /// Per-native-Space `[space.N]` workspace names. Outer key is the
+    /// native macOS Space ordinal (Mission Control order, 1-based,
+    /// user Spaces only); inner is the same `facet WS index -> name`
+    /// shape as `workspaceNames`. A native Space without a section
+    /// falls back to the global `[workspace]` list. See memory
+    /// `facet-per-native-space-ws`.
+    public var spaceWorkspaceNames: [Int: [Int: String]] = [:]
+
     /// External shell hooks invoked once at startup, after the
     /// backend has subscribed to events and the CLI DNC listener
     /// is live. Vitest-style: the user's "set things up the way I
@@ -136,16 +144,52 @@ public struct FacetConfig: Sendable {
     /// `facet-workspace-model` N2.2 = no upper bound). Adapters
     /// build their workspace state from this list.
     public var effectiveWorkspaceList: [(index: Int, name: String)] {
-        let valid = workspaceNames
-            .filter { $0.key >= 1 }
-        if valid.isEmpty {
-            return (1...Self.defaultWorkspaceCount).map {
-                ($0, "")
-            }
-        }
-        return valid
-            .sorted { $0.key < $1.key }
-            .map { ($0.key, $0.value) }
+        Self.sortedSlots(workspaceNames)
+            ?? (1...Self.defaultWorkspaceCount).map { ($0, "") }
+    }
+
+    /// Workspace list for a given native-Space ordinal (1-based,
+    /// Mission Control order). Returns the `[space.N]` config when
+    /// that Space has a non-empty section, else the global
+    /// `[workspace]` list. `nil` ordinal (SkyLight unavailable, or
+    /// single-space mode) → global list.
+    public func effectiveWorkspaceList(forSpaceOrdinal ordinal: Int?)
+        -> [(index: Int, name: String)]
+    {
+        guard let ordinal,
+              let names = spaceWorkspaceNames[ordinal],
+              let list = Self.sortedSlots(names)
+        else { return effectiveWorkspaceList }
+        return list
+    }
+
+    /// Clamp + order a raw `index → name` map into `(index, name)`
+    /// slots: drop keys < 1, sort ascending. `nil` when nothing
+    /// valid remains (lets callers fall back). Shared by the global
+    /// and per-Space workspace-list accessors.
+    private static func sortedSlots(_ names: [Int: String])
+        -> [(index: Int, name: String)]?
+    {
+        let valid = names.filter { $0.key >= 1 }
+        guard !valid.isEmpty else { return nil }
+        return valid.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+
+    /// Whether facet manages the native Space at `ordinal`.
+    ///
+    /// - With **any** `[space.N]` section present, facet is opt-in:
+    ///   it manages ONLY the Spaces that have a section. A Space
+    ///   without one is left untouched — no facet workspaces, no
+    ///   window parking, and the panel hides there.
+    /// - With **no** `[space.N]` sections at all, every native Space
+    ///   is managed via the global `[workspace]` default (the
+    ///   automatic per-Space behaviour).
+    /// - `nil` ordinal (SkyLight unavailable / single-space mode) is
+    ///   always managed.
+    public func isSpaceManaged(ordinal: Int?) -> Bool {
+        if spaceWorkspaceNames.isEmpty { return true }
+        guard let ordinal else { return true }
+        return spaceWorkspaceNames[ordinal] != nil
     }
 
     // MARK: - Construction from parsed TOML
@@ -190,6 +234,22 @@ public struct FacetConfig: Sendable {
                 else { continue }
                 c.workspaceNames[idx] = name
             }
+        }
+        // [space.N] per-native-Space workspace names. The TOML
+        // parser flattens `[space.1]` to the section name "space.1";
+        // N is the native-Space ordinal (Mission Control order).
+        // Inline int keys are WS-index → name, same as [workspace].
+        for (sectionName, section) in toml
+        where sectionName.hasPrefix("space.") {
+            guard let ordinal = Int(sectionName.dropFirst("space.".count)),
+                  ordinal >= 1 else { continue }
+            var names: [Int: String] = [:]
+            for (key, value) in section {
+                guard let idx = Int(key), idx >= 1,
+                      case .string(let name) = value else { continue }
+                names[idx] = name
+            }
+            if !names.isEmpty { c.spaceWorkspaceNames[ordinal] = names }
         }
         return c
     }

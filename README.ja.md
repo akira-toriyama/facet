@@ -95,9 +95,9 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 ## ステータス
 
 **Alpha** — native AX backend、 外部依存なし。 workspace 切替 /
-window park (anchor) / BSP・stack tiling / AX role auto-float /
-display reconfigure 処理が全て default で動作。
-`brew install akira-toriyama/tap/facet` 稼働中。
+native macOS Space ごとの独立 workspace / window park (anchor) /
+BSP・stack tiling / AX role auto-float / display reconfigure 処理が
+全て default で動作。 `brew install akira-toriyama/tap/facet` 稼働中。
 
 | マイルストーン | 状態 |
 |---|---|
@@ -149,6 +149,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[layout] default_view` — `tree` / `grid`
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
+- `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
+  Mission Control 順の位置。 `[space.N]` が**1つも無ければ**全 native
+  Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
+  セクションのある Space だけ facet が管理し、 無い Space は完全に
+  ノータッチ（窓そのまま・パネル非表示）。
 - `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
   実行可能 script のパス配列（Vitest 流）。 詳細は下の
   「Workspace setup hooks」 を参照。
@@ -277,6 +282,31 @@ ctrl + shift + alt - 2  : facet window --move-to=2
 
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
 hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`。
+
+#### おまけ: native Space 切替のローディングスケルトン
+
+フレーム単位が気になるあなたへ。 macOS は「Space 切替が *これから*
+始まる」 フックを出してくれないので、 facet が切替を知るのはスライド
+*後* — 切替先デスクトップに前デスクトップの tree が一瞬チラッと残る、
+ちょうどそのくらい遅い。 額に入れて飾るような美しい解ではない。
+
+でも、 その 1 フレームのチラつきが我々と同じくらい気になるなら: ホット
+キーツールで Space 切替キーの *直前* に `facet --view=tree --loading=2000`
+を撃つ。 facet は tree にスケルトンを被せ、 スライド中ずっと保持し、
+切替先デスクトップの workspace がロードされた瞬間（または 2 秒経過、
+早い方）に外す。 [chord](https://github.com/akira-toriyama/chord) なら
+`action-shell` が先に走り、 `action-keys` が本来のキーを送る:
+
+```toml
+[[bindings]]
+name         = "space-left + facet tree"
+input        = "ctrl + fn - left"
+action-shell = "facet --view=tree --loading=2000"
+action-keys  = "ctrl + fn - left"
+```
+
+ハック？ 間違いなく。 1 フレームに気づいてしまう人へのささやかな
+ラブレター？ それも。 💙
 
 ### Workspace shell ヘルパー
 

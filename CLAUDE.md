@@ -121,6 +121,34 @@ use:
   button), `Displays` (screen-containing-point), and
   `WindowEventObserver` (per-app AX subscription) all live here.
   New AX code goes here unless it's truly backend-specific.
+- **Per-native-Space workspaces** (memory
+  [[facet-per-native-space-ws]]): each native macOS Space keeps an
+  independent `WorkspaceCatalog`. `NativeAdapter` parks the active
+  catalog by Space id and swaps in the destination Space's in
+  `refreshCatalog`. The active Space id + Mission-Control ordinal
+  are read via **read-only** private SkyLight (`Spaces` in
+  `FacetAccessibility`: `SLSGetActiveSpace` /
+  `SLSCopyManagedDisplaySpaces`, dlsym-bound). **READ-only is the
+  rule** — facet never moves a window across Spaces (that needs
+  SIP-off; see [[native-window-hide-methods]] 手法4). SkyLight
+  unavailable → `activeSpaceID == 0` → one shared catalog
+  (pre-feature behaviour). `[space.N]` config keys by ordinal;
+  catalog state is session-only (never persisted), rebuilt from
+  live windows on restart. **Opt-in rule**: any `[space.N]` section
+  makes facet manage ONLY configured desktops — others are
+  hands-off (no adopt/park, empty `workspaces()` → Controller's
+  empty-list guard hides the panel). No `[space.N]` at all → every
+  desktop managed with the global default. `FacetConfig.isSpaceManaged`.
+- **Loading skeleton is CLI-triggered, not auto** (`facet --view=tree
+  --loading[=MS]`): macOS exposes no pre-Space-switch hook, so facet
+  can't detect a switch early enough to mask the flicker. Instead an
+  external tool (chord) fires `--loading` *before* the switch keys;
+  `Controller.showLoading` paints `SidebarView`'s skeleton, held
+  until the next *different* content signature loads (auto-clear) or
+  `MS` elapses (cap). Don't reintroduce a backend-event /
+  activeSpaceDidChange auto-trigger — it's always too late (the
+  Space commits ~0.7s post-keypress). Memory:
+  [[facet-per-native-space-ws]].
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. The id keys the TCC grant
   and self-signed cert identity — don't change it.

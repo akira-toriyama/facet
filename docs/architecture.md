@@ -101,9 +101,23 @@ Phase α design is fully decided. Details live in memory; this list
 is the index. **Do not relitigate** without explicit grill round.
 
 - **Workspace model**: (b) rift-style hybrid (macOS Space × facet
-  Space, 2 dimensions). macOS Space co-use discouraged but not
-  rejected. Window-unit management (not app-rules). Default 5 WS,
-  dynamic add/remove via external `add_workspace.sh` + hot reload.
+  Space, 2 dimensions). Window-unit management (not app-rules).
+  Default 5 WS, dynamic add/remove via external `add_workspace.sh`
+  + hot reload.
+- **Per-native-Space workspaces**: each native macOS Space keeps an
+  independent set of facet workspaces (own `WorkspaceCatalog`,
+  parked/swapped on Space change). The active Space id + ordinal
+  are read read-only via private SkyLight (`Spaces`,
+  `SLSGetActiveSpace` / `SLSCopyManagedDisplaySpaces`); facet never
+  moves windows across Spaces, so it stays SIP-on / public-contract
+  (the rejected cross-Space move was hide 手法4). `[space.N]` config
+  customises a Space's WS names/count by Mission-Control ordinal;
+  catalog state is session-only. Opt-in: any `[space.N]` → facet
+  manages only configured desktops, others hands-off (panel hidden);
+  no `[space.N]` → all desktops managed by default. SkyLight gone → single shared
+  catalog. Memory: facet-per-native-space-ws. (This supersedes the
+  earlier "macOS Space co-use discouraged" stance — facet now nests
+  under native Spaces by design.)
 - **Hide method**: 7 candidates evaluated; only `anchor` (1×41 px
   corner park) is used — instant, no animation, recoverable from
   Mission Control. `minimize` (Dock genie) was trialed then

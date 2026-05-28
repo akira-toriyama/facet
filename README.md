@@ -97,9 +97,10 @@ so the overlay opens with real screenshots, not icon fallbacks.
 ## Status
 
 **Alpha** — native AX backend, no external dependency. Workspace
-switching, window park, BSP / stack tiling with AX-role
-auto-float, and display reconfigure handling all ship in the
-default build. `brew install akira-toriyama/tap/facet` is live.
+switching, independent workspaces per native macOS Space, window
+park, BSP / stack tiling with AX-role auto-float, and display
+reconfigure handling all ship in the default build.
+`brew install akira-toriyama/tap/facet` is live.
 
 | Milestone | Status |
 |---|---|
@@ -153,6 +154,12 @@ Frequently-touched keys:
 - `[layout] default_view` — `tree` / `grid`
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
+- `[space.N]` table — per-native-Space workspace names/count, where
+  `N` is the Space's Mission Control position. With **no** `[space.N]`
+  sections, every native macOS Space gets the default workspaces
+  automatically. With **any** `[space.N]` present it's **opt-in**:
+  facet manages only the Spaces that have a section; a Space without
+  one is left untouched (windows as-is, panel hidden there).
 - `[workspace] setupFiles = [...]` — array of executable script
   paths run once at startup, Vitest-style. See "Workspace setup
   hooks" below.
@@ -286,6 +293,33 @@ Modifications* JSON (`shell_command`: `/opt/homebrew/bin/facet
 
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
 hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`.
+
+#### Bonus: a loading skeleton for native-Space switches
+
+For the flicker-obsessed — you know who you are. macOS hands out no
+"a Space switch is *about* to start" hook, so facet only hears about
+the move *after* the slide — just late enough that the incoming
+desktop flashes the previous desktop's tree for a frame. Not the fix
+we'd frame and hang on the wall.
+
+But if that single-frame blink nags at you the way it nagged at us:
+have your hotkey tool fire `facet --view=tree --loading=2000` *right
+before* the Space-switch keys. facet lays a skeleton over the tree,
+holds it through the slide, and lifts it the instant the new
+desktop's workspaces load (or at 2 s — whichever comes first). With
+[chord](https://github.com/akira-toriyama/chord), `action-shell`
+runs first and `action-keys` forwards the real keystroke through:
+
+```toml
+[[bindings]]
+name         = "space-left + facet tree"
+input        = "ctrl + fn - left"
+action-shell = "facet --view=tree --loading=2000"
+action-keys  = "ctrl + fn - left"
+```
+
+A hack? Absolutely. A tiny love letter to everyone who notices
+single frames? Also that. 💙
 
 ### Workspace shell helpers
 
