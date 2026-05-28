@@ -29,13 +29,13 @@ import FacetCore
 public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public let name = "native"
 
-    /// Phase γ frozen layout-mode set. `float` is the per-WS
-    /// default but isn't advertised here because it isn't a
-    /// *user-pickable mode* in the menu sense — it's the
-    /// "no tiling applied" baseline. master_stack / scrolling /
-    /// traditional are explicitly out of γ scope (memory:
-    /// facet-phase-gamma-decisions Q1).
-    public let layoutModes = ["bsp", "stack"]
+    /// Advertised layout-mode set. `float` is the per-WS default
+    /// but isn't advertised here because it isn't a *user-pickable
+    /// mode* in the menu sense — it's the "no tiling applied"
+    /// baseline. `bsp` / `stack` are the stateful Phase γ modes;
+    /// `LayoutRegistry.names` adds the stateless engines (Theme B —
+    /// memory: facet-theme-b-decisions).
+    public let layoutModes = ["bsp", "stack"] + LayoutRegistry.names
 
     // MARK: - State (delegated to catalog)
 
@@ -791,7 +791,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// (top fills, others park). No-op for float mode.
     public func retileActiveWorkspace() {
         let mode = catalog.mode(of: catalog.activeIndex)
-        guard mode == "bsp" || mode == "stack" else {
+        guard mode == "bsp" || mode == "stack"
+                || LayoutRegistry.engine(named: mode) != nil else {
             Log.debug("native: retile noop "
                 + "(WS \(catalog.activeIndex) is \(mode))")
             return
@@ -837,7 +838,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// through AX. Floating windows are skipped (they're not in
     /// the tree). No-op when the WS has no tree.
     private func applyTile(workspace n1Based: Int, rect: CGRect) {
-        let frames = catalog.tiledFrames(for: n1Based, in: rect)
+        applyFrames(catalog.tiledFrames(for: n1Based, in: rect),
+                    label: "tile WS \(n1Based)", rect: rect)
+    }
+
+    /// Apply a stateless `LayoutEngine`'s frames for `n1Based`. The
+    /// engine path: catalog computes pure geometry, this pushes it
+    /// through AX exactly like `applyTile`.
+    private func applyEngine(workspace n1Based: Int, rect: CGRect) {
+        applyFrames(catalog.engineFrames(for: n1Based, in: rect),
+                    label: "engine WS \(n1Based)", rect: rect)
+    }
+
+    /// Shared AX writer: set each window's position + size from a
+    /// pre-computed frame map. Used by both the bsp tree path and
+    /// the stateless-engine path.
+    private func applyFrames(_ frames: [WindowID: CGRect],
+                             label: String, rect: CGRect) {
         guard !frames.isEmpty else { return }
         var applied = 0
         for (id, frame) in frames {
@@ -849,7 +866,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             AXGeom.setSize(ax, frame.size)
             applied += 1
         }
-        Log.debug("native: tile WS \(n1Based) "
+        Log.debug("native: \(label) "
             + "frames=\(frames.count) applied=\(applied) "
             + "rect=\(rect)")
     }
@@ -946,10 +963,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// (refresh / switch / move / setMode / retile / perform)
     /// funnels through here.
     private func applyLayout(workspace n1Based: Int, rect: CGRect) {
-        switch catalog.mode(of: n1Based) {
+        let mode = catalog.mode(of: n1Based)
+        switch mode {
         case "bsp":   applyTile(workspace: n1Based, rect: rect)
         case "stack": applyStack(workspace: n1Based, rect: rect)
-        default:      break
+        default:
+            if LayoutRegistry.engine(named: mode) != nil {
+                applyEngine(workspace: n1Based, rect: rect)
+            }
         }
     }
 

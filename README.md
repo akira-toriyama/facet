@@ -250,8 +250,8 @@ facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
 
 # Tiling (M5 Phase γ)
-facet --set-layout=NAME              # active WS mode (bsp | stack | float)
-facet --retile                       # re-apply active WS's layout (bsp or stack)
+facet --set-layout=NAME              # active WS mode (bsp | stack | monocle | float)
+facet --retile                       # re-apply active WS's layout (bsp / stack / monocle)
 facet window --toggle-float          # flip focused window float flag
 facet window --toggle-orientation    # rotate focused window's parent split (bsp)
 facet window --cycle-stack=next|prev # rotate stack to next / previous member

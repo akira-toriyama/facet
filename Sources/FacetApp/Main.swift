@@ -329,7 +329,8 @@ enum FacetApp {
     /// Validate + canonicalise a layout-mode name. Loud reject on
     /// typo (`exit(2)`) — same pattern as `canonicalView` /
     /// `canonicalStyle`.
-    static let canonicalLayoutModes = ["bsp", "stack", "float"]
+    static let canonicalLayoutModes =
+        ["bsp", "stack", "float"] + LayoutRegistry.names
 
     static func canonicalLayoutMode(_ name: String) -> String {
         switch canonicalize(name, allowed: canonicalLayoutModes) {
