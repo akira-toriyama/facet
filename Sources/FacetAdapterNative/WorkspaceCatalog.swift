@@ -191,7 +191,8 @@ struct WorkspaceCatalog {
     mutating func reconcile(live: [Window],
                                    focused: WindowID? = nil,
                                    activeRect: CGRect = .zero,
-                                   autoFloat: Set<WindowID> = [])
+                                   autoFloat: Set<WindowID> = [],
+                                   requireConfirm: Bool = false)
         -> ReconcileResult
     {
         let liveByID = Dictionary(uniqueKeysWithValues:
@@ -266,7 +267,13 @@ struct WorkspaceCatalog {
             // gate it would pile into `activeIndex`. Cost: a
             // genuine new window takes one extra ~2 s poll
             // before showing up in the sidebar.
-            if !pendingAddCandidates.contains(id) {
+            //
+            // Tests that don't simulate the poll loop opt out
+            // via `requireConfirm: false` and get the old
+            // single-call commit behaviour.
+            if requireConfirm,
+               !pendingAddCandidates.contains(id)
+            {
                 pendingAddCandidates.insert(id)
                 continue
             }

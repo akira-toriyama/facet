@@ -202,7 +202,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let result = catalog.reconcile(live: live,
                                        focused: focused,
                                        activeRect: rect,
-                                       autoFloat: autoFloat)
+                                       autoFloat: autoFloat,
+                                       requireConfirm: true)
         if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
