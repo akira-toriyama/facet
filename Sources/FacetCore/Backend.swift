@@ -45,13 +45,6 @@ public struct WindowMenuItem: Sendable {
 /// layer runs at.
 public enum BackendEvent: Sendable {
     case refreshNeeded
-    /// The user switched native macOS Spaces. `managed` = whether
-    /// the destination desktop is facet-managed (has a workspace
-    /// set). The UI uses this to show a skeleton placeholder while
-    /// the new desktop's content settles (managed) or to hide the
-    /// panel (unmanaged) — before the following `refreshNeeded`
-    /// delivers the real snapshot. Memory: facet-per-native-space-ws.
-    case spaceChanged(managed: Bool)
 }
 
 /// The only surface the rest of the app knows about. rift / native
