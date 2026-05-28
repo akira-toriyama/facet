@@ -946,11 +946,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                            rect: rect)
                 eventContinuation.yield(.refreshNeeded)
             }
-        // rift-only / out-of-γ-scope cases — no-op, but listed
-        // explicitly so the compiler enforces a handling
-        // decision on every future enum addition.
+        case .promoteToMaster:
+            // Tall / master-stack: move the focused window to the
+            // master slot (index 0 of the WS's shared order).
+            guard let id = focusedWindow() else { return }
+            let moved = catalog.promoteToMaster(
+                id, workspace: catalog.activeIndex)
+            Log.debug("native: perform promoteToMaster "
+                + "\(id.serverID) moved=\(moved)")
+            if moved {
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+                eventContinuation.yield(.refreshNeeded)
+            }
+        // out-of-scope / future cases — no-op, but listed explicitly
+        // so the compiler enforces a handling decision on every
+        // future enum addition.
         case .toggleFullscreen,
-             .promoteToMaster, .swapMasterStack,
+             .swapMasterStack,
              .toggleStack,
              .centerColumn, .snapStrip:
             break
@@ -990,6 +1002,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                                [.cycleStackNext]))
             items.append(.init("Previous stack window",
                                [.cycleStackPrev]))
+        }
+        if mode == "tall", !floating {
+            items.append(.init("Promote to master",
+                               [.promoteToMaster]))
         }
         items.append(.init(floating ? "Unfloat" : "Float",
                            [.toggleFloat]))

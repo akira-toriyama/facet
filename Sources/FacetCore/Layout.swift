@@ -64,6 +64,58 @@ public struct MonocleLayout: LayoutEngine {
     }
 }
 
+/// Tall / master-stack (dwm `tile`, xmonad `Tall`, Amethyst "Tall").
+/// The first `masterCount` windows fill the left master column
+/// (`masterRatio` of the width), split into equal-height rows; the
+/// remaining windows stack as equal-height rows in the right column.
+/// With ≤ `masterCount` windows the master column fills the whole
+/// rect. `order[0]` is the primary master — the adapter's
+/// `promoteToMaster` reorders to put a chosen window there.
+public struct TallLayout: LayoutEngine {
+    public let name = "tall"
+    public init() {}
+
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        guard !order.isEmpty else { return [:] }
+        var out: [WindowID: CGRect] = [:]
+        let m = min(params.masterCount, order.count)
+        let masters = Array(order.prefix(m))
+        let stack = Array(order.dropFirst(m))
+
+        guard !stack.isEmpty else {
+            // No stack column — master area fills the whole rect.
+            rows(masters, in: rect, into: &out)
+            return out
+        }
+        let masterW = rect.width * params.masterRatio
+        rows(masters,
+             in: CGRect(x: rect.minX, y: rect.minY,
+                        width: masterW, height: rect.height),
+             into: &out)
+        rows(stack,
+             in: CGRect(x: rect.minX + masterW, y: rect.minY,
+                        width: rect.width - masterW,
+                        height: rect.height),
+             into: &out)
+        return out
+    }
+
+    /// Split `ids` into equal-height rows filling `rect`, first id at
+    /// `minY` — matching `LayoutTree`'s horizontal-split convention.
+    private func rows(_ ids: [WindowID], in rect: CGRect,
+                      into out: inout [WindowID: CGRect]) {
+        guard !ids.isEmpty else { return }
+        let h = rect.height / CGFloat(ids.count)
+        for (i, id) in ids.enumerated() {
+            out[id] = CGRect(x: rect.minX,
+                             y: rect.minY + CGFloat(i) * h,
+                             width: rect.width, height: h)
+        }
+    }
+}
+
 /// Registry of stateless layout engines, keyed by `name`. bsp and
 /// stack are intentionally absent — they keep their stateful adapter
 /// paths; this is the seam stateless layouts register into, so adding
@@ -71,6 +123,7 @@ public struct MonocleLayout: LayoutEngine {
 public enum LayoutRegistry {
     public static let all: [any LayoutEngine] = [
         MonocleLayout(),
+        TallLayout(),
     ]
 
     /// Mode name → engine, or nil when `name` isn't a registered
