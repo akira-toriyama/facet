@@ -14,6 +14,26 @@ macOS 向け Swift 製ワークスペース + ウィンドウマネージャ。 
 native 実装、 外部依存なし。 レイヤー図は
 [docs/architecture.md](docs/architecture.md)。
 
+## デモ
+
+![facet — 半透明ツリーサイドバーと BSP タイルされた windows](docs/media/tree-bsp.gif)
+
+左上の半透明ツリーサイドバーが各ワークスペースとその windows を
+一覧し、 native な BSP レイアウトがそれらをタイルする — ここでは
+蒸気機関車・ π スピゴット・ マンデルブロ・ Matrix レインを流す
+4 つのターミナル。
+
+| フルスクリーン grid オーバービュー | window をセル間でドラッグ |
+|:--:|:--:|
+| ![grid オーバービュー](docs/media/grid.gif) | ![grid ドラッグ&ドロップ](docs/media/grid-dnd.gif) |
+
+| ワークスペース切替 | BSP / stack タイリング |
+|:--:|:--:|
+| ![ワークスペース切替](docs/media/workspace-switch.gif) | ![タイリング](docs/media/tiling.gif) |
+
+<sub>クリーンな macOS VM で録画 — window タイトル・ grid サムネイル・
+タイリングはすべて実 AX / ScreenCaptureKit、 モックなし。</sub>
+
 ## 何ができるか
 
 facet は menu-bar-less な agent (`LSUIElement`) として常駐し、

@@ -14,6 +14,26 @@ palettes — all driven by a native AX/CGS backend with no external
 dependency. See [docs/architecture.md](docs/architecture.md) for
 the layer diagram.
 
+## Demo
+
+![facet — translucent tree sidebar over BSP-tiled windows](docs/media/tree-bsp.gif)
+
+The translucent tree sidebar (top-left) lists every workspace and its
+windows while a native BSP layout tiles them — here four terminals
+running a steam locomotive, a π spigot, a Mandelbrot render, and a
+Matrix rain.
+
+| Full-screen grid overview | Drag a window between cells |
+|:--:|:--:|
+| ![grid overview](docs/media/grid.gif) | ![grid drag-and-drop](docs/media/grid-dnd.gif) |
+
+| Switch workspaces | BSP / stack tiling |
+|:--:|:--:|
+| ![workspace switch](docs/media/workspace-switch.gif) | ![tiling modes](docs/media/tiling.gif) |
+
+<sub>Recorded on a clean macOS VM — window titles, grid thumbnails, and
+tiling are all live AX / ScreenCaptureKit, no mockups.</sub>
+
 ## What it does
 
 facet runs as a menu-bar-less agent (`LSUIElement`) and surfaces
