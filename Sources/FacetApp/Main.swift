@@ -75,6 +75,16 @@ enum FacetApp {
           can jump straight in (Spotlight-style). --view=grid
           silently ignores; the overlay is always key/active.
 
+          --loading[=MS] is a --view=tree modifier: paint a loading
+          skeleton over the tree, cleared as soon as new content
+          loads OR after MS milliseconds (default 500), whichever
+          comes first — so MS is just a safety cap. Fire it just
+          BEFORE a native-Space switch (bind it ahead of your switch
+          hotkey) so the panel shows a placeholder during the switch
+          instead of the previous desktop's tree. grid ignores it.
+          Example:
+            facet --view=tree --loading=2000
+
           GEOMETRY MODIFIERS (--view=tree only; grid ignores)
             --pos-x=N --pos-y=N --width=N --height=N
               Place the tree panel at exact screen coords (AppKit
@@ -245,14 +255,20 @@ enum FacetApp {
         postControl("style:" + name)
     }
 
-    /// Post ``view:NAME[+active][+geom:X,Y,W,H]``. Name must
-    /// already be canonical. Geom is optional and only meaningful
-    /// for tree (grid silently ignores it, same pattern as +active).
+    /// Default skeleton duration (ms) for a bare ``--loading``.
+    static let defaultLoadingMs = 500
+
+    /// Post ``view:NAME[+active][+loading:MS][+geom:X,Y,W,H]``. Name
+    /// must already be canonical. Geom + loading are optional and
+    /// only meaningful for tree (grid silently ignores them, same
+    /// pattern as +active).
     static func postView(_ name: String,
                          active: Bool,
+                         loadingMs: Int?,
                          geom: (Int, Int, Int, Int)?) -> Never {
         var payload = "view:\(name)"
         if active { payload += "+active" }
+        if let ms = loadingMs { payload += "+loading:\(ms)" }
         if let g = geom {
             payload += "+geom:\(g.0),\(g.1),\(g.2),\(g.3)"
         }
@@ -689,6 +705,7 @@ enum FacetApp {
         var setLayoutArg: String?
         var retileFlag = false
         var activeFlag = false
+        var loadingArg: Int?            // nil = not requested; ms otherwise
         var quitFlag = false
         var reloadFlag = false
         var posX: Int?, posY: Int?, width: Int?, height: Int?
@@ -725,6 +742,14 @@ enum FacetApp {
             case a == "--quit":              quitFlag = true
             case a == "--reload":            reloadFlag = true
             case a == "--active":            activeFlag = true
+            case a == "--loading":           loadingArg = defaultLoadingMs
+            case a.hasPrefix("--loading="):
+                let raw = String(a.dropFirst("--loading=".count))
+                guard let ms = Int(raw), ms >= 0 else {
+                    die("--loading=MS needs a non-negative integer "
+                        + "(milliseconds) — got \"\(raw)\"")
+                }
+                loadingArg = ms
             case a == "--debug":             break          // handled above
             case a == "--resign":            break          // handled above
             // Names are canonicalised + validated at parse time
@@ -784,6 +809,15 @@ enum FacetApp {
             exit(2)
         }
 
+        // ``--loading`` is a modifier on ``--view=tree`` (grid
+        // ignores it, same as ``--active``).
+        if loadingArg != nil && viewArg == nil {
+            let msg = "facet: --loading requires --view=tree — "
+                + "see `facet --help`\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(2)
+        }
+
         // Geom flags are all-or-nothing modifiers; only meaningful
         // with --view=tree (grid silently ignores, same as --active).
         // Partial sets (e.g. only --width) are rejected loudly so
@@ -826,7 +860,7 @@ enum FacetApp {
         if quitFlag                  { postControl("quit") }
         if reloadFlag                { postControl("reload") }
 
-        if let v = viewArg           { postView(v, active: activeFlag, geom: geom) }
+        if let v = viewArg           { postView(v, active: activeFlag, loadingMs: loadingArg, geom: geom) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
         if let w = workspaceArg      { postWorkspace(w) }

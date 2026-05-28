@@ -283,6 +283,31 @@ ctrl + shift + alt - 2  : facet window --move-to=2
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
 hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`。
 
+#### おまけ: native Space 切替のローディングスケルトン
+
+フレーム単位が気になるあなたへ。 macOS は「Space 切替が *これから*
+始まる」 フックを出してくれないので、 facet が切替を知るのはスライド
+*後* — 切替先デスクトップに前デスクトップの tree が一瞬チラッと残る、
+ちょうどそのくらい遅い。 額に入れて飾るような美しい解ではない。
+
+でも、 その 1 フレームのチラつきが我々と同じくらい気になるなら: ホット
+キーツールで Space 切替キーの *直前* に `facet --view=tree --loading=2000`
+を撃つ。 facet は tree にスケルトンを被せ、 スライド中ずっと保持し、
+切替先デスクトップの workspace がロードされた瞬間（または 2 秒経過、
+早い方）に外す。 [chord](https://github.com/akira-toriyama/chord) なら
+`action-shell` が先に走り、 `action-keys` が本来のキーを送る:
+
+```toml
+[[bindings]]
+name         = "space-left + facet tree"
+input        = "ctrl + fn - left"
+action-shell = "facet --view=tree --loading=2000"
+action-keys  = "ctrl + fn - left"
+```
+
+ハック？ 間違いなく。 1 フレームに気づいてしまう人へのささやかな
+ラブレター？ それも。 💙
+
 ### Workspace shell ヘルパー
 
 facet 本体は `config.toml` に書き込まない方針。 repo 同梱の

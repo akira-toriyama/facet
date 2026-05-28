@@ -52,6 +52,20 @@ public final class SidebarView: NSView {
     private var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public private(set) var signature = ""
     public private(set) var contentHeight: CGFloat = 40
+
+    /// While true, `draw` renders placeholder rows and `update`
+    /// holds (incoming refreshes don't replace the skeleton). Driven
+    /// by the CLI `facet --view=tree --loading[=MS]`: an external
+    /// tool (e.g. chord) shows the skeleton just BEFORE triggering a
+    /// native-Space switch, so the shared panel never flashes the
+    /// previous desktop's tree. The Controller clears it on a timer.
+    /// Memory: facet-per-native-space-ws.
+    private var skeleton = false
+    /// Content signature at the moment the skeleton was shown. While
+    /// skeleton is up, an `update` whose signature still equals this
+    /// is the SAME (pre-switch) content → keep holding; a different
+    /// signature means new content loaded → drop the skeleton early.
+    private var skeletonBaseSig = ""
     public private(set) var activeWS: Int?    // REAL active WS (skip-switch)
 
     // Optimistic selection: on click we move the highlight
@@ -156,6 +170,16 @@ public final class SidebarView: NSView {
                     "\($0.id.serverID)\(hot($0) ? "f" : ""):\(eff($0))"
                 }.joined(separator: ",")
             }.joined(separator: ";")
+        // Loading skeleton: hold while content is UNCHANGED from when
+        // `--loading` fired (e.g. a refresh mid native-Space switch
+        // still returns the previous desktop), but clear the instant
+        // genuinely new content arrives (the new desktop finished
+        // loading). The Controller's timer is only an upper bound.
+        if skeleton {
+            if sig == skeletonBaseSig { return skeletonHeight }
+            skeleton = false
+            Log.debug("tree: skeleton cleared (new content loaded)")
+        }
         if sig == signature { return contentHeight }
         signature = sig
         rows.removeAll(); cells.removeAll(); wsBands.removeAll()
@@ -221,6 +245,31 @@ public final class SidebarView: NSView {
     }
 
     public func forceRedraw() { signature = "" }
+
+    /// Enter the loading-skeleton state (CLI `--loading`). Held until
+    /// `clearSkeleton`; refreshes are absorbed without repainting.
+    public func showSkeleton() {
+        skeletonBaseSig = signature   // content shown right before loading
+        skeleton = true
+        needsDisplay = true
+    }
+
+    /// Leave the skeleton. `signature = ""` forces the next `update`
+    /// (driven by the Controller's `apply`) to rebuild real content.
+    public func clearSkeleton() {
+        guard skeleton else { return }
+        skeleton = false
+        signature = ""
+        needsDisplay = true
+    }
+
+    public var isSkeleton: Bool { skeleton }
+
+    /// Panel height while the skeleton is on screen — three
+    /// placeholder sections (header + two rows each).
+    public var skeletonHeight: CGFloat {
+        headerFirstRowH + headerRowH * 2 + windowRowH * 6 + 12
+    }
     public func relayout() { signature = ""; _ = update(lastWorkspaces) }
 
     // MARK: - type-to-filter (entered with `s` in --active)
@@ -356,7 +405,35 @@ public final class SidebarView: NSView {
 
     // MARK: - Draw
 
+    /// Loading placeholder shown via `facet --view=tree --loading`.
+    /// Mirrors the real layout's rhythm (caption + two window rows
+    /// per section) with muted, theme-aware rounded bars.
+    private func drawSkeleton() {
+        func bar(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
+                 _ alpha: CGFloat, _ radius: CGFloat = 4.5) {
+            pal.dim.withAlphaComponent(alpha).setFill()
+            NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
+                         xRadius: radius, yRadius: radius).fill()
+        }
+        var y: CGFloat = 6
+        let widths: [CGFloat] = [0.60, 0.44, 0.52]
+        for s in 0..<3 {
+            let hh = s == 0 ? headerFirstRowH : headerRowH
+            let capY = s == 0 ? y + 8 : y + 20
+            bar(rowPadX, capY, bounds.width * 0.34, 9, 0.80)
+            y += hh
+            for r in 0..<2 {
+                bar(rowPadX + 2, y + (windowRowH - 14) / 2, 14, 14, 0.45, 4)
+                let tw = max(bounds.width * widths[(s + r) % widths.count] - 40, 40)
+                bar(rowPadX + 24, y + (windowRowH - 9) / 2, tw, 9, 0.45)
+                y += windowRowH
+            }
+            y += 3
+        }
+    }
+
     public override func draw(_ dirty: NSRect) {
+        if skeleton { drawSkeleton(); return }
         // Strong drop-target highlight: only a *different* workspace
         // band is a valid drop target — fill + outline it so "drop
         // here" is unmistakable.

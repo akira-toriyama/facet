@@ -139,6 +139,16 @@ use:
   hands-off (no adopt/park, empty `workspaces()` → Controller's
   empty-list guard hides the panel). No `[space.N]` at all → every
   desktop managed with the global default. `FacetConfig.isSpaceManaged`.
+- **Loading skeleton is CLI-triggered, not auto** (`facet --view=tree
+  --loading[=MS]`): macOS exposes no pre-Space-switch hook, so facet
+  can't detect a switch early enough to mask the flicker. Instead an
+  external tool (chord) fires `--loading` *before* the switch keys;
+  `Controller.showLoading` paints `SidebarView`'s skeleton, held
+  until the next *different* content signature loads (auto-clear) or
+  `MS` elapses (cap). Don't reintroduce a backend-event /
+  activeSpaceDidChange auto-trigger — it's always too late (the
+  Space commits ~0.7s post-keypress). Memory:
+  [[facet-per-native-space-ws]].
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. The id keys the TCC grant
   and self-signed cert identity — don't change it.

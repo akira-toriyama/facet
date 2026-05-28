@@ -290,7 +290,7 @@ final class Controller: NSObject {
 
                 // Symmetric view ops — canonical-only, no aliases.
                 case let s where s.hasPrefix("view:"):
-                    // Payload: NAME[+active][+geom:X,Y,W,H]
+                    // Payload: NAME[+active][+loading:MS][+geom:X,Y,W,H]
                     let rest = String(s.dropFirst("view:".count))
                     let parts = rest.split(separator: "+")
                     let name = String(parts.first ?? "")
@@ -299,7 +299,11 @@ final class Controller: NSObject {
                     let geom: NSRect? = mods
                         .first(where: { $0.hasPrefix("geom:") })
                         .flatMap { Self.parseGeom($0) }
-                    self.dispatchView(name, active: active, geom: geom)
+                    let loadingMs: Int? = mods
+                        .first(where: { $0.hasPrefix("loading:") })
+                        .flatMap { Int($0.dropFirst("loading:".count)) }
+                    self.dispatchView(name, active: active,
+                                      geom: geom, loadingMs: loadingMs)
                 case let s where s.hasPrefix("hide:"):
                     self.dispatchHide(
                         String(s.dropFirst("hide:".count)))
@@ -358,12 +362,49 @@ final class Controller: NSObject {
     /// Open (or activate) ``name``. Idempotent — re-issuing the
     /// same view doesn't toggle it off; use ``dispatchToggle`` /
     /// ``dispatchHide`` for that.
-    private func dispatchView(_ name: String, active: Bool, geom: NSRect?) {
+    private var loadingTimer: Timer?
+
+    /// CLI `facet --view=tree --loading[=MS]`: paint the tree
+    /// skeleton now and hold it for `durationMs`, then repaint real
+    /// content. An external tool (e.g. chord) fires this just before
+    /// triggering a native-Space switch, so the shared
+    /// `.canJoinAllSpaces` panel never flashes the previous
+    /// desktop's tree during the switch (macOS gives no pre-switch
+    /// hook — memory facet-per-native-space-ws). No-op while the user
+    /// has hidden the panel or the grid owns the screen.
+    private func showLoading(durationMs: Int) {
+        if userHidden || isGridVisible { return }
+        let ms = max(0, durationMs)
+        Log.debug("controller: showLoading \(ms)ms (skeleton)")
+        sidebarView.frame.size.width = panelHost.userWidth
+        sidebarView.showSkeleton()
+        panelHost.layout(contentHeight: sidebarView.skeletonHeight,
+                         searching: false)
+        if !panelHost.isVisible { panelHost.show() }
+        loadingTimer?.invalidate()
+        loadingTimer = Timer.scheduledTimer(
+            withTimeInterval: Double(ms) / 1000.0, repeats: false
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.sidebarView.isSkeleton else { return }
+                // Upper-bound reached without new content — drop the
+                // skeleton and repaint whatever we have. (When new
+                // content arrives first, `update` clears the skeleton
+                // early and this is a no-op.)
+                self.sidebarView.clearSkeleton()
+                self.apply(self.lastWorkspaces)
+            }
+        }
+    }
+
+    private func dispatchView(_ name: String, active: Bool, geom: NSRect?,
+                              loadingMs: Int? = nil) {
         switch name {
         case "tree":
             // Apply explicit geom BEFORE showing so the panel
             // appears at the right place on the first paint.
             if let g = geom { panelHost.setExplicitFrame(g) }
+            if let ms = loadingMs { showLoading(durationMs: ms); return }
             if active { enterActive() } else { setHidden(false) }
         case "grid":
             // ``+active`` is silently a no-op for grid — the

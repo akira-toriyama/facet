@@ -294,6 +294,33 @@ Modifications* JSON (`shell_command`: `/opt/homebrew/bin/facet
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
 hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`.
 
+#### Bonus: a loading skeleton for native-Space switches
+
+For the flicker-obsessed — you know who you are. macOS hands out no
+"a Space switch is *about* to start" hook, so facet only hears about
+the move *after* the slide — just late enough that the incoming
+desktop flashes the previous desktop's tree for a frame. Not the fix
+we'd frame and hang on the wall.
+
+But if that single-frame blink nags at you the way it nagged at us:
+have your hotkey tool fire `facet --view=tree --loading=2000` *right
+before* the Space-switch keys. facet lays a skeleton over the tree,
+holds it through the slide, and lifts it the instant the new
+desktop's workspaces load (or at 2 s — whichever comes first). With
+[chord](https://github.com/akira-toriyama/chord), `action-shell`
+runs first and `action-keys` forwards the real keystroke through:
+
+```toml
+[[bindings]]
+name         = "space-left + facet tree"
+input        = "ctrl + fn - left"
+action-shell = "facet --view=tree --loading=2000"
+action-keys  = "ctrl + fn - left"
+```
+
+A hack? Absolutely. A tiny love letter to everyone who notices
+single frames? Also that. 💙
+
 ### Workspace shell helpers
 
 facet itself never writes to your `config.toml`. Repo-local
