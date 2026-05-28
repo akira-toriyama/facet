@@ -69,7 +69,7 @@ matches how rift / aerospace operate today.
 | Phase | Scope | Reference reading |
 |---|---|---|
 | **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet --workspace=N`. Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
-| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close + setupFiles startup hook | rift `wm/window`, yabai window mgmt |
+| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close + setup-files startup hook | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
 | **ε** | `FacetAdapterRift` retire; native becomes the only backend. **Frozen + shipped 2026-05-27 (v2.0.0 major bump)**: rift module deleted, `FACET_BACKEND` env var removed (kept as warning hint only), `WindowBackend` protocol preserved for unit-test stub seam. M5 completes here. | — |
@@ -143,7 +143,7 @@ is the index. **Do not relitigate** without explicit grill round.
 - **Fullscreen apps**: excluded from facet management, left to
   macOS.
 - **Persistence**: not in facet. External sh hook via
-  `setupFiles` config key (Vitest-style).
+  `setup-files` config key (Vitest-style).
 - **Startup**: don't touch existing windows. **Shutdown**: restore
   all hidden windows (treat shutdown = workspace feature OFF).
 
@@ -235,7 +235,7 @@ not relitigate** without explicit grill round.
   *existing* persisted geometry (panel position) survives
   display reconfiguration without breaking. WS state
   persistence stays out of scope (Phase α frozen "no state
-  persistence, setupFiles only" is preserved).
+  persistence, setup-files only" is preserved).
 - **Trigger**: `NSApplication.didChangeScreenParametersNotification`
   only. Covers resolution change, arrangement, hot-plug, lid
   open/close, sleep wake — one signal, one handler.
@@ -392,7 +392,7 @@ windows or hosts.
   --move-to=N`.
 - **Persistence of workspace state across restart** — out of
   scope for facet itself. External shell hooks (Vitest-style
-  `setupFiles` config) let users snapshot/restore if needed.
+  `setup-files` config) let users snapshot/restore if needed.
 - **Plugin / extension system, menubar icon, system notifications,
   theme editor GUI, window snapping, global hotkey reservation,
   screen recording, animation customization, UI translation

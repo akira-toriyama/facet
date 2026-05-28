@@ -5,10 +5,10 @@ final class TOMLTests: XCTestCase {
 
     func testTopLevelKeyValuePairs() {
         let p = parseTOMLSubset("""
-            default_view = "tree"
+            default-view = "tree"
             theme = "cute"
             """)
-        XCTAssertEqual(p[""]?["default_view"], .string("tree"))
+        XCTAssertEqual(p[""]?["default-view"], .string("tree"))
         XCTAssertEqual(p[""]?["theme"], .string("cute"))
     }
 

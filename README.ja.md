@@ -38,16 +38,22 @@ native 実装、 外部依存なし。 レイヤー図は
 
 facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 ワークスペースを 2 種類の view で見せる。 起動時にどちらを表示する
-かは [`config.toml`](config.toml) の `default_view` で選ぶ:
+かは [`config.toml`](config.toml) の `default-view` で選ぶ:
 
 - **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
-  その windows をツリー表示。 行クリックで focus、 行ドラッグで window
-  を別 ws に移動、 ホバーで実画面プレビュー。
+  その windows をツリー表示。 行クリックで focus、 window 行ドラッグで
+  window を別 ws に移動、 ワークスペース header (左にグリップ) ドラッグ
+  で 2 つのワークスペースの中身を swap、 ホバーで実画面プレビュー。
 - **Grid** — フルスクリーンのオーバービュー。 1 セル =
-  1 ワークスペース、 ScreenCaptureKit のリアルサムネイル、 セル間 DnD
-  (通常ドラッグで window 移動、 Shift+ドラッグでセル丸ごと内容
-  swap)。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
+  1 ワークスペース、 ScreenCaptureKit のリアルサムネイル、 セル間 DnD:
+  window サムネイルドラッグで移動、 セル header ドラッグでセル丸ごと
+  swap。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
   で閉じる。
+
+DnD は両 view 共通のモデル — **掴んだ対象が動作を決める**: window を
+掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を
+swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾
+キーは使わない。
 
 両 view は同じ backend と同じテーマ (terminal / cute / system、
 ライブ切替) を共有。
@@ -59,13 +65,14 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 | window 行クリック (tree) | そのワークスペースに切替 + その window に focus |
 | ワークスペース header クリック (tree) | そのワークスペースに切替 |
 | window 行を別ワークスペースにドラッグ (tree) | その window を移動 |
-| 空白部分をドラッグ (tree) | パネル位置を変更 — 位置は永続 |
+| ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
+| 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 — 位置は永続 |
 | 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
-| window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview_mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
+| window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
 | サムネイルを別セルにドラッグ (grid) | その window を移動 |
-| **Shift+ドラッグ** (grid) | source ↔ destination セルの内容を丸ごと swap |
+| ワークスペース header を別セルにドラッグ (grid) | 2 セルの内容を丸ごと swap |
 
 表示制御 / 非表示 / トグル / キーボードモードは全部 CLI 経由 —
 [CLI](#cli) 参照。
@@ -88,9 +95,10 @@ tree パネルは focus を持っている間、 キー入力に反応する。 
 | `↓`/`↑`, `Ctrl-N`/`Ctrl-P`, `j`/`k` | 行間移動 |
 | `Tab`/`⇧Tab`, `→`/`←`, `l`/`h` | 前/次ワークスペースへジャンプ |
 | `s` | type-to-filter: 全ワークスペース横断 fuzzy 検索 (本物の text field、 IME 動く) |
-| `Space` | 選択行のコンテキストメニュー (キーボード操作可: `↑↓`/`Return`/`Esc`) |
-| `Return` | 切替 + focus (クリックと同等) |
-| `Esc` | filter クリア → keyboard mode 抜ける (パネルは表示維持) |
+| `Space` | 選択行を持ち上げて DnD — window 行は移動、 ワークスペース header は swap。 矢印で行き先ワークスペースを照準、 `Return`/`Space` で確定、 `Esc` でキャンセル |
+| `m` | 選択行のコンテキストメニュー (キーボード操作可: `↑↓`/`Return`/`Esc`) |
+| `Return` | 持ち上げ確定、 または (非持ち上げ時) クリックと同等に切替 + focus |
+| `Esc` | 持ち上げキャンセル → filter クリア → keyboard mode 抜ける (パネルは表示維持) |
 
 window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 照合、 短 TTL キャッシュ) で解決。 タイトル解決できない行は
@@ -101,9 +109,8 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 | キー | アクション |
 |---|---|
 | 矢印 | セルカーソル移動 |
-| `Tab` / `⇧Tab` | 同一セル内で window 選択を循環 |
-| `Space` | 選択 window を持ち上げ (キーボード DnD)、 矢印で照準、 `Return` で確定 |
-| `Shift+Space` | セル丸ごと持ち上げ (swap) |
+| `Tab` / `⇧Tab` | 同一セル内の header + windows をカーソル循環 |
+| `Space` | 選択を持ち上げて DnD — window (移動) か header スロット (セル丸ごと swap)。 矢印で照準、 `Return` で確定 |
 | `Return` | 持ち上げ中なら確定 / 通常時は切替 |
 | `Esc` | 持ち上げをキャンセル / オーバービューを閉じる |
 
@@ -125,7 +132,7 @@ BSP・stack tiling / AX role auto-float / display reconfigure 処理が
 | M2 — tree + grid view 動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor hide、 closeWindow、 setupFiles | ✅ |
+| M5 Phase β — anchor hide、 closeWindow、 setup-files | ✅ |
 | M5 Phase γ — BSP + stack tiling、 AX-role auto-float、 tiling CLI | ✅ |
 | M5 Phase δ — display reconfigure | ✅ |
 | M5 Phase ε — native sole backend (v2.0.0) | ✅ |
@@ -165,8 +172,8 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 よく触る key:
 
-- `[appearance] theme` — `terminal` (default) / `cute` / `system`
-- `[layout] default_view` — `tree` / `grid`
+- `theme` (トップレベル) — `terminal` (default) / `cute` / `system`
+- `default-view` (トップレベル) — `tree` / `grid`
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
@@ -174,14 +181,14 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
   セクションのある Space だけ facet が管理し、 無い Space は完全に
   ノータッチ（窓そのまま・パネル非表示）。
-- `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
+- `[workspace] setup-files = [...]` — 起動時に 1 度だけ実行される
   実行可能 script のパス配列（Vitest 流）。 詳細は下の
   「Workspace setup hooks」 を参照。
 
 ### Workspace setup hooks
 
 facet 自身は window-to-workspace の割当を永続化しない。
-`setupFiles` config key で、 起動時に「あなたの好みのレイアウト」
+`setup-files` config key で、 起動時に「あなたの好みのレイアウト」
 を再構築する script を自分で書ける — script は facet の CLI
 listener が立ち上がった **後** に発火するので、 そのまま
 `facet status` / `facet --workspace=N` / `facet window --move-to=N`
@@ -189,7 +196,7 @@ listener が立ち上がった **後** に発火するので、 そのまま
 
 ```toml
 [workspace]
-setupFiles = ["~/.config/facet/setup.sh"]
+setup-files = ["~/.config/facet/setup.sh"]
 ```
 
 ```sh
@@ -254,7 +261,7 @@ facet status                      # スナップショット: backend /
 # Server 制御
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # config.toml 再読込 + 反映
-                                  # (theme / preview_mode / [workspaces])
+                                  # (theme / preview-mode / [workspaces])
 facet --quit                      # server 終了
 facet --debug                     # verbose log (stderr +
                                   # /tmp/facet.log、 server-mode)

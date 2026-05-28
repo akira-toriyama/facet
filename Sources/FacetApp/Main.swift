@@ -7,7 +7,7 @@
 //
 //   2. **Server mode** — no CLI flags. Wake the AppKit run loop,
 //      load config, build the rift adapter + Controller, and
-//      apply ``default_view`` from config (omitted → agent-only,
+//      apply ``default-view`` from config (omitted → agent-only,
 //      no panel until the CLI asks).
 //
 // ``@main enum FacetApp`` (NOT top-level code in main.swift) so
@@ -145,9 +145,9 @@ enum FacetApp {
                                              config.toml to persist)
           facet --quit                       terminate the server
           facet --reload                     re-read config.toml + apply
-                                             (theme / preview_mode /
-                                             [workspaces]). Default_view
-                                             and setupFiles need a real
+                                             (theme / preview-mode /
+                                             [workspaces]). default-view
+                                             and setup-files need a real
                                              restart. The server also
                                              auto-reloads on file edits
                                              via FSEvents — this flag is
@@ -900,7 +900,7 @@ enum FacetApp {
         let controller = Controller(backend: backend, config: cfg)
         controller.start()
 
-        // Apply config's default_view. nil → agent-only mode (no
+        // Apply config's default-view. nil → agent-only mode (no
         // panel, no overlay); facet stays running and waits for a
         // ``facet --view=tree`` / ``facet --view=grid`` to bring
         // something on screen. See memory config-default-behavior.

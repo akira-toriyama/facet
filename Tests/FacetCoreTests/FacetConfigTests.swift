@@ -42,16 +42,6 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveGridCols, 6)
     }
 
-    func testEffectiveGridLabelSizeClampsAndComputesBandHeight() {
-        var c = FacetConfig()
-        XCTAssertEqual(c.effectiveGridLabelSize, 15)
-        XCTAssertEqual(c.effectiveGridLabelBandHeight, 22)
-        c.gridLabelSize = 4
-        XCTAssertEqual(c.effectiveGridLabelSize, 8, "clamp low")
-        c.gridLabelSize = 99
-        XCTAssertEqual(c.effectiveGridLabelSize, 32, "clamp high")
-    }
-
     func testEffectiveThumbnailRefreshInterval() {
         var c = FacetConfig()
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 4)
@@ -90,14 +80,14 @@ final class FacetConfigTests: XCTestCase {
     func testFromTOMLPopulatesWorkspaceNames() {
         let parsed = parseTOMLSubset("""
             [workspace]
-            setupFiles = ["x.sh"]
+            setup-files = ["x.sh"]
             1 = "dev"
             2 = "sns"
             """)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.workspaceNames[1], "dev")
         XCTAssertEqual(c.workspaceNames[2], "sns")
-        // Non-int meta keys (setupFiles etc.) must not bleed into
+        // Non-int meta keys (setup-files etc.) must not bleed into
         // workspaceNames — a parser bug that coerced unparseable
         // string keys to 0 would fail this count check (and would
         // also surface as a phantom index-0 entry).
@@ -109,13 +99,12 @@ final class FacetConfigTests: XCTestCase {
 
     func testFromTOMLMapsAllRecognisedKeys() {
         let parsed = parseTOMLSubset("""
-            default_view = "tree"
+            default-view = "tree"
             theme = "cute"
 
             [grid]
             cols = 6
             label-position = "down"
-            label-size = 18
             thumbnail-refresh-seconds = 10
             """)
         let c = FacetConfig.from(toml: parsed)
@@ -123,7 +112,6 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveTheme, "cute")
         XCTAssertEqual(c.effectiveGridCols, 6)
         XCTAssertEqual(c.effectiveGridLabelPosition, "down")
-        XCTAssertEqual(c.effectiveGridLabelSize, 18)
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
     }
 
@@ -189,12 +177,12 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveGridCols, 4)
     }
 
-    // MARK: - setupFiles + expandPath
+    // MARK: - setup-files + expandPath
 
     func testSetupFilesParseFromTOML() {
         let parsed = parseTOMLSubset(#"""
             [workspace]
-            setupFiles = ["~/foo.sh", "/etc/bar.sh"]
+            setup-files = ["~/foo.sh", "/etc/bar.sh"]
             """#)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.setupFiles, ["~/foo.sh", "/etc/bar.sh"])

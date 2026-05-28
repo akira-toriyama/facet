@@ -9,6 +9,24 @@ let gridOuterPad: CGFloat = 48          // overlay edge → outermost cell row
 let gridCellGap: CGFloat = 24           // gap between cell rows / cols
 let gridCellCornerRadius: CGFloat = 10  // rounded cell shape
 let gridLabelGap: CGFloat = 4           // breathing room: label → cell
+let gridHeaderGripW: CGFloat = 11       // grip-dot box at left of header band
+
+// Workspace header band sizes PROPORTIONALLY to the cell: fewer
+// workspaces → bigger cells → a taller header, and vice-versa, so the
+// header stays visually balanced at any workspace count. Height is a
+// fraction of the (label-band-free) nominal cell height, clamped so
+// two stacked lines (WS name + layout mode) always fit yet the header
+// never crowds the thumbs. Both fonts track the resolved band height.
+let gridHeaderRatio: CGFloat = 0.07     // band height ≈ 7% of nominal cell height
+let gridHeaderMinH: CGFloat = 30        // floor fits two small text lines
+let gridHeaderMaxH: CGFloat = 58
+let gridHeaderNameFrac: CGFloat = 0.34  // WS-name font ≈ 34% of band height
+let gridHeaderNameMinFont: CGFloat = 13
+let gridHeaderNameMaxFont: CGFloat = 24
+let gridHeaderModeFrac: CGFloat = 0.24  // layout-mode font ≈ 24% of band height
+let gridHeaderModeMinFont: CGFloat = 9
+let gridHeaderModeMaxFont: CGFloat = 16
+let gridGhostLabelSize: CGFloat = 30    // centred label on an empty-WS swap ghost
 
 // Public so FacetApp's Controller can configure the GridOverlay
 // fade timing without redefining the numbers.

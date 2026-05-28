@@ -23,6 +23,11 @@ let windowFontSize: CGFloat = 12
 let iconSize: CGFloat = 18               // app icon square
 let rowPadX: CGFloat = 12
 
+// Drag-grip glyph at the left of each workspace header — affords
+// "grab this workspace to swap its contents" (Theme A). Width is the
+// glyph box; the WS name is shifted right by grip + gap.
+let headerGripW: CGFloat = 9
+
 // Pointer distance (px) required before a mouseDown becomes a drag.
 // Below this, the gesture stays a click.
 let dragThreshold: CGFloat = 5

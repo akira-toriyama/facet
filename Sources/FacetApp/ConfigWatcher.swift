@@ -1,5 +1,5 @@
 // File-system watcher for ~/.config/facet/config.toml so the
-// Controller can hot-reload theme / preview_mode / [workspaces]
+// Controller can hot-reload theme / preview-mode / [workspaces]
 // changes without a restart.
 //
 // Design (memory facet-cli-surface N11 + N15):

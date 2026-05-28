@@ -29,7 +29,7 @@
 # Default for a fresh `curl` install: "tree" (the always-on-top
 # sidebar — facet's primary surface; the grid is a full-screen
 # overview you summon on demand with `facet --view=grid`).
-default_view = "tree"
+default-view = "tree"
 
 
 # -----------------------------------------------------------------
@@ -60,15 +60,15 @@ theme = "terminal"
 # because it's the sweet spot for typical workspace counts.
 cols = 5
 
-# Where the workspace label sits relative to its cell.
+# Where the workspace header sits relative to its cell.
 #
-#   "up"   — label above each cell (Mission Control style).
-#   "down" — label below each cell (Stage Manager / dock style).
+#   "up"   — header above each cell (Mission Control style).
+#   "down" — header below each cell (Stage Manager / dock style).
+#
+# The header's size is automatic: it scales with the cell (fewer
+# workspaces → bigger cells → a taller header), so there is no
+# size knob to set.
 label-position = "up"
-
-# Workspace label font size in points. Clamped 8..32. The label
-# band height tracks this so larger labels reserve more space.
-label-size = 15
 
 # Background ScreenCaptureKit refresh cadence (seconds) that keeps
 # grid-view thumbnails warm so `--view=grid` paints immediately
@@ -94,15 +94,15 @@ thumbnail-refresh-seconds = 4
 #               where the window actually lives.
 #               Recommended default.
 #
-#   "mirror"  — preview at the window's own on-screen frame
-#               (position + size). Note: an inactive-workspace
-#               window is parked in a 1x41 corner sliver, so its
-#               mirror preview lands in that same sliver and is
-#               mostly off-screen. Pick this only if you know
-#               that's what you want.
+#   "mirror"  — full-size preview at the window's *would-be*
+#               on-screen frame: the spot it will occupy once you
+#               switch to its workspace. facet computes this from
+#               the pre-park position (float), the tile slot (bsp),
+#               or the full display (stack) — NOT the 1x41 corner
+#               sliver the window is currently parked in.
 #
 # Unknown values clamp to "popover".
-preview_mode = "popover"
+preview-mode = "popover"
 
 
 # -----------------------------------------------------------------
@@ -143,7 +143,7 @@ preview_mode = "popover"
 #     under `facet --debug`).
 #
 # Default (unset) = no scripts.
-# setupFiles = ["~/.config/facet/setup.sh"]
+# setup-files = ["~/.config/facet/setup.sh"]
 
 # Tiling (M5 Phase γ) is opt-in per workspace via the CLI; no
 # config key. Each WS defaults to "float" so existing users see
@@ -166,7 +166,7 @@ preview_mode = "popover"
 # manual `--toggle-float` is always authoritative once set.
 #
 # Per-WS mode is *runtime* state (not persisted in config); use
-# `setupFiles` above if you want a specific WS to come up in BSP
+# `setup-files` above if you want a specific WS to come up in BSP
 # at every launch.
 
 # -----------------------------------------------------------------

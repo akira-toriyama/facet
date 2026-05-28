@@ -64,7 +64,7 @@ final class StatusTests: XCTestCase {
         let out = snap.render()
         XCTAssertTrue(out.contains("backend: rift"))
         XCTAssertTrue(out.contains("theme: terminal"))
-        XCTAssertTrue(out.contains("default_view: tree"))
+        XCTAssertTrue(out.contains("default-view: tree"))
         XCTAssertTrue(out.contains("last error: (none)"))
         XCTAssertTrue(out.contains("timestamp: 2026-05-25T12:00:00Z"))
         XCTAssertTrue(out.contains("workspaces:\n  (none)"))
@@ -78,7 +78,7 @@ final class StatusTests: XCTestCase {
             workspaces: [],
             lastError: nil,
             timestamp: "ts")
-        XCTAssertTrue(snap.render().contains("default_view: (agent)"),
+        XCTAssertTrue(snap.render().contains("default-view: (agent)"),
                       "nil defaultView renders as (agent)")
     }
 

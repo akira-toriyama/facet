@@ -8,26 +8,17 @@ public struct GridConfig: Sendable {
     /// Number of columns. Clamped 1…12 at the boundary; out-of-range
     /// reads fall back to the default rather than throwing.
     public var cols: Int
-    /// Where the workspace label sits relative to its cell. Accepts
+    /// Where the workspace header sits relative to its cell. Accepts
     /// two strings: "up" (Mission Control convention, default) or
     /// "down" (Stage Manager / dock style).
     public var labelPosition: String
-    /// Label font size in points.
-    public var labelSize: CGFloat
 
     public init(cols: Int = 4,
-                labelPosition: String = "up",
-                labelSize: CGFloat = 15) {
+                labelPosition: String = "up") {
         // Clamp at construction so consumers don't repeat the check.
         self.cols = min(max(cols, 1), 12)
         self.labelPosition = (labelPosition == "down") ? "down" : "up"
-        self.labelSize = max(8, min(labelSize, 32))
     }
-
-    /// Total vertical band reserved per row for the label (font size
-    /// + a small breathing pad). Pre-computed since the grid layout
-    /// math reads it repeatedly.
-    public var labelBandHeight: CGFloat { labelSize + 7 }
 
     public static let standard = GridConfig()
 }

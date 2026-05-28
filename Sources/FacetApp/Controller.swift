@@ -200,7 +200,7 @@ final class Controller: NSObject {
         installConfigWatcher()
         installDisplayObserver()
         refresh()
-        // setupFiles fires AFTER DNC is listening + status file is
+        // setup-files fires AFTER DNC is listening + status file is
         // touched, so hooks can call `facet status` / `facet
         // --workspace=N` immediately without racing the server's
         // own readiness. Fire-and-forget; errors land in the
@@ -245,12 +245,12 @@ final class Controller: NSObject {
     ///
     /// Reload-on (memory facet-cli-surface N11):
     ///   - theme           → applyStyle live
-    ///   - preview_mode    → next hover-preview reads the new value
+    ///   - preview-mode    → next hover-preview reads the new value
     ///   - [workspaces]    → reflected in writeStatus (the live
     ///                       data-model overlay onto facet
     ///                       workspaces lands at Phase α impl)
     /// Reload-off (intentionally — restart required):
-    ///   - default_view, setupFiles
+    ///   - default-view, setup-files
     func reloadConfig() {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
@@ -259,7 +259,7 @@ final class Controller: NSObject {
         let newTheme = config.effectiveTheme
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
-            + "preview_mode=\(oldPrev)→\(newPrev)")
+            + "preview-mode=\(oldPrev)→\(newPrev)")
         if newTheme != oldTheme {
             applyStyle(newTheme)
         }
@@ -785,7 +785,7 @@ final class Controller: NSObject {
     /// secondary screen sits above the primary aren't handled
     /// here — the conversion uses the primary screen's height
     /// only. (Same behaviour as the pre-popover code; if it
-    /// matters, `tree.preview_mode = "popover"` sidesteps it.)
+    /// matters, `tree.preview-mode = "popover"` sidesteps it.)
     static func cgFrameToAppKit(_ r: CGRect) -> NSRect {
         let primaryH = (NSScreen.screens.first { $0.frame.origin == .zero }?
             .frame.height) ?? NSScreen.main?.frame.height ?? r.maxY
@@ -900,8 +900,7 @@ final class Controller: NSObject {
         gv.screenFrame = scr.frame
         gv.config = GridConfig(
             cols: config.effectiveGridCols,
-            labelPosition: config.effectiveGridLabelPosition,
-            labelSize: config.effectiveGridLabelSize)
+            labelPosition: config.effectiveGridLabelPosition)
         gv.onDismiss = { [weak self] in self?.hideGrid() }
         gv.onDrop = { [weak self, bk = backend] src, dst, _, id in
             guard src != dst else { return }
@@ -1006,13 +1005,10 @@ final class Controller: NSObject {
             case 36, 76:
                 gv.kbCommit();                             return nil
             case 49:
-                // Shift+Space = lift the WHOLE cell for swap (kb
-                // counterpart of mouse Shift-drag). Cmd+Space is
-                // reserved by Spotlight system-wide; Shift+Space
-                // has the same "modifier escalates Space's scope"
-                // feel without the system conflict.
-                if shift { gv.kbLiftWorkspace() } else { gv.kbLift() }
-                return nil
+                // Space lifts the selection — a window (move) or the
+                // header slot (whole-WS swap). Theme A: no Shift; Tab
+                // moves between the header and the windows.
+                gv.kbSpaceLift();                          return nil
             case 48:
                 gv.kbCycleWindow(forward: !shift);         return nil
             case 123: gv.kbMoveSelection(dx: -1, dy: 0);   return nil
@@ -1144,16 +1140,22 @@ final class Controller: NSObject {
         // didBecomeKey hook below — fall through to the full nav.
 
         // -- Normal keyboard nav --
+        // Theme A keyboard DnD: Space lifts the selected row (window
+        // = move, header = WS-swap); while lifted the arrow keys aim
+        // the drop target (kbMove/kbJumpWS redirect internally),
+        // Return/Space commits, Esc cancels the lift before exiting.
         switch e.keyCode {
-        case 53:      _exitActiveImpl(restore: true);    return true
-        case 36, 76:  sidebarView.kbActivate();          return true
+        case 53:      if sidebarView.kbCancelLift() { return true }
+                      _exitActiveImpl(restore: true);    return true
+        case 36, 76:  if sidebarView.kbCommitLift() { return true }
+                      sidebarView.kbActivate();          return true
         case 125:     sidebarView.kbMove(1);             return true
         case 126:     sidebarView.kbMove(-1);            return true
         case 124:     sidebarView.kbJumpWS(1);           return true
         case 123:     sidebarView.kbJumpWS(-1);          return true
         case 48:      sidebarView.kbJumpWS(shift ? -1 : 1)
                       return true
-        case 49:      sidebarView.kbContextMenu();       return true
+        case 49:      sidebarView.kbToggleLift();         return true
         default:      break
         }
         switch e.charactersIgnoringModifiers?.lowercased() {
@@ -1163,6 +1165,7 @@ final class Controller: NSObject {
         case "k":            sidebarView.kbMove(-1);     return true
         case "l":            sidebarView.kbJumpWS(1);    return true
         case "h":            sidebarView.kbJumpWS(-1);   return true
+        case "m":            sidebarView.kbContextMenu(); return true
         case "s":            enterSearch();              return true
         default:             return false
         }
