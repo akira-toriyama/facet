@@ -39,10 +39,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     // MARK: - State (delegated to catalog)
 
-    /// Self-managed workspace state. All mutations go through here
-    /// so the state machine stays pure and testable; this file
-    /// only applies the AX side-effects the catalog hands back.
+    /// Self-managed workspace state for the **currently active**
+    /// native macOS Space. All mutations go through here so the
+    /// state machine stays pure and testable; this file only
+    /// applies the AX side-effects the catalog hands back.
     private var catalog = WorkspaceCatalog()
+
+    /// Per-native-Space catalogs that aren't currently active.
+    /// facet keeps an independent set of virtual workspaces per
+    /// native macOS Space (memory: facet-per-native-space-ws). On a
+    /// Space switch the active `catalog` is parked here under its
+    /// Space id and the destination Space's catalog is swapped in
+    /// (lazily created on first visit). Window state is session-only
+    /// (facet never persists), so on restart each Space's catalog
+    /// rebuilds from its live windows.
+    private var parkedCatalogs: [UInt64: WorkspaceCatalog] = [:]
+
+    /// SkyLight id of the native Space `catalog` belongs to. `0`
+    /// when SkyLight is unavailable — then facet runs a single
+    /// shared catalog (pre-per-Space behaviour) and never swaps.
+    private var activeSpaceID: UInt64 = 0
 
     /// Snapshot of the last `workspaces()` build, returned as-is on
     /// the next call. Rebuilt every `refreshCatalog()` invocation.
@@ -91,8 +107,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         self.errorStream = AsyncStream { c in errC = c }
         self.errorContinuation = errC
 
+        // Seed the active native Space so the first refresh doesn't
+        // spuriously swap. 0 (SkyLight unavailable) → single shared
+        // catalog, never swaps.
+        self.activeSpaceID = Spaces.activeSpaceID()
+
         Log.debug("native: init workspaces="
-            + "\(config.effectiveWorkspaceList.count)")
+            + "\(config.effectiveWorkspaceList.count) "
+            + "space=\(activeSpaceID) "
+            + "spaceAware=\(Spaces.available)")
 
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
@@ -131,21 +154,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             MainActor.assumeIsolated { dObs.start() }
         }
 
-        // macOS Space switch observer. The post-switch
-        // enumeration includes the new Space's windows with
-        // `isOnscreen=true` — reconcile would otherwise see them
-        // as fresh user-opened windows and pile them into
-        // `activeIndex`. Flag refreshCatalog so it bulk-marks the
-        // current enumeration as pre-existing before evaluating
-        // any of them. See memory
-        // `facet-macos-spaces-coexistence`.
+        // macOS Space switch observer. Nudges a refresh so
+        // `refreshCatalog` re-reads the active native Space and
+        // swaps to that Space's catalog (per-native-Space WS,
+        // memory `facet-per-native-space-ws`). The poll loop would
+        // catch the switch within ~2 s anyway; this just makes it
+        // immediate.
         let nc = NSWorkspace.shared.notificationCenter
         spaceChangeToken = nc.addObserver(
             forName: NSWorkspace.activeSpaceDidChangeNotification,
             object: nil, queue: .main
         ) { [weak self, eventContinuation] _ in
             MainActor.assumeIsolated {
-                self?.spaceChangePending = true
                 // After the Space transition settles (~500 ms
                 // covers the swipe animation +
                 // `kCGWindowIsOnscreen` flip), nudge focus onto a
@@ -170,6 +190,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func handleSpaceChangeAutoFocus() {
         cliQueue.async { [weak self] in
             guard let self else { return }
+            // Ensure we're looking at the destination Space's
+            // catalog even if the poll-driven refresh hasn't run
+            // yet (both run on this serial queue, so this is safe).
+            self.swapCatalogIfSpaceChanged()
             if let cur = self.focusedWindow(),
                self.catalog.windowMap[cur] != nil {
                 return
@@ -215,6 +239,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// here — they go through `switchWorkspace` /
     /// `setLayoutMode` / `perform`.
     private func refreshCatalog() {
+        // Per-native-Space: if the user switched native macOS Spaces,
+        // park the current catalog and swap in the destination
+        // Space's. Done here (off-main, same context as every other
+        // catalog mutation) rather than from the main-thread Space
+        // observer, so catalog access stays single-threaded.
+        swapCatalogIfSpaceChanged()
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
@@ -223,17 +253,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // panels auto-float on first sight so they don't fight
         // the tiler.
         let autoFloat = detectAutoFloating(live: live)
-        // Space-change snapshot: mark every currently-enumerated
-        // ID as pre-existing BEFORE reconcile sees them. The
-        // post-switch enumeration includes the new macOS Space's
-        // windows with `isOnscreen=true`; without this flagging,
-        // reconcile would treat each as a fresh user-opened
-        // window and pile them into `activeIndex` (WS1).
-        // See memory `facet-macos-spaces-coexistence`.
-        if spaceChangePending {
-            spaceChangePending = false
-            catalog.markPreExisting(live.map(\.id))
-        }
         let result = catalog.reconcile(live: live,
                                        focused: focused,
                                        activeRect: rect,
@@ -276,10 +295,27 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// Set by the `activeSpaceDidChange` observer; consumed by
-    /// the next `refreshCatalog` to bulk-mark the post-switch
-    /// enumeration as pre-existing before reconcile evaluates it.
-    private var spaceChangePending = false
+    /// Park the active Space's catalog and swap in the destination
+    /// Space's (lazily created) when the user has switched native
+    /// macOS Spaces. No-op when SkyLight is unavailable
+    /// (`activeSpaceID` stays 0 → one shared catalog) or the Space
+    /// is unchanged. Called only from `refreshCatalog` so all
+    /// catalog access stays on a single thread. The destination
+    /// Space's windows are picked up by the normal reconcile that
+    /// follows (its on-screen windows enter that catalog's WS1);
+    /// other Spaces' windows read `isOnscreen=false` and are
+    /// ignored, so no cross-Space leakage occurs.
+    private func swapCatalogIfSpaceChanged() {
+        let live = Spaces.activeSpaceID()
+        guard live != 0, live != activeSpaceID else { return }
+        parkedCatalogs[activeSpaceID] = catalog
+        let restored = parkedCatalogs.removeValue(forKey: live)
+        catalog = restored ?? WorkspaceCatalog()
+        Log.debug("native: native-space \(activeSpaceID) -> \(live) "
+            + "(\(restored == nil ? "fresh" : "restored"), "
+            + "parked=\(parkedCatalogs.count))")
+        activeSpaceID = live
+    }
     /// Cleared after the first successful `refreshCatalog`. Used
     /// to bulk-mark the initial CGWindowList as pre-existing so
     /// off-screen windows alive at launch can't sneak in later.
