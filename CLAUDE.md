@@ -121,6 +121,20 @@ use:
   button), `Displays` (screen-containing-point), and
   `WindowEventObserver` (per-app AX subscription) all live here.
   New AX code goes here unless it's truly backend-specific.
+- **Per-native-Space workspaces** (memory
+  [[facet-per-native-space-ws]]): each native macOS Space keeps an
+  independent `WorkspaceCatalog`. `NativeAdapter` parks the active
+  catalog by Space id and swaps in the destination Space's in
+  `refreshCatalog`. The active Space id + Mission-Control ordinal
+  are read via **read-only** private SkyLight (`Spaces` in
+  `FacetAccessibility`: `SLSGetActiveSpace` /
+  `SLSCopyManagedDisplaySpaces`, dlsym-bound). **READ-only is the
+  rule** — facet never moves a window across Spaces (that needs
+  SIP-off; see [[native-window-hide-methods]] 手法4). SkyLight
+  unavailable → `activeSpaceID == 0` → one shared catalog
+  (pre-feature behaviour). `[space.N]` config keys by ordinal;
+  catalog state is session-only (never persisted), rebuilt from
+  live windows on restart.
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. The id keys the TCC grant
   and self-signed cert identity — don't change it.

@@ -60,6 +60,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// shared catalog (pre-per-Space behaviour) and never swaps.
     private var activeSpaceID: UInt64 = 0
 
+    /// 1-based Mission-Control ordinal of the active native Space
+    /// (user Spaces only). Selects the `[space.N]` workspace config;
+    /// `nil` → fall back to the global `[workspace]`. Refreshed on
+    /// every Space swap. May briefly go stale if the user reorders
+    /// Spaces in Mission Control without switching — a cosmetic
+    /// name/count mismatch only (memory: facet-per-native-space-ws).
+    private var activeSpaceOrdinal: Int?
+
     /// Snapshot of the last `workspaces()` build, returned as-is on
     /// the next call. Rebuilt every `refreshCatalog()` invocation.
     private var workspaceList: [Workspace] = []
@@ -111,10 +119,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // spuriously swap. 0 (SkyLight unavailable) → single shared
         // catalog, never swaps.
         self.activeSpaceID = Spaces.activeSpaceID()
+        self.activeSpaceOrdinal = Spaces.activeSpaceOrdinal()
 
         Log.debug("native: init workspaces="
-            + "\(config.effectiveWorkspaceList.count) "
-            + "space=\(activeSpaceID) "
+            + "\(config.effectiveWorkspaceList(forSpaceOrdinal: activeSpaceOrdinal).count) "
+            + "space=\(activeSpaceID) ordinal=\(activeSpaceOrdinal.map(String.init) ?? "-") "
             + "spaceAware=\(Spaces.available)")
 
         // AX permission is the foundation of every native-backend
@@ -280,7 +289,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             live: live,
             focused: displayFocus,
             activeRect: rect,
-            configured: config.effectiveWorkspaceList)
+            configured: config.effectiveWorkspaceList(
+                forSpaceOrdinal: activeSpaceOrdinal))
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
         // windows (Cmd+H'd apps, windows on other macOS Spaces,
         // minimized windows) as examined so a later
@@ -311,10 +321,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         parkedCatalogs[activeSpaceID] = catalog
         let restored = parkedCatalogs.removeValue(forKey: live)
         catalog = restored ?? WorkspaceCatalog()
-        Log.debug("native: native-space \(activeSpaceID) -> \(live) "
+        activeSpaceID = live
+        activeSpaceOrdinal = Spaces.activeSpaceOrdinal()
+        Log.debug("native: native-space -> \(live) "
+            + "ordinal=\(activeSpaceOrdinal.map(String.init) ?? "-") "
             + "(\(restored == nil ? "fresh" : "restored"), "
             + "parked=\(parkedCatalogs.count))")
-        activeSpaceID = live
     }
     /// Cleared after the first successful `refreshCatalog`. Used
     /// to bulk-mark the initial CGWindowList as pre-existing so
@@ -551,7 +563,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
-        let configured = config.effectiveWorkspaceList.map(\.index)
+        let configured = config.effectiveWorkspaceList(
+            forSpaceOrdinal: activeSpaceOrdinal).map(\.index)
         guard let plan = catalog.setActive(target,
                                            configuredIndexes: configured)
         else { return }
@@ -626,7 +639,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
         let target = index + 1
-        let configured = config.effectiveWorkspaceList.map(\.index)
+        let configured = config.effectiveWorkspaceList(
+            forSpaceOrdinal: activeSpaceOrdinal).map(\.index)
         let rect = activeDisplayRect()
         let outcome = catalog.moveWindow(id, to: target,
                                          configuredIndexes: configured,

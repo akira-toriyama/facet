@@ -97,9 +97,10 @@ so the overlay opens with real screenshots, not icon fallbacks.
 ## Status
 
 **Alpha** — native AX backend, no external dependency. Workspace
-switching, window park, BSP / stack tiling with AX-role
-auto-float, and display reconfigure handling all ship in the
-default build. `brew install akira-toriyama/tap/facet` is live.
+switching, independent workspaces per native macOS Space, window
+park, BSP / stack tiling with AX-role auto-float, and display
+reconfigure handling all ship in the default build.
+`brew install akira-toriyama/tap/facet` is live.
 
 | Milestone | Status |
 |---|---|
@@ -153,6 +154,11 @@ Frequently-touched keys:
 - `[layout] default_view` — `tree` / `grid`
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
+- `[space.N]` table — per-native-Space workspace names/count, where
+  `N` is the Space's Mission Control position. Each native macOS
+  Space gets its own independent workspaces automatically; a
+  `[space.N]` section just customises that Space's names. Spaces
+  without one fall back to `[workspace]`.
 - `[workspace] setupFiles = [...]` — array of executable script
   paths run once at startup, Vitest-style. See "Workspace setup
   hooks" below.

@@ -95,9 +95,9 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 ## ステータス
 
 **Alpha** — native AX backend、 外部依存なし。 workspace 切替 /
-window park (anchor) / BSP・stack tiling / AX role auto-float /
-display reconfigure 処理が全て default で動作。
-`brew install akira-toriyama/tap/facet` 稼働中。
+native macOS Space ごとの独立 workspace / window park (anchor) /
+BSP・stack tiling / AX role auto-float / display reconfigure 処理が
+全て default で動作。 `brew install akira-toriyama/tap/facet` 稼働中。
 
 | マイルストーン | 状態 |
 |---|---|
@@ -149,6 +149,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[layout] default_view` — `tree` / `grid`
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
+- `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
+  Mission Control 順の位置。 各 native macOS Space は自動で独立した
+  workspace 群を持ち、 `[space.N]` はその Space の名前を上書きするだけ。
+  セクション未定義の Space は `[workspace]` にフォールバック。
 - `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
   実行可能 script のパス配列（Vitest 流）。 詳細は下の
   「Workspace setup hooks」 を参照。

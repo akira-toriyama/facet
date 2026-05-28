@@ -39,6 +39,14 @@ public struct FacetConfig: Sendable {
     /// Read through `effectiveWorkspaceNames` for clamped values.
     public var workspaceNames: [Int: String] = [:]
 
+    /// Per-native-Space `[space.N]` workspace names. Outer key is the
+    /// native macOS Space ordinal (Mission Control order, 1-based,
+    /// user Spaces only); inner is the same `facet WS index -> name`
+    /// shape as `workspaceNames`. A native Space without a section
+    /// falls back to the global `[workspace]` list. See memory
+    /// `facet-per-native-space-ws`.
+    public var spaceWorkspaceNames: [Int: [Int: String]] = [:]
+
     /// External shell hooks invoked once at startup, after the
     /// backend has subscribed to events and the CLI DNC listener
     /// is live. Vitest-style: the user's "set things up the way I
@@ -148,6 +156,24 @@ public struct FacetConfig: Sendable {
             .map { ($0.key, $0.value) }
     }
 
+    /// Workspace list for a given native-Space ordinal (1-based,
+    /// Mission Control order). Returns the `[space.N]` config when
+    /// that Space has a non-empty section, else the global
+    /// `[workspace]` list. `nil` ordinal (SkyLight unavailable, or
+    /// single-space mode) → global list.
+    public func effectiveWorkspaceList(forSpaceOrdinal ordinal: Int?)
+        -> [(index: Int, name: String)]
+    {
+        guard let ordinal,
+              let names = spaceWorkspaceNames[ordinal]
+        else { return effectiveWorkspaceList }
+        let valid = names.filter { $0.key >= 1 }
+        guard !valid.isEmpty else { return effectiveWorkspaceList }
+        return valid
+            .sorted { $0.key < $1.key }
+            .map { ($0.key, $0.value) }
+    }
+
     // MARK: - Construction from parsed TOML
 
     public static func from(toml: [String: [String: TOMLValue]])
@@ -190,6 +216,22 @@ public struct FacetConfig: Sendable {
                 else { continue }
                 c.workspaceNames[idx] = name
             }
+        }
+        // [space.N] per-native-Space workspace names. The TOML
+        // parser flattens `[space.1]` to the section name "space.1";
+        // N is the native-Space ordinal (Mission Control order).
+        // Inline int keys are WS-index → name, same as [workspace].
+        for (sectionName, section) in toml
+        where sectionName.hasPrefix("space.") {
+            guard let ordinal = Int(sectionName.dropFirst("space.".count)),
+                  ordinal >= 1 else { continue }
+            var names: [Int: String] = [:]
+            for (key, value) in section {
+                guard let idx = Int(key), idx >= 1,
+                      case .string(let name) = value else { continue }
+                names[idx] = name
+            }
+            if !names.isEmpty { c.spaceWorkspaceNames[ordinal] = names }
         }
         return c
     }

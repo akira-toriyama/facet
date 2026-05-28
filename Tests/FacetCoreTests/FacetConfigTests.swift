@@ -127,6 +127,42 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
     }
 
+    // MARK: - Per-native-Space [space.N]
+
+    func testFromTOMLParsesPerSpaceSections() {
+        let parsed = parseTOMLSubset("""
+            [space.1]
+            1 = "dev"
+            2 = "build"
+
+            [space.2]
+            1 = "mail"
+            """)
+        let c = FacetConfig.from(toml: parsed)
+        XCTAssertEqual(c.spaceWorkspaceNames[1], [1: "dev", 2: "build"])
+        XCTAssertEqual(c.spaceWorkspaceNames[2], [1: "mail"])
+        XCTAssertNil(c.spaceWorkspaceNames[3])
+    }
+
+    func testEffectiveWorkspaceListForSpaceOrdinalFallsBack() {
+        var c = FacetConfig()
+        c.workspaceNames = [1: "g1", 2: "g2", 3: "g3"]   // global = 3
+        c.spaceWorkspaceNames = [1: [1: "a", 2: "b"]]    // space 1 = 2
+
+        // Configured ordinal → per-space list.
+        XCTAssertEqual(
+            c.effectiveWorkspaceList(forSpaceOrdinal: 1).map(\.name),
+            ["a", "b"])
+        // Unconfigured ordinal → global fallback.
+        XCTAssertEqual(
+            c.effectiveWorkspaceList(forSpaceOrdinal: 2).map(\.name),
+            ["g1", "g2", "g3"])
+        // nil ordinal (SkyLight unavailable / single-space) → global.
+        XCTAssertEqual(
+            c.effectiveWorkspaceList(forSpaceOrdinal: nil).map(\.index),
+            [1, 2, 3])
+    }
+
     func testEmptyTOMLYieldsAllDefaults() {
         let c = FacetConfig.from(toml: [:])
         XCTAssertNil(c.effectiveDefaultView)

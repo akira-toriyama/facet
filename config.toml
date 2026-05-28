@@ -168,3 +168,32 @@ preview_mode = "popover"
 # Per-WS mode is *runtime* state (not persisted in config); use
 # `setupFiles` above if you want a specific WS to come up in BSP
 # at every launch.
+
+# -----------------------------------------------------------------
+# Per-native-Space workspaces  [space.N]
+# -----------------------------------------------------------------
+# facet keeps an INDEPENDENT set of workspaces for each native macOS
+# Space. Switch native Spaces (Mission Control / Ctrl+arrow) and the
+# tree shows that Space's own facet workspaces; a window stays in the
+# Space it was opened on (facet never moves windows across Spaces).
+# This needs no config — it just works.
+#
+# Optionally give a specific native Space its own workspace names /
+# count with a `[space.N]` section, where N is the Space's position
+# in Mission Control order (1-based, user Spaces only — fullscreen
+# Spaces don't count). The body is `index = "name"`, identical to a
+# `[workspace]` mapping. A native Space without a section uses the
+# default 5 workspaces. Edits take effect on restart.
+#
+# Caveat: the mapping is by Mission Control position. Reordering your
+# Spaces re-points these sections (names/counts only — your windows
+# stay correctly scoped to their real Space).
+#
+#   [space.1]            # 1st native Space
+#   1 = "dev"
+#   2 = "build"
+#   3 = "logs"
+#
+#   [space.2]            # 2nd native Space
+#   1 = "mail"
+#   2 = "chat"

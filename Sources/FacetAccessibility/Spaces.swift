@@ -35,6 +35,7 @@ private func slSym(_ name: String) -> UnsafeMutableRawPointer? {
 
 private typealias ConnFn = @convention(c) () -> Int32
 private typealias ActiveSpaceFn = @convention(c) (Int32) -> UInt64
+private typealias CopySpacesFn = @convention(c) (Int32) -> Unmanaged<CFArray>?
 
 private let mainConnectionID: Int32? = {
     guard let s = slSym("SLSMainConnectionID") else { return nil }
@@ -44,6 +45,11 @@ private let mainConnectionID: Int32? = {
 private let getActiveSpaceFn: ActiveSpaceFn? = {
     guard let s = slSym("SLSGetActiveSpace") else { return nil }
     return unsafeBitCast(s, to: ActiveSpaceFn.self)
+}()
+
+private let copyManagedSpacesFn: CopySpacesFn? = {
+    guard let s = slSym("SLSCopyManagedDisplaySpaces") else { return nil }
+    return unsafeBitCast(s, to: CopySpacesFn.self)
 }()
 
 public enum Spaces {
@@ -61,5 +67,35 @@ public enum Spaces {
     /// the adapter log a one-time hint when the symbols are gone.
     public static var available: Bool {
         mainConnectionID != nil && getActiveSpaceFn != nil
+    }
+
+    /// 1-based position of the active Space among **user** Spaces
+    /// (`type == 0`, i.e. excluding fullscreen Spaces), in Mission
+    /// Control order across displays. This is the ordinal the user
+    /// thinks in ("native WS1 / WS2") and what `[space.N]` config
+    /// keys against. `nil` when SkyLight is unavailable or the
+    /// active Space can't be located in the managed list.
+    public static func activeSpaceOrdinal() -> Int? {
+        guard let cid = mainConnectionID, let copy = copyManagedSpacesFn
+        else { return nil }
+        let active = activeSpaceID()
+        guard active != 0,
+              let displays = copy(cid)?.takeRetainedValue()
+                as? [[String: Any]]
+        else { return nil }
+        var ordinal = 0
+        for display in displays {
+            let spaces = display["Spaces"] as? [[String: Any]] ?? []
+            for sp in spaces {
+                let type = (sp["type"] as? NSNumber)?.intValue ?? 0
+                guard type == 0 else { continue }   // skip fullscreen
+                ordinal += 1
+                if let id = (sp["id64"] as? NSNumber)?.uint64Value,
+                   id == active {
+                    return ordinal
+                }
+            }
+        }
+        return nil
     }
 }
