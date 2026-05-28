@@ -50,6 +50,16 @@ enum SkyLight {
         @convention(c) (Int32, CFArray, CFArray) -> Void
     typealias RemoveWindowsFromSpacesFn =
         @convention(c) (Int32, CFArray, CFArray) -> Void
+    // Alpha / order — caller-connection composited attributes. The
+    // architectural prediction is these only affect *your own*
+    // windows (the cid is the caller's WindowServer connection), so a
+    // cross-app target should no-op. Never actually exercised before.
+    typealias SetWindowAlphaFn =
+        @convention(c) (Int32, UInt32, Float) -> Int32
+    typealias GetWindowAlphaFn =
+        @convention(c) (Int32, UInt32, UnsafeMutablePointer<Float>) -> Int32
+    typealias OrderWindowFn =
+        @convention(c) (Int32, UInt32, Int32, UInt32) -> Int32
 
     nonisolated(unsafe) static let mainConnectionID: MainConnFn =
         sym("SLSMainConnectionID")
@@ -75,6 +85,12 @@ enum SkyLight {
         optSym("SLSAddWindowsToSpaces") ?? optSym("CGSAddWindowsToSpaces")
     nonisolated(unsafe) static let removeWindowsFromSpaces: RemoveWindowsFromSpacesFn? =
         optSym("SLSRemoveWindowsFromSpaces") ?? optSym("CGSRemoveWindowsFromSpaces")
+    nonisolated(unsafe) static let setWindowAlpha: SetWindowAlphaFn? =
+        optSym("SLSSetWindowAlpha") ?? optSym("CGSSetWindowAlpha")
+    nonisolated(unsafe) static let getWindowAlpha: GetWindowAlphaFn? =
+        optSym("SLSGetWindowAlpha") ?? optSym("CGSGetWindowAlpha")
+    nonisolated(unsafe) static let orderWindow: OrderWindowFn? =
+        optSym("SLSOrderWindow") ?? optSym("CGSOrderWindow")
 
     private static func sym<T>(_ name: String) -> T {
         guard let p = dlsym(handle, name) else {
@@ -694,12 +710,179 @@ func cmdCombinedSpace(_ cgID: CGWindowID, from: UInt64, to: UInt64) {
     }
 }
 
+// MARK: - Public-API verification helpers
+
+/// Composited alpha of a single window, read from the *public*
+/// CGWindowList (`kCGWindowAlpha`). This is the ground-truth check for
+/// whether `SLSSetWindowAlpha` actually took effect on the target —
+/// no eyeballing needed.
+func publicAlpha(_ cgID: CGWindowID) -> Double? {
+    let opt: CGWindowListOption = [.optionIncludingWindow]
+    guard let raw = CGWindowListCopyWindowInfo(opt, cgID) as? [[String: Any]]
+    else { return nil }
+    for w in raw where (w[kCGWindowNumber as String] as? CGWindowID) == cgID {
+        return w[kCGWindowAlpha as String] as? Double
+    }
+    return nil
+}
+
+/// True if the window still appears in the on-screen list. Used to
+/// detect whether `SLSOrderWindow(..., 0, ...)` (order-out) removed it.
+func isOnScreen(_ cgID: CGWindowID) -> Bool {
+    enumerateWindows().contains { $0.cgID == cgID }
+}
+
+// MARK: - Hide-probe commands (alpha / order — untested cross-app axes)
+
+/// Method Z, finally executed: `SLSSetWindowAlpha(cid, wid, 0.0)` on a
+/// *cross-app* window. Verifies via the public `kCGWindowAlpha` whether
+/// the composited alpha actually changed. The prediction (never run
+/// before) is no-op for windows not owned by the caller's connection.
+func cmdAlphaZero(_ cgID: CGWindowID) {
+    guard let setFn = SkyLight.setWindowAlpha else {
+        print("[alpha] SLSSetWindowAlpha / CGSSetWindowAlpha not found"); return
+    }
+    let cid = SkyLight.mainConnectionID()
+    let info = enumerateWindows().first { $0.cgID == cgID }
+    print("[alpha] cgID=\(cgID) owner=\(info?.owner ?? "?") name=\(info?.name ?? "")")
+    print("[alpha] caller connection id: \(cid)")
+    print("[alpha] BEFORE public kCGWindowAlpha = \(publicAlpha(cgID).map { "\($0)" } ?? "nil")")
+    if let getFn = SkyLight.getWindowAlpha {
+        var a: Float = -1
+        let rc = getFn(cid, cgID, &a)
+        print("[alpha] BEFORE SLSGetWindowAlpha rc=\(rc) alpha=\(a)")
+    }
+    let rc = setFn(cid, cgID, 0.0)
+    print("[alpha] SLSSetWindowAlpha(cid=\(cid), wid=\(cgID), 0.0) → rc=\(rc)")
+    Thread.sleep(forTimeInterval: 0.5)
+    print("[alpha] AFTER  public kCGWindowAlpha = \(publicAlpha(cgID).map { "\($0)" } ?? "nil")")
+    if let getFn = SkyLight.getWindowAlpha {
+        var a: Float = -1
+        let rc2 = getFn(cid, cgID, &a)
+        print("[alpha] AFTER  SLSGetWindowAlpha rc=\(rc2) alpha=\(a)")
+    }
+    let after = publicAlpha(cgID) ?? 1.0
+    print(after < 0.5
+          ? "[alpha] ✅ EFFECT — composited alpha dropped (window hidden/transparent)"
+          : "[alpha] ❌ NO EFFECT — composited alpha unchanged (cross-app no-op)")
+    print("[alpha] → OBSERVE 4s")
+    Thread.sleep(forTimeInterval: 4)
+    let rc3 = setFn(cid, cgID, 1.0)
+    print("[alpha] restore alpha=1.0 → rc=\(rc3)")
+}
+
+/// `SLSOrderWindow(cid, wid, 0, 0)` — order=0 removes the window from
+/// the screen ordering (yabai uses SLSOrderWindow for its window
+/// shuffling). Probes whether a non-Dock caller can order-out another
+/// app's window. Verified via the public on-screen list.
+func cmdOrderOut(_ cgID: CGWindowID) {
+    guard let orderFn = SkyLight.orderWindow else {
+        print("[order] SLSOrderWindow / CGSOrderWindow not found"); return
+    }
+    let cid = SkyLight.mainConnectionID()
+    let info = enumerateWindows().first { $0.cgID == cgID }
+    print("[order] cgID=\(cgID) owner=\(info?.owner ?? "?")")
+    print("[order] caller connection id: \(cid)")
+    print("[order] onScreen(before) = \(isOnScreen(cgID))")
+    let rc = orderFn(cid, cgID, 0, 0)   // 0 = remove from ordering
+    print("[order] SLSOrderWindow(cid, \(cgID), order=0, relativeTo=0) → rc=\(rc)")
+    Thread.sleep(forTimeInterval: 1)
+    let after = isOnScreen(cgID)
+    print("[order] onScreen(after)  = \(after)")
+    print(after
+          ? "[order] ❌ NO EFFECT — window still on-screen (cross-app no-op)"
+          : "[order] ✅ EFFECT — window removed from on-screen list")
+    print("[order] → OBSERVE 4s")
+    Thread.sleep(forTimeInterval: 4)
+    let rc2 = orderFn(cid, cgID, 1, 0)  // 1 = order above
+    print("[order] restore order=1 → rc=\(rc2)")
+}
+
+/// Residual probe flagged by research: `SLSSetWindowShape` with an
+/// empty region. Would clip the window to nothing if it worked. Sits
+/// behind the same connection-owner gate as alpha, so expected no-op;
+/// run for belt-and-suspenders completeness.
+func cmdShapeEmpty(_ cgID: CGWindowID) {
+    let h = SkyLight.handle
+    typealias NewRegionFn =
+        @convention(c) (UnsafePointer<CGRect>, UnsafeMutablePointer<UnsafeMutableRawPointer?>) -> Int32
+    typealias SetShapeFn =
+        @convention(c) (Int32, UInt32, Float, Float, UnsafeMutableRawPointer?) -> Int32
+    guard let np = dlsym(h, "CGSNewRegionWithRect") ?? dlsym(h, "SLSNewRegionWithRect"),
+          let sp = dlsym(h, "SLSSetWindowShape") ?? dlsym(h, "CGSSetWindowShape") else {
+        print("[shape] CGSNewRegionWithRect / SLSSetWindowShape not found"); return
+    }
+    let newRegion = unsafeBitCast(np, to: NewRegionFn.self)
+    let setShape = unsafeBitCast(sp, to: SetShapeFn.self)
+    let cid = SkyLight.mainConnectionID()
+    let info = enumerateWindows().first { $0.cgID == cgID }
+    print("[shape] cgID=\(cgID) owner=\(info?.owner ?? "?")  caller cid=\(cid)")
+    var emptyRect = CGRect.zero
+    var region: UnsafeMutableRawPointer? = nil
+    let rc1 = newRegion(&emptyRect, &region)
+    print("[shape] CGSNewRegionWithRect(zero) rc=\(rc1) region=\(region == nil ? "nil" : "ok")")
+    print("[shape] onScreen(before) = \(isOnScreen(cgID))")
+    let rc2 = setShape(cid, cgID, 0, 0, region)
+    print("[shape] SLSSetWindowShape(cid, \(cgID), 0, 0, emptyRegion) → rc=\(rc2)")
+    Thread.sleep(forTimeInterval: 1)
+    let after = isOnScreen(cgID)
+    print("[shape] onScreen(after)  = \(after)")
+    print(after
+          ? "[shape] ❌ NO EFFECT — window still on-screen (cross-app no-op)"
+          : "[shape] ✅ EFFECT — window clipped away")
+    print("[shape] (VM disposable; no restore attempted)")
+}
+
+// MARK: - TCC capability check
+
+/// Report whether the calling process currently has Accessibility and
+/// Screen Recording. Used to test the "does an explicit TCC grant
+/// change SkyLight's cross-app gate?" axis: run this, then re-run
+/// alpha-zero / order-out and see if the verdict changes.
+func cmdTccStatus() {
+    print("[tcc] AXIsProcessTrusted() = \(AXIsProcessTrusted())")
+    typealias BoolFn = @convention(c) () -> Bool
+    let h = dlopen(nil, RTLD_NOW)
+    if let p = h.flatMap({ dlsym($0, "CGPreflightScreenCaptureAccess") }) {
+        let fn = unsafeBitCast(p, to: BoolFn.self)
+        print("[tcc] CGPreflightScreenCaptureAccess() = \(fn())")
+    } else {
+        print("[tcc] CGPreflightScreenCaptureAccess symbol not found")
+    }
+    // Window names via CGWindowList are Screen-Recording-gated on
+    // 10.15+: if names are populated, SR is effectively granted to
+    // this process's TCC context.
+    let wins = enumerateWindows()
+    let named = wins.filter { !$0.name.isEmpty }.count
+    print("[tcc] windows with non-empty names = \(named)/\(wins.count)  (SR-gated; >0 ⟹ SR effectively granted)")
+    print("[tcc] sample names: \(wins.prefix(6).map { $0.name.isEmpty ? "—" : $0.name })")
+}
+
 // MARK: - Entry
+
+/// Optionally establish a real GUI (NSApplication) WindowServer
+/// connection before running a command, to test the "does being a GUI
+/// process change SkyLight's gate?" axis. Toggled with SPIKE_GUI=1 so
+/// every verb can be A/B'd headless vs GUI without a separate target.
+func bootGUIIfRequested() {
+    guard ProcessInfo.processInfo.environment["SPIKE_GUI"] == "1" else { return }
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    app.finishLaunching()
+    print("[gui] NSApplication initialized (.accessory), GUI connection established")
+}
 
 let args = Array(CommandLine.arguments.dropFirst())
 let cmd = args.first ?? "list"
 
-if !AXIsProcessTrusted() {
+bootGUIIfRequested()
+
+// AX trust is only needed by the AX-mutating verbs. SLS-only probes
+// (alpha / order / spaces / move) use the WindowServer connection, not
+// AX, so don't gate them behind the Accessibility prompt.
+let axVerbs: Set<String> = ["park-1px", "clamp-probe", "park-min",
+                            "park-zero", "park-app", "focus"]
+if axVerbs.contains(cmd), !AXIsProcessTrusted() {
     print("⚠️  Accessibility NOT granted to this terminal.")
     print("    System Settings → Privacy & Security → Accessibility →")
     print("    add your terminal app, then re-run.")
@@ -736,6 +919,23 @@ case "park-tag":
         print("usage: native-spike park-tag <cgWindowID>"); exit(2)
     }
     cmdParkTag(id)
+case "tcc-status":
+    cmdTccStatus()
+case "shape-empty":
+    guard args.count >= 2, let id = UInt32(args[1]) else {
+        print("usage: native-spike shape-empty <cgWindowID>"); exit(2)
+    }
+    cmdShapeEmpty(id)
+case "alpha-zero":
+    guard args.count >= 2, let id = UInt32(args[1]) else {
+        print("usage: native-spike alpha-zero <cgWindowID>  (SLSSetWindowAlpha 0; SPIKE_GUI=1 for GUI conn)"); exit(2)
+    }
+    cmdAlphaZero(id)
+case "order-out":
+    guard args.count >= 2, let id = UInt32(args[1]) else {
+        print("usage: native-spike order-out <cgWindowID>  (SLSOrderWindow remove; SPIKE_GUI=1 for GUI conn)"); exit(2)
+    }
+    cmdOrderOut(id)
 case "focus":
     guard args.count >= 2, let id = UInt32(args[1]) else {
         print("usage: native-spike focus <cgWindowID>"); exit(2)
