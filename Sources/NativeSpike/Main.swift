@@ -833,6 +833,47 @@ func cmdShapeEmpty(_ cgID: CGWindowID) {
     print("[shape] (VM disposable; no restore attempted)")
 }
 
+/// Measure how long an AX minimize takes to actually remove the window
+/// from the on-screen list — a proxy for the genie animation duration.
+/// Run with different system settings (Dock mineffect / Reduce Motion)
+/// to see if the animation can be killed (which would revive minimize
+/// as an instant, no-sliver hide).
+func cmdMinTimed(_ cgID: CGWindowID) {
+    guard let (info, win, _) = resolve(cgID) else { return }
+    print("[min-timed] \(info.owner) cgID=\(cgID)")
+    let t0 = Date()
+    let setOK = axSetMinimized(win, true)
+    print("[min-timed] set kAXMinimized=true ok=\(setOK)")
+    var elapsed = 0.0
+    while elapsed < 4.0 {
+        if !isOnScreen(cgID) { break }
+        Thread.sleep(forTimeInterval: 0.008)
+        elapsed = Date().timeIntervalSince(t0)
+    }
+    let gone = !isOnScreen(cgID)
+    print(String(format: "[min-timed] time-to-leave-on-screen = %.3f s  gone=%@",
+                 elapsed, gone ? "true" : "false"))
+    Thread.sleep(forTimeInterval: 0.8)
+    let r = axSetMinimized(win, false)
+    print("[min-timed] unminimize ok=\(r)")
+}
+
+/// Read-only alpha probe: report a window's composited alpha without
+/// changing anything. Used to independently confirm whether yabai's
+/// Dock-SA `--opacity 0` actually dropped a cross-app window's alpha
+/// (contrast with our no-SA test where it stayed 1.0).
+func cmdGetAlpha(_ cgID: CGWindowID) {
+    let cid = SkyLight.mainConnectionID()
+    let info = enumerateWindows().first { $0.cgID == cgID }
+    print("[get-alpha] cgID=\(cgID) owner=\(info?.owner ?? "?")")
+    print("[get-alpha] public kCGWindowAlpha = \(publicAlpha(cgID).map { "\($0)" } ?? "nil")")
+    if let getFn = SkyLight.getWindowAlpha {
+        var a: Float = -1
+        let rc = getFn(cid, cgID, &a)
+        print("[get-alpha] SLSGetWindowAlpha rc=\(rc) alpha=\(a)")
+    }
+}
+
 // MARK: - TCC capability check
 
 /// Report whether the calling process currently has Accessibility and
@@ -921,6 +962,16 @@ case "park-tag":
     cmdParkTag(id)
 case "tcc-status":
     cmdTccStatus()
+case "min-timed":
+    guard args.count >= 2, let id = UInt32(args[1]) else {
+        print("usage: native-spike min-timed <cgWindowID>"); exit(2)
+    }
+    cmdMinTimed(id)
+case "get-alpha":
+    guard args.count >= 2, let id = UInt32(args[1]) else {
+        print("usage: native-spike get-alpha <cgWindowID>"); exit(2)
+    }
+    cmdGetAlpha(id)
 case "shape-empty":
     guard args.count >= 2, let id = UInt32(args[1]) else {
         print("usage: native-spike shape-empty <cgWindowID>"); exit(2)
