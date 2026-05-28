@@ -133,6 +133,17 @@ struct WorkspaceCatalog {
     /// focus to a now-missing window.
     private(set) var lastFocusedOnLeave: [Int: WindowID] = [:]
 
+    /// IDs that have been observed `isOnscreen=true` once but not
+    /// yet committed to `windowMap`. Reconcile requires **two
+    /// consecutive on-screen observations** before adding so a
+    /// transient cross-Space visibility flip during a macOS
+    /// Space-switch animation doesn't get mistaken for a genuine
+    /// new window. Cleared when the window goes off-screen, the
+    /// catalog leaves the facet Space, or the window enters
+    /// `windowMap` for real. See memory
+    /// `facet-macos-spaces-coexistence`.
+    private(set) var pendingAddCandidates: Set<WindowID> = []
+
     /// IDs reconcile has decided NOT to auto-manage on a later
     /// `isOnscreen` flip. Populated two ways:
     ///   1. **Bulk-marked as pre-existing** via `markPreExisting`
@@ -180,7 +191,8 @@ struct WorkspaceCatalog {
     mutating func reconcile(live: [Window],
                                    focused: WindowID? = nil,
                                    activeRect: CGRect = .zero,
-                                   autoFloat: Set<WindowID> = [])
+                                   autoFloat: Set<WindowID> = [],
+                                   requireConfirm: Bool = false)
         -> ReconcileResult
     {
         let liveByID = Dictionary(uniqueKeysWithValues:
@@ -195,6 +207,22 @@ struct WorkspaceCatalog {
         // left it.
         let goneIDs = windowMap.keys.filter { !liveIDs.contains($0) }
         for id in goneIDs { forgetWindow(id) }
+        // "Are we on a macOS Space that holds at least one window
+        // facet already manages?" If not, suppress auto-add so a
+        // window the user opens while parked on an unrelated Space
+        // (e.g. open Finder after switching to Space 2) doesn't
+        // slide into `activeIndex` and pollute the user's facet
+        // tree. The catalog has no public way to know its own
+        // Space membership without dipping into private SkyLight
+        // APIs, so this heuristic uses the visibility of an
+        // already-managed window as a proxy: if one of ours is
+        // on-screen, the user is on "our" Space. Empty-catalog
+        // bootstrap is exempt — facet has to be able to pick up
+        // its first batch of windows.
+        let onFacetSpace = windowMap.keys.contains { id in
+            liveByID[id]?.isOnscreen == true
+        }
+        let allowAutoAdd = windowMap.isEmpty || onFacetSpace
         var added = 0
         for (id, w) in liveByID {
             if let existing = windowMap[id] {
@@ -209,13 +237,47 @@ struct WorkspaceCatalog {
             // startup, etc.). Stay out of `windowMap` even if
             // the OS later flips them on-screen.
             if examinedIDs.contains(id) { continue }
+            // Off-Space new window: see `allowAutoAdd` above.
+            // Don't mark examined either — when the user comes
+            // back to facet's Space and the window is moved here
+            // (or any managed window becomes visible alongside
+            // it), the next reconcile will add it.
+            if !allowAutoAdd {
+                pendingAddCandidates.remove(id)
+                continue
+            }
             // First-sight off-screen: defer the decision. Don't
             // mark examined yet — newly-opened windows (e.g.
             // Chrome's first window post-launch) can briefly
             // report `isOnscreen=false` during creation, and a
             // premature examined-mark here would lock them out
             // for good.
-            guard w.isOnscreen else { continue }
+            guard w.isOnscreen else {
+                pendingAddCandidates.remove(id)
+                continue
+            }
+            // Two-tick gate. A window must be seen `isOnscreen=
+            // true` on TWO consecutive reconciles before joining
+            // `windowMap`. This swallows the transient cross-
+            // Space visibility flip that happens during a
+            // macOS-Space switch animation: a Finder window
+            // opened on Space N briefly reads `isOnscreen=true`
+            // when the user swipes back to Space 1, but settles
+            // to `false` by the next reconcile — without the
+            // gate it would pile into `activeIndex`. Cost: a
+            // genuine new window takes one extra ~2 s poll
+            // before showing up in the sidebar.
+            //
+            // Tests that don't simulate the poll loop opt out
+            // via `requireConfirm: false` and get the old
+            // single-call commit behaviour.
+            if requireConfirm,
+               !pendingAddCandidates.contains(id)
+            {
+                pendingAddCandidates.insert(id)
+                continue
+            }
+            pendingAddCandidates.remove(id)
             windowMap[id] = WindowSlot(
                 workspace: activeIndex, pid: w.pid)
             examinedIDs.insert(id)
@@ -263,6 +325,7 @@ struct WorkspaceCatalog {
         detachFromLayouts(id)
         clearLeaveFocus(of: id)
         examinedIDs.remove(id)
+        pendingAddCandidates.remove(id)
     }
 
     /// Clear all hide-state bookkeeping for `id` without

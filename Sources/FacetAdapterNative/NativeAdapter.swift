@@ -202,7 +202,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let result = catalog.reconcile(live: live,
                                        focused: focused,
                                        activeRect: rect,
-                                       autoFloat: autoFloat)
+                                       autoFloat: autoFloat,
+                                       requireConfirm: true)
         if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
@@ -214,15 +215,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             focused: focused,
             activeRect: rect,
             configured: config.effectiveWorkspaceList)
-        // Bootstrap snapshot: after the very first reconcile
-        // populates `windowMap` with the initially-visible
-        // windows, lock every other live ID (Cmd+H'd, other
-        // macOS Space, minimized to Dock) as pre-existing so a
-        // later `isOnscreen` flip doesn't sweep them into
-        // `activeIndex`.
+        // Bootstrap snapshot: lock OFF-SCREEN pre-existing
+        // windows (Cmd+H'd apps, windows on other macOS Spaces,
+        // minimized windows) as examined so a later
+        // `isOnscreen` flip doesn't sweep them into
+        // `activeIndex`. On-screen windows are intentionally
+        // skipped — they go through the catalog's 2-tick
+        // confirmation gate and join `windowMap` normally.
         if !didBootstrap {
             didBootstrap = true
-            catalog.markPreExisting(live.map(\.id))
+            catalog.markPreExisting(
+                live.lazy.filter { !$0.isOnscreen }.map(\.id))
         }
     }
 
