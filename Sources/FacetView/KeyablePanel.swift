@@ -9,6 +9,16 @@
 import AppKit
 
 public final class KeyablePanel: NSPanel {
-    public override var canBecomeKey: Bool { true }
+    /// The panel may become key ONLY when explicitly entering keyboard
+    /// nav (`--active`), which sets this true via `PanelHost.makeKey()`.
+    /// A plain tree-row click must NOT make the panel key: if it did,
+    /// facet's own panel would hold the key window and no public-AX call
+    /// could move the keyboard focus to the clicked window of an
+    /// already-frontmost app — that was the same-app focus bug. (This is
+    /// exactly why AeroSpace, which has no key-grabbing panel, can focus
+    /// same-app windows with plain public AX and facet previously
+    /// couldn't.)
+    public var wantsKey = false
+    public override var canBecomeKey: Bool { wantsKey }
     public override var canBecomeMain: Bool { true }
 }

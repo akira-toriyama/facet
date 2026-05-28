@@ -88,16 +88,27 @@ public enum AX {
             activate(pid: window.pid)
             return false
         }
-        // Order matters for multi-window apps: bring the app
-        // frontmost first via AX, then make THIS window main, then
-        // raise it last so it ends on top.
-        AXUIElementSetAttributeValue(
-            app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        // Precise focus, public AX only: mark the target main, raise it,
+        // then activate the owning app. Works for same-app / same-WS
+        // focus because facet's tree panel never grabs key on a click
+        // (KeyablePanel.canBecomeKey is gated to explicit kb-nav entry) —
+        // if it held key, no public-AX call could re-key another app's
+        // window; that was the same-app focus bug. AeroSpace works the
+        // same way and has no key-grabbing panel.
+        //
+        // KNOWN LIMITATION (deferred): after a workspace switch the
+        // keyboard focus can stay "pending" until the next real HID
+        // event — the user nudging the mouse commits it. Synthetic
+        // mouse-moves don't commit (only a click does), and we keep this
+        // path public-AX-only by choice, so cross-WS focus may need a
+        // tiny mouse move to start typing. Revisit separately.
         AXUIElementSetAttributeValue(
             w, kAXMainAttribute as CFString, kCFBooleanTrue)
-        AXUIElementSetAttributeValue(
-            w, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         AXUIElementPerformAction(w, kAXRaiseAction as CFString)
+        NSRunningApplication(processIdentifier: pid_t(window.pid))?
+            .activate(options: [.activateIgnoringOtherApps])
+        Log.debug("focus applied main+raise+activate "
+            + "pid=\(window.pid) wsid=\(window.id.serverID)")
         return true
     }
 

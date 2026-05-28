@@ -129,9 +129,11 @@ final class Controller: NSObject {
             }
         }
         panelHost.searchBar.field.delegate = searchDelegate
-        // Passive keyboard nav: when the panel acquires key status
-        // (e.g. user clicks it without --active), enable kbNav so
-        // arrow keys / s / Enter all work; relinquish on resign.
+        // Keep kbNav in sync with the panel's key status. The panel
+        // only becomes key via explicit kb-nav entry (`--active` →
+        // makeKey); a plain tree-row click no longer grabs key (that
+        // would break same-app focus — see KeyablePanel). So this now
+        // fires on the --active enter/exit, not on every click.
         panelHost.onKeyChanged = { [weak self] isKey in
             self?.handlePanelKeyChange(isKey: isKey)
         }
