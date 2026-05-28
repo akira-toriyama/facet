@@ -147,8 +147,44 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         ) { [weak self, eventContinuation] _ in
             MainActor.assumeIsolated {
                 self?.spaceChangePending = true
+                // After the Space transition settles (~500 ms
+                // covers the swipe animation +
+                // `kCGWindowIsOnscreen` flip), nudge focus onto a
+                // managed window visible on the new Space — but
+                // only when the current frontmost isn't already
+                // one of ours, so the user explicitly landing on
+                // Finder / a non-managed app is left alone.
+                // Handles the "switch back to Space N, no window
+                // focused" gap the user reported.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    MainActor.assumeIsolated {
+                        self?.handleSpaceChangeAutoFocus()
+                    }
+                }
             }
             eventContinuation.yield(.refreshNeeded)
+        }
+    }
+
+    /// See the comment on the Space-change observer in `init`.
+    @MainActor
+    private func handleSpaceChangeAutoFocus() {
+        cliQueue.async { [weak self] in
+            guard let self else { return }
+            if let cur = self.focusedWindow(),
+               self.catalog.windowMap[cur] != nil {
+                return
+            }
+            let live = self.enumerateCGWindows()
+            let visibleManaged = live.filter {
+                $0.isOnscreen
+                    && self.catalog.windowMap[$0.id] != nil
+            }
+            guard let pick = visibleManaged.predictedFocus()
+            else { return }
+            Log.debug("native: spaceChange autoFocus "
+                + "pick=\(pick.id.serverID) app=\(pick.appName)")
+            Focus.assert(pick, backend: self)
         }
     }
 
