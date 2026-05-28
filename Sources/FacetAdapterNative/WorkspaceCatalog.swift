@@ -403,11 +403,7 @@ struct WorkspaceCatalog {
                                  in rect: CGRect = .zero) -> String {
         let normalised = mode.lowercased()
         layoutModes[n1Based] = normalised
-        let members = windowMap
-            .filter { $0.value.workspace == n1Based
-                && !floatingWindows.contains($0.key) }
-            .map(\.key)
-            .sorted { $0.serverID < $1.serverID }
+        let members = nonFloatingMembers(of: n1Based)
         switch normalised {
         case "bsp":
             var tree = LayoutTree()
@@ -550,6 +546,32 @@ struct WorkspaceCatalog {
         guard mode(of: n1Based) == "bsp",
               let tree = layoutTrees[n1Based] else { return [:] }
         return tree.frames(in: rect)
+    }
+
+    /// Non-floating windows of `n1Based`, sorted by `serverID` for a
+    /// stable, deterministic order. Shared by `setMode` (tree / stack
+    /// seeding) and the stateless layout-engine path so both agree on
+    /// "which windows, in what order".
+    func nonFloatingMembers(of n1Based: Int) -> [WindowID] {
+        windowMap
+            .filter { $0.value.workspace == n1Based
+                && !floatingWindows.contains($0.key) }
+            .map(\.key)
+            .sorted { $0.serverID < $1.serverID }
+    }
+
+    /// Frames from the registered stateless `LayoutEngine` for
+    /// `n1Based`'s mode, or empty when the mode isn't a registered
+    /// engine (bsp / stack / float). The engine is pure; this hands
+    /// it the WS's stable member order + the rect to carve.
+    func engineFrames(for n1Based: Int,
+                             in rect: CGRect) -> [WindowID: CGRect] {
+        guard let engine = LayoutRegistry.engine(named: mode(of: n1Based))
+        else { return [:] }
+        return engine.frames(order: nonFloatingMembers(of: n1Based),
+                             focused: nil,
+                             params: LayoutParams(),
+                             in: rect)
     }
 
     /// Resolve the cached pid for a window, or nil if it's not in
@@ -711,6 +733,10 @@ struct WorkspaceCatalog {
             let stackSet: Set<WindowID> = (m == "stack")
                 ? Set(stackOrders[entry.index] ?? [])
                 : []
+            let engineF: [WindowID: CGRect] =
+                LayoutRegistry.engine(named: m) != nil
+                ? engineFrames(for: entry.index, in: activeRect)
+                : [:]
             let wins = (byWS[entry.index] ?? []).map { w in
                 Window(id: w.id, pid: w.pid, appName: w.appName,
                        title: w.title,
@@ -720,6 +746,7 @@ struct WorkspaceCatalog {
                            for: w, isActiveWS: isActive,
                            mode: m, tileFrames: tileF,
                            stackSet: stackSet,
+                           engineFrames: engineF,
                            activeRect: activeRect),
                        isOnscreen: w.isOnscreen)
             }
@@ -753,6 +780,7 @@ struct WorkspaceCatalog {
                               mode m: String,
                               tileFrames: [WindowID: CGRect],
                               stackSet: Set<WindowID>,
+                              engineFrames: [WindowID: CGRect],
                               activeRect: CGRect) -> CGRect?
     {
         if isActiveWS { return w.frame }
@@ -766,6 +794,12 @@ struct WorkspaceCatalog {
             return stackSet.contains(w.id)
                 ? activeRect : preParkFrame(for: w)
         default:
+            // Stateless layout engine (monocle, …): the frame the
+            // window will occupy once its WS is active. Empty map →
+            // float mode → fall back to the pre-park position.
+            if !engineFrames.isEmpty {
+                return engineFrames[w.id] ?? preParkFrame(for: w)
+            }
             return preParkFrame(for: w)
         }
     }
