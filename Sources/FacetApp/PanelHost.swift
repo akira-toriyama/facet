@@ -27,7 +27,7 @@ final class PanelHost: NSObject {
 
     // MARK: - Chrome
 
-    let panel: NSPanel
+    let panel: KeyablePanel
     private let effect: NSVisualEffectView
     private let scroll: NSScrollView
     private let bgView = NSView()
@@ -162,11 +162,15 @@ final class PanelHost: NSObject {
 
     /// Make the panel key (used by `--active` keyboard-nav mode).
     /// Controller handles NSApp activation policy around this call.
+    /// `wantsKey` gates `canBecomeKey`, so this is the ONLY path that
+    /// lets the panel take key — a plain click never does.
     func makeKey() {
+        panel.wantsKey = true
         panel.makeKeyAndOrderFront(nil)
     }
 
     func resignKey() {
+        panel.wantsKey = false
         panel.makeFirstResponder(nil)
     }
 
