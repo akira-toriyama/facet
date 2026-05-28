@@ -119,7 +119,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // spuriously swap. 0 (SkyLight unavailable) → single shared
         // catalog, never swaps.
         self.activeSpaceID = Spaces.activeSpaceID()
-        self.activeSpaceOrdinal = Spaces.activeSpaceOrdinal()
+        self.activeSpaceOrdinal = Spaces.activeSpaceOrdinal(for: activeSpaceID)
 
         Log.debug("native: init workspaces="
             + "\(config.effectiveWorkspaceList(forSpaceOrdinal: activeSpaceOrdinal).count) "
@@ -337,7 +337,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let restored = parkedCatalogs.removeValue(forKey: live)
         catalog = restored ?? WorkspaceCatalog()
         activeSpaceID = live
-        activeSpaceOrdinal = Spaces.activeSpaceOrdinal()
+        activeSpaceOrdinal = Spaces.activeSpaceOrdinal(for: live)
         Log.debug("native: native-space -> \(live) "
             + "ordinal=\(activeSpaceOrdinal.map(String.init) ?? "-") "
             + "(\(restored == nil ? "fresh" : "restored"), "

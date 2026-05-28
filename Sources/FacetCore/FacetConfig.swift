@@ -144,16 +144,8 @@ public struct FacetConfig: Sendable {
     /// `facet-workspace-model` N2.2 = no upper bound). Adapters
     /// build their workspace state from this list.
     public var effectiveWorkspaceList: [(index: Int, name: String)] {
-        let valid = workspaceNames
-            .filter { $0.key >= 1 }
-        if valid.isEmpty {
-            return (1...Self.defaultWorkspaceCount).map {
-                ($0, "")
-            }
-        }
-        return valid
-            .sorted { $0.key < $1.key }
-            .map { ($0.key, $0.value) }
+        Self.sortedSlots(workspaceNames)
+            ?? (1...Self.defaultWorkspaceCount).map { ($0, "") }
     }
 
     /// Workspace list for a given native-Space ordinal (1-based,
@@ -165,13 +157,22 @@ public struct FacetConfig: Sendable {
         -> [(index: Int, name: String)]
     {
         guard let ordinal,
-              let names = spaceWorkspaceNames[ordinal]
+              let names = spaceWorkspaceNames[ordinal],
+              let list = Self.sortedSlots(names)
         else { return effectiveWorkspaceList }
+        return list
+    }
+
+    /// Clamp + order a raw `index → name` map into `(index, name)`
+    /// slots: drop keys < 1, sort ascending. `nil` when nothing
+    /// valid remains (lets callers fall back). Shared by the global
+    /// and per-Space workspace-list accessors.
+    private static func sortedSlots(_ names: [Int: String])
+        -> [(index: Int, name: String)]?
+    {
         let valid = names.filter { $0.key >= 1 }
-        guard !valid.isEmpty else { return effectiveWorkspaceList }
-        return valid
-            .sorted { $0.key < $1.key }
-            .map { ($0.key, $0.value) }
+        guard !valid.isEmpty else { return nil }
+        return valid.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
 
     /// Whether facet manages the native Space at `ordinal`.

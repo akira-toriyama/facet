@@ -63,26 +63,29 @@ public enum Spaces {
         return f(cid)
     }
 
-    /// Whether the SkyLight active-space read resolved at all. Lets
-    /// the adapter log a one-time hint when the symbols are gone.
+    /// Whether the SkyLight active-space symbols resolved. Surfaced
+    /// in the adapter's init debug line so a future OS change that
+    /// removes them is visible in the log (facet then falls back to
+    /// a single shared catalog).
     public static var available: Bool {
         mainConnectionID != nil && getActiveSpaceFn != nil
     }
 
-    /// 1-based position of the active Space among **user** Spaces
+    /// 1-based position of `activeID` among **user** Spaces
     /// (`type == 0`, i.e. excluding fullscreen Spaces), in Mission
     /// Control order across displays. This is the ordinal the user
     /// thinks in ("native WS1 / WS2") and what `[space.N]` config
-    /// keys against. `nil` when SkyLight is unavailable or the
-    /// active Space can't be located in the managed list.
-    public static func activeSpaceOrdinal() -> Int? {
-        guard let cid = mainConnectionID, let copy = copyManagedSpacesFn
-        else { return nil }
-        let active = activeSpaceID()
-        guard active != 0,
+    /// keys against. Takes the already-known active id (callers have
+    /// just read it) to avoid a redundant `SLSGetActiveSpace`. `nil`
+    /// when SkyLight is unavailable or `activeID` isn't in the
+    /// managed list.
+    public static func activeSpaceOrdinal(for activeID: UInt64) -> Int? {
+        guard activeID != 0, let cid = mainConnectionID,
+              let copy = copyManagedSpacesFn,
               let displays = copy(cid)?.takeRetainedValue()
                 as? [[String: Any]]
         else { return nil }
+        let active = activeID
         var ordinal = 0
         for display in displays {
             let spaces = display["Spaces"] as? [[String: Any]] ?? []
