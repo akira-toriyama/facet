@@ -253,7 +253,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Space's. Done here (off-main, same context as every other
         // catalog mutation) rather than from the main-thread Space
         // observer, so catalog access stays single-threaded.
-        swapCatalogIfSpaceChanged()
+        let swapped = swapCatalogIfSpaceChanged()
         // Unmanaged native desktop (no `[space.N]` in opt-in mode):
         // facet stays completely hands-off — adopt no windows, park
         // nothing, and return an empty workspace list so the
@@ -288,6 +288,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "total=\(live.count)")
             applyLayout(workspace: catalog.activeIndex, rect: rect)
         }
+        // Safety check (log-only): just landed on this native desktop
+        // — verify the active WS's tiled windows are where we expect.
+        if swapped { verifyActiveWorkspace() }
         if result.removed > 0 { recentCloseAt = Date() }
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
@@ -330,9 +333,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// follows (its on-screen windows enter that catalog's WS1);
     /// other Spaces' windows read `isOnscreen=false` and are
     /// ignored, so no cross-Space leakage occurs.
-    private func swapCatalogIfSpaceChanged() {
+    @discardableResult
+    private func swapCatalogIfSpaceChanged() -> Bool {
         let live = Spaces.activeSpaceID()
-        guard live != 0, live != activeSpaceID else { return }
+        guard live != 0, live != activeSpaceID else { return false }
         parkedCatalogs[activeSpaceID] = catalog
         let restored = parkedCatalogs.removeValue(forKey: live)
         catalog = restored ?? WorkspaceCatalog()
@@ -342,6 +346,57 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             + "ordinal=\(activeSpaceOrdinal.map(String.init) ?? "-") "
             + "(\(restored == nil ? "fresh" : "restored"), "
             + "parked=\(parkedCatalogs.count))")
+        return true
+    }
+
+    /// Post-native-Space-switch safety check — **LOG ONLY** (no
+    /// heal yet; observing first). Reads back the active WS's tiled
+    /// windows and logs any whose AX frame drifted from the layout
+    /// facet expects — a silent AX restore/tile failure, or the OS
+    /// nudging a window. Float windows are skipped (user-placed);
+    /// non-top stack members are skipped (parked, not "visible").
+    /// Active WS only, runs only right after a Space swap, off-main
+    /// → negligible cost — "a bit of insurance". Memory:
+    /// `facet-per-native-space-ws`.
+    private func verifyActiveWorkspace() {
+        let ws = catalog.activeIndex
+        let mode = catalog.mode(of: ws)
+        guard mode == "bsp" || mode == "stack" else {
+            Log.debug("native: verify WS \(ws) skipped (mode=\(mode))")
+            return
+        }
+        let rect = activeDisplayRect()
+        let frames = catalog.tiledFrames(for: ws, in: rect)
+        let stackTop = catalog.stackOrder(of: ws).first
+        var checked = 0, drift = 0
+        for (id, slot) in catalog.windowMap where slot.workspace == ws {
+            let expected: CGRect? = (mode == "bsp")
+                ? frames[id]
+                : (id == stackTop ? rect : nil)  // stack: only top is visible
+            guard let exp = expected, !catalog.isFloating(id),
+                  let ax = AXGeom.window(for: CGWindowID(id.serverID),
+                                         pid: pid_t(slot.pid)),
+                  let pos = AXGeom.position(ax), let size = AXGeom.size(ax)
+            else { continue }
+            checked += 1
+            let off = max(abs(pos.x - exp.origin.x), abs(pos.y - exp.origin.y),
+                          abs(size.width - exp.width),
+                          abs(size.height - exp.height))
+            if off > 4 {
+                drift += 1
+                Log.line("native: verify WS \(ws) DRIFT wsid=\(id.serverID) "
+                    + "actual=(\(Int(pos.x)),\(Int(pos.y)) "
+                    + "\(Int(size.width))×\(Int(size.height))) "
+                    + "expected=(\(Int(exp.origin.x)),\(Int(exp.origin.y)) "
+                    + "\(Int(exp.width))×\(Int(exp.height)))")
+            }
+        }
+        if drift > 0 {
+            Log.line("native: post-switch verify WS \(ws): "
+                + "\(drift)/\(checked) drifted (log-only, not healed)")
+        } else {
+            Log.debug("native: post-switch verify WS \(ws): \(checked) OK")
+        }
     }
     /// Cleared after the first successful `refreshCatalog`. Used
     /// to bulk-mark the initial CGWindowList as pre-existing so
