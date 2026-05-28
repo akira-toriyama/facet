@@ -68,8 +68,8 @@ matches how rift / aerospace operate today.
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (default 1×41 px) + `minimize` (option), CLI = `facet --workspace=N`. Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
-| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Shipped 2026-05-26**: anchor hide / minimize hide / closeWindow + windowMenu Close + setupFiles startup hook | rift `wm/window`, yabai window mgmt |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet --workspace=N`. Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **β** | window move across workspaces; off-screen park/unpark; closeWindow; persistence (external sh hook). **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close + setupFiles startup hook | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
 | **ε** | `FacetAdapterRift` retire; native becomes the only backend. **Frozen + shipped 2026-05-27 (v2.0.0 major bump)**: rift module deleted, `FACET_BACKEND` env var removed (kept as warning hint only), `WindowBackend` protocol preserved for unit-test stub seam. M5 completes here. | — |
@@ -104,11 +104,13 @@ is the index. **Do not relitigate** without explicit grill round.
   Space, 2 dimensions). macOS Space co-use discouraged but not
   rejected. Window-unit management (not app-rules). Default 5 WS,
   dynamic add/remove via external `add_workspace.sh` + hot reload.
-- **Hide methods**: 7 candidates evaluated, only `anchor` (1×41 px
-  corner park) + `minimize` (Dock genie) adopted. Config:
-  `[workspace] hide_method = "anchor" | "minimize"`. Default
-  `anchor` (instant switching). True hide (MC/Cmd-Tab disappearance)
-  is impossible in public API — out of scope for facet.
+- **Hide method**: 7 candidates evaluated; only `anchor` (1×41 px
+  corner park) is used — instant, no animation, recoverable from
+  Mission Control. `minimize` (Dock genie) was trialed then
+  dropped (the genie animation makes workspace switching feel
+  slow); no config knob remains, `anchor` is unconditional. True
+  hide (MC/Cmd-Tab disappearance) is impossible in public API —
+  out of scope for facet.
 - **CLI surface**: `--workspace=N` switch, `window --move-to=N`
   move, `--reload` explicit + auto FSEvents watcher, `status` for
   state dump. TOML atomic write enforced in shipped templates.
@@ -160,7 +162,7 @@ not relitigate** without explicit grill round.
   tree-computed frames; floating windows restore from
   `originalPosition` per existing hide flow.
 - **Stack mode**: focused window fills the display; others are
-  parked via the configured `hide_method`. `cycleStackNext` /
+  parked at the anchor sliver. `cycleStackNext` /
   `cycleStackPrev` actions move focus; a new window in a stack
   WS becomes the focused / top member.
 - **Layout state**: `LayoutTree` value type in
@@ -179,7 +181,7 @@ not relitigate** without explicit grill round.
   are out of γ.1 scope; tree pathfinding adds enough complexity
   to deserve its own increment.
 - **Mode change**: smooth migration — `toggleStack` from BSP
-  parks all but focused (via `hide_method`); the reverse
+  parks all but focused (at the anchor sliver); the reverse
   re-inserts members in focus order via auto-balance. **Default
   mode for a new WS = `"float"`** (not `"bsp"`) so existing
   users see no surprise behaviour; opt-in per WS via

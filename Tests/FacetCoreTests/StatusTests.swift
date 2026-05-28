@@ -11,7 +11,6 @@ final class StatusTests: XCTestCase {
             backend: "rift",
             theme: "terminal",
             defaultView: "tree",
-            hideMethod: "anchor",
             workspaces: [
                 .init(index: 1, name: "dev",
                       active: true, windowCount: 3),
@@ -35,7 +34,6 @@ final class StatusTests: XCTestCase {
             backend: "stub",
             theme: "cute",
             defaultView: nil,
-            hideMethod: "minimize",
             workspaces: [
                 .init(index: 1, name: "main",
                       active: true, windowCount: 5),
@@ -60,7 +58,6 @@ final class StatusTests: XCTestCase {
             backend: "rift",
             theme: "terminal",
             defaultView: "tree",
-            hideMethod: "anchor",
             workspaces: [],
             lastError: nil,
             timestamp: "2026-05-25T12:00:00Z")
@@ -68,7 +65,6 @@ final class StatusTests: XCTestCase {
         XCTAssertTrue(out.contains("backend: rift"))
         XCTAssertTrue(out.contains("theme: terminal"))
         XCTAssertTrue(out.contains("default_view: tree"))
-        XCTAssertTrue(out.contains("hide_method: anchor"))
         XCTAssertTrue(out.contains("last error: (none)"))
         XCTAssertTrue(out.contains("timestamp: 2026-05-25T12:00:00Z"))
         XCTAssertTrue(out.contains("workspaces:\n  (none)"))
@@ -79,7 +75,6 @@ final class StatusTests: XCTestCase {
             backend: "rift",
             theme: "system",
             defaultView: nil,
-            hideMethod: "anchor",
             workspaces: [],
             lastError: nil,
             timestamp: "ts")
@@ -92,7 +87,6 @@ final class StatusTests: XCTestCase {
             backend: "rift",
             theme: "terminal",
             defaultView: "grid",
-            hideMethod: "anchor",
             workspaces: [
                 .init(index: 1, name: "dev",
                       active: true, windowCount: 1),
@@ -117,7 +111,6 @@ final class StatusTests: XCTestCase {
             backend: "rift",
             theme: "terminal",
             defaultView: "tree",
-            hideMethod: "anchor",
             workspaces: [],
             lastError: "Window 7: AX permission failed",
             timestamp: "ts")

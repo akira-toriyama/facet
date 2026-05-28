@@ -32,10 +32,6 @@ public struct FacetConfig: Sendable {
     public var treePreviewMode: String?     // "popover" | "mirror"
 
     // [workspace]
-    /// How to hide non-active-workspace windows on switch.
-    /// See memory [[native-window-hide-methods]] for the choice rationale.
-    public var hideMethod: String?          // "anchor" | "minimize"
-
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
     /// Keys are 1-indexed integers matching what the user types
     /// into `facet --workspace=N`. Empty string values are
@@ -100,20 +96,12 @@ public struct FacetConfig: Sendable {
         return TimeInterval(max(1, min(60, raw)))
     }
 
-    /// `"anchor"` (default) — instant 1×41 px corner park.
-    /// `"minimize"` — AX `kAXMinimized`, Dock genie animation.
-    /// Unknown / unset → `"anchor"`. Case-insensitive.
-    public var effectiveHideMethod: String {
-        let raw = (hideMethod ?? "anchor").lowercased()
-        return ["anchor", "minimize"].contains(raw) ? raw : "anchor"
-    }
-
     /// `"popover"` (default) — small thumbnail next to the source
     /// row, capped + auto-flipped to stay on-screen.
-    /// `"mirror"` — preview at the window's own on-screen frame
-    /// (the pre-bug behaviour). Best paired with `hide_method =
-    /// "minimize"`; with `"anchor"` the preview lands in the same
-    /// 1×41 corner sliver the window itself occupies.
+    /// `"mirror"` — preview at the window's own on-screen frame.
+    /// Note: a parked window sits in the 1×41 corner sliver, so a
+    /// mirror preview of an inactive-WS window lands in that same
+    /// sliver and is mostly off-screen.
     /// Unknown / unset → `"popover"`. Case-insensitive.
     public var effectiveTreePreviewMode: String {
         let raw = (treePreviewMode ?? "popover").lowercased()
@@ -189,15 +177,12 @@ public struct FacetConfig: Sendable {
             c.treePreviewMode = s
         }
         // [workspace]
-        if case .string(let s)? = toml["workspace"]?["hide_method"] {
-            c.hideMethod = s
-        }
         if case .stringArray(let xs)? = toml["workspace"]?["setupFiles"] {
             c.setupFiles = xs
         }
         // [workspace] inline mapping (e.g. `1 = "dev"`). Any int
         // key inside the section that isn't a known meta-field
-        // (`hide_method` etc.) is treated as a workspace name slot.
+        // (`setupFiles` etc.) is treated as a workspace name slot.
         if let section = toml["workspace"] {
             for (key, value) in section {
                 guard let idx = Int(key),

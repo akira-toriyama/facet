@@ -95,8 +95,8 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 ## ステータス
 
 **Alpha** — native AX backend、 外部依存なし。 workspace 切替 /
-window park (anchor / minimize) / BSP・stack tiling / AX role
-auto-float / display reconfigure 処理が全て default で動作。
+window park (anchor) / BSP・stack tiling / AX role auto-float /
+display reconfigure 処理が全て default で動作。
 `brew install akira-toriyama/tap/facet` 稼働中。
 
 | マイルストーン | 状態 |
@@ -105,7 +105,7 @@ auto-float / display reconfigure 処理が全て default で動作。
 | M2 — tree + grid view 動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor / minimize hide、 closeWindow、 setupFiles | ✅ |
+| M5 Phase β — anchor hide、 closeWindow、 setupFiles | ✅ |
 | M5 Phase γ — BSP + stack tiling、 AX-role auto-float、 tiling CLI | ✅ |
 | M5 Phase δ — display reconfigure | ✅ |
 | M5 Phase ε — native sole backend (v2.0.0) | ✅ |
@@ -147,8 +147,6 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 - `[appearance] theme` — `terminal` (default) / `cute` / `system`
 - `[layout] default_view` — `tree` / `grid`
-- `[workspace] hide_method` — `anchor` (default、 1×41 px corner park、
-  即座) / `minimize` (Dock genie、 見栄え良いが遅い)。
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
 - `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
@@ -225,13 +223,13 @@ facet window --cycle-stack=next|prev # stack の次 / 前メンバーへ循環
 facet --workspace=N               # workspace N に切替 (1-indexed)
 facet window --move-to=N          # focus 中の window を WS N へ
 facet status                      # スナップショット: backend /
-                                  # hide_method / workspaces /
+                                  # theme / workspaces /
                                   # lastError / timestamp
 
 # Server 制御
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # config.toml 再読込 + 反映
-                                  # (theme / hide_method / [workspaces])
+                                  # (theme / preview_mode / [workspaces])
 facet --quit                      # server 終了
 facet --debug                     # verbose log (stderr +
                                   # /tmp/facet.log、 server-mode)

@@ -95,14 +95,11 @@ thumbnail-refresh-seconds = 4
 #               Recommended default.
 #
 #   "mirror"  — preview at the window's own on-screen frame
-#               (position + size). Useful with hide_method =
-#               "minimize" (windows keep their pre-minimize frame
-#               in AX, so the preview shows where they'll reappear).
-#               With hide_method = "anchor" (default) the window
-#               is parked in a 1x41 corner sliver — the mirror
-#               preview lands in that same sliver and is mostly
-#               off-screen. Pick this only if you know that's
-#               what you want.
+#               (position + size). Note: an inactive-workspace
+#               window is parked in a 1x41 corner sliver, so its
+#               mirror preview lands in that same sliver and is
+#               mostly off-screen. Pick this only if you know
+#               that's what you want.
 #
 # Unknown values clamp to "popover".
 preview_mode = "popover"
@@ -113,30 +110,15 @@ preview_mode = "popover"
 # -----------------------------------------------------------------
 [workspace]
 
-# How facet hides the windows of a workspace you're not currently
-# looking at. macOS public APIs cannot truly remove a window from
-# the screen, so each method below is a different tradeoff between
-# instant switching, visual cleanliness, and crash safety.
-#
-#   "anchor"   — park each window at a 1×41 px sliver in the
-#                bottom-right corner (rift / AeroSpace's approach).
-#                Instant. No animation. Still appears in Mission
-#                Control (handy if facet crashes — you can pull
-#                windows back). Tiny sliver is visible at the corner.
-#                Recommended default. The 41 px is macOS's enforced
-#                title-bar guarantee — can't go smaller via public APIs.
-#
-#   "minimize" — AX kAXMinimized. Window goes to the Dock with the
-#                genie animation. Cleaner visually but slower; window
-#                vanishes from Mission Control. Crash-safe (recover
-#                from Dock). Best when "really hide this away" matters
-#                more than instant switching.
-#
-# True hide (gone from Mission Control + Cmd-Tab) is impossible
-# via macOS public APIs — facet stays inside that contract.
-#
-# Unknown values clamp to "anchor".
-hide_method = "anchor"
+# facet hides the windows of a workspace you're not currently
+# looking at by parking each one at a 1×41 px sliver in the
+# bottom-right corner (rift / AeroSpace's approach). It's instant,
+# has no animation, and the windows still appear in Mission Control
+# so you can pull them back if facet ever crashes. The 41 px is
+# macOS's enforced title-bar guarantee — public APIs can't park a
+# window smaller, and true hide (gone from Mission Control +
+# Cmd-Tab) is impossible via public APIs. facet stays inside that
+# contract.
 
 # External shell-hook setup scripts, run once at startup AFTER
 # facet's CLI listener (DNC) is live so the script can immediately
