@@ -1,12 +1,12 @@
 // External shell-hook runner — invokes each path in
-// `config.toml`'s `[workspace] setupFiles = [...]` once at startup,
+// `config.toml`'s `[workspace] setup-files = [...]` once at startup,
 // in declared order, fire-and-forget after spawn.
 //
 // Why this exists
 //
 //   Architecture.md Phase α frozen decisions: facet does NOT
 //   persist workspace assignments itself ("Persistence: not in
-//   facet. External sh hook via `setupFiles` config key
+//   facet. External sh hook via `setup-files` config key
 //   (Vitest-style)"). The hook is the user's escape hatch to
 //   recreate their preferred layout on launch — they write a
 //   script that uses the normal `facet --workspace=N` and
@@ -51,14 +51,14 @@ public enum SetupRunner {
     ) {
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else {
-            onError("setupFiles: \(path) — file not found")
+            onError("setup-files: \(path) — file not found")
             return
         }
         // `isExecutableFile` is a perms check, not a filetype one;
         // a non-executable script gets a clearer error here than
         // the opaque NSPosixError from Process.run.
         guard fm.isExecutableFile(atPath: path) else {
-            onError("setupFiles: \(path) — not executable "
+            onError("setup-files: \(path) — not executable "
                 + "(chmod +x?)")
             return
         }
@@ -85,7 +85,7 @@ public enum SetupRunner {
         }
         proc.terminationHandler = { p in
             if p.terminationStatus != 0 {
-                onError("setupFiles: \(path) exited "
+                onError("setup-files: \(path) exited "
                     + "\(p.terminationStatus)")
             } else {
                 Log.debug("setup: \(path) done")
@@ -96,7 +96,7 @@ public enum SetupRunner {
             Log.debug("setup: spawned \(path) pid="
                 + "\(proc.processIdentifier)")
         } catch {
-            onError("setupFiles: \(path) — spawn failed: "
+            onError("setup-files: \(path) — spawn failed: "
                 + "\(error.localizedDescription)")
         }
     }

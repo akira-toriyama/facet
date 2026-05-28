@@ -96,7 +96,7 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
         var lines: [String] = []
         lines.append("backend: \(backend)")
         lines.append("theme: \(theme)")
-        lines.append("default_view: \(defaultView ?? "(agent)")")
+        lines.append("default-view: \(defaultView ?? "(agent)")")
         lines.append("workspaces:")
         if workspaces.isEmpty {
             lines.append("  (none)")

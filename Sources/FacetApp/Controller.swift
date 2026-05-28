@@ -200,7 +200,7 @@ final class Controller: NSObject {
         installConfigWatcher()
         installDisplayObserver()
         refresh()
-        // setupFiles fires AFTER DNC is listening + status file is
+        // setup-files fires AFTER DNC is listening + status file is
         // touched, so hooks can call `facet status` / `facet
         // --workspace=N` immediately without racing the server's
         // own readiness. Fire-and-forget; errors land in the
@@ -245,12 +245,12 @@ final class Controller: NSObject {
     ///
     /// Reload-on (memory facet-cli-surface N11):
     ///   - theme           → applyStyle live
-    ///   - preview_mode    → next hover-preview reads the new value
+    ///   - preview-mode    → next hover-preview reads the new value
     ///   - [workspaces]    → reflected in writeStatus (the live
     ///                       data-model overlay onto facet
     ///                       workspaces lands at Phase α impl)
     /// Reload-off (intentionally — restart required):
-    ///   - default_view, setupFiles
+    ///   - default-view, setup-files
     func reloadConfig() {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
@@ -259,7 +259,7 @@ final class Controller: NSObject {
         let newTheme = config.effectiveTheme
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
-            + "preview_mode=\(oldPrev)→\(newPrev)")
+            + "preview-mode=\(oldPrev)→\(newPrev)")
         if newTheme != oldTheme {
             applyStyle(newTheme)
         }
@@ -785,7 +785,7 @@ final class Controller: NSObject {
     /// secondary screen sits above the primary aren't handled
     /// here — the conversion uses the primary screen's height
     /// only. (Same behaviour as the pre-popover code; if it
-    /// matters, `tree.preview_mode = "popover"` sidesteps it.)
+    /// matters, `tree.preview-mode = "popover"` sidesteps it.)
     static func cgFrameToAppKit(_ r: CGRect) -> NSRect {
         let primaryH = (NSScreen.screens.first { $0.frame.origin == .zero }?
             .frame.height) ?? NSScreen.main?.frame.height ?? r.maxY

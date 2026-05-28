@@ -368,7 +368,7 @@ public final class SidebarView: NSView {
     /// - `windowFrame` — the window's own backend frame in Quartz
     ///   coords (mirror mode), or `nil` if the backend hasn't
     ///   reported one. The caller picks between anchor and frame
-    ///   based on the `tree.preview_mode` config.
+    ///   based on the `tree.preview-mode` config.
     ///
     /// Empty = no preview. A window row → 1 item; a workspace
     /// header → every window of that workspace, all sharing the

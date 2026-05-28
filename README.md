@@ -70,7 +70,7 @@ Both views share the same backend and the same theme
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
 | Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel — position persists |
 | Right-click (tree) | context menu — window actions / workspace layout picker |
-| Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview_mode` for full-size at the would-be on-screen frame |
+| Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
 | Drag a thumb to another cell (grid) | move that window to that workspace |
@@ -136,7 +136,7 @@ reconfigure handling all ship in the default build.
 | M2 — tree + grid views working | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor hide, closeWindow, setupFiles | ✅ |
+| M5 Phase β — anchor hide, closeWindow, setup-files | ✅ |
 | M5 Phase γ — BSP + stack tiling, AX-role auto-float, tiling CLI | ✅ |
 | M5 Phase δ — display reconfigure | ✅ |
 | M5 Phase ε — native sole backend (v2.0.0) | ✅ |
@@ -178,8 +178,8 @@ edit the file to make a change stick.
 
 Frequently-touched keys:
 
-- `[appearance] theme` — `terminal` (default) / `cute` / `system`
-- `[layout] default_view` — `tree` / `grid`
+- `theme` (top-level) — `terminal` (default) / `cute` / `system`
+- `default-view` (top-level) — `tree` / `grid`
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `--workspace=N`).
 - `[space.N]` table — per-native-Space workspace names/count, where
@@ -188,14 +188,14 @@ Frequently-touched keys:
   automatically. With **any** `[space.N]` present it's **opt-in**:
   facet manages only the Spaces that have a section; a Space without
   one is left untouched (windows as-is, panel hidden there).
-- `[workspace] setupFiles = [...]` — array of executable script
+- `[workspace] setup-files = [...]` — array of executable script
   paths run once at startup, Vitest-style. See "Workspace setup
   hooks" below.
 
 ### Workspace setup hooks
 
 facet itself never persists window-to-workspace assignments. The
-`setupFiles` config key lets your own scripts recreate whatever
+`setup-files` config key lets your own scripts recreate whatever
 layout you want on launch — they fire **after** facet's CLI
 listener is up, so they can immediately call `facet status` /
 `facet --workspace=N` / `facet window --move-to=N` like any other
@@ -203,7 +203,7 @@ hotkey would.
 
 ```toml
 [workspace]
-setupFiles = ["~/.config/facet/setup.sh"]
+setup-files = ["~/.config/facet/setup.sh"]
 ```
 
 ```sh
@@ -272,7 +272,7 @@ facet status                      # snapshot: backend, theme,
 # Server controls
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # re-read config.toml + apply
-                                  # (theme / preview_mode / [workspaces])
+                                  # (theme / preview-mode / [workspaces])
 facet --quit                      # terminate the running server
 facet --debug                     # verbose log to stderr +
                                   # /tmp/facet.log (server-mode)

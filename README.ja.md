@@ -38,7 +38,7 @@ native 実装、 外部依存なし。 レイヤー図は
 
 facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
 ワークスペースを 2 種類の view で見せる。 起動時にどちらを表示する
-かは [`config.toml`](config.toml) の `default_view` で選ぶ:
+かは [`config.toml`](config.toml) の `default-view` で選ぶ:
 
 - **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
   その windows をツリー表示。 行クリックで focus、 window 行ドラッグで
@@ -68,7 +68,7 @@ swap (ワークスペースの枠自体は動かないので hotkey 番号は不
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
 | 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 — 位置は永続 |
 | 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
-| window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview_mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
+| window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
 | サムネイルを別セルにドラッグ (grid) | その window を移動 |
@@ -132,7 +132,7 @@ BSP・stack tiling / AX role auto-float / display reconfigure 処理が
 | M2 — tree + grid view 動作 | ✅ |
 | M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
 | M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor hide、 closeWindow、 setupFiles | ✅ |
+| M5 Phase β — anchor hide、 closeWindow、 setup-files | ✅ |
 | M5 Phase γ — BSP + stack tiling、 AX-role auto-float、 tiling CLI | ✅ |
 | M5 Phase δ — display reconfigure | ✅ |
 | M5 Phase ε — native sole backend (v2.0.0) | ✅ |
@@ -172,8 +172,8 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 よく触る key:
 
-- `[appearance] theme` — `terminal` (default) / `cute` / `system`
-- `[layout] default_view` — `tree` / `grid`
+- `theme` (トップレベル) — `terminal` (default) / `cute` / `system`
+- `default-view` (トップレベル) — `tree` / `grid`
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
@@ -181,14 +181,14 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
   セクションのある Space だけ facet が管理し、 無い Space は完全に
   ノータッチ（窓そのまま・パネル非表示）。
-- `[workspace] setupFiles = [...]` — 起動時に 1 度だけ実行される
+- `[workspace] setup-files = [...]` — 起動時に 1 度だけ実行される
   実行可能 script のパス配列（Vitest 流）。 詳細は下の
   「Workspace setup hooks」 を参照。
 
 ### Workspace setup hooks
 
 facet 自身は window-to-workspace の割当を永続化しない。
-`setupFiles` config key で、 起動時に「あなたの好みのレイアウト」
+`setup-files` config key で、 起動時に「あなたの好みのレイアウト」
 を再構築する script を自分で書ける — script は facet の CLI
 listener が立ち上がった **後** に発火するので、 そのまま
 `facet status` / `facet --workspace=N` / `facet window --move-to=N`
@@ -196,7 +196,7 @@ listener が立ち上がった **後** に発火するので、 そのまま
 
 ```toml
 [workspace]
-setupFiles = ["~/.config/facet/setup.sh"]
+setup-files = ["~/.config/facet/setup.sh"]
 ```
 
 ```sh
@@ -261,7 +261,7 @@ facet status                      # スナップショット: backend /
 # Server 制御
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # config.toml 再読込 + 反映
-                                  # (theme / preview_mode / [workspaces])
+                                  # (theme / preview-mode / [workspaces])
 facet --quit                      # server 終了
 facet --debug                     # verbose log (stderr +
                                   # /tmp/facet.log、 server-mode)

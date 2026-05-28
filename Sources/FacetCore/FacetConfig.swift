@@ -95,10 +95,11 @@ public struct FacetConfig: Sendable {
 
     /// `"popover"` (default) — small thumbnail next to the source
     /// row, capped + auto-flipped to stay on-screen.
-    /// `"mirror"` — preview at the window's own on-screen frame.
-    /// Note: a parked window sits in the 1×41 corner sliver, so a
-    /// mirror preview of an inactive-WS window lands in that same
-    /// sliver and is mostly off-screen.
+    /// `"mirror"` — full-size preview at the window's *would-be*
+    /// on-screen frame (where it lands after switching to its WS),
+    /// computed by the adapter's `wouldBeFrame` from the pre-park
+    /// position / tile slot / full display — NOT the 1×41 parked
+    /// sliver.
     /// Unknown / unset → `"popover"`. Case-insensitive.
     public var effectiveTreePreviewMode: String {
         let raw = (treePreviewMode ?? "popover").lowercased()
@@ -188,7 +189,7 @@ public struct FacetConfig: Sendable {
     {
         var c = FacetConfig()
         // Top-level
-        if case .string(let s)? = toml[""]?["default_view"] {
+        if case .string(let s)? = toml[""]?["default-view"] {
             c.defaultView = s
         }
         if case .string(let s)? = toml[""]?["theme"] {
@@ -203,16 +204,16 @@ public struct FacetConfig: Sendable {
             c.thumbnailRefreshSeconds = n
         }
         // [tree]
-        if case .string(let s)? = toml["tree"]?["preview_mode"] {
+        if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
         }
         // [workspace]
-        if case .stringArray(let xs)? = toml["workspace"]?["setupFiles"] {
+        if case .stringArray(let xs)? = toml["workspace"]?["setup-files"] {
             c.setupFiles = xs
         }
         // [workspace] inline mapping (e.g. `1 = "dev"`). Any int
         // key inside the section that isn't a known meta-field
-        // (`setupFiles` etc.) is treated as a workspace name slot.
+        // (`setup-files` etc.) is treated as a workspace name slot.
         if let section = toml["workspace"] {
             for (key, value) in section {
                 guard let idx = Int(key),
