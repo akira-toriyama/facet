@@ -1144,16 +1144,22 @@ final class Controller: NSObject {
         // didBecomeKey hook below — fall through to the full nav.
 
         // -- Normal keyboard nav --
+        // Theme A keyboard DnD: Space lifts the selected row (window
+        // = move, header = WS-swap); while lifted the arrow keys aim
+        // the drop target (kbMove/kbJumpWS redirect internally),
+        // Return/Space commits, Esc cancels the lift before exiting.
         switch e.keyCode {
-        case 53:      _exitActiveImpl(restore: true);    return true
-        case 36, 76:  sidebarView.kbActivate();          return true
+        case 53:      if sidebarView.kbCancelLift() { return true }
+                      _exitActiveImpl(restore: true);    return true
+        case 36, 76:  if sidebarView.kbCommitLift() { return true }
+                      sidebarView.kbActivate();          return true
         case 125:     sidebarView.kbMove(1);             return true
         case 126:     sidebarView.kbMove(-1);            return true
         case 124:     sidebarView.kbJumpWS(1);           return true
         case 123:     sidebarView.kbJumpWS(-1);          return true
         case 48:      sidebarView.kbJumpWS(shift ? -1 : 1)
                       return true
-        case 49:      sidebarView.kbContextMenu();       return true
+        case 49:      sidebarView.kbToggleLift();         return true
         default:      break
         }
         switch e.charactersIgnoringModifiers?.lowercased() {
@@ -1163,6 +1169,7 @@ final class Controller: NSObject {
         case "k":            sidebarView.kbMove(-1);     return true
         case "l":            sidebarView.kbJumpWS(1);    return true
         case "h":            sidebarView.kbJumpWS(-1);   return true
+        case "m":            sidebarView.kbContextMenu(); return true
         case "s":            enterSearch();              return true
         default:             return false
         }

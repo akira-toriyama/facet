@@ -85,6 +85,17 @@ public final class SidebarView: NSView {
     private var dropWS: Int?
     private var dragLabel: String?
     private var lastDropWS: Int?           // redraw band only when this changes
+    // Header-swap drag: source WS while a workspace header is being
+    // dragged onto another (mouseDown loop `mode == 3`). Parallel to
+    // `draggingWid`; drop trades the two workspaces' contents.
+    private var draggingWS: Int?
+    // Keyboard DnD: the row lifted with Space (window = move, header
+    // = WS-swap). `kbDropWS` is the current aim target; arrows walk
+    // it through the workspace order, Return/Space commits, Esc
+    // cancels. nil = not lifting. Theme A: target carries the
+    // move/swap semantics — no modifier keys.
+    private var kbLifted: TreeKbSel?
+    private var kbDropWS: Int?
     private lazy var chip: NSTextField = {
         let f = NSTextField(labelWithString: "")
         f.wantsLayer = true
@@ -432,24 +443,56 @@ public final class SidebarView: NSView {
         }
     }
 
+    /// A 2×3 dot grid — the universal "drag handle" affordance drawn
+    /// at the left of every workspace header (header drag = WS-swap).
+    private func drawGrip(in r: NSRect, hot: Bool) {
+        let dotR: CGFloat = 1.15
+        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
+        let ys = [r.midY - 4, r.midY, r.midY + 4]
+        (hot ? pal.accent : pal.dim)
+            .withAlphaComponent(hot ? 0.85 : 0.45).setFill()
+        for x in xs {
+            for y in ys {
+                NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
+                                            width: dotR * 2,
+                                            height: dotR * 2)).fill()
+            }
+        }
+    }
+
     public override func draw(_ dirty: NSRect) {
         if skeleton { drawSkeleton(); return }
         // Strong drop-target highlight: only a *different* workspace
         // band is a valid drop target — fill + outline it so "drop
-        // here" is unmistakable.
-        if let drag = draggingWid, let ws = dropWS,
-           ws != drag.workspaceIndex,
-           let band = wsBands[ws] {
-            let r = NSRect(x: 1, y: band.lowerBound,
-                           width: bounds.width - 2,
-                           height: band.upperBound - band.lowerBound)
-            pal.accent.withAlphaComponent(0.28).setFill()
-            NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6).fill()
-            pal.accent.setStroke()
-            let o = NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1),
-                                 xRadius: 6, yRadius: 6)
-            o.lineWidth = 2
-            o.stroke()
+        // here" is unmistakable. Source is a mouse window-drag
+        // (`draggingWid`), a mouse header-swap (`draggingWS`), or a
+        // keyboard lift (`kbLifted`). For a swap the source band is
+        // also dashed-outlined so the trade reads as "these two".
+        if let ctx = dragContext() {
+            if let tgt = ctx.target, tgt != ctx.source,
+               let band = wsBands[tgt] {
+                let r = NSRect(x: 1, y: band.lowerBound,
+                               width: bounds.width - 2,
+                               height: band.upperBound - band.lowerBound)
+                pal.accent.withAlphaComponent(0.28).setFill()
+                NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6).fill()
+                pal.accent.setStroke()
+                let o = NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1),
+                                     xRadius: 6, yRadius: 6)
+                o.lineWidth = 2
+                o.stroke()
+            }
+            if ctx.isSwap, let band = wsBands[ctx.source] {
+                let r = NSRect(x: 1, y: band.lowerBound,
+                               width: bounds.width - 2,
+                               height: band.upperBound - band.lowerBound)
+                    .insetBy(dx: 1, dy: 1)
+                pal.accent.withAlphaComponent(0.7).setStroke()
+                let o = NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6)
+                o.lineWidth = 1.5
+                o.setLineDash([4, 3], count: 2, phase: 0)
+                o.stroke()
+            }
         }
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
@@ -506,9 +549,15 @@ public final class SidebarView: NSView {
                               withAttributes: mAttrs)
                     mW += 8                       // gap before the WS name
                 }
+                // Drag grip — affords "grab to swap this workspace".
+                let gripSpace = headerGripW + 6
+                drawGrip(in: NSRect(x: rowPadX, y: capY,
+                                    width: headerGripW, height: capH),
+                         hot: c.hot || hoverIdx == i)
                 let t = c.text as NSString
-                t.draw(in: NSRect(x: rowPadX, y: capY,
-                                  width: bounds.width - rowPadX * 2 - mW,
+                t.draw(in: NSRect(x: rowPadX + gripSpace, y: capY,
+                                  width: bounds.width - rowPadX * 2
+                                      - mW - gripSpace,
                                   height: capH),
                        withAttributes: [
                         .font: uiFont(fs, .bold),
@@ -578,20 +627,38 @@ public final class SidebarView: NSView {
             }
         }
 
-        // DnD: only dim the dragged source row here. The
-        // follow-pointer chip is a separate layer-backed subview
-        // (repositioned, never redrawn) so it keeps up with fast
-        // cursor motion.
-        if let drag = draggingWid {
+        // DnD: dim the lifted/dragged source window row (mouse drag
+        // or kb lift). The follow-pointer chip is a separate
+        // layer-backed subview (repositioned, never redrawn) so it
+        // keeps up with fast cursor motion. Header-swap dims nothing
+        // here — its source WS is dashed-outlined above instead.
+        let liftedWinID: WindowID? = draggingWid?.windowID ?? {
+            if case .win(let id)? = kbLifted { return id }
+            return nil
+        }()
+        if let liftedWinID {
             for row in rows {
                 if case .window(_, _, let id, _) = row.kind,
-                   id == drag.windowID {
+                   id == liftedWinID {
                     (pal.bg ?? .windowBackgroundColor)
                         .withAlphaComponent(0.55).setFill()
                     NSBezierPath(roundedRect: row.rect.insetBy(dx: 4, dy: 1),
                                  xRadius: 5, yRadius: 5).fill()
                 }
             }
+        }
+    }
+
+    /// Unified drag/lift context for `draw`: the source workspace,
+    /// the current drop target (if any), and whether the gesture is a
+    /// header swap (vs a window move).
+    private func dragContext() -> (source: Int, target: Int?, isSwap: Bool)? {
+        if let d = draggingWid { return (d.workspaceIndex, dropWS, false) }
+        if let s = draggingWS { return (s, dropWS, true) }
+        switch kbLifted {
+        case .win(let id): return (wsOf(windowID: id) ?? -1, kbDropWS, false)
+        case .hdr(let ws): return (ws, kbDropWS, true)
+        case .none:        return nil
         }
     }
 
@@ -644,6 +711,11 @@ public final class SidebarView: NSView {
                             }
                         }
                     }
+                } else if mode == 3 {
+                    let tgt = wsBands.first { $0.value.contains(cp.y) }?.key
+                    if let tgt, tgt != dragWS {
+                        performSwap(sourceWS: dragWS, targetWS: tgt)
+                    }
                 } else if let row, row.rect.contains(cp) {
                     handleClick(row)
                 }
@@ -655,8 +727,8 @@ public final class SidebarView: NSView {
                         mode = 1                       // ⌘+drag anywhere → move
                     } else {
                         switch row?.kind {
-                        case .none, .handle?:
-                            mode = 1                   // empty space → move
+                        case .none, .handle?, .search?:
+                            mode = 1                   // empty / search → move
                         case .window(let ws, let pid, let wid, let title)?:
                             mode = 2
                             dragWS = ws
@@ -675,15 +747,22 @@ public final class SidebarView: NSView {
                             lastDropWS = nil
                             prevApp = NSWorkspace.shared.frontmostApplication
                             NSApp.activate(ignoringOtherApps: true)
-                        case .header?, .search?:
-                            mode = 1   // header / search row → move panel
+                        case .header(let ws)?:
+                            // Theme A: header drag = swap this WS's
+                            // contents with the drop-target WS. Panel
+                            // move retreats to ⌘+drag / empty space.
+                            mode = 3
+                            dragWS = ws
+                            draggingWS = ws
+                            showChip(swapChipLabel(for: ws))
+                            lastDropWS = nil
                         }
                     }
                 }
                 if mode == 1 {
                     controller?.movePanel(by: CGSize(width: ev.deltaX,
                                                      height: -ev.deltaY))
-                } else if mode == 2 {
+                } else if mode == 2 || mode == 3 {
                     dropWS = wsBands.first { $0.value.contains(cp.y) }?.key
                     if let t = dropWS, t != dragWS {
                         NSCursor.closedHand.set()
@@ -707,7 +786,7 @@ public final class SidebarView: NSView {
             }
         }
 
-        draggingWid = nil; dropWS = nil; dragLabel = nil
+        draggingWid = nil; draggingWS = nil; dropWS = nil; dragLabel = nil
         lastDropWS = nil
         chip.isHidden = true
         NSCursor.arrow.set()
@@ -731,6 +810,41 @@ public final class SidebarView: NSView {
         chip.frame = NSRect(x: chip.frame.minX, y: chip.frame.minY,
                             width: w, height: 22)
         chip.isHidden = false
+    }
+
+    // MARK: - Workspace-content swap (header drag / kb header lift)
+
+    private func wsName(_ ws: Int) -> String {
+        let w = lastWorkspaces.first { $0.index == ws }
+        return (w?.name.isEmpty == false) ? w!.name : "WS\(ws + 1)"
+    }
+
+    private func swapChipLabel(for ws: Int) -> String { "⇄ \(wsName(ws))" }
+
+    private func wsOf(windowID id: WindowID) -> Int? {
+        lastWorkspaces.first { $0.windows.contains { $0.id == id } }?.index
+    }
+
+    /// Swap the entire window membership of two workspaces. The WS
+    /// indices never change (hotkey mapping preserved) — only the
+    /// windows inside trade places. IDs are captured up-front so the
+    /// two halves don't interfere mid-flight; N+M `moveWindow` calls
+    /// run on the serial backend queue, then a reconcile reflects the
+    /// result. Active WS / focus are intentionally left unchanged
+    /// (Theme A).
+    private func performSwap(sourceWS: Int, targetWS: Int) {
+        guard sourceWS != targetWS else { return }
+        let srcIDs = lastWorkspaces.first { $0.index == sourceWS }?
+            .windows.map(\.id) ?? []
+        let dstIDs = lastWorkspaces.first { $0.index == targetWS }?
+            .windows.map(\.id) ?? []
+        guard !(srcIDs.isEmpty && dstIDs.isEmpty) else { return }
+        let bk = backend
+        cliQueue.async {
+            for id in srcIDs { bk.moveWindow(id, toWorkspaceIndex: targetWS) }
+            for id in dstIDs { bk.moveWindow(id, toWorkspaceIndex: sourceWS) }
+        }
+        controller?.scheduleReconcile(after: 0.05)
     }
 
     private func handleClick(_ row: TreeRow) {
@@ -847,6 +961,7 @@ public final class SidebarView: NSView {
     public func exitKbNav() {
         kbNav = false
         kbSel = nil
+        kbLifted = nil; kbDropWS = nil
         searching = false           // restore headers / normal list next show
         query = ""
         signature = ""
@@ -855,6 +970,7 @@ public final class SidebarView: NSView {
     }
 
     public func kbMove(_ d: Int) {
+        if kbLifted != nil { kbAim(d); return }
         let ids = kbSelectable()
         let cur = kbSel.flatMap(kbIndex(of:))
         if let new = kbMoveTarget(selectable: ids, current: cur, delta: d) {
@@ -865,6 +981,7 @@ public final class SidebarView: NSView {
     /// Jump to the prev/next workspace: its first window, or its
     /// header when that workspace is empty.
     public func kbJumpWS(_ dir: Int) {
+        if kbLifted != nil { kbAim(dir); return }
         let curWS: Int? = {
             guard let s = kbSel, let i = kbIndex(of: s) else { return nil }
             switch rows[i].kind {
@@ -878,10 +995,99 @@ public final class SidebarView: NSView {
         }
     }
 
-    /// Space in --active: open the selected row's context menu —
-    /// the same menu right-click shows (window actions / workspace
-    /// layout), anchored at that row. facet stays --active; pick
-    /// with the mouse or Esc.
+    // MARK: - Keyboard DnD (lift / aim / commit)
+
+    public var kbIsLifting: Bool { kbLifted != nil }
+
+    private func liftSourceWS() -> Int? {
+        switch kbLifted {
+        case .win(let id): return wsOf(windowID: id)
+        case .hdr(let ws): return ws
+        case .none:        return nil
+        }
+    }
+
+    /// Space: pick up the selected row (window = move, header =
+    /// WS-swap). A second Space — or Return — commits; Esc cancels.
+    /// While lifted, the arrow keys (via `kbMove` / `kbJumpWS`) walk
+    /// the drop target through the workspace order instead of moving
+    /// the selection.
+    public func kbToggleLift() {
+        if kbLifted == nil {
+            guard let s = kbSel else { return }
+            kbLifted = s
+            kbDropWS = liftSourceWS()
+            needsDisplay = true
+        } else {
+            kbCommitLift()
+        }
+    }
+
+    /// Step the drop target to the prev/next workspace.
+    private func kbAim(_ delta: Int) {
+        guard kbLifted != nil else { return }
+        let order = kbWsOrder(rows: rows)
+        guard !order.isEmpty else { return }
+        let cur = kbDropWS ?? liftSourceWS() ?? order[0]
+        let pos = order.firstIndex(of: cur) ?? 0
+        let step = delta > 0 ? 1 : -1
+        kbDropWS = order[min(max(pos + step, 0), order.count - 1)]
+        if let t = kbDropWS, let band = wsBands[t] {
+            scrollToVisible(NSRect(x: 0, y: band.lowerBound,
+                                   width: bounds.width,
+                                   height: band.upperBound - band.lowerBound))
+        }
+        needsDisplay = true
+    }
+
+    /// Esc while lifting: drop the lift without moving anything.
+    /// Returns true if a lift was in progress (so the caller doesn't
+    /// also exit keyboard mode).
+    @discardableResult
+    public func kbCancelLift() -> Bool {
+        guard kbLifted != nil else { return false }
+        kbLifted = nil; kbDropWS = nil
+        needsDisplay = true
+        return true
+    }
+
+    /// Commit the lift: a window moves to the target WS (mirrors the
+    /// mouse drop — optimistic highlight, then move + switch +
+    /// focus-follow); a header swaps its WS's contents with the
+    /// target. Returns true if a lift was in progress.
+    @discardableResult
+    public func kbCommitLift() -> Bool {
+        guard let s = kbLifted else { return false }
+        let tgt = kbDropWS
+        kbLifted = nil; kbDropWS = nil
+        needsDisplay = true
+        guard let tgt else { return true }
+        switch s {
+        case .win(let id):
+            // Move-only: unlike the mouse drop (which switches +
+            // focus-follows), a keyboard lift "files" the window into
+            // the target WS and stays in --active so the user can
+            // keep organizing. No switch → don't claim tgt is active
+            // (so no setOptimistic, which would mislabel the active
+            // WS). The reconcile relocates the row; kbSel follows it.
+            guard let src = wsOf(windowID: id), src != tgt else { return true }
+            let bk = backend
+            cliQueue.async {
+                bk.moveWindow(id, toWorkspaceIndex: tgt)
+            }
+            kbSel = .win(id)
+            controller?.scheduleReconcile(after: 0.05)
+        case .hdr(let ws):
+            guard ws != tgt else { return true }
+            performSwap(sourceWS: ws, targetWS: tgt)
+        }
+        return true
+    }
+
+    /// `m` in --active: open the selected row's context menu — the
+    /// same menu right-click shows (window actions / workspace
+    /// layout), anchored at that row. (Space is the lift gesture in
+    /// Theme A.) facet stays --active; pick with the mouse or Esc.
     public func kbContextMenu() {
         guard let s = kbSel, let i = kbIndex(of: s),
               let win = window else { return }
