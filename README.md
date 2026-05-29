@@ -14,26 +14,6 @@ palettes — all driven by a native AX/CGS backend with no external
 dependency. See [docs/architecture.md](docs/architecture.md) for
 the layer diagram.
 
-## Demo
-
-![facet — translucent tree sidebar over BSP-tiled windows](docs/media/tree-bsp.gif)
-
-The translucent tree sidebar (top-left) lists every workspace and its
-windows while a native BSP layout tiles them — here four terminals
-running a steam locomotive, a π spigot, a Mandelbrot render, and a
-Matrix rain.
-
-| Full-screen grid overview | Drag a window between cells |
-|:--:|:--:|
-| ![grid overview](docs/media/grid.gif) | ![grid drag-and-drop](docs/media/grid-dnd.gif) |
-
-| Switch workspaces | BSP / stack tiling |
-|:--:|:--:|
-| ![workspace switch](docs/media/workspace-switch.gif) | ![tiling modes](docs/media/tiling.gif) |
-
-<sub>Recorded on a clean macOS VM — window titles, grid thumbnails, and
-tiling are all live AX / ScreenCaptureKit, no mockups.</sub>
-
 ## What it does
 
 facet runs as a menu-bar-less agent (`LSUIElement`) and surfaces
@@ -59,6 +39,149 @@ modifier keys.
 
 Both views share the same backend and the same theme
 (terminal / cute / system, live toggleable).
+
+## Layouts
+
+Each workspace runs a layout, set at runtime with
+`facet --set-layout=NAME` (per-WS, never persisted — use a
+[setup hook](#workspace-setup-hooks) to pick one at launch). facet
+never hides windows, so a layout only *positions* them and the
+focused window is always raised. Diagrams use four windows; **1** is
+the master / focus where that matters.
+
+### `tall` — master + stack
+dwm `tile` / xmonad `Tall`. Master fills the left column (a tunable
+fraction of the width); the rest stack as rows on the right. The
+ultrawide bread-and-butter.
+
+```
+┌────────────┬───────────┐
+│            │     2     │
+│            ├───────────┤
+│     1      │     3     │
+│  (master)  ├───────────┤
+│            │     4     │
+└────────────┴───────────┘
+```
+
+### `wide` — master on top
+`tall` rotated 90° (toggle with `--toggle-orientation`): master is
+the top row, the rest become columns below.
+
+```
+┌─────────────────────────┐
+│        1 (master)       │
+├───────┬───────┬─────────┤
+│   2   │   3   │    4    │
+└───────┴───────┴─────────┘
+```
+
+### `centered-master` — master in the middle
+dwm `centeredmaster` / xmonad ThreeColMid. Master centred; the rest
+split between the left and right side columns (right fills first).
+Built for ultrawide.
+
+```
+┌───────┬───────────────┬───────┐
+│       │               │   2   │
+│   4   │   1 (master)  ├───────┤
+│       │               │   3   │
+└───────┴───────────────┴───────┘
+```
+
+### `grid` — even tiles
+awesome `grid`. A near-square grid (`ceil(√N)` columns); the last row
+widens to fill.
+
+```
+ 2 windows         3 windows          4 windows
+┌─────┬─────┐    ┌─────┬─────┐      ┌─────┬─────┐
+│  1  │  2  │    │  1  │  2  │      │  1  │  2  │
+└─────┴─────┘    ├─────┴─────┤      ├─────┼─────┤
+                 │     3     │      │  3  │  4  │
+                 └───────────┘      └─────┴─────┘
+```
+
+### `spiral` — fibonacci
+dwm `fibonacci`. Each new window halves the remaining space, winding
+clockwise inward.
+
+```
+┌────────────┬───────────┐
+│            │     2     │
+│     1      ├─────┬─────┤
+│            │  4  │  3  │
+└────────────┴─────┴─────┘
+```
+
+### `monocle` — full-screen focus
+dwm `monocle`. Every window fills the screen; the focused one is on
+top (the others sit full-size behind it — facet raises focus rather
+than hiding).
+
+```
+┌─────────────────────────┐
+│                         │
+│     1  (2 3 4 behind)   │
+│                         │
+└─────────────────────────┘
+```
+
+### `bsp` — binary splits
+bspwm-style. Each new window splits the focused tile in half
+(auto-balanced by aspect); `--toggle-orientation` rotates the focused
+split.
+
+```
+┌────────────┬───────────┐
+│            │     2     │
+│     1      ├─────┬─────┤
+│            │  3  │  4  │
+└────────────┴─────┴─────┘
+```
+
+### `stack` — one at a time
+One window fills the screen; the rest are parked off-screen.
+`--cycle-stack=next|prev` rotates which one is on top.
+
+```
+┌─────────────────────────┐    others (2, 3, 4) parked
+│                         │    off-screen; cycle-stack
+│       1  (front)        │    brings the next one forward
+│                         │
+└─────────────────────────┘
+```
+
+`float` (the default) applies no layout — windows stay where you put
+them.
+
+### Master-stack operations
+
+`tall` / `centered-master` are adjustable at runtime (per workspace).
+**Promote** the focused window to the master slot:
+
+```
+  before (focus 3)            after --promote (menu)
+┌────────────┬───────┐      ┌────────────┬───────┐
+│            │   2   │      │            │   1   │
+│     1      ├───────┤  →   │     3      ├───────┤
+│  (master)  │   3   │      │  (master)  │   2   │
+└────────────┴───────┘      └────────────┴───────┘
+```
+
+**Resize** the master (`--grow-master` / `--shrink-master`, ±0.05)
+and change **how many** windows share it (`--inc-master` /
+`--dec-master`):
+
+```
+  --grow-master              --inc-master (2 masters)
+┌──────────────┬─────┐      ┌────────────┬───────────┐
+│              │  2  │      │     1      │     3     │
+│      1       ├─────┤  →   │  (master)  ├───────────┤
+│   (master)   │  3  │      │     2      │     4     │
+└──────────────┴─────┘      │  (master)  │           │
+                            └────────────┴───────────┘
+```
 
 ## Interactions
 
@@ -121,28 +244,6 @@ stay compact. Requires Accessibility (same grant as clicks).
 Cells paint with **ScreenCaptureKit thumbnails** (macOS 14+,
 Screen Recording grant); a background refresh keeps them warm
 so the overlay opens with real screenshots, not icon fallbacks.
-
-## Status
-
-**Alpha** — native AX backend, no external dependency. Workspace
-switching, independent workspaces per native macOS Space, window
-park, BSP / stack tiling with AX-role auto-float, and display
-reconfigure handling all ship in the default build.
-`brew install akira-toriyama/tap/facet` is live.
-
-| Milestone | Status |
-|---|---|
-| M1 — repo scaffolded, `swift build` green | ✅ |
-| M2 — tree + grid views working | ✅ |
-| M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
-| M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor hide, closeWindow, setup-files | ✅ |
-| M5 Phase γ — BSP + stack tiling, AX-role auto-float, tiling CLI | ✅ |
-| M5 Phase δ — display reconfigure | ✅ |
-| M5 Phase ε — native sole backend (v2.0.0) | ✅ |
-
-See [docs/architecture.md](docs/architecture.md) for the layer
-diagram and the migration plan.
 
 ## Install
 
