@@ -918,6 +918,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func animateSwitch(toPark: [WindowRef], toRestore: [WindowRef],
                                oldActive: Int, newActive: Int,
                                rect: CGRect, autoFocus: Bool) -> Bool {
+        // Honour the system "Reduce motion" setting — fall back to the
+        // instant path so motion-sensitive users aren't animated at.
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            return false
+        }
         let screen = Displays.containing(CGPoint(x: rect.midX, y: rect.midY))
         let dir: CGFloat = newActive > oldActive ? 1 : -1
         let enterDx = dir * screen.width   // incoming start offset (off entry edge)
@@ -985,8 +990,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             else { t.invalidate(); return }
             let raw = min(1.0, -begin.timeIntervalSinceNow / self.slideDuration)
             let e = SlideCurve.easeOutCubic(raw)
-            for a in self.slideAnims {
-                AXGeom.setPosition(a.ax, a.slide.origin(atEased: e))
+            // AX is thread-safe per element; we vouch for the fan-out.
+            nonisolated(unsafe) let anims = self.slideAnims
+            // Each AX write is a cross-process call; with many windows the
+            // serial sum can blow the frame budget. Fan out per window
+            // (AX is thread-safe per element) above a threshold; stay
+            // serial below it where the dispatch overhead isn't worth it.
+            if anims.count >= 6 {
+                DispatchQueue.concurrentPerform(iterations: anims.count) { i in
+                    AXGeom.setPosition(anims[i].ax, anims[i].slide.origin(atEased: e))
+                }
+            } else {
+                for a in anims {
+                    AXGeom.setPosition(a.ax, a.slide.origin(atEased: e))
+                }
             }
             // Settle via the stored finish (read through `self`) so the
             // non-Sendable closure isn't captured by this @Sendable block.
