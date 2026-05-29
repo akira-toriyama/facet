@@ -50,6 +50,14 @@ public struct FacetConfig: Sendable {
     public var outerGapLeft: CGFloat?
     public var outerGapRight: CGFloat?
 
+    // [animation]
+    /// Window-move animation (枠 E). When on, geometry transitions
+    /// (Phase 1: workspace switch) slide via per-frame AX writes instead
+    /// of jumping. Raw; read `effectiveAnimationsEnabled`.
+    public var animationsEnabled: Bool?
+    /// Slide duration in ms. Raw; read `effectiveAnimationDuration`.
+    public var animationDurationMs: Int?
+
     // [workspace]
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
     /// Keys are 1-indexed integers matching what the user types
@@ -148,6 +156,13 @@ public struct FacetConfig: Sendable {
         let m = (defaultLayout ?? "float").lowercased()
         let known = ["float", "bsp", "stack"] + LayoutRegistry.names
         return known.contains(m) ? m : "float"
+    }
+
+    /// Window-move animation on? Default on. Read this, not the raw field.
+    public var effectiveAnimationsEnabled: Bool { animationsEnabled ?? true }
+    /// Slide duration (seconds), clamped 0.08–0.8 s. Default 0.28 s.
+    public var effectiveAnimationDuration: TimeInterval {
+        Double(min(800, max(80, animationDurationMs ?? 280))) / 1000
     }
 
     /// Per-edge outer gap, px: inset from that screen edge for the
@@ -285,6 +300,13 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["layout"]?["outer-gap-right"] {
             c.outerGapRight = CGFloat(n)
+        }
+        // [animation]
+        if case .bool(let b)? = toml["animation"]?["enabled"] {
+            c.animationsEnabled = b
+        }
+        if case .int(let n)? = toml["animation"]?["duration-ms"] {
+            c.animationDurationMs = n
         }
         // [workspace]
         if case .stringArray(let xs)? = toml["workspace"]?["setup-files"] {

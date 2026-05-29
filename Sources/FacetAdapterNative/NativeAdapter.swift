@@ -853,12 +853,160 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return WindowID(serverID: Int(cgID))
     }
 
+    // MARK: - 枠 E: workspace-switch slide animation (Phase 1)
+
+    /// In-flight slide clock + its settle. Touched on main only.
+    private var slideTimer: Timer?
+    private var slideFinish: (() -> Void)?
+    /// Resolved AX elements + from/to origins for the in-flight slide.
+    /// Resolved ONCE (not per frame): the per-frame AX window lookup was
+    /// the main smoothness drag. Read through `self` in the timer block
+    /// so the non-Sendable AX element stays behind the class's
+    /// `@unchecked Sendable` boundary.
+    private var slideAnims: [(ax: AXUIElement, slide: WindowSlide)] = []
+    private var slideStart: Date?
+    private var slideDuration: TimeInterval = 0
+
+    /// AX element for a managed window (pid via the catalog).
+    private func axWin(id: WindowID) -> AXUIElement? {
+        guard let pid = catalog.pid(for: id) else { return nil }
+        return AXGeom.window(for: CGWindowID(id.serverID), pid: pid_t(pid))
+    }
+    private func axWin(_ ref: WindowRef) -> AXUIElement? {
+        AXGeom.window(for: CGWindowID(ref.id.serverID), pid: pid_t(ref.pid))
+    }
+
+    /// Visible tiled targets for a workspace (bsp tree / engine / stack
+    /// top). Floating windows aren't here — they restore to their
+    /// recorded original position (handled in `animateSwitch`).
+    private func targetFrames(for n1Based: Int, in rect: CGRect)
+        -> [WindowID: CGRect]
+    {
+        let mode = catalog.mode(of: n1Based)
+        switch mode {
+        case "bsp":
+            return catalog.tiledFrames(for: n1Based, in: rect)
+        case "stack":
+            guard let top = catalog.stackOrder(of: n1Based).first
+            else { return [:] }
+            return [top: rect]
+        default:
+            guard LayoutRegistry.engine(named: mode) != nil else { return [:] }
+            return catalog.engineFrames(for: n1Based, in: rect)
+        }
+    }
+
+    /// If a slide is mid-flight, stop its clock and jump straight to its
+    /// settle. Guards against overlap when switches arrive faster than
+    /// the animation, and must run before any catalog mutation so the
+    /// outgoing windows are recorded parked first.
+    private func finishSlideIfRunning() {
+        guard let finish = slideFinish else { return }
+        slideTimer?.invalidate()
+        slideTimer = nil
+        slideFinish = nil
+        finish()
+    }
+
+    /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
+    /// switch. Incoming windows enter from one edge (sized off-screen
+    /// first, so visible motion is pure translation); outgoing exit the
+    /// opposite edge; the index delta picks the direction. The real
+    /// park/tile bookkeeping happens in the settle closure (run on
+    /// completion or on interrupt). Returns false when nothing is
+    /// visible to move, so the caller falls back to the instant path.
+    private func animateSwitch(toPark: [WindowRef], toRestore: [WindowRef],
+                               oldActive: Int, newActive: Int,
+                               rect: CGRect, autoFocus: Bool) -> Bool {
+        let screen = Displays.containing(CGPoint(x: rect.midX, y: rect.midY))
+        let dir: CGFloat = newActive > oldActive ? 1 : -1
+        let enterDx = dir * screen.width   // incoming start offset (off entry edge)
+        let scale = activeScale(near: rect)
+
+        // Incoming: tiled/engine/stack targets + floating-at-original.
+        var targets = targetFrames(for: newActive, in: rect)
+        for ref in toRestore where targets[ref.id] == nil {
+            guard let orig = catalog.originalPositions[ref.id],
+                  let ax = axWin(ref), let sz = AXGeom.size(ax) else { continue }
+            targets[ref.id] = CGRect(origin: orig, size: sz)
+        }
+        slideAnims = []
+        for (id, raw) in targets {
+            guard let ax = axWin(id: id) else { continue }
+            let f = raw.roundedToPhysicalPixels(scale: scale)
+            // We own this window's geometry now — clear its parked flag.
+            catalog.clearParkedState(of: id)
+            AXGeom.setSize(ax, f.size)                       // off-screen resize
+            let start = CGPoint(x: f.origin.x + enterDx, y: f.origin.y)
+            AXGeom.setPosition(ax, start)
+            slideAnims.append((ax, WindowSlide(id: id, from: start, to: f.origin)))
+        }
+
+        // Outgoing: capture true current frame, slide off the far edge.
+        var outOrigin: [WindowID: CGPoint] = [:]
+        for ref in toPark {
+            guard catalog.shouldParkAnchor(ref.id), let ax = axWin(ref),
+                  let p = AXGeom.position(ax) else { continue }
+            outOrigin[ref.id] = p
+            slideAnims.append((ax, WindowSlide(id: ref.id, from: p,
+                to: CGPoint(x: p.x - enterDx, y: p.y))))
+        }
+
+        guard !slideAnims.isEmpty else { return false }
+
+        // Settle: authoritative final state + park bookkeeping. Runs once
+        // (on completion or interrupt). Uses the *captured* outgoing
+        // origins so a later switch-back restores to the real position,
+        // not the slid-off-screen one.
+        let settle: () -> Void = { [weak self] in
+            guard let self else { return }
+            self.slideAnims = []
+            self.applyLayout(workspace: newActive, rect: rect)
+            for ref in toPark {
+                guard let orig = outOrigin[ref.id], let ax = self.axWin(ref)
+                else { continue }
+                let scr = Displays.containing(orig)
+                self.catalog.markAnchorParked(ref.id, originalPosition: orig)
+                AXGeom.setPosition(ax, CGPoint(x: scr.maxX - 1, y: scr.maxY - 1))
+            }
+            if autoFocus { self.applyAutoFocus(newActiveWS: newActive) }
+            self.eventContinuation.yield(.refreshNeeded)
+        }
+
+        slideStart = Date()
+        slideDuration = config.effectiveAnimationDuration
+        slideFinish = settle
+        // Drive on the main runloop. Reads cached state via `self` so the
+        // non-Sendable AX elements don't cross the @Sendable closure as
+        // captured locals (no per-frame lookup, no Sendable warning).
+        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) {
+            [weak self] t in
+            guard let self, let begin = self.slideStart
+            else { t.invalidate(); return }
+            let raw = min(1.0, -begin.timeIntervalSinceNow / self.slideDuration)
+            let e = SlideCurve.easeOutCubic(raw)
+            for a in self.slideAnims {
+                AXGeom.setPosition(a.ax, a.slide.origin(atEased: e))
+            }
+            // Settle via the stored finish (read through `self`) so the
+            // non-Sendable closure isn't captured by this @Sendable block.
+            if raw >= 1.0 { self.finishSlideIfRunning() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        slideTimer = timer
+        Log.debug("native: animateSwitch \(oldActive)->\(newActive) "
+            + "anims=\(slideAnims.count) dir=\(Int(dir))")
+        return true
+    }
+
     // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
         // No facet workspaces on an unmanaged native desktop.
         guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
         else { return }
+        // A slide already running? Finish it before mutating the catalog.
+        finishSlideIfRunning()
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
@@ -874,13 +1022,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) autoFocus=\(autoFocus)")
+        let rect = activeDisplayRect()
+
+        // 枠 E Phase 1: animate the switch as a directional slide. The
+        // animated path owns its own settle (anchor park + tile +
+        // auto-focus + refresh) on completion, so we return early.
+        if config.effectiveAnimationsEnabled,
+           plan.newActive != plan.oldActive,
+           animateSwitch(toPark: plan.toPark, toRestore: plan.toRestore,
+                         oldActive: plan.oldActive, newActive: plan.newActive,
+                         rect: rect, autoFocus: autoFocus) {
+            return
+        }
+
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
         // Phase γ: overlay layout-specific frames on top of the
         // anchor restore. Floating windows in the same WS keep the
         // restoreAnchor position; tiled / stacked windows snap to
         // their computed frame.
-        applyLayout(workspace: plan.newActive,
-                    rect: activeDisplayRect())
+        applyLayout(workspace: plan.newActive, rect: rect)
 
         // 2-a / 2-b: no-pick callers (CLI --workspace, sidebar
         // header click, grid workspace cell click) opt in to
