@@ -1003,7 +1003,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("Previous stack window",
                                [.cycleStackPrev]))
         }
-        if mode == "tall", !floating {
+        if (mode == "tall" || mode == "centered-master"), !floating {
             items.append(.init("Promote to master",
                                [.promoteToMaster]))
         }
