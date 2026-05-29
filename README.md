@@ -379,9 +379,14 @@ facet window --inc-master|--dec-master       # master window count ±1 (tall / c
 # --view=grid it's silently ignored; the overlay is always
 # key/active by construction.
 
-# Workspace ops (M5 Phase α)
+# Workspace ops
 facet workspace --focus=N               # switch to workspace N (1-indexed)
+facet workspace --focus=NAME            # switch by name (stable across reorder)
 facet workspace --focus=next|prev|recent # step (wraps) / return to previous
+facet workspace --add                   # append a new workspace
+facet workspace --remove[=N]            # remove WS N (or active); windows → neighbour
+facet workspace --rename=NAME           # rename the active workspace
+facet workspace --move=N                # move active workspace to position N
 facet window --move-to=N          # move focused window to workspace N
 facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp

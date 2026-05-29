@@ -364,9 +364,14 @@ facet window --inc-master|--dec-master       # master 窓数 ±1 (tall / centere
 # (Spotlight 風起動)。 --view=grid と組み合わせると silent no-op
 # (grid は常に key/active)。
 
-# Workspace 操作 (M5 Phase α)
+# Workspace 操作
 facet workspace --focus=N               # workspace N に切替 (1-indexed)
+facet workspace --focus=NAME            # 名前で切替 (reorder しても安定)
 facet workspace --focus=next|prev|recent # 巡回 (wrap) / 直前へ戻る
+facet workspace --add                   # workspace を末尾に追加
+facet workspace --remove[=N]            # WS N (省略=active) を削除・窓は隣 WS へ
+facet workspace --rename=NAME           # active workspace を改名
+facet workspace --move=N                # active workspace を位置 N へ移動
 facet window --move-to=N          # focus 中の window を WS N へ
 facet status                      # スナップショット: backend /
                                   # theme / workspaces /

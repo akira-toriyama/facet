@@ -21,26 +21,25 @@ final class WorkspaceCatalogTests: XCTestCase {
                isFloating: false, frame: nil)
     }
 
-    /// 1-based default workspace list (5 slots, matching
-    /// `FacetConfig.defaultWorkspaceCount`).
-    private let defaultConfigured = [1, 2, 3, 4, 5]
-
-    /// Sparse list: only 1, 3, 5 — exercises the
-    /// `isValid` sparse-aware path.
-    private let sparseConfigured = [1, 3, 5]
-
-    private func defaultConfiguredPairs() -> [(index: Int, name: String)] {
-        defaultConfigured.map { ($0, "") }
+    /// A catalog seeded with `n` contiguous, unnamed workspaces — the
+    /// dynamic live set the adapter normally seeds from config. Most
+    /// tests need ≥1 workspace before `setActive` / `snapshot` etc.
+    /// work (an unseeded catalog has an empty set). Uses `.init()` so
+    /// it isn't itself rewritten when call sites adopt this helper.
+    private func seededCatalog(_ n: Int = 5) -> WorkspaceCatalog {
+        var c = WorkspaceCatalog.init()
+        c.seed(names: (1...n).map { (index: $0, name: "") })
+        return c
     }
 
     // MARK: - Initial state
 
     func testInitialActiveIs1() {
-        XCTAssertEqual(WorkspaceCatalog().activeIndex, 1)
+        XCTAssertEqual(seededCatalog().activeIndex, 1)
     }
 
     func testInitialMapsAndSetsAreEmpty() {
-        let c = WorkspaceCatalog()
+        let c = seededCatalog()
         XCTAssertTrue(c.windowMap.isEmpty)
         XCTAssertTrue(c.anchorParked.isEmpty)
         XCTAssertTrue(c.originalPositions.isEmpty)
@@ -49,7 +48,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Reconcile
 
     func testReconcileAssignsNewWindowsToActive() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         let r = c.reconcile(live: [window(10), window(20)])
         XCTAssertEqual(r, .init(added: 2, removed: 0))
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
@@ -57,7 +56,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testReconcileRecordsPidFromLiveWindow() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 4242)])
         XCTAssertEqual(c.windowMap[wid(10)]?.pid, 4242)
     }
@@ -66,7 +65,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Defensive: if a wsid is ever reused after its owner dies,
         // the fresh pid should win so subsequent AX calls don't
         // target a stale (or now-different) process.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 1000)])
         _ = c.reconcile(live: [window(10, pid: 2000)])
         XCTAssertEqual(c.windowMap[wid(10)]?.pid, 2000)
@@ -74,14 +73,14 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testReconcileNewWindowsLandInCurrentActive() {
         // Switch to WS 3 first; new windows should land in 3.
-        var c = WorkspaceCatalog()
-        _ = c.setActive(3, configuredIndexes: defaultConfigured)
+        var c = seededCatalog()
+        _ = c.setActive(3)
         _ = c.reconcile(live: [window(10)])
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3)
     }
 
     func testReconcileDropsGoneWindows() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         let r = c.reconcile(live: [window(10)])
         XCTAssertEqual(r, .init(added: 0, removed: 1))
@@ -94,7 +93,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Under requireConfirm a new on-screen window waits for a
         // SECOND sighting before joining the map (swallows the
         // cross-Space `isOnscreen` flip during a Space switch).
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         let r1 = c.reconcile(live: [window(10)], requireConfirm: true)
         XCTAssertEqual(r1, .init(added: 0, removed: 0))
         XCTAssertNil(c.windowMap[wid(10)])
@@ -107,7 +106,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // A genuinely-new window (kAXWindowCreated → trusted) joins on
         // the FIRST sighting even under requireConfirm — this is the
         // add-latency win.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         let r = c.reconcile(live: [window(10)],
                             trusted: [wid(10)],
                             requireConfirm: true)
@@ -119,7 +118,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Config `action="ignore"` window never enters the map, and
         // stays out on later reconciles (marked examined) even once
         // the ignore hint is no longer supplied.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         let r = c.reconcile(live: [window(10), window(20)],
                             ignore: [wid(20)])
         XCTAssertEqual(r.added, 1)
@@ -134,7 +133,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Trusted bypasses only the two-tick gate, not the off-screen
         // defer that runs before it: a window still transiently
         // off-screen mid-creation must NOT slip in.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         let offscreen = Window(id: wid(10), pid: 1000, appName: "A",
                                title: "w10", isFocused: false,
                                isFloating: false, frame: nil,
@@ -149,18 +148,17 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testReconcileDoesNotMovePreexistingWindow() {
         // Window assigned to WS 3 must stay there even after
         // active flips back to 1 and reconcile runs.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        _ = c.moveWindow(wid(10), to: 3,
-                         configuredIndexes: defaultConfigured)
-        _ = c.setActive(2, configuredIndexes: defaultConfigured)
+        _ = c.moveWindow(wid(10), to: 3)
+        _ = c.setActive(2)
         _ = c.reconcile(live: [window(10)])
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3,
                        "reconcile must not reassign existing windows")
     }
 
     func testReconcileSweepsParkedSetsAndOriginalPositions() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
         c.markAnchorParked(wid(20), originalPosition: .init(x: 3, y: 4))
@@ -176,67 +174,61 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - pid lookup
 
     func testPidForUnknownWindowIsNil() {
-        XCTAssertNil(WorkspaceCatalog().pid(for: wid(10)))
+        XCTAssertNil(seededCatalog().pid(for: wid(10)))
     }
 
     func testPidForKnownWindowMatchesLiveValue() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 1234)])
         XCTAssertEqual(c.pid(for: wid(10)), 1234)
     }
 
-    // MARK: - isValid (sparse-aware)
+    // MARK: - isValid (contiguous live set)
 
-    func testIsValidAcceptsConfiguredIndexes() {
-        let c = WorkspaceCatalog()
-        XCTAssertTrue(c.isValid(1, configuredIndexes: defaultConfigured))
-        XCTAssertTrue(c.isValid(5, configuredIndexes: defaultConfigured))
+    func testIsValidAcceptsLiveRange() {
+        let c = seededCatalog()           // 5 contiguous workspaces
+        XCTAssertTrue(c.isValid(1))
+        XCTAssertTrue(c.isValid(5))
     }
 
-    func testIsValidRejectsGapInSparseConfig() {
-        let c = WorkspaceCatalog()
-        // Sparse [1, 3, 5] — 2 is invalid even though count ≥ 2.
-        XCTAssertTrue(c.isValid(1, configuredIndexes: sparseConfigured))
-        XCTAssertTrue(c.isValid(3, configuredIndexes: sparseConfigured))
-        XCTAssertFalse(c.isValid(2, configuredIndexes: sparseConfigured),
-                       "sparse config: 2 must be invalid")
-        XCTAssertFalse(c.isValid(4, configuredIndexes: sparseConfigured))
+    func testIsValidRejectsBeyondCount() {
+        let c = seededCatalog(3)          // positions 1...3
+        XCTAssertTrue(c.isValid(3))
+        XCTAssertFalse(c.isValid(4),
+                       "the live set is contiguous 1...count")
     }
 
     func testIsValidRejectsZeroAndNegative() {
-        let c = WorkspaceCatalog()
-        XCTAssertFalse(c.isValid(0, configuredIndexes: defaultConfigured))
-        XCTAssertFalse(c.isValid(-1, configuredIndexes: defaultConfigured))
+        let c = seededCatalog()
+        XCTAssertFalse(c.isValid(0))
+        XCTAssertFalse(c.isValid(-1))
     }
 
     // MARK: - setActive
 
     func testSetActiveReturnsNilForCurrentWorkspace() {
-        var c = WorkspaceCatalog()
-        XCTAssertNil(c.setActive(1, configuredIndexes: defaultConfigured),
+        var c = seededCatalog()
+        XCTAssertNil(c.setActive(1),
                      "switching to current must be a no-op")
         XCTAssertEqual(c.activeIndex, 1)
     }
 
     func testSetActiveReturnsNilForInvalidTarget() {
-        var c = WorkspaceCatalog()
-        XCTAssertNil(c.setActive(2, configuredIndexes: sparseConfigured))
+        var c = seededCatalog(3)
+        XCTAssertNil(c.setActive(6), "beyond the live count")
         XCTAssertEqual(c.activeIndex, 1, "rejected switch must not mutate")
     }
 
     func testSetActiveReturnsSwitchPlanWithCorrectSets() {
         // Three windows: 10 in WS1, 20 in WS2, 30 in WS2.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 100),
                                window(20, pid: 200),
                                window(30, pid: 300)])
-        _ = c.moveWindow(wid(20), to: 2,
-                         configuredIndexes: defaultConfigured)
-        _ = c.moveWindow(wid(30), to: 2,
-                         configuredIndexes: defaultConfigured)
+        _ = c.moveWindow(wid(20), to: 2)
+        _ = c.moveWindow(wid(30), to: 2)
         // Switching 1 → 2: 10 should park, {20, 30} should restore.
-        let plan = c.setActive(2,
-                               configuredIndexes: defaultConfigured)
+        let plan = c.setActive(2)
         XCTAssertEqual(plan?.oldActive, 1)
         XCTAssertEqual(plan?.newActive, 2)
         XCTAssertEqual(plan?.toPark, [WindowRef(id: wid(10), pid: 100)])
@@ -250,46 +242,42 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Specifically asserting the pid threading — even if pid
         // wasn't passed into setActive, the plan must include it
         // so the adapter can dispatch AX directly.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 9999)])
-        let plan = c.setActive(2,
-                               configuredIndexes: defaultConfigured)
+        let plan = c.setActive(2)
         XCTAssertEqual(plan?.toPark.first?.pid, 9999)
     }
 
     // MARK: - moveWindow
 
     func testMoveWindowRejectsUnknownWindow() {
-        var c = WorkspaceCatalog()
-        let outcome = c.moveWindow(wid(99), to: 2,
-                                   configuredIndexes: defaultConfigured)
+        var c = seededCatalog()
+        let outcome = c.moveWindow(wid(99), to: 2)
         XCTAssertEqual(outcome, .rejected)
     }
 
     func testMoveWindowRejectsInvalidTarget() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog(3)
         _ = c.reconcile(live: [window(10)])
-        let outcome = c.moveWindow(wid(10), to: 2,
-                                   configuredIndexes: sparseConfigured)
+        // Target beyond the live workspace count is rejected.
+        let outcome = c.moveWindow(wid(10), to: 99)
         XCTAssertEqual(outcome, .rejected)
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1,
                        "rejected move must not mutate")
     }
 
     func testMoveWindowRejectsAlreadyOnTarget() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        let outcome = c.moveWindow(wid(10), to: 1,
-                                   configuredIndexes: defaultConfigured)
+        let outcome = c.moveWindow(wid(10), to: 1)
         XCTAssertEqual(outcome, .rejected)
     }
 
     func testMoveAwayFromActiveIsPark() {
         // Active = 1, window in 1 → move to 2 → park.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 777)])
-        let outcome = c.moveWindow(wid(10), to: 2,
-                                   configuredIndexes: defaultConfigured)
+        let outcome = c.moveWindow(wid(10), to: 2)
         XCTAssertEqual(outcome,
                        .park(WindowRef(id: wid(10), pid: 777)))
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 2)
@@ -299,12 +287,10 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testMoveIntoActiveIsRestore() {
         // Window starts in WS 2 (non-active). Move it to active=1.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 555)])
-        _ = c.moveWindow(wid(10), to: 2,
-                         configuredIndexes: defaultConfigured)
-        let outcome = c.moveWindow(wid(10), to: 1,
-                                   configuredIndexes: defaultConfigured)
+        _ = c.moveWindow(wid(10), to: 2)
+        let outcome = c.moveWindow(wid(10), to: 1)
         XCTAssertEqual(outcome,
                        .restore(WindowRef(id: wid(10), pid: 555)))
     }
@@ -312,12 +298,10 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testMoveBetweenInactiveWorkspacesIsStateOnly() {
         // Active = 1. Window in WS 2 → move to WS 3 → invisible to
         // user, only the assignment changes.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        _ = c.moveWindow(wid(10), to: 2,
-                         configuredIndexes: defaultConfigured)
-        let outcome = c.moveWindow(wid(10), to: 3,
-                                   configuredIndexes: defaultConfigured)
+        _ = c.moveWindow(wid(10), to: 2)
+        let outcome = c.moveWindow(wid(10), to: 3)
         XCTAssertEqual(outcome, .stateOnly)
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3)
     }
@@ -325,19 +309,19 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Anchor park bookkeeping
 
     func testShouldParkAnchorTrueWhenNotParked() {
-        let c = WorkspaceCatalog()
+        let c = seededCatalog()
         XCTAssertTrue(c.shouldParkAnchor(wid(10)))
     }
 
     func testShouldParkAnchorFalseAfterMark() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
         XCTAssertFalse(c.shouldParkAnchor(wid(10)),
                        "double-park guard")
     }
 
     func testConsumeAnchorRestoreReturnsAndClearsPosition() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
         XCTAssertEqual(c.consumeAnchorRestore(wid(10)),
                        .init(x: 5, y: 7))
@@ -346,7 +330,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testConsumeAnchorRestoreReturnsNilForNonParked() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         XCTAssertNil(c.consumeAnchorRestore(wid(10)),
                      "defensive against double-restore")
     }
@@ -354,7 +338,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - drop (closeWindow eviction)
 
     func testDropClearsAllTracesForWindow() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
         c.drop(wid(10))
@@ -367,7 +351,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Two paths: drop on a never-known id, and drop twice on
         // the same id. Both must leave the catalog in an empty
         // / consistent state (no crash, no stale entries).
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         c.drop(wid(10))
         XCTAssertNil(c.windowMap[wid(10)])
         XCTAssertFalse(c.anchorParked.contains(wid(10)))
@@ -382,48 +366,43 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Snapshot (0-based wire convention)
 
     func testSnapshotTranslatesIndexTo0Based() {
-        let c = WorkspaceCatalog()
+        let c = seededCatalog()
         let snap = c.snapshot(
             live: [], focused: nil,
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         XCTAssertEqual(snap.map(\.index), [0, 1, 2, 3, 4],
                        "snapshot must emit 0-based indexes")
     }
 
     func testSnapshotMarksActiveWorkspace() {
-        var c = WorkspaceCatalog()
-        _ = c.setActive(3, configuredIndexes: defaultConfigured)
+        var c = seededCatalog()
+        _ = c.setActive(3)
         let snap = c.snapshot(
             live: [], focused: nil,
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         XCTAssertEqual(snap.filter(\.isActive).map(\.index), [2],
                        "0-based index 2 = 1-based 3")
     }
 
     func testSnapshotPlacesWindowsInAssignedWorkspace() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
-        _ = c.moveWindow(wid(20), to: 3,
-                         configuredIndexes: defaultConfigured)
+        _ = c.moveWindow(wid(20), to: 3)
         let snap = c.snapshot(
             live: [window(10), window(20)], focused: nil,
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         XCTAssertEqual(snap[0].windows.map(\.id), [wid(10)])
         XCTAssertEqual(snap[2].windows.map(\.id), [wid(20)])
         XCTAssertEqual(snap[1].windows.count, 0)
     }
 
     func testSnapshotStampsFocusedFlag() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         let snap = c.snapshot(
             live: [window(10), window(20)],
             focused: wid(20),
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         let allWindows = snap.flatMap(\.windows)
         XCTAssertEqual(allWindows.first { $0.id == wid(20) }?.isFocused,
                        true)
@@ -437,12 +416,11 @@ final class WorkspaceCatalogTests: XCTestCase {
         // etc.) are filtered out of the per-WS snapshot. Previously
         // they fell back to `activeIndex` — that surfaced as the
         // "145 windows in WS1" bug after the `.optionAll` switch.
-        var c = WorkspaceCatalog()
-        _ = c.setActive(2, configuredIndexes: defaultConfigured)
+        var c = seededCatalog()
+        _ = c.setActive(2)
         let snap = c.snapshot(
             live: [window(99)], focused: nil,
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         XCTAssertEqual(snap.flatMap(\.windows).count, 0)
     }
 
@@ -452,11 +430,11 @@ final class WorkspaceCatalogTests: XCTestCase {
                                      width: 1600, height: 900)
 
     func testDefaultModeIsFloatForUnsetWorkspace() {
-        XCTAssertEqual(WorkspaceCatalog().mode(of: 1), "float")
+        XCTAssertEqual(seededCatalog().mode(of: 1), "float")
     }
 
     func testSetModeBspCreatesTreeFromCurrentMembers() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         XCTAssertEqual(c.mode(of: 1), "bsp")
@@ -465,7 +443,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testSetModeFloatDiscardsTree() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         XCTAssertNotNil(c.layoutTrees[1])
@@ -475,13 +453,13 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testSetModeLowercasesInput() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "BSP", in: displayRect)
         XCTAssertEqual(c.mode(of: 1), "bsp")
     }
 
     func testReconcileAutoInsertsNewWindowsIntoActiveBspTree() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
@@ -490,7 +468,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testReconcileSkipsFloatingWindowsFromTree() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         c.toggleFloat(wid(10))
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
@@ -498,7 +476,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testToggleFloatRemovesFromTreeAndReinserts() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
@@ -512,7 +490,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testDropAlsoEvictsFromTree() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
@@ -522,7 +500,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testReconcileGoneSweepHealsTree() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
@@ -533,13 +511,12 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testMoveWindowBetweenBspWorkspacesMaintainsBothTrees() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         let outcome = c.moveWindow(wid(20), to: 2,
-                                   configuredIndexes: defaultConfigured,
                                    in: displayRect)
         XCTAssertEqual(outcome,
                        .park(WindowRef(id: wid(20), pid: 1000)))
@@ -550,7 +527,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testToggleOrientationDelegatesToOwningTree() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
@@ -564,18 +541,17 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testTiledFramesEmptyForFloatMode() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         XCTAssertEqual(c.tiledFrames(for: 1, in: displayRect), [:])
     }
 
     func testSnapshotPicksModePerWorkspace() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
         let snap = c.snapshot(
             live: [], focused: nil,
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         XCTAssertEqual(snap[0].layoutMode, "float",
                        "WS 1 unset → float")
         XCTAssertEqual(snap[1].layoutMode, "bsp",
@@ -585,7 +561,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Phase γ.2 — stack mode
 
     func testSetModeStackCreatesOrderFromCurrentMembers() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(20), window(10)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -594,7 +570,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testSetModeStackSkipsFloatingMembers() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.toggleFloat(wid(20))
         _ = c.setMode(workspace: 1, to: "stack",
@@ -603,12 +579,12 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testStackOrderEmptyForNonStackMode() {
-        let c = WorkspaceCatalog()
+        let c = seededCatalog()
         XCTAssertEqual(c.stackOrder(of: 1), [])
     }
 
     func testReconcileNewWindowBecomesStackTop() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -619,7 +595,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testCycleStackNextRotatesLeft() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -632,7 +608,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testCycleStackPrevRotatesRight() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -643,7 +619,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testCycleStackSingleMemberIsNoop() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -652,7 +628,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testCycleStackEmptyIsNoop() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
         XCTAssertNil(c.cycleStack(workspace: 1, direction: .next))
@@ -661,7 +637,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testDropEvictsFromStackOrder() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -670,7 +646,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testToggleFloatRemovesFromStackAndReadds() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
@@ -682,14 +658,12 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testMoveWindowIntoStackPutsItOnTop() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 2, to: "stack",
                       in: displayRect)
         _ = c.reconcile(live: [window(10)])
         // 10 is in WS 1 (active default). Move into WS 2 stack.
-        _ = c.moveWindow(wid(10), to: 2,
-                         configuredIndexes: defaultConfigured,
-                         in: displayRect)
+        _ = c.moveWindow(wid(10), to: 2, in: displayRect)
         XCTAssertEqual(c.stackOrder(of: 2), [wid(10)])
     }
 
@@ -697,7 +671,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // Mode flipping a populated WS shouldn't drop members.
         // BSP → Stack → BSP with 5 windows: every id survives,
         // and the final BSP tree contains the same id set.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: (10...14).map { window($0) })
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         let bspIDs = Set(c.tiledFrames(for: 1, in: displayRect).keys)
@@ -714,7 +688,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testSetModeFlipReplacesLayoutKind() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         // BSP → stack: tree gone, order built.
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
@@ -732,7 +706,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Theme B — tall / stateless-engine shared order
 
     func testSetModeTallSeedsSharedOrderFromMembers() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(20), window(10)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         // Stateless engines reuse the stack order; seeded id-sorted.
@@ -741,7 +715,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testReconcileNewWindowBecomesTallMaster() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
@@ -751,7 +725,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testPromoteToMasterMovesChosenWindowToFront() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         XCTAssertEqual(c.stackOrder(of: 1),
@@ -762,7 +736,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testPromoteToMasterAlreadyMasterIsNoop() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         XCTAssertFalse(c.promoteToMaster(wid(10), workspace: 1),
@@ -771,14 +745,14 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testPromoteToMasterUnknownWindowIsNoop() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         XCTAssertFalse(c.promoteToMaster(wid(99), workspace: 1))
     }
 
     func testOrderedMembersReflectsSharedOrder() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         _ = c.promoteToMaster(wid(30), workspace: 1)
@@ -787,7 +761,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testTallDropEvictsFromSharedOrder() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         c.drop(wid(10))
@@ -797,13 +771,13 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Theme B — master knobs (ratio / count)
 
     func testDefaultParamsAreNeutral() {
-        let c = WorkspaceCatalog()
+        let c = seededCatalog()
         XCTAssertEqual(c.params(of: 1).masterRatio, 0.5)
         XCTAssertEqual(c.params(of: 1).masterCount, 1)
     }
 
     func testAdjustMasterRatioNudgesAndClamps() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         XCTAssertTrue(c.adjustMasterRatio(workspace: 1, delta: 0.05))
         XCTAssertEqual(c.params(of: 1).masterRatio, 0.55, accuracy: 1e-9)
         // Drive up to the 0.95 clamp; the boundary nudge returns false.
@@ -814,7 +788,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testAdjustMasterCountNudgesAndClampsAtOne() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         XCTAssertTrue(c.adjustMasterCount(workspace: 1, delta: 1))
         XCTAssertEqual(c.params(of: 1).masterCount, 2)
         XCTAssertTrue(c.adjustMasterCount(workspace: 1, delta: -1))
@@ -824,7 +798,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testParamsPersistAcrossModeFlip() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // → 0.6
@@ -835,7 +809,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testEngineFramesReflectAdjustedRatio() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // 0.5 → 0.6
@@ -847,7 +821,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Phase γ.3 — autoFloat reconcile hint
 
     func testReconcileAutoFloatMarksNewWindowFloating() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)],
                         autoFloat: [wid(10)])
         XCTAssertTrue(c.isFloating(wid(10)))
@@ -856,7 +830,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testReconcileAutoFloatSkipsTreeInsert() {
         // BSP active WS. A new auto-floating window must NOT
         // enter the tree.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10)],
                         focused: nil, activeRect: displayRect,
@@ -866,7 +840,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testReconcileAutoFloatSkipsStackInsert() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
         _ = c.reconcile(live: [window(10)],
                         focused: nil, activeRect: displayRect,
@@ -879,7 +853,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // autoFloat hint must NOT flip floating state on a
         // window the catalog already knows about — user's
         // toggleFloat decision stays authoritative.
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         XCTAssertFalse(c.isFloating(wid(10)))
         // Subsequent reconcile with autoFloat set should NOT
@@ -896,8 +870,8 @@ final class WorkspaceCatalogTests: XCTestCase {
         // regardless of which WS landed it. If the user opens a
         // dialog while not on WS 1 (e.g. they're on WS 3 and
         // window appears there), it should still auto-float.
-        var c = WorkspaceCatalog()
-        _ = c.setActive(3, configuredIndexes: defaultConfigured)
+        var c = seededCatalog()
+        _ = c.setActive(3)
         _ = c.setMode(workspace: 3, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10)],
                         focused: nil, activeRect: displayRect,
@@ -911,7 +885,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     // MARK: - Misc state helpers
 
     func testClearParkedStateDropsAllHideFlags() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
         c.clearParkedState(of: wid(10))
         XCTAssertFalse(c.anchorParked.contains(wid(10)))
@@ -919,13 +893,12 @@ final class WorkspaceCatalogTests: XCTestCase {
     }
 
     func testSnapshotStampsIsFloating() {
-        var c = WorkspaceCatalog()
+        var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.toggleFloat(wid(10))
         let snap = c.snapshot(
             live: [window(10), window(20)], focused: nil,
-            activeRect: .zero,
-            configured: defaultConfiguredPairs())
+            activeRect: .zero)
         let allWindows = snap.flatMap(\.windows)
         XCTAssertEqual(allWindows.first { $0.id == wid(10) }?.isFloating,
                        true)
@@ -933,13 +906,17 @@ final class WorkspaceCatalogTests: XCTestCase {
                        false)
     }
 
-    func testSnapshotRespectsSparseConfig() {
-        let c = WorkspaceCatalog()
-        let snap = c.snapshot(
-            live: [], focused: nil,
-            activeRect: .zero,
-            configured: [(1, "dev"), (3, "ide"), (5, "sns")])
-        XCTAssertEqual(snap.map(\.index), [0, 2, 4])
+    func testSnapshotUsesSeededNamesCompactedToContiguous() {
+        // A sparse seed (1/3/5) compacts to contiguous positions; the
+        // snapshot emits 0-based contiguous indices, names preserved
+        // in order. (Dynamic model is position-based — sparsity can't
+        // survive; names are the stable handle now.)
+        var c = WorkspaceCatalog.init()
+        c.seed(names: [(index: 1, name: "dev"),
+                       (index: 3, name: "ide"),
+                       (index: 5, name: "sns")])
+        let snap = c.snapshot(live: [], focused: nil, activeRect: .zero)
+        XCTAssertEqual(snap.map(\.index), [0, 1, 2])
         XCTAssertEqual(snap.map(\.name), ["dev", "ide", "sns"])
     }
 }

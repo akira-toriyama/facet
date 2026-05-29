@@ -92,6 +92,32 @@ public protocol WindowBackend: Sendable {
     /// (fewer than 2 workspaces, or no recent recorded yet).
     /// `autoFocus` behaves as in `switchWorkspace`.
     func switchWorkspaceRelative(_ target: RelativeWorkspace, autoFocus: Bool)
+
+    /// Switch to the workspace whose name matches `name` (first match,
+    /// case-sensitive). No-op when no workspace has that name.
+    /// `autoFocus` behaves as in `switchWorkspace`. Names are a stable
+    /// handle even as position-based indices shift under add / remove /
+    /// move (memory: facet-cli-dynamic-runtime-model).
+    func switchWorkspace(named name: String, autoFocus: Bool)
+
+    /// Append a new, empty (unnamed) workspace at the end. Runtime
+    /// state — session-only, not persisted (config stays the seed).
+    func addWorkspace()
+
+    /// Remove a workspace (1-based position; `nil` = active). Its
+    /// windows evacuate to a neighbouring workspace so nothing is
+    /// lost; positions above the removed one shift down by one. No-op
+    /// when only one workspace remains (the last can't be removed).
+    func removeWorkspace(at position: Int?)
+
+    /// Rename a workspace (1-based position; `nil` = active). An empty
+    /// name makes it display its position number.
+    func renameWorkspace(at position: Int?, to name: String)
+
+    /// Move the active workspace to a new 1-based position (reorder).
+    /// No-op for an out-of-range or unchanged position.
+    func moveActiveWorkspace(to position: Int)
+
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)
@@ -145,4 +171,13 @@ public extension WindowBackend {
     func switchWorkspace(toIndex index: Int) {
         switchWorkspace(toIndex: index, autoFocus: false)
     }
+
+    // Default no-ops so backends that don't support a dynamic
+    // workspace set (and the unit-test stub) need not implement
+    // these. The native adapter overrides all of them.
+    func switchWorkspace(named name: String, autoFocus: Bool) {}
+    func addWorkspace() {}
+    func removeWorkspace(at position: Int?) {}
+    func renameWorkspace(at position: Int?, to name: String) {}
+    func moveActiveWorkspace(to position: Int) {}
 }
