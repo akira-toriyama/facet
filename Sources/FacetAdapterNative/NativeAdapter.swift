@@ -866,6 +866,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var slideAnims: [(ax: AXUIElement, slide: WindowSlide)] = []
     private var slideStart: Date?
     private var slideDuration: TimeInterval = 0
+    /// Direction for the next switch's slide: +1 forward, -1 back, nil =
+    /// derive from the index delta. `switchWorkspaceRelative` sets it so
+    /// next/prev always slide the intuitive way even when they wrap
+    /// (e.g. last → first reads as "forward", not the long way back).
+    private var slideDirectionHint: CGFloat?
 
     /// AX element for a managed window (pid via the catalog).
     private func axWin(id: WindowID) -> AXUIElement? {
@@ -917,6 +922,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// visible to move, so the caller falls back to the instant path.
     private func animateSwitch(toPark: [WindowRef], toRestore: [WindowRef],
                                oldActive: Int, newActive: Int,
+                               directionHint: CGFloat?,
                                rect: CGRect, autoFocus: Bool) -> Bool {
         // Honour the system "Reduce motion" setting — fall back to the
         // instant path so motion-sensitive users aren't animated at.
@@ -924,7 +930,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             return false
         }
         let screen = Displays.containing(CGPoint(x: rect.midX, y: rect.midY))
-        let dir: CGFloat = newActive > oldActive ? 1 : -1
+        let dir: CGFloat = directionHint ?? (newActive > oldActive ? 1 : -1)
         let enterDx = dir * screen.width   // incoming start offset (off entry edge)
         let scale = activeScale(near: rect)
 
@@ -1040,6 +1046,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) autoFocus=\(autoFocus)")
         let rect = activeDisplayRect()
+        // Consume the relative-switch direction hint (set just before by
+        // switchWorkspaceRelative) regardless of whether we animate, so
+        // it never leaks into a later switch.
+        let hint = slideDirectionHint
+        slideDirectionHint = nil
 
         // 枠 E Phase 1: animate the switch as a directional slide. The
         // animated path owns its own settle (anchor park + tile +
@@ -1048,7 +1059,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
            plan.newActive != plan.oldActive,
            animateSwitch(toPark: plan.toPark, toRestore: plan.toRestore,
                          oldActive: plan.oldActive, newActive: plan.newActive,
-                         rect: rect, autoFocus: autoFocus) {
+                         directionHint: hint, rect: rect, autoFocus: autoFocus) {
             return
         }
 
@@ -1078,6 +1089,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard let t = catalog.relativeTarget(target) else {
             Log.debug("native: switchWorkspaceRelative \(target) → no-op")
             return
+        }
+        // Slide the intuitive way for next/prev even across the wrap
+        // edge; `recent` has no inherent direction, so leave it to the
+        // index delta.
+        switch target {
+        case .next: slideDirectionHint = 1
+        case .prev: slideDirectionHint = -1
+        case .recent: slideDirectionHint = nil
         }
         switchWorkspace(toIndex: t - 1, autoFocus: autoFocus)
     }
