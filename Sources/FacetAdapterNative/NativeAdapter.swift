@@ -476,16 +476,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         } else {
             probe = .zero
         }
+        let full: CGRect
         if Thread.isMainThread {
-            return MainActor.assumeIsolated {
+            full = MainActor.assumeIsolated {
                 Displays.visibleFrame(containing: probe)
             }
-        }
-        return DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                Displays.visibleFrame(containing: probe)
+        } else {
+            full = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    Displays.visibleFrame(containing: probe)
+                }
             }
         }
+        // Outer gap: inset the whole tiling area from every screen
+        // edge before any layout carves it. Doing it here feeds every
+        // downstream path (tile / stack / engine) from one place.
+        let g = config.effectiveOuterGap
+        return g > 0 ? full.insetBy(dx: g, dy: g) : full
     }
 
     /// Enumerate windows via the public CGWindowList API.
@@ -869,6 +876,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the stateless-engine path.
     private func applyFrames(_ frames: [WindowID: CGRect],
                              label: String, rect: CGRect) {
+        // Inner gap: pull abutting windows apart. The screen-edge
+        // side of an outermost window stays flush — that distance is
+        // the outer gap, already inset into `rect`. No-op when 0.
+        let frames = applyInnerGap(frames, in: rect,
+                                   gap: config.effectiveInnerGap)
         guard !frames.isEmpty else { return }
         var applied = 0
         for (id, frame) in frames {

@@ -272,6 +272,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 - `theme` (トップレベル) — `terminal` (default) / `cute` / `system`
 - `default-view` (トップレベル) — `tree` / `grid`
+- `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
+  `outer-gap` (各画面端からの距離)、 単位 pt。 両方 default 0 (隙間
+  なしのフラッシュ配置); [0, 200] にクランプ。 全 layout に適用、
+  floating window は対象外。
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `workspace --focus=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は

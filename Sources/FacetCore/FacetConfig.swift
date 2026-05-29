@@ -30,6 +30,14 @@ public struct FacetConfig: Sendable {
     /// `"mirror"` puts it at the window's own on-screen frame.
     public var treePreviewMode: String?     // "popover" | "mirror"
 
+    // [layout]
+    /// Gap between adjacent tiled windows, px (inner gap). Raw value;
+    /// read `effectiveInnerGap`.
+    public var innerGap: CGFloat?
+    /// Inset from each screen edge for the whole tiling area, px
+    /// (outer gap, four edges equal). Raw value; read `effectiveOuterGap`.
+    public var outerGap: CGFloat?
+
     // [workspace]
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
     /// Keys are 1-indexed integers matching what the user types
@@ -105,6 +113,19 @@ public struct FacetConfig: Sendable {
         let raw = (treePreviewMode ?? "popover").lowercased()
         return ["popover", "mirror"].contains(raw) ? raw : "popover"
     }
+
+    /// Gap between adjacent tiled windows, px. [0, 200] clamp,
+    /// default 0 (= flush tiling, the pre-gap behaviour). Applied by
+    /// `applyInnerGap` to every layout's frames; the screen-edge side
+    /// of an outermost window is left flush (that distance is
+    /// `effectiveOuterGap`, not this).
+    public var effectiveInnerGap: CGFloat { max(0, min(200, innerGap ?? 0)) }
+
+    /// Inset from each screen edge for the whole tiling area, px
+    /// (four edges equal). [0, 200] clamp, default 0. Applied to the
+    /// display rect before any layout runs, so it shrinks the area
+    /// every layout tiles into (bsp / stack / stateless alike).
+    public var effectiveOuterGap: CGFloat { max(0, min(200, outerGap ?? 0)) }
 
     /// Facet workspace defaults when the user hasn't (yet) edited
     /// `[workspace]` at all. 5 is the memory-confirmed
@@ -206,6 +227,13 @@ public struct FacetConfig: Sendable {
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
+        }
+        // [layout]
+        if case .int(let n)? = toml["layout"]?["inner-gap"] {
+            c.innerGap = CGFloat(n)
+        }
+        if case .int(let n)? = toml["layout"]?["outer-gap"] {
+            c.outerGap = CGFloat(n)
         }
         // [workspace]
         if case .stringArray(let xs)? = toml["workspace"]?["setup-files"] {

@@ -106,6 +106,29 @@ preview-mode = "popover"
 
 
 # -----------------------------------------------------------------
+# Tiling gaps
+# -----------------------------------------------------------------
+[layout]
+
+# Spacing for tiled windows, in points. Both default to 0 — windows
+# tile flush, edge-to-edge (facet's behaviour before gaps existed) —
+# so leaving this section out changes nothing. Applies to every
+# layout (bsp / stack / tall / wide / grid / centered-master /
+# spiral / monocle); floating windows are never touched.
+#
+#   inner-gap — space between two adjacent windows.
+#   outer-gap — distance from each screen edge (all four equal), on
+#               top of the menu bar / Dock that facet already avoids.
+#
+# These don't compound at the border: the screen-edge distance is
+# exactly outer-gap and the window-to-window distance is exactly
+# inner-gap. Integer points; both clamp to [0, 200] so a typo can't
+# make windows vanish.
+inner-gap = 0
+outer-gap = 0
+
+
+# -----------------------------------------------------------------
 # Virtual-workspace behavior (M5 Phase α)
 # -----------------------------------------------------------------
 [workspace]
