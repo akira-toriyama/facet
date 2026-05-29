@@ -83,4 +83,23 @@ final class SlideAnimationTests: XCTestCase {
         let c = FacetConfig.from(toml: ["animation": ["duration-ms": .int(9999)]])
         XCTAssertEqual(c.effectiveAnimationDuration, 0.8, accuracy: 0.0001)
     }
+
+    func testAnimationCurveDefaultsToCubic() {
+        XCTAssertEqual(FacetConfig.from(toml: [:]).effectiveAnimationCurve, "cubic")
+    }
+
+    func testAnimationCurveParsedAndClamped() {
+        func curve(_ s: String) -> String {
+            FacetConfig.from(toml: ["animation": ["curve": .string(s)]])
+                .effectiveAnimationCurve
+        }
+        XCTAssertEqual(curve("spring"), "spring")
+        XCTAssertEqual(curve("RANDOM"), "random")   // case-insensitive
+        XCTAssertEqual(curve("bogus"), "cubic")     // unknown → default
+    }
+
+    func testAnimationCurveNoneDisables() {
+        let c = FacetConfig.from(toml: ["animation": ["curve": .string("none")]])
+        XCTAssertFalse(c.effectiveAnimationsEnabled)
+    }
 }

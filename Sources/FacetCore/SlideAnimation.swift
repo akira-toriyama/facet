@@ -1,16 +1,47 @@
 import CoreGraphics
+import Foundation
 
-/// Pure animation math for the workspace-switch slide (枠 E, Phase 1).
-/// No AppKit / AX / timer here — FacetCore stays pure. The adapter owns
-/// the clock + the per-frame AX writes; this only turns a normalized
-/// progress `t ∈ [0, 1]` into eased interpolated origins.
+/// Pure animation math for the window-move animation (枠 E). No AppKit /
+/// AX / timer here — FacetCore stays pure. The adapter owns the clock +
+/// the per-frame AX writes; these only turn a normalized progress
+/// `t ∈ [0, 1]` into an eased value. All clamp `t` to [0, 1].
 public enum SlideCurve {
-    /// Ease-out cubic: fast start, gentle settle. Matches the "ぬるっと"
-    /// feel of scrollable WMs without a spring's overshoot.
+    /// Ease-out cubic: fast start, gentle settle, no overshoot.
     public static func easeOutCubic(_ t: Double) -> Double {
         let c = min(1, max(0, t))
         let inv = 1 - c
         return 1 - inv * inv * inv
+    }
+
+    /// Ease-out quint: snappier than cubic (steeper settle), no
+    /// overshoot. The "キレ" feel.
+    public static func easeOutQuint(_ t: Double) -> Double {
+        let c = min(1, max(0, t))
+        let i = 1 - c
+        return 1 - i * i * i * i * i
+    }
+
+    /// Ease-in-out cubic: eased at both ends. Paired with a longer
+    /// duration it reads as the silky / luxurious feel.
+    public static func easeInOutCubic(_ t: Double) -> Double {
+        let c = min(1, max(0, t))
+        if c < 0.5 { return 4 * c * c * c }
+        let p = -2 * c + 2
+        return 1 - (p * p * p) / 2
+    }
+
+    /// Underdamped spring step response: overshoot then settle (the
+    /// "弾む高級感"). `zeta` (damping, 0–1) sets the bounce — lower =
+    /// bigger overshoot / more spring; `omega` the speed. Clamped so a
+    /// runaway value can't diverge.
+    public static func spring(_ t: Double, zeta: Double = 0.55,
+                              omega: Double = 9.0) -> Double {
+        let c = min(1, max(0, t))
+        if c >= 1 { return 1 }
+        let z = min(0.95, max(0.2, zeta))
+        let wd = omega * (1 - z * z).squareRoot()
+        return 1 - exp(-z * omega * c)
+            * (cos(wd * c) + (z * omega / wd) * sin(wd * c))
     }
 }
 

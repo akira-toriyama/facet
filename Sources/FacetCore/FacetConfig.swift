@@ -56,7 +56,11 @@ public struct FacetConfig: Sendable {
     /// of jumping. Raw; read `effectiveAnimationsEnabled`.
     public var animationsEnabled: Bool?
     /// Slide duration in ms. Raw; read `effectiveAnimationDuration`.
+    /// When unset, each curve uses its own natural default.
     public var animationDurationMs: Int?
+    /// Easing curve: none / cubic / spring / silky / snappy / random.
+    /// Raw; read `effectiveAnimationCurve`.
+    public var animationCurve: String?
 
     // [workspace]
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
@@ -158,11 +162,21 @@ public struct FacetConfig: Sendable {
         return known.contains(m) ? m : "float"
     }
 
-    /// Window-move animation on? Default on. Read this, not the raw field.
-    public var effectiveAnimationsEnabled: Bool { animationsEnabled ?? true }
+    /// Window-move animation on? Default on. False when explicitly
+    /// disabled OR the curve is "none". Read this, not the raw fields.
+    public var effectiveAnimationsEnabled: Bool {
+        (animationsEnabled ?? true) && effectiveAnimationCurve != "none"
+    }
     /// Slide duration (seconds), clamped 0.08–0.8 s. Default 0.28 s.
     public var effectiveAnimationDuration: TimeInterval {
         Double(min(800, max(80, animationDurationMs ?? 280))) / 1000
+    }
+    /// Animation curve: none / cubic / spring / silky / snappy / random.
+    /// Unknown clamps to "cubic"; "random" picks per transition.
+    public var effectiveAnimationCurve: String {
+        let known = ["none", "cubic", "spring", "silky", "snappy", "random"]
+        let c = (animationCurve ?? "cubic").lowercased()
+        return known.contains(c) ? c : "cubic"
     }
 
     /// Per-edge outer gap, px: inset from that screen edge for the
@@ -307,6 +321,9 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["animation"]?["duration-ms"] {
             c.animationDurationMs = n
+        }
+        if case .string(let s)? = toml["animation"]?["curve"] {
+            c.animationCurve = s
         }
         // [workspace]
         if case .stringArray(let xs)? = toml["workspace"]?["setup-files"] {

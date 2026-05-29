@@ -878,6 +878,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var slideAnims: [(ax: AXUIElement, slide: WindowSlide)] = []
     private var slideStart: Date?
     private var slideDuration: TimeInterval = 0
+    /// Easing for the in-flight animation; set when the driver starts.
+    private var slideCurve: (Double) -> Double = SlideCurve.easeOutCubic
     /// CADisplayLink (macOS 14+) driving the slide; `AnyObject?` keeps
     /// the stored type available on macOS 13. nil = Timer fallback.
     private var displayLink: AnyObject?
@@ -941,7 +943,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     fileprivate func slideTick() {
         guard let begin = slideStart else { return }
         let raw = min(1.0, -begin.timeIntervalSinceNow / slideDuration)
-        let e = SlideCurve.easeOutCubic(raw)
+        let e = slideCurve(raw)
         // AX is thread-safe per element; we vouch for the fan-out.
         nonisolated(unsafe) let anims = slideAnims
         // Many windows: fan out the per-frame writes so the serial sum
@@ -963,13 +965,47 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         if raw >= 1.0 { finishSlideIfRunning() }
     }
 
+    /// Curve + duration for the in-flight animation. `FACET_ANIM_CURVE`
+    /// (spring | silky | snappy | cubic) is a dev override for A/B'ing
+    /// the feel; default = ease-out cubic at the configured duration.
+    private func resolveAnimPreset()
+        -> (curve: (Double) -> Double, duration: TimeInterval)
+    {
+        let env = ProcessInfo.processInfo.environment
+        // Curve: env (dev A/B) → config → default. "random" → pick one
+        // per transition.
+        var name = env["FACET_ANIM_CURVE"] ?? config.effectiveAnimationCurve
+        if name == "random" {
+            name = ["cubic", "spring", "silky", "snappy"].randomElement() ?? "cubic"
+        }
+        // Duration: env override → config (if set, clamped) → per-curve default.
+        func ms(_ perCurveMs: Double) -> TimeInterval {
+            if let e = Double(env["FACET_ANIM_MS"] ?? "") { return e / 1000 }
+            if let c = config.animationDurationMs {
+                return Double(min(800, max(80, c))) / 1000
+            }
+            return perCurveMs / 1000
+        }
+        switch name {
+        case "spring":
+            // FACET_SPRING_ZETA: lower = bouncier (more overshoot).
+            let z = Double(env["FACET_SPRING_ZETA"] ?? "") ?? 0.5
+            return ({ SlideCurve.spring($0, zeta: z) }, ms(420))
+        case "silky":  return (SlideCurve.easeInOutCubic, ms(420))
+        case "snappy": return (SlideCurve.easeOutQuint, ms(220))
+        default:       return (SlideCurve.easeOutCubic, ms(280))
+        }
+    }
+
     /// Start the per-frame driver for an already-populated `slideAnims`.
     /// Prefers a vsync CADisplayLink (macOS 14+); Timer fallback on 13.
     /// `settle` runs once on completion (or interrupt via
     /// finishSlideIfRunning).
     private func startSlideDriver(_ settle: @escaping () -> Void) {
+        let preset = resolveAnimPreset()
+        slideCurve = preset.curve
         slideStart = Date()
-        slideDuration = config.effectiveAnimationDuration
+        slideDuration = preset.duration
         slideFinish = settle
         if #available(macOS 14.0, *), let screen = NSScreen.main {
             let link = screen.displayLink(target: slideTicker,

@@ -163,19 +163,29 @@ outer-gap = 0
 # -----------------------------------------------------------------
 # Window-move animation  [animation]
 # -----------------------------------------------------------------
-# Animate geometry transitions instead of snapping. Phase 1 covers the
-# workspace switch: windows slide as a directional filmstrip — the
-# workspace you leave slides off one edge while the one you enter slides
-# in from the opposite edge; the workspace-index delta picks the
-# direction. Pure public AX (no private APIs, no SIP changes). macOS
-# "Reduce motion" (System Settings > Accessibility > Display) is
-# honoured: when it's on, switches jump regardless of `enabled` below.
+# Animate geometry transitions instead of snapping. Covered today: the
+# workspace switch (windows slide as a directional filmstrip — leave one
+# edge, enter from the opposite; index delta picks the direction) and
+# retile / layout change (windows reflow in place, resizing as they go).
+# Pure public AX (no private APIs, no SIP changes). macOS "Reduce motion"
+# (System Settings > Accessibility > Display) is honoured: when it's on,
+# transitions jump regardless of the settings below.
 
 [animation]
 # enabled — master switch. Default true. Set false for instant jumps.
 enabled = true
-# duration-ms — slide length per transition, ms. Clamped to [80, 800];
-# default 280.
+# curve — easing / feel. One of:
+#   none   — no animation (same as enabled = false)
+#   cubic  — ease-out, no overshoot (default)
+#   spring — slight overshoot then settle (bouncy / premium)
+#   silky  — ease both ends, longer; smooth and unhurried
+#   snappy — fast, crisp deceleration, no overshoot
+#   random — pick one of the above per transition
+# Unknown values fall back to cubic.
+# curve = "cubic"
+# duration-ms — override the slide length (ms, clamped [80, 800]). When
+# unset, each curve uses its own natural default (cubic 280 / spring 420
+# / silky 420 / snappy 220).
 # duration-ms = 280
 
 
