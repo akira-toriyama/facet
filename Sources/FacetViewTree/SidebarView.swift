@@ -543,26 +543,32 @@ public final class SidebarView: NSView {
             switch c.kind {
             case 0:   // top drag-handle band: grab to move the panel;
                       // shows the native macOS desktop ("Desktop N").
+                      // Divider sits `dividerPadBelow` above the band's
+                      // bottom edge; label + grip centre in the zone
+                      // above it, so the line reads with breathing room
+                      // on both sides.
+                let dividerPadBelow: CGFloat = 6
+                let zoneH = row.height - dividerPadBelow
                 drawGrip(in: NSRect(x: rowPadX,
-                                    y: row.minY + (row.height - 12) / 2,
+                                    y: row.minY + (zoneH - 12) / 2,
                                     width: headerGripW, height: 12),
                          hot: hoverIdx == i)
-                let th: CGFloat = 16
+                let th: CGFloat = 18
                 let t = c.text as NSString
                 t.draw(in: NSRect(x: rowPadX + headerGripW + 7,
-                                  y: row.minY + (row.height - th) / 2,
+                                  y: row.minY + (zoneH - th) / 2,
                                   width: bounds.width
                                       - (rowPadX * 2 + headerGripW + 7),
                                   height: th),
                        withAttributes: [
-                        .font: uiFont(11.5, .semibold),
-                        .foregroundColor: pal.dim,
-                        .kern: 0.4, .paragraphStyle: para])
+                        .font: uiFont(13, .bold),
+                        .foregroundColor: pal.text,
+                        .kern: 0.5, .paragraphStyle: para])
+                let lineY = row.maxY - dividerPadBelow
                 pal.divider.setStroke()
                 let hsep = NSBezierPath()
-                hsep.move(to: NSPoint(x: rowPadX, y: row.maxY - 0.5))
-                hsep.line(to: NSPoint(x: bounds.width - rowPadX,
-                                      y: row.maxY - 0.5))
+                hsep.move(to: NSPoint(x: rowPadX, y: lineY))
+                hsep.line(to: NSPoint(x: bounds.width - rowPadX, y: lineY))
                 hsep.lineWidth = 1
                 hsep.stroke()
 
