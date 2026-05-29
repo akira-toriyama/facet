@@ -359,3 +359,25 @@ public func applyInnerGap(_ frames: [WindowID: CGRect],
     }
     return out
 }
+
+public extension CGRect {
+    /// Snap every edge to a whole physical pixel for the given
+    /// backing `scale` (`(v*scale).rounded()/scale`), so window
+    /// edges stay crisp on HiDPI displays instead of landing on a
+    /// fractional point and getting blurred / leaving a 1px seam.
+    ///
+    /// Rounds the leading edge (`minX`/`minY`) and the trailing edge
+    /// (`maxX`/`maxY`) *independently*, then derives width/height
+    /// from the difference — NOT by rounding width/height directly.
+    /// That way two frames sharing an edge (one's `maxX` == the
+    /// other's `minX`) round to the same value and still meet
+    /// exactly. `scale <= 0` is a no-op.
+    func roundedToPhysicalPixels(scale: CGFloat) -> CGRect {
+        guard scale > 0 else { return self }
+        let x0 = (minX * scale).rounded() / scale
+        let y0 = (minY * scale).rounded() / scale
+        let x1 = (maxX * scale).rounded() / scale
+        let y1 = (maxY * scale).rounded() / scale
+        return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
+    }
+}

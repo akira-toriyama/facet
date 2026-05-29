@@ -504,6 +504,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                       height: max(0, full.height - top - bottom))
     }
 
+    /// Backing scale of the display the tiling `rect` sits on, for
+    /// pixel-rounding tile frames. Same main-thread hop as
+    /// `activeDisplayRect` (NSScreen is main-only). `rect` is already
+    /// in the display's Quartz coords, so its centre identifies the
+    /// screen.
+    private func activeScale(near rect: CGRect) -> CGFloat {
+        let p = CGPoint(x: rect.midX, y: rect.midY)
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                Displays.backingScaleFactor(containing: p)
+            }
+        }
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                Displays.backingScaleFactor(containing: p)
+            }
+        }
+    }
+
     /// Enumerate windows via the public CGWindowList API.
     /// Returns **every** window in the user session, not just the
     /// ones currently on-screen — each entry carries an
@@ -891,14 +910,22 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let frames = applyInnerGap(frames, in: rect,
                                    gap: config.effectiveInnerGap)
         guard !frames.isEmpty else { return }
+        // Pixel-round each frame to whole physical pixels (HiDPI
+        // crispness) on the active display's backing scale — after
+        // gap (which introduces fractional points), before the AX
+        // write. Kept out of AXGeom's generic setters so anchor-hide's
+        // sub-pixel reveal coords aren't rounded (would break the
+        // macOS clamp dodge).
+        let scale = activeScale(near: rect)
         var applied = 0
         for (id, frame) in frames {
             guard let pid = catalog.pid(for: id) else { continue }
             guard let ax = AXGeom.window(
                 for: CGWindowID(id.serverID),
                 pid: pid_t(pid)) else { continue }
-            AXGeom.setPosition(ax, frame.origin)
-            AXGeom.setSize(ax, frame.size)
+            let r = frame.roundedToPhysicalPixels(scale: scale)
+            AXGeom.setPosition(ax, r.origin)
+            AXGeom.setSize(ax, r.size)
             applied += 1
         }
         Log.debug("native: \(label) "

@@ -207,4 +207,19 @@ public enum Displays {
             width: v.width,
             height: v.height)
     }
+
+    /// `backingScaleFactor` of the display containing `point` (same
+    /// NSScreen lookup as `visibleFrame`): 1.0 non-Retina, 2.0
+    /// Retina, 3.0 on some. Falls back to the main screen, then 2.0
+    /// (the common Retina case). Used to round tile frames to whole
+    /// physical pixels so HiDPI window edges stay crisp.
+    @MainActor
+    public static func backingScaleFactor(containing point: CGPoint)
+        -> CGFloat
+    {
+        let screen = NSScreen.screens.first {
+            $0.frame.contains(point)
+        } ?? NSScreen.main
+        return screen?.backingScaleFactor ?? 2.0
+    }
 }
