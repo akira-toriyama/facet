@@ -476,16 +476,32 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         } else {
             probe = .zero
         }
+        let full: CGRect
         if Thread.isMainThread {
-            return MainActor.assumeIsolated {
+            full = MainActor.assumeIsolated {
                 Displays.visibleFrame(containing: probe)
             }
-        }
-        return DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                Displays.visibleFrame(containing: probe)
+        } else {
+            full = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    Displays.visibleFrame(containing: probe)
+                }
             }
         }
+        // Outer gap: inset the whole tiling area from each screen
+        // edge before any layout carves it. Per-edge; doing it here
+        // feeds every downstream path (tile / stack / engine) from
+        // one place. `full` is top-left origin (Displays.visibleFrame
+        // returns Quartz coords), so screen top → minY, bottom → maxY.
+        let top = config.effectiveOuterGapTop
+        let bottom = config.effectiveOuterGapBottom
+        let left = config.effectiveOuterGapLeft
+        let right = config.effectiveOuterGapRight
+        guard top + bottom + left + right > 0 else { return full }
+        return CGRect(x: full.minX + left,
+                      y: full.minY + top,
+                      width: max(0, full.width - left - right),
+                      height: max(0, full.height - top - bottom))
     }
 
     /// Enumerate windows via the public CGWindowList API.
@@ -869,6 +885,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the stateless-engine path.
     private func applyFrames(_ frames: [WindowID: CGRect],
                              label: String, rect: CGRect) {
+        // Inner gap: pull abutting windows apart. The screen-edge
+        // side of an outermost window stays flush — that distance is
+        // the outer gap, already inset into `rect`. No-op when 0.
+        let frames = applyInnerGap(frames, in: rect,
+                                   gap: config.effectiveInnerGap)
         guard !frames.isEmpty else { return }
         var applied = 0
         for (id, frame) in frames {
