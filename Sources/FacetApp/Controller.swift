@@ -619,7 +619,13 @@ final class Controller: NSObject {
         }
         sidebarView.frame.size.width = panelHost.userWidth
         sidebarView.forceRedraw()
-        let contentH = sidebarView.update(wss, titles: titles)
+        // Native macOS desktop ordinal (read-only SkyLight) for the
+        // tree's top handle band. 0 = SkyLight unavailable → no name.
+        let activeSpace = Spaces.activeSpaceID()
+        let desktopOrdinal = activeSpace == 0
+            ? nil : Spaces.activeSpaceOrdinal(for: activeSpace)
+        let contentH = sidebarView.update(wss, titles: titles,
+                                          nativeDesktop: desktopOrdinal)
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
