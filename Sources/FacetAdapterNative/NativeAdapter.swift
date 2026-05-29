@@ -1281,9 +1281,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Layout changed for source AND/OR destination — re-apply
         // the active WS if its mode produces an on-screen layout.
         // Inactive WSs catch up on their next switchWorkspace
-        // (Phase γ: lazy retile / re-stack).
-        applyLayout(workspace: catalog.activeIndex, rect: rect)
-        eventContinuation.yield(.refreshNeeded)
+        // (Phase γ: lazy retile / re-stack). 枠 E: the remaining
+        // windows animate as they reflow to fill the moved window's
+        // slot (the moved window itself already parked off-screen).
+        reflowActive(rect: rect)
     }
 
     // MARK: - Dynamic workspace commands (A: runtime WS set)
