@@ -14,26 +14,6 @@ macOS 向け Swift 製ワークスペース + ウィンドウマネージャ。 
 native 実装、 外部依存なし。 レイヤー図は
 [docs/architecture.md](docs/architecture.md)。
 
-## デモ
-
-![facet — 半透明ツリーサイドバーと BSP タイルされた windows](docs/media/tree-bsp.gif)
-
-左上の半透明ツリーサイドバーが各ワークスペースとその windows を
-一覧し、 native な BSP レイアウトがそれらをタイルする — ここでは
-蒸気機関車・ π スピゴット・ マンデルブロ・ Matrix レインを流す
-4 つのターミナル。
-
-| フルスクリーン grid オーバービュー | window をセル間でドラッグ |
-|:--:|:--:|
-| ![grid オーバービュー](docs/media/grid.gif) | ![grid ドラッグ&ドロップ](docs/media/grid-dnd.gif) |
-
-| ワークスペース切替 | BSP / stack タイリング |
-|:--:|:--:|
-| ![ワークスペース切替](docs/media/workspace-switch.gif) | ![タイリング](docs/media/tiling.gif) |
-
-<sub>クリーンな macOS VM で録画 — window タイトル・ grid サムネイル・
-タイリングはすべて実 AX / ScreenCaptureKit、 モックなし。</sub>
-
 ## 何ができるか
 
 facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
@@ -57,6 +37,144 @@ swap (ワークスペースの枠自体は動かないので hotkey 番号は不
 
 両 view は同じ backend と同じテーマ (terminal / cute / system、
 ライブ切替) を共有。
+
+## レイアウト
+
+各ワークスペースは 1 つのレイアウトで動作し、 実行時に
+`facet --set-layout=NAME` で切り替える (per-WS、 永続化しない —
+起動時に選ぶなら [setup hook](#workspace-setup-hooks) を使う)。 facet
+は window を隠さないので、 レイアウトは window を*配置*するだけで、
+focus 中の window は常に前面に来る。 図は 4 window 想定、 **1** が
+master / focus。
+
+### `tall` — master + stack
+dwm `tile` / xmonad `Tall`。 master が左カラム (幅の可変割合) を占め、
+残りが右に行で積まれる。 ウルトラワイドの定番。
+
+```
+┌────────────┬───────────┐
+│            │     2     │
+│            ├───────────┤
+│     1      │     3     │
+│  (master)  ├───────────┤
+│            │     4     │
+└────────────┴───────────┘
+```
+
+### `wide` — master を上に
+`tall` を 90° 回転 (`--toggle-orientation` で切替): master が上の行、
+残りが下のカラムになる。
+
+```
+┌─────────────────────────┐
+│        1 (master)       │
+├───────┬───────┬─────────┤
+│   2   │   3   │    4    │
+└───────┴───────┴─────────┘
+```
+
+### `centered-master` — master を中央に
+dwm `centeredmaster` / xmonad ThreeColMid。 master を中央に、 残りを
+左右のサイドカラムに分配 (右から埋まる)。 ウルトラワイド向け。
+
+```
+┌───────┬───────────────┬───────┐
+│       │               │   2   │
+│   4   │   1 (master)  ├───────┤
+│       │               │   3   │
+└───────┴───────────────┴───────┘
+```
+
+### `grid` — 均等タイル
+awesome `grid`。 ほぼ正方の格子 (`ceil(√N)` 列)、 最終行は幅いっぱいに
+広がる。
+
+```
+ 2 window          3 window           4 window
+┌─────┬─────┐    ┌─────┬─────┐      ┌─────┬─────┐
+│  1  │  2  │    │  1  │  2  │      │  1  │  2  │
+└─────┴─────┘    ├─────┴─────┤      ├─────┼─────┤
+                 │     3     │      │  3  │  4  │
+                 └───────────┘      └─────┴─────┘
+```
+
+### `spiral` — フィボナッチ
+dwm `fibonacci`。 新しい window が残り空間を半分にしながら時計回りに
+内へ巻いていく。
+
+```
+┌────────────┬───────────┐
+│            │     2     │
+│     1      ├─────┬─────┤
+│            │  4  │  3  │
+└────────────┴─────┴─────┘
+```
+
+### `monocle` — 全画面フォーカス
+dwm `monocle`。 全 window が画面いっぱい、 focus 中が前面 (他は背面に
+原寸で控える — facet は隠さず focus を前面化する)。
+
+```
+┌─────────────────────────┐
+│                         │
+│     1  (2 3 4 behind)   │
+│                         │
+└─────────────────────────┘
+```
+
+### `bsp` — 二分割
+bspwm 流。 新しい window が focus 中のタイルを半分に割る (アスペクトで
+自動バランス)。 `--toggle-orientation` で focus 中の split を回転。
+
+```
+┌────────────┬───────────┐
+│            │     2     │
+│     1      ├─────┬─────┤
+│            │  3  │  4  │
+└────────────┴─────┴─────┘
+```
+
+### `stack` — 1 つずつ
+1 window が画面いっぱい、 残りは画面外に park。
+`--cycle-stack=next|prev` で前面の window を巡回。
+
+```
+┌─────────────────────────┐    他 (2, 3, 4) は画面外に park。
+│                         │    cycle-stack で次を前面に。
+│       1  (front)        │
+│                         │
+└─────────────────────────┘
+```
+
+`float` (デフォルト) はレイアウトを適用しない — window は置いた位置に
+留まる。
+
+### master-stack の操作
+
+`tall` / `centered-master` は実行時に調整できる (per-WS)。 focus 中の
+window を master スロットへ **昇格**:
+
+```
+  before (3 を focus)         after --promote (menu)
+┌────────────┬───────┐      ┌────────────┬───────┐
+│            │   2   │      │            │   1   │
+│     1      ├───────┤  →   │     3      ├───────┤
+│  (master)  │   3   │      │  (master)  │   2   │
+└────────────┴───────┘      └────────────┴───────┘
+```
+
+master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
+**枚数変更** (`--inc-master` / `--dec-master`):
+
+```
+  --grow-master              --inc-master (2 masters)
+┌──────────────┬─────┐      ┌────────────┬───────────┐
+│              │  2  │      │     1      │     3     │
+│      1       ├─────┤  →   │  (master)  ├───────────┤
+│   (master)   │  3  │      │     2      │     4     │
+└──────────────┴─────┘      │  (master)  │           │
+                            └────────────┴───────────┘
+```
 
 ## 操作
 
@@ -118,26 +236,6 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 権限必要) で描画。 バックグラウンド refresh でキャッシュを温めるので、
 オーバービュー初回表示でアイコンフォールバックではなく実スクリーン
 ショットが出る。
-
-## ステータス
-
-**Alpha** — native AX backend、 外部依存なし。 workspace 切替 /
-native macOS Space ごとの独立 workspace / window park (anchor) /
-BSP・stack tiling / AX role auto-float / display reconfigure 処理が
-全て default で動作。 `brew install akira-toriyama/tap/facet` 稼働中。
-
-| マイルストーン | 状態 |
-|---|---|
-| M1 — repo scaffold、 `swift build` green | ✅ |
-| M2 — tree + grid view 動作 | ✅ |
-| M3 — Homebrew tap (`brew install akira-toriyama/tap/facet`) | ✅ |
-| M5 Phase α — native workspaces + focus + AX events | ✅ |
-| M5 Phase β — anchor hide、 closeWindow、 setup-files | ✅ |
-| M5 Phase γ — BSP + stack tiling、 AX-role auto-float、 tiling CLI | ✅ |
-| M5 Phase δ — display reconfigure | ✅ |
-| M5 Phase ε — native sole backend (v2.0.0) | ✅ |
-
-レイヤー図と移行計画は [docs/architecture.md](docs/architecture.md)。
 
 ## インストール
 
