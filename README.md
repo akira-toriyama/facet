@@ -147,7 +147,7 @@ One window fills the screen; the rest are parked off-screen.
 ```
 ┌─────────────────────────┐    others (2, 3, 4) parked
 │                         │    off-screen; cycle-stack
-│       1  (on top)       │    brings the next one forward
+│       1  (front)        │    brings the next one forward
 │                         │
 └─────────────────────────┘
 ```
@@ -181,26 +181,6 @@ and change **how many** windows share it (`--inc-master` /
 │   (master)   │  3  │      │     2      │     4     │
 └──────────────┴─────┘      │  (master)  │           │
                             └────────────┴───────────┘
-```
-
-The operation model, as a flow:
-
-```mermaid
-flowchart LR
-  T["tall / centered-master"]
-  T -->|"--grow-master / --shrink-master"| R["master width ±0.05"]
-  T -->|"--inc-master / --dec-master"| C["master count ±1"]
-  T -->|"--toggle-orientation"| O["flip wide ↔ tall"]
-  T -->|"Promote to master (menu)"| P["focused → master slot"]
-```
-
-`grid` maps cleanly onto a block diagram too:
-
-```mermaid
-block-beta
-  columns 2
-  one["1"] two["2"]
-  three["3"] four["4"]
 ```
 
 ## Interactions
