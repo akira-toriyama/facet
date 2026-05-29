@@ -99,10 +99,16 @@ public protocol WindowBackend: Sendable {
     /// Run an action against the currently-focused window.
     func perform(_ action: WindowAction)
 
-    /// Build the right-click menu for a window in the given layout
-    /// mode / floating state. Pure function on the backend's
-    /// knowledge of which actions its layouts support.
-    func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem]
+    /// Build the right-click menu for a window, given its workspace's
+    /// layout `mode`, whether the window is `floating`, whether it is
+    /// the `isMaster` window (first in tiling order), and the
+    /// workspace's tiled `windowCount` (non-floating members). Pure
+    /// function on the backend's knowledge of which actions its
+    /// layouts support; state-dependent items (e.g. "Promote to
+    /// master", stack cycling) are gated so the menu matches the
+    /// window's actual state.
+    func windowMenu(mode: String, floating: Bool,
+                    isMaster: Bool, windowCount: Int) -> [WindowMenuItem]
 
     /// Re-apply the active workspace's layout. Phase γ escape
     /// hatch: when the on-screen state has drifted from what the

@@ -68,6 +68,13 @@ public struct Window: Sendable {
     /// doesn't lose the WS assignment. See memory
     /// `facet-macos-spaces-coexistence`.
     public let isOnscreen: Bool
+    /// Whether this window occupies the master slot of its workspace
+    /// — i.e. it is first in the workspace's tiling order
+    /// (`order[0]`). Only meaningful for master-stack layouts
+    /// (tall / centered-master); the right-click menu uses it to hide
+    /// "Promote to master" on the window that is already the master.
+    /// `false` for floating windows and layouts without a master.
+    public let isMaster: Bool
 
     public init(id: WindowID,
                 pid: Int,
@@ -76,7 +83,8 @@ public struct Window: Sendable {
                 isFocused: Bool,
                 isFloating: Bool,
                 frame: CGRect?,
-                isOnscreen: Bool = true) {
+                isOnscreen: Bool = true,
+                isMaster: Bool = false) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -85,6 +93,7 @@ public struct Window: Sendable {
         self.isFloating = isFloating
         self.frame = frame
         self.isOnscreen = isOnscreen
+        self.isMaster = isMaster
     }
 }
 

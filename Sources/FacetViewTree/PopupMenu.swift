@@ -207,6 +207,17 @@ public final class PopupMenu {
             handler: { _ in
                 MainActor.assumeIsolated { Self.shared.close() }
             }) as Any)
+        // Esc-to-close even when facet isn't the active app. The local
+        // keyDown monitor below only fires while facet is key (e.g.
+        // --active kb-nav); a right-click menu opens without activating
+        // facet, so Esc would otherwise never reach it. Global monitors
+        // observe (can't swallow) — fine for Esc: closing is all we need.
+        monitors.append(NSEvent.addGlobalMonitorForEvents(
+            matching: [.keyDown],
+            handler: { ev in
+                guard ev.keyCode == 53 else { return }   // Esc
+                MainActor.assumeIsolated { Self.shared.close() }
+            }) as Any)
         monitors.append(NSEvent.addLocalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .keyDown]
         ) { [weak self] ev in

@@ -866,6 +866,9 @@ struct WorkspaceCatalog {
                 LayoutRegistry.engine(named: m) != nil
                 ? engineFrames(for: entry.index, in: activeRect)
                 : [:]
+            // Master = first in the WS's tiling order (order[0]). Used
+            // by the right-click menu to vary master vs non-master.
+            let master = orderedMembers(of: entry.index).first
             let wins = (byWS[entry.index] ?? []).map { w in
                 Window(id: w.id, pid: w.pid, appName: w.appName,
                        title: w.title,
@@ -877,7 +880,8 @@ struct WorkspaceCatalog {
                            stackSet: stackSet,
                            engineFrames: engineF,
                            activeRect: activeRect),
-                       isOnscreen: w.isOnscreen)
+                       isOnscreen: w.isOnscreen,
+                       isMaster: w.id == master)
             }
             return Workspace(
                 index: entry.index - 1,
