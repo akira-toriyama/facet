@@ -1631,6 +1631,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         eventContinuation.yield(.refreshNeeded)
     }
 
+    /// Animate (or instantly apply) the active workspace's reflow after
+    /// a user action (master / orientation / float). Mirrors the retile
+    /// path — animate when on, else snap — and owns the refresh yield.
+    private func reflowActive(rect: CGRect) {
+        finishSlideIfRunning()
+        if config.effectiveAnimationsEnabled,
+           animateRetile(workspace: catalog.activeIndex, rect: rect) {
+            return
+        }
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
+        eventContinuation.yield(.refreshNeeded)
+    }
+
     public func perform(_ action: WindowAction) {
         // BSP: toggleFloat, toggleOrientation. Stack:
         // cycleStackNext, cycleStackPrev. Everything else
@@ -1644,8 +1657,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: perform toggleFloat "
                 + "\(id.serverID) → "
                 + "isFloating=\(catalog.isFloating(id))")
-            applyLayout(workspace: catalog.activeIndex, rect: rect)
-            eventContinuation.yield(.refreshNeeded)
+            reflowActive(rect: rect)
         case .toggleOrientation:
             // bsp: rotate the focused window's parent split.
             // tall: flip the master axis (Tall ↔ Wide).
@@ -1654,15 +1666,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 _ = catalog.toggleMasterOrientation(
                     workspace: catalog.activeIndex)
                 Log.debug("native: perform toggleOrientation (tall flip)")
-                applyLayout(workspace: catalog.activeIndex, rect: rect)
-                eventContinuation.yield(.refreshNeeded)
+                reflowActive(rect: rect)
             case "bsp":
                 guard let id = focusedWindow() else { return }
                 catalog.toggleOrientation(of: id)
                 Log.debug("native: perform toggleOrientation "
                     + "\(id.serverID)")
-                applyLayout(workspace: catalog.activeIndex, rect: rect)
-                eventContinuation.yield(.refreshNeeded)
+                reflowActive(rect: rect)
             default:
                 break
             }
@@ -1691,8 +1701,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: perform promoteToMaster "
                 + "\(id.serverID) moved=\(moved)")
             if moved {
-                applyLayout(workspace: catalog.activeIndex, rect: rect)
-                eventContinuation.yield(.refreshNeeded)
+                reflowActive(rect: rect)
             }
         case .growMaster, .shrinkMaster:
             // Master-ratio nudge — only meaningful for the master
@@ -1701,16 +1710,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             let delta: CGFloat = action == .growMaster ? 0.05 : -0.05
             if catalog.adjustMasterRatio(
                 workspace: catalog.activeIndex, delta: delta) {
-                applyLayout(workspace: catalog.activeIndex, rect: rect)
-                eventContinuation.yield(.refreshNeeded)
+                reflowActive(rect: rect)
             }
         case .incMaster, .decMaster:
             guard hasMasterKnob(catalog.activeIndex) else { return }
             let delta = action == .incMaster ? 1 : -1
             if catalog.adjustMasterCount(
                 workspace: catalog.activeIndex, delta: delta) {
-                applyLayout(workspace: catalog.activeIndex, rect: rect)
-                eventContinuation.yield(.refreshNeeded)
+                reflowActive(rect: rect)
             }
         // out-of-scope / future cases — no-op, but listed explicitly
         // so the compiler enforces a handling decision on every
