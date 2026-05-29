@@ -173,6 +173,41 @@ public struct CenteredMasterLayout: LayoutEngine {
     }
 }
 
+/// Grid (awesome `grid`, Qtile `Grid`). Tiles N windows into a
+/// near-square grid: `cols = ceil(√N)` columns over `ceil(N/cols)`
+/// rows, filled left→right / top→bottom in `order`. The final row is
+/// widened to fill the width (no trailing gap). Master knobs unused —
+/// grid has no master.
+public struct GridLayout: LayoutEngine {
+    public let name = "grid"
+    public init() {}
+
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        let n = order.count
+        guard n > 0 else { return [:] }
+        // cols = ceil(√n) via integer math (no Foundation dependency).
+        var cols = 1
+        while cols * cols < n { cols += 1 }
+        let rows = (n + cols - 1) / cols
+        let cellH = rect.height / CGFloat(rows)
+        var out: [WindowID: CGRect] = [:]
+        for (i, id) in order.enumerated() {
+            let row = i / cols
+            let colInRow = i - row * cols
+            // The last row may hold fewer than `cols` windows — widen
+            // its cells so the row still fills the full width.
+            let rowCount = (row == rows - 1) ? (n - row * cols) : cols
+            let cellW = rect.width / CGFloat(rowCount)
+            out[id] = CGRect(x: rect.minX + CGFloat(colInRow) * cellW,
+                             y: rect.minY + CGFloat(row) * cellH,
+                             width: cellW, height: cellH)
+        }
+        return out
+    }
+}
+
 /// Registry of stateless layout engines, keyed by `name`. bsp and
 /// stack are intentionally absent — they keep their stateful adapter
 /// paths; this is the seam stateless layouts register into, so adding
@@ -182,6 +217,7 @@ public enum LayoutRegistry {
         MonocleLayout(),
         TallLayout(),
         CenteredMasterLayout(),
+        GridLayout(),
     ]
 
     /// Mode name → engine, or nil when `name` isn't a registered
