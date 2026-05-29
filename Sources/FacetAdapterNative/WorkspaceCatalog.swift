@@ -14,7 +14,7 @@
 // Indexing convention
 //
 //   The catalog speaks 1-based indexes everywhere it borders the
-//   user-facing CLI (`facet --workspace=N` is 1-indexed). The
+//   user-facing CLI (`facet workspace --focus=N` is 1-indexed). The
 //   `WindowBackend` protocol is 0-based on the wire, so
 //   `NativeAdapter` translates at the seam (`index + 1` on entry,
 //   `index - 1` on snapshot emit). Keeping the catalog 1-based

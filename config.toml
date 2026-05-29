@@ -122,7 +122,7 @@ preview-mode = "popover"
 
 # External shell-hook setup scripts, run once at startup AFTER
 # facet's CLI listener (DNC) is live so the script can immediately
-# call `facet --workspace=N` / `facet window --move-to=N` /
+# call `facet workspace --focus=N` / `facet window --move-to=N` /
 # `facet status`. Vitest-style: facet itself never persists window
 # assignments — this hook is your escape hatch to recreate the
 # layout you want on launch.
@@ -149,12 +149,12 @@ preview-mode = "popover"
 # config key. Each WS defaults to "float" so existing users see
 # zero behaviour change on upgrade. Opt in with, e.g.:
 #
-#     facet --workspace=1
-#     facet --set-layout=bsp     # this WS now auto-tiles BSP
-#     facet --set-layout=stack   # or single-window stack mode
+#     facet workspace --focus=1
+#     facet workspace --layout=bsp     # this WS now auto-tiles BSP
+#     facet workspace --layout=stack   # or single-window stack mode
 #
 # Other tiling-related verbs:
-#     facet --retile                       # recompute + reapply layout
+#     facet workspace --retile             # recompute + reapply layout
 #     facet window --toggle-float          # exclude window from layout
 #     facet window --toggle-orientation    # rotate parent split (bsp)
 #     facet window --cycle-stack=next|prev # rotate stack focus

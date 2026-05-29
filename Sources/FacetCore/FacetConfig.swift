@@ -33,7 +33,7 @@ public struct FacetConfig: Sendable {
     // [workspace]
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
     /// Keys are 1-indexed integers matching what the user types
-    /// into `facet --workspace=N`. Empty string values are
+    /// into `facet workspace --focus=N`. Empty string values are
     /// permitted (= name-less slot, renders as "(N)" in status).
     /// Read through `effectiveWorkspaceNames` for clamped values.
     public var workspaceNames: [Int: String] = [:]

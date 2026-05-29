@@ -23,11 +23,10 @@
 //   Theme   : --theme=NAME
 //   Server  : --quit / --reload / --debug / --resign / --help
 //   Status  : facet status (read-only, no `--`)
-//   Workspace : --workspace=N / facet window --move-to=N
-//   Tiling    : --set-layout=NAME / --retile
-//               facet window --toggle-float
-//               facet window --toggle-orientation
-//               facet window --cycle-stack=next|prev
+//   Workspace : facet workspace --focus=N / --layout=NAME / --retile
+//   Window    : facet window --move-to=N / --toggle-float /
+//               --toggle-orientation / --cycle-stack=next|prev /
+//               --grow-master / --shrink-master / --inc-master / --dec-master
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
@@ -100,23 +99,21 @@ enum FacetApp {
             alias fa='facet --view=tree --active'
             alias fg='facet --view=grid'
 
-        WORKSPACE
-          facet --workspace=N                switch to workspace N
-                                             (1-indexed; idempotent —
-                                             no-op if already there)
-          facet window --move-to=N           move the focused window
-                                             to workspace N (1-indexed)
+        WORKSPACE                            (active / target workspace)
+          facet workspace --focus=N          switch to workspace N
+                                             (1-indexed; idempotent)
+          facet workspace --layout=NAME      set the workspace's layout
+                                             (bsp | stack | tall |
+                                             centered-master | grid |
+                                             spiral | monocle | float)
+          facet workspace --retile           re-apply the layout
+                                             (no-op when float)
 
-        TILING (M5 Phase γ)
-          facet --set-layout=NAME            set active WS's layout mode
-                                             (bsp | stack | float)
-          facet --retile                     re-apply active WS's layout
-                                             (BSP re-tile / stack re-stack;
-                                             no-op when float)
-          facet window --toggle-float        flip focused window's float
-                                             flag (skips tile / stack)
-          facet window --toggle-orientation  rotate focused window's
-                                             parent split 90° (bsp only)
+        WINDOW                               (focused window)
+          facet window --move-to=N           move it to workspace N
+          facet window --toggle-float        flip its float flag
+          facet window --toggle-orientation  bsp: rotate parent split /
+                                             tall: flip wide ↔ tall
           facet window --cycle-stack=next    rotate stack to next member
           facet window --cycle-stack=prev    rotate stack to previous
                                              member (stack only)
@@ -130,8 +127,8 @@ enum FacetApp {
           your shortcut tool of choice (skhd, Karabiner-Elements,
           hammerspoon, …):
             # ~/.config/skhd/skhdrc
-            ctrl + alt - 1 : facet --workspace=1
-            ctrl + alt - 2 : facet --workspace=2
+            ctrl + alt - 1 : facet workspace --focus=1
+            ctrl + alt - 2 : facet workspace --focus=2
             ctrl + shift + alt - 1 : facet window --move-to=1
 
         STATUS
@@ -367,11 +364,12 @@ enum FacetApp {
         }
     }
 
-    /// Parse ``--workspace=N`` (positive integer, 1-indexed). Loud
-    /// reject on non-integer / non-positive so a typo can't pick
-    /// the wrong workspace silently.
-    static func parseWorkspaceInt(_ arg: String) -> Int {
-        parsePositiveInt(arg, prefix: "--workspace=", flag: "--workspace")
+    /// Parse ``workspace --focus=N`` (positive integer, 1-indexed).
+    /// Loud reject on non-integer / non-positive so a typo can't pick
+    /// the wrong workspace silently. Relative targets
+    /// (next / prev / recent) are handled separately as strings.
+    static func parseWorkspaceFocusInt(_ arg: String) -> Int {
+        parsePositiveInt(arg, prefix: "--focus=", flag: "workspace --focus")
     }
 
     /// Parse ``--move-to=N`` (positive integer, 1-indexed).
@@ -429,6 +427,52 @@ enum FacetApp {
             FileHandle.standardError.write(Data(msg.utf8))
             exit(4)
         }
+    }
+
+    /// Sub-command parser for ``facet workspace <flag>``. Subject-verb
+    /// mirror of ``facet window``: one action per invocation, loud
+    /// reject on zero / multiple / unknown. Verbs:
+    ///   --focus=N     switch to workspace N (1-indexed)
+    ///   --layout=NAME set the active workspace's layout mode
+    ///   --retile      re-apply the active workspace's layout
+    /// (Relative --focus=next|prev|recent lands in a follow-up.)
+    static func runWorkspaceCommand(_ args: [String]) -> Never {
+        var focusArg: Int?
+        var layoutArg: String?
+        var retileFlag = false
+        var i = 0
+        while i < args.count {
+            defer { i += 1 }
+            let a = args[i]
+            switch true {
+            case a.hasPrefix("--focus="):
+                focusArg = parseWorkspaceFocusInt(a)
+            case a.hasPrefix("--layout="):
+                layoutArg = canonicalLayoutMode(
+                    String(a.dropFirst("--layout=".count)))
+            case a == "--retile":
+                retileFlag = true
+            default:
+                die("unknown `workspace` flag \"\(a)\" — "
+                    + "see `facet --help`")
+            }
+        }
+        let count = (focusArg != nil ? 1 : 0)
+            + (layoutArg != nil ? 1 : 0)
+            + (retileFlag ? 1 : 0)
+        guard count > 0 else {
+            die("facet workspace: no action specified — "
+                + "see `facet --help`")
+        }
+        guard count == 1 else {
+            die("facet workspace: pick one action per invocation — "
+                + "see `facet --help`")
+        }
+        requireServerAlive()
+        if let n = focusArg  { postWorkspace(n) }
+        if let l = layoutArg { postSetLayout(l) }
+        if retileFlag        { postRetile() }
+        die("facet workspace: dispatch fell through (bug)")
     }
 
     /// Sub-command parser for ``facet window <flag>``. Subcommand
@@ -746,9 +790,6 @@ enum FacetApp {
         var hideArg: String?
         var toggleArg: String?
         var styleArg: String?
-        var workspaceArg: Int?
-        var setLayoutArg: String?
-        var retileFlag = false
         var activeFlag = false
         var loadingArg: Int?            // nil = not requested; ms otherwise
         var quitFlag = false
@@ -772,6 +813,11 @@ enum FacetApp {
         // open for `--close` / `--float` / etc. later.
         if argv.first == "window" {
             runWindowCommand(Array(argv.dropFirst()))
+        }
+        // `facet workspace <flag>` — workspace-scoped verbs (focus /
+        // layout / retile). Subject-verb mirror of `facet window`.
+        if argv.first == "workspace" {
+            runWorkspaceCommand(Array(argv.dropFirst()))
         }
         // Read-only query sub-command. Plain noun (no `--`)
         // because it returns data rather than triggering a verb.
@@ -817,13 +863,6 @@ enum FacetApp {
                 if i + 1 < argv.count {
                     styleArg = canonicalStyle(argv[i + 1]); i += 1
                 }
-            case a.hasPrefix("--workspace="):
-                workspaceArg = parseWorkspaceInt(a)
-            case a.hasPrefix("--set-layout="):
-                setLayoutArg = canonicalLayoutMode(
-                    String(a.dropFirst("--set-layout=".count)))
-            case a == "--retile":
-                retileFlag = true
             case a.hasPrefix("--pos-x="):
                 posX = parseGeomInt(a, "--pos-x=")
             case a.hasPrefix("--pos-y="):
@@ -892,7 +931,6 @@ enum FacetApp {
         // about to become the server.
         let anyClientAction = styleArg != nil || quitFlag || reloadFlag
             || viewArg != nil || hideArg != nil || toggleArg != nil
-            || workspaceArg != nil || setLayoutArg != nil || retileFlag
         if anyClientAction { requireServerAlive() }
 
         // Dispatch. Each ``post*`` returns ``Never`` (calls
@@ -908,9 +946,6 @@ enum FacetApp {
         if let v = viewArg           { postView(v, active: activeFlag, loadingMs: loadingArg, geom: geom) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
-        if let w = workspaceArg      { postWorkspace(w) }
-        if let l = setLayoutArg      { postSetLayout(l) }
-        if retileFlag                { postRetile() }
 
         // Server mode. Reached only when no client flag matched.
 

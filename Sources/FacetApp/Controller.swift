@@ -513,7 +513,7 @@ final class Controller: NSObject {
         scheduleReconcile(after: 0.05)
     }
 
-    /// `facet --retile`: ask the backend to re-apply the active
+    /// `facet workspace --retile`: ask the backend to re-apply the active
     /// workspace's layout. Backends without tiling (rift) treat
     /// this as a no-op.
     private func dispatchRetile() {

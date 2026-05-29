@@ -9,14 +9,14 @@
 //   facet. External sh hook via `setup-files` config key
 //   (Vitest-style)"). The hook is the user's escape hatch to
 //   recreate their preferred layout on launch — they write a
-//   script that uses the normal `facet --workspace=N` and
+//   script that uses the normal `facet workspace --focus=N` and
 //   `facet window --move-to=N` CLI to move windows where they
 //   want them.
 //
 // Invocation model
 //
 //   - Fire-and-forget after the DNC listener is up, so the script
-//     can immediately invoke `facet status` / `facet --workspace=N`
+//     can immediately invoke `facet status` / `facet workspace --focus=N`
 //     and reach the running server. No blocking — a hung script
 //     can't stall facet startup.
 //   - Each script gets its own `Process`; failures (missing file,
