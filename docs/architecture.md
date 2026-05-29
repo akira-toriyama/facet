@@ -80,17 +80,17 @@ against them.
 
 ## Future themes (M7+, deferred)
 
-M5 shipped at v2.0.0. The four themes below are stocked as future
-milestones — トミー記録依頼 2026-05-27. No scope freeze yet; each
-requires a grill round (same pattern as Phase γ/δ/ε) before
-implementation. Independent themes — can land in any order.
-Details in `facet-future-roadmap` memory.
+M5 shipped at v2.0.0 (themes stocked 2026-05-27). Of the four themes
+below, **A / B / C shipped during M7** (#72 / #73–80 / #81–82, each
+after a grill round — Phase γ/δ/ε pattern; see the Status column).
+**D remains** (M7's last, low confidence). Independent themes — can
+land in any order. Details in `facet-future-roadmap` memory.
 
 | Theme | Goal | Status |
 |---|---|---|
-| **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | spec TBD |
-| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | spec TBD; γ frozen-decisions の "future opt-ins" 具体化 |
-| **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | spec TBD; reference: yabai / rift / AeroSpace wiki |
+| **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | ✅ shipped (#72) |
+| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。scrolling columns (niri 風) は未実装 |
+| **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
 | **D. New view types** | (i) 自由配置ビュー Google Maps 風 (modifier + wheel zoom, WS/window grab & place); (ii) WS DnD reorder Mission Control 風 | spec TBD; トミー曰く「微妙、提案あれば」 = 確定度低 |
 
 着手前 invariants: `facet-buddha-palm-principle` (OS 尊重) を壊さない / `facet-scope-exclusions` (15 not-do) と矛盾しない / `WindowBackend` protocol 経由設計を維持 (unit-test stub seam を壊さない)。
