@@ -15,6 +15,13 @@
 
 import CoreGraphics
 
+/// Master-area axis. `vertical` puts the master column on the left
+/// (Tall); `horizontal` puts the master row on top (Wide). Engines
+/// that have no orientation (grid, monocle, …) ignore it.
+public enum LayoutOrientation: Sendable, Equatable {
+    case vertical, horizontal
+}
+
 /// Tunable knobs shared across layout engines. Per-workspace runtime
 /// state (never persisted to config); the adapter owns the values and
 /// passes a snapshot in on each `frames` call. Engines read only the
@@ -24,10 +31,14 @@ public struct LayoutParams: Sendable, Equatable {
     public var masterRatio: CGFloat
     /// Number of windows in the master area (clamped ≥ 1).
     public var masterCount: Int
+    /// Master-area axis (Tall vs Wide). Only the master engines read it.
+    public var orientation: LayoutOrientation
 
-    public init(masterRatio: CGFloat = 0.5, masterCount: Int = 1) {
+    public init(masterRatio: CGFloat = 0.5, masterCount: Int = 1,
+                orientation: LayoutOrientation = .vertical) {
         self.masterRatio = max(0.05, min(0.95, masterRatio))
         self.masterCount = max(1, masterCount)
+        self.orientation = orientation
     }
 }
 
@@ -65,12 +76,14 @@ public struct MonocleLayout: LayoutEngine {
 }
 
 /// Tall / master-stack (dwm `tile`, xmonad `Tall`, Amethyst "Tall").
-/// The first `masterCount` windows fill the left master column
-/// (`masterRatio` of the width), split into equal-height rows; the
-/// remaining windows stack as equal-height rows in the right column.
-/// With ≤ `masterCount` windows the master column fills the whole
-/// rect. `order[0]` is the primary master — the adapter's
-/// `promoteToMaster` reorders to put a chosen window there.
+/// `vertical` (default = Tall): the first `masterCount` windows fill
+/// the left master column (`masterRatio` of the width) as equal-height
+/// rows; the rest stack as rows in the right column. `horizontal`
+/// (= Wide): the same rotated 90° — master is a top row (`masterRatio`
+/// of the height) split into columns, the rest a bottom row of
+/// columns. ≤ `masterCount` windows → master fills the whole rect.
+/// `order[0]` is the primary master (`promoteToMaster` reorders);
+/// `toggleOrientation` flips vertical ↔ horizontal.
 public struct TallLayout: LayoutEngine {
     public let name = "tall"
     public init() {}
@@ -84,21 +97,36 @@ public struct TallLayout: LayoutEngine {
         let masters = Array(order.prefix(m))
         let stack = Array(order.dropFirst(m))
 
-        guard !stack.isEmpty else {
-            // No stack column — master area fills the whole rect.
-            rows(masters, in: rect, into: &out)
-            return out
+        switch params.orientation {
+        case .vertical:
+            guard !stack.isEmpty else {
+                rows(masters, in: rect, into: &out); return out
+            }
+            let masterW = rect.width * params.masterRatio
+            rows(masters,
+                 in: CGRect(x: rect.minX, y: rect.minY,
+                            width: masterW, height: rect.height),
+                 into: &out)
+            rows(stack,
+                 in: CGRect(x: rect.minX + masterW, y: rect.minY,
+                            width: rect.width - masterW,
+                            height: rect.height),
+                 into: &out)
+        case .horizontal:
+            guard !stack.isEmpty else {
+                cols(masters, in: rect, into: &out); return out
+            }
+            let masterH = rect.height * params.masterRatio
+            cols(masters,
+                 in: CGRect(x: rect.minX, y: rect.minY,
+                            width: rect.width, height: masterH),
+                 into: &out)
+            cols(stack,
+                 in: CGRect(x: rect.minX, y: rect.minY + masterH,
+                            width: rect.width,
+                            height: rect.height - masterH),
+                 into: &out)
         }
-        let masterW = rect.width * params.masterRatio
-        rows(masters,
-             in: CGRect(x: rect.minX, y: rect.minY,
-                        width: masterW, height: rect.height),
-             into: &out)
-        rows(stack,
-             in: CGRect(x: rect.minX + masterW, y: rect.minY,
-                        width: rect.width - masterW,
-                        height: rect.height),
-             into: &out)
         return out
     }
 
@@ -112,6 +140,19 @@ public struct TallLayout: LayoutEngine {
             out[id] = CGRect(x: rect.minX,
                              y: rect.minY + CGFloat(i) * h,
                              width: rect.width, height: h)
+        }
+    }
+
+    /// Split `ids` into equal-width columns filling `rect`, first id
+    /// at `minX`.
+    private func cols(_ ids: [WindowID], in rect: CGRect,
+                      into out: inout [WindowID: CGRect]) {
+        guard !ids.isEmpty else { return }
+        let w = rect.width / CGFloat(ids.count)
+        for (i, id) in ids.enumerated() {
+            out[id] = CGRect(x: rect.minX + CGFloat(i) * w,
+                             y: rect.minY,
+                             width: w, height: rect.height)
         }
     }
 }

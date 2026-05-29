@@ -924,12 +924,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             applyLayout(workspace: catalog.activeIndex, rect: rect)
             eventContinuation.yield(.refreshNeeded)
         case .toggleOrientation:
-            guard let id = focusedWindow() else { return }
-            catalog.toggleOrientation(of: id)
-            Log.debug("native: perform toggleOrientation "
-                + "\(id.serverID)")
-            applyLayout(workspace: catalog.activeIndex, rect: rect)
-            eventContinuation.yield(.refreshNeeded)
+            // bsp: rotate the focused window's parent split.
+            // tall: flip the master axis (Tall ↔ Wide).
+            switch catalog.mode(of: catalog.activeIndex) {
+            case "tall":
+                _ = catalog.toggleMasterOrientation(
+                    workspace: catalog.activeIndex)
+                Log.debug("native: perform toggleOrientation (tall flip)")
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+                eventContinuation.yield(.refreshNeeded)
+            case "bsp":
+                guard let id = focusedWindow() else { return }
+                catalog.toggleOrientation(of: id)
+                Log.debug("native: perform toggleOrientation "
+                    + "\(id.serverID)")
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+                eventContinuation.yield(.refreshNeeded)
+            default:
+                break
+            }
         case .cycleStackNext, .cycleStackPrev:
             // Cycle is per-active-WS; no need for `focusedWindow`
             // — the catalog owns "who's the current top" via the
@@ -1036,6 +1049,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("Narrower master", [.shrinkMaster]))
             items.append(.init("More masters", [.incMaster]))
             items.append(.init("Fewer masters", [.decMaster]))
+        }
+        if mode == "tall", !floating {
+            items.append(.init("Flip wide / tall",
+                               [.toggleOrientation]))
         }
         items.append(.init(floating ? "Unfloat" : "Float",
                            [.toggleFloat]))
