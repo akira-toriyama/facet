@@ -275,7 +275,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
   `outer-gap` (画面端からの距離)、 単位 pt。 `outer-gap` は4辺一括、
   `outer-gap-top` / `-bottom` / `-left` / `-right` で辺ごとに上書き。
-  すべて default 0 (隙間なしのフラッシュ配置); [0, 200] にクランプ。
+  すべて default 0 (隙間なしのフラッシュ配置); [0, 1000] にクランプ。
   全 layout に適用、 floating window は対象外。
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `workspace --focus=N` で invalid 扱い)。

@@ -125,7 +125,7 @@ preview-mode = "popover"
 #
 # inner and outer don't compound at the border: a window's screen-edge
 # side stays exactly its outer-gap, the gap between two windows is
-# exactly inner-gap. Integer points; all clamp to [0, 200] so a typo
+# exactly inner-gap. Integer points; all clamp to [0, 1000] so a typo
 # can't make windows vanish.
 #
 # Example — even gaps with extra room on the left (e.g. to park the

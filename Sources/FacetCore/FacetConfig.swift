@@ -120,25 +120,25 @@ public struct FacetConfig: Sendable {
         return ["popover", "mirror"].contains(raw) ? raw : "popover"
     }
 
-    /// Gap between adjacent tiled windows, px. [0, 200] clamp,
+    /// Gap between adjacent tiled windows, px. [0, 1000] clamp,
     /// default 0 (= flush tiling, the pre-gap behaviour). Applied by
     /// `applyInnerGap` to every layout's frames; the screen-edge side
     /// of an outermost window is left flush (that distance is the
     /// outer gap, not this).
-    public var effectiveInnerGap: CGFloat { max(0, min(200, innerGap ?? 0)) }
+    public var effectiveInnerGap: CGFloat { max(0, min(1000,innerGap ?? 0)) }
 
     /// Per-edge outer gap, px: inset from that screen edge for the
     /// whole tiling area, applied before any layout runs (it shrinks
     /// the rect every layout tiles into — bsp / stack / stateless
     /// alike). Each edge falls back to `outerGap` (the all-edges
-    /// default), then 0. [0, 200] clamp. Edges are in screen
+    /// default), then 0. [0, 1000] clamp. Edges are in screen
     /// orientation; the adapter maps them onto the tiling rect.
     public var effectiveOuterGapTop: CGFloat { clampedGap(outerGapTop ?? outerGap) }
     public var effectiveOuterGapBottom: CGFloat { clampedGap(outerGapBottom ?? outerGap) }
     public var effectiveOuterGapLeft: CGFloat { clampedGap(outerGapLeft ?? outerGap) }
     public var effectiveOuterGapRight: CGFloat { clampedGap(outerGapRight ?? outerGap) }
 
-    private func clampedGap(_ v: CGFloat?) -> CGFloat { max(0, min(200, v ?? 0)) }
+    private func clampedGap(_ v: CGFloat?) -> CGFloat { max(0, min(1000,v ?? 0)) }
 
     /// Facet workspace defaults when the user hasn't (yet) edited
     /// `[workspace]` at all. 5 is the memory-confirmed

@@ -76,9 +76,9 @@ final class GapConfigTests: XCTestCase {
         var c = FacetConfig()
         c.innerGap = 9999
         c.outerGap = 9999
-        XCTAssertEqual(c.effectiveInnerGap, 200, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapTop, 200, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapRight, 200, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveInnerGap, 1000, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapTop, 1000, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapRight, 1000, accuracy: 0.001)
     }
 
     func testOuterGapDefaultsAllEdges() {
