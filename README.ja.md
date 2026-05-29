@@ -41,7 +41,7 @@ swap (ワークスペースの枠自体は動かないので hotkey 番号は不
 ## レイアウト
 
 各ワークスペースは 1 つのレイアウトで動作し、 実行時に
-`facet --set-layout=NAME` で切り替える (per-WS、 永続化しない —
+`facet workspace --layout=NAME` で切り替える (per-WS、 永続化しない —
 起動時に選ぶなら [setup hook](#workspace-setup-hooks) を使う)。 facet
 は window を隠さないので、 レイアウトは window を*配置*するだけで、
 focus 中の window は常に前面に来る。 図は 4 window 想定、 **1** が

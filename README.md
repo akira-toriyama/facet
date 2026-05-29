@@ -43,7 +43,7 @@ Both views share the same backend and the same theme
 ## Layouts
 
 Each workspace runs a layout, set at runtime with
-`facet --set-layout=NAME` (per-WS, never persisted — use a
+`facet workspace --layout=NAME` (per-WS, never persisted — use a
 [setup hook](#workspace-setup-hooks) to pick one at launch). facet
 never hides windows, so a layout only *positions* them and the
 focused window is always raised. Diagrams use four windows; **1** is
