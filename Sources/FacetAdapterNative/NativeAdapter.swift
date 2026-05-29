@@ -488,11 +488,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 }
             }
         }
-        // Outer gap: inset the whole tiling area from every screen
-        // edge before any layout carves it. Doing it here feeds every
-        // downstream path (tile / stack / engine) from one place.
-        let g = config.effectiveOuterGap
-        return g > 0 ? full.insetBy(dx: g, dy: g) : full
+        // Outer gap: inset the whole tiling area from each screen
+        // edge before any layout carves it. Per-edge; doing it here
+        // feeds every downstream path (tile / stack / engine) from
+        // one place. `full` is top-left origin (Displays.visibleFrame
+        // returns Quartz coords), so screen top → minY, bottom → maxY.
+        let top = config.effectiveOuterGapTop
+        let bottom = config.effectiveOuterGapBottom
+        let left = config.effectiveOuterGapLeft
+        let right = config.effectiveOuterGapRight
+        guard top + bottom + left + right > 0 else { return full }
+        return CGRect(x: full.minX + left,
+                      y: full.minY + top,
+                      width: max(0, full.width - left - right),
+                      height: max(0, full.height - top - bottom))
     }
 
     /// Enumerate windows via the public CGWindowList API.

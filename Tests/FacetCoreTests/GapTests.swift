@@ -51,13 +51,17 @@ final class ApplyInnerGapTests: XCTestCase {
     }
 }
 
-/// `effective*` clamping + `[layout]` parse for the gap config keys.
+/// `effective*` clamping + `[layout]` parse for the gap config keys,
+/// including per-edge outer-gap fallback to the all-edges default.
 final class GapConfigTests: XCTestCase {
 
     func testDefaultsZero() {
         let c = FacetConfig()
         XCTAssertEqual(c.effectiveInnerGap, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGap, 0, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapTop, 0, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapBottom, 0, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapLeft, 0, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapRight, 0, accuracy: 0.001)
     }
 
     func testClampNegativeToZero() {
@@ -65,7 +69,7 @@ final class GapConfigTests: XCTestCase {
         c.innerGap = -5
         c.outerGap = -50
         XCTAssertEqual(c.effectiveInnerGap, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGap, 0, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapLeft, 0, accuracy: 0.001)
     }
 
     func testClampLargeToCeiling() {
@@ -73,14 +77,35 @@ final class GapConfigTests: XCTestCase {
         c.innerGap = 9999
         c.outerGap = 9999
         XCTAssertEqual(c.effectiveInnerGap, 200, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGap, 200, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapTop, 200, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapRight, 200, accuracy: 0.001)
+    }
+
+    func testOuterGapDefaultsAllEdges() {
+        var c = FacetConfig()
+        c.outerGap = 10
+        XCTAssertEqual(c.effectiveOuterGapTop, 10, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapBottom, 10, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapLeft, 10, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapRight, 10, accuracy: 0.001)
+    }
+
+    func testPerEdgeOverridesDefault() {
+        var c = FacetConfig()
+        c.outerGap = 10
+        c.outerGapLeft = 30
+        XCTAssertEqual(c.effectiveOuterGapLeft, 30, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapTop, 10, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapRight, 10, accuracy: 0.001)
     }
 
     func testParseFromTOML() {
         let c = FacetConfig.from(toml: [
-            "layout": ["inner-gap": .int(8), "outer-gap": .int(12)],
+            "layout": ["inner-gap": .int(8), "outer-gap": .int(12),
+                       "outer-gap-left": .int(24)],
         ])
         XCTAssertEqual(c.effectiveInnerGap, 8, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGap, 12, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapTop, 12, accuracy: 0.001)
+        XCTAssertEqual(c.effectiveOuterGapLeft, 24, accuracy: 0.001)
     }
 }
