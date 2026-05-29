@@ -208,6 +208,57 @@ public struct GridLayout: LayoutEngine {
     }
 }
 
+/// Spiral / Fibonacci (dwm `fibonacci`, awesome `spiral`). The first
+/// window takes half the rect; each subsequent window halves the
+/// *remaining* space, rotating the split clockwise (left → top →
+/// right → bottom → …) so windows wind inward like a nautilus. The
+/// last window fills whatever remains. Fixed 0.5 split keeps it a
+/// pure function of `order` (no per-split resize — that would need
+/// persisted ratios, out of scope here). Master knobs unused.
+public struct SpiralLayout: LayoutEngine {
+    public let name = "spiral"
+    public init() {}
+
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        guard !order.isEmpty else { return [:] }
+        var out: [WindowID: CGRect] = [:]
+        var r = rect
+        let last = order.count - 1
+        for (i, id) in order.enumerated() {
+            if i == last { out[id] = r; break }
+            switch i % 4 {
+            case 0:                                   // window left
+                let w = r.width / 2
+                out[id] = CGRect(x: r.minX, y: r.minY,
+                                 width: w, height: r.height)
+                r = CGRect(x: r.minX + w, y: r.minY,
+                           width: r.width - w, height: r.height)
+            case 1:                                   // window top
+                let h = r.height / 2
+                out[id] = CGRect(x: r.minX, y: r.minY,
+                                 width: r.width, height: h)
+                r = CGRect(x: r.minX, y: r.minY + h,
+                           width: r.width, height: r.height - h)
+            case 2:                                   // window right
+                let w = r.width / 2
+                out[id] = CGRect(x: r.minX + w, y: r.minY,
+                                 width: r.width - w, height: r.height)
+                r = CGRect(x: r.minX, y: r.minY,
+                           width: w, height: r.height)
+            default:                                  // window bottom
+                let h = r.height / 2
+                out[id] = CGRect(x: r.minX, y: r.minY + h,
+                                 width: r.width, height: r.height - h)
+                r = CGRect(x: r.minX, y: r.minY,
+                           width: r.width, height: h)
+            }
+        }
+        return out
+    }
+}
+
 /// Registry of stateless layout engines, keyed by `name`. bsp and
 /// stack are intentionally absent — they keep their stateful adapter
 /// paths; this is the seam stateless layouts register into, so adding
@@ -218,6 +269,7 @@ public enum LayoutRegistry {
         TallLayout(),
         CenteredMasterLayout(),
         GridLayout(),
+        SpiralLayout(),
     ]
 
     /// Mode name → engine, or nil when `name` isn't a registered
