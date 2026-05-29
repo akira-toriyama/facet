@@ -111,6 +111,14 @@ struct WorkspaceCatalog {
     /// bsp (uses `layoutTrees`) and float (no managed order).
     private(set) var stackOrders: [Int: [WindowID]] = [:]
 
+    /// Per-WS layout knobs (master ratio / master count) for the
+    /// stateless engines that read them (tall, centered-master).
+    /// Runtime-only — never persisted to config (Theme B decision).
+    /// Missing entry → `LayoutParams()` defaults. Kept across mode
+    /// flips so a WS remembers its ratio when you toggle away and
+    /// back.
+    private(set) var layoutParams: [Int: LayoutParams] = [:]
+
     /// Windows the user (or AX role detector) flagged as floating.
     /// Floating windows are skipped by the tiler and stay at the
     /// user's last-set position. Independent of `anchorParked`
@@ -612,8 +620,41 @@ struct WorkspaceCatalog {
         else { return [:] }
         return engine.frames(order: orderedMembers(of: n1Based),
                              focused: nil,
-                             params: LayoutParams(),
+                             params: params(of: n1Based),
                              in: rect)
+    }
+
+    // MARK: - Layout knobs (master ratio / count)
+
+    /// Per-WS layout knobs, or defaults when none set.
+    func params(of n1Based: Int) -> LayoutParams {
+        layoutParams[n1Based] ?? LayoutParams()
+    }
+
+    /// Nudge the master ratio by `delta` (clamped 0.05…0.95 by
+    /// `LayoutParams`). Returns whether the value actually changed
+    /// (false at the clamp boundary, so the caller can skip a
+    /// pointless re-tile).
+    @discardableResult
+    mutating func adjustMasterRatio(workspace n1Based: Int,
+                                           delta: CGFloat) -> Bool {
+        let cur = params(of: n1Based)
+        let next = LayoutParams(masterRatio: cur.masterRatio + delta,
+                                masterCount: cur.masterCount)
+        layoutParams[n1Based] = next
+        return next.masterRatio != cur.masterRatio
+    }
+
+    /// Nudge the master count by `delta` (clamped ≥ 1). Returns
+    /// whether the value actually changed.
+    @discardableResult
+    mutating func adjustMasterCount(workspace n1Based: Int,
+                                           delta: Int) -> Bool {
+        let cur = params(of: n1Based)
+        let next = LayoutParams(masterRatio: cur.masterRatio,
+                                masterCount: cur.masterCount + delta)
+        layoutParams[n1Based] = next
+        return next.masterCount != cur.masterCount
     }
 
     /// Resolve the cached pid for a window, or nil if it's not in

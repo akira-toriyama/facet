@@ -17,6 +17,8 @@ public enum WindowAction: Sendable, Equatable {
     case toggleStack, toggleOrientation            // traditional / bsp / stack
     case centerColumn, snapStrip                   // scrolling
     case cycleStackNext, cycleStackPrev            // stack (native adapter)
+    case growMaster, shrinkMaster                  // tall / centered-master: ratio
+    case incMaster, decMaster                      // tall / centered-master: master count
 }
 
 /// One entry in the window right-click menu.

@@ -736,6 +736,56 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertEqual(c.stackOrder(of: 1), [wid(20)])
     }
 
+    // MARK: - Theme B — master knobs (ratio / count)
+
+    func testDefaultParamsAreNeutral() {
+        let c = WorkspaceCatalog()
+        XCTAssertEqual(c.params(of: 1).masterRatio, 0.5)
+        XCTAssertEqual(c.params(of: 1).masterCount, 1)
+    }
+
+    func testAdjustMasterRatioNudgesAndClamps() {
+        var c = WorkspaceCatalog()
+        XCTAssertTrue(c.adjustMasterRatio(workspace: 1, delta: 0.05))
+        XCTAssertEqual(c.params(of: 1).masterRatio, 0.55, accuracy: 1e-9)
+        // Drive up to the 0.95 clamp; the boundary nudge returns false.
+        for _ in 0..<20 { _ = c.adjustMasterRatio(workspace: 1, delta: 0.05) }
+        XCTAssertEqual(c.params(of: 1).masterRatio, 0.95, accuracy: 1e-9)
+        XCTAssertFalse(c.adjustMasterRatio(workspace: 1, delta: 0.05),
+                       "no change at the clamp → false (skip re-tile)")
+    }
+
+    func testAdjustMasterCountNudgesAndClampsAtOne() {
+        var c = WorkspaceCatalog()
+        XCTAssertTrue(c.adjustMasterCount(workspace: 1, delta: 1))
+        XCTAssertEqual(c.params(of: 1).masterCount, 2)
+        XCTAssertTrue(c.adjustMasterCount(workspace: 1, delta: -1))
+        XCTAssertEqual(c.params(of: 1).masterCount, 1)
+        XCTAssertFalse(c.adjustMasterCount(workspace: 1, delta: -1),
+                       "clamped at 1 → no change")
+    }
+
+    func testParamsPersistAcrossModeFlip() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // → 0.6
+        _ = c.setMode(workspace: 1, to: "grid", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        XCTAssertEqual(c.params(of: 1).masterRatio, 0.6, accuracy: 1e-9,
+                       "ratio remembered across a mode round-trip")
+    }
+
+    func testEngineFramesReflectAdjustedRatio() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // 0.5 → 0.6
+        let frames = c.engineFrames(for: 1, in: displayRect)
+        // Master (lower id = order[0]) gets 0.6 * 1600 = 960 wide.
+        XCTAssertEqual(frames[wid(10)]?.width, 960, accuracy: 1e-9)
+    }
+
     // MARK: - Phase γ.3 — autoFloat reconcile hint
 
     func testReconcileAutoFloatMarksNewWindowFloating() {

@@ -244,6 +244,8 @@ facet --retile                       # active WS のレイアウトを再適用 
 facet window --toggle-float          # focused window の float flag flip
 facet window --toggle-orientation    # focused window の親 split を 90 度回転 (bsp)
 facet window --cycle-stack=next|prev # stack の次 / 前メンバーへ循環
+facet window --grow-master|--shrink-master   # master 幅 ±0.05 (tall / centered-master)
+facet window --inc-master|--dec-master       # master 窓数 ±1 (tall / centered-master)
 
 # --active は修飾子 — --view=tree と組み合わせた時のみ意味あり。
 # --active なしでも tree パネルはクリックすればキーボードナビ ON

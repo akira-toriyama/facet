@@ -120,6 +120,11 @@ enum FacetApp {
           facet window --cycle-stack=next    rotate stack to next member
           facet window --cycle-stack=prev    rotate stack to previous
                                              member (stack only)
+          facet window --grow-master         widen the master area +0.05
+          facet window --shrink-master       narrow the master area -0.05
+          facet window --inc-master          one more window in master
+          facet window --dec-master          one fewer window in master
+                                             (tall / centered-master only)
 
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
@@ -326,6 +331,25 @@ enum FacetApp {
         postControl("window-cycle-stack:" + direction)
     }
 
+    /// Post master-knob nudges (tall / centered-master). The active
+    /// WS's master ratio (`grow` / `shrink`, ±0.05) or master count
+    /// (`inc` / `dec`, ±1); no-op for other modes.
+    static func postWindowGrowMaster() -> Never {
+        postControl("window-grow-master")
+    }
+
+    static func postWindowShrinkMaster() -> Never {
+        postControl("window-shrink-master")
+    }
+
+    static func postWindowIncMaster() -> Never {
+        postControl("window-inc-master")
+    }
+
+    static func postWindowDecMaster() -> Never {
+        postControl("window-dec-master")
+    }
+
     /// Validate + canonicalise a layout-mode name. Loud reject on
     /// typo (`exit(2)`) — same pattern as `canonicalView` /
     /// `canonicalStyle`.
@@ -416,6 +440,10 @@ enum FacetApp {
         var toggleFloat = false
         var toggleOrientation = false
         var cycleStackDir: String?
+        var growMaster = false
+        var shrinkMaster = false
+        var incMaster = false
+        var decMaster = false
         var i = 0
         while i < args.count {
             defer { i += 1 }
@@ -429,6 +457,14 @@ enum FacetApp {
                 toggleOrientation = true
             case a.hasPrefix("--cycle-stack="):
                 cycleStackDir = parseCycleStack(a)
+            case a == "--grow-master":
+                growMaster = true
+            case a == "--shrink-master":
+                shrinkMaster = true
+            case a == "--inc-master":
+                incMaster = true
+            case a == "--dec-master":
+                decMaster = true
             default:
                 die("unknown `window` flag \"\(a)\" — "
                     + "see `facet --help`")
@@ -442,6 +478,10 @@ enum FacetApp {
             + (toggleFloat ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
             + (cycleStackDir != nil ? 1 : 0)
+            + (growMaster ? 1 : 0)
+            + (shrinkMaster ? 1 : 0)
+            + (incMaster ? 1 : 0)
+            + (decMaster ? 1 : 0)
         guard count > 0 else {
             die("facet window: no action specified — "
                 + "see `facet --help`")
@@ -455,6 +495,10 @@ enum FacetApp {
         if toggleFloat { postWindowToggleFloat() }
         if toggleOrientation { postWindowToggleOrientation() }
         if let d = cycleStackDir { postWindowCycleStack(d) }
+        if growMaster { postWindowGrowMaster() }
+        if shrinkMaster { postWindowShrinkMaster() }
+        if incMaster { postWindowIncMaster() }
+        if decMaster { postWindowDecMaster() }
         // Unreachable — `count == 1` guarantees one branch fired.
         die("facet window: dispatch fell through (bug)")
     }

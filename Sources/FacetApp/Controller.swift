@@ -339,6 +339,18 @@ final class Controller: NSObject {
                         dir == "prev" ? .cycleStackPrev
                                       : .cycleStackNext)
 
+                case "window-grow-master":
+                    self.dispatchWindowAction(.growMaster)
+
+                case "window-shrink-master":
+                    self.dispatchWindowAction(.shrinkMaster)
+
+                case "window-inc-master":
+                    self.dispatchWindowAction(.incMaster)
+
+                case "window-dec-master":
+                    self.dispatchWindowAction(.decMaster)
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }
