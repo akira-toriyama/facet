@@ -116,6 +116,63 @@ public struct TallLayout: LayoutEngine {
     }
 }
 
+/// Centered master (dwm `centeredmaster`, xmonad ThreeColMid). The
+/// first `masterCount` windows fill a centered column (`masterRatio`
+/// of the width) as equal-height rows; the rest split between left
+/// and right side columns (right gets the extra one on an odd count).
+/// With ≤ `masterCount` windows the master fills the whole rect. The
+/// master stays centered even when only one side has windows — the
+/// defining ultrawide look.
+public struct CenteredMasterLayout: LayoutEngine {
+    public let name = "centered-master"
+    public init() {}
+
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        guard !order.isEmpty else { return [:] }
+        var out: [WindowID: CGRect] = [:]
+        let m = min(params.masterCount, order.count)
+        let masters = Array(order.prefix(m))
+        let stack = Array(order.dropFirst(m))
+
+        guard !stack.isEmpty else {
+            rows(masters, in: rect, into: &out)
+            return out
+        }
+        let sideW = rect.width * (1 - params.masterRatio) / 2
+        let centerW = rect.width - sideW * 2
+        let rightCount = (stack.count + 1) / 2     // right ≥ left
+        let right = Array(stack.prefix(rightCount))
+        let left = Array(stack.dropFirst(rightCount))
+        rows(left,
+             in: CGRect(x: rect.minX, y: rect.minY,
+                        width: sideW, height: rect.height),
+             into: &out)
+        rows(masters,
+             in: CGRect(x: rect.minX + sideW, y: rect.minY,
+                        width: centerW, height: rect.height),
+             into: &out)
+        rows(right,
+             in: CGRect(x: rect.minX + sideW + centerW, y: rect.minY,
+                        width: sideW, height: rect.height),
+             into: &out)
+        return out
+    }
+
+    /// Equal-height rows filling `rect`, first id at `minY`.
+    private func rows(_ ids: [WindowID], in rect: CGRect,
+                      into out: inout [WindowID: CGRect]) {
+        guard !ids.isEmpty else { return }
+        let h = rect.height / CGFloat(ids.count)
+        for (i, id) in ids.enumerated() {
+            out[id] = CGRect(x: rect.minX,
+                             y: rect.minY + CGFloat(i) * h,
+                             width: rect.width, height: h)
+        }
+    }
+}
+
 /// Registry of stateless layout engines, keyed by `name`. bsp and
 /// stack are intentionally absent — they keep their stateful adapter
 /// paths; this is the seam stateless layouts register into, so adding
@@ -124,6 +181,7 @@ public enum LayoutRegistry {
     public static let all: [any LayoutEngine] = [
         MonocleLayout(),
         TallLayout(),
+        CenteredMasterLayout(),
     ]
 
     /// Mode name → engine, or nil when `name` isn't a registered
