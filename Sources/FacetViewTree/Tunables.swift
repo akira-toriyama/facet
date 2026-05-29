@@ -14,6 +14,7 @@ let headerRowH: CGFloat = 40             // workspace section heading (divider a
 let headerFirstRowH: CGFloat = 26        // first workspace: no divider, tighter top
 let windowRowH: CGFloat = 28             // window row, no title (compact single line)
 let windowRowTallH: CGFloat = 44         // window row with title (app + title)
+let handleRowH: CGFloat = 30             // top drag-handle band (panel move + native desktop label)
 
 // Typography.
 let headerFontSize: CGFloat = 12

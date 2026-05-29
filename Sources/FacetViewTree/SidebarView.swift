@@ -72,6 +72,12 @@ public final class SidebarView: NSView {
     // immediately and hold briefly; the next real query reconciles
     // (reverts if rift's focus actually failed).
     private var lastWorkspaces: [Workspace] = []
+    // Native macOS desktop ordinal (Mission Control order) for the
+    // top handle band's "Desktop N" label. nil = SkyLight
+    // unavailable / single-space → band shows no name. Preserved
+    // across internal relayouts (update's `nativeDesktop` arg is a
+    // double-optional: omitted = keep current).
+    private var nativeDesktopOrdinal: Int?
     // AX-resolved titles for windows the backend left blank; kept
     // across internal relayouts that don't re-resolve.
     private var titleOverride: [WindowID: String] = [:]
@@ -157,9 +163,14 @@ public final class SidebarView: NSView {
 
     @discardableResult
     public func update(_ workspaces: [Workspace],
-                       titles: [WindowID: String]? = nil) -> CGFloat {
+                       titles: [WindowID: String]? = nil,
+                       nativeDesktop: Int?? = nil) -> CGFloat {
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
+        // Double-optional: omitting the arg (internal relayouts) keeps
+        // the current ordinal; passing it (the Controller refresh)
+        // sets it — including to nil when SkyLight is unavailable.
+        if let nativeDesktop { nativeDesktopOrdinal = nativeDesktop }
         activeWS = workspaces.first(where: { $0.isActive })?.index   // always REAL
         let opt = optimisticHeld()
         let effActive = opt ? optActiveWS : activeWS
@@ -172,6 +183,7 @@ public final class SidebarView: NSView {
                 ? (titleOverride[win.id] ?? "") : win.title
         }
         let sig = (searching ? "S:\(query);" : "")
+            + "D\(nativeDesktopOrdinal ?? -1);"
             + (opt
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
@@ -195,7 +207,19 @@ public final class SidebarView: NSView {
         signature = sig
         rows.removeAll(); cells.removeAll(); wsBands.removeAll()
         let w = max(bounds.width, sidebarWidth)
-        var y: CGFloat = 6        // small top inset (no handle row)
+        var y: CGFloat = 6        // small top inset
+
+        // Top drag-handle band: grab to move the panel (mouseDown
+        // routes a `.handle` drag to panel-move, mode 1) and shows the
+        // native macOS desktop ("Desktop N") when SkyLight resolves the
+        // ordinal — the panel previously had no grab affordance.
+        let hbr = NSRect(x: 0, y: y, width: w, height: handleRowH)
+        rows.append(TreeRow(rect: hbr, kind: .handle))
+        cells.append(Cell(row: hbr, kind: 0, hot: false, firstHeader: false,
+                          pid: 0, app: "", title: "",
+                          text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
+                          mode: ""))
+        y += handleRowH
 
         if searching {
             // Flat cross-workspace result list (no headers).
@@ -517,13 +541,30 @@ public final class SidebarView: NSView {
         for (i, c) in cells.enumerated() {
             let row = c.row
             switch c.kind {
-            case 0:   // handle (not used in current layout; reserved)
+            case 0:   // top drag-handle band: grab to move the panel;
+                      // shows the native macOS desktop ("Desktop N").
+                drawGrip(in: NSRect(x: rowPadX,
+                                    y: row.minY + (row.height - 12) / 2,
+                                    width: headerGripW, height: 12),
+                         hot: hoverIdx == i)
+                let th: CGFloat = 16
                 let t = c.text as NSString
-                t.draw(in: row.insetBy(dx: rowPadX, dy: 5),
+                t.draw(in: NSRect(x: rowPadX + headerGripW + 7,
+                                  y: row.minY + (row.height - th) / 2,
+                                  width: bounds.width
+                                      - (rowPadX * 2 + headerGripW + 7),
+                                  height: th),
                        withAttributes: [
-                        .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                        .foregroundColor: NSColor.secondaryLabelColor,
-                        .paragraphStyle: para])
+                        .font: uiFont(11.5, .semibold),
+                        .foregroundColor: pal.dim,
+                        .kern: 0.4, .paragraphStyle: para])
+                pal.divider.setStroke()
+                let hsep = NSBezierPath()
+                hsep.move(to: NSPoint(x: rowPadX, y: row.maxY - 0.5))
+                hsep.line(to: NSPoint(x: bounds.width - rowPadX,
+                                      y: row.maxY - 0.5))
+                hsep.lineWidth = 1
+                hsep.stroke()
 
             case 1:   // workspace section header (Raycast-ish caption)
                 if !c.firstHeader {
