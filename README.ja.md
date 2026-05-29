@@ -239,7 +239,7 @@ facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
 
 # Tiling (M5 Phase γ)
-facet --set-layout=NAME              # bsp | stack | tall | centered-master | monocle | float
+facet --set-layout=NAME              # bsp | stack | tall | centered-master | grid | monocle | float
 facet --retile                       # active WS のレイアウトを再適用 (任意の tiling mode)
 facet window --toggle-float          # focused window の float flag flip
 facet window --toggle-orientation    # focused window の親 split を 90 度回転 (bsp)
