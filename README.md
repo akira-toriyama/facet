@@ -43,7 +43,7 @@ Both views share the same backend and the same theme
 ## Layouts
 
 Each workspace runs a layout, set at runtime with
-`facet --set-layout=NAME` (per-WS, never persisted — use a
+`facet workspace --layout=NAME` (per-WS, never persisted — use a
 [setup hook](#workspace-setup-hooks) to pick one at launch). facet
 never hides windows, so a layout only *positions* them and the
 focused window is always raised. Diagrams use four windows; **1** is
@@ -282,7 +282,7 @@ Frequently-touched keys:
 - `theme` (top-level) — `terminal` (default) / `cute` / `system`
 - `default-view` (top-level) — `tree` / `grid`
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
-  sparse OK; missing slots → `N` invalid for `--workspace=N`).
+  sparse OK; missing slots → `N` invalid for `workspace --focus=N`).
 - `[space.N]` table — per-native-Space workspace names/count, where
   `N` is the Space's Mission Control position. With **no** `[space.N]`
   sections, every native macOS Space gets the default workspaces
@@ -299,7 +299,7 @@ facet itself never persists window-to-workspace assignments. The
 `setup-files` config key lets your own scripts recreate whatever
 layout you want on launch — they fire **after** facet's CLI
 listener is up, so they can immediately call `facet status` /
-`facet --workspace=N` / `facet window --move-to=N` like any other
+`facet workspace --focus=N` / `facet window --move-to=N` like any other
 hotkey would.
 
 ```toml
@@ -314,11 +314,11 @@ setup-files = ["~/.config/facet/setup.sh"]
 # always land in the currently-active facet WS, so the trick is:
 # switch first, then `open` — the launched app's first window
 # inherits the current WS.
-facet --workspace=2 && open -ga Slack
+facet workspace --focus=2 && open -ga Slack
 sleep 0.4               # let Slack's window register
-facet --workspace=1 && open -ga "Safari"
+facet workspace --focus=1 && open -ga "Safari"
 sleep 0.4
-facet --workspace=1     # finish on the WS you want to look at
+facet workspace --focus=1     # finish on the WS you want to look at
 ```
 
 (`facet window --move-to=N` operates on the focused window only —
@@ -351,8 +351,8 @@ facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
 
 # Tiling (M5 Phase γ)
-facet --set-layout=NAME              # bsp | stack | tall | centered-master | grid | spiral | monocle | float
-facet --retile                       # re-apply active WS's layout (any tiling mode)
+facet workspace --layout=NAME     # bsp | stack | tall | centered-master | grid | spiral | monocle | float
+facet workspace --retile          # re-apply active WS's layout (any tiling mode)
 facet window --toggle-float          # flip focused window float flag
 facet window --toggle-orientation    # bsp: rotate parent split / tall: flip wide↔tall
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
@@ -367,7 +367,7 @@ facet window --inc-master|--dec-master       # master window count ±1 (tall / c
 # key/active by construction.
 
 # Workspace ops (M5 Phase α)
-facet --workspace=N               # switch to workspace N (1-indexed)
+facet workspace --focus=N               # switch to workspace N (1-indexed)
 facet window --move-to=N          # move focused window to workspace N
 facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp
@@ -401,7 +401,7 @@ hexagonal Swift shape as facet; one config file, no GUI.
 [[bindings]]
 name   = "facet workspace 1"
 input  = "ctrl + alt - 1"
-action-shell = "/opt/homebrew/bin/facet --workspace=1"
+action-shell = "/opt/homebrew/bin/facet workspace --focus=1"
 
 [[bindings]]
 name   = "move focused window to workspace 1"
@@ -412,18 +412,18 @@ action-shell = "/opt/homebrew/bin/facet window --move-to=1"
 **skhd** (`~/.config/skhd/skhdrc`):
 
 ```
-ctrl + alt - 1          : facet --workspace=1
-ctrl + alt - 2          : facet --workspace=2
+ctrl + alt - 1          : facet workspace --focus=1
+ctrl + alt - 2          : facet workspace --focus=2
 ctrl + shift + alt - 1  : facet window --move-to=1
 ctrl + shift + alt - 2  : facet window --move-to=2
 ```
 
 **Karabiner-Elements**: bind shell commands via the *Complex
 Modifications* JSON (`shell_command`: `/opt/homebrew/bin/facet
---workspace=1`).
+workspace --focus=1`).
 
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
-hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`.
+hs.execute("/opt/homebrew/bin/facet workspace --focus=1") end)`.
 
 #### Bonus: a loading skeleton for native-Space switches
 

@@ -41,7 +41,7 @@ swap (ワークスペースの枠自体は動かないので hotkey 番号は不
 ## レイアウト
 
 各ワークスペースは 1 つのレイアウトで動作し、 実行時に
-`facet --set-layout=NAME` で切り替える (per-WS、 永続化しない —
+`facet workspace --layout=NAME` で切り替える (per-WS、 永続化しない —
 起動時に選ぶなら [setup hook](#workspace-setup-hooks) を使う)。 facet
 は window を隠さないので、 レイアウトは window を*配置*するだけで、
 focus 中の window は常に前面に来る。 図は 4 window 想定、 **1** が
@@ -273,7 +273,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `theme` (トップレベル) — `terminal` (default) / `cute` / `system`
 - `default-view` (トップレベル) — `tree` / `grid`
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
-  sparse OK; 欠番 index は `--workspace=N` で invalid 扱い)。
+  sparse OK; 欠番 index は `workspace --focus=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
   Mission Control 順の位置。 `[space.N]` が**1つも無ければ**全 native
   Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
@@ -289,7 +289,7 @@ facet 自身は window-to-workspace の割当を永続化しない。
 `setup-files` config key で、 起動時に「あなたの好みのレイアウト」
 を再構築する script を自分で書ける — script は facet の CLI
 listener が立ち上がった **後** に発火するので、 そのまま
-`facet status` / `facet --workspace=N` / `facet window --move-to=N`
+`facet status` / `facet workspace --focus=N` / `facet window --move-to=N`
 を呼べる (hotkey と同じ仕組み)。
 
 ```toml
@@ -302,12 +302,12 @@ setup-files = ["~/.config/facet/setup.sh"]
 #!/usr/bin/env bash
 # アプリを希望の WS に予め立ち上げる。 新しい window は常に
 # 「現在アクティブな facet WS」 に landing するので、 先に
-# `facet --workspace=N` で切り替えてから `open` するのがコツ。
-facet --workspace=2 && open -ga Slack
+# `facet workspace --focus=N` で切り替えてから `open` するのがコツ。
+facet workspace --focus=2 && open -ga Slack
 sleep 0.4               # Slack の window 登録を少し待つ
-facet --workspace=1 && open -ga "Safari"
+facet workspace --focus=1 && open -ga "Safari"
 sleep 0.4
-facet --workspace=1     # 最後に「見たい WS」 に戻して終了
+facet workspace --focus=1     # 最後に「見たい WS」 に戻して終了
 ```
 
 (`facet window --move-to=N` は focused window 専用、 `--id` flag
@@ -337,8 +337,8 @@ facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
 
 # Tiling (M5 Phase γ)
-facet --set-layout=NAME              # bsp | stack | tall | centered-master | grid | spiral | monocle | float
-facet --retile                       # active WS のレイアウトを再適用 (任意の tiling mode)
+facet workspace --layout=NAME     # bsp | stack | tall | centered-master | grid | spiral | monocle | float
+facet workspace --retile          # active WS のレイアウトを再適用 (任意の tiling mode)
 facet window --toggle-float          # focused window の float flag flip
 facet window --toggle-orientation    # bsp: 親 split を 90 度回転 / tall: wide↔tall 反転
 facet window --cycle-stack=next|prev # stack の次 / 前メンバーへ循環
@@ -352,7 +352,7 @@ facet window --inc-master|--dec-master       # master 窓数 ±1 (tall / centere
 # (grid は常に key/active)。
 
 # Workspace 操作 (M5 Phase α)
-facet --workspace=N               # workspace N に切替 (1-indexed)
+facet workspace --focus=N               # workspace N に切替 (1-indexed)
 facet window --move-to=N          # focus 中の window を WS N へ
 facet status                      # スナップショット: backend /
                                   # theme / workspaces /
@@ -386,7 +386,7 @@ config 1 ファイル。
 [[bindings]]
 name   = "facet workspace 1"
 input  = "ctrl + alt - 1"
-action-shell = "/opt/homebrew/bin/facet --workspace=1"
+action-shell = "/opt/homebrew/bin/facet workspace --focus=1"
 
 [[bindings]]
 name   = "move focused window to workspace 1"
@@ -397,18 +397,18 @@ action-shell = "/opt/homebrew/bin/facet window --move-to=1"
 **skhd** (`~/.config/skhd/skhdrc`):
 
 ```
-ctrl + alt - 1          : facet --workspace=1
-ctrl + alt - 2          : facet --workspace=2
+ctrl + alt - 1          : facet workspace --focus=1
+ctrl + alt - 2          : facet workspace --focus=2
 ctrl + shift + alt - 1  : facet window --move-to=1
 ctrl + shift + alt - 2  : facet window --move-to=2
 ```
 
 **Karabiner-Elements**: *Complex Modifications* の JSON で
-`shell_command` に `/opt/homebrew/bin/facet --workspace=1` 等を
+`shell_command` に `/opt/homebrew/bin/facet workspace --focus=1` 等を
 指定。
 
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
-hs.execute("/opt/homebrew/bin/facet --workspace=1") end)`。
+hs.execute("/opt/homebrew/bin/facet workspace --focus=1") end)`。
 
 #### おまけ: native Space 切替のローディングスケルトン
 

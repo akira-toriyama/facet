@@ -93,7 +93,7 @@ public protocol WindowBackend: Sendable {
     /// Re-apply the active workspace's layout. Phase γ escape
     /// hatch: when the on-screen state has drifted from what the
     /// backend thinks (external resize / unexpected move), the
-    /// user runs `facet --retile` to force a fresh tile pass.
+    /// user runs `facet workspace --retile` to force a fresh tile pass.
     /// Backends that delegate layout (rift) silently no-op.
     func retileActiveWorkspace()
 
