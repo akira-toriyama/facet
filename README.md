@@ -287,12 +287,13 @@ Frequently-touched keys:
   `-right` override individual edges. All default 0 (flush tiling);
   clamp to [0, 1000]. Applies to every layout; floating windows excluded.
 - `[animation]` table — animate transitions instead of snapping.
-  `enabled` (default `true`) is the master switch; `curve` picks the
-  feel: `cubic` (default, ease-out), `spring` (bouncy), `silky` (smooth,
-  longer), `snappy` (crisp), `random` (one per transition), or `none`.
-  `duration-ms` overrides the length (clamp [80, 800]); unset = each
-  curve's own default. Covers the workspace switch (directional
-  filmstrip slide) and retile / layout change (in-place reflow). Pure
+  `enabled` (default `false` — opt in by setting `true`) is the master
+  switch; `curve` picks the feel: `cubic` (default, ease-out), `spring`
+  (bouncy), `silky` (smooth, longer), `snappy` (crisp), or `random` (one
+  per transition). `duration-ms` overrides the length (clamp [80, 800]);
+  unset = each curve's own default. Covers the workspace switch
+  (directional filmstrip slide), retile / layout change (in-place
+  reflow), and stack cycle (old top slides out / next slides in). Pure
   public AX; macOS "Reduce motion" forces instant transitions regardless.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`

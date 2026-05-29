@@ -162,19 +162,19 @@ public struct FacetConfig: Sendable {
         return known.contains(m) ? m : "float"
     }
 
-    /// Window-move animation on? Default on. False when explicitly
-    /// disabled OR the curve is "none". Read this, not the raw fields.
-    public var effectiveAnimationsEnabled: Bool {
-        (animationsEnabled ?? true) && effectiveAnimationCurve != "none"
-    }
+    /// Window-move animation on? **Default off** (opt-in): a fresh
+    /// install gets instant transitions until `enabled = true`. Read
+    /// this, not the raw field.
+    public var effectiveAnimationsEnabled: Bool { animationsEnabled ?? false }
     /// Slide duration (seconds), clamped 0.08–0.8 s. Default 0.28 s.
     public var effectiveAnimationDuration: TimeInterval {
         Double(min(800, max(80, animationDurationMs ?? 280))) / 1000
     }
-    /// Animation curve: none / cubic / spring / silky / snappy / random.
-    /// Unknown clamps to "cubic"; "random" picks per transition.
+    /// Animation curve (used when enabled): cubic / spring / silky /
+    /// snappy / random. Unknown clamps to "cubic"; "random" picks per
+    /// transition. (Off is `enabled = false`, not a curve value.)
     public var effectiveAnimationCurve: String {
-        let known = ["none", "cubic", "spring", "silky", "snappy", "random"]
+        let known = ["cubic", "spring", "silky", "snappy", "random"]
         let c = (animationCurve ?? "cubic").lowercased()
         return known.contains(c) ? c : "cubic"
     }

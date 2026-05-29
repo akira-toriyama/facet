@@ -63,15 +63,18 @@ final class SlideAnimationTests: XCTestCase {
 
     // MARK: FacetConfig [animation]
 
-    func testAnimationDefaults() {
+    func testAnimationDefaultsOff() {
+        // Opt-in: a fresh install animates nothing until enabled = true.
         let c = FacetConfig.from(toml: [:])
-        XCTAssertTrue(c.effectiveAnimationsEnabled)
+        XCTAssertFalse(c.effectiveAnimationsEnabled)
         XCTAssertEqual(c.effectiveAnimationDuration, 0.28, accuracy: 0.0001)
     }
 
     func testAnimationEnabledParsed() {
-        let c = FacetConfig.from(toml: ["animation": ["enabled": .bool(false)]])
-        XCTAssertFalse(c.effectiveAnimationsEnabled)
+        let on = FacetConfig.from(toml: ["animation": ["enabled": .bool(true)]])
+        XCTAssertTrue(on.effectiveAnimationsEnabled)
+        let off = FacetConfig.from(toml: ["animation": ["enabled": .bool(false)]])
+        XCTAssertFalse(off.effectiveAnimationsEnabled)
     }
 
     func testAnimationDurationClampsLow() {
@@ -96,10 +99,6 @@ final class SlideAnimationTests: XCTestCase {
         XCTAssertEqual(curve("spring"), "spring")
         XCTAssertEqual(curve("RANDOM"), "random")   // case-insensitive
         XCTAssertEqual(curve("bogus"), "cubic")     // unknown → default
-    }
-
-    func testAnimationCurveNoneDisables() {
-        let c = FacetConfig.from(toml: ["animation": ["curve": .string("none")]])
-        XCTAssertFalse(c.effectiveAnimationsEnabled)
+        XCTAssertEqual(curve("none"), "cubic")      // "none" dropped → default
     }
 }

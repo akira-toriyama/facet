@@ -172,10 +172,10 @@ outer-gap = 0
 # transitions jump regardless of the settings below.
 
 [animation]
-# enabled — master switch. Default true. Set false for instant jumps.
-enabled = true
-# curve — easing / feel. One of:
-#   none   — no animation (same as enabled = false)
+# enabled — master switch. Default false (opt-in): a fresh install gets
+# instant transitions. Set true to animate; off is `enabled = false`.
+enabled = false
+# curve — easing / feel (used when enabled). One of:
 #   cubic  — ease-out, no overshoot (default)
 #   spring — slight overshoot then settle (bouncy / premium)
 #   silky  — ease both ends, longer; smooth and unhurried
