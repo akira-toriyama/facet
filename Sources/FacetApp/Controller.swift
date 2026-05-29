@@ -312,8 +312,8 @@ final class Controller: NSObject {
                         String(s.dropFirst("toggle:".count)))
 
                 case let s where s.hasPrefix("workspace:"):
-                    let n = Int(s.dropFirst("workspace:".count)) ?? 0
-                    self.dispatchWorkspace(n)
+                    self.dispatchWorkspaceTarget(
+                        String(s.dropFirst("workspace:".count)))
 
                 case let s where s.hasPrefix("window-move:"):
                     let n = Int(s.dropFirst("window-move:".count)) ?? 0
@@ -454,6 +454,26 @@ final class Controller: NSObject {
     /// a debug log) — the DNC receiver shouldn't exit the server
     /// just because a stale hotkey points past the current WS count.
     /// Idempotent: switching to the current WS is a backend no-op.
+    /// Route a `workspace:` control payload — either an absolute
+    /// 1-based index (`"2"`) or a relative target (`next` / `prev` /
+    /// `recent`).
+    private func dispatchWorkspaceTarget(_ arg: String) {
+        switch arg {
+        case "next":   dispatchWorkspaceRelative(.next)
+        case "prev":   dispatchWorkspaceRelative(.prev)
+        case "recent": dispatchWorkspaceRelative(.recent)
+        default:       dispatchWorkspace(Int(arg) ?? 0)
+        }
+    }
+
+    private func dispatchWorkspaceRelative(_ target: RelativeWorkspace) {
+        // Same focus contract as the absolute path: no explicit window
+        // pick, so the backend auto-focuses the destination's
+        // last-touched window (memory [[facet-ws-switch-focus-management]]).
+        backend.switchWorkspaceRelative(target, autoFocus: true)
+        scheduleReconcile(after: 0.05)
+    }
+
     private func dispatchWorkspace(_ n: Int) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {

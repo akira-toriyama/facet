@@ -23,7 +23,7 @@
 //   Theme   : --theme=NAME
 //   Server  : --quit / --reload / --debug / --resign / --help
 //   Status  : facet status (read-only, no `--`)
-//   Workspace : facet workspace --focus=N / --layout=NAME / --retile
+//   Workspace : facet workspace --focus=N|next|prev|recent / --layout=NAME / --retile
 //   Window    : facet window --move-to=N / --toggle-float /
 //               --toggle-orientation / --cycle-stack=next|prev /
 //               --grow-master / --shrink-master / --inc-master / --dec-master
@@ -102,6 +102,9 @@ enum FacetApp {
         WORKSPACE                            (active / target workspace)
           facet workspace --focus=N          switch to workspace N
                                              (1-indexed; idempotent)
+          facet workspace --focus=next       step to next / previous
+          facet workspace --focus=prev       configured workspace (wraps)
+          facet workspace --focus=recent     return to the previous one
           facet workspace --layout=NAME      set the workspace's layout
                                              (bsp | stack | tall |
                                              centered-master | grid |
@@ -285,11 +288,12 @@ enum FacetApp {
         postControl("toggle:\(name)")
     }
 
-    /// Post ``workspace:N`` (1-indexed). Switches to the Nth
-    /// workspace via the backend. Idempotent — if you're already
-    /// on N the backend treats it as a no-op.
-    static func postWorkspace(_ index: Int) -> Never {
-        postControl("workspace:\(index)")
+    /// Post ``workspace:TARGET`` where TARGET is an absolute 1-based
+    /// index (`"2"`) or a relative keyword (`next` / `prev` /
+    /// `recent`). The server resolves relatives against its live
+    /// state. Absolute is idempotent (no-op if already there).
+    static func postWorkspaceFocus(_ target: String) -> Never {
+        postControl("workspace:" + target)
     }
 
     /// Post ``window-move:N`` (1-indexed). Moves the focused
@@ -364,12 +368,22 @@ enum FacetApp {
         }
     }
 
-    /// Parse ``workspace --focus=N`` (positive integer, 1-indexed).
-    /// Loud reject on non-integer / non-positive so a typo can't pick
-    /// the wrong workspace silently. Relative targets
-    /// (next / prev / recent) are handled separately as strings.
-    static func parseWorkspaceFocusInt(_ arg: String) -> Int {
-        parsePositiveInt(arg, prefix: "--focus=", flag: "workspace --focus")
+    /// Parse + validate ``workspace --focus=VALUE``. VALUE is either a
+    /// relative keyword (`next` / `prev` / `recent`) or an absolute
+    /// 1-based index. Returns the canonical string to post; loud
+    /// reject on anything else so a typo can't silently pick the
+    /// wrong workspace.
+    static func parseWorkspaceFocus(_ arg: String) -> String {
+        let raw = String(arg.dropFirst("--focus=".count)).lowercased()
+        switch raw {
+        case "next", "prev", "recent":
+            return raw
+        default:
+            // Absolute index — reuse the positive-int validator.
+            let n = parsePositiveInt(arg, prefix: "--focus=",
+                                     flag: "workspace --focus")
+            return String(n)
+        }
     }
 
     /// Parse ``--move-to=N`` (positive integer, 1-indexed).
@@ -432,12 +446,11 @@ enum FacetApp {
     /// Sub-command parser for ``facet workspace <flag>``. Subject-verb
     /// mirror of ``facet window``: one action per invocation, loud
     /// reject on zero / multiple / unknown. Verbs:
-    ///   --focus=N     switch to workspace N (1-indexed)
-    ///   --layout=NAME set the active workspace's layout mode
-    ///   --retile      re-apply the active workspace's layout
-    /// (Relative --focus=next|prev|recent lands in a follow-up.)
+    ///   --focus=N|next|prev|recent  switch workspace (absolute or relative)
+    ///   --layout=NAME               set the active workspace's layout mode
+    ///   --retile                    re-apply the active workspace's layout
     static func runWorkspaceCommand(_ args: [String]) -> Never {
-        var focusArg: Int?
+        var focusArg: String?
         var layoutArg: String?
         var retileFlag = false
         var i = 0
@@ -446,7 +459,7 @@ enum FacetApp {
             let a = args[i]
             switch true {
             case a.hasPrefix("--focus="):
-                focusArg = parseWorkspaceFocusInt(a)
+                focusArg = parseWorkspaceFocus(a)
             case a.hasPrefix("--layout="):
                 layoutArg = canonicalLayoutMode(
                     String(a.dropFirst("--layout=".count)))
@@ -469,7 +482,7 @@ enum FacetApp {
                 + "see `facet --help`")
         }
         requireServerAlive()
-        if let n = focusArg  { postWorkspace(n) }
+        if let f = focusArg  { postWorkspaceFocus(f) }
         if let l = layoutArg { postSetLayout(l) }
         if retileFlag        { postRetile() }
         die("facet workspace: dispatch fell through (bug)")

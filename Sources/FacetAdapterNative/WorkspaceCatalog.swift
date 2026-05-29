@@ -73,6 +73,12 @@ struct WorkspaceCatalog {
     /// 1-based index of the active workspace.
     private(set) var activeIndex: Int = 1
 
+    /// 1-based index of the workspace that was active immediately
+    /// before the current one, or nil before the first switch. Powers
+    /// `workspace --focus=recent`. Updated by `setActive` on every
+    /// real transition; cleared to nil only at init.
+    private(set) var previousActiveIndex: Int?
+
     /// Window → slot (workspace + pid). Survives across reconciles
     /// so a window the user moved stays where they put it; new
     /// windows land in `activeIndex` on the next reconcile.
@@ -712,6 +718,7 @@ struct WorkspaceCatalog {
               n1Based != activeIndex else { return nil }
         let old = activeIndex
         activeIndex = n1Based
+        previousActiveIndex = old
         let toPark = windowMap
             .filter { $0.value.workspace == old }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
@@ -720,6 +727,30 @@ struct WorkspaceCatalog {
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
+    }
+
+    /// Resolve a relative workspace target to a concrete 1-based
+    /// index, or nil when there's nowhere to go. `configured` is the
+    /// ordered list of valid 1-based WS indices.
+    ///   - `next` / `prev`: neighbour of `activeIndex` in `configured`,
+    ///     wrapping at the ends; nil with fewer than 2 configured WSs.
+    ///   - `recent`: `previousActiveIndex` when it's still configured,
+    ///     else nil.
+    func relativeTarget(_ target: RelativeWorkspace,
+                               configured: [Int]) -> Int? {
+        switch target {
+        case .recent:
+            guard let p = previousActiveIndex,
+                  configured.contains(p) else { return nil }
+            return p
+        case .next, .prev:
+            guard configured.count >= 2,
+                  let pos = configured.firstIndex(of: activeIndex)
+            else { return nil }
+            let step = target == .next ? 1 : -1
+            let n = (pos + step + configured.count) % configured.count
+            return configured[n]
+        }
     }
 
     // MARK: - Move window
