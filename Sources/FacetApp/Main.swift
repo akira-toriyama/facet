@@ -23,7 +23,8 @@
 //   Theme   : --theme=NAME
 //   Server  : --quit / --reload / --debug / --resign / --help
 //   Status  : facet status (read-only, no `--`)
-//   Workspace : facet workspace --focus=N|next|prev|recent / --layout=NAME / --retile
+//   Workspace : facet workspace --focus=N|NAME|next|prev|recent / --layout=NAME
+//               / --retile / --add / --remove[=N] / --rename=NAME / --move=N
 //   Window    : facet window --move-to=N / --toggle-float /
 //               --toggle-orientation / --cycle-stack=next|prev /
 //               --grow-master / --shrink-master / --inc-master / --dec-master
@@ -102,8 +103,10 @@ enum FacetApp {
         WORKSPACE                            (active / target workspace)
           facet workspace --focus=N          switch to workspace N
                                              (1-indexed; idempotent)
+          facet workspace --focus=NAME       switch by name (stable
+                                             across reorder)
           facet workspace --focus=next       step to next / previous
-          facet workspace --focus=prev       configured workspace (wraps)
+          facet workspace --focus=prev       workspace (wraps)
           facet workspace --focus=recent     return to the previous one
           facet workspace --layout=NAME      set the workspace's layout
                                              (bsp | stack | tall |
@@ -111,6 +114,13 @@ enum FacetApp {
                                              spiral | monocle | float)
           facet workspace --retile           re-apply the layout
                                              (no-op when float)
+          facet workspace --add              append a new workspace
+          facet workspace --remove[=N]       remove workspace N (or the
+                                             active one); its windows
+                                             move to a neighbour
+          facet workspace --rename=NAME      rename the active workspace
+          facet workspace --move=N           move the active workspace to
+                                             position N (reorder)
 
         WINDOW                               (focused window)
           facet window --move-to=N           move it to workspace N
@@ -368,21 +378,24 @@ enum FacetApp {
         }
     }
 
-    /// Parse + validate ``workspace --focus=VALUE``. VALUE is either a
-    /// relative keyword (`next` / `prev` / `recent`) or an absolute
-    /// 1-based index. Returns the canonical string to post; loud
-    /// reject on anything else so a typo can't silently pick the
-    /// wrong workspace.
+    /// Parse ``workspace --focus=VALUE``. VALUE is a relative keyword
+    /// (`next` / `prev` / `recent`), an absolute 1-based index, or a
+    /// workspace **name**. Returns the canonical control payload:
+    /// `next|prev|recent`, the index as a string, or `name:NAME`
+    /// (case preserved). Numeric values are always indices — name a
+    /// workspace non-numerically to reference it by name (yabai-style).
     static func parseWorkspaceFocus(_ arg: String) -> String {
-        let raw = String(arg.dropFirst("--focus=".count)).lowercased()
-        switch raw {
+        let raw = String(arg.dropFirst("--focus=".count))
+        switch raw.lowercased() {
         case "next", "prev", "recent":
-            return raw
+            return raw.lowercased()
         default:
-            // Absolute index — reuse the positive-int validator.
-            let n = parsePositiveInt(arg, prefix: "--focus=",
-                                     flag: "workspace --focus")
-            return String(n)
+            if let n = Int(raw), n > 0 { return String(n) }   // index
+            guard !raw.isEmpty else {
+                die("workspace --focus expects an index, name, or "
+                    + "next/prev/recent")
+            }
+            return "name:" + raw                              // name
         }
     }
 
@@ -453,6 +466,10 @@ enum FacetApp {
         var focusArg: String?
         var layoutArg: String?
         var retileFlag = false
+        var addFlag = false
+        var removeArg: String?      // "" = active, else 1-based index
+        var renameArg: String?
+        var moveArg: Int?
         var i = 0
         while i < args.count {
             defer { i += 1 }
@@ -465,14 +482,26 @@ enum FacetApp {
                     String(a.dropFirst("--layout=".count)))
             case a == "--retile":
                 retileFlag = true
+            case a == "--add":
+                addFlag = true
+            case a == "--remove":
+                removeArg = ""                       // active workspace
+            case a.hasPrefix("--remove="):
+                removeArg = String(parsePositiveInt(
+                    a, prefix: "--remove=", flag: "workspace --remove"))
+            case a.hasPrefix("--rename="):
+                renameArg = String(a.dropFirst("--rename=".count))
+            case a.hasPrefix("--move="):
+                moveArg = parsePositiveInt(
+                    a, prefix: "--move=", flag: "workspace --move")
             default:
                 die("unknown `workspace` flag \"\(a)\" — "
                     + "see `facet --help`")
             }
         }
-        let count = (focusArg != nil ? 1 : 0)
-            + (layoutArg != nil ? 1 : 0)
-            + (retileFlag ? 1 : 0)
+        let count = [focusArg != nil, layoutArg != nil, retileFlag,
+                     addFlag, removeArg != nil, renameArg != nil,
+                     moveArg != nil].filter { $0 }.count
         guard count > 0 else {
             die("facet workspace: no action specified — "
                 + "see `facet --help`")
@@ -485,6 +514,10 @@ enum FacetApp {
         if let f = focusArg  { postWorkspaceFocus(f) }
         if let l = layoutArg { postSetLayout(l) }
         if retileFlag        { postRetile() }
+        if addFlag           { postControl("workspace-add") }
+        if let r = removeArg { postControl("workspace-remove:" + r) }
+        if let n = renameArg { postControl("workspace-rename:" + n) }
+        if let m = moveArg   { postControl("workspace-move:\(m)") }
         die("facet workspace: dispatch fell through (bug)")
     }
 

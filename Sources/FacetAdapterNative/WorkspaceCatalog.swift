@@ -70,6 +70,27 @@ struct WorkspaceCatalog {
 
     // MARK: - State
 
+    /// The live, mutable workspace set — authority for membership,
+    /// order, and names (replaces the config list that callers used to
+    /// pass in). Position-based: array element `i` is workspace
+    /// `i+1` (1-based, contiguous); the string is its display name
+    /// (`""` = show the number). Seeded once from config via
+    /// `seed(names:)`, then mutated by `add`/`remove`/`rename`/`move`
+    /// (session-only — config stays the read-only seed, memory
+    /// `facet-cli-dynamic-runtime-model`). Per native Space: each
+    /// catalog owns its own set.
+    private(set) var workspaceNames: [String] = []
+
+    /// Number of live workspaces (= highest valid 1-based index).
+    var workspaceCount: Int { workspaceNames.count }
+
+    /// The live set as `(index, name)` pairs for `snapshot` / status.
+    var workspaceEntries: [(index: Int, name: String)] {
+        workspaceNames.enumerated().map {
+            (index: $0.offset + 1, name: $0.element)
+        }
+    }
+
     /// 1-based index of the active workspace.
     private(set) var activeIndex: Int = 1
 
@@ -712,13 +733,136 @@ struct WorkspaceCatalog {
         windowMap[id]?.pid
     }
 
+    // MARK: - Dynamic workspace set (seed + mutate)
+
+    /// Seed the live set from config, once, at catalog creation.
+    /// Compacts to contiguous positions: a sparse config (`1`, `3`,
+    /// `5`) becomes positions 1/2/3 keeping names in index order. The
+    /// dynamic model is position-based and contiguous, so sparsity
+    /// can't survive — names are the stable handle now. No-op once
+    /// seeded (the set is then authoritative; config is just the
+    /// seed). Falls back to one unnamed workspace if `entries` empty.
+    mutating func seed(names entries: [(index: Int, name: String)]) {
+        guard workspaceNames.isEmpty else { return }
+        let sorted = entries.sorted { $0.index < $1.index }
+        workspaceNames = sorted.isEmpty ? [""] : sorted.map(\.name)
+        if activeIndex > workspaceNames.count { activeIndex = 1 }
+    }
+
+    /// 1-based position of the first workspace named `name`, or nil.
+    /// Empty `name` never matches (it's the "show the number"
+    /// sentinel, not a real label).
+    func index(ofName name: String) -> Int? {
+        guard !name.isEmpty else { return nil }
+        return workspaceNames.firstIndex(of: name).map { $0 + 1 }
+    }
+
+    /// Append a new empty workspace; returns its 1-based position.
+    @discardableResult
+    mutating func addWorkspace() -> Int {
+        workspaceNames.append("")
+        return workspaceNames.count
+    }
+
+    /// Rename the workspace at `n1Based`. No-op for an invalid position.
+    mutating func renameWorkspace(_ n1Based: Int, to name: String) {
+        guard n1Based >= 1, n1Based <= workspaceNames.count else { return }
+        workspaceNames[n1Based - 1] = name
+    }
+
+    /// Remove the workspace at `n1Based`. Its windows evacuate to a
+    /// neighbour (P-1, or P+1 when removing the first) so nothing is
+    /// lost; positions above shift down by one. No-op when only one
+    /// workspace remains. `rect` rebuilds the neighbour's layout
+    /// container after it absorbs the evacuees. Returns true on
+    /// success.
+    @discardableResult
+    mutating func removeWorkspace(_ n1Based: Int, in rect: CGRect = .zero)
+        -> Bool
+    {
+        let n = workspaceNames.count
+        guard n > 1, n1Based >= 1, n1Based <= n else { return false }
+        let neighbour = n1Based > 1 ? n1Based - 1 : 2      // old numbering
+        // Evacuate windows P -> neighbour (old numbering).
+        for (id, slot) in windowMap where slot.workspace == n1Based {
+            windowMap[id] = WindowSlot(workspace: neighbour, pid: slot.pid)
+            clearLeaveFocus(of: id)
+        }
+        // Active / recent follow the evacuated windows.
+        if activeIndex == n1Based { activeIndex = neighbour }
+        if previousActiveIndex == n1Based { previousActiveIndex = neighbour }
+        // Drop P from the name list, then shift positions > P down by
+        // one across every index-keyed structure (P's own state is
+        // discarded — its windows already moved out).
+        workspaceNames.remove(at: n1Based - 1)
+        var map: [Int: Int] = [:]
+        for pos in 1...n where pos != n1Based {
+            map[pos] = pos < n1Based ? pos : pos - 1
+        }
+        remapIndices(map)
+        // Rebuild the neighbour's container from its now-larger member
+        // set so absorbed windows tile correctly.
+        let neighbourNew = neighbour < n1Based ? neighbour : neighbour - 1
+        _ = setMode(workspace: neighbourNew,
+                    to: mode(of: neighbourNew), in: rect)
+        return true
+    }
+
+    /// Move the active workspace to 1-based `target` (reorder). No-op
+    /// for an out-of-range or unchanged target. Each workspace keeps
+    /// its windows + layout; only the position numbers change.
+    @discardableResult
+    mutating func moveActiveWorkspace(to target: Int) -> Bool {
+        let n = workspaceNames.count
+        let from = activeIndex
+        guard target >= 1, target <= n, target != from else { return false }
+        let moved = workspaceNames.remove(at: from - 1)
+        workspaceNames.insert(moved, at: target - 1)
+        // Permutation. Moving `from` -> `target`:
+        //   from < target: positions (from, target] shift down by 1.
+        //   from > target: positions [target, from) shift up by 1.
+        var map: [Int: Int] = [from: target]
+        if from < target {
+            for pos in (from + 1)...target { map[pos] = pos - 1 }
+        } else {
+            for pos in target...(from - 1) { map[pos] = pos + 1 }
+        }
+        for pos in 1...n where map[pos] == nil { map[pos] = pos }
+        remapIndices(map)
+        return true
+    }
+
+    /// Re-key every index-keyed structure (per-WS dicts + windowMap
+    /// slots + active / previous) by `map` (oldPos -> newPos).
+    /// Positions absent from `map` are dropped; `map`'s values must be
+    /// unique (a permutation of the surviving positions).
+    private mutating func remapIndices(_ map: [Int: Int]) {
+        func remap<V>(_ d: [Int: V]) -> [Int: V] {
+            var out: [Int: V] = [:]
+            for (k, v) in d where map[k] != nil { out[map[k]!] = v }
+            return out
+        }
+        layoutModes = remap(layoutModes)
+        layoutTrees = remap(layoutTrees)
+        stackOrders = remap(stackOrders)
+        layoutParams = remap(layoutParams)
+        lastFocusedOnLeave = remap(lastFocusedOnLeave)
+        for (id, slot) in windowMap where map[slot.workspace] != nil {
+            windowMap[id] = WindowSlot(workspace: map[slot.workspace]!,
+                                       pid: slot.pid)
+        }
+        activeIndex = map[activeIndex]
+            ?? min(activeIndex, max(1, workspaceNames.count))
+        previousActiveIndex = previousActiveIndex.flatMap { map[$0] }
+    }
+
     // MARK: - Validation
 
-    /// True when `n1Based` is a slot in the configured workspace
-    /// list. Sparse configs (only `1`, `3`, `5` declared) are
-    /// honoured: `2` is invalid even though raw count ≥ 2.
-    func isValid(_ n1Based: Int, configuredIndexes: [Int]) -> Bool {
-        configuredIndexes.contains(n1Based)
+    /// True when `n1Based` is a live workspace position (contiguous
+    /// 1...count). The dynamic set is the authority (memory
+    /// `facet-cli-dynamic-runtime-model`).
+    func isValid(_ n1Based: Int) -> Bool {
+        n1Based >= 1 && n1Based <= workspaceNames.count
     }
 
     // MARK: - Switch workspace
@@ -739,10 +883,8 @@ struct WorkspaceCatalog {
     /// active. Caller applies AX side-effects against the
     /// returned `WindowRef` lists.
     @discardableResult
-    mutating func setActive(_ n1Based: Int,
-                                   configuredIndexes: [Int]) -> SwitchPlan? {
-        guard isValid(n1Based, configuredIndexes: configuredIndexes),
-              n1Based != activeIndex else { return nil }
+    mutating func setActive(_ n1Based: Int) -> SwitchPlan? {
+        guard isValid(n1Based), n1Based != activeIndex else { return nil }
         let old = activeIndex
         activeIndex = n1Based
         previousActiveIndex = old
@@ -757,26 +899,22 @@ struct WorkspaceCatalog {
     }
 
     /// Resolve a relative workspace target to a concrete 1-based
-    /// index, or nil when there's nowhere to go. `configured` is the
-    /// ordered list of valid 1-based WS indices.
-    ///   - `next` / `prev`: neighbour of `activeIndex` in `configured`,
-    ///     wrapping at the ends; nil with fewer than 2 configured WSs.
-    ///   - `recent`: `previousActiveIndex` when it's still configured,
-    ///     else nil.
-    func relativeTarget(_ target: RelativeWorkspace,
-                               configured: [Int]) -> Int? {
+    /// index over the live (contiguous 1...count) set, or nil when
+    /// there's nowhere to go.
+    ///   - `next` / `prev`: neighbour of `activeIndex`, wrapping at the
+    ///     ends; nil with fewer than 2 workspaces.
+    ///   - `recent`: `previousActiveIndex` when it's still valid.
+    func relativeTarget(_ target: RelativeWorkspace) -> Int? {
+        let count = workspaceNames.count
         switch target {
         case .recent:
-            guard let p = previousActiveIndex,
-                  configured.contains(p) else { return nil }
+            guard let p = previousActiveIndex, isValid(p) else { return nil }
             return p
         case .next, .prev:
-            guard configured.count >= 2,
-                  let pos = configured.firstIndex(of: activeIndex)
-            else { return nil }
+            guard count >= 2, isValid(activeIndex) else { return nil }
             let step = target == .next ? 1 : -1
-            let n = (pos + step + configured.count) % configured.count
-            return configured[n]
+            let n = (activeIndex - 1 + step + count) % count
+            return n + 1
         }
     }
 
@@ -798,9 +936,8 @@ struct WorkspaceCatalog {
 
     @discardableResult
     mutating func moveWindow(_ id: WindowID, to n1Based: Int,
-                                    configuredIndexes: [Int],
                                     in rect: CGRect = .zero) -> MoveOutcome {
-        guard isValid(n1Based, configuredIndexes: configuredIndexes),
+        guard isValid(n1Based),
               let current = windowMap[id],
               current.workspace != n1Based else { return .rejected }
         windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
@@ -864,8 +1001,7 @@ struct WorkspaceCatalog {
     /// wire convention of the `WindowBackend` protocol — translation
     /// happens here at the seam.
     func snapshot(live: [Window], focused: WindowID?,
-                         activeRect: CGRect,
-                         configured: [(index: Int, name: String)])
+                         activeRect: CGRect)
         -> [Workspace]
     {
         // Group raw live windows by WS first so per-WS layout
@@ -880,7 +1016,7 @@ struct WorkspaceCatalog {
         let byWS = Dictionary(grouping: tracked) { w in
             windowMap[w.id]!.workspace
         }
-        return configured.map { entry in
+        return workspaceEntries.map { entry in
             let isActive = entry.index == activeIndex
             let m = mode(of: entry.index)
             let tileF = (m == "bsp")

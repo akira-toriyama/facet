@@ -315,6 +315,27 @@ final class Controller: NSObject {
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
+                case "workspace-add":
+                    self.backend.addWorkspace()
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("workspace-remove:"):
+                    let raw = String(s.dropFirst("workspace-remove:".count))
+                    self.backend.removeWorkspace(
+                        at: raw.isEmpty ? nil : Int(raw))
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("workspace-rename:"):
+                    self.backend.renameWorkspace(
+                        at: nil,
+                        to: String(s.dropFirst("workspace-rename:".count)))
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("workspace-move:"):
+                    self.backend.moveActiveWorkspace(
+                        to: Int(s.dropFirst("workspace-move:".count)) ?? 0)
+                    self.scheduleReconcile(after: 0.05)
+
                 case let s where s.hasPrefix("window-move:"):
                     let n = Int(s.dropFirst("window-move:".count)) ?? 0
                     self.dispatchWindowMove(n)
@@ -462,6 +483,13 @@ final class Controller: NSObject {
         case "next":   dispatchWorkspaceRelative(.next)
         case "prev":   dispatchWorkspaceRelative(.prev)
         case "recent": dispatchWorkspaceRelative(.recent)
+        case let s where s.hasPrefix("name:"):
+            // Focus by workspace name (stable across reorder). No
+            // explicit window pick → auto-focus the destination's
+            // last-touched window, same contract as the index path.
+            backend.switchWorkspace(
+                named: String(s.dropFirst("name:".count)), autoFocus: true)
+            scheduleReconcile(after: 0.05)
         default:       dispatchWorkspace(Int(arg) ?? 0)
         }
     }

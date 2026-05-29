@@ -291,6 +291,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             workspaceList = []
             return
         }
+        // Seed the live workspace set from config the first time this
+        // (per-Space) catalog is used. Idempotent — once seeded, the
+        // catalog's set is authoritative and runtime add/remove/rename/
+        // move own it (config stays the read-only seed).
+        catalog.seed(names: config.effectiveWorkspaceList(
+            forSpaceOrdinal: activeSpaceOrdinal))
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
@@ -352,9 +358,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         workspaceList = catalog.snapshot(
             live: live,
             focused: displayFocus,
-            activeRect: rect,
-            configured: config.effectiveWorkspaceList(
-                forSpaceOrdinal: activeSpaceOrdinal))
+            activeRect: rect)
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
         // windows (Cmd+H'd apps, windows on other macOS Spaces,
         // minimized windows) as examined so a later
@@ -737,11 +741,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
-        let configured = config.effectiveWorkspaceList(
-            forSpaceOrdinal: activeSpaceOrdinal).map(\.index)
-        guard let plan = catalog.setActive(target,
-                                           configuredIndexes: configured)
-        else { return }
+        guard let plan = catalog.setActive(target) else { return }
 
         // Leave-snapshot only fires on a real transition: setActive
         // already returned nil for the no-op `target == activeIndex`
@@ -777,10 +777,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                                         autoFocus: Bool) {
         guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
         else { return }
-        let configured = config.effectiveWorkspaceList(
-            forSpaceOrdinal: activeSpaceOrdinal).map(\.index)
-        guard let t = catalog.relativeTarget(target,
-                                             configured: configured) else {
+        guard let t = catalog.relativeTarget(target) else {
             Log.debug("native: switchWorkspaceRelative \(target) → no-op")
             return
         }
@@ -829,12 +826,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
         else { return }
         let target = index + 1
-        let configured = config.effectiveWorkspaceList(
-            forSpaceOrdinal: activeSpaceOrdinal).map(\.index)
         let rect = activeDisplayRect()
-        let outcome = catalog.moveWindow(id, to: target,
-                                         configuredIndexes: configured,
-                                         in: rect)
+        let outcome = catalog.moveWindow(id, to: target, in: rect)
         switch outcome {
         case .rejected:
             return
@@ -856,6 +849,85 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // (Phase γ: lazy retile / re-stack).
         applyLayout(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
+    }
+
+    // MARK: - Dynamic workspace commands (A: runtime WS set)
+
+    public func switchWorkspace(named name: String, autoFocus: Bool) {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
+        guard let pos = catalog.index(ofName: name) else {
+            Log.debug("native: switchWorkspace(named: \"\(name)\") → no match")
+            return
+        }
+        switchWorkspace(toIndex: pos - 1, autoFocus: autoFocus)
+    }
+
+    public func addWorkspace() {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
+        let pos = catalog.addWorkspace()
+        Log.debug("native: addWorkspace → position \(pos) "
+            + "(count=\(catalog.workspaceCount))")
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    public func removeWorkspace(at position: Int?) {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
+        let target = position ?? catalog.activeIndex
+        let rect = activeDisplayRect()
+        guard catalog.removeWorkspace(target, in: rect) else {
+            Log.debug("native: removeWorkspace(\(target)) → rejected "
+                + "(invalid, or last workspace)")
+            return
+        }
+        Log.debug("native: removeWorkspace(\(target)) → "
+            + "count=\(catalog.workspaceCount) active=\(catalog.activeIndex)")
+        // Windows evacuated to a neighbour and positions shifted —
+        // re-establish what's visible (only the active WS) and tile.
+        resyncVisibleState(rect: rect)
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    public func renameWorkspace(at position: Int?, to name: String) {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
+        let target = position ?? catalog.activeIndex
+        catalog.renameWorkspace(target, to: name)
+        Log.debug("native: renameWorkspace(\(target)) → \"\(name)\"")
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    public func moveActiveWorkspace(to position: Int) {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
+        // 1-based position; active follows the moved WS. Pure
+        // renumber — windows / visibility don't change.
+        guard catalog.moveActiveWorkspace(to: position) else {
+            Log.debug("native: moveActiveWorkspace(to: \(position)) → no-op")
+            return
+        }
+        Log.debug("native: moveActiveWorkspace → \(position) "
+            + "active=\(catalog.activeIndex)")
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Force on-screen reality to match the catalog: only the active
+    /// workspace's windows visible (rest parked), then tile. Idempotent
+    /// — `applyHide` guards already-parked / already-restored windows —
+    /// so it's safe after a remove that shuffled windows + positions.
+    private func resyncVisibleState(rect: CGRect) {
+        let active = catalog.activeIndex
+        var toPark: [WindowRef] = []
+        var toRestore: [WindowRef] = []
+        for (id, slot) in catalog.windowMap {
+            let ref = WindowRef(id: id, pid: slot.pid)
+            if slot.workspace == active { toRestore.append(ref) }
+            else { toPark.append(ref) }
+        }
+        applyHide(toPark: toPark, toRestore: toRestore)
+        applyLayout(workspace: active, rect: rect)
     }
 
     /// Park / restore two `WindowRef` lists at the anchor sliver.
