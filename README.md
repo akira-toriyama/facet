@@ -255,6 +255,8 @@ facet --retile                       # re-apply active WS's layout (any tiling m
 facet window --toggle-float          # flip focused window float flag
 facet window --toggle-orientation    # rotate focused window's parent split (bsp)
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
+facet window --grow-master|--shrink-master   # master width ±0.05 (tall / centered-master)
+facet window --inc-master|--dec-master       # master window count ±1 (tall / centered-master)
 
 # --active is a modifier — only meaningful with --view=tree.
 # Without it the tree panel still gains keyboard nav as soon as

@@ -958,6 +958,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 applyLayout(workspace: catalog.activeIndex, rect: rect)
                 eventContinuation.yield(.refreshNeeded)
             }
+        case .growMaster, .shrinkMaster:
+            // Master-ratio nudge — only meaningful for the master
+            // engines; other modes ignore the knob.
+            guard hasMasterKnob(catalog.activeIndex) else { return }
+            let delta: CGFloat = action == .growMaster ? 0.05 : -0.05
+            if catalog.adjustMasterRatio(
+                workspace: catalog.activeIndex, delta: delta) {
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+                eventContinuation.yield(.refreshNeeded)
+            }
+        case .incMaster, .decMaster:
+            guard hasMasterKnob(catalog.activeIndex) else { return }
+            let delta = action == .incMaster ? 1 : -1
+            if catalog.adjustMasterCount(
+                workspace: catalog.activeIndex, delta: delta) {
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+                eventContinuation.yield(.refreshNeeded)
+            }
         // out-of-scope / future cases — no-op, but listed explicitly
         // so the compiler enforces a handling decision on every
         // future enum addition.
@@ -967,6 +985,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
              .centerColumn, .snapStrip:
             break
         }
+    }
+
+    /// Whether the WS's mode reads the master ratio / count knobs
+    /// (tall / centered-master). Other modes ignore them, so master
+    /// adjustments no-op there.
+    private func hasMasterKnob(_ n1Based: Int) -> Bool {
+        let m = catalog.mode(of: n1Based)
+        return m == "tall" || m == "centered-master"
     }
 
     /// Apply the workspace's mode-specific layout (tile / stack /
@@ -1006,6 +1032,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         if (mode == "tall" || mode == "centered-master"), !floating {
             items.append(.init("Promote to master",
                                [.promoteToMaster]))
+            items.append(.init("Wider master", [.growMaster]))
+            items.append(.init("Narrower master", [.shrinkMaster]))
+            items.append(.init("More masters", [.incMaster]))
+            items.append(.init("Fewer masters", [.decMaster]))
         }
         items.append(.init(floating ? "Unfloat" : "Float",
                            [.toggleFloat]))
