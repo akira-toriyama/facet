@@ -101,11 +101,14 @@ struct WorkspaceCatalog {
     /// the explicit `setMode` migration path.
     private(set) var layoutTrees: [Int: LayoutTree] = [:]
 
-    /// Per-WS stack-member order. Only present for WSs in
-    /// `"stack"` mode. The element at index 0 is the *visible
-    /// top* (the single window that fills the display); the rest
-    /// are parked at the anchor sliver. New windows land at index
-    /// 0 (Q7c: new = top); `cycleStack` rotates the array.
+    /// Per-WS window order, shared by `"stack"` mode and the
+    /// stateless `LayoutEngine`s (tall / monocle / …). Index 0 is
+    /// the master / visible-top: in stack it's the single window
+    /// that fills the display (the rest parked at the anchor sliver);
+    /// in tall it's the primary master. New windows land at index 0
+    /// (Q7c: new = top / master); `cycleStack` rotates the array and
+    /// `promoteToMaster` moves a chosen window to index 0. Absent for
+    /// bsp (uses `layoutTrees`) and float (no managed order).
     private(set) var stackOrders: [Int: [WindowID]] = [:]
 
     /// Windows the user (or AX role detector) flagged as floating.
@@ -357,18 +360,18 @@ struct WorkspaceCatalog {
                                          focused: WindowID?,
                                          in rect: CGRect) {
         guard !floatingWindows.contains(id) else { return }
-        switch mode(of: n1Based) {
-        case "bsp":
+        let m = mode(of: n1Based)
+        if m == "bsp" {
             var tree = layoutTrees[n1Based] ?? LayoutTree()
             tree.insert(id, focused: focused, in: rect)
             layoutTrees[n1Based] = tree
-        case "stack":
+        } else if m == "stack" || LayoutRegistry.engine(named: m) != nil {
+            // Stack + stateless engines share one per-WS order; new
+            // window lands at index 0 (= master / top).
             var order = stackOrders[n1Based] ?? []
             order.removeAll { $0 == id }
             order.insert(id, at: 0)
             stackOrders[n1Based] = order
-        default:
-            break
         }
     }
 
@@ -416,8 +419,16 @@ struct WorkspaceCatalog {
             stackOrders[n1Based] = members
             layoutTrees.removeValue(forKey: n1Based)
         default:
-            layoutTrees.removeValue(forKey: n1Based)
-            stackOrders.removeValue(forKey: n1Based)
+            if LayoutRegistry.engine(named: normalised) != nil {
+                // Stateless engine (tall, monocle, …): seed the
+                // shared per-WS order; discard any tree.
+                stackOrders[n1Based] = members
+                layoutTrees.removeValue(forKey: n1Based)
+            } else {
+                // float / unknown → no managed layout state.
+                layoutTrees.removeValue(forKey: n1Based)
+                stackOrders.removeValue(forKey: n1Based)
+            }
         }
         return normalised
     }
@@ -452,6 +463,22 @@ struct WorkspaceCatalog {
         }
         stackOrders[n1Based] = order
         return order.first
+    }
+
+    /// Move `id` to the front (master slot / index 0) of the WS's
+    /// shared order. No-op — returns `false` — when the WS has no
+    /// maintained order, doesn't contain `id`, or `id` is already the
+    /// master. Used by `promoteToMaster` for tall / master-stack.
+    @discardableResult
+    mutating func promoteToMaster(_ id: WindowID,
+                                         workspace n1Based: Int) -> Bool {
+        guard var order = stackOrders[n1Based],
+              let idx = order.firstIndex(of: id), idx != 0
+        else { return false }
+        order.remove(at: idx)
+        order.insert(id, at: 0)
+        stackOrders[n1Based] = order
+        return true
     }
 
     // MARK: - Leave-focus snapshot (auto-focus on re-entry)
@@ -560,15 +587,30 @@ struct WorkspaceCatalog {
             .sorted { $0.serverID < $1.serverID }
     }
 
+    /// The WS's non-floating windows in maintained order
+    /// (`stackOrders`), reconciled against current membership: stale
+    /// ids dropped, any member missing from the order appended. Feeds
+    /// stateless engines a stable + complete order even if the order
+    /// and membership briefly drift (a missing member would otherwise
+    /// get no frame and be left wherever it was).
+    func orderedMembers(of n1Based: Int) -> [WindowID] {
+        let members = nonFloatingMembers(of: n1Based)
+        let memberSet = Set(members)
+        let maintained = (stackOrders[n1Based] ?? [])
+            .filter { memberSet.contains($0) }
+        let have = Set(maintained)
+        return maintained + members.filter { !have.contains($0) }
+    }
+
     /// Frames from the registered stateless `LayoutEngine` for
     /// `n1Based`'s mode, or empty when the mode isn't a registered
     /// engine (bsp / stack / float). The engine is pure; this hands
-    /// it the WS's stable member order + the rect to carve.
+    /// it the WS's stable, complete member order + the rect to carve.
     func engineFrames(for n1Based: Int,
                              in rect: CGRect) -> [WindowID: CGRect] {
         guard let engine = LayoutRegistry.engine(named: mode(of: n1Based))
         else { return [:] }
-        return engine.frames(order: nonFloatingMembers(of: n1Based),
+        return engine.frames(order: orderedMembers(of: n1Based),
                              focused: nil,
                              params: LayoutParams(),
                              in: rect)

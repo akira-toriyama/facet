@@ -671,6 +671,71 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertNotNil(c.layoutTrees[1])
     }
 
+    // MARK: - Theme B — tall / stateless-engine shared order
+
+    func testSetModeTallSeedsSharedOrderFromMembers() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(20), window(10)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        // Stateless engines reuse the stack order; seeded id-sorted.
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
+        XCTAssertNil(c.layoutTrees[1], "tall must discard any tree")
+    }
+
+    func testReconcileNewWindowBecomesTallMaster() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)],
+                        focused: nil, activeRect: displayRect)
+        // New window lands at index 0 = master.
+        XCTAssertEqual(c.stackOrder(of: 1).first, wid(20))
+    }
+
+    func testPromoteToMasterMovesChosenWindowToFront() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        XCTAssertEqual(c.stackOrder(of: 1),
+                       [wid(10), wid(20), wid(30)])
+        XCTAssertTrue(c.promoteToMaster(wid(30), workspace: 1))
+        XCTAssertEqual(c.stackOrder(of: 1),
+                       [wid(30), wid(10), wid(20)])
+    }
+
+    func testPromoteToMasterAlreadyMasterIsNoop() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        XCTAssertFalse(c.promoteToMaster(wid(10), workspace: 1),
+                       "already at index 0 → no change")
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
+    }
+
+    func testPromoteToMasterUnknownWindowIsNoop() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        XCTAssertFalse(c.promoteToMaster(wid(99), workspace: 1))
+    }
+
+    func testOrderedMembersReflectsSharedOrder() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.promoteToMaster(wid(30), workspace: 1)
+        XCTAssertEqual(c.orderedMembers(of: 1),
+                       [wid(30), wid(10), wid(20)])
+    }
+
+    func testTallDropEvictsFromSharedOrder() {
+        var c = WorkspaceCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        c.drop(wid(10))
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(20)])
+    }
+
     // MARK: - Phase γ.3 — autoFloat reconcile hint
 
     func testReconcileAutoFloatMarksNewWindowFloating() {
