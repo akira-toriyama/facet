@@ -109,9 +109,10 @@ use:
   M5 complete: Phase α (workspaces + focus + AX
   events), β (anchor hide, closeWindow, setupFiles
   startup hook), γ (BSP + stack tiling, AX-role auto-float for
-  sheets / dialogs / palettes, 5 CLI verbs: `--set-layout=NAME`,
-  `--retile`, and three `facet window` flags `--toggle-float`,
-  `--toggle-orientation`, `--cycle-stack=next|prev`), δ (display
+  sheets / dialogs / palettes; tiling CLI = `facet workspace
+  --layout=NAME` / `--retile` plus `facet window --toggle-float` /
+  `--toggle-orientation` / `--cycle-stack=next|prev` — reshaped to
+  the subject-verb form by Theme C #81/#82), δ (display
   reconfigure), ε (rift retire) all shipped. See `facet --help`
   and [docs/architecture.md](docs/architecture.md) for the contracts.
 - **AX helpers live in `FacetAccessibility`** (extracted at M5;
@@ -517,7 +518,7 @@ scientific debugging, bisection.*
   *(reviewed 2026-05-27)* — Apple Virtualization.Framework-based
   macOS VM tool. facet uses it for clean-environment
   verification (v1→v2 upgrade smoke, fresh AX-permission grant
-  flow, destructive `--set-layout=bsp` sweeps that would
+  flow, destructive `facet workspace --layout=bsp` sweeps that would
   scramble the host's real windows, private-API spike
   isolation). Subcommands relied on: ``clone`` (APFS COW —
   fast, only differences claim space), ``run`` (with
