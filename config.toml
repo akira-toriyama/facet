@@ -142,19 +142,17 @@ outer-gap = 0
 
 
 # -----------------------------------------------------------------
-# Virtual-workspace behavior (M5 Phase α)
+# Virtual-workspace behavior
 # -----------------------------------------------------------------
 [workspace]
 
-# facet hides the windows of a workspace you're not currently
-# looking at by parking each one at a 1×41 px sliver in the
-# bottom-right corner (rift / AeroSpace's approach). It's instant,
-# has no animation, and the windows still appear in Mission Control
-# so you can pull them back if facet ever crashes. The 41 px is
-# macOS's enforced title-bar guarantee — public APIs can't park a
-# window smaller, and true hide (gone from Mission Control +
-# Cmd-Tab) is impossible via public APIs. facet stays inside that
-# contract.
+# How hiding works (fixed behaviour — there is no key to set here):
+# facet parks the windows of a workspace you're not looking at at a
+# 1×41 px sliver in the bottom-right corner. Instant, no animation,
+# and the windows still appear in Mission Control so you can recover
+# them if facet ever crashes. 41 px is macOS's enforced title-bar
+# minimum; true hide (gone from Mission Control + Cmd-Tab) isn't
+# possible via public APIs, and facet stays inside that contract.
 
 # External shell-hook setup scripts, run once at startup AFTER
 # facet's CLI listener (DNC) is live so the script can immediately
