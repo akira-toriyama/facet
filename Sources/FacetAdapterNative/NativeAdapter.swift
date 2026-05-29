@@ -645,6 +645,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
             // 4. Allowlist gate on AX role/subrole.
             if role == "AXWindow", subrole == "AXStandardWindow" {
+                // yabai/rift `window_can_move`: a standard window AX
+                // won't let us reposition can't be tiled (we'd hand it
+                // a slot it can't fill) → float it instead of tiling.
+                if let ax, !AXGeom.canMove(ax) {
+                    autoFloat.insert(w.id)
+                    Log.debug("native: gate=float(immovable) "
+                        + "wsid=\(w.id.serverID) app=\(w.appName)")
+                    continue
+                }
                 continue                          // tile (managed by reconcile)
             }
             if let ax, AXGeom.isFloatingByRole(ax) {
