@@ -209,6 +209,17 @@ outer-gap = 0
 app = "com.apple.systempreferences"
 action = "float"
 
+# Recommended: Google Chrome spawns transient `AXUnknown`-subrole
+# windows (link hovercards, autofill drop-downs, the download shelf,
+# etc.). They aren't real windows, but the allowlist can't prove
+# they're standard either, so it conservatively *floats* them — which
+# makes them flicker into the tree as a phantom extra window. They
+# carry no useful state, so drop them outright.
+[[exclude]]
+app = "com.google.Chrome"
+subrole = "AXUnknown"
+action = "ignore"
+
 # More examples — uncomment / adapt as needed:
 #
 # [[exclude]]                       # force-tile a window an app

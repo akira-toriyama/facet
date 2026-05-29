@@ -73,6 +73,19 @@ public enum AXGeom {
             win, kAXSizeAttribute as CFString, v) == .success
     }
 
+    /// Whether AX will let us move the window — `kAXPositionAttribute`
+    /// is settable. yabai / rift gate on this (`window_can_move`): a
+    /// window we can't reposition can't be tiled (we'd hand it a slot
+    /// it can't fill), so an immovable standard window is floated
+    /// rather than tiled. Read-only probe; pairs with the subrole +
+    /// window-level gate.
+    public static func canMove(_ win: AXUIElement) -> Bool {
+        var settable: DarwinBoolean = false
+        return AXUIElementIsAttributeSettable(
+            win, kAXPositionAttribute as CFString, &settable
+        ) == .success && settable.boolValue
+    }
+
     /// AX `kAXRoleAttribute` of a window element, or nil when
     /// the attribute is missing / the app refuses AX. Used by
     /// the native adapter to auto-detect floating windows
