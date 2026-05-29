@@ -325,3 +325,37 @@ public enum LayoutRegistry {
     /// backend's `layoutModes` and the CLI's accepted layout set.
     public static var names: [String] { all.map(\.name) }
 }
+
+/// Apply an inner gap to a computed frame map: shrink each frame by
+/// `gap`/2 on every edge that is *interior* to `rect`, leaving any
+/// edge flush with `rect`'s outer boundary untouched. Two abutting
+/// windows each give up `gap`/2 on their shared edge → they end up
+/// `gap` apart; a window touching the screen edge keeps that edge
+/// flush, so the edge distance stays whatever the caller already
+/// inset `rect` by (the outer gap). This keeps "screen-edge = outer,
+/// window-gap = inner" exact rather than doubling at the border.
+///
+/// Assumes the layout tiled `rect` edge-to-edge (every engine here
+/// does), so "flush with the boundary" is detected by comparing each
+/// frame edge to the matching `rect` edge within `eps`. `gap <= 0` is
+/// a no-op. Pure (CoreGraphics only) — unit-testable without a
+/// display, and shared by the bsp tree path and the stateless engines.
+public func applyInnerGap(_ frames: [WindowID: CGRect],
+                          in rect: CGRect,
+                          gap: CGFloat,
+                          eps: CGFloat = 0.5) -> [WindowID: CGRect] {
+    guard gap > 0 else { return frames }
+    let h = gap / 2
+    var out: [WindowID: CGRect] = [:]
+    out.reserveCapacity(frames.count)
+    for (id, f) in frames {
+        var x = f.minX, y = f.minY, w = f.width, ht = f.height
+        if f.minX > rect.minX + eps { x += h; w -= h }   // left has a neighbour
+        if f.maxX < rect.maxX - eps { w -= h }            // right has a neighbour
+        if f.minY > rect.minY + eps { y += h; ht -= h }   // bottom has a neighbour
+        if f.maxY < rect.maxY - eps { ht -= h }           // top has a neighbour
+        out[id] = CGRect(x: x, y: y,
+                         width: max(0, w), height: max(0, ht))
+    }
+    return out
+}

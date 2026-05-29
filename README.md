@@ -281,6 +281,11 @@ Frequently-touched keys:
 
 - `theme` (top-level) — `terminal` (default) / `cute` / `system`
 - `default-view` (top-level) — `tree` / `grid`
+- `[layout]` table — `inner-gap` (space between tiled windows) and
+  `outer-gap` (distance from the screen edges), in points. `outer-gap`
+  sets all four edges; `outer-gap-top` / `-bottom` / `-left` /
+  `-right` override individual edges. All default 0 (flush tiling);
+  clamp to [0, 1000]. Applies to every layout; floating windows excluded.
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `workspace --focus=N`).
 - `[space.N]` table — per-native-Space workspace names/count, where

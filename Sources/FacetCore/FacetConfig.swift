@@ -30,6 +30,20 @@ public struct FacetConfig: Sendable {
     /// `"mirror"` puts it at the window's own on-screen frame.
     public var treePreviewMode: String?     // "popover" | "mirror"
 
+    // [layout]
+    /// Gap between adjacent tiled windows, px (inner gap). Raw value;
+    /// read `effectiveInnerGap`.
+    public var innerGap: CGFloat?
+    /// Outer gap: inset from the screen edges for the whole tiling
+    /// area, px. `outerGap` is the all-edges default; the four
+    /// per-edge values override it where set. Raw; read the
+    /// `effectiveOuterGap*` accessors.
+    public var outerGap: CGFloat?
+    public var outerGapTop: CGFloat?
+    public var outerGapBottom: CGFloat?
+    public var outerGapLeft: CGFloat?
+    public var outerGapRight: CGFloat?
+
     // [workspace]
     /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
     /// Keys are 1-indexed integers matching what the user types
@@ -105,6 +119,26 @@ public struct FacetConfig: Sendable {
         let raw = (treePreviewMode ?? "popover").lowercased()
         return ["popover", "mirror"].contains(raw) ? raw : "popover"
     }
+
+    /// Gap between adjacent tiled windows, px. [0, 1000] clamp,
+    /// default 0 (= flush tiling, the pre-gap behaviour). Applied by
+    /// `applyInnerGap` to every layout's frames; the screen-edge side
+    /// of an outermost window is left flush (that distance is the
+    /// outer gap, not this).
+    public var effectiveInnerGap: CGFloat { max(0, min(1000,innerGap ?? 0)) }
+
+    /// Per-edge outer gap, px: inset from that screen edge for the
+    /// whole tiling area, applied before any layout runs (it shrinks
+    /// the rect every layout tiles into — bsp / stack / stateless
+    /// alike). Each edge falls back to `outerGap` (the all-edges
+    /// default), then 0. [0, 1000] clamp. Edges are in screen
+    /// orientation; the adapter maps them onto the tiling rect.
+    public var effectiveOuterGapTop: CGFloat { clampedGap(outerGapTop ?? outerGap) }
+    public var effectiveOuterGapBottom: CGFloat { clampedGap(outerGapBottom ?? outerGap) }
+    public var effectiveOuterGapLeft: CGFloat { clampedGap(outerGapLeft ?? outerGap) }
+    public var effectiveOuterGapRight: CGFloat { clampedGap(outerGapRight ?? outerGap) }
+
+    private func clampedGap(_ v: CGFloat?) -> CGFloat { max(0, min(1000,v ?? 0)) }
 
     /// Facet workspace defaults when the user hasn't (yet) edited
     /// `[workspace]` at all. 5 is the memory-confirmed
@@ -206,6 +240,25 @@ public struct FacetConfig: Sendable {
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
+        }
+        // [layout]
+        if case .int(let n)? = toml["layout"]?["inner-gap"] {
+            c.innerGap = CGFloat(n)
+        }
+        if case .int(let n)? = toml["layout"]?["outer-gap"] {
+            c.outerGap = CGFloat(n)
+        }
+        if case .int(let n)? = toml["layout"]?["outer-gap-top"] {
+            c.outerGapTop = CGFloat(n)
+        }
+        if case .int(let n)? = toml["layout"]?["outer-gap-bottom"] {
+            c.outerGapBottom = CGFloat(n)
+        }
+        if case .int(let n)? = toml["layout"]?["outer-gap-left"] {
+            c.outerGapLeft = CGFloat(n)
+        }
+        if case .int(let n)? = toml["layout"]?["outer-gap-right"] {
+            c.outerGapRight = CGFloat(n)
         }
         // [workspace]
         if case .stringArray(let xs)? = toml["workspace"]?["setup-files"] {
