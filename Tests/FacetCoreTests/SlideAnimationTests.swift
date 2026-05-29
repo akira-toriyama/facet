@@ -35,17 +35,30 @@ final class SlideAnimationTests: XCTestCase {
         }
     }
 
-    // MARK: WindowSlide.origin
+    // MARK: WindowSlide.frame
 
-    func testWindowSlideInterpolatesHorizontally() {
-        let s = WindowSlide(id: WindowID(serverID: 1),
-                            from: CGPoint(x: 100, y: 50),
-                            to: CGPoint(x: 700, y: 50))
-        XCTAssertEqual(s.origin(atEased: 0).x, 100, accuracy: 0.0001)
-        XCTAssertEqual(s.origin(atEased: 1).x, 700, accuracy: 0.0001)
-        XCTAssertEqual(s.origin(atEased: 0.5).x, 400, accuracy: 0.0001)
-        // y is held constant — the slide is pure translation.
-        XCTAssertEqual(s.origin(atEased: 0.5).y, 50, accuracy: 0.0001)
+    func testWindowSlideTranslationKeepsSize() {
+        // Pure translation (WS-switch slide): size constant, origin
+        // tweens, resizes == false so the adapter skips setSize.
+        let move = WindowSlide(id: WindowID(serverID: 1),
+                               from: CGRect(x: 100, y: 50, width: 300, height: 200),
+                               to: CGRect(x: 700, y: 50, width: 300, height: 200))
+        XCTAssertFalse(move.resizes)
+        XCTAssertEqual(move.frame(atEased: 0).minX, 100, accuracy: 0.0001)
+        XCTAssertEqual(move.frame(atEased: 1).minX, 700, accuracy: 0.0001)
+        XCTAssertEqual(move.frame(atEased: 0.5).minX, 400, accuracy: 0.0001)
+        XCTAssertEqual(move.frame(atEased: 0.5).width, 300, accuracy: 0.0001)
+    }
+
+    func testWindowSlideResizeInterpolatesSize() {
+        // Retile / layout-change: size tweens too; resizes == true.
+        let grow = WindowSlide(id: WindowID(serverID: 2),
+                               from: CGRect(x: 0, y: 0, width: 200, height: 100),
+                               to: CGRect(x: 0, y: 0, width: 600, height: 500))
+        XCTAssertTrue(grow.resizes)
+        XCTAssertEqual(grow.frame(atEased: 0.5).width, 400, accuracy: 0.0001)
+        XCTAssertEqual(grow.frame(atEased: 0.5).height, 300, accuracy: 0.0001)
+        XCTAssertEqual(grow.frame(atEased: 1).width, 600, accuracy: 0.0001)
     }
 
     // MARK: FacetConfig [animation]

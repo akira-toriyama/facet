@@ -14,24 +14,32 @@ public enum SlideCurve {
     }
 }
 
-/// One window's slide: interpolate its origin from `from` to `to`.
-/// Size is held constant (set once off-screen before the slide), so the
-/// visible motion is pure translation — cheap and smooth over AX.
+/// One window's tween: interpolate its frame from `from` to `to`.
+/// Workspace-switch slides keep the size constant (so `resizes` is false
+/// and the adapter skips setSize — pure translation); layout / retile
+/// transitions change size too, and `resizes` flips on.
 public struct WindowSlide: Sendable {
     public let id: WindowID
-    public let from: CGPoint
-    public let to: CGPoint
+    public let from: CGRect
+    public let to: CGRect
 
-    public init(id: WindowID, from: CGPoint, to: CGPoint) {
+    public init(id: WindowID, from: CGRect, to: CGRect) {
         self.id = id
         self.from = from
         self.to = to
     }
 
-    /// Origin at eased progress `e ∈ [0, 1]` (caller passes the curve
+    /// Frame at eased progress `e ∈ [0, 1]` (caller passes the curve
     /// output, not raw `t`).
-    public func origin(atEased e: Double) -> CGPoint {
-        CGPoint(x: from.x + (to.x - from.x) * e,
-                y: from.y + (to.y - from.y) * e)
+    public func frame(atEased e: Double) -> CGRect {
+        let f = CGFloat(e)
+        return CGRect(x: from.minX + (to.minX - from.minX) * f,
+                      y: from.minY + (to.minY - from.minY) * f,
+                      width: from.width + (to.width - from.width) * f,
+                      height: from.height + (to.height - from.height) * f)
     }
+
+    /// True when the size changes across the tween — the adapter only
+    /// issues a per-frame setSize (heavier than setPosition) when so.
+    public var resizes: Bool { from.size != to.size }
 }

@@ -946,16 +946,43 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         nonisolated(unsafe) let anims = slideAnims
         // Many windows: fan out the per-frame writes so the serial sum
         // doesn't blow the frame budget. Few windows: stay serial.
+        // setSize only when the tween actually resizes (WS-switch slides
+        // keep size constant — pure translation).
+        func write(_ a: (ax: AXUIElement, slide: WindowSlide)) {
+            let fr = a.slide.frame(atEased: e)
+            AXGeom.setPosition(a.ax, fr.origin)
+            if a.slide.resizes { AXGeom.setSize(a.ax, fr.size) }
+        }
         if anims.count >= 6 {
             DispatchQueue.concurrentPerform(iterations: anims.count) { i in
-                AXGeom.setPosition(anims[i].ax, anims[i].slide.origin(atEased: e))
+                write(anims[i])
             }
         } else {
-            for a in anims {
-                AXGeom.setPosition(a.ax, a.slide.origin(atEased: e))
-            }
+            for a in anims { write(a) }
         }
         if raw >= 1.0 { finishSlideIfRunning() }
+    }
+
+    /// Start the per-frame driver for an already-populated `slideAnims`.
+    /// Prefers a vsync CADisplayLink (macOS 14+); Timer fallback on 13.
+    /// `settle` runs once on completion (or interrupt via
+    /// finishSlideIfRunning).
+    private func startSlideDriver(_ settle: @escaping () -> Void) {
+        slideStart = Date()
+        slideDuration = config.effectiveAnimationDuration
+        slideFinish = settle
+        if #available(macOS 14.0, *), let screen = NSScreen.main {
+            let link = screen.displayLink(target: slideTicker,
+                                          selector: #selector(SlideTicker.tick(_:)))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        } else {
+            let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) {
+                [weak self] _ in self?.slideTick()
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            slideTimer = timer
+        }
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
@@ -993,19 +1020,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // We own this window's geometry now — clear its parked flag.
             catalog.clearParkedState(of: id)
             AXGeom.setSize(ax, f.size)                       // off-screen resize
-            let start = CGPoint(x: f.origin.x + enterDx, y: f.origin.y)
-            AXGeom.setPosition(ax, start)
-            slideAnims.append((ax, WindowSlide(id: id, from: start, to: f.origin)))
+            // from/to share the final size → pure translation (no setSize
+            // per frame), sliding in from off the entry edge.
+            let start = CGRect(x: f.origin.x + enterDx, y: f.origin.y,
+                               width: f.width, height: f.height)
+            AXGeom.setPosition(ax, start.origin)
+            slideAnims.append((ax, WindowSlide(id: id, from: start, to: f)))
         }
 
         // Outgoing: capture true current frame, slide off the far edge.
         var outOrigin: [WindowID: CGPoint] = [:]
         for ref in toPark {
             guard catalog.shouldParkAnchor(ref.id), let ax = axWin(ref),
-                  let p = AXGeom.position(ax) else { continue }
+                  let p = AXGeom.position(ax), let sz = AXGeom.size(ax) else { continue }
             outOrigin[ref.id] = p
-            slideAnims.append((ax, WindowSlide(id: ref.id, from: p,
-                to: CGPoint(x: p.x - enterDx, y: p.y))))
+            let from = CGRect(origin: p, size: sz)
+            let to = CGRect(x: p.x - enterDx, y: p.y, width: sz.width, height: sz.height)
+            slideAnims.append((ax, WindowSlide(id: ref.id, from: from, to: to)))
         }
 
         guard !slideAnims.isEmpty else { return false }
@@ -1029,26 +1060,47 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             self.eventContinuation.yield(.refreshNeeded)
         }
 
-        slideStart = Date()
-        slideDuration = config.effectiveAnimationDuration
-        slideFinish = settle
-        // Prefer a CADisplayLink (vsync-locked, no timer-vs-refresh
-        // judder) on macOS 14+; fall back to a 120 Hz timer on 13. Both
-        // fire slideTick on the main runloop.
-        if #available(macOS 14.0, *), let screen = NSScreen.main {
-            let link = screen.displayLink(target: slideTicker,
-                                          selector: #selector(SlideTicker.tick(_:)))
-            link.add(to: .main, forMode: .common)
-            displayLink = link
-        } else {
-            let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) {
-                [weak self] _ in self?.slideTick()
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            slideTimer = timer
-        }
+        startSlideDriver(settle)
         Log.debug("native: animateSwitch \(oldActive)->\(newActive) "
             + "anims=\(slideAnims.count) dir=\(Int(dir))")
+        return true
+    }
+
+    /// Phase 2 of 枠 E: animate a same-mode re-tile / layout change as an
+    /// in-place reflow — every visible window tweens its full frame
+    /// (position + size) from where it sits now to its new tiled frame.
+    /// All windows stay on-screen (no off-screen trick), so this is the
+    /// resize-bearing path. Returns false (caller does the instant apply)
+    /// when reduce-motion is set or nothing actually moves.
+    private func animateRetile(workspace n1Based: Int, rect: CGRect) -> Bool {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            return false
+        }
+        let scale = activeScale(near: rect)
+        let targets = targetFrames(for: n1Based, in: rect)
+        guard !targets.isEmpty else { return false }
+        slideAnims = []
+        for (id, raw) in targets {
+            guard let ax = axWin(id: id), let p = AXGeom.position(ax),
+                  let sz = AXGeom.size(ax) else { continue }
+            let to = raw.roundedToPhysicalPixels(scale: scale)
+            let from = CGRect(origin: p, size: sz)
+            // Already at target (within 1pt) → nothing to animate.
+            if abs(from.minX - to.minX) < 1, abs(from.minY - to.minY) < 1,
+               abs(from.width - to.width) < 1, abs(from.height - to.height) < 1 {
+                continue
+            }
+            slideAnims.append((ax, WindowSlide(id: id, from: from, to: to)))
+        }
+        guard !slideAnims.isEmpty else { return false }
+        let settle: () -> Void = { [weak self] in
+            guard let self else { return }
+            self.slideAnims = []
+            self.applyLayout(workspace: n1Based, rect: rect)
+            self.eventContinuation.yield(.refreshNeeded)
+        }
+        startSlideDriver(settle)
+        Log.debug("native: animateRetile WS \(n1Based) anims=\(slideAnims.count)")
         return true
     }
 
@@ -1293,15 +1345,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
         let target = index + 1
         let rect = activeDisplayRect()
+        finishSlideIfRunning()
         // BSP → Stack migration parks all but the focused window
         // at the anchor sliver. The catalog's setMode discards
         // layoutTrees / stackOrders entries, so we rely on
         // applyStack post-flip to park non-top members. Symmetric
         // for Stack → BSP.
+        let oldMode = catalog.mode(of: target)
         let applied = catalog.setMode(workspace: target,
                                       to: mode, in: rect)
         Log.debug("native: setLayoutMode WS \(target) -> \(applied)")
         if target == catalog.activeIndex {
+            // 枠 E Phase 2: animate the reflow only between all-visible
+            // layouts. stack parks members (windows appear / disappear),
+            // which the slide engine doesn't handle yet — instant there.
+            let parks = oldMode == "stack" || applied == "stack"
+            if config.effectiveAnimationsEnabled, !parks,
+               animateRetile(workspace: target, rect: rect) {
+                return
+            }
             applyLayout(workspace: target, rect: rect)
         }
         eventContinuation.yield(.refreshNeeded)
@@ -1386,8 +1448,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "(WS \(catalog.activeIndex) is \(mode))")
             return
         }
-        applyLayout(workspace: catalog.activeIndex,
-                    rect: activeDisplayRect())
+        finishSlideIfRunning()
+        let rect = activeDisplayRect()
+        // 枠 E Phase 2: animate the in-place reflow. animateRetile owns
+        // its settle (applyLayout + refresh); fall through to instant
+        // when off / reduce-motion / nothing moved.
+        if config.effectiveAnimationsEnabled,
+           animateRetile(workspace: catalog.activeIndex, rect: rect) {
+            return
+        }
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
     }
 
