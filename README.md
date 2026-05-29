@@ -286,6 +286,14 @@ Frequently-touched keys:
   sets all four edges; `outer-gap-top` / `-bottom` / `-left` /
   `-right` override individual edges. All default 0 (flush tiling);
   clamp to [0, 1000]. Applies to every layout; floating windows excluded.
+- `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
+  of the tiling layout. Match by `app` (bundle-id regex), `title`
+  (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or
+  `max_width` / `max_height` (points). Keys within a rule AND; rules
+  OR (first match wins). `action = "float"` (default) keeps the window
+  tracked but untiled; `"ignore"` drops it entirely. The template
+  ships one default that floats tiny unnamed popups. (System sheets /
+  dialogs / palettes are auto-floated by AX role regardless.)
 - `[workspace]` table — `1 = "dev"`, `2 = "ide"`, … (1-indexed,
   sparse OK; missing slots → `N` invalid for `workspace --focus=N`).
 - `[space.N]` table — per-native-Space workspace names/count, where

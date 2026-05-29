@@ -277,6 +277,14 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `outer-gap-top` / `-bottom` / `-left` / `-right` で辺ごとに上書き。
   すべて default 0 (隙間なしのフラッシュ配置); [0, 1000] にクランプ。
   全 layout に適用、 floating window は対象外。
+- `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
+  外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
+  `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で
+  マッチ。 1ルール内の key は AND、 複数ルールは OR (上から最初の一致が
+  勝ち)。 `action = "float"` (デフォルト) は追跡継続のままタイルから除外、
+  `"ignore"` は完全に非管理。 テンプレには「極小の無名ポップアップを
+  float する」 デフォルトを 1 件同梱。 (システムの sheet / dialog /
+  palette は AX role で自動 float される。)
 - `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
   sparse OK; 欠番 index は `workspace --focus=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は

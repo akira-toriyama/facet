@@ -44,6 +44,11 @@ public struct Window: Sendable {
     public let id: WindowID
     public let pid: Int
     public let appName: String
+    /// Bundle identifier of the owning app (e.g. `com.apple.finder`),
+    /// resolved by the adapter from `pid`. `nil` when the app has no
+    /// bundle id (rare) or it couldn't be resolved. Used by config
+    /// `[[exclude]]` rules to match windows by app.
+    public let bundleId: String?
     public let title: String
     public let isFocused: Bool
     public let isFloating: Bool
@@ -84,10 +89,12 @@ public struct Window: Sendable {
                 isFloating: Bool,
                 frame: CGRect?,
                 isOnscreen: Bool = true,
-                isMaster: Bool = false) {
+                isMaster: Bool = false,
+                bundleId: String? = nil) {
         self.id = id
         self.pid = pid
         self.appName = appName
+        self.bundleId = bundleId
         self.title = title
         self.isFocused = isFocused
         self.isFloating = isFloating

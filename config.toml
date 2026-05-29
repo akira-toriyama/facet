@@ -142,6 +142,57 @@ outer-gap = 0
 
 
 # -----------------------------------------------------------------
+# Window exclusion rules  [[exclude]]
+# -----------------------------------------------------------------
+# Some windows shouldn't be tiled: unnamed popups, autocomplete
+# dropdowns, small auxiliary panels. facet already auto-floats system
+# sheets / dialogs / palettes by their AX role, but a popup that looks
+# like a normal window to AX still lands in the tiling layout and
+# disrupts it. These rules catch the rest.
+#
+# Each `[[exclude]]` is one rule. Keys WITHIN a rule are ANDed (all
+# must match); multiple rules are ORed (first match wins, top to
+# bottom). Match keys (all optional, omit = don't care):
+#
+#   app        — regex against the app's bundle id (e.g.
+#                "^com\.apple\.finder$"). Substring search unless you
+#                anchor with ^…$.
+#   title      — regex against the window title. "^$" matches an
+#                unnamed (empty-title) window.
+#   role       — exact AX role     (e.g. "AXWindow").
+#   subrole    — exact AX subrole  (e.g. "AXDialog").
+#   max_width  — match windows no wider than this (points).
+#   max_height — match windows no taller than this (points).
+#
+# action = "float" (default) keeps the window tracked + shown in the
+# tree, just outside the tiling layout. action = "ignore" drops it
+# entirely (never managed, never shown) — use for transient popups.
+#
+# A rule with no match key is ignored (it would match nothing). A bad
+# regex simply never matches — it can't break the other rules.
+#
+# Default below floats tiny unnamed windows (almost always popups).
+# Delete it, or widen the thresholds, if a small real window of yours
+# gets floated. Edits take effect on restart.
+[[exclude]]
+title = "^$"
+max_width = 200
+max_height = 200
+action = "float"
+
+# More examples — uncomment / adapt as needed:
+#
+# [[exclude]]                       # drop a specific app's popups
+# app = "^com\\.example\\.app$"
+# title = "^$"
+# action = "ignore"
+#
+# [[exclude]]                       # float any AX dialog-subrole window
+# subrole = "AXDialog"
+# action = "float"
+
+
+# -----------------------------------------------------------------
 # Virtual-workspace behavior
 # -----------------------------------------------------------------
 [workspace]

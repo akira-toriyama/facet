@@ -69,6 +69,13 @@ public struct FacetConfig: Sendable {
     /// `effectiveSetupFiles`.
     public var setupFiles: [String]?
 
+    /// `[[exclude]]` rules — windows matching one are floated or
+    /// ignored instead of tiled (unnamed popups, auxiliary panels).
+    /// `nil` when the config specifies none. Parsed from the raw TOML
+    /// text (array-of-tables), not the flattened `[section]` dict, so
+    /// it's filled by `load`, not `from(toml:)`.
+    public var exclusionRules: [ExclusionRule]?
+
     public init() {}
 
     // MARK: - Effective accessors (defaults + clamping)
@@ -294,6 +301,48 @@ public struct FacetConfig: Sendable {
         return c
     }
 
+    /// Effective `[[exclude]]` rule set (empty when none configured).
+    /// Always read through this, never the raw Optional.
+    public var effectiveExclusionRules: ExclusionRules {
+        ExclusionRules(exclusionRules ?? [])
+    }
+
+    /// Build `[ExclusionRule]` from the raw TOML text's `[[exclude]]`
+    /// array-of-tables. Each table: `app` / `title` / `role` /
+    /// `subrole` are strings (regex for app/title, exact for
+    /// role/subrole), `max_width` / `max_height` are ints, `action`
+    /// is `"float"` (default) or `"ignore"`. A table with no match
+    /// key is dropped (it would match nothing). Unknown/typo'd keys
+    /// are ignored — a bad rule never breaks the others.
+    public static func exclusionRules(fromTOML text: String)
+        -> [ExclusionRule]
+    {
+        parseTOMLArrayOfTables(text, table: "exclude").compactMap { t in
+            func str(_ k: String) -> String? {
+                if case .string(let s)? = t[k] { return s }
+                return nil
+            }
+            func dbl(_ k: String) -> Double? {
+                if case .int(let n)? = t[k] { return Double(n) }
+                return nil
+            }
+            let action: ExclusionAction = {
+                if case .string(let s)? = t["action"],
+                   let a = ExclusionAction(rawValue: s) { return a }
+                return .float
+            }()
+            let rule = ExclusionRule(
+                app: str("app"), title: str("title"),
+                role: str("role"), subrole: str("subrole"),
+                maxWidth: dbl("max_width"), maxHeight: dbl("max_height"),
+                action: action)
+            let hasKey = rule.app != nil || rule.title != nil
+                || rule.role != nil || rule.subrole != nil
+                || rule.maxWidth != nil || rule.maxHeight != nil
+            return hasKey ? rule : nil
+        }
+    }
+
     // MARK: - Disk
 
     public static var defaultPath: String {
@@ -315,7 +364,10 @@ public struct FacetConfig: Sendable {
         let url = URL(fileURLWithPath: path)
         if let data = try? Data(contentsOf: url),
            let text = String(data: data, encoding: .utf8) {
-            return .from(toml: parseTOMLSubset(text))
+            var c = FacetConfig.from(toml: parseTOMLSubset(text))
+            let rules = exclusionRules(fromTOML: text)
+            if !rules.isEmpty { c.exclusionRules = rules }
+            return c
         }
         FileHandle.standardError.write(Data(
             "facet: could not read \(path)\n".utf8))

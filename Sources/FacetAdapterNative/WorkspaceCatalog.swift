@@ -202,12 +202,18 @@ struct WorkspaceCatalog {
     /// gate (added on first on-screen sight) but still honour
     /// `allowAutoAdd` and the off-screen defer, so off-Space windows
     /// and the flip case remain protected.
+    ///
+    /// `ignore` lists ids that matched a config `[[exclude]]` rule
+    /// with `action="ignore"` — they're marked examined and never
+    /// enter `windowMap` (fully unmanaged). First-sight only: a
+    /// window already in `windowMap` is untouched.
     @discardableResult
     mutating func reconcile(live: [Window],
                                    focused: WindowID? = nil,
                                    activeRect: CGRect = .zero,
                                    autoFloat: Set<WindowID> = [],
                                    trusted: Set<WindowID> = [],
+                                   ignore: Set<WindowID> = [],
                                    requireConfirm: Bool = false)
         -> ReconcileResult
     {
@@ -253,6 +259,13 @@ struct WorkspaceCatalog {
             // startup, etc.). Stay out of `windowMap` even if
             // the OS later flips them on-screen.
             if examinedIDs.contains(id) { continue }
+            // Config `[[exclude]] action="ignore"`: never manage.
+            // Mark examined so it's not reconsidered (and the
+            // adapter's classify pass stops re-probing it).
+            if ignore.contains(id) {
+                examinedIDs.insert(id)
+                continue
+            }
             // Off-Space new window: see `allowAutoAdd` above.
             // Don't mark examined either — when the user comes
             // back to facet's Space and the window is moved here

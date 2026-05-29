@@ -47,44 +47,98 @@ public func parseTOMLSubset(_ text: String)
         guard let eq = trimmed.firstIndex(of: "=") else { continue }
         let key = String(trimmed[..<eq])
             .trimmingCharacters(in: .whitespaces)
-        var val = String(trimmed[trimmed.index(after: eq)...])
+        let rawVal = String(trimmed[trimmed.index(after: eq)...])
             .trimmingCharacters(in: .whitespaces)
-        // Inline `# …` comment. Two cases:
-        //   - val starts with `"`: skip until the *closing* quote,
-        //     then strip any `# …` that follows. `#` inside the
-        //     quoted body stays as data.
-        //   - val unquoted: any `#` starts the inline comment.
-        if val.hasPrefix("\"") {
-            let afterOpen = val.index(after: val.startIndex)
-            if let closeIdx = val[afterOpen...].firstIndex(of: "\"") {
-                let afterClose = val.index(after: closeIdx)
-                if afterClose < val.endIndex,
-                   let h = val[afterClose...].firstIndex(of: "#") {
-                    val = String(val[..<h])
-                        .trimmingCharacters(in: .whitespaces)
-                }
-            }
-        } else if let h = val.firstIndex(of: "#") {
-            val = String(val[..<h]).trimmingCharacters(in: .whitespaces)
-        }
-        guard !key.isEmpty, !val.isEmpty else { continue }
-        let parsed: TOMLValue
-        if val.hasPrefix("\""), val.hasSuffix("\""), val.count >= 2 {
-            parsed = .string(String(val.dropFirst().dropLast()))
-        } else if val.hasPrefix("["), val.hasSuffix("]") {
-            // Inline string array: `["a", "b"]`. Strict: every
-            // element must be double-quoted; any malformed element
-            // skips the whole line (matches the parser's existing
-            // "lose one line on typo" failure mode).
-            guard let strs = parseStringArray(val) else { continue }
-            parsed = .stringArray(strs)
-        } else if val == "true"  { parsed = .bool(true) }
-        else  if val == "false" { parsed = .bool(false) }
-        else  if let i = Int(val) { parsed = .int(i) }
-        else  { continue }                          // skip unknown shapes
+        guard !key.isEmpty, let parsed = parseTOMLScalar(rawVal)
+        else { continue }
         out[section, default: [:]][key] = parsed
     }
     return out
+}
+
+/// Parse repeated `[[name]]` array-of-tables blocks, in file order.
+/// One dict per occurrence; keys use the same scalar grammar as
+/// `parseTOMLSubset`. Lines outside a matching `[[name]]` block —
+/// other array-tables, `[section]` headers, top-level keys — are
+/// ignored. A `[section]` or a different `[[other]]` header closes
+/// the current block.
+///
+/// Why a second pass instead of folding into `parseTOMLSubset`: that
+/// returns `[section: [key: value]]`, which can't hold *multiple*
+/// tables of the same name (the OR semantics `[[exclude]]` needs).
+public func parseTOMLArrayOfTables(_ text: String, table name: String)
+    -> [[String: TOMLValue]]
+{
+    var out: [[String: TOMLValue]] = []
+    var inTarget = false
+    for raw in text.split(separator: "\n",
+                          omittingEmptySubsequences: false) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty || trimmed.hasPrefix("#") { continue }
+        // [[name]] — check the double-bracket form BEFORE [section],
+        // since `[[x]]` also satisfies the single-bracket test.
+        if trimmed.hasPrefix("[["), trimmed.hasSuffix("]]") {
+            let n = String(trimmed.dropFirst(2).dropLast(2))
+                .trimmingCharacters(in: .whitespaces)
+            if n == name { out.append([:]); inTarget = true }
+            else { inTarget = false }
+            continue
+        }
+        // A plain [section] header ends the current array-table.
+        if trimmed.hasPrefix("["), trimmed.hasSuffix("]") {
+            inTarget = false
+            continue
+        }
+        guard inTarget, !out.isEmpty else { continue }
+        guard let eq = trimmed.firstIndex(of: "=") else { continue }
+        let key = String(trimmed[..<eq])
+            .trimmingCharacters(in: .whitespaces)
+        let rawVal = String(trimmed[trimmed.index(after: eq)...])
+            .trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty, let v = parseTOMLScalar(rawVal) else { continue }
+        out[out.count - 1][key] = v
+    }
+    return out
+}
+
+/// Parse the value half of a `key = value` line into a `TOMLValue`,
+/// stripping an inline `# …` comment first. Returns `nil` for an
+/// empty or unrecognised value (caller skips that key). Shared by
+/// `parseTOMLSubset` and `parseTOMLArrayOfTables`.
+func parseTOMLScalar(_ raw: String) -> TOMLValue? {
+    var val = raw
+    // Inline `# …` comment. Two cases:
+    //   - val starts with `"`: skip until the *closing* quote, then
+    //     strip any `# …` that follows. `#` inside the quoted body
+    //     stays as data.
+    //   - val unquoted: any `#` starts the inline comment.
+    if val.hasPrefix("\"") {
+        let afterOpen = val.index(after: val.startIndex)
+        if let closeIdx = val[afterOpen...].firstIndex(of: "\"") {
+            let afterClose = val.index(after: closeIdx)
+            if afterClose < val.endIndex,
+               let h = val[afterClose...].firstIndex(of: "#") {
+                val = String(val[..<h])
+                    .trimmingCharacters(in: .whitespaces)
+            }
+        }
+    } else if let h = val.firstIndex(of: "#") {
+        val = String(val[..<h]).trimmingCharacters(in: .whitespaces)
+    }
+    guard !val.isEmpty else { return nil }
+    if val.hasPrefix("\""), val.hasSuffix("\""), val.count >= 2 {
+        return .string(String(val.dropFirst().dropLast()))
+    } else if val.hasPrefix("["), val.hasSuffix("]") {
+        // Inline string array: `["a", "b"]`. Strict: every element
+        // must be double-quoted; any malformed element skips the
+        // whole value (matches the parser's "lose one line on typo"
+        // failure mode).
+        guard let strs = parseStringArray(val) else { return nil }
+        return .stringArray(strs)
+    } else if val == "true" { return .bool(true) }
+    else if val == "false" { return .bool(false) }
+    else if let i = Int(val) { return .int(i) }
+    return nil                                   // skip unknown shapes
 }
 
 /// Parse `["a", "b"]` → `["a", "b"]`. Returns nil if any element

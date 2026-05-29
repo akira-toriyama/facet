@@ -95,6 +95,56 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertNil(c.workspaceNames[0])
     }
 
+    // MARK: - [[exclude]] rules
+
+    func testExclusionRulesParsedFromTOML() {
+        let rules = FacetConfig.exclusionRules(fromTOML: """
+            [[exclude]]
+            app = "com.apple.finder"
+            action = "float"
+
+            [[exclude]]
+            title = "^$"
+            max_width = 400
+            action = "ignore"
+
+            [[exclude]]
+            subrole = "AXDialog"
+            """)
+        XCTAssertEqual(rules.count, 3)
+        XCTAssertEqual(rules[0].app, "com.apple.finder")
+        XCTAssertEqual(rules[0].action, .float)
+        XCTAssertEqual(rules[1].title, "^$")
+        XCTAssertEqual(rules[1].maxWidth, 400)
+        XCTAssertEqual(rules[1].action, .ignore)
+        // No explicit action → defaults to float.
+        XCTAssertEqual(rules[2].subrole, "AXDialog")
+        XCTAssertEqual(rules[2].action, .float)
+    }
+
+    func testExclusionRuleWithNoMatchKeyDropped() {
+        // A `[[exclude]]` with only `action` (no match key) is a
+        // mistake and is dropped (it would match nothing anyway).
+        let rules = FacetConfig.exclusionRules(fromTOML: """
+            [[exclude]]
+            action = "ignore"
+
+            [[exclude]]
+            app = "x"
+            """)
+        XCTAssertEqual(rules.count, 1)
+        XCTAssertEqual(rules[0].app, "x")
+    }
+
+    func testExclusionRulesEmptyWhenAbsent() {
+        let c = FacetConfig()
+        XCTAssertTrue(c.effectiveExclusionRules.isEmpty)
+        XCTAssertTrue(FacetConfig.exclusionRules(fromTOML: """
+            [grid]
+            cols = 2
+            """).isEmpty)
+    }
+
     // MARK: - TOML mapping
 
     func testFromTOMLMapsAllRecognisedKeys() {
