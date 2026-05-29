@@ -560,17 +560,30 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///   managed). Config rules take **precedence** over the built-in
     ///   heuristic (explicit user intent wins).
     ///
-    /// Only windows the catalog hasn't seen *and* hasn't examined are
-    /// considered (known windows keep the user's `toggleFloat`;
-    /// examined ones were already decided — re-checking just wastes AX
-    /// round-trips). AX role/subrole probes are capped at
-    /// `maxAutoFloatProbes` per call; beyond the cap, app/title/size
-    /// rules still apply (they need no AX), only role/subrole rules
-    /// and the built-in role float are skipped.
+    /// Allowlist gate (yabai / AeroSpace style): a window is TILED only
+    /// when it's positively confirmed a standard window; everything else
+    /// is floated (tracked + shown, not tiled) or ignored (dropped).
+    /// Two signals, cheapest first:
+    ///   1. window-server level (SkyLight read, no AX) — a raised level
+    ///      (tool-tip / pop-up / menu) is ignored without an AX probe.
+    ///   2. AX role/subrole (probed, capped at `maxAutoFloatProbes`) —
+    ///      `AXWindow`+`AXStandardWindow` tiles; sheets / dialogs /
+    ///      palettes and `AXWindow`+non-standard subrole (e.g.
+    ///      `AXUnknown`) float; a non-window role (AXHelpTag / menu /
+    ///      popover) is ignored. An un-probed/un-probeable normal-level
+    ///      window leans MANAGED — junk is almost always raised-level
+    ///      (caught by 1 without a probe), so a bare normal-level window
+    ///      is most likely real; tiling it beats risking a real window
+    ///      vanishing from the layout.
+    /// User `[[exclude]]` rules win over the heuristic (incl. the
+    /// `manage` force-tile escape hatch). Only unseen + unexamined
+    /// windows are classified. Tile-eligible windows are left out of
+    /// both returned sets so `reconcile` manages them normally.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>)
     {
         let rules = config.effectiveExclusionRules
+        let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
         var probed = 0
@@ -578,10 +591,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         where catalog.windowMap[w.id] == nil
             && !catalog.examinedIDs.contains(w.id)
         {
+            // 1. Cheap level gate (SkyLight read, no AX). nil = SkyLight
+            //    down → unknown; defer to the AX gate rather than
+            //    excluding on a missing signal.
+            let level = Spaces.windowLevel(forWindow: w.id.serverID)
+            let normalOrUnknownLevel = (level == nil) || (level == normalLevel)
+
+            // AX role/subrole — probe only windows that could still tile
+            // (normal/unknown level), within the per-call cap.
             var ax: AXUIElement?
             var role: String?
             var subrole: String?
-            if probed < maxAutoFloatProbes {
+            if normalOrUnknownLevel, probed < maxAutoFloatProbes {
                 probed += 1
                 ax = AXGeom.window(for: CGWindowID(w.id.serverID),
                                    pid: pid_t(w.pid))
@@ -590,11 +611,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     subrole = AXGeom.subrole(ax)
                 }
             }
-            // Config rules first — user intent overrides the heuristic.
+
+            // 2. User `[[exclude]]` rules win over the heuristic.
             let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
                                     role: role, subrole: subrole,
                                     size: w.frame?.size)
             switch rules.action(for: probe) {
+            case .manage:
+                Log.debug("native: rule=manage wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+                continue                          // force-tile
             case .ignore:
                 ignore.insert(w.id)
                 Log.debug("native: exclude=ignore wsid=\(w.id.serverID) "
@@ -608,12 +634,40 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             case nil:
                 break
             }
-            // Built-in role auto-float fallback.
-            if let ax, AXGeom.isFloatingByRole(ax) {
-                autoFloat.insert(w.id)
-                Log.debug("native: auto-float wsid=\(w.id.serverID) "
-                    + "app=\(w.appName)")
+
+            // 3. Level gate verdict: raised level → never tiled.
+            if let level, level != normalLevel {
+                ignore.insert(w.id)
+                Log.debug("native: gate=ignore(level=\(level)) "
+                    + "wsid=\(w.id.serverID) app=\(w.appName)")
+                continue
             }
+
+            // 4. Allowlist gate on AX role/subrole.
+            if role == "AXWindow", subrole == "AXStandardWindow" {
+                continue                          // tile (managed by reconcile)
+            }
+            if let ax, AXGeom.isFloatingByRole(ax) {
+                autoFloat.insert(w.id)            // sheet / dialog / palette
+                Log.debug("native: gate=float(role) wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+                continue
+            }
+            if role == "AXWindow" {
+                // AXWindow with a non-standard subrole (e.g. AXUnknown):
+                // conservative — show it, don't tile.
+                autoFloat.insert(w.id)
+                Log.debug("native: gate=float(nonstd sub=\(subrole ?? "-")) "
+                    + "wsid=\(w.id.serverID) app=\(w.appName)")
+                continue
+            }
+            if role == nil {
+                continue                          // un-probed normal-level → tile
+            }
+            // A definite non-window role (AXHelpTag / menu / popover …).
+            ignore.insert(w.id)
+            Log.debug("native: gate=ignore(role=\(role ?? "-")) "
+                + "wsid=\(w.id.serverID) app=\(w.appName)")
         }
         return (autoFloat, ignore)
     }

@@ -161,13 +161,25 @@ outer-gap = 0
 
 
 # -----------------------------------------------------------------
-# Window exclusion rules  [[exclude]]
+# Window override rules  [[exclude]]
 # -----------------------------------------------------------------
-# Some windows shouldn't be tiled: unnamed popups, autocomplete
-# dropdowns, small auxiliary panels. facet already auto-floats system
-# sheets / dialogs / palettes by their AX role, but a popup that looks
-# like a normal window to AX still lands in the tiling layout and
-# disrupts it. These rules catch the rest.
+# facet uses an ALLOWLIST (yabai / AeroSpace style): a window is only
+# tiled when it's positively confirmed a standard window — AX role
+# AXWindow + subrole AXStandardWindow, at the normal window-server
+# level. Everything else (tool-tips, pop-ups, menus, sheets, dialogs,
+# palettes, XPC helper windows) is automatically kept OUT of the
+# tiling layout — no rule needed. So you usually need NOTHING here.
+#
+# These rules are the OVERRIDE layer for the cases the heuristic gets
+# wrong for your taste:
+#
+#   action = "float"  — a standard window you'd rather NOT tile (keep
+#                       it tracked + shown in the tree, just floating).
+#   action = "ignore" — drop a window entirely (never managed, never
+#                       shown). For stray windows still slipping in.
+#   action = "manage" — FORCE-tile a window the allowlist floated /
+#                       ignored — for an app that mislabels a real
+#                       window (non-standard subrole). The escape hatch.
 #
 # Each `[[exclude]]` is one rule. Keys WITHIN a rule are ANDed (all
 # must match); multiple rules are ORed (first match wins, top to
@@ -183,32 +195,29 @@ outer-gap = 0
 #   max_width  — match windows no wider than this (points).
 #   max_height — match windows no taller than this (points).
 #
-# action = "float" (default) keeps the window tracked + shown in the
-# tree, just outside the tiling layout. action = "ignore" drops it
-# entirely (never managed, never shown) — use for transient popups.
+# action defaults to "float". A rule with no match key is ignored (it
+# would match nothing). A bad regex simply never matches — it can't
+# break the other rules.
 #
-# A rule with no match key is ignored (it would match nothing). A bad
-# regex simply never matches — it can't break the other rules.
-#
-# Default below floats tiny unnamed windows (almost always popups).
-# Delete it, or widen the thresholds, if a small real window of yours
-# gets floated. Edits take effect on restart.
+# Example: System Settings IS a standard window, so the allowlist
+# would tile it — but it's a reach-for-then-dismiss window, so float
+# it instead of letting it shove the layout around. (Regex is a
+# substring search; the dots match literal dots here. facet's TOML
+# reader does not unescape backslashes — write regex metachars bare,
+# not "\\.".)
 [[exclude]]
-title = "^$"
-max_width = 200
-max_height = 200
+app = "com.apple.systempreferences"
 action = "float"
 
 # More examples — uncomment / adapt as needed:
 #
-# [[exclude]]                       # drop a specific app's popups
-# app = "^com\\.example\\.app$"
-# title = "^$"
-# action = "ignore"
+# [[exclude]]                       # force-tile a window an app
+# app = "^com\\.example\\.app$"     # mislabels (non-standard subrole)
+# action = "manage"
 #
-# [[exclude]]                       # float any AX dialog-subrole window
-# subrole = "AXDialog"
-# action = "float"
+# [[exclude]]                       # never manage a whole app's windows
+# app = "^com\\.example\\.player$"
+# action = "ignore"
 
 
 # -----------------------------------------------------------------
