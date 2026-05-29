@@ -1217,11 +1217,16 @@ public final class SidebarView: NSView {
                                 pid: Int,
                                 windowID id: WindowID,
                                 title: String) {
-        let mode = (lastWorkspaces.first { $0.index == ws })?.layoutMode ?? ""
-        let floating = (lastWorkspaces.first { $0.index == ws })?
-            .windows.first { $0.id == id }?
-            .isFloating ?? false
-        let menu = backend.windowMenu(mode: mode, floating: floating)
+        let wsModel = lastWorkspaces.first { $0.index == ws }
+        let mode = wsModel?.layoutMode ?? ""
+        let win = wsModel?.windows.first { $0.id == id }
+        let floating = win?.isFloating ?? false
+        let isMaster = win?.isMaster ?? false
+        // Non-floating tiled members — what stack cycling rotates over.
+        let windowCount = wsModel?.windows.filter { !$0.isFloating }.count ?? 0
+        let menu = backend.windowMenu(mode: mode, floating: floating,
+                                      isMaster: isMaster,
+                                      windowCount: windowCount)
         let bk = backend
         let ctrl = controller
         PopupMenu.shared.show(at: scr,

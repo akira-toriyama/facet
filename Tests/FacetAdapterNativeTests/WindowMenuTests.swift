@@ -2,13 +2,10 @@ import XCTest
 @testable import FacetCore
 @testable import FacetAdapterNative
 
-/// `NativeAdapter.windowMenu(mode:floating:)` is pure (no AX, no
-/// catalog state) — it's a small per-mode lookup table for the
-/// right-click menu. Tests live here so the menu shape is locked
-/// down before any γ.X+ slice tries to extend it.
-///
-/// Matrix: 3 modes (`float` / `bsp` / `stack`) × 2 floating
-/// states = 6 combinations. Every one is exercised below.
+/// `NativeAdapter.windowMenu(mode:floating:isMaster:windowCount:)` is
+/// pure (no AX, no catalog state) — a per-mode lookup table for the
+/// right-click menu, gated by the window's state so master vs
+/// non-master (and a lone stack window) get the right items.
 final class WindowMenuTests: XCTestCase {
 
     private func adapter() -> NativeAdapter {
@@ -24,22 +21,28 @@ final class WindowMenuTests: XCTestCase {
         items.map(\.label)
     }
 
+    private func menu(_ mode: String, floating: Bool = false,
+                      isMaster: Bool = false,
+                      windowCount: Int = 2) -> [WindowMenuItem] {
+        adapter().windowMenu(mode: mode, floating: floating,
+                             isMaster: isMaster, windowCount: windowCount)
+    }
+
     // MARK: - Float mode
 
     func testFloatModeNonFloatingMenu() {
-        let items = adapter().windowMenu(mode: "float", floating: false)
-        XCTAssertEqual(labels(items), ["Float", "Close window"])
+        XCTAssertEqual(labels(menu("float")), ["Float", "Close window"])
     }
 
     func testFloatModeFloatingMenu() {
-        let items = adapter().windowMenu(mode: "float", floating: true)
-        XCTAssertEqual(labels(items), ["Unfloat", "Close window"])
+        XCTAssertEqual(labels(menu("float", floating: true)),
+                       ["Unfloat", "Close window"])
     }
 
     // MARK: - BSP mode
 
     func testBspModeNonFloatingMenu() {
-        let items = adapter().windowMenu(mode: "bsp", floating: false)
+        let items = menu("bsp")
         XCTAssertEqual(labels(items),
                        ["Toggle orientation", "Float", "Close window"])
         XCTAssertEqual(items[0].ops, [.toggleOrientation])
@@ -49,14 +52,14 @@ final class WindowMenuTests: XCTestCase {
         // Floating window in a bsp WS still has no orientation
         // (it's outside the tree) — menu collapses to Unfloat +
         // Close.
-        let items = adapter().windowMenu(mode: "bsp", floating: true)
-        XCTAssertEqual(labels(items), ["Unfloat", "Close window"])
+        XCTAssertEqual(labels(menu("bsp", floating: true)),
+                       ["Unfloat", "Close window"])
     }
 
     // MARK: - Stack mode
 
     func testStackModeNonFloatingMenu() {
-        let items = adapter().windowMenu(mode: "stack", floating: false)
+        let items = menu("stack", windowCount: 2)
         XCTAssertEqual(labels(items),
                        ["Next stack window",
                         "Previous stack window",
@@ -66,20 +69,69 @@ final class WindowMenuTests: XCTestCase {
         XCTAssertEqual(items[1].ops, [.cycleStackPrev])
     }
 
+    func testStackModeSingleWindowHidesCycle() {
+        // Nothing to cycle to with one window — cycle items drop out.
+        XCTAssertEqual(labels(menu("stack", windowCount: 1)),
+                       ["Float", "Close window"])
+    }
+
     func testStackModeFloatingMenu() {
         // Same logic as bsp floating: a floating window in a
         // stack WS isn't on the stack, so cycle items disappear.
-        let items = adapter().windowMenu(mode: "stack", floating: true)
+        XCTAssertEqual(labels(menu("stack", floating: true)),
+                       ["Unfloat", "Close window"])
+    }
+
+    // MARK: - Master-stack modes (tall / centered-master)
+
+    func testTallNonMasterShowsPromote() {
+        let items = menu("tall", isMaster: false)
+        XCTAssertEqual(labels(items),
+                       ["Promote to master",
+                        "Wider master", "Narrower master",
+                        "More masters", "Fewer masters",
+                        "Flip wide / tall",
+                        "Float", "Close window"])
+    }
+
+    func testTallMasterHidesPromote() {
+        // The master window already holds the slot — no "Promote".
+        let items = menu("tall", isMaster: true)
+        XCTAssertFalse(labels(items).contains("Promote to master"))
+        XCTAssertEqual(labels(items),
+                       ["Wider master", "Narrower master",
+                        "More masters", "Fewer masters",
+                        "Flip wide / tall",
+                        "Float", "Close window"])
+    }
+
+    func testCenteredMasterNonMasterShowsPromote() {
+        let items = menu("centered-master", isMaster: false)
+        XCTAssertEqual(labels(items),
+                       ["Promote to master",
+                        "Wider master", "Narrower master",
+                        "More masters", "Fewer masters",
+                        "Float", "Close window"])
+    }
+
+    func testCenteredMasterMasterHidesPromote() {
+        let items = menu("centered-master", isMaster: true)
+        XCTAssertFalse(labels(items).contains("Promote to master"))
+    }
+
+    func testMasterStackFloatingDropsTilingItems() {
+        // A floating window in a master-stack WS gets neither promote
+        // nor the master knobs.
+        let items = menu("tall", floating: true, isMaster: false)
         XCTAssertEqual(labels(items), ["Unfloat", "Close window"])
     }
 
     // MARK: - Universal items
 
     func testCloseAlwaysLastAndCloseFlagged() {
-        for mode in ["float", "bsp", "stack"] {
+        for mode in ["float", "bsp", "stack", "tall", "centered-master"] {
             for floating in [false, true] {
-                let items = adapter().windowMenu(
-                    mode: mode, floating: floating)
+                let items = menu(mode, floating: floating)
                 XCTAssertTrue(items.last?.isClose == true,
                               "mode=\(mode) floating=\(floating)")
                 XCTAssertEqual(items.last?.label, "Close window",
@@ -89,15 +141,13 @@ final class WindowMenuTests: XCTestCase {
     }
 
     func testFloatToggleLabelTracksFloatingFlag() {
-        for mode in ["float", "bsp", "stack"] {
-            let nonFloating = adapter().windowMenu(
-                mode: mode, floating: false)
-            let floating = adapter().windowMenu(
-                mode: mode, floating: true)
-            XCTAssertTrue(nonFloating.contains { $0.label == "Float" },
-                          "mode=\(mode) non-floating → Float item")
-            XCTAssertTrue(floating.contains { $0.label == "Unfloat" },
-                          "mode=\(mode) floating → Unfloat item")
+        for mode in ["float", "bsp", "stack", "tall"] {
+            XCTAssertTrue(menu(mode, floating: false)
+                .contains { $0.label == "Float" },
+                "mode=\(mode) non-floating → Float item")
+            XCTAssertTrue(menu(mode, floating: true)
+                .contains { $0.label == "Unfloat" },
+                "mode=\(mode) floating → Unfloat item")
         }
     }
 
@@ -105,8 +155,6 @@ final class WindowMenuTests: XCTestCase {
         // A typo or future mode that the backend doesn't know
         // about should still produce a usable menu — at minimum
         // Float/Unfloat + Close. Same as float mode.
-        let items = adapter().windowMenu(
-            mode: "scrolling", floating: false)
-        XCTAssertEqual(labels(items), ["Float", "Close window"])
+        XCTAssertEqual(labels(menu("scrolling")), ["Float", "Close window"])
     }
 }

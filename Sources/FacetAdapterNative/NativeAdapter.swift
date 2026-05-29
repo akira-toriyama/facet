@@ -1060,26 +1060,32 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    public func windowMenu(mode: String, floating: Bool) -> [WindowMenuItem] {
-        // Menu items per layout mode (Phase γ): BSP non-floating
-        // gets Toggle orientation; stack non-floating gets
-        // cycle-next / cycle-prev; everyone gets Float/Unfloat
-        // and Close. master_stack / scrolling actions stay out
-        // of the menu (out of γ scope).
+    public func windowMenu(mode: String, floating: Bool,
+                           isMaster: Bool,
+                           windowCount: Int) -> [WindowMenuItem] {
+        // Menu items per layout mode (Phase γ), gated by the window's
+        // actual state so master vs non-master (and a lone stack
+        // window) get the right menu — no dead items. Floating windows
+        // only get Unfloat + Close (tiling actions don't apply).
         var items: [WindowMenuItem] = []
         if mode == "bsp", !floating {
             items.append(.init("Toggle orientation",
                                [.toggleOrientation]))
         }
-        if mode == "stack", !floating {
+        // Cycling needs at least two windows to rotate between.
+        if mode == "stack", !floating, windowCount >= 2 {
             items.append(.init("Next stack window",
                                [.cycleStackNext]))
             items.append(.init("Previous stack window",
                                [.cycleStackPrev]))
         }
         if (mode == "tall" || mode == "centered-master"), !floating {
-            items.append(.init("Promote to master",
-                               [.promoteToMaster]))
+            // "Promote to master" is meaningless for the window that
+            // already holds the master slot.
+            if !isMaster {
+                items.append(.init("Promote to master",
+                                   [.promoteToMaster]))
+            }
             items.append(.init("Wider master", [.growMaster]))
             items.append(.init("Narrower master", [.shrinkMaster]))
             items.append(.init("More masters", [.incMaster]))
