@@ -36,6 +36,10 @@ private func slSym(_ name: String) -> UnsafeMutableRawPointer? {
 private typealias ConnFn = @convention(c) () -> Int32
 private typealias ActiveSpaceFn = @convention(c) (Int32) -> UInt64
 private typealias CopySpacesFn = @convention(c) (Int32) -> Unmanaged<CFArray>?
+private typealias CopySpacesForWindowsFn =
+    @convention(c) (Int32, Int32, CFArray) -> Unmanaged<CFArray>?
+private typealias GetWindowLevelFn =
+    @convention(c) (Int32, UInt32, UnsafeMutablePointer<Int32>) -> Int32
 
 private let mainConnectionID: Int32? = {
     guard let s = slSym("SLSMainConnectionID") else { return nil }
@@ -50,6 +54,22 @@ private let getActiveSpaceFn: ActiveSpaceFn? = {
 private let copyManagedSpacesFn: CopySpacesFn? = {
     guard let s = slSym("SLSCopyManagedDisplaySpaces") else { return nil }
     return unsafeBitCast(s, to: CopySpacesFn.self)
+}()
+
+private let copySpacesForWindowsFn: CopySpacesForWindowsFn? = {
+    guard let s = slSym("SLSCopySpacesForWindows") else { return nil }
+    return unsafeBitCast(s, to: CopySpacesForWindowsFn.self)
+}()
+
+/// `0x7` = "all space types" selector (current + others + fullscreen),
+/// the same mask yabai uses to enumerate a window's spaces. A normal
+/// window resides on exactly one Space, so the returned array is
+/// usually single-element; sticky / all-Spaces windows return many.
+private let kSpacesAllMask: Int32 = 0x7
+
+private let getWindowLevelFn: GetWindowLevelFn? = {
+    guard let s = slSym("SLSGetWindowLevel") else { return nil }
+    return unsafeBitCast(s, to: GetWindowLevelFn.self)
 }()
 
 public enum Spaces {
@@ -69,6 +89,39 @@ public enum Spaces {
     /// a single shared catalog).
     public static var available: Bool {
         mainConnectionID != nil && getActiveSpaceFn != nil
+    }
+
+    /// Native macOS Space id64s that `windowID` (a CGWindowID) is
+    /// resident on, read-only via SkyLight `SLSCopySpacesForWindows`.
+    /// Returns an EMPTY array when the symbol is unavailable, the
+    /// query fails, or the window genuinely reports no space —
+    /// callers MUST treat empty as "unknown, don't act" so a
+    /// transient SkyLight miss can't wrongly evict a real window.
+    /// Per memory `sls-copy-spaces-behavior` a single-window query
+    /// returns that window's own spaces (no union ambiguity), so the
+    /// result is directly usable for "is this window on Space X?".
+    public static func spaces(forWindow windowID: Int) -> [UInt64] {
+        guard windowID > 0, let cid = mainConnectionID,
+              let f = copySpacesForWindowsFn else { return [] }
+        let list = [NSNumber(value: windowID)] as CFArray
+        guard let arr = f(cid, kSpacesAllMask, list)?.takeRetainedValue()
+                as? [NSNumber] else { return [] }
+        return arr.map { $0.uint64Value }
+    }
+
+    /// The window-server level of `windowID` (a CGWindowID), read-only
+    /// via SkyLight `SLSGetWindowLevel` — the same non-blocking signal
+    /// yabai / rift use to tell ordinary windows (normal level) from
+    /// pop-ups / tool-tips / menus (raised levels). `nil` when the
+    /// symbol is unavailable or the query fails; callers treat `nil`
+    /// as "unknown — don't exclude on level alone". Cheaper than an AX
+    /// round-trip, so it runs as the first gate before any AX probe.
+    public static func windowLevel(forWindow windowID: Int) -> Int? {
+        guard windowID > 0, let cid = mainConnectionID,
+              let f = getWindowLevelFn else { return nil }
+        var level: Int32 = 0
+        guard f(cid, UInt32(windowID), &level) == 0 else { return nil }
+        return Int(level)
     }
 
     /// 1-based position of `activeID` among **user** Spaces

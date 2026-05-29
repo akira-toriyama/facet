@@ -26,6 +26,11 @@ public enum ExclusionAction: String, Sendable, Equatable {
     /// Drop it entirely: never enters a workspace, never shown.
     /// Good for transient popups. Mirrors yabai `manage=off`.
     case ignore
+    /// Force-manage (tile) it even though the allowlist gate would
+    /// otherwise float/ignore it — for a real window an app
+    /// mislabels (non-`AXStandardWindow` subrole, off-normal level).
+    /// The inverse escape hatch; mirrors yabai's `WINDOW_RULE_MANAGED`.
+    case manage
 }
 
 /// The window facts a rule is matched against. `role`/`subrole` are

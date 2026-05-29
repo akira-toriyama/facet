@@ -291,6 +291,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             workspaceList = []
             return
         }
+        // Seed the per-WS default layout mode from config (`[layout]
+        // default`). Layout mode is otherwise session-only, so without
+        // this every restart / per-native-Space catalog resets to the
+        // hardcoded "float" and the user's windows stop tiling until
+        // they re-issue `facet workspace --layout=…`. Set every refresh
+        // (cheap, value-type field) so a config hot-reload takes too.
+        catalog.defaultMode = config.effectiveDefaultLayout
         // Seed the live workspace set from config the first time this
         // (per-Space) catalog is used. Idempotent — once seeded, the
         // catalog's set is authoritative and runtime add/remove/rename/
@@ -336,6 +343,57 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "total=\(live.count)")
         }
         if result.removed > 0 { recentCloseAt = Date() }
+        // Heal (native-Space drift): a window can leak into this
+        // catalog's WS when it was swept in during a native macOS
+        // Space switch (the destination Space's windows flip
+        // `isOnscreen=true` before `swapCatalogIfSpaceChanged` sees
+        // the new active-Space id, so the two-tick gate adds them to
+        // the wrong catalog). Prevention is racy and トミー accepts the
+        // leak; instead we recompute hard here. Read each managed
+        // window's TRUE native Space (read-only SkyLight) and evict any
+        // that isn't on the active Space — it'll be re-adopted by its
+        // real Space's catalog on visit. Only runs when SkyLight is
+        // live (`activeSpaceID != 0`); an empty query result leaves the
+        // window untouched, so a transient SkyLight miss can't evict a
+        // real window. Must run BEFORE applyLayout / snapshot so both
+        // the tiling and the tree reflect the cleaned membership.
+        if activeSpaceID != 0 {
+            // Cache each window's Space query for this reconcile (the
+            // sanity gate + the eviction filter would otherwise double-
+            // query the on-screen windows).
+            var spaceCache: [WindowID: [UInt64]] = [:]
+            func windowSpaces(_ id: WindowID) -> [UInt64] {
+                if let c = spaceCache[id] { return c }
+                let s = Spaces.spaces(forWindow: id.serverID)
+                spaceCache[id] = s
+                return s
+            }
+            // Sanity gate: an on-screen managed window is, by
+            // definition, on the active Space right now — so if the
+            // SLS query is sound, at least one must report it. If NONE
+            // do, the query is untrustworthy (selector / id-format
+            // drift across an OS update) and evicting on its word could
+            // wrongly remove every real window. Bail in that case —
+            // a no-op heal is harmless; a false mass-eviction is not.
+            let trustworthy = live.contains { w in
+                w.isOnscreen && catalog.windowMap[w.id] != nil
+                    && windowSpaces(w.id).contains(activeSpaceID)
+            }
+            if trustworthy {
+                let foreign = catalog.windowMap.keys.filter { id in
+                    let s = windowSpaces(id)
+                    return !s.isEmpty && !s.contains(activeSpaceID)
+                }
+                for id in foreign { catalog.drop(id) }
+                if !foreign.isEmpty {
+                    Log.debug("native: heal evicted \(foreign.count) "
+                        + "off-Space window(s) from space=\(activeSpaceID)")
+                }
+            } else if !catalog.windowMap.isEmpty {
+                Log.debug("native: heal skipped "
+                    + "(SLS space query untrustworthy, space=\(activeSpaceID))")
+            }
+        }
         // D (event-driven re-tile): re-tile the active WS on every
         // refresh, not only when windows were added/removed. Cheap
         // when nothing drifted (applyFrames' frame-match skip reads
@@ -502,17 +560,30 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///   managed). Config rules take **precedence** over the built-in
     ///   heuristic (explicit user intent wins).
     ///
-    /// Only windows the catalog hasn't seen *and* hasn't examined are
-    /// considered (known windows keep the user's `toggleFloat`;
-    /// examined ones were already decided — re-checking just wastes AX
-    /// round-trips). AX role/subrole probes are capped at
-    /// `maxAutoFloatProbes` per call; beyond the cap, app/title/size
-    /// rules still apply (they need no AX), only role/subrole rules
-    /// and the built-in role float are skipped.
+    /// Allowlist gate (yabai / AeroSpace style): a window is TILED only
+    /// when it's positively confirmed a standard window; everything else
+    /// is floated (tracked + shown, not tiled) or ignored (dropped).
+    /// Two signals, cheapest first:
+    ///   1. window-server level (SkyLight read, no AX) — a raised level
+    ///      (tool-tip / pop-up / menu) is ignored without an AX probe.
+    ///   2. AX role/subrole (probed, capped at `maxAutoFloatProbes`) —
+    ///      `AXWindow`+`AXStandardWindow` tiles; sheets / dialogs /
+    ///      palettes and `AXWindow`+non-standard subrole (e.g.
+    ///      `AXUnknown`) float; a non-window role (AXHelpTag / menu /
+    ///      popover) is ignored. An un-probed/un-probeable normal-level
+    ///      window leans MANAGED — junk is almost always raised-level
+    ///      (caught by 1 without a probe), so a bare normal-level window
+    ///      is most likely real; tiling it beats risking a real window
+    ///      vanishing from the layout.
+    /// User `[[exclude]]` rules win over the heuristic (incl. the
+    /// `manage` force-tile escape hatch). Only unseen + unexamined
+    /// windows are classified. Tile-eligible windows are left out of
+    /// both returned sets so `reconcile` manages them normally.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>)
     {
         let rules = config.effectiveExclusionRules
+        let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
         var probed = 0
@@ -520,10 +591,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         where catalog.windowMap[w.id] == nil
             && !catalog.examinedIDs.contains(w.id)
         {
+            // 1. Cheap level gate (SkyLight read, no AX). nil = SkyLight
+            //    down → unknown; defer to the AX gate rather than
+            //    excluding on a missing signal.
+            let level = Spaces.windowLevel(forWindow: w.id.serverID)
+            let normalOrUnknownLevel = (level == nil) || (level == normalLevel)
+
+            // AX role/subrole — probe only windows that could still tile
+            // (normal/unknown level), within the per-call cap.
             var ax: AXUIElement?
             var role: String?
             var subrole: String?
-            if probed < maxAutoFloatProbes {
+            if normalOrUnknownLevel, probed < maxAutoFloatProbes {
                 probed += 1
                 ax = AXGeom.window(for: CGWindowID(w.id.serverID),
                                    pid: pid_t(w.pid))
@@ -532,11 +611,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     subrole = AXGeom.subrole(ax)
                 }
             }
-            // Config rules first — user intent overrides the heuristic.
+
+            // 2. User `[[exclude]]` rules win over the heuristic.
             let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
                                     role: role, subrole: subrole,
                                     size: w.frame?.size)
             switch rules.action(for: probe) {
+            case .manage:
+                Log.debug("native: rule=manage wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+                continue                          // force-tile
             case .ignore:
                 ignore.insert(w.id)
                 Log.debug("native: exclude=ignore wsid=\(w.id.serverID) "
@@ -550,12 +634,40 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             case nil:
                 break
             }
-            // Built-in role auto-float fallback.
-            if let ax, AXGeom.isFloatingByRole(ax) {
-                autoFloat.insert(w.id)
-                Log.debug("native: auto-float wsid=\(w.id.serverID) "
-                    + "app=\(w.appName)")
+
+            // 3. Level gate verdict: raised level → never tiled.
+            if let level, level != normalLevel {
+                ignore.insert(w.id)
+                Log.debug("native: gate=ignore(level=\(level)) "
+                    + "wsid=\(w.id.serverID) app=\(w.appName)")
+                continue
             }
+
+            // 4. Allowlist gate on AX role/subrole.
+            if role == "AXWindow", subrole == "AXStandardWindow" {
+                continue                          // tile (managed by reconcile)
+            }
+            if let ax, AXGeom.isFloatingByRole(ax) {
+                autoFloat.insert(w.id)            // sheet / dialog / palette
+                Log.debug("native: gate=float(role) wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+                continue
+            }
+            if role == "AXWindow" {
+                // AXWindow with a non-standard subrole (e.g. AXUnknown):
+                // conservative — show it, don't tile.
+                autoFloat.insert(w.id)
+                Log.debug("native: gate=float(nonstd sub=\(subrole ?? "-")) "
+                    + "wsid=\(w.id.serverID) app=\(w.appName)")
+                continue
+            }
+            if role == nil {
+                continue                          // un-probed normal-level → tile
+            }
+            // A definite non-window role (AXHelpTag / menu / popover …).
+            ignore.insert(w.id)
+            Log.debug("native: gate=ignore(role=\(role ?? "-")) "
+                + "wsid=\(w.id.serverID) app=\(w.appName)")
         }
         return (autoFloat, ignore)
     }

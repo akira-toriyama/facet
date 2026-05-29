@@ -439,10 +439,17 @@ struct WorkspaceCatalog {
 
     // MARK: - Layout mode
 
-    /// 1-based WS index → mode string. Missing entries default
-    /// to `"float"` (Phase γ frozen default).
+    /// Mode a WS uses when it has no explicit `layoutModes` entry.
+    /// Seeded from `[layout] default` (config) by the adapter on
+    /// every refresh; `"float"` (Phase γ frozen default) until set.
+    /// Layout mode is otherwise session-only, so this is what a
+    /// fresh launch / per-native-Space catalog starts every WS in.
+    var defaultMode: String = "float"
+
+    /// 1-based WS index → mode string. Missing entries fall back to
+    /// `defaultMode` (config `[layout] default`, else `"float"`).
     func mode(of n1Based: Int) -> String {
-        layoutModes[n1Based] ?? "float"
+        layoutModes[n1Based] ?? defaultMode
     }
 
     /// Change the mode of a workspace. Side-effects on layout
