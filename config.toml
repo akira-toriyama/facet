@@ -110,6 +110,25 @@ preview-mode = "popover"
 # -----------------------------------------------------------------
 [layout]
 
+# Startup layout mode every workspace begins in. Layout mode is
+# otherwise session-only (set live with `facet workspace --layout=NAME`
+# and lost on restart), so this is the seed each launch — and each
+# native macOS Space's independent catalog — starts every workspace
+# from.
+#
+#   "float"           — facet tiles nothing; windows keep the size and
+#                       position their app gives them (the default).
+#   "bsp"             — binary space partition (auto-tile, splits).
+#   "stack"           — one window fills the screen; others stacked
+#                       behind, cycled with `facet window --cycle-stack`.
+#   "tall" / "wide" / "monocle" / "centered-master" / "spiral" / "grid"
+#                     — stateless layout engines.
+#
+# Unknown / unset clamps to "float" (a typo can't break tiling). To
+# tile by default, set this to "bsp"; per-workspace tweaks are still
+# done live via the CLI.
+default = "float"
+
 # Spacing for tiled windows, in points. Everything here defaults to 0
 # — windows tile flush, edge-to-edge (facet's behaviour before gaps
 # existed) — so leaving this section out changes nothing. Applies to

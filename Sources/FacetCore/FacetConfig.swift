@@ -31,6 +31,12 @@ public struct FacetConfig: Sendable {
     public var treePreviewMode: String?     // "popover" | "mirror"
 
     // [layout]
+    /// Startup layout mode every workspace begins in (`float` / `bsp`
+    /// / `stack` / a registered engine name). Layout mode is otherwise
+    /// session-only, so this is the seed each fresh launch (and each
+    /// per-native-Space catalog) starts from. Raw; read
+    /// `effectiveDefaultLayout`.
+    public var defaultLayout: String?
     /// Gap between adjacent tiled windows, px (inner gap). Raw value;
     /// read `effectiveInnerGap`.
     public var innerGap: CGFloat?
@@ -133,6 +139,16 @@ public struct FacetConfig: Sendable {
     /// of an outermost window is left flush (that distance is the
     /// outer gap, not this).
     public var effectiveInnerGap: CGFloat { max(0, min(1000,innerGap ?? 0)) }
+
+    /// Startup layout mode for every workspace. Lowercased + clamped
+    /// to a known mode (`float` / `bsp` / `stack` / a registered
+    /// engine); an unknown / unset value falls back to `"float"`
+    /// (the Phase γ frozen default — facet tiles nothing until asked).
+    public var effectiveDefaultLayout: String {
+        let m = (defaultLayout ?? "float").lowercased()
+        let known = ["float", "bsp", "stack"] + LayoutRegistry.names
+        return known.contains(m) ? m : "float"
+    }
 
     /// Per-edge outer gap, px: inset from that screen edge for the
     /// whole tiling area, applied before any layout runs (it shrinks
@@ -249,6 +265,9 @@ public struct FacetConfig: Sendable {
             c.treePreviewMode = s
         }
         // [layout]
+        if case .string(let s)? = toml["layout"]?["default"] {
+            c.defaultLayout = s
+        }
         if case .int(let n)? = toml["layout"]?["inner-gap"] {
             c.innerGap = CGFloat(n)
         }
