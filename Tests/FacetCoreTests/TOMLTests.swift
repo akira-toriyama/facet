@@ -119,4 +119,63 @@ final class TOMLTests: XCTestCase {
         XCTAssertNil(p[""]?["bad"])
         XCTAssertEqual(p[""]?["also"], .int(2))
     }
+
+    // MARK: - Array of tables (added for [[exclude]])
+
+    func testArrayOfTablesCollectsEachOccurrence() {
+        let tables = parseTOMLArrayOfTables("""
+            [[exclude]]
+            app = "com.apple.finder"
+            action = "float"
+
+            [[exclude]]
+            title = "^$"
+            action = "ignore"
+            """, table: "exclude")
+        XCTAssertEqual(tables.count, 2)
+        XCTAssertEqual(tables[0]["app"], .string("com.apple.finder"))
+        XCTAssertEqual(tables[0]["action"], .string("float"))
+        XCTAssertEqual(tables[1]["title"], .string("^$"))
+        XCTAssertEqual(tables[1]["action"], .string("ignore"))
+    }
+
+    func testArrayOfTablesIgnoresOtherSectionsAndKeys() {
+        let tables = parseTOMLArrayOfTables("""
+            theme = "cute"
+
+            [grid]
+            cols = 4
+
+            [[exclude]]
+            app = "x"
+            max_width = 400
+
+            [layout]
+            mode = "tall"
+            """, table: "exclude")
+        XCTAssertEqual(tables.count, 1)
+        XCTAssertEqual(tables[0]["app"], .string("x"))
+        XCTAssertEqual(tables[0]["max_width"], .int(400))
+        // A following [section] closes the block — its keys don't leak in.
+        XCTAssertNil(tables[0]["mode"])
+        XCTAssertNil(tables[0]["cols"])
+    }
+
+    func testArrayOfTablesEmptyWhenAbsent() {
+        let tables = parseTOMLArrayOfTables("""
+            [grid]
+            cols = 2
+            """, table: "exclude")
+        XCTAssertTrue(tables.isEmpty)
+    }
+
+    func testArrayOfTablesDoesNotMatchSingleBracketSection() {
+        // `[exclude]` (single bracket) is a plain section, not an
+        // array-of-tables entry → not collected.
+        let tables = parseTOMLArrayOfTables("""
+            [exclude]
+            app = "x"
+            """, table: "exclude")
+        XCTAssertTrue(tables.isEmpty)
+    }
 }

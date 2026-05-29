@@ -115,6 +115,21 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
     }
 
+    func testIgnoreKeepsWindowUnmanaged() {
+        // Config `action="ignore"` window never enters the map, and
+        // stays out on later reconciles (marked examined) even once
+        // the ignore hint is no longer supplied.
+        var c = WorkspaceCatalog()
+        let r = c.reconcile(live: [window(10), window(20)],
+                            ignore: [wid(20)])
+        XCTAssertEqual(r.added, 1)
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+        XCTAssertNil(c.windowMap[wid(20)])
+        let r2 = c.reconcile(live: [window(10), window(20)])
+        XCTAssertEqual(r2.added, 0)
+        XCTAssertNil(c.windowMap[wid(20)])
+    }
+
     func testTrustedDoesNotOverrideOffScreenDefer() {
         // Trusted bypasses only the two-tick gate, not the off-screen
         // defer that runs before it: a window still transiently

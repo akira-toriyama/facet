@@ -294,11 +294,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
-        // Phase γ.3: probe AX role for every live ID that the
-        // catalog hasn't seen yet — sheets / dialogs / floating
-        // panels auto-float on first sight so they don't fight
-        // the tiler.
-        let autoFloat = detectAutoFloating(live: live)
+        // Phase γ.3 + F: classify first-sight windows — auto-float
+        // (sheets / dialogs / palettes + config float rules) and
+        // ignore (config `action="ignore"` → kept fully unmanaged).
+        let (autoFloat, ignore) = classifyNewWindows(live: live)
         // Drop expired trusted-new hints, then hand the survivors to
         // reconcile so a genuinely-new window joins on first on-screen
         // sight (skips the two-tick gate). Non-trusted windows — incl.
@@ -314,6 +313,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                                        activeRect: rect,
                                        autoFloat: autoFloat,
                                        trusted: trusted,
+                                       ignore: ignore,
                                        requireConfirm: true)
         // Latency telemetry + consume: any trusted id now in the
         // catalog was fast-added — log create→add dt and forget the
@@ -471,35 +471,89 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// windows per refresh tick) is fully covered.
     private let maxAutoFloatProbes = 16
 
-    /// Phase γ.3: which live windows should default to floating
-    /// (sheet / dialog / palette). Only checks windows the
-    /// catalog hasn't seen yet — known windows keep whatever
-    /// `floatingWindows` state the user has set (toggleFloat
-    /// must remain authoritative once they've explicitly chosen).
-    /// Capped at `maxAutoFloatProbes` AX queries per call so a
-    /// busy startup can't burn an unbounded number of AX
-    /// round-trips on the foreground reconcile.
-    private func detectAutoFloating(live: [Window]) -> Set<WindowID> {
-        var out: Set<WindowID> = []
+    /// pid → bundle id cache. Bundle id is stable for a process's
+    /// lifetime, so resolve once via `NSRunningApplication` and reuse.
+    /// Only failures are left uncached (so a later tick can retry an
+    /// app that wasn't ready). Touched only on `cliQueue`
+    /// (`enumerateCGWindows`), like the rest of the catalog state.
+    private var pidToBundleId: [pid_t: String] = [:]
+
+    private func bundleId(forPid pid: Int) -> String? {
+        let p = pid_t(pid)
+        if let cached = pidToBundleId[p] { return cached }
+        guard let b = NSRunningApplication(processIdentifier: p)?
+            .bundleIdentifier else { return nil }
+        pidToBundleId[p] = b
+        return b
+    }
+
+    /// Phase γ.3 + window-exclusion (F): classify not-yet-managed
+    /// windows on first sight into the ones to auto-float vs. ignore.
+    ///
+    /// - **Built-in role auto-float**: sheets / dialogs / palettes by
+    ///   AX role (`AXGeom.isFloatingByRole`) — kept tracked but not
+    ///   tiled.
+    /// - **Config `[[exclude]]` rules**: `action="float"` joins the
+    ///   auto-float set; `action="ignore"` is dropped entirely (never
+    ///   managed). Config rules take **precedence** over the built-in
+    ///   heuristic (explicit user intent wins).
+    ///
+    /// Only windows the catalog hasn't seen *and* hasn't examined are
+    /// considered (known windows keep the user's `toggleFloat`;
+    /// examined ones were already decided — re-checking just wastes AX
+    /// round-trips). AX role/subrole probes are capped at
+    /// `maxAutoFloatProbes` per call; beyond the cap, app/title/size
+    /// rules still apply (they need no AX), only role/subrole rules
+    /// and the built-in role float are skipped.
+    private func classifyNewWindows(live: [Window])
+        -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>)
+    {
+        let rules = config.effectiveExclusionRules
+        var autoFloat: Set<WindowID> = []
+        var ignore: Set<WindowID> = []
         var probed = 0
-        for w in live where catalog.windowMap[w.id] == nil {
-            if probed >= maxAutoFloatProbes {
-                Log.debug("native: auto-float probe cap "
-                    + "(\(maxAutoFloatProbes)) hit — "
-                    + "remaining new windows skip role check")
+        for w in live
+        where catalog.windowMap[w.id] == nil
+            && !catalog.examinedIDs.contains(w.id)
+        {
+            var ax: AXUIElement?
+            var role: String?
+            var subrole: String?
+            if probed < maxAutoFloatProbes {
+                probed += 1
+                ax = AXGeom.window(for: CGWindowID(w.id.serverID),
+                                   pid: pid_t(w.pid))
+                if let ax {
+                    role = AXGeom.role(ax)
+                    subrole = AXGeom.subrole(ax)
+                }
+            }
+            // Config rules first — user intent overrides the heuristic.
+            let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
+                                    role: role, subrole: subrole,
+                                    size: w.frame?.size)
+            switch rules.action(for: probe) {
+            case .ignore:
+                ignore.insert(w.id)
+                Log.debug("native: exclude=ignore wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+                continue
+            case .float:
+                autoFloat.insert(w.id)
+                Log.debug("native: exclude=float wsid=\(w.id.serverID) "
+                    + "app=\(w.appName)")
+                continue
+            case nil:
                 break
             }
-            probed += 1
-            guard let ax = AXGeom.window(
-                for: CGWindowID(w.id.serverID),
-                pid: pid_t(w.pid)) else { continue }
-            if AXGeom.isFloatingByRole(ax) {
-                out.insert(w.id)
+            // Built-in role auto-float fallback.
+            if let ax, AXGeom.isFloatingByRole(ax) {
+                autoFloat.insert(w.id)
                 Log.debug("native: auto-float wsid=\(w.id.serverID) "
                     + "app=\(w.appName)")
             }
         }
-        return out
+        return (autoFloat, ignore)
     }
 
     /// Display rect to anchor tile / stack math against.
@@ -661,7 +715,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 isFocused: false,
                 isFloating: false,
                 frame: frame,
-                isOnscreen: isOnscreen)
+                isOnscreen: isOnscreen,
+                bundleId: bundleId(forPid: pid))
         }
     }
 
