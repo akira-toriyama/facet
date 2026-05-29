@@ -161,6 +161,25 @@ outer-gap = 0
 
 
 # -----------------------------------------------------------------
+# Window-move animation  [animation]
+# -----------------------------------------------------------------
+# Animate geometry transitions instead of snapping. Phase 1 covers the
+# workspace switch: windows slide as a directional filmstrip — the
+# workspace you leave slides off one edge while the one you enter slides
+# in from the opposite edge; the workspace-index delta picks the
+# direction. Pure public AX (no private APIs, no SIP changes). macOS
+# "Reduce motion" (System Settings > Accessibility > Display) is
+# honoured: when it's on, switches jump regardless of `enabled` below.
+
+[animation]
+# enabled — master switch. Default true. Set false for instant jumps.
+enabled = true
+# duration-ms — slide length per transition, ms. Clamped to [80, 800];
+# default 280.
+# duration-ms = 280
+
+
+# -----------------------------------------------------------------
 # Window override rules  [[exclude]]
 # -----------------------------------------------------------------
 # facet uses an ALLOWLIST (yabai / AeroSpace style): a window is only

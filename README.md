@@ -286,6 +286,12 @@ Frequently-touched keys:
   sets all four edges; `outer-gap-top` / `-bottom` / `-left` /
   `-right` override individual edges. All default 0 (flush tiling);
   clamp to [0, 1000]. Applies to every layout; floating windows excluded.
+- `[animation]` table — `enabled` (default `true`) animates the
+  workspace switch as a directional slide: the workspace you leave
+  slides off one edge while the one you enter slides in from the
+  opposite edge (index delta picks the direction). `duration-ms`
+  (default 280, clamp [80, 800]) sets the slide length. Pure public AX;
+  macOS "Reduce motion" forces instant switches regardless.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or

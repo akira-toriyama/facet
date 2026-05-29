@@ -277,6 +277,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `outer-gap-top` / `-bottom` / `-left` / `-right` で辺ごとに上書き。
   すべて default 0 (隙間なしのフラッシュ配置); [0, 1000] にクランプ。
   全 layout に適用、 floating window は対象外。
+- `[animation]` テーブル — `enabled` (default `true`) で WS 切替を
+  方向性スライドにアニメ: 離れる WS は片側へ滑り出し、 入る WS は反対側
+  から滑り込む (WS 番号差で左右が決まる)。 `duration-ms` (default 280、
+  [80, 800] にクランプ) でスライド長。 公開 AX のみ。 macOS の
+  「視差効果を減らす」 が ON なら設定に関わらず即時切替。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
   `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で
