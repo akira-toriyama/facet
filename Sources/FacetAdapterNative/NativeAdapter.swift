@@ -1166,6 +1166,55 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return true
     }
 
+    /// 枠 E: animate a stack cycle as a one-window slide — the old top
+    /// exits one edge, the next window enters from the opposite edge
+    /// (the others stay parked); direction picks the axis. Always applies
+    /// the cycle; settles via applyStack (newTop fills, others park), and
+    /// falls back to an instant applyStack when it can't animate.
+    private func animateStackCycle(direction: WorkspaceCatalog.CycleDirection,
+                                   rect: CGRect) {
+        let active = catalog.activeIndex
+        let oldTop = catalog.stackOrder(of: active).first
+        let newTop = catalog.cycleStack(workspace: active, direction: direction)
+        Log.debug("native: animateStackCycle \(direction) "
+            + "old=\(oldTop?.serverID.description ?? "nil") "
+            + "new=\(newTop?.serverID.description ?? "nil")")
+        guard let newTop, let oldTop, newTop != oldTop,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let oldAx = axWin(id: oldTop), let newAx = axWin(id: newTop),
+              let oldPos = AXGeom.position(oldAx), let oldSize = AXGeom.size(oldAx)
+        else {
+            applyStack(workspace: active, rect: rect)
+            eventContinuation.yield(.refreshNeeded)
+            return
+        }
+        let r = rect.roundedToPhysicalPixels(scale: activeScale(near: rect))
+        let dx = (direction == .next ? 1 : -1) * rect.width
+        slideAnims = []
+        // Old top: slide off the near edge (size constant → translation).
+        slideAnims.append((oldAx, WindowSlide(
+            id: oldTop,
+            from: CGRect(origin: oldPos, size: oldSize),
+            to: CGRect(x: oldPos.x - dx, y: oldPos.y,
+                       width: oldSize.width, height: oldSize.height))))
+        // New top: un-park, place off the far edge at full size, slide in.
+        catalog.clearParkedState(of: newTop)
+        AXGeom.setSize(newAx, r.size)
+        let start = CGRect(x: r.minX + dx, y: r.minY,
+                           width: r.width, height: r.height)
+        AXGeom.setPosition(newAx, start.origin)
+        slideAnims.append((newAx, WindowSlide(id: newTop, from: start, to: r)))
+
+        let settle: () -> Void = { [weak self] in
+            guard let self else { return }
+            self.slideAnims = []
+            self.applyStack(workspace: active, rect: rect)
+            self.eventContinuation.yield(.refreshNeeded)
+        }
+        slideIsRetile = false   // park bookkeeping in settle → settle on interrupt
+        startSlideDriver(settle)
+    }
+
     // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
@@ -1709,15 +1758,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // stack-order array, not via OS focus.
             let direction: WorkspaceCatalog.CycleDirection =
                 action == .cycleStackNext ? .next : .prev
-            let newTop = catalog.cycleStack(
-                workspace: catalog.activeIndex,
-                direction: direction)
-            Log.debug("native: perform \(action) → newTop="
-                + "\(newTop?.serverID.description ?? "nil")")
-            if newTop != nil {
-                applyStack(workspace: catalog.activeIndex,
-                           rect: rect)
-                eventContinuation.yield(.refreshNeeded)
+            cancelSlideForRetarget()
+            if config.effectiveAnimationsEnabled {
+                // 枠 E: slide the old top out / next top in.
+                animateStackCycle(direction: direction, rect: rect)
+            } else {
+                let newTop = catalog.cycleStack(
+                    workspace: catalog.activeIndex, direction: direction)
+                Log.debug("native: perform \(action) → newTop="
+                    + "\(newTop?.serverID.description ?? "nil")")
+                if newTop != nil {
+                    applyStack(workspace: catalog.activeIndex, rect: rect)
+                    eventContinuation.yield(.refreshNeeded)
+                }
             }
         case .promoteToMaster:
             // Tall / master-stack: move the focused window to the
