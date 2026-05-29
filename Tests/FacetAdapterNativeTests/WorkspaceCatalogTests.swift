@@ -783,7 +783,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // 0.5 → 0.6
         let frames = c.engineFrames(for: 1, in: displayRect)
         // Master (lower id = order[0]) gets 0.6 * 1600 = 960 wide.
-        XCTAssertEqual(frames[wid(10)]?.width, 960, accuracy: 1e-9)
+        XCTAssertEqual(frames[wid(10)]?.width ?? 0, 960, accuracy: 1e-9)
     }
 
     // MARK: - Phase γ.3 — autoFloat reconcile hint
