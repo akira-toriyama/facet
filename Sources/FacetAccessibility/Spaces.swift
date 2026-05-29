@@ -36,6 +36,8 @@ private func slSym(_ name: String) -> UnsafeMutableRawPointer? {
 private typealias ConnFn = @convention(c) () -> Int32
 private typealias ActiveSpaceFn = @convention(c) (Int32) -> UInt64
 private typealias CopySpacesFn = @convention(c) (Int32) -> Unmanaged<CFArray>?
+private typealias CopySpacesForWindowsFn =
+    @convention(c) (Int32, Int32, CFArray) -> Unmanaged<CFArray>?
 
 private let mainConnectionID: Int32? = {
     guard let s = slSym("SLSMainConnectionID") else { return nil }
@@ -51,6 +53,17 @@ private let copyManagedSpacesFn: CopySpacesFn? = {
     guard let s = slSym("SLSCopyManagedDisplaySpaces") else { return nil }
     return unsafeBitCast(s, to: CopySpacesFn.self)
 }()
+
+private let copySpacesForWindowsFn: CopySpacesForWindowsFn? = {
+    guard let s = slSym("SLSCopySpacesForWindows") else { return nil }
+    return unsafeBitCast(s, to: CopySpacesForWindowsFn.self)
+}()
+
+/// `0x7` = "all space types" selector (current + others + fullscreen),
+/// the same mask yabai uses to enumerate a window's spaces. A normal
+/// window resides on exactly one Space, so the returned array is
+/// usually single-element; sticky / all-Spaces windows return many.
+private let kSpacesAllMask: Int32 = 0x7
 
 public enum Spaces {
     /// Current active native macOS Space id (SkyLight `id64`).
@@ -69,6 +82,24 @@ public enum Spaces {
     /// a single shared catalog).
     public static var available: Bool {
         mainConnectionID != nil && getActiveSpaceFn != nil
+    }
+
+    /// Native macOS Space id64s that `windowID` (a CGWindowID) is
+    /// resident on, read-only via SkyLight `SLSCopySpacesForWindows`.
+    /// Returns an EMPTY array when the symbol is unavailable, the
+    /// query fails, or the window genuinely reports no space —
+    /// callers MUST treat empty as "unknown, don't act" so a
+    /// transient SkyLight miss can't wrongly evict a real window.
+    /// Per memory `sls-copy-spaces-behavior` a single-window query
+    /// returns that window's own spaces (no union ambiguity), so the
+    /// result is directly usable for "is this window on Space X?".
+    public static func spaces(forWindow windowID: Int) -> [UInt64] {
+        guard windowID > 0, let cid = mainConnectionID,
+              let f = copySpacesForWindowsFn else { return [] }
+        let list = [NSNumber(value: windowID)] as CFArray
+        guard let arr = f(cid, kSpacesAllMask, list)?.takeRetainedValue()
+                as? [NSNumber] else { return [] }
+        return arr.map { $0.uint64Value }
     }
 
     /// 1-based position of `activeID` among **user** Spaces

@@ -343,6 +343,57 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "total=\(live.count)")
         }
         if result.removed > 0 { recentCloseAt = Date() }
+        // Heal (native-Space drift): a window can leak into this
+        // catalog's WS when it was swept in during a native macOS
+        // Space switch (the destination Space's windows flip
+        // `isOnscreen=true` before `swapCatalogIfSpaceChanged` sees
+        // the new active-Space id, so the two-tick gate adds them to
+        // the wrong catalog). Prevention is racy and トミー accepts the
+        // leak; instead we recompute hard here. Read each managed
+        // window's TRUE native Space (read-only SkyLight) and evict any
+        // that isn't on the active Space — it'll be re-adopted by its
+        // real Space's catalog on visit. Only runs when SkyLight is
+        // live (`activeSpaceID != 0`); an empty query result leaves the
+        // window untouched, so a transient SkyLight miss can't evict a
+        // real window. Must run BEFORE applyLayout / snapshot so both
+        // the tiling and the tree reflect the cleaned membership.
+        if activeSpaceID != 0 {
+            // Cache each window's Space query for this reconcile (the
+            // sanity gate + the eviction filter would otherwise double-
+            // query the on-screen windows).
+            var spaceCache: [WindowID: [UInt64]] = [:]
+            func windowSpaces(_ id: WindowID) -> [UInt64] {
+                if let c = spaceCache[id] { return c }
+                let s = Spaces.spaces(forWindow: id.serverID)
+                spaceCache[id] = s
+                return s
+            }
+            // Sanity gate: an on-screen managed window is, by
+            // definition, on the active Space right now — so if the
+            // SLS query is sound, at least one must report it. If NONE
+            // do, the query is untrustworthy (selector / id-format
+            // drift across an OS update) and evicting on its word could
+            // wrongly remove every real window. Bail in that case —
+            // a no-op heal is harmless; a false mass-eviction is not.
+            let trustworthy = live.contains { w in
+                w.isOnscreen && catalog.windowMap[w.id] != nil
+                    && windowSpaces(w.id).contains(activeSpaceID)
+            }
+            if trustworthy {
+                let foreign = catalog.windowMap.keys.filter { id in
+                    let s = windowSpaces(id)
+                    return !s.isEmpty && !s.contains(activeSpaceID)
+                }
+                for id in foreign { catalog.drop(id) }
+                if !foreign.isEmpty {
+                    Log.debug("native: heal evicted \(foreign.count) "
+                        + "off-Space window(s) from space=\(activeSpaceID)")
+                }
+            } else if !catalog.windowMap.isEmpty {
+                Log.debug("native: heal skipped "
+                    + "(SLS space query untrustworthy, space=\(activeSpaceID))")
+            }
+        }
         // D (event-driven re-tile): re-tile the active WS on every
         // refresh, not only when windows were added/removed. Cheap
         // when nothing drifted (applyFrames' frame-match skip reads
