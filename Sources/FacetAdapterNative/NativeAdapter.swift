@@ -289,9 +289,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
                 + "total=\(live.count)")
-            applyLayout(workspace: catalog.activeIndex, rect: rect)
         }
         if result.removed > 0 { recentCloseAt = Date() }
+        // D (event-driven re-tile): re-tile the active WS on every
+        // refresh, not only when windows were added/removed. Cheap
+        // when nothing drifted (applyFrames' frame-match skip reads
+        // only, no AX write) and self-heals geometry after a native
+        // WS switch / resize / external nudge that the old lazy
+        // retile (add/remove only) missed. float WS is a no-op (no
+        // engine). Supersedes the Phase γ lazy-retile invariant.
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
         // z-ordered window of the same app, which often sits in a
@@ -920,6 +927,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // sub-pixel reveal coords aren't rounded (would break the
         // macOS clamp dodge).
         let scale = activeScale(near: rect)
+        // Below this (≈1pt), treat the window as already at the
+        // target and skip the AX write. pixel-rounding lands frames
+        // on 0.5pt (Retina) boundaries so genuine targets compare
+        // well within 1pt.
+        let eps: CGFloat = 1.0
         var applied = 0
         for (id, frame) in frames {
             guard let pid = catalog.pid(for: id) else { continue }
@@ -927,6 +939,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 for: CGWindowID(id.serverID),
                 pid: pid_t(pid)) else { continue }
             let r = frame.roundedToPhysicalPixels(scale: scale)
+            // Frame-match skip: if the window already sits at the
+            // target, don't write. This stops facet's own setSize/
+            // setPosition from re-firing kAXWindowResized/Moved →
+            // re-tile loop (event-driven re-tile, D), and saves the
+            // AX round-trip when nothing drifted.
+            if let cur = AXGeom.position(ax), let sz = AXGeom.size(ax),
+               abs(cur.x - r.minX) < eps, abs(cur.y - r.minY) < eps,
+               abs(sz.width - r.width) < eps, abs(sz.height - r.height) < eps {
+                continue
+            }
             AXGeom.setPosition(ax, r.origin)
             AXGeom.setSize(ax, r.size)
             applied += 1

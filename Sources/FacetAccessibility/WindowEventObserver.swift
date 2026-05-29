@@ -46,6 +46,13 @@ public final class WindowEventObserver: @unchecked Sendable {
     private var observers: [pid_t: AXObserver] = [:]
     private var launchToken: NSObjectProtocol?
     private var terminateToken: NSObjectProtocol?
+    /// A drag fires a burst of `kAXWindowMoved`; coalesce them to a
+    /// single `onChange` after this much stillness (= drag finished)
+    /// so re-tile doesn't run mid-drag and fight the cursor. resize /
+    /// focus / create / destroy fire immediately (the Controller's own
+    /// 50 ms debounce coalesces those).
+    private var moveDebounceTimer: Timer?
+    private let moveDebounce: TimeInterval = 0.2
 
     public init(onChange: @escaping Callback) {
         self.onChange = onChange
@@ -103,11 +110,23 @@ public final class WindowEventObserver: @unchecked Sendable {
         for pid in observers.keys { detach(pid: pid) }
     }
 
-    /// Public so the C-style AX callback can route in. Do not
-    /// call directly from adapter code.
+    /// Public so the C-style AX callback can route in. Do not call
+    /// directly from adapter code. `notification` lets us treat window
+    /// moves specially: a drag fires a burst of `kAXWindowMoved`, so
+    /// those coalesce to a single fire after `moveDebounce` of
+    /// stillness (drag finished). Everything else fires immediately.
     @MainActor
-    fileprivate func fire() {
-        onChange()
+    fileprivate func fire(_ notification: String) {
+        guard notification == kAXWindowMovedNotification as String else {
+            onChange()
+            return
+        }
+        moveDebounceTimer?.invalidate()
+        moveDebounceTimer = Timer.scheduledTimer(
+            withTimeInterval: moveDebounce, repeats: false
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onChange() }
+        }
     }
 
     @MainActor
@@ -124,6 +143,8 @@ public final class WindowEventObserver: @unchecked Sendable {
             kAXFocusedWindowChangedNotification,
             kAXWindowCreatedNotification,
             kAXUIElementDestroyedNotification,
+            kAXWindowResizedNotification,
+            kAXWindowMovedNotification,
         ] as [String] {
             AXObserverAddNotification(
                 obs, app, note as CFString, context)
@@ -157,5 +178,6 @@ private func axObserverCallback(
     guard let refcon else { return }
     let obs = Unmanaged<WindowEventObserver>
         .fromOpaque(refcon).takeUnretainedValue()
-    MainActor.assumeIsolated { obs.fire() }
+    let note = notification as String
+    MainActor.assumeIsolated { obs.fire(note) }
 }
