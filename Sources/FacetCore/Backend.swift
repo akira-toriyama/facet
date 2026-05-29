@@ -49,6 +49,13 @@ public enum BackendEvent: Sendable {
     case refreshNeeded
 }
 
+/// Relative workspace target for `switchWorkspaceRelative`.
+/// `next` / `prev` step through the configured workspaces (wrapping
+/// at the ends); `recent` returns to the previously-active one.
+public enum RelativeWorkspace: Sendable, Equatable {
+    case next, prev, recent
+}
+
 /// The only surface the rest of the app knows about. rift / native
 /// each implement it; the UI, AX focus glue, themes and DnD are all
 /// WM-agnostic.
@@ -78,6 +85,13 @@ public protocol WindowBackend: Sendable {
     ///     should leave this `false` to avoid a redundant AX write
     ///     plus a brief flicker before the explicit pick wins.
     func switchWorkspace(toIndex index: Int, autoFocus: Bool)
+
+    /// Switch relative to the current workspace: `next` / `prev` step
+    /// through the configured workspaces (wrapping), `recent` returns
+    /// to the previously-active one. No-op when there's nowhere to go
+    /// (fewer than 2 workspaces, or no recent recorded yet).
+    /// `autoFocus` behaves as in `switchWorkspace`.
+    func switchWorkspaceRelative(_ target: RelativeWorkspace, autoFocus: Bool)
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)

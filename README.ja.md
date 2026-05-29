@@ -353,6 +353,7 @@ facet window --inc-master|--dec-master       # master 窓数 ±1 (tall / centere
 
 # Workspace 操作 (M5 Phase α)
 facet workspace --focus=N               # workspace N に切替 (1-indexed)
+facet workspace --focus=next|prev|recent # 巡回 (wrap) / 直前へ戻る
 facet window --move-to=N          # focus 中の window を WS N へ
 facet status                      # スナップショット: backend /
                                   # theme / workspaces /

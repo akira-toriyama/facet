@@ -617,6 +617,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         eventContinuation.yield(.refreshNeeded)
     }
 
+    public func switchWorkspaceRelative(_ target: RelativeWorkspace,
+                                        autoFocus: Bool) {
+        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        else { return }
+        let configured = config.effectiveWorkspaceList(
+            forSpaceOrdinal: activeSpaceOrdinal).map(\.index)
+        guard let t = catalog.relativeTarget(target,
+                                             configured: configured) else {
+            Log.debug("native: switchWorkspaceRelative \(target) → no-op")
+            return
+        }
+        switchWorkspace(toIndex: t - 1, autoFocus: autoFocus)
+    }
+
     /// Focus the window the user was last on in `newActiveWS`, or
     /// — when the WS has no windows — bounce focus to Finder so
     /// the source app doesn't linger as frontmost. Window pick

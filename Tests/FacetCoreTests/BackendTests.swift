@@ -16,6 +16,7 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
     var state: [Workspace] = []
     var focused: WindowID?
     private(set) var switched: [Int] = []
+    private(set) var switchedRelative: [RelativeWorkspace] = []
     private(set) var moved: [(WindowID, Int)] = []
     private(set) var layoutChanges: [(Int, String)] = []
     private(set) var closed: [WindowID] = []
@@ -26,6 +27,10 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
 
     func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
         switched.append(index)
+    }
+    func switchWorkspaceRelative(_ target: RelativeWorkspace,
+                                 autoFocus: Bool) {
+        switchedRelative.append(target)
     }
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
         moved.append((id, index))

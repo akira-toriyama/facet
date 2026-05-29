@@ -368,6 +368,7 @@ facet window --inc-master|--dec-master       # master window count ±1 (tall / c
 
 # Workspace ops (M5 Phase α)
 facet workspace --focus=N               # switch to workspace N (1-indexed)
+facet workspace --focus=next|prev|recent # step (wraps) / return to previous
 facet window --move-to=N          # move focused window to workspace N
 facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp
