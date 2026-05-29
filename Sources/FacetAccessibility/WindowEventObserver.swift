@@ -27,6 +27,7 @@
 
 import AppKit
 import ApplicationServices
+import FacetCore
 import Foundation
 
 /// Per-app AX event observer. Calls `onChange()` whenever the
@@ -40,7 +41,20 @@ import Foundation
 /// to the main runloop so callbacks land there too.
 public final class WindowEventObserver: @unchecked Sendable {
 
-    public typealias Callback = @MainActor () -> Void
+    /// What the observer saw. `created` is the one event we can act
+    /// on without ambiguity: a brand-new window can never be a
+    /// Space-switch `isOnscreen` flip of an *existing* window, so the
+    /// adapter can fast-path it past `reconcile`'s two-tick gate. The
+    /// CGWindowID is resolved from the AX element via the private
+    /// `_AXUIElementGetWindow`; if that symbol is unavailable the
+    /// event degrades to `.other` and the window goes through the
+    /// normal (slower, gated) add path.
+    public enum Event: Sendable {
+        case created(WindowID)
+        case other
+    }
+
+    public typealias Callback = @MainActor (Event) -> Void
 
     private let onChange: Callback
     private var observers: [pid_t: AXObserver] = [:]
@@ -82,7 +96,7 @@ public final class WindowEventObserver: @unchecked Sendable {
             let pid = app.processIdentifier
             MainActor.assumeIsolated {
                 self?.attach(pid: pid)
-                self?.onChange()
+                self?.onChange(.other)
             }
         }
         terminateToken = nc.addObserver(
@@ -95,7 +109,7 @@ public final class WindowEventObserver: @unchecked Sendable {
             let pid = app.processIdentifier
             MainActor.assumeIsolated {
                 self?.detach(pid: pid)
-                self?.onChange()
+                self?.onChange(.other)
             }
         }
     }
@@ -115,17 +129,21 @@ public final class WindowEventObserver: @unchecked Sendable {
     /// moves specially: a drag fires a burst of `kAXWindowMoved`, so
     /// those coalesce to a single fire after `moveDebounce` of
     /// stillness (drag finished). Everything else fires immediately.
+    /// `event` carries the resolved created-window id (or `.other`)
+    /// computed by the callback, which has the AX element in hand.
     @MainActor
-    fileprivate func fire(_ notification: String) {
+    fileprivate func fire(_ event: Event, notification: String) {
         guard notification == kAXWindowMovedNotification as String else {
-            onChange()
+            onChange(event)
             return
         }
+        // Moves are always `.other` (no new window) and get debounced
+        // so re-tile doesn't fight the cursor mid-drag.
         moveDebounceTimer?.invalidate()
         moveDebounceTimer = Timer.scheduledTimer(
             withTimeInterval: moveDebounce, repeats: false
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onChange() }
+            MainActor.assumeIsolated { self?.onChange(.other) }
         }
     }
 
@@ -179,5 +197,17 @@ private func axObserverCallback(
     let obs = Unmanaged<WindowEventObserver>
         .fromOpaque(refcon).takeUnretainedValue()
     let note = notification as String
-    MainActor.assumeIsolated { obs.fire(note) }
+    // For a genuine window creation, resolve the CGWindowID from the
+    // AX element (the `element` arg IS the new window) so the adapter
+    // can fast-path it. `axGetWindow` is the same dlsym'd
+    // `_AXUIElementGetWindow` used for precise focus; a `nil`/failed
+    // lookup degrades to `.other`.
+    var event = WindowEventObserver.Event.other
+    if note == kAXWindowCreatedNotification as String, let g = axGetWindow {
+        var cg: UInt32 = 0
+        if g(element, &cg) == .success, cg != 0 {
+            event = .created(WindowID(serverID: Int(cg)))
+        }
+    }
+    MainActor.assumeIsolated { obs.fire(event, notification: note) }
 }

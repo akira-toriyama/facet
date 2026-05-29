@@ -144,7 +144,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // observed event yields a single refreshNeeded — Controller
         // already debounces, so a focus burst collapses into one
         // backend.workspaces() round-trip.
-        let observer = WindowEventObserver { [eventContinuation] in
+        //
+        // A `.created` event additionally records the new window's id
+        // as trusted (so `reconcile` fast-paths it past the two-tick
+        // gate) and schedules ONE follow-up refresh ~250ms later: at
+        // create time the window is often listed but transiently
+        // `isOnscreen=false`, so the immediate (debounced) reconcile
+        // can miss it; the follow-up catches it without waiting for
+        // the 2s poll. The trusted record is enqueued on `cliQueue`
+        // BEFORE the yield, so it's in place by the time the
+        // debounced refresh's reconcile reads it (serial FIFO).
+        let observer = WindowEventObserver { [weak self, eventContinuation] event in
+            if case let .created(wid) = event, let self {
+                let t0 = Date()
+                cliQueue.async { self.trustedNew[wid] = t0 }
+                Log.debug("native: window created wid=\(wid.serverID)"
+                    + " -> trusted (fast-add)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    eventContinuation.yield(.refreshNeeded)
+                }
+            }
             eventContinuation.yield(.refreshNeeded)
         }
         self.eventObserver = observer
@@ -280,11 +299,31 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // panels auto-float on first sight so they don't fight
         // the tiler.
         let autoFloat = detectAutoFloating(live: live)
+        // Drop expired trusted-new hints, then hand the survivors to
+        // reconcile so a genuinely-new window joins on first on-screen
+        // sight (skips the two-tick gate). Non-trusted windows — incl.
+        // Space-switch `isOnscreen` flips of existing windows — still
+        // go through the gate, so its flip protection is intact.
+        let nowDate = Date()
+        trustedNew = trustedNew.filter {
+            nowDate.timeIntervalSince($0.value) < trustedNewTTL
+        }
+        let trusted = Set(trustedNew.keys)
         let result = catalog.reconcile(live: live,
                                        focused: focused,
                                        activeRect: rect,
                                        autoFloat: autoFloat,
+                                       trusted: trusted,
                                        requireConfirm: true)
+        // Latency telemetry + consume: any trusted id now in the
+        // catalog was fast-added — log create→add dt and forget the
+        // hint so it can't act again.
+        for id in trusted where catalog.windowMap[id] != nil {
+            if let t0 = trustedNew.removeValue(forKey: id) {
+                let dt = Int(Date().timeIntervalSince(t0) * 1000)
+                Log.debug("native: fast-add wid=\(id.serverID) dt=\(dt)ms")
+            }
+        }
         if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
@@ -366,6 +405,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// enough to cover the AX-event + reconcile settling, short
     /// enough not to hijack the user's next deliberate action.
     private let closeFocusWindow: TimeInterval = 0.6
+
+    /// CGWindowIDs of windows that fired `kAXWindowCreated`, mapped
+    /// to the create timestamp. A genuinely-new window can't be a
+    /// Space-switch `isOnscreen` flip of an existing one, so
+    /// `reconcile` adds these on first on-screen sight — skipping the
+    /// two-tick gate that otherwise costs up to one ~2s poll. Touched
+    /// only on `cliQueue` (write from the observer closure's
+    /// `cliQueue.async`, drain in `refreshCatalog`, both serial) so no
+    /// lock is needed. Entries are consumed on add and expire after
+    /// `trustedNewTTL` (e.g. a transient window that closed before it
+    /// ever became on-screen).
+    private var trustedNew: [WindowID: Date] = [:]
+    /// Upper bound a trusted-new hint lives before it's discarded if
+    /// the window never materialised on-screen. ~matches the poll
+    /// cadence — long enough for the create→settle transient, short
+    /// enough that a stale hint can't fast-add much later.
+    private let trustedNewTTL: TimeInterval = 2.0
 
     /// What the sidebar should show as focused. Normally the AX
     /// frontmost (`axFocus`). But within `closeFocusWindow` after
