@@ -253,7 +253,7 @@ facet --toggle=NAME               # toggle NAME
 facet --set-layout=NAME              # bsp | stack | tall | centered-master | grid | spiral | monocle | float
 facet --retile                       # re-apply active WS's layout (any tiling mode)
 facet window --toggle-float          # flip focused window float flag
-facet window --toggle-orientation    # rotate focused window's parent split (bsp)
+facet window --toggle-orientation    # bsp: rotate parent split / tall: flip wide↔tall
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
 facet window --grow-master|--shrink-master   # master width ±0.05 (tall / centered-master)
 facet window --inc-master|--dec-master       # master window count ±1 (tall / centered-master)

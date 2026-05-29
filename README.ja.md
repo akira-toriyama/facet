@@ -242,7 +242,7 @@ facet --toggle=NAME               # NAME トグル
 facet --set-layout=NAME              # bsp | stack | tall | centered-master | grid | spiral | monocle | float
 facet --retile                       # active WS のレイアウトを再適用 (任意の tiling mode)
 facet window --toggle-float          # focused window の float flag flip
-facet window --toggle-orientation    # focused window の親 split を 90 度回転 (bsp)
+facet window --toggle-orientation    # bsp: 親 split を 90 度回転 / tall: wide↔tall 反転
 facet window --cycle-stack=next|prev # stack の次 / 前メンバーへ循環
 facet window --grow-master|--shrink-master   # master 幅 ±0.05 (tall / centered-master)
 facet window --inc-master|--dec-master       # master 窓数 ±1 (tall / centered-master)

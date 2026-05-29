@@ -640,7 +640,8 @@ struct WorkspaceCatalog {
                                            delta: CGFloat) -> Bool {
         let cur = params(of: n1Based)
         let next = LayoutParams(masterRatio: cur.masterRatio + delta,
-                                masterCount: cur.masterCount)
+                                masterCount: cur.masterCount,
+                                orientation: cur.orientation)
         layoutParams[n1Based] = next
         return next.masterRatio != cur.masterRatio
     }
@@ -652,9 +653,23 @@ struct WorkspaceCatalog {
                                            delta: Int) -> Bool {
         let cur = params(of: n1Based)
         let next = LayoutParams(masterRatio: cur.masterRatio,
-                                masterCount: cur.masterCount + delta)
+                                masterCount: cur.masterCount + delta,
+                                orientation: cur.orientation)
         layoutParams[n1Based] = next
         return next.masterCount != cur.masterCount
+    }
+
+    /// Flip the master axis (Tall ↔ Wide) for `n1Based`. Always
+    /// changes, so returns `true`. Other knobs preserved.
+    @discardableResult
+    mutating func toggleMasterOrientation(workspace n1Based: Int) -> Bool {
+        let cur = params(of: n1Based)
+        let flipped: LayoutOrientation =
+            cur.orientation == .vertical ? .horizontal : .vertical
+        layoutParams[n1Based] = LayoutParams(masterRatio: cur.masterRatio,
+                                             masterCount: cur.masterCount,
+                                             orientation: flipped)
+        return true
     }
 
     /// Resolve the cached pid for a window, or nil if it's not in
