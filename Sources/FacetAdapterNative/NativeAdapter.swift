@@ -880,6 +880,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var slideDuration: TimeInterval = 0
     /// Easing for the in-flight animation; set when the driver starts.
     private var slideCurve: (Double) -> Double = SlideCurve.easeOutCubic
+    /// True while the in-flight slide is a retile (no park bookkeeping),
+    /// so an interrupt can drop it and retarget from current positions.
+    private var slideIsRetile = false
     /// CADisplayLink (macOS 14+) driving the slide; `AnyObject?` keeps
     /// the stored type available on macOS 13. nil = Timer fallback.
     private var displayLink: AnyObject?
@@ -919,21 +922,42 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// If a slide is mid-flight, stop its clock and jump straight to its
-    /// settle. Guards against overlap when switches arrive faster than
-    /// the animation, and must run before any catalog mutation so the
-    /// outgoing windows are recorded parked first.
-    private func finishSlideIfRunning() {
-        guard let finish = slideFinish else { return }
+    /// Stop the per-frame driver (display link / timer). Doesn't settle.
+    private func stopSlideClock() {
         if #available(macOS 14.0, *), let link = displayLink as? CADisplayLink {
             link.invalidate()
         }
         displayLink = nil
         slideTimer?.invalidate()
         slideTimer = nil
+    }
+
+    /// Run the in-flight slide's settle now (on normal completion, or a
+    /// hard finish that must apply the final state + park bookkeeping).
+    private func finishSlideIfRunning() {
+        guard let finish = slideFinish else { return }
+        stopSlideClock()
         slideStart = nil
         slideFinish = nil
         finish()
+    }
+
+    /// Interrupt the in-flight slide for a *new* transition. A retile
+    /// carries no park bookkeeping, so just drop it — the windows stay
+    /// where they are mid-slide and the new animation redirects from
+    /// their current positions (no jump to the old target). A switch
+    /// must still settle (its outgoing windows have to be recorded
+    /// parked before the catalog mutates again).
+    private func cancelSlideForRetarget() {
+        guard slideFinish != nil else { return }
+        if slideIsRetile {
+            stopSlideClock()
+            slideAnims = []
+            slideStart = nil
+            slideFinish = nil
+        } else {
+            finishSlideIfRunning()
+        }
     }
 
     /// One animation frame: advance progress and write each window's
@@ -1096,6 +1120,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             self.eventContinuation.yield(.refreshNeeded)
         }
 
+        slideIsRetile = false
         startSlideDriver(settle)
         Log.debug("native: animateSwitch \(oldActive)->\(newActive) "
             + "anims=\(slideAnims.count) dir=\(Int(dir))")
@@ -1135,6 +1160,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             self.applyLayout(workspace: n1Based, rect: rect)
             self.eventContinuation.yield(.refreshNeeded)
         }
+        slideIsRetile = true
         startSlideDriver(settle)
         Log.debug("native: animateRetile WS \(n1Based) anims=\(slideAnims.count)")
         return true
@@ -1147,7 +1173,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
         else { return }
         // A slide already running? Finish it before mutating the catalog.
-        finishSlideIfRunning()
+        cancelSlideForRetarget()
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
@@ -1382,7 +1408,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
         let target = index + 1
         let rect = activeDisplayRect()
-        finishSlideIfRunning()
+        cancelSlideForRetarget()
         // BSP → Stack migration parks all but the focused window
         // at the anchor sliver. The catalog's setMode discards
         // layoutTrees / stackOrders entries, so we rely on
@@ -1485,7 +1511,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "(WS \(catalog.activeIndex) is \(mode))")
             return
         }
-        finishSlideIfRunning()
+        cancelSlideForRetarget()
         let rect = activeDisplayRect()
         // 枠 E Phase 2: animate the in-place reflow. animateRetile owns
         // its settle (applyLayout + refresh); fall through to instant
@@ -1636,7 +1662,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// a user action (master / orientation / float). Mirrors the retile
     /// path — animate when on, else snap — and owns the refresh yield.
     private func reflowActive(rect: CGRect) {
-        finishSlideIfRunning()
+        cancelSlideForRetarget()
         if config.effectiveAnimationsEnabled,
            animateRetile(workspace: catalog.activeIndex, rect: rect) {
             return
