@@ -23,8 +23,20 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import QuartzCore
 import FacetAccessibility
 import FacetCore
+
+/// NSObject shim so a `CADisplayLink` (target/selector only on macOS)
+/// can drive `NativeAdapter.slideTick`, which isn't an NSObject. The
+/// adapter owns the shim; the back-ref is weak.
+private final class SlideTicker: NSObject {
+    weak var adapter: NativeAdapter?
+    init(_ adapter: NativeAdapter) { self.adapter = adapter; super.init() }
+    // `Any` (not CADisplayLink) so the signature stays available on
+    // macOS 13; the link arg is unused. The 14+ display link calls it.
+    @objc func tick(_ sender: Any) { adapter?.slideTick() }
+}
 
 public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public let name = "native"
@@ -866,6 +878,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var slideAnims: [(ax: AXUIElement, slide: WindowSlide)] = []
     private var slideStart: Date?
     private var slideDuration: TimeInterval = 0
+    /// CADisplayLink (macOS 14+) driving the slide; `AnyObject?` keeps
+    /// the stored type available on macOS 13. nil = Timer fallback.
+    private var displayLink: AnyObject?
+    private lazy var slideTicker = SlideTicker(self)
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
     /// derive from the index delta. `switchWorkspaceRelative` sets it so
     /// next/prev always slide the intuitive way even when they wrap
@@ -907,10 +923,39 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// outgoing windows are recorded parked first.
     private func finishSlideIfRunning() {
         guard let finish = slideFinish else { return }
+        if #available(macOS 14.0, *), let link = displayLink as? CADisplayLink {
+            link.invalidate()
+        }
+        displayLink = nil
         slideTimer?.invalidate()
         slideTimer = nil
+        slideStart = nil
         slideFinish = nil
         finish()
+    }
+
+    /// One animation frame: advance progress and write each window's
+    /// origin. Runs on the main runloop (CADisplayLink on macOS 14+,
+    /// else a 120 Hz timer). fileprivate so the SlideTicker shim can
+    /// call it; a late tick after settle no-ops on the nil slideStart.
+    fileprivate func slideTick() {
+        guard let begin = slideStart else { return }
+        let raw = min(1.0, -begin.timeIntervalSinceNow / slideDuration)
+        let e = SlideCurve.easeOutCubic(raw)
+        // AX is thread-safe per element; we vouch for the fan-out.
+        nonisolated(unsafe) let anims = slideAnims
+        // Many windows: fan out the per-frame writes so the serial sum
+        // doesn't blow the frame budget. Few windows: stay serial.
+        if anims.count >= 6 {
+            DispatchQueue.concurrentPerform(iterations: anims.count) { i in
+                AXGeom.setPosition(anims[i].ax, anims[i].slide.origin(atEased: e))
+            }
+        } else {
+            for a in anims {
+                AXGeom.setPosition(a.ax, a.slide.origin(atEased: e))
+            }
+        }
+        if raw >= 1.0 { finishSlideIfRunning() }
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
@@ -987,36 +1032,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         slideStart = Date()
         slideDuration = config.effectiveAnimationDuration
         slideFinish = settle
-        // Drive on the main runloop. Reads cached state via `self` so the
-        // non-Sendable AX elements don't cross the @Sendable closure as
-        // captured locals (no per-frame lookup, no Sendable warning).
-        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) {
-            [weak self] t in
-            guard let self, let begin = self.slideStart
-            else { t.invalidate(); return }
-            let raw = min(1.0, -begin.timeIntervalSinceNow / self.slideDuration)
-            let e = SlideCurve.easeOutCubic(raw)
-            // AX is thread-safe per element; we vouch for the fan-out.
-            nonisolated(unsafe) let anims = self.slideAnims
-            // Each AX write is a cross-process call; with many windows the
-            // serial sum can blow the frame budget. Fan out per window
-            // (AX is thread-safe per element) above a threshold; stay
-            // serial below it where the dispatch overhead isn't worth it.
-            if anims.count >= 6 {
-                DispatchQueue.concurrentPerform(iterations: anims.count) { i in
-                    AXGeom.setPosition(anims[i].ax, anims[i].slide.origin(atEased: e))
-                }
-            } else {
-                for a in anims {
-                    AXGeom.setPosition(a.ax, a.slide.origin(atEased: e))
-                }
+        // Prefer a CADisplayLink (vsync-locked, no timer-vs-refresh
+        // judder) on macOS 14+; fall back to a 120 Hz timer on 13. Both
+        // fire slideTick on the main runloop.
+        if #available(macOS 14.0, *), let screen = NSScreen.main {
+            let link = screen.displayLink(target: slideTicker,
+                                          selector: #selector(SlideTicker.tick(_:)))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        } else {
+            let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) {
+                [weak self] _ in self?.slideTick()
             }
-            // Settle via the stored finish (read through `self`) so the
-            // non-Sendable closure isn't captured by this @Sendable block.
-            if raw >= 1.0 { self.finishSlideIfRunning() }
+            RunLoop.main.add(timer, forMode: .common)
+            slideTimer = timer
         }
-        RunLoop.main.add(timer, forMode: .common)
-        slideTimer = timer
         Log.debug("native: animateSwitch \(oldActive)->\(newActive) "
             + "anims=\(slideAnims.count) dir=\(Int(dir))")
         return true
