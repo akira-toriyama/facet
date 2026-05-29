@@ -88,6 +88,49 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertNil(c.windowMap[wid(20)])
     }
 
+    // MARK: - Trusted-new fast-path (two-tick gate)
+
+    func testTwoTickGateDefersUntrustedNewWindow() {
+        // Under requireConfirm a new on-screen window waits for a
+        // SECOND sighting before joining the map (swallows the
+        // cross-Space `isOnscreen` flip during a Space switch).
+        var c = WorkspaceCatalog()
+        let r1 = c.reconcile(live: [window(10)], requireConfirm: true)
+        XCTAssertEqual(r1, .init(added: 0, removed: 0))
+        XCTAssertNil(c.windowMap[wid(10)])
+        let r2 = c.reconcile(live: [window(10)], requireConfirm: true)
+        XCTAssertEqual(r2, .init(added: 1, removed: 0))
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+    }
+
+    func testTrustedNewWindowSkipsGate() {
+        // A genuinely-new window (kAXWindowCreated → trusted) joins on
+        // the FIRST sighting even under requireConfirm — this is the
+        // add-latency win.
+        var c = WorkspaceCatalog()
+        let r = c.reconcile(live: [window(10)],
+                            trusted: [wid(10)],
+                            requireConfirm: true)
+        XCTAssertEqual(r, .init(added: 1, removed: 0))
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+    }
+
+    func testTrustedDoesNotOverrideOffScreenDefer() {
+        // Trusted bypasses only the two-tick gate, not the off-screen
+        // defer that runs before it: a window still transiently
+        // off-screen mid-creation must NOT slip in.
+        var c = WorkspaceCatalog()
+        let offscreen = Window(id: wid(10), pid: 1000, appName: "A",
+                               title: "w10", isFocused: false,
+                               isFloating: false, frame: nil,
+                               isOnscreen: false)
+        let r = c.reconcile(live: [offscreen],
+                            trusted: [wid(10)],
+                            requireConfirm: true)
+        XCTAssertEqual(r, .init(added: 0, removed: 0))
+        XCTAssertNil(c.windowMap[wid(10)])
+    }
+
     func testReconcileDoesNotMovePreexistingWindow() {
         // Window assigned to WS 3 must stay there even after
         // active flips back to 1 and reconcile runs.

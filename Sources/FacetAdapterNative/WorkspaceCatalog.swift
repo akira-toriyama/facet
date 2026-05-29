@@ -195,11 +195,19 @@ struct WorkspaceCatalog {
     /// Pid is refreshed on every reconcile even for known windows;
     /// pid is stable across a process's lifetime, but if a window
     /// id is ever reused after its owner died the fresh value wins.
+    ///
+    /// `trusted` lists ids the adapter saw a `kAXWindowCreated` for —
+    /// genuinely new windows, which can't be a Space-switch
+    /// `isOnscreen` flip of an existing one. They skip the two-tick
+    /// gate (added on first on-screen sight) but still honour
+    /// `allowAutoAdd` and the off-screen defer, so off-Space windows
+    /// and the flip case remain protected.
     @discardableResult
     mutating func reconcile(live: [Window],
                                    focused: WindowID? = nil,
                                    activeRect: CGRect = .zero,
                                    autoFloat: Set<WindowID> = [],
+                                   trusted: Set<WindowID> = [],
                                    requireConfirm: Bool = false)
         -> ReconcileResult
     {
@@ -279,8 +287,14 @@ struct WorkspaceCatalog {
             // Tests that don't simulate the poll loop opt out
             // via `requireConfirm: false` and get the old
             // single-call commit behaviour.
+            //
+            // `trusted` ids (a `kAXWindowCreated` fired for them) skip
+            // the gate: a brand-new window can't be the cross-Space
+            // flip the gate defends against, so making it wait a
+            // second tick only adds the ~2s latency we're removing.
             if requireConfirm,
-               !pendingAddCandidates.contains(id)
+               !pendingAddCandidates.contains(id),
+               !trusted.contains(id)
             {
                 pendingAddCandidates.insert(id)
                 continue
