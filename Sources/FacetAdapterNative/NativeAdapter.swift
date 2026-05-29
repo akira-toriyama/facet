@@ -29,13 +29,16 @@ import FacetCore
 public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public let name = "native"
 
-    /// Advertised layout-mode set. `float` is the per-WS default
-    /// but isn't advertised here because it isn't a *user-pickable
-    /// mode* in the menu sense — it's the "no tiling applied"
-    /// baseline. `bsp` / `stack` are the stateful Phase γ modes;
-    /// `LayoutRegistry.names` adds the stateless engines (Theme B —
-    /// memory: facet-theme-b-decisions).
-    public let layoutModes = ["bsp", "stack"] + LayoutRegistry.names
+    /// Advertised layout-mode set — drives the layout picker and the
+    /// accepted `--layout` values. `bsp` / `stack` are the stateful
+    /// Phase γ modes; `LayoutRegistry.names` adds the stateless
+    /// engines (Theme B — memory: facet-theme-b-decisions). `float`
+    /// is the "no tiling applied" baseline: picking it leaves the
+    /// WS's windows exactly where they are (facet stops controlling
+    /// geometry but still tracks them / parks on Space switch). The
+    /// CLI's `canonicalLayoutModes` already lists it; advertise it
+    /// here too so it appears in the right-click picker.
+    public let layoutModes = ["bsp", "stack", "float"] + LayoutRegistry.names
 
     // MARK: - State (delegated to catalog)
 
