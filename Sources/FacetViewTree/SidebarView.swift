@@ -35,6 +35,8 @@ public final class SidebarView: NSView {
         let title: String
         let text: String       // handle / header label
         let mode: String       // header: WS layout engine
+        let isMaster: Bool     // window: shows a right-edge `master` chip
+        let isFloating: Bool   // window: shows a right-edge `float` chip
     }
     private var cells: [Cell] = []
     private var hoverIdx: Int?            // row under the pointer
@@ -218,7 +220,7 @@ public final class SidebarView: NSView {
         cells.append(Cell(row: hbr, kind: 0, hot: false, firstHeader: false,
                           pid: 0, app: "", title: "",
                           text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
-                          mode: ""))
+                          mode: "", isMaster: false, isFloating: false))
         y += handleRowH
 
         if searching {
@@ -236,7 +238,9 @@ public final class SidebarView: NSView {
                     cells.append(Cell(row: wr, kind: 2, hot: hot(win),
                                       firstHeader: false, pid: win.pid,
                                       app: win.appName, title: wt,
-                                      text: "", mode: ""))
+                                      text: "", mode: "",
+                                      isMaster: win.isMaster,
+                                      isFloating: win.isFloating))
                     y += rh
                 }
             }
@@ -253,7 +257,8 @@ public final class SidebarView: NSView {
                 cells.append(Cell(row: hr, kind: 1, hot: ws.index == effActive,
                                   firstHeader: firstHeader, pid: 0, app: "",
                                   title: "", text: t.uppercased(),
-                                  mode: ws.layoutMode))
+                                  mode: ws.layoutMode,
+                                  isMaster: false, isFloating: false))
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
@@ -266,7 +271,9 @@ public final class SidebarView: NSView {
                     cells.append(Cell(row: wr, kind: 2, hot: hot(win),
                                       firstHeader: false, pid: win.pid,
                                       app: win.appName, title: wt,
-                                      text: "", mode: ""))
+                                      text: "", mode: "",
+                                      isMaster: win.isMaster,
+                                      isFloating: win.isFloating))
                     y += rh
                 }
                 wsBands[ws.index] = start...(y + 3)
@@ -651,10 +658,27 @@ public final class SidebarView: NSView {
                     img.draw(in: NSRect(x: iconX, y: iconY,
                                         width: iconSize, height: iconSize))
                 }
+                // Right-edge label (Task 3, dim text only — no
+                // background chip). master and float are mutually
+                // exclusive in the catalog: a floated window is
+                // detached from the layout and can't be its master.
+                let labelText: String? =
+                    c.isMaster ? "master" :
+                    c.isFloating ? "float" : nil
+                let labelAttrs: [NSAttributedString.Key: Any] = [
+                    .font: uiFont(windowFontSize - 1, .regular),
+                    .foregroundColor: pal.dim,
+                    .paragraphStyle: para,
+                ]
+                let labelWidth: CGFloat = labelText.map {
+                    ($0 as NSString).size(withAttributes: labelAttrs).width
+                } ?? 0
+                let labelGap: CGFloat = labelWidth > 0 ? 8 : 0
                 // Title present → two lines; absent → compact,
                 // app name vertically centred.
                 let tx = iconX + iconSize + 8
-                let tw = max(bounds.width - tx - rowPadX, 0)
+                let tw = max(bounds.width - tx - rowPadX
+                             - labelWidth - labelGap, 0)
                 let hasTitle = !c.title.isEmpty
                 let appY = hasTitle ? row.minY + 6 : row.midY - 9
                 (c.app as NSString).draw(
@@ -674,6 +698,14 @@ public final class SidebarView: NSView {
                             .foregroundColor: pal.dim,
                             .paragraphStyle: para,
                         ])
+                }
+                if let labelText {
+                    (labelText as NSString).draw(
+                        in: NSRect(
+                            x: bounds.width - rowPadX - labelWidth,
+                            y: row.midY - 8,
+                            width: labelWidth, height: 16),
+                        withAttributes: labelAttrs)
                 }
             }
 
