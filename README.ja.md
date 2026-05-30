@@ -293,56 +293,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `"ignore"` は完全に非管理。 テンプレには「極小の無名ポップアップを
   float する」 デフォルトを 1 件同梱。 (システムの sheet / dialog /
   palette は AX role で自動 float される。)
-- `[workspace]` テーブル — `1 = "dev"`, `2 = "ide"`, … (1-indexed、
-  sparse OK; 欠番 index は `workspace --focus=N` で invalid 扱い)。
 - `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
   Mission Control 順の位置。 `[space.N]` が**1つも無ければ**全 native
   Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
   セクションのある Space だけ facet が管理し、 無い Space は完全に
   ノータッチ（窓そのまま・パネル非表示）。
-- `[workspace] setup-files = [...]` — 起動時に 1 度だけ実行される
-  実行可能 script のパス配列（Vitest 流）。 詳細は下の
-  「Workspace setup hooks」 を参照。
-
-### Workspace setup hooks
-
-facet 自身は window-to-workspace の割当を永続化しない。
-`setup-files` config key で、 起動時に「あなたの好みのレイアウト」
-を再構築する script を自分で書ける — script は facet の CLI
-listener が立ち上がった **後** に発火するので、 そのまま
-`facet status` / `facet workspace --focus=N` / `facet window --move-to=N`
-を呼べる (hotkey と同じ仕組み)。
-
-```toml
-[workspace]
-setup-files = ["~/.config/facet/setup.sh"]
-```
-
-```sh
-# ~/.config/facet/setup.sh (chmod +x)
-#!/usr/bin/env bash
-# アプリを希望の WS に予め立ち上げる。 新しい window は常に
-# 「現在アクティブな facet WS」 に landing するので、 先に
-# `facet workspace --focus=N` で切り替えてから `open` するのがコツ。
-facet workspace --focus=2 && open -ga Slack
-sleep 0.4               # Slack の window 登録を少し待つ
-facet workspace --focus=1 && open -ga "Safari"
-sleep 0.4
-facet workspace --focus=1     # 最後に「見たい WS」 に戻して終了
-```
-
-(`facet window --move-to=N` は focused window 専用、 `--id` flag
-は現状ない。 だから「事前に WS を切り替えてから open」 が
-今正直に書ける唯一の起動 staging パターン。)
-
-注意点:
-- パス内の `~` / `$VAR` / `${VAR}` は展開される。
-- script は実行可能 (`chmod +x`) であること。
-- spawn 後は fire-and-forget — hung script で facet 起動が
-  止まる事はない。 エラー (file 無し / 非実行 / non-zero exit)
-  は `facet status` の `lastError` スロットに出る。
-- full restart 時のみ再実行、 `facet --reload` では走らない (意図的)。
-- stdout / stderr は `/tmp/facet.log` に記録される (`facet --debug` で可視化)。
 
 ## CLI
 
@@ -461,22 +416,6 @@ action-keys  = "ctrl + fn - left"
 
 ハック？ 間違いなく。 1 フレームに気づいてしまう人へのささやかな
 ラブレター？ それも。 💙
-
-### Workspace shell ヘルパー
-
-facet 本体は `config.toml` に書き込まない方針。 repo 同梱の
-shell スクリプトで atomic write (`mktemp` + `mv`、 ConfigWatcher
-が中途半端な状態を見ない契約):
-
-```sh
-./scripts/add_workspace.sh 1 dev      # [workspace] に 1 = "dev" 追加
-./scripts/add_workspace.sh 5          # 名前空、 スロットだけ作る
-./scripts/remove_workspace.sh 2       # エントリ 2 を削除 (冪等)
-```
-
-facet の `ConfigWatcher` が変更を自動 pick up。 `facet --reload`
-は明示 trigger 版で、 スクリプトが反映タイミングを確実に制御
-したい時に使う。
 
 ## デバッグ
 

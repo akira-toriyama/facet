@@ -53,46 +53,32 @@ final class FacetConfigTests: XCTestCase {
                        "clamp high")
     }
 
-    func testEffectiveWorkspaceListDefaultWhenUnset() {
-        let c = FacetConfig()
-        let list = c.effectiveWorkspaceList
-        XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
-        XCTAssertEqual(list.map(\.index), [1, 2, 3, 4, 5])
-        XCTAssertTrue(list.allSatisfy { $0.name.isEmpty })
-    }
-
-    func testEffectiveWorkspaceListReadsConfiguredEntries() {
+    func testEffectiveWorkspaceListReadsConfiguredSpaceEntries() {
         var c = FacetConfig()
-        c.workspaceNames = [1: "dev", 3: "sns", 5: ""]
-        let list = c.effectiveWorkspaceList
+        c.spaceWorkspaceNames = [1: [1: "dev", 3: "sns", 5: ""]]
+        let list = c.effectiveWorkspaceList(forSpaceOrdinal: 1)
         XCTAssertEqual(list.map(\.index), [1, 3, 5])
         XCTAssertEqual(list.map(\.name), ["dev", "sns", ""])
     }
 
     func testEffectiveWorkspaceListDropsNonPositiveKeys() {
         var c = FacetConfig()
-        c.workspaceNames = [0: "zero", -1: "neg", 2: "ok"]
-        let list = c.effectiveWorkspaceList
+        c.spaceWorkspaceNames = [1: [0: "zero", -1: "neg", 2: "ok"]]
+        let list = c.effectiveWorkspaceList(forSpaceOrdinal: 1)
         XCTAssertEqual(list.map(\.index), [2])
         XCTAssertEqual(list.map(\.name), ["ok"])
     }
 
-    func testFromTOMLPopulatesWorkspaceNames() {
+    func testFromTOMLPopulatesSpaceWorkspaceNames() {
         let parsed = parseTOMLSubset("""
-            [workspace]
-            setup-files = ["x.sh"]
+            [space.1]
             1 = "dev"
             2 = "sns"
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.workspaceNames[1], "dev")
-        XCTAssertEqual(c.workspaceNames[2], "sns")
-        // Non-int meta keys (setup-files etc.) must not bleed into
-        // workspaceNames — a parser bug that coerced unparseable
-        // string keys to 0 would fail this count check (and would
-        // also surface as a phantom index-0 entry).
-        XCTAssertEqual(c.workspaceNames.count, 2)
-        XCTAssertNil(c.workspaceNames[0])
+        XCTAssertEqual(c.spaceWorkspaceNames[1]?[1], "dev")
+        XCTAssertEqual(c.spaceWorkspaceNames[1]?[2], "sns")
+        XCTAssertEqual(c.spaceWorkspaceNames[1]?.count, 2)
     }
 
     // MARK: - [[exclude]] rules
@@ -201,23 +187,21 @@ final class FacetConfigTests: XCTestCase {
                       "SkyLight-unavailable always managed")
     }
 
-    func testEffectiveWorkspaceListForSpaceOrdinalFallsBack() {
+    func testEffectiveWorkspaceListForSpaceOrdinal() {
         var c = FacetConfig()
-        c.workspaceNames = [1: "g1", 2: "g2", 3: "g3"]   // global = 3
         c.spaceWorkspaceNames = [1: [1: "a", 2: "b"]]    // space 1 = 2
 
         // Configured ordinal → per-space list.
         XCTAssertEqual(
             c.effectiveWorkspaceList(forSpaceOrdinal: 1).map(\.name),
             ["a", "b"])
-        // Unconfigured ordinal → global fallback.
-        XCTAssertEqual(
-            c.effectiveWorkspaceList(forSpaceOrdinal: 2).map(\.name),
-            ["g1", "g2", "g3"])
-        // nil ordinal (SkyLight unavailable / single-space) → global.
-        XCTAssertEqual(
-            c.effectiveWorkspaceList(forSpaceOrdinal: nil).map(\.index),
-            [1, 2, 3])
+        // Unconfigured ordinal → defaultWorkspaceCount unnamed slots.
+        let unconfigured = c.effectiveWorkspaceList(forSpaceOrdinal: 2)
+        XCTAssertEqual(unconfigured.count, FacetConfig.defaultWorkspaceCount)
+        XCTAssertTrue(unconfigured.allSatisfy { $0.name.isEmpty })
+        // nil ordinal → default slots.
+        let nilList = c.effectiveWorkspaceList(forSpaceOrdinal: nil)
+        XCTAssertEqual(nilList.count, FacetConfig.defaultWorkspaceCount)
     }
 
     func testEmptyTOMLYieldsAllDefaults() {
@@ -225,61 +209,6 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertNil(c.effectiveDefaultView)
         XCTAssertEqual(c.effectiveTheme, "terminal")
         XCTAssertEqual(c.effectiveGridCols, 4)
-    }
-
-    // MARK: - setup-files + expandPath
-
-    func testSetupFilesParseFromTOML() {
-        let parsed = parseTOMLSubset(#"""
-            [workspace]
-            setup-files = ["~/foo.sh", "/etc/bar.sh"]
-            """#)
-        let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.setupFiles, ["~/foo.sh", "/etc/bar.sh"])
-    }
-
-    func testEffectiveSetupFilesEmptyWhenUnset() {
-        XCTAssertEqual(FacetConfig().effectiveSetupFiles, [])
-    }
-
-    func testEffectiveSetupFilesExpandsTilde() {
-        var c = FacetConfig()
-        c.setupFiles = ["~/foo.sh"]
-        let home = ProcessInfo.processInfo.environment["HOME"]
-            ?? NSHomeDirectory()
-        XCTAssertEqual(c.effectiveSetupFiles, ["\(home)/foo.sh"])
-    }
-
-    func testEffectiveSetupFilesDropsEmptyAfterExpansion() {
-        var c = FacetConfig()
-        c.setupFiles = ["", "  ", "/keep.sh"]
-        XCTAssertEqual(c.effectiveSetupFiles, ["/keep.sh"])
-    }
-
-    func testExpandPathDollarVar() {
-        setenv("FACET_TEST_VAR", "/from-env", 1)
-        defer { unsetenv("FACET_TEST_VAR") }
-        XCTAssertEqual(expandPath("$FACET_TEST_VAR/x"),
-                       "/from-env/x")
-    }
-
-    func testExpandPathBracedVar() {
-        setenv("FACET_TEST_VAR", "/from-env", 1)
-        defer { unsetenv("FACET_TEST_VAR") }
-        XCTAssertEqual(expandPath("${FACET_TEST_VAR}-suffix"),
-                       "/from-env-suffix")
-    }
-
-    func testExpandPathUnsetVarBecomesEmpty() {
-        unsetenv("FACET_DEFINITELY_UNSET")
-        XCTAssertEqual(expandPath("$FACET_DEFINITELY_UNSET/x"),
-                       "/x")
-    }
-
-    func testExpandPathLiteralTildeMidString() {
-        // Only `~` at start or `~/` expands; mid-path `~` stays
-        // literal (matches sh).
-        XCTAssertEqual(expandPath("/foo/~bar"), "/foo/~bar")
     }
 
     // MARK: - Disk loader

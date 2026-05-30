@@ -107,8 +107,8 @@ use:
 
 - **Native adapter is the sole backend** (v2.0.0 retired rift).
   M5 complete: Phase α (workspaces + focus + AX
-  events), β (anchor hide, closeWindow, setupFiles
-  startup hook), γ (BSP + stack tiling, AX-role auto-float for
+  events), β (anchor hide, closeWindow), γ (BSP + stack tiling,
+  AX-role auto-float for
   sheets / dialogs / palettes; tiling CLI = `facet workspace
   --layout=NAME` / `--retile` plus `facet window --toggle-float` /
   `--toggle-orientation` / `--cycle-stack=next|prev` — reshaped to

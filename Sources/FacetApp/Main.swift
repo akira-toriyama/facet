@@ -160,9 +160,8 @@ enum FacetApp {
                                              config.toml to persist)
           facet --quit                       terminate the server
           facet --reload                     re-read config.toml + apply
-                                             (theme / preview-mode /
-                                             [workspaces]). default-view
-                                             and setup-files need a real
+                                             (theme / preview-mode).
+                                             default-view needs a real
                                              restart. The server also
                                              auto-reloads on file edits
                                              via FSEvents — this flag is

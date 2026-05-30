@@ -77,10 +77,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     /// 1-based Mission-Control ordinal of the active native Space
     /// (user Spaces only). Selects the `[space.N]` workspace config;
-    /// `nil` → fall back to the global `[workspace]`. Refreshed on
-    /// every Space swap. May briefly go stale if the user reorders
-    /// Spaces in Mission Control without switching — a cosmetic
-    /// name/count mismatch only (memory: facet-per-native-space-ws).
+    /// `nil` → fall back to `defaultWorkspaceCount` unnamed slots.
+    /// Refreshed on every Space swap. May briefly go stale if the
+    /// user reorders Spaces in Mission Control without switching —
+    /// a cosmetic name/count mismatch only
+    /// (memory: facet-per-native-space-ws).
     private var activeSpaceOrdinal: Int?
 
     /// Snapshot of the last `workspaces()` build, returned as-is on
@@ -91,7 +92,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// list each tick. Note: this captures the config at adapter
     /// init time; `Controller.reloadConfig()` re-reads
     /// `config.toml` but does NOT push the fresh value back to
-    /// the adapter, so `[workspace]` table edits during a session
+    /// the adapter, so `[space.N]` table edits during a session
     /// take effect only on restart. Wiring a config-push channel
     /// is a known follow-up.
     private let config: FacetConfig
@@ -118,7 +119,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private let errorContinuation: AsyncStream<String>.Continuation
 
     /// Init with config so workspace count + names come from the
-    /// user's `[workspace]` section. The (default = 5) fallback in
+    /// user's `[space.N]` sections. The (default = 5) fallback in
     /// FacetConfig keeps a vanilla `~/.config/facet/config.toml`
     /// usable out of the box.
     public init(config: FacetConfig) {

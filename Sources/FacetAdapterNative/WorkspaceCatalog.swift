@@ -19,7 +19,7 @@
 //   `NativeAdapter` translates at the seam (`index + 1` on entry,
 //   `index - 1` on snapshot emit). Keeping the catalog 1-based
 //   internally matches what the user sees in `facet status` and
-//   `config.toml`'s `[workspace]` table.
+//   `config.toml`'s `[space.N]` tables.
 //
 // Why `WindowSlot` carries `pid` alongside `workspace`
 //
