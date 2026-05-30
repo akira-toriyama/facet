@@ -261,11 +261,9 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
-# Virtual-workspace behavior
+# Workspace behavior (no keys — informational only)
 # -----------------------------------------------------------------
-[workspace]
-
-# How hiding works (fixed behaviour — there is no key to set here):
+# How hiding works (fixed behaviour):
 # facet parks the windows of a workspace you're not looking at at a
 # 1×41 px sliver in the bottom-right corner. Instant, no animation,
 # and the windows still appear in Mission Control so you can recover
@@ -273,34 +271,9 @@ action = "ignore"
 # minimum; true hide (gone from Mission Control + Cmd-Tab) isn't
 # possible via public APIs, and facet stays inside that contract.
 
-# External shell-hook setup scripts, run once at startup AFTER
-# facet's CLI listener (DNC) is live so the script can immediately
-# call `facet workspace --focus=N` / `facet window --move-to=N` /
-# `facet status`. Vitest-style: facet itself never persists window
-# assignments — this hook is your escape hatch to recreate the
-# layout you want on launch.
-#
-# Use it for, e.g.:
-#   - Pin Slack to WS 3, Safari to WS 1 (after they auto-launch).
-#   - Pre-open a terminal in WS 2 (via `open -na Terminal`) then
-#     move it.
-#
-# Notes:
-#   - Each script must be executable (`chmod +x`).
-#   - `~` and `$VAR` / `${VAR}` are expanded.
-#   - Fire-and-forget after spawn — a hung script can't stall
-#     facet startup. Errors (missing file, non-executable,
-#     non-zero exit) surface in `facet status` lastError.
-#   - Re-invoked on full restart only, NOT on `facet --reload`.
-#   - stdout / stderr is captured into /tmp/facet.log (visible
-#     under `facet --debug`).
-#
-# Default (unset) = no scripts.
-# setup-files = ["~/.config/facet/setup.sh"]
-
 # Tiling (M5 Phase γ) is opt-in per workspace via the CLI; no
-# config key. Each WS defaults to "float" so existing users see
-# zero behaviour change on upgrade. Opt in with, e.g.:
+# config key. Each WS starts at `[layout] default` (see above) and
+# can be changed live with:
 #
 #     facet workspace --focus=1
 #     facet workspace --layout=bsp     # this WS now auto-tiles BSP
@@ -318,9 +291,8 @@ action = "ignore"
 # auto-floated on first sight via AX role detection — your
 # manual `--toggle-float` is always authoritative once set.
 #
-# Per-WS mode is *runtime* state (not persisted in config); use
-# `setup-files` above if you want a specific WS to come up in BSP
-# at every launch.
+# Per-WS mode is *runtime* state (not persisted in config) — set
+# `[layout] default` above to control what every WS starts at.
 
 # -----------------------------------------------------------------
 # Per-native-Space workspaces  [space.N]
@@ -348,12 +320,12 @@ action = "ignore"
 # stay correctly scoped to their real Space).
 #
 #   [space.1]            # 1st native Space — managed, 3 workspaces
-#   1 = "dev"
-#   2 = "build"
-#   3 = "logs"
+#   1 = "Dev"
+#   2 = "Web"
+#   3 = "Notes"
 #
 #   [space.2]            # 2nd native Space — managed, 2 workspaces
-#   1 = "mail"
-#   2 = "chat"
+#   1 = "Mail"
+#   2 = "Chat"
 #
 #   # 3rd+ native Spaces: no section -> facet hands-off (panel hidden)

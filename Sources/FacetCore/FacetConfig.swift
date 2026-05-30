@@ -62,30 +62,13 @@ public struct FacetConfig: Sendable {
     /// Raw; read `effectiveAnimationCurve`.
     public var animationCurve: String?
 
-    // [workspace]
-    /// Raw `[workspace]` inline-mapping entries (e.g. `1 = "dev"`).
-    /// Keys are 1-indexed integers matching what the user types
-    /// into `facet workspace --focus=N`. Empty string values are
-    /// permitted (= name-less slot, renders as "(N)" in status).
-    /// Read through `effectiveWorkspaceNames` for clamped values.
-    public var workspaceNames: [Int: String] = [:]
-
     /// Per-native-Space `[space.N]` workspace names. Outer key is the
     /// native macOS Space ordinal (Mission Control order, 1-based,
-    /// user Spaces only); inner is the same `facet WS index -> name`
-    /// shape as `workspaceNames`. A native Space without a section
-    /// falls back to the global `[workspace]` list. See memory
+    /// user Spaces only); inner is `facet WS index -> name`. A
+    /// native Space without a section falls back to
+    /// `defaultWorkspaceCount` unnamed slots. See memory
     /// `facet-per-native-space-ws`.
     public var spaceWorkspaceNames: [Int: [Int: String]] = [:]
-
-    /// External shell hooks invoked once at startup, after the
-    /// backend has subscribed to events and the CLI DNC listener
-    /// is live. Vitest-style: the user's "set things up the way I
-    /// want them on launch" escape hatch, kept outside facet's
-    /// own state (architecture.md Phase α frozen decisions).
-    /// Each path is tilde / env-var expanded before spawn; see
-    /// `effectiveSetupFiles`.
-    public var setupFiles: [String]?
 
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
@@ -192,57 +175,29 @@ public struct FacetConfig: Sendable {
 
     private func clampedGap(_ v: CGFloat?) -> CGFloat { max(0, min(1000,v ?? 0)) }
 
-    /// Facet workspace defaults when the user hasn't (yet) edited
-    /// `[workspace]` at all. 5 is the memory-confirmed
-    /// (`facet-workspace-model` N2) "control above zero, easy to
-    /// expand" starting point.
+    /// Facet workspace defaults for a Space without a `[space.N]`
+    /// section. 5 is the memory-confirmed (`facet-workspace-model`
+    /// N2) "control above zero, easy to expand" starting point.
     public static let defaultWorkspaceCount = 5
-
-    /// Tilde + env-var expanded `setupFiles` paths, in declared
-    /// order, with empty / whitespace-only entries dropped.
-    /// `~` expands against `$HOME`; `$VAR` and `${VAR}` expand
-    /// against the current environment (unset → empty string,
-    /// which then trips the empty-path drop).
-    public var effectiveSetupFiles: [String] {
-        guard let raw = setupFiles else { return [] }
-        return raw.compactMap { path in
-            let expanded = expandPath(path)
-                .trimmingCharacters(in: .whitespaces)
-            return expanded.isEmpty ? nil : expanded
-        }
-    }
-
-    /// Effective workspace list as `(index, name)` pairs, 1-indexed,
-    /// sorted by index. Returns `defaultWorkspaceCount` empty-name
-    /// slots when the user hasn't configured any.
-    ///
-    /// Negative / zero / duplicate keys are dropped (clamping;
-    /// `facet-workspace-model` N2.2 = no upper bound). Adapters
-    /// build their workspace state from this list.
-    public var effectiveWorkspaceList: [(index: Int, name: String)] {
-        Self.sortedSlots(workspaceNames)
-            ?? (1...Self.defaultWorkspaceCount).map { ($0, "") }
-    }
 
     /// Workspace list for a given native-Space ordinal (1-based,
     /// Mission Control order). Returns the `[space.N]` config when
-    /// that Space has a non-empty section, else the global
-    /// `[workspace]` list. `nil` ordinal (SkyLight unavailable, or
-    /// single-space mode) → global list.
+    /// that Space has a non-empty section, else
+    /// `defaultWorkspaceCount` unnamed slots. `nil` ordinal
+    /// (SkyLight unavailable / single-space mode) → default slots.
     public func effectiveWorkspaceList(forSpaceOrdinal ordinal: Int?)
         -> [(index: Int, name: String)]
     {
         guard let ordinal,
               let names = spaceWorkspaceNames[ordinal],
               let list = Self.sortedSlots(names)
-        else { return effectiveWorkspaceList }
+        else { return (1...Self.defaultWorkspaceCount).map { ($0, "") } }
         return list
     }
 
     /// Clamp + order a raw `index → name` map into `(index, name)`
     /// slots: drop keys < 1, sort ascending. `nil` when nothing
-    /// valid remains (lets callers fall back). Shared by the global
-    /// and per-Space workspace-list accessors.
+    /// valid remains (lets callers fall back).
     private static func sortedSlots(_ names: [Int: String])
         -> [(index: Int, name: String)]?
     {
@@ -258,8 +213,7 @@ public struct FacetConfig: Sendable {
     ///   without one is left untouched — no facet workspaces, no
     ///   window parking, and the panel hides there.
     /// - With **no** `[space.N]` sections at all, every native Space
-    ///   is managed via the global `[workspace]` default (the
-    ///   automatic per-Space behaviour).
+    ///   is managed with `defaultWorkspaceCount` unnamed slots.
     /// - `nil` ordinal (SkyLight unavailable / single-space mode) is
     ///   always managed.
     public func isSpaceManaged(ordinal: Int?) -> Bool {
@@ -325,25 +279,10 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["animation"]?["curve"] {
             c.animationCurve = s
         }
-        // [workspace]
-        if case .stringArray(let xs)? = toml["workspace"]?["setup-files"] {
-            c.setupFiles = xs
-        }
-        // [workspace] inline mapping (e.g. `1 = "dev"`). Any int
-        // key inside the section that isn't a known meta-field
-        // (`setup-files` etc.) is treated as a workspace name slot.
-        if let section = toml["workspace"] {
-            for (key, value) in section {
-                guard let idx = Int(key),
-                      case .string(let name) = value
-                else { continue }
-                c.workspaceNames[idx] = name
-            }
-        }
         // [space.N] per-native-Space workspace names. The TOML
         // parser flattens `[space.1]` to the section name "space.1";
         // N is the native-Space ordinal (Mission Control order).
-        // Inline int keys are WS-index → name, same as [workspace].
+        // Inline int keys are WS-index → name.
         for (sectionName, section) in toml
         where sectionName.hasPrefix("space.") {
             guard let ordinal = Int(sectionName.dropFirst("space.".count)),
@@ -431,50 +370,4 @@ public struct FacetConfig: Sendable {
             "facet: could not read \(path)\n".utf8))
         return .init()
     }
-}
-
-/// Expand `~` against `$HOME` and `$VAR` / `${VAR}` against the
-/// current process environment. Public for unit-testability; the
-/// only caller is `FacetConfig.effectiveSetupFiles`.
-public func expandPath(_ path: String) -> String {
-    let env = ProcessInfo.processInfo.environment
-    var s = path
-    // `~` only at the start (paths like `/foo/~bar` are kept
-    // literal — matches sh expansion).
-    if s == "~" || s.hasPrefix("~/") {
-        let home = env["HOME"] ?? NSHomeDirectory()
-        s = s == "~" ? home : home + String(s.dropFirst())
-    }
-    // Single pass over `$VAR` / `${VAR}`. Naive but matches the
-    // parser's "subset, not full sh" stance — escaping (`\$`) or
-    // nested expansion isn't supported.
-    var out = ""
-    var i = s.startIndex
-    while i < s.endIndex {
-        if s[i] == "$", let next = s.index(i, offsetBy: 1,
-                                           limitedBy: s.endIndex),
-           next < s.endIndex {
-            let braced = s[next] == "{"
-            let nameStart = braced ? s.index(after: next) : next
-            var nameEnd = nameStart
-            while nameEnd < s.endIndex {
-                let ch = s[nameEnd]
-                if braced ? (ch == "}") :
-                            !(ch.isLetter || ch.isNumber || ch == "_") {
-                    break
-                }
-                nameEnd = s.index(after: nameEnd)
-            }
-            let name = String(s[nameStart..<nameEnd])
-            if !name.isEmpty {
-                out.append(env[name] ?? "")
-                i = braced && nameEnd < s.endIndex
-                    ? s.index(after: nameEnd) : nameEnd
-                continue
-            }
-        }
-        out.append(s[i])
-        i = s.index(after: i)
-    }
-    return out
 }

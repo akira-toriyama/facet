@@ -89,7 +89,7 @@ final class TOMLTests: XCTestCase {
         XCTAssertEqual(p[""]?["n"], .int(1))
     }
 
-    // MARK: - String arrays (added for setupFiles)
+    // MARK: - String arrays
 
     func testStringArraySingleElement() {
         let p = parseTOMLSubset(#"xs = ["one"]"#)
