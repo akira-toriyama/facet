@@ -1068,9 +1068,18 @@ struct WorkspaceCatalog {
                 LayoutRegistry.engine(named: m) != nil
                 ? engineFrames(for: entry.index, in: activeRect)
                 : [:]
-            // Master = first in the WS's tiling order (order[0]). Used
-            // by the right-click menu to vary master vs non-master.
-            let master = orderedMembers(of: entry.index).first
+            // Master = first in the WS's tiling order (order[0]) —
+            // consumed by the right-click menu's master-aware
+            // actions AND the tree's right-edge `master` chip.
+            // Gated on a layout that actually has a primary slot:
+            // `float` tiles nothing, so a master label there would
+            // be a lie (an unknown mode is treated the same way —
+            // safer to render no chip than the wrong one).
+            let hasMasterSlot = m == "bsp" || m == "stack"
+                || LayoutRegistry.engine(named: m) != nil
+            let master = hasMasterSlot
+                ? orderedMembers(of: entry.index).first
+                : nil
             let wins = (byWS[entry.index] ?? []).map { w in
                 Window(id: w.id, pid: w.pid, appName: w.appName,
                        title: w.title,
