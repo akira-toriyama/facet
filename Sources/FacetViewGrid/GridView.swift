@@ -605,32 +605,28 @@ public final class GridView: NSView {
                 let modeFont = min(gridHeaderModeMaxFont,
                                    max(gridHeaderModeMinFont,
                                        (hb.height * gridHeaderModeFrac).rounded()))
+                // Layout-mode text — accent-2 semibold on the active
+                // WS, `pal.dim` on the rest. No pill background — the
+                // text + color step alone carries the badge weight,
+                // matching the tree header's restyle.
+                let modeColor = cell.isActive ? pal.accent2 : pal.dim
                 let mAttrs: [NSAttributedString.Key: Any] = [
                     .font: uiFont(modeFont, .semibold),
-                    .foregroundColor: activeColor,
+                    .foregroundColor: modeColor,
                     .paragraphStyle: lp,
                 ]
-                let mStr = cell.mode as NSString
-                let padH: CGFloat = 5
-                let chipH = (modeFont + 7).rounded()
+                let modeH = (modeFont * 1.3).rounded()
                 let nameH = nameFont * 1.25
                 let gap: CGFloat = 3
-                let startY = hb.minY + (hb.height - (nameH + gap + chipH)) / 2
+                let startY = hb.minY + (hb.height - (nameH + gap + modeH)) / 2
                 drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
                                color: nameColor, para: lp,
                                in: NSRect(x: nameX, y: startY,
                                           width: nameW, height: nameH))
-                // Layout-mode badge — accent pill, mirroring the tree
-                // header's mode chip.
-                let tw = min(mStr.size(withAttributes: mAttrs).width,
-                             max(nameW - padH * 2, 0))
-                let chip = NSRect(x: nameX, y: startY + nameH + gap,
-                                  width: tw + padH * 2, height: chipH)
-                activeColor.withAlphaComponent(0.16).setFill()
-                NSBezierPath(roundedRect: chip, xRadius: 5, yRadius: 5).fill()
-                mStr.draw(in: chip.insetBy(dx: padH,
-                                           dy: (chipH - modeFont * 1.2) / 2),
-                          withAttributes: mAttrs)
+                (cell.mode as NSString).draw(
+                    in: NSRect(x: nameX, y: startY + nameH + gap,
+                               width: nameW, height: modeH),
+                    withAttributes: mAttrs)
             }
         }
 
@@ -661,21 +657,23 @@ public final class GridView: NSView {
         ])
     }
 
-    /// A 2-column dot grid — the "drag handle" affordance at the left
-    /// of each workspace header band (header drag = WS-swap). The row
-    /// count fills ~64% of the band height (≥3 rows), so the grip
-    /// grows with the two-line header instead of floating small.
+    /// A 3-column dot grid — the "drag handle" affordance at the left
+    /// of each workspace header band (header drag = WS-swap). Two-
+    /// state height awareness mirrors the tree's grip: 10 rows in a
+    /// tall rect (the 2-line header) and 3 rows in compact rects, so
+    /// the same dot texture renders whether the user is on the tree
+    /// or the grid.
     private func drawGridGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
         let dotR: CGFloat = 1.5
-        let spacing: CGFloat = 4
-        let xs = [r.minX + dotR + 2, r.minX + dotR + 7]
-        let rows = max(3, Int((r.height * 0.8 / spacing).rounded()))
-        let span = CGFloat(rows - 1) * spacing
-        let y0 = r.midY - span / 2
+        let xs = [r.minX + dotR + 2, r.minX + dotR + 7,
+                  r.minX + dotR + 12]
+        let ys: [CGFloat] = r.height >= 28
+            ? stride(from: -18.0, through: 18.0, by: 4.0)
+                .map { r.midY + $0 }
+            : [r.midY - 4, r.midY, r.midY + 4]
         color.withAlphaComponent(alpha).setFill()
-        for i in 0..<rows {
-            let y = y0 + CGFloat(i) * spacing
-            for x in xs {
+        for x in xs {
+            for y in ys {
                 NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
                                             width: dotR * 2,
                                             height: dotR * 2)).fill()

@@ -230,7 +230,9 @@ public final class SidebarView: NSView {
                     let wt = eff(win)
                     guard fuzzyMatch(query, win.appName + " " + wt)
                     else { continue }
-                    let rh = wt.isEmpty ? windowRowH : windowRowTallH
+                    let hasLabel = win.isMaster || win.isFloating
+                    let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
+                    let rh = baseRH + (hasLabel ? 14 : 0)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -263,7 +265,12 @@ public final class SidebarView: NSView {
                 y += hh
                 for win in ws.windows {
                     let wt = eff(win)
-                    let rh = wt.isEmpty ? windowRowH : windowRowTallH
+                    let hasLabel = win.isMaster || win.isFloating
+                    let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
+                    // A 3rd line (master / float) adds 14 pt so the
+                    // label has its own row instead of crowding the
+                    // title baseline.
+                    let rh = baseRH + (hasLabel ? 14 : 0)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -490,12 +497,22 @@ public final class SidebarView: NSView {
         }
     }
 
-    /// A 2×3 dot grid — the universal "drag handle" affordance drawn
-    /// at the left of every workspace header (header drag = WS-swap).
+    /// A 2-column dot grid — the universal "drag handle" affordance
+    /// drawn at the left of every workspace header (header drag =
+    /// WS-swap). Height-aware: stretches to an 8-row vertical strip
+    /// in a tall rect (the WS header's full 2-line caption) so the
+    /// grip reads as a proper anchor for the whole header; falls
+    /// back to the compact 3-row form in shorter rects (the top
+    /// desktop-name band). The tree stays at 2×8 (vs the grid's 3×10)
+    /// because the sidebar is narrow — a wider strip would crowd the
+    /// WS name column.
     private func drawGrip(in r: NSRect, hot: Bool) {
         let dotR: CGFloat = 1.15
         let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
-        let ys = [r.midY - 4, r.midY, r.midY + 4]
+        let ys: [CGFloat] = r.height >= 28
+            ? stride(from: -14.0, through: 14.0, by: 4.0)
+                .map { r.midY + $0 }
+            : [r.midY - 4, r.midY, r.midY + 4]
         (hot ? pal.accent : pal.dim)
             .withAlphaComponent(hot ? 0.85 : 0.45).setFill()
         for x in xs {
@@ -597,7 +614,7 @@ public final class SidebarView: NSView {
                 let capH = row.maxY - capY - 6
                 // Drag grip — affords "grab to swap this workspace".
                 // Spans the full caption area so it visually anchors both
-                // lines (WS name + layout mode) as one unit.
+                // lines (WS name + layout-mode chip) as one unit.
                 let gripSpace = headerGripW + 6
                 drawGrip(in: NSRect(x: rowPadX, y: capY,
                                     width: headerGripW, height: capH),
@@ -612,18 +629,27 @@ public final class SidebarView: NSView {
                         .font: uiFont(fs, .bold),
                         .foregroundColor: c.hot ? pal.accent : pal.dim,
                         .kern: 0.6, .paragraphStyle: hp])
-                // Line 2: layout mode — always dim, smaller, regular weight
-                // (Task 1: subordinate hint; accent stays on the name only,
-                // even when the WS is active).
+                // Line 2: layout-mode text — accent-2 semibold on the
+                // active WS, `pal.dim` semibold when the WS isn't
+                // active so non-focused rows recede. No pill
+                // background (the WS name on line 1 carries enough
+                // visual weight for the group); the color + weight
+                // step alone separates the badge from body text.
+                // accent-2 is the palette's secondary hue
+                // (terminal=purple, cute=peach, system=systemPurple),
+                // reserved for status badges so the text never
+                // collides with the primary accent used by the
+                // active WS-name on line 1.
                 if !c.mode.isEmpty {
+                    let modeColor = c.hot ? pal.accent2 : pal.dim
                     (c.mode as NSString).draw(
                         in: NSRect(x: rowPadX + gripSpace,
-                                   y: capY + nameH - 2,
+                                   y: capY + nameH + 4,
                                    width: bounds.width - rowPadX * 2 - gripSpace,
                                    height: 14),
                         withAttributes: [
-                            .font: uiFont(10.5, .regular),
-                            .foregroundColor: pal.dim,
+                            .font: uiFont(10.5, .semibold),
+                            .foregroundColor: modeColor,
                             .paragraphStyle: hp,
                         ])
                 }
@@ -652,29 +678,25 @@ public final class SidebarView: NSView {
                     img.draw(in: NSRect(x: iconX, y: iconY,
                                         width: iconSize, height: iconSize))
                 }
-                // Right-edge label (Task 3, dim text only — no
-                // background chip). master and float are mutually
-                // exclusive in the catalog: a floated window is
-                // detached from the layout and can't be its master.
+                // Status label (master / float) — text-only 3rd line
+                // under the title (or under the app name when there's
+                // no title). Master and float are mutually exclusive
+                // in the catalog (a floated window is detached from
+                // the layout and can't also be its master). Same
+                // accent-2 semibold styling as the WS-header layout
+                // line, so the badge palette stays consistent across
+                // the tree.
                 let labelText: String? =
                     c.isMaster ? "master" :
                     c.isFloating ? "float" : nil
-                let labelAttrs: [NSAttributedString.Key: Any] = [
-                    .font: uiFont(windowFontSize - 1, .regular),
-                    .foregroundColor: pal.dim,
-                    .paragraphStyle: para,
-                ]
-                let labelWidth: CGFloat = labelText.map {
-                    ($0 as NSString).size(withAttributes: labelAttrs).width
-                } ?? 0
-                let labelGap: CGFloat = labelWidth > 0 ? 8 : 0
-                // Title present → two lines; absent → compact,
-                // app name vertically centred.
-                let tx = iconX + iconSize + 8
-                let tw = max(bounds.width - tx - rowPadX
-                             - labelWidth - labelGap, 0)
+                let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
-                let appY = hasTitle ? row.minY + 6 : row.midY - 9
+                let tx = iconX + iconSize + 8
+                let tw = max(bounds.width - tx - rowPadX, 0)
+                // Pin the app name to the top whenever a title or a
+                // status label sits below it; otherwise center it.
+                let appY = (hasTitle || hasLabel)
+                    ? row.minY + 6 : row.midY - 9
                 (c.app as NSString).draw(
                     in: NSRect(x: tx, y: appY, width: tw, height: 18),
                     withAttributes: [
@@ -694,12 +716,17 @@ public final class SidebarView: NSView {
                         ])
                 }
                 if let labelText {
+                    let labelY = hasTitle
+                        ? row.minY + 42   // app(6-24) + title(25-40) + gap
+                        : row.minY + 24   // app(6-24) + tiny gap
                     (labelText as NSString).draw(
-                        in: NSRect(
-                            x: bounds.width - rowPadX - labelWidth,
-                            y: row.midY - 8,
-                            width: labelWidth, height: 16),
-                        withAttributes: labelAttrs)
+                        in: NSRect(x: tx, y: labelY,
+                                   width: tw, height: 14),
+                        withAttributes: [
+                            .font: uiFont(windowFontSize - 1, .semibold),
+                            .foregroundColor: pal.accent2,
+                            .paragraphStyle: para,
+                        ])
                 }
             }
 
