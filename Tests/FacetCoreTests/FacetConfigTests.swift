@@ -55,30 +55,53 @@ final class FacetConfigTests: XCTestCase {
 
     func testEffectiveWorkspaceListReadsConfiguredSpaceEntries() {
         var c = FacetConfig()
-        c.spaceWorkspaceNames = [1: [1: "dev", 3: "sns", 5: ""]]
+        c.spaceWorkspaceConfigs = [1: [
+            1: WorkspaceConfig(name: "dev"),
+            3: WorkspaceConfig(name: "sns"),
+            5: WorkspaceConfig(name: ""),
+        ]]
         let list = c.effectiveWorkspaceList(forSpaceOrdinal: 1)
         XCTAssertEqual(list.map(\.index), [1, 3, 5])
-        XCTAssertEqual(list.map(\.name), ["dev", "sns", ""])
+        XCTAssertEqual(list.map(\.config.name), ["dev", "sns", ""])
     }
 
     func testEffectiveWorkspaceListDropsNonPositiveKeys() {
         var c = FacetConfig()
-        c.spaceWorkspaceNames = [1: [0: "zero", -1: "neg", 2: "ok"]]
+        c.spaceWorkspaceConfigs = [1: [
+            0: WorkspaceConfig(name: "zero"),
+            -1: WorkspaceConfig(name: "neg"),
+            2: WorkspaceConfig(name: "ok"),
+        ]]
         let list = c.effectiveWorkspaceList(forSpaceOrdinal: 1)
         XCTAssertEqual(list.map(\.index), [2])
-        XCTAssertEqual(list.map(\.name), ["ok"])
+        XCTAssertEqual(list.map(\.config.name), ["ok"])
     }
 
-    func testFromTOMLPopulatesSpaceWorkspaceNames() {
+    func testFromTOMLPopulatesSpaceWorkspaceConfigs() {
         let parsed = parseTOMLSubset("""
             [space.1]
-            1 = "dev"
-            2 = "sns"
+            1 = { name = "dev" }
+            2 = { name = "sns", layout = "bsp" }
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.spaceWorkspaceNames[1]?[1], "dev")
-        XCTAssertEqual(c.spaceWorkspaceNames[1]?[2], "sns")
-        XCTAssertEqual(c.spaceWorkspaceNames[1]?.count, 2)
+        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?[1],
+                       WorkspaceConfig(name: "dev"))
+        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?[2],
+                       WorkspaceConfig(name: "sns", layout: "bsp"))
+        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?.count, 2)
+    }
+
+    func testFromTOMLDropsNonTableSpaceEntries() {
+        // Shorthand `1 = "Dev"` (post-PR2 disallowed) is silently
+        // skipped: only inline-table values are accepted.
+        let parsed = parseTOMLSubset("""
+            [space.1]
+            1 = "Dev"
+            2 = { name = "Web" }
+            """)
+        let c = FacetConfig.from(toml: parsed)
+        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?.count, 1)
+        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?[2]?.name, "Web")
     }
 
     // MARK: - [[exclude]] rules
@@ -156,16 +179,21 @@ final class FacetConfigTests: XCTestCase {
     func testFromTOMLParsesPerSpaceSections() {
         let parsed = parseTOMLSubset("""
             [space.1]
-            1 = "dev"
-            2 = "build"
+            1 = { name = "dev" }
+            2 = { name = "build", layout = "bsp" }
 
             [space.2]
-            1 = "mail"
+            1 = { name = "mail" }
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.spaceWorkspaceNames[1], [1: "dev", 2: "build"])
-        XCTAssertEqual(c.spaceWorkspaceNames[2], [1: "mail"])
-        XCTAssertNil(c.spaceWorkspaceNames[3])
+        XCTAssertEqual(c.spaceWorkspaceConfigs[1], [
+            1: WorkspaceConfig(name: "dev"),
+            2: WorkspaceConfig(name: "build", layout: "bsp"),
+        ])
+        XCTAssertEqual(c.spaceWorkspaceConfigs[2], [
+            1: WorkspaceConfig(name: "mail"),
+        ])
+        XCTAssertNil(c.spaceWorkspaceConfigs[3])
     }
 
     func testIsSpaceManagedOptInVsDefault() {
@@ -177,7 +205,10 @@ final class FacetConfigTests: XCTestCase {
 
         // Any [space.N] present → opt-in: only configured ordinals.
         var optIn = FacetConfig()
-        optIn.spaceWorkspaceNames = [1: [1: "a"], 3: [1: "b"]]
+        optIn.spaceWorkspaceConfigs = [
+            1: [1: WorkspaceConfig(name: "a")],
+            3: [1: WorkspaceConfig(name: "b")],
+        ]
         XCTAssertTrue(optIn.isSpaceManaged(ordinal: 1))
         XCTAssertTrue(optIn.isSpaceManaged(ordinal: 3))
         XCTAssertFalse(optIn.isSpaceManaged(ordinal: 2),
@@ -189,16 +220,19 @@ final class FacetConfigTests: XCTestCase {
 
     func testEffectiveWorkspaceListForSpaceOrdinal() {
         var c = FacetConfig()
-        c.spaceWorkspaceNames = [1: [1: "a", 2: "b"]]    // space 1 = 2
+        c.spaceWorkspaceConfigs = [1: [
+            1: WorkspaceConfig(name: "a"),
+            2: WorkspaceConfig(name: "b"),
+        ]]
 
         // Configured ordinal → per-space list.
         XCTAssertEqual(
-            c.effectiveWorkspaceList(forSpaceOrdinal: 1).map(\.name),
+            c.effectiveWorkspaceList(forSpaceOrdinal: 1).map(\.config.name),
             ["a", "b"])
         // Unconfigured ordinal → defaultWorkspaceCount unnamed slots.
         let unconfigured = c.effectiveWorkspaceList(forSpaceOrdinal: 2)
         XCTAssertEqual(unconfigured.count, FacetConfig.defaultWorkspaceCount)
-        XCTAssertTrue(unconfigured.allSatisfy { $0.name.isEmpty })
+        XCTAssertTrue(unconfigured.allSatisfy { $0.config.name.isEmpty })
         // nil ordinal → default slots.
         let nilList = c.effectiveWorkspaceList(forSpaceOrdinal: nil)
         XCTAssertEqual(nilList.count, FacetConfig.defaultWorkspaceCount)

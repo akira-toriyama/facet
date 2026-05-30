@@ -14,6 +14,21 @@
 import CoreGraphics
 import Foundation
 
+/// Per-WS configuration parsed from a `[space.N]` inline table:
+/// `1 = { name = "Dev", layout = "bsp" }`. `name` is required;
+/// `layout` is the optional seed for `facet workspace --layout`
+/// (the runtime catalog can still override it for the session).
+/// An unknown / mistyped layout falls back to the global
+/// `[layout] default` at seed time.
+public struct WorkspaceConfig: Sendable, Equatable {
+    public let name: String
+    public let layout: String?
+    public init(name: String, layout: String? = nil) {
+        self.name = name
+        self.layout = layout
+    }
+}
+
 public struct FacetConfig: Sendable {
     // Top-level
     public var defaultView: String?         // "tree" | "grid"
@@ -62,13 +77,14 @@ public struct FacetConfig: Sendable {
     /// Raw; read `effectiveAnimationCurve`.
     public var animationCurve: String?
 
-    /// Per-native-Space `[space.N]` workspace names. Outer key is the
-    /// native macOS Space ordinal (Mission Control order, 1-based,
-    /// user Spaces only); inner is `facet WS index -> name`. A
-    /// native Space without a section falls back to
-    /// `defaultWorkspaceCount` unnamed slots. See memory
-    /// `facet-per-native-space-ws`.
-    public var spaceWorkspaceNames: [Int: [Int: String]] = [:]
+    /// Per-native-Space `[space.N]` workspace configs. Outer key is
+    /// the native macOS Space ordinal (Mission Control order,
+    /// 1-based, user Spaces only); inner is `facet WS index ->
+    /// WorkspaceConfig` (name + optional layout). A native Space
+    /// without a section falls back to `defaultWorkspaceCount`
+    /// unnamed slots with the global `[layout] default`. See
+    /// memory `facet-per-native-space-ws`.
+    public var spaceWorkspaceConfigs: [Int: [Int: WorkspaceConfig]] = [:]
 
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
@@ -183,25 +199,30 @@ public struct FacetConfig: Sendable {
     /// Workspace list for a given native-Space ordinal (1-based,
     /// Mission Control order). Returns the `[space.N]` config when
     /// that Space has a non-empty section, else
-    /// `defaultWorkspaceCount` unnamed slots. `nil` ordinal
-    /// (SkyLight unavailable / single-space mode) → default slots.
+    /// `defaultWorkspaceCount` unnamed slots with no layout
+    /// override. `nil` ordinal (SkyLight unavailable / single-space
+    /// mode) → default slots.
     public func effectiveWorkspaceList(forSpaceOrdinal ordinal: Int?)
-        -> [(index: Int, name: String)]
+        -> [(index: Int, config: WorkspaceConfig)]
     {
         guard let ordinal,
-              let names = spaceWorkspaceNames[ordinal],
-              let list = Self.sortedSlots(names)
-        else { return (1...Self.defaultWorkspaceCount).map { ($0, "") } }
+              let configs = spaceWorkspaceConfigs[ordinal],
+              let list = Self.sortedSlots(configs)
+        else {
+            return (1...Self.defaultWorkspaceCount).map {
+                ($0, WorkspaceConfig(name: ""))
+            }
+        }
         return list
     }
 
-    /// Clamp + order a raw `index → name` map into `(index, name)`
-    /// slots: drop keys < 1, sort ascending. `nil` when nothing
-    /// valid remains (lets callers fall back).
-    private static func sortedSlots(_ names: [Int: String])
-        -> [(index: Int, name: String)]?
+    /// Clamp + order a raw `index → WorkspaceConfig` map into
+    /// `(index, config)` slots: drop keys < 1, sort ascending.
+    /// `nil` when nothing valid remains (lets callers fall back).
+    private static func sortedSlots(_ configs: [Int: WorkspaceConfig])
+        -> [(index: Int, config: WorkspaceConfig)]?
     {
-        let valid = names.filter { $0.key >= 1 }
+        let valid = configs.filter { $0.key >= 1 }
         guard !valid.isEmpty else { return nil }
         return valid.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
@@ -217,9 +238,9 @@ public struct FacetConfig: Sendable {
     /// - `nil` ordinal (SkyLight unavailable / single-space mode) is
     ///   always managed.
     public func isSpaceManaged(ordinal: Int?) -> Bool {
-        if spaceWorkspaceNames.isEmpty { return true }
+        if spaceWorkspaceConfigs.isEmpty { return true }
         guard let ordinal else { return true }
-        return spaceWorkspaceNames[ordinal] != nil
+        return spaceWorkspaceConfigs[ordinal] != nil
     }
 
     // MARK: - Construction from parsed TOML
@@ -279,21 +300,29 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["animation"]?["curve"] {
             c.animationCurve = s
         }
-        // [space.N] per-native-Space workspace names. The TOML
+        // [space.N] per-native-Space workspace configs. The TOML
         // parser flattens `[space.1]` to the section name "space.1";
         // N is the native-Space ordinal (Mission Control order).
-        // Inline int keys are WS-index → name.
+        // Each int key is a WS index whose value is an inline table:
+        //   1 = { name = "Dev", layout = "bsp" }
+        // `layout` is optional; a missing / mistyped value is left
+        // to the catalog's seed step to clamp to the global default.
+        // A non-table value (typo) is silently dropped.
         for (sectionName, section) in toml
         where sectionName.hasPrefix("space.") {
             guard let ordinal = Int(sectionName.dropFirst("space.".count)),
                   ordinal >= 1 else { continue }
-            var names: [Int: String] = [:]
+            var configs: [Int: WorkspaceConfig] = [:]
             for (key, value) in section {
                 guard let idx = Int(key), idx >= 1,
-                      case .string(let name) = value else { continue }
-                names[idx] = name
+                      case .table(let t) = value,
+                      case .string(let name)? = t["name"]
+                else { continue }
+                var layout: String? = nil
+                if case .string(let l)? = t["layout"] { layout = l }
+                configs[idx] = WorkspaceConfig(name: name, layout: layout)
             }
-            if !names.isEmpty { c.spaceWorkspaceNames[ordinal] = names }
+            if !configs.isEmpty { c.spaceWorkspaceConfigs[ordinal] = configs }
         }
         return c
     }

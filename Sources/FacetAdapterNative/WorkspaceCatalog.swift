@@ -749,11 +749,22 @@ struct WorkspaceCatalog {
     /// can't survive — names are the stable handle now. No-op once
     /// seeded (the set is then authoritative; config is just the
     /// seed). Falls back to one unnamed workspace if `entries` empty.
-    mutating func seed(names entries: [(index: Int, name: String)]) {
+    ///
+    /// Per-WS layout is seeded too when the entry's
+    /// `WorkspaceConfig.layout` is non-nil: the catalog records it
+    /// at the compacted position so the first `mode(of:)` returns
+    /// the configured value. Runtime `setMode` can still override
+    /// for the session (Q7 seed-only semantics).
+    mutating func seed(configs entries: [(index: Int, config: WorkspaceConfig)]) {
         guard workspaceNames.isEmpty else { return }
         let sorted = entries.sorted { $0.index < $1.index }
-        workspaceNames = sorted.isEmpty ? [""] : sorted.map(\.name)
+        workspaceNames = sorted.isEmpty ? [""] : sorted.map(\.config.name)
         if activeIndex > workspaceNames.count { activeIndex = 1 }
+        for (pos, e) in sorted.enumerated() {
+            if let layout = e.config.layout {
+                layoutModes[pos + 1] = layout
+            }
+        }
     }
 
     /// 1-based position of the first workspace named `name`, or nil.

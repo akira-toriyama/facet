@@ -303,12 +303,16 @@ Frequently-touched keys:
   tracked but untiled; `"ignore"` drops it entirely. The template
   ships one default that floats tiny unnamed popups. (System sheets /
   dialogs / palettes are auto-floated by AX role regardless.)
-- `[space.N]` table — per-native-Space workspace names/count, where
-  `N` is the Space's Mission Control position. With **no** `[space.N]`
-  sections, every native macOS Space gets the default workspaces
-  automatically. With **any** `[space.N]` present it's **opt-in**:
-  facet manages only the Spaces that have a section; a Space without
-  one is left untouched (windows as-is, panel hidden there).
+- `[space.N]` table — per-native-Space workspace list. `N` is the
+  Space's Mission Control position; each entry is a 1-indexed inline
+  table: `1 = { name = "Dev" }` (name only) or
+  `1 = { name = "Dev", layout = "bsp" }` (name + startup layout).
+  `layout` is optional — when omitted the WS starts at the global
+  `[layout] default`. Two modes: **no** `[space.N]` anywhere → every
+  native Space gets the default workspaces automatically; **any**
+  `[space.N]` present → **opt-in**: facet manages only the Spaces
+  that have a section; a Space without one is left untouched (windows
+  as-is, panel hidden there).
 
 ## CLI
 

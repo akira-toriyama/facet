@@ -28,7 +28,9 @@ final class WorkspaceCatalogTests: XCTestCase {
     /// it isn't itself rewritten when call sites adopt this helper.
     private func seededCatalog(_ n: Int = 5) -> WorkspaceCatalog {
         var c = WorkspaceCatalog.init()
-        c.seed(names: (1...n).map { (index: $0, name: "") })
+        c.seed(configs: (1...n).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        })
         return c
     }
 
@@ -912,9 +914,11 @@ final class WorkspaceCatalogTests: XCTestCase {
         // in order. (Dynamic model is position-based — sparsity can't
         // survive; names are the stable handle now.)
         var c = WorkspaceCatalog.init()
-        c.seed(names: [(index: 1, name: "dev"),
-                       (index: 3, name: "ide"),
-                       (index: 5, name: "sns")])
+        c.seed(configs: [
+            (index: 1, config: WorkspaceConfig(name: "dev")),
+            (index: 3, config: WorkspaceConfig(name: "ide")),
+            (index: 5, config: WorkspaceConfig(name: "sns")),
+        ])
         let snap = c.snapshot(live: [], focused: nil, activeRect: .zero)
         XCTAssertEqual(snap.map(\.index), [0, 1, 2])
         XCTAssertEqual(snap.map(\.name), ["dev", "ide", "sns"])

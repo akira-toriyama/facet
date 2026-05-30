@@ -113,8 +113,9 @@ is the index. **Do not relitigate** without explicit grill round.
   `SLSGetActiveSpace` / `SLSCopyManagedDisplaySpaces`); facet never
   moves windows across Spaces, so it stays SIP-on / public-contract
   (the rejected cross-Space move was hide 手法4). `[space.N]` config
-  customises a Space's WS names/count by Mission-Control ordinal;
-  catalog state is session-only. Opt-in: any `[space.N]` → facet
+  customises a Space's WS list by Mission-Control ordinal — each
+  entry is an inline-table value (`1 = { name = "...", layout = "..." }`,
+  layout optional). Catalog state is session-only. Opt-in: any `[space.N]` → facet
   manages only configured desktops, others hands-off (panel hidden);
   no `[space.N]` → all desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the
