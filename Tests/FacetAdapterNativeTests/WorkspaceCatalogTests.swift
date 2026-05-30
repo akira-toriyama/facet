@@ -52,7 +52,10 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testReconcileAssignsNewWindowsToActive() {
         var c = seededCatalog()
         let r = c.reconcile(live: [window(10), window(20)])
-        XCTAssertEqual(r, .init(added: 2, removed: 0))
+        XCTAssertEqual(r.added, 2)
+        XCTAssertEqual(r.removed, 0)
+        XCTAssertEqual(Set(r.addedIDs), [wid(10), wid(20)])
+        XCTAssertEqual(r.removedIDs, [])
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
         XCTAssertEqual(c.windowMap[wid(20)]?.workspace, 1)
     }
@@ -85,7 +88,11 @@ final class WorkspaceCatalogTests: XCTestCase {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         let r = c.reconcile(live: [window(10)])
-        XCTAssertEqual(r, .init(added: 0, removed: 1))
+        XCTAssertEqual(r.added, 0)
+        XCTAssertEqual(r.removed, 1)
+        XCTAssertEqual(r.addedIDs, [])
+        XCTAssertEqual(r.removedIDs, [wid(20)],
+                       "removed IDs surface the gone window")
         XCTAssertNil(c.windowMap[wid(20)])
     }
 
@@ -97,10 +104,13 @@ final class WorkspaceCatalogTests: XCTestCase {
         // cross-Space `isOnscreen` flip during a Space switch).
         var c = seededCatalog()
         let r1 = c.reconcile(live: [window(10)], requireConfirm: true)
-        XCTAssertEqual(r1, .init(added: 0, removed: 0))
+        XCTAssertEqual(r1.added, 0)
+        XCTAssertEqual(r1.removed, 0)
+        XCTAssertEqual(r1.addedIDs, [])
         XCTAssertNil(c.windowMap[wid(10)])
         let r2 = c.reconcile(live: [window(10)], requireConfirm: true)
-        XCTAssertEqual(r2, .init(added: 1, removed: 0))
+        XCTAssertEqual(r2.added, 1)
+        XCTAssertEqual(r2.addedIDs, [wid(10)])
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
     }
 
@@ -112,7 +122,8 @@ final class WorkspaceCatalogTests: XCTestCase {
         let r = c.reconcile(live: [window(10)],
                             trusted: [wid(10)],
                             requireConfirm: true)
-        XCTAssertEqual(r, .init(added: 1, removed: 0))
+        XCTAssertEqual(r.added, 1)
+        XCTAssertEqual(r.addedIDs, [wid(10)])
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
     }
 
@@ -143,7 +154,9 @@ final class WorkspaceCatalogTests: XCTestCase {
         let r = c.reconcile(live: [offscreen],
                             trusted: [wid(10)],
                             requireConfirm: true)
-        XCTAssertEqual(r, .init(added: 0, removed: 0))
+        XCTAssertEqual(r.added, 0)
+        XCTAssertEqual(r.removed, 0)
+        XCTAssertEqual(r.addedIDs, [])
         XCTAssertNil(c.windowMap[wid(10)])
     }
 

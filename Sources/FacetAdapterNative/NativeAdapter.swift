@@ -88,6 +88,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the next call. Rebuilt every `refreshCatalog()` invocation.
     private var workspaceList: [Workspace] = []
 
+    /// Delta from the most recent `refreshCatalog` pass — the IDs
+    /// that joined / left `windowMap`, plus whether a native-Space
+    /// swap happened in the same pass. Task 4 PR2 (open/close
+    /// reflow animation) reads this to decide whether the next
+    /// retile should be animated:
+    /// - addedIDs or removedIDs non-empty + no Space swap → animate
+    ///   (a real spawn / close on the current Space).
+    /// - Space swap → diff is the catalog-swap shockwave, skip the
+    ///   animation gate (Space switch has its own animation path).
+    /// Reset (to empty / false) at the top of every `refreshCatalog`.
+    private(set) var lastReconcileDelta: (added: [WindowID],
+                                           removed: [WindowID],
+                                           spaceSwapped: Bool)
+        = ([], [], false)
+
     /// Held so `refreshCatalog` can read the configured workspace
     /// list each tick. Note: this captures the config at adapter
     /// init time; `Controller.reloadConfig()` re-reads
@@ -283,12 +298,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// here — they go through `switchWorkspace` /
     /// `setLayoutMode` / `perform`.
     private func refreshCatalog() {
+        // Reset the per-pass delta — every call rewrites it so PR2's
+        // animation gate reads only THIS pass's adds / removes /
+        // space-swap signal.
+        lastReconcileDelta = ([], [], false)
+        let preSpaceID = activeSpaceID
         // Per-native-Space: if the user switched native macOS Spaces,
         // park the current catalog and swap in the destination
         // Space's. Done here (off-main, same context as every other
         // catalog mutation) rather than from the main-thread Space
         // observer, so catalog access stays single-threaded.
         swapCatalogIfSpaceChanged()
+        let spaceSwapped = activeSpaceID != preSpaceID
         // Unmanaged native desktop (no `[space.N]` in opt-in mode):
         // facet stays completely hands-off — adopt no windows, park
         // nothing, and return an empty workspace list so the
@@ -353,9 +374,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         if result.added > 0 || result.removed > 0 {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
-                + "total=\(live.count)")
+                + "total=\(live.count)"
+                + (spaceSwapped ? " (space-swap)" : ""))
         }
         if result.removed > 0 { recentCloseAt = Date() }
+        // Stash the delta for PR2's open/close animation gate. The
+        // space-swap flag tells PR2 to skip animating when the diff
+        // is the catalog-swap shockwave (Space-switch has its own
+        // animation path).
+        lastReconcileDelta = (result.addedIDs, result.removedIDs,
+                              spaceSwapped)
         // Heal (native-Space drift): a window can leak into this
         // catalog's WS when it was swept in during a native macOS
         // Space switch (the destination Space's windows flip
