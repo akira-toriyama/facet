@@ -10,8 +10,8 @@ import CoreGraphics
 public let sidebarWidth: CGFloat = 248
 
 // Row heights for the different row kinds the sidebar emits.
-let headerRowH: CGFloat = 40             // workspace section heading (divider above)
-let headerFirstRowH: CGFloat = 26        // first workspace: no divider, tighter top
+let headerRowH: CGFloat = 54             // workspace section heading (divider above) — 2-line caption (name + layout mode)
+let headerFirstRowH: CGFloat = 40        // first workspace: no divider, tighter top, still 2-line caption
 let windowRowH: CGFloat = 28             // window row, no title (compact single line)
 let windowRowTallH: CGFloat = 44         // window row with title (app + title)
 let handleRowH: CGFloat = 42             // top drag-handle band (panel move + native desktop label); taller so the divider has padding above/below
