@@ -10,7 +10,9 @@ final class RelativeWorkspaceTests: XCTestCase {
     /// Catalog seeded with `n` contiguous, unnamed workspaces.
     private func seeded(_ n: Int) -> WorkspaceCatalog {
         var c = WorkspaceCatalog()
-        c.seed(names: (1...n).map { (index: $0, name: "") })
+        c.seed(configs: (1...n).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        })
         return c
     }
 

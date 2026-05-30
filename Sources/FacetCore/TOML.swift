@@ -23,6 +23,14 @@ public enum TOMLValue: Sendable, Equatable {
     /// the rest of this parser's "skip what we don't recognise"
     /// policy). Empty array `[]` is permitted.
     case stringArray([String])
+    /// Inline table: `key = { k = v, k2 = v2 }`. Values use the
+    /// same scalar grammar as the rest of the parser
+    /// (int / string / bool / stringArray / table). Empty table
+    /// `{}` is permitted. Limit: `#` inside an inline-table string
+    /// value is read as a comment start (same subset stance as
+    /// elsewhere), so layout names ("bsp", "stack", …) are safe
+    /// but `name = "tag # 1"` isn't.
+    case table([String: TOMLValue])
 }
 
 /// Pure-function TOML subset parser. Output keyed by section name
@@ -135,6 +143,15 @@ func parseTOMLScalar(_ raw: String) -> TOMLValue? {
         // failure mode).
         guard let strs = parseStringArray(val) else { return nil }
         return .stringArray(strs)
+    } else if val.hasPrefix("{"), val.hasSuffix("}") {
+        // Inline table: `{ k = "v", k2 = 1 }`. Comma-separated
+        // pairs at top level; commas inside strings / nested
+        // brackets / nested braces don't split (so an element value
+        // can itself be an array or a sub-table). A malformed pair
+        // skips the whole table (same "lose one line on typo"
+        // policy as elsewhere).
+        guard let dict = parseInlineTable(val) else { return nil }
+        return .table(dict)
     } else if val == "true" { return .bool(true) }
     else if val == "false" { return .bool(false) }
     else if let i = Int(val) { return .int(i) }
@@ -156,5 +173,58 @@ private func parseStringArray(_ raw: String) -> [String]? {
         else { return nil }
         out.append(String(p.dropFirst().dropLast()))
     }
+    return out
+}
+
+/// Parse `{ k = "v", k2 = 1 }` → `[k: .string("v"), k2: .int(1)]`.
+/// Returns nil on a malformed pair (no `=`, empty key, value the
+/// scalar parser rejects). Comma splitting is **string- and
+/// nesting-aware**: a top-level comma separates pairs, but a comma
+/// inside `"…"` / `[…]` / `{…}` stays as part of the value.
+private func parseInlineTable(_ raw: String) -> [String: TOMLValue]? {
+    let inner = raw.dropFirst().dropLast()
+        .trimmingCharacters(in: .whitespaces)
+    if inner.isEmpty { return [:] }
+    var out: [String: TOMLValue] = [:]
+    for piece in splitTopLevelCommas(inner) {
+        let p = piece.trimmingCharacters(in: .whitespaces)
+        guard let eq = p.firstIndex(of: "=") else { return nil }
+        let key = p[..<eq].trimmingCharacters(in: .whitespaces)
+        let rawVal = p[p.index(after: eq)...]
+            .trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty,
+              let parsed = parseTOMLScalar(rawVal) else { return nil }
+        out[key] = parsed
+    }
+    return out
+}
+
+/// Split `s` on top-level commas, ignoring commas inside `"…"` or
+/// inside nested `[…]` / `{…}` (so an inline-table value can itself
+/// be an array or a sub-table). Returns the comma-separated pieces
+/// as substrings (caller trims).
+private func splitTopLevelCommas(_ s: String) -> [Substring] {
+    var out: [Substring] = []
+    var depth = 0
+    var inString = false
+    var lastSplit = s.startIndex
+    var i = s.startIndex
+    while i < s.endIndex {
+        let c = s[i]
+        if inString {
+            if c == "\"" { inString = false }
+        } else if c == "\"" {
+            inString = true
+        } else if c == "[" || c == "{" {
+            depth += 1
+        } else if c == "]" || c == "}" {
+            if depth > 0 { depth -= 1 }
+        } else if c == "," && depth == 0 {
+            out.append(s[lastSplit..<i])
+            lastSplit = s.index(after: i)
+        }
+        i = s.index(after: i)
+    }
+    out.append(s[lastSplit..<s.endIndex])
     return out
 }

@@ -18,7 +18,9 @@ final class DynamicWorkspaceTests: XCTestCase {
 
     private func seeded(_ n: Int) -> WorkspaceCatalog {
         var c = WorkspaceCatalog()
-        c.seed(names: (1...n).map { (index: $0, name: "") })
+        c.seed(configs: (1...n).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        })
         return c
     }
 
@@ -26,24 +28,42 @@ final class DynamicWorkspaceTests: XCTestCase {
 
     func testSeedSortsByIndexAndCompacts() {
         var c = WorkspaceCatalog()
-        c.seed(names: [(index: 3, name: "c"),
-                       (index: 1, name: "a"),
-                       (index: 5, name: "b")])
+        c.seed(configs: [
+            (index: 3, config: WorkspaceConfig(name: "c")),
+            (index: 1, config: WorkspaceConfig(name: "a")),
+            (index: 5, config: WorkspaceConfig(name: "b")),
+        ])
         XCTAssertEqual(c.workspaceNames, ["a", "c", "b"])
         XCTAssertEqual(c.workspaceCount, 3)
     }
 
     func testSeedIsIdempotent() {
         var c = seeded(3)
-        c.seed(names: [(index: 1, name: "x")])   // already seeded → no-op
+        c.seed(configs: [(index: 1, config: WorkspaceConfig(name: "x"))])
         XCTAssertEqual(c.workspaceCount, 3)
         XCTAssertEqual(c.workspaceNames, ["", "", ""])
     }
 
     func testSeedEmptyFallsBackToOne() {
         var c = WorkspaceCatalog()
-        c.seed(names: [])
+        c.seed(configs: [])
         XCTAssertEqual(c.workspaceCount, 1)
+    }
+
+    func testSeedAppliesPerWSLayoutAtCompactedPosition() {
+        var c = WorkspaceCatalog()
+        c.defaultMode = "float"
+        // Sparse: indices 1, 3, 5 → compact to positions 1, 2, 3.
+        // WS at original idx 3 (position 2) gets "bsp".
+        c.seed(configs: [
+            (index: 1, config: WorkspaceConfig(name: "a", layout: nil)),
+            (index: 3, config: WorkspaceConfig(name: "b", layout: "bsp")),
+            (index: 5, config: WorkspaceConfig(name: "c", layout: "stack")),
+        ])
+        XCTAssertEqual(c.mode(of: 1), "float", "no layout → default")
+        XCTAssertEqual(c.mode(of: 2), "bsp",
+                       "config layout applied at compacted position")
+        XCTAssertEqual(c.mode(of: 3), "stack")
     }
 
     // MARK: - add / rename / name lookup

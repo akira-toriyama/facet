@@ -315,7 +315,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // (per-Space) catalog is used. Idempotent — once seeded, the
         // catalog's set is authoritative and runtime add/remove/rename/
         // move own it (config stays the read-only seed).
-        catalog.seed(names: config.effectiveWorkspaceList(
+        catalog.seed(configs: config.effectiveWorkspaceList(
             forSpaceOrdinal: activeSpaceOrdinal))
         let live = enumerateCGWindows()
         let focused = focusedWindow()

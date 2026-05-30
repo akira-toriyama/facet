@@ -304,8 +304,16 @@ action = "ignore"
 #
 # `[space.N]` gives the Nth native Space (Mission Control order,
 # 1-based, user Spaces only — fullscreen Spaces don't count) its own
-# workspace names / count. The body is `index = "name"`, identical
-# to a `[workspace]` mapping. Edits take effect on restart.
+# workspace list. Each entry is a 1-indexed inline-table value:
+#
+#   N = { name = "..." }                    # name only
+#   N = { name = "...", layout = "bsp" }    # name + startup layout
+#
+# `layout` is optional — when omitted the WS starts at the global
+# `[layout] default` above. Valid `layout` values are the layout
+# engines registered at startup (float / bsp / stack / tall / wide /
+# monocle / centered-master / spiral / grid); an unknown value is
+# silently dropped (the WS then starts at the global default).
 #
 # Two modes, decided by whether ANY [space.N] section exists:
 #   - NO [space.N] anywhere → every native Space is managed with the
@@ -318,14 +326,25 @@ action = "ignore"
 # Caveat: the mapping is by Mission Control position. Reordering your
 # Spaces re-points these sections (names/counts only — your windows
 # stay correctly scoped to their real Space).
-#
-#   [space.1]            # 1st native Space — managed, 3 workspaces
-#   1 = "Dev"
-#   2 = "Web"
-#   3 = "Notes"
-#
-#   [space.2]            # 2nd native Space — managed, 2 workspaces
-#   1 = "Mail"
-#   2 = "Chat"
-#
-#   # 3rd+ native Spaces: no section -> facet hands-off (panel hidden)
+
+# Recommended starter — covers a common 3-Space dev workflow.
+# Edit the names / counts / layouts to taste, or comment the whole
+# block out to fall back to facet's default (5 unnamed WSs / Space).
+
+[space.1]
+1 = { name = "Dev" }
+2 = { name = "Web" }
+3 = { name = "Notes" }
+
+[space.2]
+1 = { name = "Code" }
+2 = { name = "Build" }
+3 = { name = "Logs" }
+4 = { name = "Test" }
+
+[space.3]
+1 = { name = "Mail" }
+2 = { name = "Chat" }
+3 = { name = "Cal" }
+4 = { name = "Tasks" }
+5 = { name = "Docs" }

@@ -293,9 +293,13 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `"ignore"` は完全に非管理。 テンプレには「極小の無名ポップアップを
   float する」 デフォルトを 1 件同梱。 (システムの sheet / dialog /
   palette は AX role で自動 float される。)
-- `[space.N]` テーブル — native Space ごとの workspace 名/数。 `N` は
-  Mission Control 順の位置。 `[space.N]` が**1つも無ければ**全 native
-  Space が自動でデフォルト workspace を持つ。 **1つでもあれば opt-in**:
+- `[space.N]` テーブル — native Space ごとの workspace 一覧。 `N` は
+  Mission Control 順の位置。 各 entry は 1-indexed の inline table:
+  `1 = { name = "Dev" }` (名前のみ) もしくは
+  `1 = { name = "Dev", layout = "bsp" }` (名前 + 起動時 layout)。
+  `layout` は省略可で、 未指定なら グローバル `[layout] default` で
+  起動。 2 モード: `[space.N]` が**1 つも無ければ**全 native Space
+  が自動でデフォルト workspace を持つ。 **1 つでもあれば opt-in**:
   セクションのある Space だけ facet が管理し、 無い Space は完全に
   ノータッチ（窓そのまま・パネル非表示）。
 

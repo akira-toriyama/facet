@@ -120,6 +120,51 @@ final class TOMLTests: XCTestCase {
         XCTAssertEqual(p[""]?["also"], .int(2))
     }
 
+    // MARK: - Inline tables
+
+    func testInlineTableSingleStringPair() {
+        let p = parseTOMLSubset(#"t = { name = "Dev" }"#)
+        XCTAssertEqual(p[""]?["t"], .table(["name": .string("Dev")]))
+    }
+
+    func testInlineTableMixedScalarTypes() {
+        let p = parseTOMLSubset(
+            #"t = { name = "Dev", layout = "bsp", count = 3, on = true }"#)
+        XCTAssertEqual(p[""]?["t"], .table([
+            "name": .string("Dev"),
+            "layout": .string("bsp"),
+            "count": .int(3),
+            "on": .bool(true),
+        ]))
+    }
+
+    func testInlineTableEmpty() {
+        let p = parseTOMLSubset(#"t = {}"#)
+        XCTAssertEqual(p[""]?["t"], .table([:]))
+    }
+
+    func testInlineTableCommasInsideStringDoNotSplit() {
+        // A comma inside a string body must not split the pair list.
+        let p = parseTOMLSubset(#"t = { name = "a, b", layout = "bsp" }"#)
+        XCTAssertEqual(p[""]?["t"], .table([
+            "name": .string("a, b"),
+            "layout": .string("bsp"),
+        ]))
+    }
+
+    func testInlineTableMalformedSkippedKeepsOtherKeys() {
+        // A malformed pair (no `=`) drops the whole line, matching
+        // the parser's "lose one line on typo" rule.
+        let p = parseTOMLSubset("""
+            ok = 1
+            bad = { name "no equals" }
+            also = 2
+            """)
+        XCTAssertEqual(p[""]?["ok"], .int(1))
+        XCTAssertNil(p[""]?["bad"])
+        XCTAssertEqual(p[""]?["also"], .int(2))
+    }
+
     // MARK: - Array of tables (added for [[exclude]])
 
     func testArrayOfTablesCollectsEachOccurrence() {
