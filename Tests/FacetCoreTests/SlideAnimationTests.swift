@@ -101,4 +101,32 @@ final class SlideAnimationTests: XCTestCase {
         XCTAssertEqual(curve("bogus"), "cubic")     // unknown → default
         XCTAssertEqual(curve("none"), "cubic")      // "none" dropped → default
     }
+
+    func testAnimationEventDrivenFollowsMasterByDefault() {
+        // Sub-key unset: tracks master `enabled`.
+        let off = FacetConfig.from(toml: [:])
+        XCTAssertFalse(off.effectiveAnimationEventDriven)
+        let on = FacetConfig.from(toml: ["animation": ["enabled": .bool(true)]])
+        XCTAssertTrue(on.effectiveAnimationEventDriven)
+    }
+
+    func testAnimationEventDrivenOptOut() {
+        // Master on + sub-key off → master animations work but
+        // background open/close stays a snap.
+        let c = FacetConfig.from(toml: ["animation": [
+            "enabled": .bool(true),
+            "event-driven": .bool(false),
+        ]])
+        XCTAssertTrue(c.effectiveAnimationsEnabled)
+        XCTAssertFalse(c.effectiveAnimationEventDriven)
+    }
+
+    func testAnimationEventDrivenCannotOverrideMasterOff() {
+        // Sub-key alone can't turn animation on — master is the floor.
+        let c = FacetConfig.from(toml: ["animation": [
+            "enabled": .bool(false),
+            "event-driven": .bool(true),
+        ]])
+        XCTAssertFalse(c.effectiveAnimationEventDriven)
+    }
 }

@@ -442,7 +442,32 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // WS switch / resize / external nudge that the old lazy
         // retile (add/remove only) missed. float WS is a no-op (no
         // engine). Supersedes the Phase γ lazy-retile invariant.
-        applyLayout(workspace: catalog.activeIndex, rect: rect)
+        //
+        // Task 4 PR2 — open / close reflow animation: when a real
+        // add or remove happened on the current Space (NOT a
+        // catalog-swap shockwave from a Space switch) and the user
+        // opted in, route through `animateRetile` so the existing
+        // tiled windows glide to their new sizes. Newly-added
+        // windows skip animation — they snap to their tile slot to
+        // avoid the "glide from the app's wild initial position"
+        // jank (Q4.3 = b). In-flight slides retarget via the
+        // existing `cancelSlideForRetarget`. Fall through to the
+        // instant `applyLayout` whenever animation isn't applicable
+        // (master off, sub-key off, reduce-motion, no diff, or the
+        // pass coincided with a Space swap).
+        let shouldAnimateOpenClose = config.effectiveAnimationEventDriven
+            && !spaceSwapped
+            && (!result.addedIDs.isEmpty || !result.removedIDs.isEmpty)
+        if shouldAnimateOpenClose {
+            cancelSlideForRetarget()
+            let snapNew = Set(result.addedIDs)
+            if !animateRetile(workspace: catalog.activeIndex, rect: rect,
+                              skipAnimation: snapNew) {
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+            }
+        } else {
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
+        }
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
         // z-ordered window of the same app, which often sits in a
@@ -1166,9 +1191,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `extra` adds one off-layout window (e.g. just-floated) to the
     /// same animation cycle so its move stays coordinated with the
     /// retile of the remaining tiled windows.
+    ///
+    /// `skipAnimation` snaps the listed ids straight to their tile
+    /// frame instead of including them in the slide. Used by the
+    /// open-reflow gate so a brand-new window appears at its tile
+    /// slot (rather than gliding from the app's wild initial
+    /// position); the surrounding windows still animate.
     private func animateRetile(workspace n1Based: Int, rect: CGRect,
-                               extra: (id: WindowID, target: CGRect)? = nil)
-        -> Bool
+                               extra: (id: WindowID, target: CGRect)? = nil,
+                               skipAnimation: Set<WindowID> = []) -> Bool
     {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             return false
@@ -1189,7 +1220,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             }
             slideAnims.append((ax, WindowSlide(id: id, from: from, to: snapped)))
         }
-        for (id, raw) in targets { append(id, raw) }
+        for (id, raw) in targets where !skipAnimation.contains(id) {
+            append(id, raw)
+        }
         if let extra { append(extra.id, extra.target) }
         guard !slideAnims.isEmpty else { return false }
         let settle: () -> Void = { [weak self] in

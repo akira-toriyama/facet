@@ -76,6 +76,12 @@ public struct FacetConfig: Sendable {
     /// Easing curve: none / cubic / spring / silky / snappy / random.
     /// Raw; read `effectiveAnimationCurve`.
     public var animationCurve: String?
+    /// Sub-toggle: animate event-driven retiles too (window open /
+    /// close reflow). Defaults to ON when `animationsEnabled` is
+    /// on; flip to false to keep WS-switch + user-triggered retile
+    /// animated but snap on background opens / closes. Raw; read
+    /// `effectiveAnimationEventDriven`.
+    public var animationEventDriven: Bool?
 
     /// Per-native-Space `[space.N]` workspace configs. Outer key is
     /// the native macOS Space ordinal (Mission Control order,
@@ -165,6 +171,16 @@ public struct FacetConfig: Sendable {
     /// install gets instant transitions until `enabled = true`. Read
     /// this, not the raw field.
     public var effectiveAnimationsEnabled: Bool { animationsEnabled ?? false }
+    /// Animate event-driven retiles (window open / close reflow)?
+    /// Defaults to true when `effectiveAnimationsEnabled` is on —
+    /// a single master switch covers the common case; set
+    /// `event-driven = false` to keep WS-switch + user-triggered
+    /// retile animated but snap on background opens / closes.
+    /// Always false when the master switch is off (sub-key can't
+    /// turn animation on by itself).
+    public var effectiveAnimationEventDriven: Bool {
+        effectiveAnimationsEnabled && (animationEventDriven ?? true)
+    }
     /// Slide duration (seconds), clamped 0.08–0.8 s. Default 0.28 s.
     public var effectiveAnimationDuration: TimeInterval {
         Double(min(800, max(80, animationDurationMs ?? 280))) / 1000
@@ -299,6 +315,9 @@ public struct FacetConfig: Sendable {
         }
         if case .string(let s)? = toml["animation"]?["curve"] {
             c.animationCurve = s
+        }
+        if case .bool(let b)? = toml["animation"]?["event-driven"] {
+            c.animationEventDriven = b
         }
         // [space.N] per-native-Space workspace configs. The TOML
         // parser flattens `[space.1]` to the section name "space.1";

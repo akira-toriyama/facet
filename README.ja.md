@@ -282,9 +282,13 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `cubic` (既定・ease-out) / `spring` (弾む) / `silky` (なめらか・長め) /
   `snappy` (キレ) / `random` (遷移ごとにランダム)。 off は `enabled = false`。
   `duration-ms` で長さ上書き ([80, 800] クランプ)、 未指定なら各カーブ既定。
-  対象は WS 切替 (方向性 filmstrip スライド)・retile / レイアウト変更
-  (その場 reflow)・stack cycle (旧 top が抜け次が入る)。 公開 AX のみ。
-  macOS「視差効果を減らす」 ON なら設定に関わらず即時。
+  `event-driven` (master ON 時の default = `true`) は背景の窓 開閉 reflow
+  をカバー — `false` にすると WS 切替 + 自分の操作起点の retile はアニメ
+  のまま、 背景の open / close だけ snap。 対象は WS 切替 (方向性
+  filmstrip スライド)・retile / レイアウト変更 (その場 reflow)・stack
+  cycle (旧 top が抜け次が入る)・窓 open / close (既存タイル窓が新しいサイ
+  ズへスライド、 新窓は タイル slot に snap)。 公開 AX のみ。 macOS
+  「視差効果を減らす」 ON なら設定に関わらず即時。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
   `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で

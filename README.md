@@ -291,10 +291,15 @@ Frequently-touched keys:
   switch; `curve` picks the feel: `cubic` (default, ease-out), `spring`
   (bouncy), `silky` (smooth, longer), `snappy` (crisp), or `random` (one
   per transition). `duration-ms` overrides the length (clamp [80, 800]);
-  unset = each curve's own default. Covers the workspace switch
+  unset = each curve's own default. `event-driven` (default `true` when
+  the master is on) covers the background open / close reflow — set it
+  to `false` to keep WS-switch + user-triggered retile animated but
+  snap on background opens / closes. Covers the workspace switch
   (directional filmstrip slide), retile / layout change (in-place
-  reflow), and stack cycle (old top slides out / next slides in). Pure
-  public AX; macOS "Reduce motion" forces instant transitions regardless.
+  reflow), stack cycle (old top slides out / next slides in), and
+  window open / close (existing tiled windows glide to their new sizes;
+  the new window snaps to its tile slot). Pure public AX; macOS
+  "Reduce motion" forces instant transitions regardless.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or
