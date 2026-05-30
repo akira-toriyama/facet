@@ -9,7 +9,7 @@ let gridOuterPad: CGFloat = 48          // overlay edge → outermost cell row
 let gridCellGap: CGFloat = 24           // gap between cell rows / cols
 let gridCellCornerRadius: CGFloat = 10  // rounded cell shape
 let gridLabelGap: CGFloat = 4           // breathing room: label → cell
-let gridHeaderGripW: CGFloat = 11       // grip-dot box at left of header band
+let gridHeaderGripW: CGFloat = 16       // grip-dot box at left of header band (3 columns of dots)
 
 // Workspace header band sizes PROPORTIONALLY to the cell: fewer
 // workspaces → bigger cells → a taller header, and vice-versa, so the
@@ -17,9 +17,9 @@ let gridHeaderGripW: CGFloat = 11       // grip-dot box at left of header band
 // fraction of the (label-band-free) nominal cell height, clamped so
 // two stacked lines (WS name + layout mode) always fit yet the header
 // never crowds the thumbs. Both fonts track the resolved band height.
-let gridHeaderRatio: CGFloat = 0.07     // band height ≈ 7% of nominal cell height
-let gridHeaderMinH: CGFloat = 30        // floor fits two small text lines
-let gridHeaderMaxH: CGFloat = 58
+let gridHeaderRatio: CGFloat = 0.08     // band height ≈ 8% of nominal cell height — matches the tree's bumped two-line breathing room
+let gridHeaderMinH: CGFloat = 32        // floor fits two small text lines with the new breathing
+let gridHeaderMaxH: CGFloat = 64        // pairs with the tree's bumped headerRowH (64 pt)
 let gridHeaderNameFrac: CGFloat = 0.34  // WS-name font ≈ 34% of band height
 let gridHeaderNameMinFont: CGFloat = 13
 let gridHeaderNameMaxFont: CGFloat = 24

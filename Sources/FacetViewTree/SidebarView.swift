@@ -503,7 +503,9 @@ public final class SidebarView: NSView {
     /// in a tall rect (the WS header's full 2-line caption) so the
     /// grip reads as a proper anchor for the whole header; falls
     /// back to the compact 3-row form in shorter rects (the top
-    /// desktop-name band).
+    /// desktop-name band). The tree stays at 2×8 (vs the grid's 3×10)
+    /// because the sidebar is narrow — a wider strip would crowd the
+    /// WS name column.
     private func drawGrip(in r: NSRect, hot: Bool) {
         let dotR: CGFloat = 1.15
         let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
