@@ -579,7 +579,7 @@ public final class SidebarView: NSView {
                 hsep.lineWidth = 1
                 hsep.stroke()
 
-            case 1:   // workspace section header (Raycast-ish caption)
+            case 1:   // workspace section header — 2-line caption
                 if !c.firstHeader {
                     pal.divider.setStroke()
                     let sep = NSBezierPath()
@@ -595,44 +595,38 @@ public final class SidebarView: NSView {
                 let fs = c.hot ? activeHeaderFontSize : headerFontSize
                 let capY = c.firstHeader ? row.minY + 6 : row.minY + 18
                 let capH = row.maxY - capY - 6
-                // Layout-mode as a small accent tag/badge.
-                var mW: CGFloat = 0
-                if !c.mode.isEmpty {
-                    let mAttrs: [NSAttributedString.Key: Any] = [
-                        .font: uiFont(10.5, .semibold),
-                        .foregroundColor: pal.accent,
-                        .paragraphStyle: hp,
-                    ]
-                    let mStr = c.mode as NSString
-                    let tw = min(mStr.size(withAttributes: mAttrs).width, 130)
-                    let padH: CGFloat = 7
-                    mW = tw + padH * 2
-                    let chipH: CGFloat = 17
-                    let chip = NSRect(
-                        x: bounds.width - rowPadX - mW,
-                        y: capY + (capH - chipH) / 2,
-                        width: mW, height: chipH)
-                    pal.accent.withAlphaComponent(0.16).setFill()
-                    NSBezierPath(roundedRect: chip, xRadius: 5, yRadius: 5)
-                        .fill()
-                    mStr.draw(in: chip.insetBy(dx: padH, dy: 2),
-                              withAttributes: mAttrs)
-                    mW += 8                       // gap before the WS name
-                }
                 // Drag grip — affords "grab to swap this workspace".
+                // Spans the full caption area so it visually anchors both
+                // lines (WS name + layout mode) as one unit.
                 let gripSpace = headerGripW + 6
                 drawGrip(in: NSRect(x: rowPadX, y: capY,
                                     width: headerGripW, height: capH),
                          hot: c.hot || hoverIdx == i)
-                let t = c.text as NSString
-                t.draw(in: NSRect(x: rowPadX + gripSpace, y: capY,
-                                  width: bounds.width - rowPadX * 2
-                                      - mW - gripSpace,
-                                  height: capH),
-                       withAttributes: [
+                // Line 1: WS name (accent when active).
+                let nameH: CGFloat = 18
+                (c.text as NSString).draw(
+                    in: NSRect(x: rowPadX + gripSpace, y: capY,
+                               width: bounds.width - rowPadX * 2 - gripSpace,
+                               height: nameH),
+                    withAttributes: [
                         .font: uiFont(fs, .bold),
                         .foregroundColor: c.hot ? pal.accent : pal.dim,
                         .kern: 0.6, .paragraphStyle: hp])
+                // Line 2: layout mode — always dim, smaller, regular weight
+                // (Task 1: subordinate hint; accent stays on the name only,
+                // even when the WS is active).
+                if !c.mode.isEmpty {
+                    (c.mode as NSString).draw(
+                        in: NSRect(x: rowPadX + gripSpace,
+                                   y: capY + nameH - 2,
+                                   width: bounds.width - rowPadX * 2 - gripSpace,
+                                   height: 14),
+                        withAttributes: [
+                            .font: uiFont(10.5, .regular),
+                            .foregroundColor: pal.dim,
+                            .paragraphStyle: hp,
+                        ])
+                }
 
             default:  // window row
                 let sel = c.hot
