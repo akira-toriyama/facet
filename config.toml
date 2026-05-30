@@ -187,6 +187,14 @@ enabled = false
 # unset, each curve uses its own natural default (cubic 280 / spring 420
 # / silky 420 / snappy 220).
 # duration-ms = 280
+# event-driven — sub-toggle for background reflows (window open / close
+# rearranges the remaining tiled windows). Defaults to true when the
+# master `enabled` switch is on. Flip to false to keep WS-switch + your
+# own `--toggle-float` / `--layout=` retiles animated but snap on
+# background opens / closes. New windows always snap to their tile slot
+# regardless (they don't have a meaningful "previous" position to glide
+# from).
+# event-driven = true
 
 
 # -----------------------------------------------------------------
