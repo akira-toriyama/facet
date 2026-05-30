@@ -1134,36 +1134,55 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// All windows stay on-screen (no off-screen trick), so this is the
     /// resize-bearing path. Returns false (caller does the instant apply)
     /// when reduce-motion is set or nothing actually moves.
-    private func animateRetile(workspace n1Based: Int, rect: CGRect) -> Bool {
+    ///
+    /// `extra` adds one off-layout window (e.g. just-floated) to the
+    /// same animation cycle so its move stays coordinated with the
+    /// retile of the remaining tiled windows.
+    private func animateRetile(workspace n1Based: Int, rect: CGRect,
+                               extra: (id: WindowID, target: CGRect)? = nil)
+        -> Bool
+    {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             return false
         }
         let scale = activeScale(near: rect)
         let targets = targetFrames(for: n1Based, in: rect)
-        guard !targets.isEmpty else { return false }
         slideAnims = []
-        for (id, raw) in targets {
+        func append(_ id: WindowID, _ to: CGRect) {
             guard let ax = axWin(id: id), let p = AXGeom.position(ax),
-                  let sz = AXGeom.size(ax) else { continue }
-            let to = raw.roundedToPhysicalPixels(scale: scale)
+                  let sz = AXGeom.size(ax) else { return }
+            let snapped = to.roundedToPhysicalPixels(scale: scale)
             let from = CGRect(origin: p, size: sz)
-            // Already at target (within 1pt) → nothing to animate.
-            if abs(from.minX - to.minX) < 1, abs(from.minY - to.minY) < 1,
-               abs(from.width - to.width) < 1, abs(from.height - to.height) < 1 {
-                continue
+            if abs(from.minX - snapped.minX) < 1,
+               abs(from.minY - snapped.minY) < 1,
+               abs(from.width - snapped.width) < 1,
+               abs(from.height - snapped.height) < 1 {
+                return
             }
-            slideAnims.append((ax, WindowSlide(id: id, from: from, to: to)))
+            slideAnims.append((ax, WindowSlide(id: id, from: from, to: snapped)))
         }
+        for (id, raw) in targets { append(id, raw) }
+        if let extra { append(extra.id, extra.target) }
         guard !slideAnims.isEmpty else { return false }
         let settle: () -> Void = { [weak self] in
             guard let self else { return }
             self.slideAnims = []
             self.applyLayout(workspace: n1Based, rect: rect)
+            if let extra {
+                // Floating windows live outside the layout — settle their
+                // final frame explicitly so a missed mid-tween write can't
+                // leave them subtly off.
+                if let ax = self.axWin(id: extra.id) {
+                    AXGeom.setPosition(ax, extra.target.origin)
+                    AXGeom.setSize(ax, extra.target.size)
+                }
+            }
             self.eventContinuation.yield(.refreshNeeded)
         }
         slideIsRetile = true
         startSlideDriver(settle)
-        Log.debug("native: animateRetile WS \(n1Based) anims=\(slideAnims.count)")
+        Log.debug("native: animateRetile WS \(n1Based) anims=\(slideAnims.count)"
+            + (extra != nil ? " (+extra)" : ""))
         return true
     }
 
@@ -1711,11 +1730,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Animate (or instantly apply) the active workspace's reflow after
     /// a user action (master / orientation / float). Mirrors the retile
     /// path — animate when on, else snap — and owns the refresh yield.
-    private func reflowActive(rect: CGRect) {
+    private func reflowActive(rect: CGRect,
+                              extra: (id: WindowID, target: CGRect)? = nil) {
         cancelSlideForRetarget()
         if config.effectiveAnimationsEnabled,
-           animateRetile(workspace: catalog.activeIndex, rect: rect) {
+           animateRetile(workspace: catalog.activeIndex, rect: rect,
+                         extra: extra) {
             return
+        }
+        if let extra, let ax = axWin(id: extra.id) {
+            AXGeom.setPosition(ax, extra.target.origin)
+            AXGeom.setSize(ax, extra.target.size)
         }
         applyLayout(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
@@ -1731,10 +1756,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         case .toggleFloat:
             guard let id = focusedWindow() else { return }
             catalog.toggleFloat(id, focused: id, in: rect)
+            let nowFloating = catalog.isFloating(id)
             Log.debug("native: perform toggleFloat "
-                + "\(id.serverID) → "
-                + "isFloating=\(catalog.isFloating(id))")
-            reflowActive(rect: rect)
+                + "\(id.serverID) → isFloating=\(nowFloating)")
+            // Task 2: a user-toggled float lands centered on the active
+            // display (current size preserved). Auto-floats (AX role,
+            // sheets / dialogs) are not user-triggered and skip this —
+            // the app's chosen position is left alone.
+            var extra: (id: WindowID, target: CGRect)? = nil
+            if nowFloating, let ax = axWin(id: id),
+               let sz = AXGeom.size(ax) {
+                let target = CGRect(
+                    x: rect.midX - sz.width / 2,
+                    y: rect.midY - sz.height / 2,
+                    width: sz.width, height: sz.height)
+                extra = (id, target)
+            }
+            reflowActive(rect: rect, extra: extra)
         case .toggleOrientation:
             // bsp: rotate the focused window's parent split.
             // tall: flip the master axis (Tall ↔ Wide).
