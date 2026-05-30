@@ -202,6 +202,24 @@ struct WorkspaceCatalog {
     struct ReconcileResult: Equatable, Sendable {
         let added: Int
         let removed: Int
+        /// IDs that newly joined `windowMap` this reconcile. Empty
+        /// when `added == 0`. Order is insertion order from this
+        /// reconcile pass (which is dictionary-iteration order over
+        /// `liveByID`, so non-deterministic across runs — fine for
+        /// the open/close animation gate; not a stable handle).
+        let addedIDs: [WindowID]
+        /// IDs that left `windowMap` this reconcile (truly gone from
+        /// the CGWindowList enumeration — `.optionAll` is on, so an
+        /// off-screen / cross-Space window stays managed, not in
+        /// here). Empty when `removed == 0`.
+        let removedIDs: [WindowID]
+        init(added: Int, removed: Int,
+             addedIDs: [WindowID] = [], removedIDs: [WindowID] = []) {
+            self.added = added
+            self.removed = removed
+            self.addedIDs = addedIDs
+            self.removedIDs = removedIDs
+        }
     }
 
     /// Reconcile `windowMap` against the live CGWindowList. Gone
@@ -267,6 +285,7 @@ struct WorkspaceCatalog {
         }
         let allowAutoAdd = windowMap.isEmpty || onFacetSpace
         var added = 0
+        var addedIDs: [WindowID] = []
         for (id, w) in liveByID {
             if let existing = windowMap[id] {
                 if existing.pid != w.pid {
@@ -338,6 +357,7 @@ struct WorkspaceCatalog {
                 workspace: activeIndex, pid: w.pid)
             examinedIDs.insert(id)
             added += 1
+            addedIDs.append(id)
             // Phase γ.3: AX role pre-flag — if the adapter
             // told us this id should be floating (sheet /
             // dialog / palette), mark it BEFORE the tile /
@@ -349,7 +369,8 @@ struct WorkspaceCatalog {
                            focused: focused,
                            in: activeRect)
         }
-        return ReconcileResult(added: added, removed: goneIDs.count)
+        return ReconcileResult(added: added, removed: goneIDs.count,
+                               addedIDs: addedIDs, removedIDs: goneIDs)
     }
 
     /// Bulk-mark every id in `live` as pre-existing (don't
