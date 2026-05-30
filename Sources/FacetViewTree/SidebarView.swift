@@ -497,12 +497,20 @@ public final class SidebarView: NSView {
         }
     }
 
-    /// A 2×3 dot grid — the universal "drag handle" affordance drawn
-    /// at the left of every workspace header (header drag = WS-swap).
+    /// A 2-column dot grid — the universal "drag handle" affordance
+    /// drawn at the left of every workspace header (header drag =
+    /// WS-swap). Height-aware: stretches to an 8-row vertical strip
+    /// in a tall rect (the WS header's full 2-line caption) so the
+    /// grip reads as a proper anchor for the whole header; falls
+    /// back to the compact 3-row form in shorter rects (the top
+    /// desktop-name band).
     private func drawGrip(in r: NSRect, hot: Bool) {
         let dotR: CGFloat = 1.15
         let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
-        let ys = [r.midY - 4, r.midY, r.midY + 4]
+        let ys: [CGFloat] = r.height >= 28
+            ? stride(from: -14.0, through: 14.0, by: 4.0)
+                .map { r.midY + $0 }
+            : [r.midY - 4, r.midY, r.midY + 4]
         (hot ? pal.accent : pal.dim)
             .withAlphaComponent(hot ? 0.85 : 0.45).setFill()
         for x in xs {
