@@ -142,6 +142,33 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertNil(c.windowMap[wid(20)])
     }
 
+    func testDeferredWindowSkippedButReProbedLater() {
+        // A window the adapter couldn't classify yet (AX role
+        // unresolved — the probe raced a still-creating window or hit
+        // the per-call cap) is `deferred`: it does NOT join this tick,
+        // not even on the trusted fast-path. Unlike `ignore` it is NOT
+        // marked examined, so once AX resolves (no longer supplied as
+        // deferred) a later reconcile adopts it. This is what lets a
+        // real window tile a poll late while a transient popup — which
+        // vanishes before it ever resolves — never tiles at all.
+        var c = seededCatalog()
+        let r1 = c.reconcile(live: [window(10), window(20)],
+                             trusted: [wid(10), wid(20)],
+                             deferred: [wid(20)],
+                             requireConfirm: true)
+        XCTAssertEqual(r1.added, 1, "only the resolved window joins")
+        XCTAssertEqual(r1.addedIDs, [wid(10)])
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+        XCTAssertNil(c.windowMap[wid(20)],
+                     "deferred window skipped even when trusted")
+        // Next tick: AX resolved → no longer deferred → adopted. Proves
+        // the defer did NOT mark it examined (contrast: `ignore` does).
+        let r2 = c.reconcile(live: [window(10), window(20)])
+        XCTAssertEqual(r2.added, 1)
+        XCTAssertEqual(r2.addedIDs, [wid(20)])
+        XCTAssertEqual(c.windowMap[wid(20)]?.workspace, 1)
+    }
+
     func testTrustedDoesNotOverrideOffScreenDefer() {
         // Trusted bypasses only the two-tick gate, not the off-screen
         // defer that runs before it: a window still transiently

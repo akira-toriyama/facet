@@ -253,6 +253,7 @@ struct WorkspaceCatalog {
                                    autoFloat: Set<WindowID> = [],
                                    trusted: Set<WindowID> = [],
                                    ignore: Set<WindowID> = [],
+                                   deferred: Set<WindowID> = [],
                                    requireConfirm: Bool = false)
         -> ReconcileResult
     {
@@ -304,6 +305,18 @@ struct WorkspaceCatalog {
             // adapter's classify pass stops re-probing it).
             if ignore.contains(id) {
                 examinedIDs.insert(id)
+                continue
+            }
+            // Adapter couldn't resolve this window's AX role yet (the
+            // probe raced a still-creating window, or the per-call probe
+            // cap was hit). Skip WITHOUT marking examined so the next
+            // reconcile re-probes it: a real window resolves and joins
+            // within a poll or two; a transient popup (autocomplete /
+            // dropdown) vanishes before it resolves and never joins.
+            // Mirrors the off-screen defer below — both are "decide
+            // later" states, not "never manage" (`examined`) states.
+            if deferred.contains(id) {
+                pendingAddCandidates.remove(id)
                 continue
             }
             // Off-Space new window: see `allowAutoAdd` above.

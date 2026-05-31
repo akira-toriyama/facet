@@ -325,7 +325,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Phase γ.3 + F: classify first-sight windows — auto-float
         // (sheets / dialogs / palettes + config float rules) and
         // ignore (config `action="ignore"` → kept fully unmanaged).
-        let (autoFloat, ignore) = classifyNewWindows(live: live)
+        let (autoFloat, ignore, deferred) = classifyNewWindows(live: live)
         // Drop expired trusted-new hints, then hand the survivors to
         // reconcile so a genuinely-new window joins on first on-screen
         // sight (skips the two-tick gate). Non-trusted windows — incl.
@@ -342,6 +342,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                                        autoFloat: autoFloat,
                                        trusted: trusted,
                                        ignore: ignore,
+                                       deferred: deferred,
                                        requireConfirm: true)
         // Latency telemetry + consume: any trusted id now in the
         // catalog was fast-added — log create→add dt and forget the
@@ -611,22 +612,30 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///      `AXWindow`+`AXStandardWindow` tiles; sheets / dialogs /
     ///      palettes and `AXWindow`+non-standard subrole (e.g.
     ///      `AXUnknown`) float; a non-window role (AXHelpTag / menu /
-    ///      popover) is ignored. An un-probed/un-probeable normal-level
-    ///      window leans MANAGED — junk is almost always raised-level
-    ///      (caught by 1 without a probe), so a bare normal-level window
-    ///      is most likely real; tiling it beats risking a real window
-    ///      vanishing from the layout.
+    ///      popover) is ignored. A window whose role can't be resolved
+    ///      yet (the probe raced a still-creating window, or the
+    ///      per-call cap was hit) is DEFERRED — not tiled, not examined
+    ///      — so the next reconcile re-probes it. A real window resolves
+    ///      to `AXStandardWindow` within a poll or two and tiles then; a
+    ///      transient popup (VSCode autocomplete, Chrome dropdown)
+    ///      vanishes before it ever resolves and so never joins the
+    ///      layout. (This defer is what keeps `tall` from breaking when
+    ///      an app spawns short-lived normal-level windows — the old
+    ///      lean-MANAGED default tiled them for a frame and reflowed.)
     /// User `[[exclude]]` rules win over the heuristic (incl. the
     /// `manage` force-tile escape hatch). Only unseen + unexamined
     /// windows are classified. Tile-eligible windows are left out of
-    /// both returned sets so `reconcile` manages them normally.
+    /// all three returned sets so `reconcile` manages them normally;
+    /// `deferred` ids are skipped this tick and re-probed next time.
     private func classifyNewWindows(live: [Window])
-        -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>)
+        -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>,
+            deferred: Set<WindowID>)
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
+        var deferred: Set<WindowID> = []
         var probed = 0
         for w in live
         where catalog.windowMap[w.id] == nil
@@ -712,14 +721,27 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 continue
             }
             if role == nil {
-                continue                          // un-probed normal-level → tile
+                // AX role unresolved this tick — the probe raced a
+                // still-creating window (the common case) or the
+                // per-call probe cap was hit. DON'T tile and DON'T mark
+                // examined: defer so the next reconcile re-probes. A
+                // real window resolves to AXStandardWindow within a poll
+                // or two and tiles then; a transient popup (VSCode
+                // autocomplete, Chrome dropdown) vanishes before it ever
+                // resolves, so it never joins the layout. Replaces the
+                // old lean-MANAGED default that let those transients
+                // tile for a frame and break `tall`.
+                deferred.insert(w.id)
+                Log.debug("native: gate=defer(unresolved) "
+                    + "wsid=\(w.id.serverID) app=\(w.appName)")
+                continue
             }
             // A definite non-window role (AXHelpTag / menu / popover …).
             ignore.insert(w.id)
             Log.debug("native: gate=ignore(role=\(role ?? "-")) "
                 + "wsid=\(w.id.serverID) app=\(w.appName)")
         }
-        return (autoFloat, ignore)
+        return (autoFloat, ignore, deferred)
     }
 
     /// Display rect to anchor tile / stack math against.
