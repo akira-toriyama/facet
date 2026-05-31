@@ -1,0 +1,35 @@
+name: Deploy glossary site
+
+# 本リポの docs/glossary.md から専用 SPA を生成し、
+# https://akira-toriyama.github.io/facet/ に公開する。
+# 実体 (builder + viewer) は akira-toriyama/glossary-site の reusable workflow に委譲。
+#
+# - push to main → build + deploy
+# - pull_request → build のみ (artifact から成果物確認可、deploy なし)
+# - workflow_dispatch → build + deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/glossary.md
+      - .github/workflows/glossary.yml
+  pull_request:
+    paths:
+      - docs/glossary.md
+      - .github/workflows/glossary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  # PR と main を別グループに (PR build が main deploy を巻き込まない)
+  group: pages-${{ github.event.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    uses: akira-toriyama/glossary-site/.github/workflows/deploy.yml@main
