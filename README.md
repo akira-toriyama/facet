@@ -65,8 +65,9 @@ ultrawide bread-and-butter.
 ```
 
 ### `wide` — master on top
-`tall` rotated 90° (toggle with `--toggle-orientation`): master is
-the top row, the rest become columns below.
+`tall` rotated 90°: master is the top row, the rest become columns
+below. Selectable directly (`--layout=wide`) or flipped from `tall`
+with `--toggle-orientation`.
 
 ```
 ┌─────────────────────────┐
@@ -76,7 +77,7 @@ the top row, the rest become columns below.
 └───────┴───────┴─────────┘
 ```
 
-### `centered-master` — master in the middle
+### `centered` — master in the middle
 dwm `centeredmaster` / xmonad ThreeColMid. Master centred; the rest
 split between the left and right side columns (right fills first).
 Built for ultrawide.
@@ -114,19 +115,6 @@ clockwise inward.
 └────────────┴─────┴─────┘
 ```
 
-### `monocle` — full-screen focus
-dwm `monocle`. Every window fills the screen; the focused one is on
-top (the others sit full-size behind it — facet raises focus rather
-than hiding).
-
-```
-┌─────────────────────────┐
-│                         │
-│     1  (2 3 4 behind)   │
-│                         │
-└─────────────────────────┘
-```
-
 ### `bsp` — binary splits
 bspwm-style. Each new window splits the focused tile in half
 (auto-balanced by aspect); `--toggle-orientation` rotates the focused
@@ -140,7 +128,7 @@ split.
 └────────────┴─────┴─────┘
 ```
 
-### `stack` — one at a time
+### `stack` — full-screen focus
 One window fills the screen; the rest are parked off-screen.
 `--cycle-stack=next|prev` rotates which one is on top.
 
@@ -157,7 +145,7 @@ them.
 
 ### Master-stack operations
 
-`tall` / `centered-master` are adjustable at runtime (per workspace).
+`tall` / `wide` / `centered` are adjustable at runtime (per workspace).
 **Promote** the focused window to the master slot:
 
 ```
@@ -334,13 +322,13 @@ facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
 
 # Tiling (M5 Phase γ)
-facet workspace --layout=NAME     # bsp | stack | tall | centered-master | grid | spiral | monocle | float
+facet workspace --layout=NAME     # bsp | stack | tall | wide | centered | grid | spiral | float
 facet workspace --retile          # re-apply active WS's layout (any tiling mode)
 facet window --toggle-float          # flip focused window float flag
-facet window --toggle-orientation    # bsp: rotate parent split / tall: flip wide↔tall
+facet window --toggle-orientation    # bsp: rotate parent split / tall⇄wide: swap layout
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
-facet window --grow-master|--shrink-master   # master width ±0.05 (tall / centered-master)
-facet window --inc-master|--dec-master       # master window count ±1 (tall / centered-master)
+facet window --grow-master|--shrink-master   # master width ±0.05 (tall / wide / centered)
+facet window --inc-master|--dec-master       # master window count ±1 (tall / wide / centered)
 
 # --active is a modifier — only meaningful with --view=tree.
 # Without it the tree panel still gains keyboard nav as soon as

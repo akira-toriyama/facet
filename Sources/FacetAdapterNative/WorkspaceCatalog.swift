@@ -129,7 +129,7 @@ struct WorkspaceCatalog {
     private(set) var layoutTrees: [Int: LayoutTree] = [:]
 
     /// Per-WS window order, shared by `"stack"` mode and the
-    /// stateless `LayoutEngine`s (tall / monocle / …). Index 0 is
+    /// stateless `LayoutEngine`s (tall / wide / centered / …). Index 0 is
     /// the master / visible-top: in stack it's the single window
     /// that fills the display (the rest parked at the anchor sliver);
     /// in tall it's the primary master. New windows land at index 0
@@ -139,7 +139,7 @@ struct WorkspaceCatalog {
     private(set) var stackOrders: [Int: [WindowID]] = [:]
 
     /// Per-WS layout knobs (master ratio / master count) for the
-    /// stateless engines that read them (tall, centered-master).
+    /// stateless engines that read them (tall, wide, centered).
     /// Runtime-only — never persisted to config (Theme B decision).
     /// Missing entry → `LayoutParams()` defaults. Kept across mode
     /// flips so a WS remembers its ratio when you toggle away and
@@ -510,7 +510,7 @@ struct WorkspaceCatalog {
             layoutTrees.removeValue(forKey: n1Based)
         default:
             if LayoutRegistry.engine(named: normalised) != nil {
-                // Stateless engine (tall, monocle, …): seed the
+                // Stateless engine (tall, wide, centered, …): seed the
                 // shared per-WS order; discard any tree.
                 stackOrders[n1Based] = members
                 layoutTrees.removeValue(forKey: n1Based)
@@ -722,8 +722,7 @@ struct WorkspaceCatalog {
                                            delta: CGFloat) -> Bool {
         let cur = params(of: n1Based)
         let next = LayoutParams(masterRatio: cur.masterRatio + delta,
-                                masterCount: cur.masterCount,
-                                orientation: cur.orientation)
+                                masterCount: cur.masterCount)
         layoutParams[n1Based] = next
         return next.masterRatio != cur.masterRatio
     }
@@ -735,23 +734,23 @@ struct WorkspaceCatalog {
                                            delta: Int) -> Bool {
         let cur = params(of: n1Based)
         let next = LayoutParams(masterRatio: cur.masterRatio,
-                                masterCount: cur.masterCount + delta,
-                                orientation: cur.orientation)
+                                masterCount: cur.masterCount + delta)
         layoutParams[n1Based] = next
         return next.masterCount != cur.masterCount
     }
 
-    /// Flip the master axis (Tall ↔ Wide) for `n1Based`. Always
-    /// changes, so returns `true`. Other knobs preserved.
+    /// Swap a workspace between the `tall` and `wide` layouts — the two
+    /// orientations of the master-stack, now distinct engines rather
+    /// than an orientation knob. No-op for any other mode. Window order
+    /// and master knobs are untouched (only the engine changes), so the
+    /// caller just re-tiles. Returns whether the mode actually flipped.
     @discardableResult
-    mutating func toggleMasterOrientation(workspace n1Based: Int) -> Bool {
-        let cur = params(of: n1Based)
-        let flipped: LayoutOrientation =
-            cur.orientation == .vertical ? .horizontal : .vertical
-        layoutParams[n1Based] = LayoutParams(masterRatio: cur.masterRatio,
-                                             masterCount: cur.masterCount,
-                                             orientation: flipped)
-        return true
+    mutating func flipTallWide(workspace n1Based: Int) -> Bool {
+        switch mode(of: n1Based) {
+        case "tall": layoutModes[n1Based] = "wide"; return true
+        case "wide": layoutModes[n1Based] = "tall"; return true
+        default:     return false
+        }
     }
 
     /// Resolve the cached pid for a window, or nil if it's not in
@@ -1138,7 +1137,7 @@ struct WorkspaceCatalog {
             return stackSet.contains(w.id)
                 ? activeRect : preParkFrame(for: w)
         default:
-            // Stateless layout engine (monocle, …): the frame the
+            // Stateless layout engine (tall / wide / …): the frame the
             // window will occupy once its WS is active. Empty map →
             // float mode → fall back to the pre-park position.
             if !engineFrames.isEmpty {

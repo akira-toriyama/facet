@@ -1811,12 +1811,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             reflowActive(rect: rect, extra: extra)
         case .toggleOrientation:
             // bsp: rotate the focused window's parent split.
-            // tall: flip the master axis (Tall ↔ Wide).
+            // tall/wide: swap the workspace between the tall ⇄ wide layout.
             switch catalog.mode(of: catalog.activeIndex) {
-            case "tall":
-                _ = catalog.toggleMasterOrientation(
-                    workspace: catalog.activeIndex)
-                Log.debug("native: perform toggleOrientation (tall flip)")
+            case "tall", "wide":
+                _ = catalog.flipTallWide(workspace: catalog.activeIndex)
+                Log.debug("native: perform toggleOrientation (tall⇄wide)")
                 reflowActive(rect: rect)
             case "bsp":
                 guard let id = focusedWindow() else { return }
@@ -1886,11 +1885,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     /// Whether the WS's mode reads the master ratio / count knobs
-    /// (tall / centered-master). Other modes ignore them, so master
+    /// (tall / wide / centered). Other modes ignore them, so master
     /// adjustments no-op there.
     private func hasMasterKnob(_ n1Based: Int) -> Bool {
         let m = catalog.mode(of: n1Based)
-        return m == "tall" || m == "centered-master"
+        return m == "tall" || m == "wide" || m == "centered"
     }
 
     /// Apply the workspace's mode-specific layout (tile / stack /
@@ -1929,7 +1928,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("Previous stack window",
                                [.cycleStackPrev]))
         }
-        if (mode == "tall" || mode == "centered-master"), !floating {
+        if (mode == "tall" || mode == "wide" || mode == "centered"),
+           !floating {
             // "Promote to master" is meaningless for the window that
             // already holds the master slot.
             if !isMaster {
@@ -1941,7 +1941,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("More masters", [.incMaster]))
             items.append(.init("Fewer masters", [.decMaster]))
         }
-        if mode == "tall", !floating {
+        if mode == "tall" || mode == "wide", !floating {
             items.append(.init("Flip wide / tall",
                                [.toggleOrientation]))
         }

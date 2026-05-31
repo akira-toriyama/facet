@@ -110,8 +110,8 @@ enum FacetApp {
           facet workspace --focus=recent     return to the previous one
           facet workspace --layout=NAME      set the workspace's layout
                                              (bsp | stack | tall |
-                                             centered-master | grid |
-                                             spiral | monocle | float)
+                                             wide | centered | grid |
+                                             spiral | float)
           facet workspace --retile           re-apply the layout
                                              (no-op when float)
           facet workspace --add              append a new workspace
@@ -126,7 +126,7 @@ enum FacetApp {
           facet window --move-to=N           move it to workspace N
           facet window --toggle-float        flip its float flag
           facet window --toggle-orientation  bsp: rotate parent split /
-                                             tall: flip wide ↔ tall
+                                             tall⇄wide: swap layout
           facet window --cycle-stack=next    rotate stack to next member
           facet window --cycle-stack=prev    rotate stack to previous
                                              member (stack only)
@@ -134,7 +134,7 @@ enum FacetApp {
           facet window --shrink-master       narrow the master area -0.05
           facet window --inc-master          one more window in master
           facet window --dec-master          one fewer window in master
-                                             (tall / centered-master only)
+                                             (tall / wide / centered only)
 
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
@@ -341,7 +341,7 @@ enum FacetApp {
         postControl("window-cycle-stack:" + direction)
     }
 
-    /// Post master-knob nudges (tall / centered-master). The active
+    /// Post master-knob nudges (tall / wide / centered). The active
     /// WS's master ratio (`grow` / `shrink`, ±0.05) or master count
     /// (`inc` / `dec`, ±1); no-op for other modes.
     static func postWindowGrowMaster() -> Never {

@@ -120,8 +120,9 @@ preview-mode = "popover"
 #                       position their app gives them (the default).
 #   "bsp"             — binary space partition (auto-tile, splits).
 #   "stack"           — one window fills the screen; others stacked
-#                       behind, cycled with `facet window --cycle-stack`.
-#   "tall" / "wide" / "monocle" / "centered-master" / "spiral" / "grid"
+#                       behind, cycled with `facet window --cycle-stack`
+#                       (full-screen focus mode).
+#   "tall" / "wide" / "centered" / "spiral" / "grid"
 #                     — stateless layout engines.
 #
 # Unknown / unset clamps to "float" (a typo can't break tiling). To
@@ -132,8 +133,8 @@ default = "float"
 # Spacing for tiled windows, in points. Everything here defaults to 0
 # — windows tile flush, edge-to-edge (facet's behaviour before gaps
 # existed) — so leaving this section out changes nothing. Applies to
-# every layout (bsp / stack / tall / wide / grid / centered-master /
-# spiral / monocle); floating windows are never touched.
+# every layout (bsp / stack / tall / wide / grid / centered /
+# spiral); floating windows are never touched.
 #
 #   inner-gap — space between two adjacent windows (single value).
 #   outer-gap — distance from the screen edges. `outer-gap` sets all
@@ -320,7 +321,7 @@ action = "ignore"
 # `layout` is optional — when omitted the WS starts at the global
 # `[layout] default` above. Valid `layout` values are the layout
 # engines registered at startup (float / bsp / stack / tall / wide /
-# monocle / centered-master / spiral / grid); an unknown value is
+# centered / spiral / grid); an unknown value is
 # silently dropped (the WS then starts at the global default).
 #
 # Two modes, decided by whether ANY [space.N] section exists:

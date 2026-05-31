@@ -89,7 +89,7 @@ land in any order. Details in `facet-future-roadmap` memory.
 | Theme | Goal | Status |
 |---|---|---|
 | **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | ✅ shipped (#72) |
-| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。scrolling columns (niri 風) は未実装 |
+| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。**後日命名整理**: monocle→stack 統合・centered-master→centered 改名・wide を実 layout 化 ⇒ 現行 tall / wide / centered / grid / spiral。scrolling columns (niri 風) は未実装 |
 | **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
 | **D. New view types** | (i) 自由配置ビュー Google Maps 風 (modifier + wheel zoom, WS/window grab & place); (ii) WS DnD reorder Mission Control 風 | spec TBD; トミー曰く「微妙、提案あれば」 = 確定度低 |
 
