@@ -14,14 +14,26 @@ extension RailView {
         let hb = cell.headerRect
         guard hb.height > 1, hb.width > 1 else { return }
         let hover = hoverHeaderWS == cell.wsIndex
-        let hot = cell.isActive || hover
+        // Keyboard "whole-WS" pick: the WS-name slot is selected (Tab
+        // cycled to -1, or an arrow just landed here). Highlight the
+        // WS name like the grid's header-slot focus.
+        let kbWholeWS = drag == nil && kbSelectedWindowIdx == -1
+            && selectedWS == cell.wsIndex
+        let hot = cell.isActive || hover || kbWholeWS
 
-        // Faint rounded band fill (brighter on hover).
-        (cell.isActive
-            ? pal.accent.withAlphaComponent(hover ? 0.20 : 0.12)
-            : pal.dim.withAlphaComponent(hover ? 0.20 : 0.10)).setFill()
-        NSBezierPath(roundedRect: hb.insetBy(dx: 0, dy: 1),
-                     xRadius: 4, yRadius: 4).fill()
+        // Band fill — accent-strong when this WS is the keyboard
+        // whole-WS (swap) pick, faint otherwise (brighter on hover).
+        let band = NSBezierPath(roundedRect: hb.insetBy(dx: 0, dy: 1),
+                                xRadius: 4, yRadius: 4)
+        if kbWholeWS {
+            pal.accent.withAlphaComponent(0.30).setFill(); band.fill()
+            pal.accent.setStroke(); band.lineWidth = 1.5; band.stroke()
+        } else {
+            (cell.isActive
+                ? pal.accent.withAlphaComponent(hover ? 0.20 : 0.12)
+                : pal.dim.withAlphaComponent(hover ? 0.20 : 0.10)).setFill()
+            band.fill()
+        }
 
         // Grip (left).
         drawRailGrip(in: NSRect(x: hb.minX + 4, y: hb.minY,

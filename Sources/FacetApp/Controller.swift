@@ -1467,11 +1467,14 @@ final class Controller: NSObject {
             matching: .keyDown
         ) { [weak self] e in
             guard let rv = self?.railView else { return e }
+            let shift = e.modifierFlags.contains(.shift)
             switch e.keyCode {
-            case 53:     rv.kbEscape();            return nil   // Esc → close
-            case 123:    rv.kbMoveSelection(dx: -1); return nil // ←
-            case 124:    rv.kbMoveSelection(dx:  1); return nil // →
-            case 36, 76: rv.kbCommit();            return nil   // Return → switch+close
+            case 53:     rv.kbEscape();                     return nil  // Esc → cancel/close
+            case 36, 76: rv.kbCommit();                     return nil  // Return → commit
+            case 49:     rv.kbSpaceLift();                  return nil  // Space → lift
+            case 48:     rv.kbCycleWindow(forward: !shift); return nil  // Tab / Shift-Tab
+            case 123:    rv.kbMoveSelection(dx: -1);            return nil  // ←
+            case 124:    rv.kbMoveSelection(dx:  1);            return nil  // →
             default:     return e
             }
         }

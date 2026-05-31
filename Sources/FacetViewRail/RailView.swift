@@ -378,6 +378,19 @@ public final class RailView: NSView {
         // small bottom cells get the grid-style header (name + mode +
         // grip — the swap grab affordance).
         if !c.isHero { drawHeader(c) }
+
+        // Keyboard-selected window: a prominent accent ring + fill tint,
+        // drawn in BOTH tiers — the centre hero (large) and the selected
+        // WS's bottom cell (small), matched by window id (suppressed
+        // while lifted — the ghost carries the selection then).
+        if drag == nil, let sel = kbSelectedWindow(),
+           c.isHero || c.wsIndex == selectedWS,
+           let hit = c.wins.first(where: { $0.id == sel.id }) {
+            let ring = NSBezierPath(roundedRect: hit.rect.insetBy(dx: -1, dy: -1),
+                                    xRadius: 3, yRadius: 3)
+            pal.accent.withAlphaComponent(0.30).setFill(); ring.fill()
+            pal.accent.setStroke(); ring.lineWidth = c.isHero ? 3 : 2; ring.stroke()
+        }
     }
 
     private func drawThumb(_ w: WinHit, fill: NSColor, stroke: NSColor) {
@@ -434,6 +447,10 @@ public final class RailView: NSView {
     }
 
     public override func mouseDown(with event: NSEvent) {
+        // A keyboard lift owns the drag; ignore mouse presses until it
+        // commits (Return) or cancels (Esc) so a stray click can't
+        // commit it at the keyboard-aimed target.
+        guard drag == nil else { return }
         let p = convert(event.locationInWindow, from: nil)
         // Header press → workspace drag (swap) or click (switch).
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
@@ -460,6 +477,9 @@ public final class RailView: NSView {
     }
 
     public override func mouseDragged(with event: NSEvent) {
+        // Only act on a real mouse gesture (a press set a pending). A
+        // keyboard lift has none, so mouse motion can't hijack its aim.
+        guard pendingDown != nil || pendingHeaderDown != nil else { return }
         let p = convert(event.locationInWindow, from: nil)
         if drag == nil {
             // The grabbed target decides the gesture (no modifier keys):
@@ -505,6 +525,10 @@ public final class RailView: NSView {
 
     public override func mouseUp(with event: NSEvent) {
         defer { pendingDown = nil; pendingHeaderDown = nil; NSCursor.arrow.set() }
+        // No mouse pending → this mouseUp belongs to no mouse gesture
+        // (e.g. a click during a keyboard lift). Leave the keyboard
+        // drag to Return/Esc.
+        guard pendingDown != nil || pendingHeaderDown != nil else { return }
         if drag == nil {
             // No drag crossed threshold → resolve as a click.
             if let pd = pendingDown {
@@ -532,30 +556,162 @@ public final class RailView: NSView {
         needsDisplay = true
     }
 
-    // MARK: - Keyboard browse (Phase R4, INTERP A)
+    // MARK: - Keyboard (browse + DnD, Phase R4 + parity)
 
-    /// ←/→ : move the browse cursor along the bottom row (clamped). The
-    /// HERO re-renders to preview the newly-selected workspace; nothing
-    /// is switched until `kbCommit`.
+    /// Per-window keyboard cursor WITHIN the selected (hero) WS.
+    ///   -1 = whole-WS / none (browse; Space lifts the WS for a swap)
+    ///    0..n-1 = a specific hero window (Space lifts it for a move)
+    public var kbSelectedWindowIdx: Int = -1
+
+    /// Windows in visual reading order — top-to-bottom, left-to-right
+    /// (flipped coords: smaller y = top). So Tab walks the grid the way
+    /// the eye does (left-top → right-top → left-bottom → …), not the
+    /// backend's creation order.
+    private func readingOrder(_ wins: [WinHit]) -> [WinHit] {
+        guard wins.count > 1 else { return wins }
+        let band = max(1, (wins.map { $0.rect.height }.max() ?? 1) * 0.5)
+        // Cluster into rows (y within `band` = same row, so a sub-pixel
+        // y difference between side-by-side windows can't split them),
+        // then order each row left → right, rows top → bottom.
+        let byY = wins.sorted { $0.rect.midY < $1.rect.midY }
+        var rows: [[WinHit]] = []
+        for w in byY {
+            if let rowY = rows.last?.first?.rect.midY, w.rect.midY - rowY <= band {
+                rows[rows.count - 1].append(w)
+            } else {
+                rows.append([w])
+            }
+        }
+        return rows.flatMap { $0.sorted { $0.rect.midX < $1.rect.midX } }
+    }
+
+    /// The keyboard-selected window: the kbSelectedWindowIdx-th window
+    /// (in reading order) of the SELECTED WS, taken from the HERO (it
+    /// shows the full window list large). The ring is drawn in BOTH
+    /// tiers — the hero and the matching bottom cell — by window id.
+    private func kbSelectedWindow() -> WinHit? {
+        guard kbSelectedWindowIdx >= 0, let h = hero, !h.wins.isEmpty
+        else { return nil }
+        let ordered = readingOrder(h.wins)
+        return ordered[max(0, min(ordered.count - 1, kbSelectedWindowIdx))]
+    }
+
+    /// ←/→ : not lifted → move the WS browse cursor (hero previews it);
+    /// lifted → re-aim the drop target along the bottom row (dual role,
+    /// mirrors the grid).
     public func kbMoveSelection(dx: Int) {
-        guard drag == nil, !cells.isEmpty else { return }
+        guard !cells.isEmpty else { return }
         let cur = cells.firstIndex { $0.wsIndex == selectedWS } ?? 0
         let ni = max(0, min(cells.count - 1, cur + dx))
         guard cells[ni].wsIndex != selectedWS else { return }
         selectedWS = cells[ni].wsIndex
-        layoutCells()      // rebuild hero (+ selection cursor) for the new pick
+        if drag != nil {
+            syncRailDragToSelection()      // lifted → arrows AIM the destination
+        } else {
+            kbSelectedWindowIdx = -1       // browse → reset window cursor for the new WS
+            layoutCells()                  // rebuild hero (+ selection cursor)
+        }
     }
 
-    /// Return : commit the browse selection — switch to it (the
-    /// Controller then closes the overlay).
+    /// Tab / Shift-Tab : cycle the SELECTED WS's bottom-cell windows +
+    /// the whole-WS slot (-1). Whole-WS = swap-lift target; a window =
+    /// move-lift target.
+    public func kbCycleWindow(forward: Bool) {
+        guard drag == nil, let h = hero else { return }
+        let slots = h.wins.count + 1                        // whole-WS(-1) + windows
+        let cur = max(-1, min(h.wins.count - 1, kbSelectedWindowIdx)) + 1
+        let next = forward ? (cur + 1) % slots : (cur - 1 + slots) % slots
+        kbSelectedWindowIdx = next - 1
+        needsDisplay = true
+    }
+
+    /// Space : lift whatever is selected — a window (move) or, on the
+    /// whole-WS slot, the whole workspace (swap).
+    public func kbSpaceLift() {
+        if kbSelectedWindowIdx == -1 { kbLiftWorkspace() } else { kbLiftWindow() }
+    }
+
+    private func kbLiftWindow() {
+        guard drag == nil, let h = hero, let sel = kbSelectedWindow() else { return }
+        // Lift from the BOTTOM cell's window (small) so the ghost matches
+        // the rail's bottom-row size, not the big hero. Fall back to the
+        // hero window if that window has no thumb in the bottom cell.
+        let hit = cells.first(where: { $0.wsIndex == selectedWS })?
+            .wins.first(where: { $0.id == sel.id }) ?? sel
+        let at = NSPoint(x: hit.rect.midX, y: hit.rect.midY)
+        drag = Drag(sourceWS: h.wsIndex, kind: .window,
+                    pid: hit.pid, id: hit.id, sourceRect: hit.rect, srcIDs: [],
+                    current: at, dropTargetWS: nil)
+        layoutSuppressed = true
+        installDragGhost(for: hit)
+        positionDragGhost(at: at)
+        needsDisplay = true
+    }
+
+    private func kbLiftWorkspace() {
+        guard drag == nil, let ws = selectedWS,
+              let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+        // Live workspace windows (not the render-filtered thumbs).
+        let srcIDs = workspaces.first(where: { $0.index == ws })?.windows.map(\.id)
+            ?? cell.wins.map(\.id)
+        let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
+        drag = Drag(sourceWS: ws, kind: .workspace, pid: -1,
+                    id: WindowID(serverID: -1), sourceRect: cell.rect,
+                    srcIDs: srcIDs, current: at, dropTargetWS: nil)
+        layoutSuppressed = true
+        installWorkspaceGhost(for: cell)
+        positionDragGhost(at: at)
+        needsDisplay = true
+    }
+
+    /// While lifted, an arrow advances `selectedWS` (the aim cursor);
+    /// re-target the drop + teleport the ghost to the aimed cell.
+    private func syncRailDragToSelection() {
+        guard var d = drag, let sel = selectedWS,
+              let cell = cells.first(where: { $0.wsIndex == sel }) else { return }
+        d.dropTargetWS = (sel == d.sourceWS) ? nil : sel
+        let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
+        d.current = at
+        drag = d
+        positionDragGhost(at: at)
+        needsDisplay = true
+    }
+
+    /// Return : lifted → commit the move/swap (stay open); not lifted →
+    /// switch to the selection (focus a Tab-selected window) + close.
     public func kbCommit() {
-        guard drag == nil, let ws = selectedWS else { return }
-        onPick?(ws)
+        if let d = drag {
+            if let dst = d.dropTargetWS,
+               let dstCell = cells.first(where: { $0.wsIndex == dst }) {
+                switch d.kind {
+                case .window:
+                    commitDrop(sourceWS: d.sourceWS, pid: d.pid, id: d.id, dstCell: dstCell)
+                case .workspace:
+                    commitContentSwap(sourceWS: d.sourceWS, srcIDs: d.srcIDs, dstCell: dstCell)
+                }
+            } else {
+                cancelDrop(to: d.sourceRect)     // aimed home / nowhere → cancel
+            }
+            return
+        }
+        guard let ws = selectedWS else { return }
+        if let hit = kbSelectedWindow() {
+            onPickWindow?(ws, hit.pid, hit.id)   // Tab-selected window → switch + focus it
+        } else {
+            onPick?(ws)                          // whole-WS → switch + close
+        }
     }
 
-    /// Escape: cancel an in-flight drag first (mirrors the grid), else
-    /// dismiss the rail.
+    /// Escape, in order: cancel an in-flight lift → clear a Tab window
+    /// selection (stay open) → dismiss the rail.
     public func kbEscape() {
-        if let d = drag { cancelDrop(to: d.sourceRect) } else { onDismiss?() }
+        if let d = drag {
+            cancelDrop(to: d.sourceRect)
+        } else if kbSelectedWindowIdx != -1 {
+            kbSelectedWindowIdx = -1            // Tab deselect only — don't close
+            needsDisplay = true
+        } else {
+            onDismiss?()
+        }
     }
 }
