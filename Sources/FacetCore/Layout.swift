@@ -15,30 +15,22 @@
 
 import CoreGraphics
 
-/// Master-area axis. `vertical` puts the master column on the left
-/// (Tall); `horizontal` puts the master row on top (Wide). Engines
-/// that have no orientation (grid, monocle, …) ignore it.
-public enum LayoutOrientation: Sendable, Equatable {
-    case vertical, horizontal
-}
-
-/// Tunable knobs shared across layout engines. Per-workspace runtime
-/// state (never persisted to config); the adapter owns the values and
-/// passes a snapshot in on each `frames` call. Engines read only the
-/// knobs they care about — Monocle reads none.
+/// Tunable knobs shared across the master layouts (`tall` / `wide` /
+/// `centered`). Per-workspace runtime state (never persisted to
+/// config); the adapter owns the values and passes a snapshot in on
+/// each `frames` call. Engines read only the knobs they care about —
+/// grid / spiral read none. The Tall-vs-Wide axis is *not* a knob: it
+/// is encoded by which engine runs (`TallLayout` vs `WideLayout`),
+/// swapped via `--toggle-orientation`.
 public struct LayoutParams: Sendable, Equatable {
     /// Fraction of the rect the master area receives (clamped 0.05…0.95).
     public var masterRatio: CGFloat
     /// Number of windows in the master area (clamped ≥ 1).
     public var masterCount: Int
-    /// Master-area axis (Tall vs Wide). Only the master engines read it.
-    public var orientation: LayoutOrientation
 
-    public init(masterRatio: CGFloat = 0.5, masterCount: Int = 1,
-                orientation: LayoutOrientation = .vertical) {
+    public init(masterRatio: CGFloat = 0.5, masterCount: Int = 1) {
         self.masterRatio = max(0.05, min(0.95, masterRatio))
         self.masterCount = max(1, masterCount)
-        self.orientation = orientation
     }
 }
 
@@ -57,33 +49,13 @@ public protocol LayoutEngine: Sendable {
                 params: LayoutParams, in rect: CGRect) -> [WindowID: CGRect]
 }
 
-/// Monocle: every window fills the whole rect. facet never hides
-/// windows (Buddha-palm — public API only), so "monocle" is the
-/// focused window on top with the rest full-size behind it; z-order,
-/// not geometry, decides what's visible, and the adapter drives that
-/// through focus.
-public struct MonocleLayout: LayoutEngine {
-    public let name = "monocle"
-    public init() {}
-
-    public func frames(order: [WindowID], focused: WindowID?,
-                       params: LayoutParams,
-                       in rect: CGRect) -> [WindowID: CGRect] {
-        var out: [WindowID: CGRect] = [:]
-        for id in order { out[id] = rect }
-        return out
-    }
-}
-
 /// Tall / master-stack (dwm `tile`, xmonad `Tall`, Amethyst "Tall").
-/// `vertical` (default = Tall): the first `masterCount` windows fill
-/// the left master column (`masterRatio` of the width) as equal-height
-/// rows; the rest stack as rows in the right column. `horizontal`
-/// (= Wide): the same rotated 90° — master is a top row (`masterRatio`
-/// of the height) split into columns, the rest a bottom row of
-/// columns. ≤ `masterCount` windows → master fills the whole rect.
-/// `order[0]` is the primary master (`promoteToMaster` reorders);
-/// `toggleOrientation` flips vertical ↔ horizontal.
+/// The first `masterCount` windows fill the left master column
+/// (`masterRatio` of the width) as equal-height rows; the rest stack
+/// as rows in the right column. ≤ `masterCount` windows → master
+/// fills the whole rect. `order[0]` is the primary master
+/// (`promoteToMaster` reorders). The horizontal twin is `WideLayout`;
+/// `--toggle-orientation` swaps a workspace between the two.
 public struct TallLayout: LayoutEngine {
     public let name = "tall"
     public init() {}
@@ -96,37 +68,19 @@ public struct TallLayout: LayoutEngine {
         let m = min(params.masterCount, order.count)
         let masters = Array(order.prefix(m))
         let stack = Array(order.dropFirst(m))
-
-        switch params.orientation {
-        case .vertical:
-            guard !stack.isEmpty else {
-                rows(masters, in: rect, into: &out); return out
-            }
-            let masterW = rect.width * params.masterRatio
-            rows(masters,
-                 in: CGRect(x: rect.minX, y: rect.minY,
-                            width: masterW, height: rect.height),
-                 into: &out)
-            rows(stack,
-                 in: CGRect(x: rect.minX + masterW, y: rect.minY,
-                            width: rect.width - masterW,
-                            height: rect.height),
-                 into: &out)
-        case .horizontal:
-            guard !stack.isEmpty else {
-                cols(masters, in: rect, into: &out); return out
-            }
-            let masterH = rect.height * params.masterRatio
-            cols(masters,
-                 in: CGRect(x: rect.minX, y: rect.minY,
-                            width: rect.width, height: masterH),
-                 into: &out)
-            cols(stack,
-                 in: CGRect(x: rect.minX, y: rect.minY + masterH,
-                            width: rect.width,
-                            height: rect.height - masterH),
-                 into: &out)
+        guard !stack.isEmpty else {
+            rows(masters, in: rect, into: &out); return out
         }
+        let masterW = rect.width * params.masterRatio
+        rows(masters,
+             in: CGRect(x: rect.minX, y: rect.minY,
+                        width: masterW, height: rect.height),
+             into: &out)
+        rows(stack,
+             in: CGRect(x: rect.minX + masterW, y: rect.minY,
+                        width: rect.width - masterW,
+                        height: rect.height),
+             into: &out)
         return out
     }
 
@@ -141,6 +95,42 @@ public struct TallLayout: LayoutEngine {
                              y: rect.minY + CGFloat(i) * h,
                              width: rect.width, height: h)
         }
+    }
+}
+
+/// Wide — `TallLayout` rotated 90°. The first `masterCount` windows
+/// fill the top master row (`masterRatio` of the height) split into
+/// equal-width columns; the rest fill a bottom row of columns. ≤
+/// `masterCount` windows → master fills the whole rect. `order[0]` is
+/// the primary master (`promoteToMaster` reorders). The vertical twin
+/// is `TallLayout`; `--toggle-orientation` swaps a workspace between
+/// the two.
+public struct WideLayout: LayoutEngine {
+    public let name = "wide"
+    public init() {}
+
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        guard !order.isEmpty else { return [:] }
+        var out: [WindowID: CGRect] = [:]
+        let m = min(params.masterCount, order.count)
+        let masters = Array(order.prefix(m))
+        let stack = Array(order.dropFirst(m))
+        guard !stack.isEmpty else {
+            cols(masters, in: rect, into: &out); return out
+        }
+        let masterH = rect.height * params.masterRatio
+        cols(masters,
+             in: CGRect(x: rect.minX, y: rect.minY,
+                        width: rect.width, height: masterH),
+             into: &out)
+        cols(stack,
+             in: CGRect(x: rect.minX, y: rect.minY + masterH,
+                        width: rect.width,
+                        height: rect.height - masterH),
+             into: &out)
+        return out
     }
 
     /// Split `ids` into equal-width columns filling `rect`, first id
@@ -163,9 +153,9 @@ public struct TallLayout: LayoutEngine {
 /// and right side columns (right gets the extra one on an odd count).
 /// With ≤ `masterCount` windows the master fills the whole rect. The
 /// master stays centered even when only one side has windows — the
-/// defining ultrawide look.
-public struct CenteredMasterLayout: LayoutEngine {
-    public let name = "centered-master"
+/// defining ultrawide look. CLI name `centered`.
+public struct CenteredLayout: LayoutEngine {
+    public let name = "centered"
     public init() {}
 
     public func frames(order: [WindowID], focused: WindowID?,
@@ -306,9 +296,9 @@ public struct SpiralLayout: LayoutEngine {
 /// one is a value type plus a line in `all`.
 public enum LayoutRegistry {
     public static let all: [any LayoutEngine] = [
-        MonocleLayout(),
         TallLayout(),
-        CenteredMasterLayout(),
+        WideLayout(),
+        CenteredLayout(),
         GridLayout(),
         SpiralLayout(),
     ]

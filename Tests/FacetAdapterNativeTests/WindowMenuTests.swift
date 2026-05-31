@@ -82,7 +82,7 @@ final class WindowMenuTests: XCTestCase {
                        ["Unfloat", "Close window"])
     }
 
-    // MARK: - Master-stack modes (tall / centered-master)
+    // MARK: - Master-stack modes (tall / wide / centered)
 
     func testTallNonMasterShowsPromote() {
         let items = menu("tall", isMaster: false)
@@ -105,8 +105,19 @@ final class WindowMenuTests: XCTestCase {
                         "Float", "Close window"])
     }
 
-    func testCenteredMasterNonMasterShowsPromote() {
-        let items = menu("centered-master", isMaster: false)
+    func testWideMirrorsTall() {
+        // wide is tall's horizontal twin — same master items + flip.
+        let items = menu("wide", isMaster: false)
+        XCTAssertEqual(labels(items),
+                       ["Promote to master",
+                        "Wider master", "Narrower master",
+                        "More masters", "Fewer masters",
+                        "Flip wide / tall",
+                        "Float", "Close window"])
+    }
+
+    func testCenteredNonMasterShowsPromote() {
+        let items = menu("centered", isMaster: false)
         XCTAssertEqual(labels(items),
                        ["Promote to master",
                         "Wider master", "Narrower master",
@@ -114,9 +125,14 @@ final class WindowMenuTests: XCTestCase {
                         "Float", "Close window"])
     }
 
-    func testCenteredMasterMasterHidesPromote() {
-        let items = menu("centered-master", isMaster: true)
+    func testCenteredMasterHidesPromote() {
+        let items = menu("centered", isMaster: true)
         XCTAssertFalse(labels(items).contains("Promote to master"))
+    }
+
+    func testCenteredHasNoFlipItem() {
+        // "Flip wide / tall" is only for the tall/wide pair.
+        XCTAssertFalse(labels(menu("centered")).contains("Flip wide / tall"))
     }
 
     func testMasterStackFloatingDropsTilingItems() {
@@ -129,7 +145,7 @@ final class WindowMenuTests: XCTestCase {
     // MARK: - Universal items
 
     func testCloseAlwaysLastAndCloseFlagged() {
-        for mode in ["float", "bsp", "stack", "tall", "centered-master"] {
+        for mode in ["float", "bsp", "stack", "tall", "wide", "centered"] {
             for floating in [false, true] {
                 let items = menu(mode, floating: floating)
                 XCTAssertTrue(items.last?.isClose == true,

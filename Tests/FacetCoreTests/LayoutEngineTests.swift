@@ -4,59 +4,23 @@ import XCTest
 
 /// Pure tests for the stateless layout-engine seam (Theme B). No AX,
 /// no AppKit — engines are pure geometry, same playbook as
-/// `LayoutTreeTests`.
+/// `LayoutTreeTests`. Per-engine geometry lives in the dedicated
+/// `*LayoutTests`; this file covers the registry + shared knobs.
 final class LayoutEngineTests: XCTestCase {
-
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-    private let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
-
-    // MARK: - Monocle
-
-    func testMonocleFillsRectForEveryWindow() {
-        let order = [wid(1), wid(2), wid(3)]
-        let f = MonocleLayout().frames(
-            order: order, focused: wid(2),
-            params: LayoutParams(), in: screen)
-        XCTAssertEqual(f.count, 3)
-        for w in order { XCTAssertEqual(f[w], screen) }
-    }
-
-    func testMonocleSingleWindow() {
-        let f = MonocleLayout().frames(
-            order: [wid(7)], focused: nil,
-            params: LayoutParams(), in: screen)
-        XCTAssertEqual(f, [wid(7): screen])
-    }
-
-    func testMonocleEmptyOrderEmptyFrames() {
-        XCTAssertTrue(MonocleLayout().frames(
-            order: [], focused: nil,
-            params: LayoutParams(), in: screen).isEmpty)
-    }
-
-    func testMonocleIgnoresFocusAndParams() {
-        // Frame output must not depend on which window is focused or
-        // on the knobs (monocle reads neither).
-        let order = [wid(1), wid(2)]
-        let a = MonocleLayout().frames(
-            order: order, focused: wid(1),
-            params: LayoutParams(masterRatio: 0.3, masterCount: 3),
-            in: screen)
-        let b = MonocleLayout().frames(
-            order: order, focused: wid(2),
-            params: LayoutParams(), in: screen)
-        XCTAssertEqual(a, b)
-    }
 
     // MARK: - Registry
 
-    func testRegistryResolvesMonocleCaseInsensitive() {
-        XCTAssertEqual(LayoutRegistry.engine(named: "monocle")?.name,
-                       "monocle")
-        XCTAssertEqual(LayoutRegistry.engine(named: "MONOCLE")?.name,
-                       "monocle")
-        XCTAssertEqual(LayoutRegistry.engine(named: "Monocle")?.name,
-                       "monocle")
+    func testRegistryResolvesCaseInsensitive() {
+        XCTAssertEqual(LayoutRegistry.engine(named: "tall")?.name, "tall")
+        XCTAssertEqual(LayoutRegistry.engine(named: "TALL")?.name, "tall")
+        XCTAssertEqual(LayoutRegistry.engine(named: "Wide")?.name, "wide")
+    }
+
+    func testRegistryAdvertisesStatelessEngines() {
+        for name in ["tall", "wide", "centered", "grid", "spiral"] {
+            XCTAssertTrue(LayoutRegistry.names.contains(name),
+                          "registry should advertise \(name)")
+        }
     }
 
     func testRegistrySkipsStatefulAndUnknownModes() {
@@ -69,8 +33,11 @@ final class LayoutEngineTests: XCTestCase {
         XCTAssertNil(LayoutRegistry.engine(named: ""))
     }
 
-    func testRegistryNamesAdvertiseMonocle() {
-        XCTAssertTrue(LayoutRegistry.names.contains("monocle"))
+    func testMonocleRetired() {
+        // `monocle` merged into `stack` (full-screen focus); it must no
+        // longer resolve as a stateless engine.
+        XCTAssertNil(LayoutRegistry.engine(named: "monocle"))
+        XCTAssertFalse(LayoutRegistry.names.contains("monocle"))
     }
 
     // MARK: - LayoutParams clamping
