@@ -2,6 +2,15 @@
 
 Guidance for working in this repository.
 
+## Terminology
+
+All UI / config / code terminology follows
+[`docs/glossary.md`](docs/glossary.md) — use the canonical names
+(`FacetCore`, `FacetAdapterNative`, `WindowBackend`, `workspace`,
+`view`, `AX target`, `pal`, `loading skeleton`, …), **not** the
+`Don't call it:` synonyms. Adding or renaming a term lands in the
+same PR as the code change.
+
 ## What this is
 
 `facet` — Swift workspace + window manager for macOS. Multiple
