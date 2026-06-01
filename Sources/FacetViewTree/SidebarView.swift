@@ -769,14 +769,24 @@ public final class SidebarView: NSView {
                     let pillPara = NSMutableParagraphStyle()
                     pillPara.alignment = .center
                     pillPara.lineBreakMode = .byTruncatingTail
+                    let pillAttrs: [NSAttributedString.Key: Any] = [
+                        .font: markFont,
+                        .foregroundColor: pal.bg ?? .black,
+                        .paragraphStyle: pillPara,
+                    ]
+                    // Vertically centre the glyph in the pill from its
+                    // real measured height (NSString.draw is top-aligned,
+                    // so a fixed sub-rect otherwise reads low).
+                    let textH = (mark as NSString).size(
+                        withAttributes: pillAttrs).height
+                    // -1.5: the line box carries empty descender space at
+                    // the bottom, so pure-centre reads slightly low for
+                    // glyphs without descenders — lift it to optical centre.
                     (mark as NSString).draw(
-                        in: NSRect(x: pillRect.minX, y: clusterY + 1,
-                                   width: pillW, height: 13),
-                        withAttributes: [
-                            .font: markFont,
-                            .foregroundColor: pal.bg ?? .black,
-                            .paragraphStyle: pillPara,
-                        ])
+                        in: NSRect(x: pillRect.minX,
+                                   y: clusterY + (pillH - textH) / 2 - 1.5,
+                                   width: pillW, height: textH),
+                        withAttributes: pillAttrs)
                 }
             }
 
