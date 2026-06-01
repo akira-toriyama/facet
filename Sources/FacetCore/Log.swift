@@ -4,7 +4,7 @@
 //                       capture failures — anything the developer
 //                       wants to see after the fact.
 //   - ``Log.debug(_:)`` only when ``debugMode == true`` (set from
-//                       ``facet --debug`` at startup). Use freely
+//                       the ``FACET_DEBUG`` env var at startup). Use freely
 //                       for refresh ticks, command dispatch, drag
 //                       events. Zero overhead in normal runs (one
 //                       bool check).
@@ -13,13 +13,13 @@
 //   - File ``/tmp/facet.log`` — always (both levels). Rotation
 //     deliberately absent; tmp is volatile and macOS cleans it
 //     on reboot.
-//   - stderr — only when ``debugMode == true``. ``facet --debug``
+//   - stderr — only when ``debugMode == true``. ``FACET_DEBUG=1 facet``
 //     foreground users see events live; bug reports via
-//     ``facet --debug 2>&1 | tee bug.log`` capture everything.
+//     ``FACET_DEBUG=1 facet 2>&1 | tee bug.log`` capture everything.
 
 import Foundation
 
-/// Set once at startup by ``Main.swift`` from the ``--debug`` flag.
+/// Set once at startup by ``Main.swift`` from the ``FACET_DEBUG`` env var.
 /// Read from many call sites in ``Log.debug`` (and from ``Log.line``
 /// to decide stderr fan-out). No other code branches on this.
 ///
@@ -31,7 +31,7 @@ public enum Log {
     public static let path = "/tmp/facet.log"
 
     /// Always-on operational log. Also mirrors to stderr when
-    /// `--debug` is on so foreground users see real-time output.
+    /// `FACET_DEBUG` is set so foreground users see real-time output.
     public static func line(_ s: String) {
         emit(s, prefix: "")
     }
@@ -56,9 +56,9 @@ public enum Log {
         } else {
             try? msg.write(toFile: path, atomically: false, encoding: .utf8)
         }
-        // stderr: only in --debug mode. Non-debug runs stay quiet
-        // so a `facet &` background session doesn't pollute the
-        // launching shell.
+        // stderr: only when FACET_DEBUG is set. Quiet runs stay
+        // silent so a `facet &` background session doesn't pollute
+        // the launching shell.
         if debugMode {
             FileHandle.standardError.write(data)
         }

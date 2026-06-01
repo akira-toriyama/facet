@@ -58,7 +58,7 @@ use:
   `/tmp/facet*.log` directly rather than asking for pasted output.)
 - **GUI bugs: observe before theorising.** A screen recording can
   be frame-extracted (`ffmpeg -i in.mov -vf fps=3 f_%02d.png`) and
-  the PNGs read directly; `--debug` logs every Controller / Adapter
+  the PNGs read directly; `FACET_DEBUG` logs every Controller / Adapter
   hot-path event. Cursor shape + panel position in a frame tell you
   whether a click hit its target — facts, not guesses.
 - **When ≥2 fixes haven't worked, isolate in a sandbox.** A pure-
@@ -202,13 +202,13 @@ use:
   - tee of stdout/stderr to ``/tmp/<script>.log`` *on by default*
     so reruns + agent inspection are easy; ``--silent`` opts
     out. The inverted polarity (log-on by default, not
-    ``--debug``-gated like the app) reflects the different
+    ``FACET_DEBUG``-gated like the app) reflects the different
     audience: scripts are run rarely + interactively, the app
     runs continuously.
 
   The application CLI itself (``facet --view=*`` etc.) is
   idempotent / DNC-broadcast and doesn't need ``--dry-run``;
-  its logging is ``--debug``-gated for the opposite reason
+  its logging is ``FACET_DEBUG``-gated for the opposite reason
   (long-lived server, default-quiet stderr). This rule applies
   to repo-local automation, not to the app surface.
 
@@ -218,8 +218,9 @@ use:
   can call it without crossing layer rules. Two functions:
   ``Log.line`` (always on, for end-user-visible operational events
   like AX focus mismatches) and ``Log.debug`` (gated by the
-  ``debugMode`` global, set from ``facet --debug`` at startup).
-- **Both write to `/tmp/facet.log`**; ``--debug`` also mirrors to
+  ``debugMode`` global, set from the ``FACET_DEBUG`` env var at
+  startup — run.sh sets it; brew / raw ``open Facet.app`` stays quiet).
+- **Both write to `/tmp/facet.log`**; ``FACET_DEBUG`` also mirrors to
   stderr so foreground users see events live and bug reports can
   capture them with ``2>&1 | tee bug.log``. Non-debug runs stay
   quiet on stderr so a backgrounded ``facet &`` doesn't pollute

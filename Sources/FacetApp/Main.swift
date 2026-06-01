@@ -21,7 +21,7 @@
 //
 //   Views   : --view=NAME [--active] / --hide=NAME / --toggle=NAME
 //   Theme   : --theme=NAME
-//   Server  : --quit / --reload / --debug / --resign / --help
+//   Server  : --quit / --reload / --resign / --help
 //   Status  : facet status (read-only, no `--`)
 //   Workspace : facet workspace --focus=N|NAME|next|prev|recent / --layout=NAME
 //               / --retile / --add / --remove[=N] / --rename=NAME / --move=N
@@ -169,9 +169,6 @@ enum FacetApp {
                                              the explicit trigger for
                                              scripts that want a
                                              deterministic moment.
-          facet --debug                      verbose log to stderr +
-                                             /tmp/facet.log (server
-                                             startup only)
           facet --resign                     re-sign Facet.app with the
                                              persistent "facet Local
                                              Signing" identity + restart
@@ -826,8 +823,12 @@ enum FacetApp {
 
         // Set debug mode first so any subsequent code path (incl.
         // the validators that fire from client mode) can use
-        // ``Log.debug``. Bare flag, no value.
-        if argv.contains("--debug") { debugMode = true }
+        // ``Log.debug``. Read from the ``FACET_DEBUG`` env var (set
+        // by run.sh) — there is no CLI flag, so a brew / raw
+        // ``open Facet.app`` launch stays quiet by default.
+        if ProcessInfo.processInfo.environment["FACET_DEBUG"] != nil {
+            debugMode = true
+        }
 
         // Two-pass: collect all flags first so the dispatch below
         // is order-independent (``--view=tree --active`` and
@@ -887,7 +888,6 @@ enum FacetApp {
                         + "(milliseconds) — got \"\(raw)\"")
                 }
                 loadingArg = ms
-            case a == "--debug":             break          // handled above
             case a == "--resign":            break          // handled above
             // Names are canonicalised + validated at parse time
             // (not at post time) so typos exit 2 BEFORE the server-
