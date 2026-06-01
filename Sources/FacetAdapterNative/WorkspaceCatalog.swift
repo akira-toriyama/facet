@@ -688,6 +688,37 @@ struct WorkspaceCatalog {
         layoutTrees[slot.workspace] = tree
     }
 
+    /// Rotate the whole bsp tree of `n1Based` clockwise by `degrees`
+    /// (90 / 180 / 270). No-op (returns false) when the WS isn't in
+    /// bsp mode, has no tree, or the rotation leaves the tree
+    /// unchanged (≤1 leaf). Returns whether the tree changed so the
+    /// adapter can skip a pointless reflow.
+    @discardableResult
+    mutating func rotateTree(workspace n1Based: Int,
+                                    degrees: Int) -> Bool {
+        guard mode(of: n1Based) == "bsp",
+              var tree = layoutTrees[n1Based] else { return false }
+        let before = tree
+        tree.rotate(degrees: degrees)
+        guard tree != before else { return false }
+        layoutTrees[n1Based] = tree
+        return true
+    }
+
+    /// Mirror the whole bsp tree of `n1Based` across `axis`. Same
+    /// no-op / change-detection contract as `rotateTree`.
+    @discardableResult
+    mutating func mirrorTree(workspace n1Based: Int,
+                                    axis: LayoutTree.Axis) -> Bool {
+        guard mode(of: n1Based) == "bsp",
+              var tree = layoutTrees[n1Based] else { return false }
+        let before = tree
+        tree.mirror(axis)
+        guard tree != before else { return false }
+        layoutTrees[n1Based] = tree
+        return true
+    }
+
     /// Tree-computed frames for every tiled window in the WS,
     /// keyed by `WindowID`. Empty when the WS isn't in `"bsp"`
     /// mode or has no tree.

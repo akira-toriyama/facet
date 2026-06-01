@@ -1674,6 +1674,28 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: activeDisplayRect())
     }
 
+    public func rotateActiveWorkspace(degrees: Int) {
+        guard catalog.rotateTree(workspace: catalog.activeIndex,
+                                 degrees: degrees) else {
+            Log.debug("native: rotate noop "
+                + "(WS \(catalog.activeIndex) not bsp / unchanged)")
+            return
+        }
+        reflowActive(rect: activeDisplayRect())
+    }
+
+    public func mirrorActiveWorkspace(_ axis: MirrorAxis) {
+        let treeAxis: LayoutTree.Axis =
+            axis == .horizontal ? .horizontal : .vertical
+        guard catalog.mirrorTree(workspace: catalog.activeIndex,
+                                 axis: treeAxis) else {
+            Log.debug("native: mirror noop "
+                + "(WS \(catalog.activeIndex) not bsp / unchanged)")
+            return
+        }
+        reflowActive(rect: activeDisplayRect())
+    }
+
     /// Apply stack mode to `n1Based`: the catalog's
     /// `stackOrder[0]` fills `rect` (un-parked from the anchor
     /// sliver), all other members are parked there. Floating

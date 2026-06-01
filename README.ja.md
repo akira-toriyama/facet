@@ -315,6 +315,8 @@ facet --toggle=NAME               # NAME トグル
 facet workspace --layout=NAME     # bsp | stack | tall | wide | centered | grid | spiral | float
 facet workspace --retile          # active WS のレイアウトを再適用 (任意の tiling mode)
 facet workspace --balance         # master 比率 / 数を均等な初期値にリセット
+facet workspace --rotate=90|180|270        # bsp tree を時計回りに回転 (bsp のみ)
+facet workspace --mirror=horizontal|vertical # bsp tree を左右 / 上下に反転
 facet window --toggle-float          # focused window の float flag flip
 facet window --toggle-orientation    # bsp: 親 split を 90 度回転 / tall⇄wide: レイアウト入替
 facet window --cycle-stack=next|prev # stack の次 / 前メンバーへ循環
