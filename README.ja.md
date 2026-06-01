@@ -342,8 +342,6 @@ facet --theme=NAME                # terminal | cute | system
 facet --reload                    # config.toml 再読込 + 反映
                                   # (theme / preview-mode / [workspaces])
 facet --quit                      # server 終了
-facet --debug                     # verbose log (stderr +
-                                  # /tmp/facet.log、 server-mode)
 facet --resign                    # Facet.app 再 sign (brew install 後)
 facet --help                      # 完全リファレンス
 ```
@@ -416,18 +414,20 @@ action-keys  = "ctrl + fn - left"
 
 ## デバッグ
 
-`--debug` フラグで `/tmp/facet.log` への出力を stderr にもミラー
+`FACET_DEBUG=1` で `/tmp/facet.log` への出力を stderr にもミラー
 し、 verbose トレース (refresh tick、 backend command、 focus
-retry、 grid DnD イベント等) を有効化:
+retry、 grid DnD イベント等) を有効化。 `./run.sh` は自動で設定する。
+生バイナリはコマンド前に付ける:
 
 ```sh
-.build/release/facet --debug              # foreground でイベント流れる
-.build/release/facet --debug 2>&1 | tee bug.log   # issue 用にキャプチャ
+FACET_DEBUG=1 .build/release/facet              # foreground でイベント流れる
+FACET_DEBUG=1 .build/release/facet 2>&1 | tee bug.log   # issue 用にキャプチャ
 ```
 
-`--debug` は server 起動時のみ有効 (`--show` 等の client mode flag
-と併用しても no-op)。 通常起動では stderr は静か、 `Log.debug` 呼出
-もゼロコスト。
+`FACET_DEBUG` は server 起動時に一度だけ読まれる。 無ければ stderr は
+静か、 `Log.debug` 呼出もゼロコスト — brew 版 `facet` がシェルを
+汚すことはない。 (`--debug` flag は無い: 渡すと未知 flag として `2`
+で exit。)
 
 ## ソースからビルド
 

@@ -212,9 +212,9 @@ mismatch 等）を出す用途。
 - **Don't call it:** info log, always-on log, 通常ログ
 
 ### `Log.debug`
-**`debugMode` global で gate**（`facet --debug` 起動時のみ）。Controller /
-Adapter / EventSource の hot path で気軽に使う。
-- 出力先: `/tmp/facet.log` 常時 + `--debug` 時のみ stderr ミラー
+**`debugMode` global で gate**（`FACET_DEBUG` 環境変数の設定時のみ）。
+Controller / Adapter / EventSource の hot path で気軽に使う。
+- 出力先: `/tmp/facet.log` 常時 + `FACET_DEBUG` 時のみ stderr ミラー
 - **Don't call it:** verbose log, trace log, 詳細ログ
 
 ### `FlippedClipView`

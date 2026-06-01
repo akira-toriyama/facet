@@ -354,8 +354,6 @@ facet --theme=NAME                # terminal | cute | system
 facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode / [workspaces])
 facet --quit                      # terminate the running server
-facet --debug                     # verbose log to stderr +
-                                  # /tmp/facet.log (server-mode)
 facet --resign                    # re-sign Facet.app (after brew install)
 facet --help                      # full reference
 ```
@@ -431,19 +429,21 @@ single frames? Also that. 💙
 
 ## Debugging
 
-Start facet with `--debug` to mirror everything that goes into
+Set `FACET_DEBUG=1` to mirror everything that goes into
 `/tmp/facet.log` to stderr as well, and to turn on verbose
 tracing (refresh ticks, backend commands, focus retries, grid
-DnD events, …):
+DnD events, …). `./run.sh` sets it for you; for a raw binary
+prefix the command:
 
 ```sh
-.build/release/facet --debug              # foreground — events scroll live
-.build/release/facet --debug 2>&1 | tee bug.log   # capture for an issue
+FACET_DEBUG=1 .build/release/facet              # foreground — events scroll live
+FACET_DEBUG=1 .build/release/facet 2>&1 | tee bug.log   # capture for an issue
 ```
 
-`--debug` only takes effect at server startup (it's a no-op when
-combined with client-mode flags like `--show`). Without it the
-app stays quiet on stderr and `Log.debug` calls are zero-cost.
+`FACET_DEBUG` is read once at server startup. Without it the app
+stays quiet on stderr and `Log.debug` calls are zero-cost — so a
+brew-installed `facet` never pollutes your shell. (There is no
+`--debug` flag: passing one exits `2` like any unknown flag.)
 
 ## Build from source
 

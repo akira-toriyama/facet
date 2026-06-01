@@ -558,7 +558,7 @@ final class Controller: NSObject {
     /// the name (`canonicalLayoutMode`); a stray name landing
     /// here would silently no-op via the backend's own mode
     /// gate, but logging the receiver-side rejection makes
-    /// `--debug` traces clearer.
+    /// `FACET_DEBUG` traces clearer.
     private func dispatchSetLayout(_ name: String) {
         guard let active = lastWorkspaces.first(where: \.isActive)
         else {
@@ -582,7 +582,7 @@ final class Controller: NSObject {
     /// thin wrapper around `backend.perform`. The "no focused
     /// window" guard lives in the backend (NativeAdapter exits
     /// early when `focusedWindow()` is nil); we just log the
-    /// dispatch here for `--debug` tracing.
+    /// dispatch here for `FACET_DEBUG` tracing.
     private func dispatchWindowAction(_ action: WindowAction) {
         Log.debug("dispatchWindowAction \(action)")
         backend.perform(action)

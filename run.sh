@@ -5,8 +5,8 @@
 # (com.facet.app.dev) for verification alongside a Homebrew
 # install without TCC grant collisions.
 #
-#   ./run.sh                            release → Facet.app
-#   ./run.sh --dev                      dev     → Facet-dev.app
+#   ./run.sh                            release → Facet.app (FACET_DEBUG on)
+#   ./run.sh --dev                      dev     → Facet-dev.app (FACET_DEBUG on)
 #   FACET_BACKEND=native ./run.sh       opt into the native adapter
 #
 # Always kills any currently-running facet first (via stop.sh) so
@@ -38,6 +38,11 @@ for VAR in FACET_BACKEND; do
         OPEN_ARGS+=(--env "$VAR=${(P)VAR}")
     fi
 done
-open "./$APP" "${OPEN_ARGS[@]}"
+# run.sh is the local dev/debug launcher → always set FACET_DEBUG so
+# /tmp/facet.log gets the verbose lines (incl. `gate=` / `exclude=`
+# window-classification decisions). There is no `--debug` CLI flag:
+# debug is env-var-triggered, so a brew / raw `open Facet.app` stays
+# quiet. `open` doesn't inherit the shell env, so it goes via --env.
+open "./$APP" --env FACET_DEBUG=1 "${OPEN_ARGS[@]}"
 echo "$APP launched. Grant Accessibility + Screen Recording on first run."
 [[ ${#OPEN_ARGS[@]} -gt 0 ]] && echo "forwarded env: ${OPEN_ARGS[*]}"
