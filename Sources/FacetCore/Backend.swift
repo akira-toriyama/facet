@@ -63,6 +63,15 @@ public enum MirrorAxis: Sendable, Equatable {
     case horizontal, vertical
 }
 
+/// Which side of a target window an insert lands on (real-window DnD,
+/// 枠C `insertWindow`). Layout-interpreted: bsp splits the target on
+/// that side; stateless / stack engines place the moved window before
+/// (`left` / `top`) or after (`right` / `bottom`) the target in the
+/// window order. `top` = the minY side, `bottom` = the maxY side.
+public enum InsertEdge: Sendable, Equatable {
+    case left, right, top, bottom
+}
+
 /// The only surface the rest of the app knows about. rift / native
 /// each implement it; the UI, AX focus glue, themes and DnD are all
 /// WM-agnostic.
@@ -168,6 +177,25 @@ public protocol WindowBackend: Sendable {
     /// no-op contract as `rotateActiveWorkspace`.
     func mirrorActiveWorkspace(_ axis: MirrorAxis)
 
+    /// Swap two tiled windows' positions within the active workspace
+    /// (real-window DnD, 枠C). Stateless / stack engines trade the two
+    /// windows' order slots; bsp trades their leaves (frames swap, tree
+    /// shape unchanged). No-op unless both are non-floating members of
+    /// the active workspace. Not a CLI verb — DnD-only (the UI in PR-2
+    /// is the sole caller).
+    func swapWindows(_ a: WindowID, _ b: WindowID)
+
+    /// Insert `moved` beside `target` on `edge` within the active
+    /// workspace (real-window DnD, 枠C). The edge is layout-interpreted:
+    /// bsp splits the target's `edge` side and drops `moved` there;
+    /// stateless / stack engines move `moved` before (`left` / `top`)
+    /// or after (`right` / `bottom`) `target` in the window order. The
+    /// prediction overlay (PR-2) absorbs the per-engine difference.
+    /// No-op unless both are non-floating members of the active
+    /// workspace. Not a CLI verb — DnD-only.
+    func insertWindow(_ moved: WindowID, beside target: WindowID,
+                      edge: InsertEdge)
+
     /// Assign mark `name` (vim-style label) to the focused window
     /// (`facet window --mark=NAME`). 1:1: the name's old window and the
     /// focused window's old mark are both cleared. Returns `false` when
@@ -224,6 +252,9 @@ public extension WindowBackend {
     func balanceActiveWorkspace() {}
     func rotateActiveWorkspace(degrees: Int) {}
     func mirrorActiveWorkspace(_ axis: MirrorAxis) {}
+    func swapWindows(_ a: WindowID, _ b: WindowID) {}
+    func insertWindow(_ moved: WindowID, beside target: WindowID,
+                      edge: InsertEdge) {}
     func markFocusedWindow(_ name: String) -> Bool { false }
     func focusMark(_ name: String) -> Bool { false }
     func unmark(_ name: String) -> Bool { false }

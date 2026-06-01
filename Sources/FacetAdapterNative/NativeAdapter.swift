@@ -1696,6 +1696,27 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: activeDisplayRect())
     }
 
+    public func swapWindows(_ a: WindowID, _ b: WindowID) {
+        guard catalog.swapWindows(a, b,
+                                  workspace: catalog.activeIndex) else {
+            Log.debug("native: swap noop "
+                + "a=\(a.serverID) b=\(b.serverID)")
+            return
+        }
+        reflowActive(rect: activeDisplayRect())
+    }
+
+    public func insertWindow(_ moved: WindowID, beside target: WindowID,
+                             edge: InsertEdge) {
+        guard catalog.insertWindow(moved, beside: target, edge: edge,
+                                   workspace: catalog.activeIndex) else {
+            Log.debug("native: insert noop "
+                + "moved=\(moved.serverID) target=\(target.serverID)")
+            return
+        }
+        reflowActive(rect: activeDisplayRect())
+    }
+
     public func markFocusedWindow(_ name: String) -> Bool {
         guard let id = focusedWindow() else {
             Log.debug("native: mark \"\(name)\" — no focused window")
