@@ -234,11 +234,10 @@ public final class SidebarView: NSView {
                     else { continue }
                     let hasLabel = win.isMaster || win.isFloating
                     let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
-                    // Lines stacked above the app name (master/float on
-                    // top, mark pill below) grow the row by 16pt each.
-                    let topLines = (hasLabel ? 1 : 0)
-                        + (win.mark != nil ? 1 : 0)
-                    let rh = baseRH + CGFloat(topLines) * 16
+                    // master / float gets its own line under the title;
+                    // the mark rides inline on the app-name line (no
+                    // extra height).
+                    let rh = baseRH + (hasLabel ? 14 : 0)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -278,11 +277,10 @@ public final class SidebarView: NSView {
                     // A 3rd line (master / float) adds 14 pt so the
                     // label has its own row instead of crowding the
                     // title baseline.
-                    // Lines stacked above the app name (master/float on
-                    // top, mark pill below) grow the row by 16pt each.
-                    let topLines = (hasLabel ? 1 : 0)
-                        + (win.mark != nil ? 1 : 0)
-                    let rh = baseRH + CGFloat(topLines) * 16
+                    // master / float gets its own line under the title;
+                    // the mark rides inline on the app-name line (no
+                    // extra height).
+                    let rh = baseRH + (hasLabel ? 14 : 0)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -686,42 +684,33 @@ public final class SidebarView: NSView {
                         .fill()
                 }
                 let iconX = rowPadX + 2
+                let iconY = row.midY - iconSize / 2
+                if let img = AppIcons.icon(forPID: c.pid) {
+                    img.draw(in: NSRect(x: iconX, y: iconY,
+                                        width: iconSize, height: iconSize))
+                }
                 let labelText: String? =
                     c.isMaster ? "master" :
                     c.isFloating ? "float" : nil
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
                 let tx = iconX + iconSize + 8
-                let tw = max(bounds.width - tx - rowPadX, 0)
-
-                // Two small lines stacked ABOVE the app *name* (at the
-                // name's column — not above the icon): master / float on
-                // top, the mark pill beneath it. The icon + app name +
-                // title identity block sits below them.
-                let lineSlot: CGFloat = 16
-                let topLines = (hasLabel ? 1 : 0) + (c.mark != nil ? 1 : 0)
-                var topY = row.minY + 2
-                if let labelText {
-                    let lp = NSMutableParagraphStyle()
-                    lp.lineBreakMode = .byTruncatingTail
-                    (labelText as NSString).draw(
-                        in: NSRect(x: tx, y: topY + 1, width: tw, height: 14),
-                        withAttributes: [
-                            .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.accent2,
-                            .paragraphStyle: lp,
-                        ])
-                    topY += lineSlot
-                }
+                let appY = (hasTitle || hasLabel)
+                    ? row.minY + 6 : row.midY - 9
+                // Mark rides inline at the head of the app-name line as a
+                // filled pill; the app name flows after it. No extra row
+                // height, tied to the window's identity.
+                var nameX = tx
                 if let mark = c.mark {
                     let markFont = uiFont(windowFontSize - 1, .bold)
-                    let maxTextW: CGFloat = 72   // long names tail-truncate
+                    let maxTextW: CGFloat = 60   // long names tail-truncate
                     let textW = min(maxTextW, ceil((mark as NSString).size(
                         withAttributes: [.font: markFont]).width))
-                    let padX: CGFloat = 7
+                    let padX: CGFloat = 6
                     let pillH: CGFloat = 15
                     let pillW = textW + padX * 2
-                    let pillRect = NSRect(x: tx, y: topY,
+                    let pillY = appY + 1         // centre on the 18pt line
+                    let pillRect = NSRect(x: tx, y: pillY,
                                           width: pillW, height: pillH)
                     (sel ? pal.accent : pal.accent2).setFill()
                     NSBezierPath(roundedRect: pillRect,
@@ -737,36 +726,38 @@ public final class SidebarView: NSView {
                     let textH = (mark as NSString).size(
                         withAttributes: pillAttrs).height
                     (mark as NSString).draw(
-                        in: NSRect(x: tx, y: topY + (pillH - textH) / 2 - 1.5,
+                        in: NSRect(x: tx, y: pillY + (pillH - textH) / 2 - 1.5,
                                    width: pillW, height: textH),
                         withAttributes: pillAttrs)
+                    nameX = tx + pillW + 6
                 }
-
-                // Identity block (icon + app name + title) below the top
-                // lines. `baseRH` is the block's natural height.
-                let baseRH = hasTitle ? windowRowTallH : windowRowH
-                let base = row.minY + CGFloat(topLines) * lineSlot
-                let iconY = base + baseRH / 2 - iconSize / 2
-                if let img = AppIcons.icon(forPID: c.pid) {
-                    img.draw(in: NSRect(x: iconX, y: iconY,
-                                        width: iconSize, height: iconSize))
-                }
-                let appY = hasTitle ? base + 6 : base + baseRH / 2 - 9
+                let nameW = max(bounds.width - nameX - rowPadX, 0)
                 (c.app as NSString).draw(
-                    in: NSRect(x: tx, y: appY, width: tw, height: 18),
+                    in: NSRect(x: nameX, y: appY, width: nameW, height: 18),
                     withAttributes: [
                         .font: uiFont(windowFontSize,
                                       sel ? .semibold : .medium),
                         .foregroundColor: sel ? pal.accent : pal.text,
                         .paragraphStyle: para,
                     ])
+                let tw = max(bounds.width - tx - rowPadX, 0)
                 if hasTitle {
                     (c.title as NSString).draw(
-                        in: NSRect(x: tx, y: base + 25,
+                        in: NSRect(x: tx, y: row.minY + 25,
                                    width: tw, height: 15),
                         withAttributes: [
                             .font: uiFont(windowFontSize - 1, .regular),
                             .foregroundColor: pal.dim,
+                            .paragraphStyle: para,
+                        ])
+                }
+                if let labelText {
+                    let labelY = hasTitle ? row.minY + 42 : row.minY + 24
+                    (labelText as NSString).draw(
+                        in: NSRect(x: tx, y: labelY, width: tw, height: 14),
+                        withAttributes: [
+                            .font: uiFont(windowFontSize - 1, .semibold),
+                            .foregroundColor: pal.accent2,
                             .paragraphStyle: para,
                         ])
                 }
