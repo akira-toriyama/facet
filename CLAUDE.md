@@ -64,10 +64,10 @@ use:
 - **When ≥2 fixes haven't worked, isolate in a sandbox.** A pure-
   AppKit `.executableTarget` (no FacetCore / View deps) that opens
   the offending construct in several variant configs A/B-tests the
-  OS behaviour without facet's noise. The
-  [`sandbox/panel-resize-tester`](https://github.com/akira-toriyama/facet/tree/sandbox/panel-resize-tester)
-  branch is the worked example (it's how the chevron → `.resizable`
-  switch was found). See References → *Debugging methodology*.
+  OS behaviour without facet's noise. The worked example was a
+  `panel-sandbox` executable target (8 `NSPanel` `styleMask`
+  variants in a 4×2 grid) — how the chevron → `.resizable` switch
+  was found. See References → *Debugging methodology*.
 
 ## Non-obvious constraints — read before editing
 
@@ -344,13 +344,12 @@ scientific debugging, bisection.*
   **minimal** (least code that still triggers it), **complete**
   (anyone can copy-paste-run), **reproducible** (you ran it
   yourself and it failed). The single highest-leverage thing
-  you can do when stuck on a bug. facet's
-  [`sandbox/panel-resize-tester`][sandbox-branch] branch + the
-  `panel-sandbox` executable target are an applied example: when
-  the panel resize fix spiral hit 6 hours, isolating the AppKit
-  knobs in a pure-AppKit sandbox app (no FacetCore / View / etc.
-  dependencies) found the working `.resizable` config in 30
-  minutes. The pattern: **branch + `Sources/<Sandbox>` + new
+  you can do when stuck on a bug. facet's one-off `panel-sandbox`
+  executable target was an applied example: when the panel resize
+  fix spiral hit 6 hours, isolating the AppKit knobs in a pure-
+  AppKit sandbox app (no FacetCore / View / etc. dependencies)
+  found the working `.resizable` config in 30 minutes. The
+  pattern: **throwaway branch + `Sources/<Sandbox>` + new
   `.executableTarget` in Package.swift** ([[gui-bug-sandbox-ab-test]]).
 - [Minimal reproducible example — Wikipedia](https://en.wikipedia.org/wiki/Minimal_reproducible_example)
   *(reviewed 2026-05-22)* — cross-language overview; same idea
@@ -371,8 +370,6 @@ scientific debugging, bisection.*
   is a meaningful step — bisecting against it is cheap. Reach
   here when a regression appears that worked "yesterday" or in
   a pre-M2 build.
-
-[sandbox-branch]: https://github.com/akira-toriyama/facet/tree/sandbox/panel-resize-tester
 
 ### CLI design
 *Language-neutral UX principles for command-line tools.*
