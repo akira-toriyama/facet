@@ -80,6 +80,12 @@ public struct Window: Sendable {
     /// "Promote to master" on the window that is already the master.
     /// `false` for floating windows and layouts without a master.
     public let isMaster: Bool
+    /// User-assigned mark (vim-style label) for this window, or `nil`
+    /// when unmarked. A mark is a 1:1 handle: `facet window --mark=a`
+    /// tags the focused window, `--focus-mark=a` jumps focus to it
+    /// (switching workspace if needed). Session-only, per-native-Space.
+    /// Views surface it as a small badge.
+    public let mark: String?
 
     public init(id: WindowID,
                 pid: Int,
@@ -90,7 +96,8 @@ public struct Window: Sendable {
                 frame: CGRect?,
                 isOnscreen: Bool = true,
                 isMaster: Bool = false,
-                bundleId: String? = nil) {
+                bundleId: String? = nil,
+                mark: String? = nil) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -101,6 +108,7 @@ public struct Window: Sendable {
         self.frame = frame
         self.isOnscreen = isOnscreen
         self.isMaster = isMaster
+        self.mark = mark
     }
 }
 

@@ -352,6 +352,8 @@ facet workspace --rename=NAME           # rename the active workspace
 facet workspace --move=N                # move active workspace to position N
 facet window --move-to=N          # move focused window to workspace N
 facet window --move-to=N --follow # …and switch to N too (send-and-follow)
+facet window --mark=NAME          # tag the focused window with a mark
+facet window --focus-mark=NAME    # jump focus to that window (switches WS)
 facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp
 

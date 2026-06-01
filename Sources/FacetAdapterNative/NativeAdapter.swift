@@ -1696,6 +1696,41 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: activeDisplayRect())
     }
 
+    public func markFocusedWindow(_ name: String) -> Bool {
+        guard let id = focusedWindow() else {
+            Log.debug("native: mark \"\(name)\" — no focused window")
+            return false
+        }
+        catalog.setMark(name, to: id)
+        Log.debug("native: mark \"\(name)\" -> \(id.serverID)")
+        eventContinuation.yield(.refreshNeeded)   // repaint the badge
+        return true
+    }
+
+    public func focusMark(_ name: String) -> Bool {
+        guard let id = catalog.window(forMark: name),
+              let slot = catalog.windowMap[id] else {
+            Log.debug("native: focus-mark \"\(name)\" — unset / gone")
+            return false
+        }
+        // Cross-WS jump: switch first (un-parks + tiles the target WS,
+        // suppressing default focus), then assert the marked window —
+        // the same two-step the tree-click path uses. Same WS → assert
+        // straight away.
+        if slot.workspace != catalog.activeIndex {
+            switchWorkspace(toIndex: slot.workspace - 1, autoFocus: false)
+        }
+        guard let win = enumerateCGWindows().first(where: { $0.id == id })
+        else {
+            Log.debug("native: focus-mark \"\(name)\" — window vanished")
+            return false
+        }
+        Focus.assert(win, backend: self)
+        Log.debug("native: focus-mark \"\(name)\" -> \(id.serverID) "
+            + "WS \(slot.workspace)")
+        return true
+    }
+
     /// Apply stack mode to `n1Based`: the catalog's
     /// `stackOrder[0]` fills `rect` (un-parked from the anchor
     /// sliver), all other members are parked there. Floating

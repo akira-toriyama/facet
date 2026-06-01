@@ -27,7 +27,8 @@
 //               / --retile / --balance / --rotate=90|180|270
 //               / --mirror=horizontal|vertical / --add / --remove[=N]
 //               / --rename=NAME / --move=N
-//   Window    : facet window --move-to=N[ --follow] / --toggle-float /
+//   Window    : facet window --move-to=N[ --follow] / --mark=NAME
+//               / --focus-mark=NAME / --toggle-float /
 //               --toggle-orientation / --cycle-stack=next|prev /
 //               --grow-master / --shrink-master / --inc-master / --dec-master
 //
@@ -134,6 +135,9 @@ enum FacetApp {
         WINDOW                               (focused window)
           facet window --move-to=N           move it to workspace N
           facet window --move-to=N --follow  …and switch there too
+          facet window --mark=NAME           tag it with a mark (label)
+          facet window --focus-mark=NAME     jump focus to the marked
+                                             window (switches WS if needed)
           facet window --toggle-float        flip its float flag
           facet window --toggle-orientation  bsp: rotate parent split /
                                              tall⇄wide: swap layout
@@ -554,6 +558,8 @@ enum FacetApp {
     static func runWindowCommand(_ args: [String]) -> Never {
         var moveToArg: Int?
         var follow = false
+        var markArg: String?
+        var focusMarkArg: String?
         var toggleFloat = false
         var toggleOrientation = false
         var cycleStackDir: String?
@@ -570,6 +576,10 @@ enum FacetApp {
                 moveToArg = parseMoveToInt(a)
             case a == "--follow":
                 follow = true
+            case a.hasPrefix("--mark="):
+                markArg = parseMarkName(a, prefix: "--mark=")
+            case a.hasPrefix("--focus-mark="):
+                focusMarkArg = parseMarkName(a, prefix: "--focus-mark=")
             case a == "--toggle-float":
                 toggleFloat = true
             case a == "--toggle-orientation":
@@ -594,6 +604,8 @@ enum FacetApp {
         // was set, in declaration order. Loud reject if zero or
         // multiple were specified to keep behaviour unambiguous.
         let count = (moveToArg != nil ? 1 : 0)
+            + (markArg != nil ? 1 : 0)
+            + (focusMarkArg != nil ? 1 : 0)
             + (toggleFloat ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
             + (cycleStackDir != nil ? 1 : 0)
@@ -619,6 +631,8 @@ enum FacetApp {
         requireServerAlive()
         if let n = moveToArg { follow ? postWindowMoveFollow(n)
                                       : postWindowMove(n) }
+        if let m = markArg { postControl("window-mark:" + m) }
+        if let m = focusMarkArg { postControl("window-focus-mark:" + m) }
         if toggleFloat { postWindowToggleFloat() }
         if toggleOrientation { postWindowToggleOrientation() }
         if let d = cycleStackDir { postWindowCycleStack(d) }
@@ -628,6 +642,17 @@ enum FacetApp {
         if decMaster { postWindowDecMaster() }
         // Unreachable — `count == 1` guarantees one branch fired.
         die("facet window: dispatch fell through (bug)")
+    }
+
+    /// Parse a mark name from `--mark=NAME` / `--focus-mark=NAME`.
+    /// Any non-empty string is accepted (single letter for hotkeys or
+    /// a memorable word); an empty name is a loud reject (exit 2).
+    static func parseMarkName(_ arg: String, prefix: String) -> String {
+        let raw = String(arg.dropFirst(prefix.count))
+        guard !raw.isEmpty else {
+            die("\(prefix.dropLast()): expected a non-empty mark name")
+        }
+        return raw
     }
 
     /// Parse `--rotate=90|180|270`. Loud reject on anything else

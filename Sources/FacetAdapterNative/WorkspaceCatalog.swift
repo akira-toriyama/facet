@@ -164,6 +164,16 @@ struct WorkspaceCatalog {
     /// focus to a now-missing window.
     private(set) var lastFocusedOnLeave: [Int: WindowID] = [:]
 
+    /// User-assigned window marks (`facet window --mark=NAME`), a 1:1
+    /// bijection between mark name and window: each name maps to one
+    /// window and each window carries at most one name. Setting a name
+    /// reassigns it (the old window loses it) and clears any prior mark
+    /// on the target window. Session-only and per-native-Space (this
+    /// catalog is swapped per Space). Pruned in `forgetWindow` when a
+    /// window closes. Keyed by name → `WindowID`; stable across WS
+    /// reorder (WindowID is the window-server id), so no remap needed.
+    private(set) var marks: [String: WindowID] = [:]
+
     /// IDs that have been observed `isOnscreen=true` once but not
     /// yet committed to `windowMap`. Reconcile requires **two
     /// consecutive on-screen observations** before adding so a
@@ -418,6 +428,7 @@ struct WorkspaceCatalog {
         clearLeaveFocus(of: id)
         examinedIDs.remove(id)
         pendingAddCandidates.remove(id)
+        marks = marks.filter { $0.value != id }   // drop any mark on it
     }
 
     /// Clear all hide-state bookkeeping for `id` without
@@ -816,6 +827,28 @@ struct WorkspaceCatalog {
         return true
     }
 
+    // MARK: - Window marks (1:1 name ⇄ window)
+
+    /// Assign mark `name` to `id`, keeping the bijection: the name's
+    /// previous window loses it, and `id`'s previous mark (if any) is
+    /// cleared, so afterwards exactly `name ⇄ id` holds. No-op only on
+    /// an empty name (the caller rejects that at parse time). `id` need
+    /// not be in `windowMap` — but callers pass the focused window.
+    mutating func setMark(_ name: String, to id: WindowID) {
+        // Clear id's existing name (a window holds at most one mark).
+        marks = marks.filter { $0.value != id }
+        marks[name] = id          // reassigns the name to the new window
+    }
+
+    /// The window a mark points to, or nil when the name is unset.
+    func window(forMark name: String) -> WindowID? { marks[name] }
+
+    /// The mark a window carries, or nil when unmarked. Used by the
+    /// snapshot to stamp `Window.mark` for the tree badge.
+    func mark(forWindow id: WindowID) -> String? {
+        marks.first { $0.value == id }?.key
+    }
+
     /// Swap a workspace between the `tall` and `wide` layouts — the two
     /// orientations of the master-stack, now distinct engines rather
     /// than an orientation knob. No-op for any other mode. Window order
@@ -1168,7 +1201,8 @@ struct WorkspaceCatalog {
                            engineFrames: engineF,
                            activeRect: activeRect),
                        isOnscreen: w.isOnscreen,
-                       isMaster: w.id == master)
+                       isMaster: w.id == master,
+                       mark: mark(forWindow: w.id))
             }
             return Workspace(
                 index: entry.index - 1,

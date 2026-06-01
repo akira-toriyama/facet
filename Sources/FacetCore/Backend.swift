@@ -168,6 +168,18 @@ public protocol WindowBackend: Sendable {
     /// no-op contract as `rotateActiveWorkspace`.
     func mirrorActiveWorkspace(_ axis: MirrorAxis)
 
+    /// Assign mark `name` (vim-style label) to the focused window
+    /// (`facet window --mark=NAME`). 1:1: the name's old window and the
+    /// focused window's old mark are both cleared. Returns `false` when
+    /// there is no focused window (caller surfaces the error).
+    func markFocusedWindow(_ name: String) -> Bool
+
+    /// Jump focus to the window holding mark `name`
+    /// (`facet window --focus-mark=NAME`), switching workspace if it
+    /// lives on another one. Returns `false` when the mark is unset or
+    /// its window has since closed (caller surfaces the error).
+    func focusMark(_ name: String) -> Bool
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as
@@ -208,4 +220,6 @@ public extension WindowBackend {
     func balanceActiveWorkspace() {}
     func rotateActiveWorkspace(degrees: Int) {}
     func mirrorActiveWorkspace(_ axis: MirrorAxis) {}
+    func markFocusedWindow(_ name: String) -> Bool { false }
+    func focusMark(_ name: String) -> Bool { false }
 }
