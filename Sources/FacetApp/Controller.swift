@@ -343,6 +343,24 @@ final class Controller: NSObject {
                         s.dropFirst("window-move-follow:".count)) ?? 0
                     self.dispatchWindowMove(n, follow: true)
 
+                case let s where s.hasPrefix("window-mark:"):
+                    let name = String(s.dropFirst("window-mark:".count))
+                    if !self.backend.markFocusedWindow(name) {
+                        self.setError(
+                            "window --mark=\(name): no focused window")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("window-focus-mark:"):
+                    let name = String(
+                        s.dropFirst("window-focus-mark:".count))
+                    if !self.backend.focusMark(name) {
+                        self.setError(
+                            "window --focus-mark=\(name): no such mark")
+                    } else {
+                        self.scheduleReconcile(after: 0.05)
+                    }
+
                 case let s where s.hasPrefix("set-layout:"):
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)

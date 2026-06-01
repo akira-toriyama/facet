@@ -35,8 +35,9 @@ public final class SidebarView: NSView {
         let title: String
         let text: String       // handle / header label
         let mode: String       // header: WS layout engine
-        let isMaster: Bool     // window: shows a right-edge `master` chip
-        let isFloating: Bool   // window: shows a right-edge `float` chip
+        let isMaster: Bool     // window: shows a `master` status line
+        let isFloating: Bool   // window: shows a `float` status line
+        let mark: String?      // window: user mark → right-edge badge
     }
     private var cells: [Cell] = []
     private var hoverIdx: Int?            // row under the pointer
@@ -220,7 +221,8 @@ public final class SidebarView: NSView {
         cells.append(Cell(row: hbr, kind: 0, hot: false, firstHeader: false,
                           pid: 0, app: "", title: "",
                           text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
-                          mode: "", isMaster: false, isFloating: false))
+                          mode: "", isMaster: false, isFloating: false,
+                          mark: nil))
         y += handleRowH
 
         if searching {
@@ -242,7 +244,8 @@ public final class SidebarView: NSView {
                                       app: win.appName, title: wt,
                                       text: "", mode: "",
                                       isMaster: win.isMaster,
-                                      isFloating: win.isFloating))
+                                      isFloating: win.isFloating,
+                                      mark: win.mark))
                     y += rh
                 }
             }
@@ -260,7 +263,8 @@ public final class SidebarView: NSView {
                                   firstHeader: firstHeader, pid: 0, app: "",
                                   title: "", text: t.uppercased(),
                                   mode: ws.layoutMode,
-                                  isMaster: false, isFloating: false))
+                                  isMaster: false, isFloating: false,
+                                  mark: nil))
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
@@ -280,7 +284,8 @@ public final class SidebarView: NSView {
                                       app: win.appName, title: wt,
                                       text: "", mode: "",
                                       isMaster: win.isMaster,
-                                      isFloating: win.isFloating))
+                                      isFloating: win.isFloating,
+                                      mark: win.mark))
                     y += rh
                 }
                 wsBands[ws.index] = start...(y + 3)
@@ -692,7 +697,19 @@ public final class SidebarView: NSView {
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
                 let tx = iconX + iconSize + 8
-                let tw = max(bounds.width - tx - rowPadX, 0)
+                // Reserve right-edge room for the mark badge so the
+                // app / title text never runs under it. Cap the width
+                // so a long mark name can't eat the row — it tail-
+                // truncates inside the badge (the full name still lives
+                // in the catalog; the badge is just a glance affordance).
+                let markFont = uiFont(windowFontSize - 1, .bold)
+                let markMaxW: CGFloat = 72
+                let markW: CGFloat = c.mark.map {
+                    min(markMaxW, ceil(($0 as NSString).size(
+                        withAttributes: [.font: markFont]).width))
+                } ?? 0
+                let markGap: CGFloat = markW > 0 ? 10 : 0
+                let tw = max(bounds.width - tx - rowPadX - markW - markGap, 0)
                 // Pin the app name to the top whenever a title or a
                 // status label sits below it; otherwise center it.
                 let appY = (hasTitle || hasLabel)
@@ -726,6 +743,20 @@ public final class SidebarView: NSView {
                             .font: uiFont(windowFontSize - 1, .semibold),
                             .foregroundColor: pal.accent2,
                             .paragraphStyle: para,
+                        ])
+                }
+                // Mark badge — right-edge, vertically centred, bold so
+                // it reads as the user's own handle distinct from the
+                // master / float status line.
+                if let mark = c.mark {
+                    let mx = bounds.width - rowPadX - markW
+                    (mark as NSString).draw(
+                        in: NSRect(x: mx, y: row.midY - 8,
+                                   width: markW, height: 16),
+                        withAttributes: [
+                            .font: markFont,
+                            .foregroundColor: sel ? pal.accent : pal.accent2,
+                            .paragraphStyle: para,   // tail-truncate if long
                         ])
                 }
             }

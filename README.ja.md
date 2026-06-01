@@ -339,6 +339,10 @@ facet workspace --rename=NAME           # active workspace を改名
 facet workspace --move=N                # active workspace を位置 N へ移動
 facet window --move-to=N          # focus 中の window を WS N へ
 facet window --move-to=N --follow # …自分も WS N へ移動 (send-and-follow)
+facet window --mark=NAME          # focus 中の window にマークを付ける
+facet window --focus-mark=NAME    # そのマークの window へ jump (WS 跨ぎ可)
+                                  # 1:1 — 1 窓 = 1 マーク。同名を付け直すと
+                                  # 旧窓から外れる。session のみ・native Space ごと。
 facet status                      # スナップショット: backend /
                                   # theme / workspaces /
                                   # lastError / timestamp
