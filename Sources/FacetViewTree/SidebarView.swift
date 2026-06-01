@@ -234,7 +234,16 @@ public final class SidebarView: NSView {
                     else { continue }
                     let hasLabel = win.isMaster || win.isFloating
                     let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
-                    let rh = baseRH + (hasLabel ? 14 : 0)
+                    // Third line under the title holds the mark pill
+                    // (left) and the master / float label — present when
+                    // either exists.
+                    let hasThird = hasLabel || (win.mark != nil)
+                    var rh: CGFloat = baseRH           // compact single line
+                    if !wt.isEmpty || hasThird {
+                        rh = 34                        // top 8 + app 18 + bot 8
+                        if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
+                        if hasThird { rh += 22 }       // gap 6 + third 16
+                    }
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -274,7 +283,16 @@ public final class SidebarView: NSView {
                     // A 3rd line (master / float) adds 14 pt so the
                     // label has its own row instead of crowding the
                     // title baseline.
-                    let rh = baseRH + (hasLabel ? 14 : 0)
+                    // Third line under the title holds the mark pill
+                    // (left) and the master / float label — present when
+                    // either exists.
+                    let hasThird = hasLabel || (win.mark != nil)
+                    var rh: CGFloat = baseRH           // compact single line
+                    if !wt.isEmpty || hasThird {
+                        rh = 34                        // top 8 + app 18 + bot 8
+                        if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
+                        if hasThird { rh += 22 }       // gap 6 + third 16
+                    }
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -646,6 +664,10 @@ public final class SidebarView: NSView {
                 // collides with the primary accent used by the
                 // active WS-name on line 1.
                 if !c.mode.isEmpty {
+                    // Layout mode: plain text, no fill — same weight
+                    // (bold) as the WS name above it so the two-line
+                    // caption reads as one unit. accent-2 on the active
+                    // WS, dim when inactive so non-focused rows recede.
                     let modeColor = c.hot ? pal.accent2 : pal.dim
                     (c.mode as NSString).draw(
                         in: NSRect(x: rowPadX + gripSpace,
@@ -653,7 +675,7 @@ public final class SidebarView: NSView {
                                    width: bounds.width - rowPadX * 2 - gripSpace,
                                    height: 14),
                         withAttributes: [
-                            .font: uiFont(10.5, .semibold),
+                            .font: uiFont(10.5, .bold),
                             .foregroundColor: modeColor,
                             .paragraphStyle: hp,
                         ])
@@ -678,42 +700,29 @@ public final class SidebarView: NSView {
                         .fill()
                 }
                 let iconX = rowPadX + 2
-                let iconY = row.midY - iconSize / 2
-                if let img = AppIcons.icon(forPID: c.pid) {
-                    img.draw(in: NSRect(x: iconX, y: iconY,
-                                        width: iconSize, height: iconSize))
-                }
-                // Status label (master / float) — text-only 3rd line
-                // under the title (or under the app name when there's
-                // no title). Master and float are mutually exclusive
-                // in the catalog (a floated window is detached from
-                // the layout and can't also be its master). Same
-                // accent-2 semibold styling as the WS-header layout
-                // line, so the badge palette stays consistent across
-                // the tree.
                 let labelText: String? =
                     c.isMaster ? "master" :
                     c.isFloating ? "float" : nil
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
+                let hasMark = c.mark != nil
                 let tx = iconX + iconSize + 8
-                // Reserve right-edge room for the mark badge so the
-                // app / title text never runs under it. Cap the width
-                // so a long mark name can't eat the row — it tail-
-                // truncates inside the badge (the full name still lives
-                // in the catalog; the badge is just a glance affordance).
-                let markFont = uiFont(windowFontSize - 1, .bold)
-                let markMaxW: CGFloat = 72
-                let markW: CGFloat = c.mark.map {
-                    min(markMaxW, ceil(($0 as NSString).size(
-                        withAttributes: [.font: markFont]).width))
-                } ?? 0
-                let markGap: CGFloat = markW > 0 ? 10 : 0
-                let tw = max(bounds.width - tx - rowPadX - markW - markGap, 0)
-                // Pin the app name to the top whenever a title or a
-                // status label sits below it; otherwise center it.
-                let appY = (hasTitle || hasLabel)
-                    ? row.minY + 6 : row.midY - 9
+                let tw = max(bounds.width - tx - rowPadX, 0)
+                // Vertical rhythm (matches the row-height calc): top pad
+                // 8, app, +4 gap, title, +6 gap, third (mark / status)
+                // line. App centres only on a bare single-line row.
+                let appY = (hasTitle || hasLabel || hasMark)
+                    ? row.minY + 8 : row.midY - 9
+                let titleY = row.minY + 28        // tucked up under the app
+                // Icon centres on the app (+ title) identity block, not
+                // the whole row, so the third line doesn't drag it down.
+                let identityBottom = hasTitle ? titleY + 15 : appY + 18
+                let iconY = ((appY + identityBottom) / 2
+                    - iconSize / 2).rounded()
+                if let img = AppIcons.icon(forPID: c.pid) {
+                    img.draw(in: NSRect(x: iconX, y: iconY,
+                                        width: iconSize, height: iconSize))
+                }
                 (c.app as NSString).draw(
                     in: NSRect(x: tx, y: appY, width: tw, height: 18),
                     withAttributes: [
@@ -724,7 +733,7 @@ public final class SidebarView: NSView {
                     ])
                 if hasTitle {
                     (c.title as NSString).draw(
-                        in: NSRect(x: tx, y: row.minY + 25,
+                        in: NSRect(x: tx, y: titleY,
                                    width: tw, height: 15),
                         withAttributes: [
                             .font: uiFont(windowFontSize - 1, .regular),
@@ -732,32 +741,82 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
-                if let labelText {
-                    let labelY = hasTitle
-                        ? row.minY + 42   // app(6-24) + title(25-40) + gap
-                        : row.minY + 24   // app(6-24) + tiny gap
-                    (labelText as NSString).draw(
-                        in: NSRect(x: tx, y: labelY,
-                                   width: tw, height: 14),
-                        withAttributes: [
-                            .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.accent2,
-                            .paragraphStyle: para,
-                        ])
-                }
-                // Mark badge — right-edge, vertically centred, bold so
-                // it reads as the user's own handle distinct from the
-                // master / float status line.
-                if let mark = c.mark {
-                    let mx = bounds.width - rowPadX - markW
-                    (mark as NSString).draw(
-                        in: NSRect(x: mx, y: row.midY - 8,
-                                   width: markW, height: 16),
-                        withAttributes: [
+                // Third line: the mark pill (left) then the master /
+                // float label after it.
+                if hasLabel || hasMark {
+                    // Wider gap below the title before the mark / status.
+                    let labelY = hasTitle ? row.minY + 55 : row.minY + 32
+                    var lx = tx
+                    if let mark = c.mark {
+                        let markFont = uiFont(windowFontSize - 1, .bold)
+                        let maxTextW: CGFloat = 60   // long → tail-truncate
+                        let textW = min(maxTextW, ceil((mark as NSString)
+                            .size(withAttributes: [.font: markFont]).width))
+                        let padX: CGFloat = 6
+                        let pillH: CGFloat = 15
+                        let pillW = textW + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        let markStroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: pillH / 2, yRadius: pillH / 2)
+                        markStroke.lineWidth = 1
+                        // Mark = primary accent (green) so the user's own
+                        // handle stands apart from the accent-2 master /
+                        // float badge.
+                        pal.accent.setStroke()
+                        markStroke.stroke()
+                        let pillPara = NSMutableParagraphStyle()
+                        pillPara.alignment = .center
+                        pillPara.lineBreakMode = .byTruncatingTail
+                        let pillAttrs: [NSAttributedString.Key: Any] = [
                             .font: markFont,
-                            .foregroundColor: sel ? pal.accent : pal.accent2,
-                            .paragraphStyle: para,   // tail-truncate if long
-                        ])
+                            .foregroundColor: pal.accent,
+                            .paragraphStyle: pillPara,
+                        ]
+                        let textH = (mark as NSString).size(
+                            withAttributes: pillAttrs).height
+                        (mark as NSString).draw(
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - textH) / 2 - 1.5,
+                                       width: pillW, height: textH),
+                            withAttributes: pillAttrs)
+                        lx += pillW + 6
+                    }
+                    if let labelText {
+                        // master / float as an outlined pill — same badge
+                        // shape as the mark, lighter (stroke, no fill) so
+                        // the solid mark stays the primary handle.
+                        let lblFont = uiFont(windowFontSize - 1, .semibold)
+                        let textW = ceil((labelText as NSString).size(
+                            withAttributes: [.font: lblFont]).width)
+                        let padX: CGFloat = 6
+                        let pillH: CGFloat = 15
+                        let pillW = textW + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        let stroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: pillH / 2, yRadius: pillH / 2)
+                        stroke.lineWidth = 1
+                        pal.accent2.setStroke()
+                        stroke.stroke()
+                        let lblPara = NSMutableParagraphStyle()
+                        lblPara.alignment = .center
+                        lblPara.lineBreakMode = .byTruncatingTail
+                        let lblAttrs: [NSAttributedString.Key: Any] = [
+                            .font: lblFont,
+                            .foregroundColor: pal.accent2,
+                            .paragraphStyle: lblPara,
+                        ]
+                        let lblH = (labelText as NSString).size(
+                            withAttributes: lblAttrs).height
+                        (labelText as NSString).draw(
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.5,
+                                       width: pillW, height: lblH),
+                            withAttributes: lblAttrs)
+                    }
                 }
             }
 

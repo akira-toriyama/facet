@@ -840,6 +840,13 @@ struct WorkspaceCatalog {
         marks[name] = id          // reassigns the name to the new window
     }
 
+    /// Remove mark `name`. Returns whether it existed, so the caller
+    /// can surface "no such mark" when the user clears nothing.
+    @discardableResult
+    mutating func removeMark(_ name: String) -> Bool {
+        marks.removeValue(forKey: name) != nil
+    }
+
     /// The window a mark points to, or nil when the name is unset.
     func window(forMark name: String) -> WindowID? { marks[name] }
 

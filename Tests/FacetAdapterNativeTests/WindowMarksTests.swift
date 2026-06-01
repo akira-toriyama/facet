@@ -55,6 +55,16 @@ final class WindowMarksTests: XCTestCase {
         XCTAssertEqual(c.mark(forWindow: wid(2)), "a")
     }
 
+    func testRemoveMark() {
+        var c = WorkspaceCatalog()
+        c.setMark("a", to: wid(1))
+        XCTAssertTrue(c.removeMark("a"), "removing an existing mark succeeds")
+        XCTAssertNil(c.window(forMark: "a"))
+        XCTAssertNil(c.mark(forWindow: wid(1)))
+        XCTAssertFalse(c.removeMark("a"),
+                       "removing an absent mark reports false")
+    }
+
     func testMarkPrunedWhenWindowCloses() {
         var c = WorkspaceCatalog()
         c.setMark("a", to: wid(1))

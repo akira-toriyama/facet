@@ -28,7 +28,7 @@
 //               / --mirror=horizontal|vertical / --add / --remove[=N]
 //               / --rename=NAME / --move=N
 //   Window    : facet window --move-to=N[ --follow] / --mark=NAME
-//               / --focus-mark=NAME / --toggle-float /
+//               / --focus-mark=NAME / --unmark=NAME / --toggle-float /
 //               --toggle-orientation / --cycle-stack=next|prev /
 //               --grow-master / --shrink-master / --inc-master / --dec-master
 //
@@ -139,6 +139,7 @@ enum FacetApp {
                                              1:1 — one mark per window)
           facet window --focus-mark=NAME     jump focus to the marked
                                              window (switches WS if needed)
+          facet window --unmark=NAME         remove a mark
           facet window --toggle-float        flip its float flag
           facet window --toggle-orientation  bsp: rotate parent split /
                                              tall⇄wide: swap layout
@@ -561,6 +562,7 @@ enum FacetApp {
         var follow = false
         var markArg: String?
         var focusMarkArg: String?
+        var unmarkArg: String?
         var toggleFloat = false
         var toggleOrientation = false
         var cycleStackDir: String?
@@ -581,6 +583,8 @@ enum FacetApp {
                 markArg = parseMarkName(a, prefix: "--mark=")
             case a.hasPrefix("--focus-mark="):
                 focusMarkArg = parseMarkName(a, prefix: "--focus-mark=")
+            case a.hasPrefix("--unmark="):
+                unmarkArg = parseMarkName(a, prefix: "--unmark=")
             case a == "--toggle-float":
                 toggleFloat = true
             case a == "--toggle-orientation":
@@ -607,6 +611,7 @@ enum FacetApp {
         let count = (moveToArg != nil ? 1 : 0)
             + (markArg != nil ? 1 : 0)
             + (focusMarkArg != nil ? 1 : 0)
+            + (unmarkArg != nil ? 1 : 0)
             + (toggleFloat ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
             + (cycleStackDir != nil ? 1 : 0)
@@ -634,6 +639,7 @@ enum FacetApp {
                                       : postWindowMove(n) }
         if let m = markArg { postControl("window-mark:" + m) }
         if let m = focusMarkArg { postControl("window-focus-mark:" + m) }
+        if let m = unmarkArg { postControl("window-unmark:" + m) }
         if toggleFloat { postWindowToggleFloat() }
         if toggleOrientation { postWindowToggleOrientation() }
         if let d = cycleStackDir { postWindowCycleStack(d) }

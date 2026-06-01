@@ -1731,6 +1731,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return true
     }
 
+    public func unmark(_ name: String) -> Bool {
+        guard catalog.removeMark(name) else {
+            Log.debug("native: unmark \"\(name)\" — no such mark")
+            return false
+        }
+        Log.debug("native: unmark \"\(name)\"")
+        eventContinuation.yield(.refreshNeeded)   // repaint — badge gone
+        return true
+    }
+
     /// Apply stack mode to `n1Based`: the catalog's
     /// `stackOrder[0]` fills `rect` (un-parked from the anchor
     /// sliver), all other members are parked there. Floating
