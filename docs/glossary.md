@@ -50,7 +50,7 @@ flowchart TB
   end
   subgraph APP["FacetApp — @main + CLI"]
     MAIN["FacetApp.Main"]
-    DNC["Distributed Notification"]
+    DNC["Distributed<br/>Notification"]
   end
   MAIN -->|argv| CTRL
   DNC -->|cross-process| CTRL
