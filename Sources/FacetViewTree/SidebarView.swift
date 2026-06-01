@@ -758,15 +758,38 @@ public final class SidebarView: NSView {
                         lx += pillW + 6
                     }
                     if let labelText {
+                        // master / float as an outlined pill — same badge
+                        // shape as the mark, lighter (stroke, no fill) so
+                        // the solid mark stays the primary handle.
+                        let lblFont = uiFont(windowFontSize - 1, .semibold)
+                        let textW = ceil((labelText as NSString).size(
+                            withAttributes: [.font: lblFont]).width)
+                        let padX: CGFloat = 6
+                        let pillH: CGFloat = 15
+                        let pillW = textW + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        let stroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: pillH / 2, yRadius: pillH / 2)
+                        stroke.lineWidth = 1
+                        pal.accent2.setStroke()
+                        stroke.stroke()
+                        let lblPara = NSMutableParagraphStyle()
+                        lblPara.alignment = .center
+                        lblPara.lineBreakMode = .byTruncatingTail
+                        let lblAttrs: [NSAttributedString.Key: Any] = [
+                            .font: lblFont,
+                            .foregroundColor: pal.accent2,
+                            .paragraphStyle: lblPara,
+                        ]
+                        let lblH = (labelText as NSString).size(
+                            withAttributes: lblAttrs).height
                         (labelText as NSString).draw(
-                            in: NSRect(x: lx, y: labelY,
-                                       width: max(bounds.width - lx - rowPadX, 0),
-                                       height: 14),
-                            withAttributes: [
-                                .font: uiFont(windowFontSize - 1, .semibold),
-                                .foregroundColor: pal.accent2,
-                                .paragraphStyle: para,
-                            ])
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.5,
+                                       width: pillW, height: lblH),
+                            withAttributes: lblAttrs)
                     }
                 }
             }
