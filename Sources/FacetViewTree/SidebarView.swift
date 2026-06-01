@@ -635,6 +635,15 @@ public final class SidebarView: NSView {
                 let fs = c.hot ? activeHeaderFontSize : headerFontSize
                 let capY = c.firstHeader ? row.minY + 6 : row.minY + 18
                 let capH = row.maxY - capY - 6
+                // Active-WS marker: a left accent stripe, echoing the
+                // selected window row's left bar.
+                if c.hot {
+                    pal.accent.setFill()
+                    NSBezierPath(
+                        roundedRect: NSRect(x: 3, y: capY + 1,
+                                            width: 3, height: capH - 2),
+                        xRadius: 1.5, yRadius: 1.5).fill()
+                }
                 // Drag grip — affords "grab to swap this workspace".
                 // Spans the full caption area so it visually anchors both
                 // lines (WS name + layout-mode chip) as one unit.
@@ -651,7 +660,6 @@ public final class SidebarView: NSView {
                     withAttributes: [
                         .font: uiFont(fs, .bold),
                         .foregroundColor: c.hot ? pal.accent : pal.dim,
-                        .underlineStyle: NSUnderlineStyle.single.rawValue,
                         .kern: 0.6, .paragraphStyle: hp])
                 // Line 2: layout-mode text — accent-2 semibold on the
                 // active WS, `pal.dim` semibold when the WS isn't
@@ -678,7 +686,6 @@ public final class SidebarView: NSView {
                         withAttributes: [
                             .font: uiFont(10.5, .bold),
                             .foregroundColor: modeColor,
-                            .underlineStyle: NSUnderlineStyle.single.rawValue,
                             .paragraphStyle: hp,
                         ])
                 }
