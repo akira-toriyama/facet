@@ -42,6 +42,7 @@ import FacetAdapterNative
 import FacetView
 import FacetViewTree
 import FacetViewGrid
+import FacetViewRail
 
 @main
 enum FacetApp {
@@ -52,7 +53,7 @@ enum FacetApp {
     /// ``--toggle=``. Adding a new view (dock, palette, …) only
     /// requires extending this list + the server-side
     /// ``Controller.dispatchView/Hide/Toggle`` switches.
-    static let canonicalViews = ["tree", "grid"]
+    static let canonicalViews = ["tree", "grid", "rail"]
 
     // MARK: - Help
 
@@ -64,7 +65,7 @@ enum FacetApp {
           facet [COMMAND]                    client mode (post to server)
           facet                              server mode (start the app)
 
-        VIEW OPERATIONS                      NAME ∈ tree | grid
+        VIEW OPERATIONS                      NAME ∈ tree | grid | rail
           facet --view=NAME [--active]       open NAME (idempotent)
           facet --hide=NAME                  close NAME
           facet --toggle=NAME                toggle NAME

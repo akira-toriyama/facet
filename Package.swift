@@ -30,6 +30,11 @@
 //                       Control-style cells with ScreenCaptureKit
 //                       thumbnails).
 //
+//   FacetViewRail       bottom-of-screen workspace rail (compact
+//                       Mission-Control-style bar: click a box to
+//                       switch, hover for window thumbnails, drag a
+//                       window between boxes).
+//
 //   FacetApp            executable target: @main, CLI argv,
 //                       Controller orchestration.
 //
@@ -55,6 +60,7 @@ let package = Package(
         .target(name: "FacetView", dependencies: ["FacetCore"]),
         .target(name: "FacetViewTree", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
+        .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
         .executableTarget(
             name: "FacetApp",
             dependencies: [
@@ -64,6 +70,7 @@ let package = Package(
                 "FacetView",
                 "FacetViewTree",
                 "FacetViewGrid",
+                "FacetViewRail",
             ]),
         // Native-adapter feasibility spike (M5 Phase α). Throwaway:
         // probes CGWindowList enumeration, AX off-screen park /

@@ -541,11 +541,14 @@ public final class GridView: NSView {
                 if drag == nil, kbSelectedWS == cell.wsIndex,
                    let s = kbSelectedWindow(), s.cell.wsIndex == cell.wsIndex
                 {
-                    pal.accent.setStroke()
+                    // Accent fill + ring (covers the window front, like
+                    // the rail) so the selection is unmistakable.
                     let ko = NSBezierPath(
                         roundedRect: s.hit.rect.insetBy(dx: 1, dy: 1),
                         xRadius: 3, yRadius: 3)
-                    ko.lineWidth = 1.5
+                    pal.accent.withAlphaComponent(0.30).setFill(); ko.fill()
+                    pal.accent.setStroke()
+                    ko.lineWidth = 2.5
                     ko.stroke()
                 }
                 NSGraphicsContext.restoreGraphicsState()
@@ -1111,12 +1114,11 @@ public final class GridView: NSView {
         let ni = nr * cols + nc
         guard ni < cells.count else { return }
         kbSelectedWS = cells[ni].wsIndex
-        // Reset cursor inside the new cell: focused window first, else
-        // window 0; an empty cell selects its header (-1).
-        let dst = cells[ni]
-        kbSelectedWindowIdx = dst.windows.isEmpty
-            ? -1
-            : (dst.windows.firstIndex(where: { $0.isFocused }) ?? 0)
+        // Arrow moves the WS cursor only — land on the header (WS-name)
+        // slot (-1) so no window is auto-selected (Tab picks a window).
+        // Matches the rail's browse behaviour: arrow ⇒ no window ring,
+        // WS name highlighted.
+        kbSelectedWindowIdx = -1
         // While dragging via keyboard, the selection IS the drop
         // target.
         if drag != nil { syncKbDragToSelection() }
@@ -1141,15 +1143,36 @@ public final class GridView: NSView {
         needsDisplay = true
     }
 
+    /// Windows in visual reading order — top-to-bottom, left-to-right
+    /// (flipped coords: smaller y = top). Tab walks the grid the way
+    /// the eye does, not the backend's creation order.
+    private func readingOrder(_ wins: [WindowHit]) -> [WindowHit] {
+        guard wins.count > 1 else { return wins }
+        let band = max(1, (wins.map { $0.rect.height }.max() ?? 1) * 0.5)
+        // Cluster into rows (y within `band` = same row, so a sub-pixel
+        // y difference between side-by-side windows can't split them),
+        // then order each row left → right, rows top → bottom.
+        let byY = wins.sorted { $0.rect.midY < $1.rect.midY }
+        var rows: [[WindowHit]] = []
+        for w in byY {
+            if let rowY = rows.last?.first?.rect.midY, w.rect.midY - rowY <= band {
+                rows[rows.count - 1].append(w)
+            } else {
+                rows.append([w])
+            }
+        }
+        return rows.flatMap { $0.sorted { $0.rect.midX < $1.rect.midX } }
+    }
+
     private func kbSelectedWindow() -> (cell: Cell, hit: WindowHit)? {
         guard let sel = kbSelectedWS,
               kbSelectedWindowIdx >= 0,
               let cell = cells.first(where: { $0.wsIndex == sel }),
               !cell.windows.isEmpty
         else { return nil }
-        let i = max(0, min(cell.windows.count - 1,
-                           kbSelectedWindowIdx))
-        return (cell, cell.windows[i])
+        let ordered = readingOrder(cell.windows)
+        let i = max(0, min(ordered.count - 1, kbSelectedWindowIdx))
+        return (cell, ordered[i])
     }
 
     private func syncKbDragToSelection() {
@@ -1246,11 +1269,14 @@ public final class GridView: NSView {
         }
     }
 
-    /// Esc: cancel a lift in flight, or dismiss the grid if not
-    /// lifted.
+    /// Esc, in order: cancel an in-flight lift → clear a Tab window
+    /// selection (back to the header slot, stay open) → dismiss the grid.
     public func kbEscape() {
         if let d = drag {
             cancelDrop(to: d.sourceRect)
+        } else if kbSelectedWindowIdx != -1 {
+            kbSelectedWindowIdx = -1            // Tab deselect only — don't close
+            needsDisplay = true
         } else {
             onDismiss?()
         }

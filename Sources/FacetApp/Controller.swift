@@ -21,6 +21,7 @@ import FacetAccessibility
 import FacetView
 import FacetViewTree
 import FacetViewGrid
+import FacetViewRail
 
 @MainActor
 final class Controller: NSObject {
@@ -85,6 +86,14 @@ final class Controller: NSObject {
     /// pre-show visibility state on dismiss.
     private var treeWasHidden = false
     var isGridVisible: Bool { gridOverlay != nil }
+
+    // MARK: - Workspace rail (bottom overview bar)
+
+    private var railOverlay: RailOverlay?
+    private var railView: RailView?
+    /// Local key monitor for the rail's Escape-to-dismiss while it's up.
+    private var railKbMonitor: Any?
+    var isRailVisible: Bool { railOverlay != nil }
 
     // MARK: - Active mode (kb-nav)
 
@@ -434,6 +443,11 @@ final class Controller: NSObject {
         // teardown also un-gates `showLoading` (which no-ops while the
         // grid is up) so the tree skeleton paints on the new desktop.
         if name != "grid" && isGridVisible { hideGrid(immediate: true) }
+        // The grid is a full-screen takeover that would cover the
+        // rail; tear the rail down so it's not stranded underneath.
+        // (The rail otherwise coexists with the tree — different
+        // screen regions, complementary surfaces.)
+        if name == "grid" && isRailVisible { hideRail() }
         switch name {
         case "tree":
             // Apply explicit geom BEFORE showing so the panel
@@ -446,6 +460,10 @@ final class Controller: NSObject {
             // overlay is always key/active by nature. Geom is
             // likewise ignored (grid is always full-screen).
             showGrid()
+        case "rail":
+            // ``+active`` / geom are no-ops — the rail is a passive,
+            // bottom-anchored bar (never key, fixed position).
+            showRail()
         default:
             Log.debug("dispatchView unknown=\(name) — ignored")
         }
@@ -455,6 +473,7 @@ final class Controller: NSObject {
         switch name {
         case "tree": setHidden(true)
         case "grid": hideGrid()
+        case "rail": hideRail()
         default:     Log.debug("dispatchHide unknown=\(name) — ignored")
         }
     }
@@ -530,6 +549,7 @@ final class Controller: NSObject {
         switch name {
         case "tree": setHidden(!userHidden)
         case "grid": toggleGrid()
+        case "rail": toggleRail()
         default:     Log.debug("dispatchToggle unknown=\(name) — ignored")
         }
     }
@@ -626,6 +646,14 @@ final class Controller: NSObject {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.layoutCells()       // refresh open grid on backend events
+        }
+        // The rail is a *persistent* bar (unlike the snapshot-on-show
+        // grid), so keep it live with every reconcile — the active-WS
+        // highlight + window counts track switches and add/close.
+        if let rv = railView {
+            rv.workspaces = wss
+            rv.activeIndex = wss.first(where: { $0.isActive })?.index
+            rv.layoutCells()      // refresh open rail on backend events
         }
         if firstRealApply, #available(macOS 14.0, *) {
             refreshThumbnailCache()
@@ -765,6 +793,33 @@ final class Controller: NSObject {
                 wp.request(id) { [weak self] img, _, gotID in
                     MainActor.assumeIsolated {
                         self?.gridView?.setThumbnail(img, for: gotID)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Re-capture the windows of the listed workspaces and feed them to
+    /// the rail. After a move/swap the affected windows' frames change,
+    /// so the snapshot-on-show cache is stale. Same shape as
+    /// ``refreshGridThumbnails`` (rail uses the shared ``winPreview``).
+    func refreshRailThumbnails(forWSIndices indices: [Int],
+                               in wss: [Workspace]) {
+        guard #available(macOS 14.0, *),
+              let wp = winPreview as? WindowPreview,
+              railView != nil
+        else { return }
+        let want = Set(indices)
+        let ids: [WindowID] = wss
+            .filter { want.contains($0.index) }
+            .flatMap { $0.windows.map(\.id) }
+        for id in ids { wp.invalidate(id) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard self != nil else { return }
+            for id in ids {
+                wp.request(id) { [weak self] img, _, gotID in
+                    MainActor.assumeIsolated {
+                        self?.railView?.setThumbnail(img, for: gotID)
                     }
                 }
             }
@@ -1273,6 +1328,200 @@ final class Controller: NSObject {
             self.gridView = nil
             self.gridBackdrop = nil
             if restoreTree { self.refresh() }       // re-shows the panel
+        }
+    }
+
+    // MARK: - Rail lifecycle
+
+    func toggleRail() {
+        if isRailVisible { hideRail() } else { showRail() }
+    }
+
+    func showRail() {
+        Log.debug("showRail request (isVisible=\(isRailVisible))")
+        if isRailVisible { return }
+        guard let scr = NSScreen.main else { return }
+        // No snapshot yet (cold start): fetch then re-enter so the rail
+        // never paints empty. Bail if the fetch comes back empty (e.g.
+        // an unmanaged native Space under opt-in `[space.N]` config) so
+        // we don't spin re-fetching forever.
+        if lastWorkspaces.isEmpty {
+            let bk = backend
+            cliQueue.async {
+                let wss = bk.workspaces()
+                DispatchQueue.main.async { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.lastWorkspaces = wss
+                        if wss.isEmpty { return }   // nothing to show
+                        self.showRail()
+                    }
+                }
+            }
+            return
+        }
+
+        // Full-screen takeover: a near-black backdrop hides the desktop,
+        // the active workspace shows large in the centre, every
+        // workspace lines the bottom as a small mini-screen.
+        let overlay = RailOverlay(
+            contentRect: scr.frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false)
+        overlay.isFloatingPanel = true
+        overlay.level = NSWindow.Level(
+            rawValue: NSWindow.Level.statusBar.rawValue + 2)   // above tree
+        overlay.backgroundColor = .clear
+        overlay.isOpaque = false
+        overlay.hasShadow = false
+        overlay.hidesOnDeactivate = false
+        overlay.collectionBehavior = [.canJoinAllSpaces, .stationary,
+                                      .fullScreenAuxiliary]
+
+        let rv = RailView(frame: NSRect(origin: .zero, size: scr.frame.size))
+        rv.autoresizingMask = [.width, .height]
+        rv.screenFrame = scr.frame
+        rv.workspaces = lastWorkspaces
+        rv.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
+        rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS
+        rv.onPick = { [weak self] ws in
+            guard let self else { return }
+            // Commit-on-click (grid-like): dispatch the switch off-main
+            // and dismiss in parallel so the overlay clears immediately;
+            // the workspace-switch lands as it fades out. autoFocus lets
+            // the backend focus the destination's last-touched window.
+            cliQueue.async {
+                self.backend.switchWorkspace(toIndex: ws, autoFocus: true)
+            }
+            self.hideRail()
+        }
+        rv.onDismiss = { [weak self] in self?.hideRail() }
+        // Click a specific window thumbnail → switch to its WS AND focus
+        // THAT window (grid parity). Unlike onPick (which uses
+        // autoFocus = the WS's last-touched window), this omits
+        // autoFocus then Focus.asserts the picked window. Dispatch
+        // off-main + dismiss in parallel, like the grid's onPick.window.
+        rv.onPickWindow = { [weak self, bk = backend] ws, pid, id in
+            guard let self else { return }
+            cliQueue.async {
+                bk.switchWorkspace(toIndex: ws)
+                let win = Window(id: id, pid: pid, appName: "",
+                                 title: "", isFocused: false,
+                                 isFloating: false, frame: nil)
+                Focus.assert(win, backend: bk)
+            }
+            self.hideRail()
+        }
+        // Drag a window onto another WS cell → move it there. The
+        // overlay STAYS OPEN (no hideRail) so the user sees the result.
+        // Reuses the grid's onDrop body shape.
+        rv.onMoveWindow = { [weak self, bk = backend] src, dst, _, id in
+            guard src != dst else { return }
+            cliQueue.async {
+                bk.moveWindow(id, toWorkspaceIndex: dst)
+                let wss = bk.workspaces()
+                let titles = AXTitles.resolve(wss)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.apply(wss, titles)
+                        self?.refreshRailThumbnails(forWSIndices: [src, dst], in: wss)
+                    }
+                }
+            }
+        }
+        // Drag a header onto another cell → swap the two WS' contents
+        // (N+M moveWindow calls; the WM indices stay put).
+        rv.onSwap = { [weak self, bk = backend] src, dst, srcIDs, dstIDs in
+            guard src != dst else { return }
+            cliQueue.async {
+                for id in srcIDs { bk.moveWindow(id, toWorkspaceIndex: dst) }
+                for id in dstIDs { bk.moveWindow(id, toWorkspaceIndex: src) }
+                let wss = bk.workspaces()
+                let titles = AXTitles.resolve(wss)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.apply(wss, titles)
+                        self?.refreshRailThumbnails(forWSIndices: [src, dst], in: wss)
+                    }
+                }
+            }
+        }
+        overlay.contentView = rv
+
+        // Hide the tree panel while the rail is up (it would otherwise
+        // sit behind the backdrop); restore on dismiss like the grid.
+        treeWasHidden = userHidden
+        if panelHost.isVisible { panelHost.hide() }
+
+        overlay.alphaValue = 0
+        overlay.makeKeyAndOrderFront(nil)
+        rv.layoutCells()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = gridFadeIn
+            overlay.animator().alphaValue = 1
+        }
+
+        // Keyboard: ←/→ browse, Return commits, Esc dismisses (the
+        // overlay is key, so a local monitor fires).
+        railKbMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: .keyDown
+        ) { [weak self] e in
+            guard let rv = self?.railView else { return e }
+            let shift = e.modifierFlags.contains(.shift)
+            switch e.keyCode {
+            case 53:     rv.kbEscape();                     return nil  // Esc → cancel/close
+            case 36, 76: rv.kbCommit();                     return nil  // Return → commit
+            case 49:     rv.kbSpaceLift();                  return nil  // Space → lift
+            case 48:     rv.kbCycleWindow(forward: !shift); return nil  // Tab / Shift-Tab
+            case 123:    rv.kbMoveSelection(dx: -1);            return nil  // ←
+            case 124:    rv.kbMoveSelection(dx:  1);            return nil  // →
+            default:     return e
+            }
+        }
+
+        railOverlay = overlay
+        railView = rv
+
+        // Request every window in every workspace from the shared
+        // `winPreview`, which the Controller's thumbnail timer keeps
+        // warm in the background — so on open the cells paint real
+        // thumbnails from the cache immediately (no app-icon flash).
+        // The rail is a full-screen modal that HIDES the tree, so the
+        // tree's `bump()` can't cancel these in-flight captures while
+        // it's up (no separate instance needed). Snapshot-on-show.
+        if #available(macOS 14.0, *), let wp = winPreview as? WindowPreview {
+            for ws in lastWorkspaces {
+                for win in ws.windows {
+                    let id = win.id
+                    wp.request(id) { [weak self] img, _, gotID in
+                        MainActor.assumeIsolated {
+                            self?.railView?.setThumbnail(img, for: gotID)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func hideRail() {
+        Log.debug("hideRail")
+        guard let overlay = railOverlay else { return }
+        if let m = railKbMonitor {
+            NSEvent.removeMonitor(m); railKbMonitor = nil
+        }
+        railView?.clearDrag()        // explicit cancel if a drag is mid-flight
+        railView?.clearThumbnails()
+        // Flip `isRailVisible` synchronously so a quick hide→show within
+        // the fade window builds a fresh overlay instead of no-op'ing.
+        let restoreTree = !treeWasHidden
+        railOverlay = nil
+        railView = nil
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = gridFadeOut
+            overlay.animator().alphaValue = 0
+        }) { [weak self] in
+            overlay.orderOut(nil)
+            if restoreTree { self?.refresh() }   // re-shows the tree panel
         }
     }
 
