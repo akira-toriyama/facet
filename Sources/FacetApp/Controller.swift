@@ -81,6 +81,13 @@ final class Controller: NSObject {
     private var thumbnailTimer: Timer?
     private var thumbnailTimerInterval: TimeInterval?
 
+    // MARK: - Real-window DnD (枠C)
+
+    /// Global mouse monitor that turns a drag of a tiled window onto
+    /// another into a swap / insert. Installed once at start, lives the
+    /// whole session. See `installRealWindowDrag` (RealWindowDrag.swift).
+    var realWindowDrag: RealWindowDragMonitor?
+
     // MARK: - Grid overview
 
     private var gridOverlay: GridOverlay?
@@ -213,6 +220,7 @@ final class Controller: NSObject {
                             // even before the first backend reply
         installConfigWatcher()
         installDisplayObserver()
+        installRealWindowDrag()
         refresh()
     }
 
