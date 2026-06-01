@@ -714,11 +714,11 @@ public final class SidebarView: NSView {
                 let appY = (hasTitle || hasLabel || hasMark)
                     ? row.minY + 8 : row.midY - 9
                 let titleY = row.minY + 28        // tucked up under the app
-                // Icon centres on the app (+ title) identity block, not
-                // the whole row, so the third line doesn't drag it down.
-                let identityBottom = hasTitle ? titleY + 15 : appY + 18
-                let iconY = ((appY + identityBottom) / 2
-                    - iconSize / 2).rounded()
+                // Icon centres on the whole row so it stays vertically
+                // centred even when a third line (mark / master / float)
+                // grows the row — without it the icon rides up to the
+                // identity block and reads as top-aligned.
+                let iconY = (row.midY - iconSize / 2).rounded()
                 if let img = AppIcons.icon(forPID: c.pid) {
                     img.draw(in: NSRect(x: iconX, y: iconY,
                                         width: iconSize, height: iconSize))
