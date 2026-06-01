@@ -654,17 +654,40 @@ public final class SidebarView: NSView {
                 // collides with the primary accent used by the
                 // active WS-name on line 1.
                 if !c.mode.isEmpty {
-                    let modeColor = c.hot ? pal.accent2 : pal.dim
+                    // Layout mode as a filled pill — the WS-level badge,
+                    // solid so it outranks the outlined per-window badges.
+                    // accent-2 fill on the active WS, dim when inactive so
+                    // non-focused rows recede; knockout text in the panel
+                    // background colour.
+                    let modeFont = uiFont(10.5, .semibold)
+                    let fillCol = c.hot ? pal.accent2 : pal.dim
+                    let textW = ceil((c.mode as NSString).size(
+                        withAttributes: [.font: modeFont]).width)
+                    let padX: CGFloat = 6
+                    let pillH: CGFloat = 15
+                    let pillW = textW + padX * 2
+                    let pillX = rowPadX + gripSpace
+                    let pillY = capY + nameH + 3
+                    let pillRect = NSRect(x: pillX, y: pillY,
+                                          width: pillW, height: pillH)
+                    fillCol.setFill()
+                    NSBezierPath(roundedRect: pillRect,
+                                 xRadius: pillH / 2, yRadius: pillH / 2).fill()
+                    let mp = NSMutableParagraphStyle()
+                    mp.alignment = .center
+                    mp.lineBreakMode = .byTruncatingTail
+                    let mAttrs: [NSAttributedString.Key: Any] = [
+                        .font: modeFont,
+                        .foregroundColor: pal.bg ?? .black,
+                        .paragraphStyle: mp,
+                    ]
+                    let mH = (c.mode as NSString).size(
+                        withAttributes: mAttrs).height
                     (c.mode as NSString).draw(
-                        in: NSRect(x: rowPadX + gripSpace,
-                                   y: capY + nameH + 4,
-                                   width: bounds.width - rowPadX * 2 - gripSpace,
-                                   height: 14),
-                        withAttributes: [
-                            .font: uiFont(10.5, .semibold),
-                            .foregroundColor: modeColor,
-                            .paragraphStyle: hp,
-                        ])
+                        in: NSRect(x: pillX,
+                                   y: pillY + (pillH - mH) / 2 - 1.5,
+                                   width: pillW, height: mH),
+                        withAttributes: mAttrs)
                 }
 
             default:  // window row
@@ -736,16 +759,18 @@ public final class SidebarView: NSView {
                         let pillW = textW + padX * 2
                         let pillRect = NSRect(x: lx, y: labelY - 1,
                                               width: pillW, height: pillH)
-                        (sel ? pal.accent : pal.accent2).setFill()
-                        NSBezierPath(roundedRect: pillRect,
-                                     xRadius: pillH / 2,
-                                     yRadius: pillH / 2).fill()
+                        let markStroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: pillH / 2, yRadius: pillH / 2)
+                        markStroke.lineWidth = 1
+                        (sel ? pal.accent : pal.accent2).setStroke()
+                        markStroke.stroke()
                         let pillPara = NSMutableParagraphStyle()
                         pillPara.alignment = .center
                         pillPara.lineBreakMode = .byTruncatingTail
                         let pillAttrs: [NSAttributedString.Key: Any] = [
                             .font: markFont,
-                            .foregroundColor: pal.bg ?? .black,
+                            .foregroundColor: sel ? pal.accent : pal.accent2,
                             .paragraphStyle: pillPara,
                         ]
                         let textH = (mark as NSString).size(
