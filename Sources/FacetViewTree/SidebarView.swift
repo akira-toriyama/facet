@@ -234,8 +234,12 @@ public final class SidebarView: NSView {
                     else { continue }
                     let hasLabel = win.isMaster || win.isFloating
                     let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
-                    let rh = baseRH + (hasLabel ? 14 : 0)
-                        + (win.mark != nil ? 17 : 0)   // mark pill line
+                    // Right-side cluster (master/float on top, mark pill
+                    // below) is vertically centred — make the row at
+                    // least as tall as that stack.
+                    let rightCount = (hasLabel ? 1 : 0)
+                        + (win.mark != nil ? 1 : 0)
+                    let rh = max(baseRH, CGFloat(rightCount) * 17 + 10)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -275,8 +279,12 @@ public final class SidebarView: NSView {
                     // A 3rd line (master / float) adds 14 pt so the
                     // label has its own row instead of crowding the
                     // title baseline.
-                    let rh = baseRH + (hasLabel ? 14 : 0)
-                        + (win.mark != nil ? 17 : 0)   // mark pill line
+                    // Right-side cluster (master/float on top, mark pill
+                    // below) is vertically centred — make the row at
+                    // least as tall as that stack.
+                    let rightCount = (hasLabel ? 1 : 0)
+                        + (win.mark != nil ? 1 : 0)
+                    let rh = max(baseRH, CGFloat(rightCount) * 17 + 10)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -701,10 +709,11 @@ public final class SidebarView: NSView {
                 let hasMark = c.mark != nil
                 let tx = iconX + iconSize + 8
                 let tw = max(bounds.width - tx - rowPadX, 0)
-                // Pin the app name to the top whenever a title, a mark
-                // pill, or a status line sits below it; else center it.
-                let appY = (hasTitle || hasLabel || hasMark)
-                    ? row.minY + 6 : row.midY - 9
+                // App name: top when there's a title below it, else
+                // vertically centred. The status / mark cluster lives on
+                // the right and is centred independently, so it no longer
+                // pushes the app name down.
+                let appY = hasTitle ? row.minY + 6 : row.midY - 9
                 (c.app as NSString).draw(
                     in: NSRect(x: tx, y: appY, width: tw, height: 18),
                     withAttributes: [
@@ -723,12 +732,27 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
-                // Stacked lines below the title (or app), right-aligned.
-                // The mark sits on top as a filled pill — the user's own
-                // handle, made to stand out — with the master / float
-                // status line beneath it.
+                // Right-edge cluster, vertically centred in the row:
+                // master / float status on top, the mark pill below it.
                 let rightEdge = bounds.width - rowPadX
-                var lineY = row.minY + (hasTitle ? 42 : 24)
+                let slot: CGFloat = 17
+                let rightCount = (hasLabel ? 1 : 0) + (hasMark ? 1 : 0)
+                var clusterY = (row.midY
+                    - CGFloat(rightCount) * slot / 2).rounded()
+                if let labelText {
+                    let rightPara = NSMutableParagraphStyle()
+                    rightPara.alignment = .right
+                    rightPara.lineBreakMode = .byTruncatingTail
+                    (labelText as NSString).draw(
+                        in: NSRect(x: tx, y: clusterY + 1,
+                                   width: tw, height: 14),
+                        withAttributes: [
+                            .font: uiFont(windowFontSize - 1, .semibold),
+                            .foregroundColor: pal.accent2,
+                            .paragraphStyle: rightPara,
+                        ])
+                    clusterY += slot
+                }
                 if let mark = c.mark {
                     let markFont = uiFont(windowFontSize - 1, .bold)
                     let maxTextW: CGFloat = 72   // long names tail-truncate
@@ -737,7 +761,7 @@ public final class SidebarView: NSView {
                     let padX: CGFloat = 7
                     let pillH: CGFloat = 15
                     let pillW = textW + padX * 2
-                    let pillRect = NSRect(x: rightEdge - pillW, y: lineY,
+                    let pillRect = NSRect(x: rightEdge - pillW, y: clusterY,
                                           width: pillW, height: pillH)
                     (sel ? pal.accent : pal.accent2).setFill()
                     NSBezierPath(roundedRect: pillRect,
@@ -746,26 +770,12 @@ public final class SidebarView: NSView {
                     pillPara.alignment = .center
                     pillPara.lineBreakMode = .byTruncatingTail
                     (mark as NSString).draw(
-                        in: NSRect(x: pillRect.minX, y: lineY + 1,
+                        in: NSRect(x: pillRect.minX, y: clusterY + 1,
                                    width: pillW, height: 13),
                         withAttributes: [
                             .font: markFont,
                             .foregroundColor: pal.bg ?? .black,
                             .paragraphStyle: pillPara,
-                        ])
-                    lineY += 17
-                }
-                if let labelText {
-                    let rightPara = NSMutableParagraphStyle()
-                    rightPara.alignment = .right
-                    rightPara.lineBreakMode = .byTruncatingTail
-                    (labelText as NSString).draw(
-                        in: NSRect(x: tx, y: lineY,
-                                   width: tw, height: 14),
-                        withAttributes: [
-                            .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.accent2,
-                            .paragraphStyle: rightPara,
                         ])
                 }
             }
