@@ -142,6 +142,78 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertNil(c.windowMap[wid(20)])
     }
 
+    func testDeferredWindowSkippedButReProbedLater() {
+        // A window the adapter couldn't classify yet (AX role
+        // unresolved — the probe raced a still-creating window or hit
+        // the per-call cap) is `deferred`: it does NOT join this tick,
+        // not even on the trusted fast-path. Unlike `ignore` it is NOT
+        // marked examined, so once AX resolves (no longer supplied as
+        // deferred) a later reconcile adopts it. This is what lets a
+        // real window tile a poll late while a transient popup — which
+        // vanishes before it ever resolves — never tiles at all.
+        var c = seededCatalog()
+        let r1 = c.reconcile(live: [window(10), window(20)],
+                             trusted: [wid(10), wid(20)],
+                             deferred: [wid(20)],
+                             requireConfirm: true)
+        XCTAssertEqual(r1.added, 1, "only the resolved window joins")
+        XCTAssertEqual(r1.addedIDs, [wid(10)])
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+        XCTAssertNil(c.windowMap[wid(20)],
+                     "deferred window skipped even when trusted")
+        // Next tick: AX resolved → no longer deferred → adopted. Proves
+        // the defer did NOT mark it examined (contrast: `ignore` does).
+        let r2 = c.reconcile(live: [window(10), window(20)])
+        XCTAssertEqual(r2.added, 1)
+        XCTAssertEqual(r2.addedIDs, [wid(20)])
+        XCTAssertEqual(c.windowMap[wid(20)]?.workspace, 1)
+    }
+
+    // MARK: - Layout insertion (append, not master)
+
+    func testNewWindowAppendsToStackNotMaster() {
+        // A window joining a master-stack layout appends to the END of
+        // the per-WS order (joins the stack) rather than seizing the
+        // master slot (order[0]). The first-seen window stays master;
+        // master is taken only by the explicit promoteToMaster.
+        var c = seededCatalog()
+        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.reconcile(live: [window(10)])
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        XCTAssertEqual(c.stackOrders[1], [wid(10), wid(20), wid(30)],
+                       "new windows append; first-seen stays master")
+    }
+
+    func testMoveWindowIntoMasterStackAppendsBehindMaster() {
+        // Moving a window into a populated master-stack WS appends it
+        // behind the existing master — a move-in must not displace the
+        // destination WS's established master either.
+        var c = seededCatalog()
+        _ = c.setMode(workspace: 2, to: "tall", in: displayRect)
+        _ = c.reconcile(live: [window(10), window(20)])      // both → WS1
+        _ = c.setActive(2)
+        _ = c.reconcile(live: [window(10), window(20), window(30)]) // 30 → WS2
+        XCTAssertEqual(c.stackOrders[2], [wid(30)])
+        _ = c.moveWindow(wid(10), to: 2, in: displayRect)
+        _ = c.moveWindow(wid(20), to: 2, in: displayRect)
+        XCTAssertEqual(c.stackOrders[2], [wid(30), wid(10), wid(20)],
+                       "moved-in windows append behind the dest master")
+    }
+
+    func testNewWindowInStackModeTakesTop() {
+        // Stack ("one at a time") shows order[0] and parks the rest, so
+        // a newly-opened window must take the TOP (index 0) — you see
+        // what you just opened. (Contrast: the master-stack engines
+        // append so a new window never seizes the master.)
+        var c = seededCatalog()
+        _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
+        _ = c.reconcile(live: [window(10)])
+        _ = c.reconcile(live: [window(10), window(20)])
+        XCTAssertEqual(c.stackOrders[1], [wid(20), wid(10)],
+                       "newest is the visible stack top")
+    }
+
     func testTrustedDoesNotOverrideOffScreenDefer() {
         // Trusted bypasses only the two-tick gate, not the off-screen
         // defer that runs before it: a window still transiently
@@ -729,14 +801,18 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertNil(c.layoutTrees[1], "tall must discard any tree")
     }
 
-    func testReconcileNewWindowBecomesTallMaster() {
+    func testReconcileNewWindowDoesNotSeizeTallMaster() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
-        // New window lands at index 0 = master.
-        XCTAssertEqual(c.stackOrder(of: 1).first, wid(20))
+        // New window APPENDS — the established master (10) keeps the
+        // slot; the newcomer joins the stack. Master is taken only by
+        // the explicit promoteToMaster.
+        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
+        XCTAssertEqual(c.stackOrder(of: 1).first, wid(10),
+                       "first-seen window keeps the master slot")
     }
 
     func testPromoteToMasterMovesChosenWindowToFront() {

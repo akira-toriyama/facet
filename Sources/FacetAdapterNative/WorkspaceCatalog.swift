@@ -132,10 +132,12 @@ struct WorkspaceCatalog {
     /// stateless `LayoutEngine`s (tall / wide / centered / …). Index 0 is
     /// the master / visible-top: in stack it's the single window
     /// that fills the display (the rest parked at the anchor sliver);
-    /// in tall it's the primary master. New windows land at index 0
-    /// (Q7c: new = top / master); `cycleStack` rotates the array and
-    /// `promoteToMaster` moves a chosen window to index 0. Absent for
-    /// bsp (uses `layoutTrees`) and float (no managed order).
+    /// in tall it's the primary master. A new window lands at index 0
+    /// in stack (so you see what you just opened) but APPENDS in the
+    /// stateless engines (so it joins the stack without seizing the
+    /// master — see `attachToLayout`); `cycleStack` rotates the array
+    /// and `promoteToMaster` moves a chosen window to index 0. Absent
+    /// for bsp (uses `layoutTrees`) and float (no managed order).
     private(set) var stackOrders: [Int: [WindowID]] = [:]
 
     /// Per-WS layout knobs (master ratio / master count) for the
@@ -253,6 +255,7 @@ struct WorkspaceCatalog {
                                    autoFloat: Set<WindowID> = [],
                                    trusted: Set<WindowID> = [],
                                    ignore: Set<WindowID> = [],
+                                   deferred: Set<WindowID> = [],
                                    requireConfirm: Bool = false)
         -> ReconcileResult
     {
@@ -304,6 +307,18 @@ struct WorkspaceCatalog {
             // adapter's classify pass stops re-probing it).
             if ignore.contains(id) {
                 examinedIDs.insert(id)
+                continue
+            }
+            // Adapter couldn't resolve this window's AX role yet (the
+            // probe raced a still-creating window, or the per-call probe
+            // cap was hit). Skip WITHOUT marking examined so the next
+            // reconcile re-probes it: a real window resolves and joins
+            // within a poll or two; a transient popup (autocomplete /
+            // dropdown) vanishes before it resolves and never joins.
+            // Mirrors the off-screen defer below — both are "decide
+            // later" states, not "never manage" (`examined`) states.
+            if deferred.contains(id) {
+                pendingAddCandidates.remove(id)
                 continue
             }
             // Off-Space new window: see `allowAutoAdd` above.
@@ -434,8 +449,11 @@ struct WorkspaceCatalog {
     }
 
     /// Insert `id` into the layout container appropriate to
-    /// `n1Based`'s mode (bsp → tree, stack → order at index 0,
-    /// anything else → no-op). Skips when `id` is floating.
+    /// `n1Based`'s mode (bsp → tree; stack → per-WS order at index 0
+    /// so the joining window is the one shown; stateless engine →
+    /// append to the per-WS order so it joins the stack without
+    /// seizing master; anything else → no-op). Skips when `id` is
+    /// floating.
     /// `focused` / `rect` only matter for the bsp path (passed
     /// to `LayoutTree.insert` for orientation choice).
     private mutating func attachToLayout(_ id: WindowID,
@@ -448,12 +466,27 @@ struct WorkspaceCatalog {
             var tree = layoutTrees[n1Based] ?? LayoutTree()
             tree.insert(id, focused: focused, in: rect)
             layoutTrees[n1Based] = tree
-        } else if m == "stack" || LayoutRegistry.engine(named: m) != nil {
-            // Stack + stateless engines share one per-WS order; new
-            // window lands at index 0 (= master / top).
+        } else if m == "stack" {
+            // Stack ("one at a time") shows order[0] and parks the rest
+            // at the anchor sliver, so a joining window takes the TOP
+            // (index 0) — you see what you just opened / moved in.
             var order = stackOrders[n1Based] ?? []
             order.removeAll { $0 == id }
             order.insert(id, at: 0)
+            stackOrders[n1Based] = order
+        } else if LayoutRegistry.engine(named: m) != nil {
+            // Stateless master-stack / tiling engines (tall / wide /
+            // centered / grid / spiral) share the same per-WS order. A
+            // window joining — new adoption, un-float, or move-in —
+            // APPENDS to the end so it joins the stack rather than
+            // seizing the master slot (order[0]); opening or moving a
+            // window must not displace the established master. Master is
+            // taken only by the explicit `promoteToMaster`. Bonus: if a
+            // window ever slips past the classify gate, the tail is the
+            // least-disruptive slot — it shifts nothing.
+            var order = stackOrders[n1Based] ?? []
+            order.removeAll { $0 == id }
+            order.append(id)
             stackOrders[n1Based] = order
         }
     }
