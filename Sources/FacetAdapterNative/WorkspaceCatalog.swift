@@ -730,6 +730,65 @@ struct WorkspaceCatalog {
         return true
     }
 
+    // MARK: - Swap / insert (real-window DnD, 枠C)
+
+    /// Swap two tiled windows within `n1Based`. bsp → swap their tree
+    /// leaves; stateless / stack → swap their order slots. No-op
+    /// (returns false) when the mode keeps no managed order (bsp with no
+    /// tree / float), the two are the same window, or either isn't a
+    /// non-floating member of the WS (membership is enforced by the
+    /// order / tree lookup, so cross-WS or floating operands no-op).
+    @discardableResult
+    mutating func swapWindows(_ a: WindowID, _ b: WindowID,
+                              workspace n1Based: Int) -> Bool {
+        if mode(of: n1Based) == "bsp" {
+            guard var tree = layoutTrees[n1Based] else { return false }
+            let before = tree
+            tree.swap(a, b)
+            guard tree != before else { return false }
+            layoutTrees[n1Based] = tree
+            return true
+        }
+        guard hasManagedOrder(n1Based),
+              let next = WindowOrder.swapped(orderedMembers(of: n1Based), a, b)
+        else { return false }
+        stackOrders[n1Based] = next
+        return true
+    }
+
+    /// Insert `moved` beside `target` on `edge` within `n1Based`. bsp →
+    /// split the target leaf on that edge; stateless / stack → move
+    /// `moved` before / after `target` in the order. Same no-op /
+    /// change-detection contract as `swapWindows`.
+    @discardableResult
+    mutating func insertWindow(_ moved: WindowID, beside target: WindowID,
+                               edge: InsertEdge,
+                               workspace n1Based: Int) -> Bool {
+        if mode(of: n1Based) == "bsp" {
+            guard var tree = layoutTrees[n1Based] else { return false }
+            let before = tree
+            tree.insert(moved, beside: target, edge: edge)
+            guard tree != before else { return false }
+            layoutTrees[n1Based] = tree
+            return true
+        }
+        guard hasManagedOrder(n1Based),
+              let next = WindowOrder.inserted(orderedMembers(of: n1Based),
+                                              moving: moved, beside: target,
+                                              edge: edge)
+        else { return false }
+        stackOrders[n1Based] = next
+        return true
+    }
+
+    /// Whether `n1Based`'s mode keeps a per-WS window order that
+    /// swap / insert can reorder (the `"stack"` mode + the stateless
+    /// engines). bsp uses a tree (handled separately); float keeps none.
+    private func hasManagedOrder(_ n1Based: Int) -> Bool {
+        let m = mode(of: n1Based)
+        return m == "stack" || LayoutRegistry.engine(named: m) != nil
+    }
+
     /// Tree-computed frames for every tiled window in the WS,
     /// keyed by `WindowID`. Empty when the WS isn't in `"bsp"`
     /// mode or has no tree.

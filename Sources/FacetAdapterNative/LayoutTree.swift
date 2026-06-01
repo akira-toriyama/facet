@@ -331,6 +331,69 @@ struct LayoutTree: Equatable, Sendable {
         }
     }
 
+    // MARK: - Swap / insert (real-window DnD, 枠C)
+
+    /// Exchange the leaves holding `a` and `b` — the two windows trade
+    /// on-screen frames while the split structure (orientations /
+    /// ratios) stays put. No-op when `a == b` or either isn't in the
+    /// tree.
+    mutating func swap(_ a: WindowID, _ b: WindowID) {
+        guard a != b, let r = root, contains(a), contains(b) else { return }
+        root = Self.swapped(r, a, b)
+    }
+
+    private static func swapped(_ node: LayoutNode,
+                                _ a: WindowID, _ b: WindowID) -> LayoutNode {
+        switch node {
+        case .leaf(let id):
+            if id == a { return .leaf(b) }
+            if id == b { return .leaf(a) }
+            return node
+        case .split(let s):
+            return .split(.init(orientation: s.orientation, ratio: s.ratio,
+                                first: swapped(s.first.node, a, b),
+                                second: swapped(s.second.node, a, b)))
+        }
+    }
+
+    /// Move `moved` to sit beside `target`, splitting `target`'s leaf
+    /// 50/50 on `edge` (`left` / `top` puts `moved` first, `right` /
+    /// `bottom` second). `moved` is first removed from its current slot
+    /// — its sibling heals — so the rest of the tree re-balances. No-op
+    /// when `moved == target` or either isn't in the tree.
+    mutating func insert(_ moved: WindowID, beside target: WindowID,
+                         edge: InsertEdge) {
+        guard moved != target, root != nil,
+              contains(moved), contains(target) else { return }
+        guard let healed = removed(from: root!, id: moved) else { return }
+        root = Self.splitBeside(healed, target: target,
+                                moved: moved, edge: edge)
+    }
+
+    private static func splitBeside(_ node: LayoutNode, target: WindowID,
+                                    moved: WindowID,
+                                    edge: InsertEdge) -> LayoutNode {
+        switch node {
+        case .leaf(let id):
+            guard id == target else { return node }
+            let vertical = (edge == .left || edge == .right)
+            let movedFirst = (edge == .left || edge == .top)
+            return .split(.init(
+                orientation: vertical ? .vertical : .horizontal,
+                ratio: 0.5,
+                first: .leaf(movedFirst ? moved : target),
+                second: .leaf(movedFirst ? target : moved)))
+        case .split(let s):
+            return .split(.init(orientation: s.orientation, ratio: s.ratio,
+                                first: splitBeside(s.first.node,
+                                                   target: target,
+                                                   moved: moved, edge: edge),
+                                second: splitBeside(s.second.node,
+                                                    target: target,
+                                                    moved: moved, edge: edge)))
+        }
+    }
+
     // MARK: - Queries
 
     func contains(_ id: WindowID) -> Bool {
