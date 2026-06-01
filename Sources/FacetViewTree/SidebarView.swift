@@ -651,7 +651,6 @@ public final class SidebarView: NSView {
                     withAttributes: [
                         .font: uiFont(fs, .bold),
                         .foregroundColor: c.hot ? pal.accent : pal.dim,
-                        .underlineStyle: NSUnderlineStyle.single.rawValue,
                         .kern: 0.6, .paragraphStyle: hp])
                 // Line 2: layout-mode text — accent-2 semibold on the
                 // active WS, `pal.dim` semibold when the WS isn't
@@ -678,7 +677,6 @@ public final class SidebarView: NSView {
                         withAttributes: [
                             .font: uiFont(10.5, .bold),
                             .foregroundColor: modeColor,
-                            .underlineStyle: NSUnderlineStyle.single.rawValue,
                             .paragraphStyle: hp,
                         ])
                 }
