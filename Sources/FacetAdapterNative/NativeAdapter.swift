@@ -801,6 +801,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // feeds every downstream path (tile / stack / engine) from
         // one place. `full` is top-left origin (Displays.visibleFrame
         // returns Quartz coords), so screen top → minY, bottom → maxY.
+        // Smart gaps: a lone tiled window goes full-bleed — skip the
+        // outer inset when the active WS holds ≤ 1 tiled window. (Inner
+        // gap is already a no-op with no neighbour to pull apart.)
+        if config.effectiveSmartGaps,
+           catalog.nonFloatingMembers(of: catalog.activeIndex).count <= 1 {
+            return full
+        }
         let top = config.effectiveOuterGapTop
         let bottom = config.effectiveOuterGapBottom
         let left = config.effectiveOuterGapLeft
@@ -1649,6 +1656,22 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
         applyLayout(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
+    }
+
+    public func balanceActiveWorkspace() {
+        // Master knobs are the only per-WS layout state that drifts;
+        // bsp split ratios are fixed at 0.5 today. No knob → nothing
+        // to reset. Skip the re-tile when already at the baseline.
+        guard hasMasterKnob(catalog.activeIndex) else {
+            Log.debug("native: balance noop "
+                + "(WS \(catalog.activeIndex) has no master knob)")
+            return
+        }
+        guard catalog.resetParams(workspace: catalog.activeIndex) else {
+            Log.debug("native: balance noop (already at baseline)")
+            return
+        }
+        reflowActive(rect: activeDisplayRect())
     }
 
     /// Apply stack mode to `n1Based`: the catalog's

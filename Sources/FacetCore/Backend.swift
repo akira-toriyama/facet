@@ -143,6 +143,13 @@ public protocol WindowBackend: Sendable {
     /// Backends that delegate layout (rift) silently no-op.
     func retileActiveWorkspace()
 
+    /// Reset the active workspace's master knobs to their even
+    /// baseline (`facet workspace --balance`): master ratio → 0.5,
+    /// master count → 1, undoing accumulated grow/shrink/inc/dec
+    /// nudges. No-op for modes without master knobs (bsp / stack /
+    /// grid / spiral / float) and for backends without layout state.
+    func balanceActiveWorkspace()
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as
@@ -180,4 +187,5 @@ public extension WindowBackend {
     func removeWorkspace(at position: Int?) {}
     func renameWorkspace(at position: Int?, to name: String) {}
     func moveActiveWorkspace(to position: Int) {}
+    func balanceActiveWorkspace() {}
 }

@@ -772,6 +772,19 @@ struct WorkspaceCatalog {
         return next.masterCount != cur.masterCount
     }
 
+    /// Reset a workspace's master knobs to defaults (`balance`):
+    /// master ratio → 0.5, master count → 1. Undoes accumulated
+    /// `grow`/`shrink`/`inc`/`dec` nudges so the layout returns to its
+    /// even baseline. Returns whether anything actually changed (false
+    /// when already at defaults, so the caller can skip a re-tile).
+    @discardableResult
+    mutating func resetParams(workspace n1Based: Int) -> Bool {
+        guard layoutParams[n1Based] != nil,
+              layoutParams[n1Based] != LayoutParams() else { return false }
+        layoutParams[n1Based] = nil          // nil reads back as defaults
+        return true
+    }
+
     /// Swap a workspace between the `tall` and `wide` layouts — the two
     /// orientations of the master-stack, now distinct engines rather
     /// than an orientation knob. No-op for any other mode. Window order
