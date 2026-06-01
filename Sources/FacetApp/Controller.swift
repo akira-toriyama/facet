@@ -685,6 +685,14 @@ final class Controller: NSObject {
     }
 
     private func refresh() {
+        // Don't re-query (and thus re-tile) while the user is dragging a
+        // tiled window — the per-refresh re-tile in the adapter would
+        // snap the window back to its slot mid-drag. The drop commit (or
+        // the next refresh after release) re-tiles to the final layout.
+        if realWindowDrag?.isDragging == true {
+            Log.debug("refresh skipped (real-window drag in progress)")
+            return
+        }
         Log.debug("refresh dispatch")
         let bk = backend
         cliQueue.async {

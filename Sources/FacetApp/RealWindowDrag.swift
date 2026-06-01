@@ -31,6 +31,13 @@ final class RealWindowDragMonitor {
     private var dragged: WindowID?
     private var liftQuartz: CGPoint = .zero
     private var dragging = false
+
+    /// True from the moment a tiled-window drag passes the threshold
+    /// until mouse-up. The Controller gates its refresh on this so
+    /// facet's per-refresh re-tile can't fight the drag (snap the window
+    /// back) — and `lastWorkspaces` stays frozen at the pre-drag layout,
+    /// which keeps the drop hit-test's reference frames stable.
+    var isDragging: Bool { dragging }
     /// Pointer travel before a mouse-down becomes a drag (matches the
     /// tree's `dragThreshold`); below it the gesture stays a click.
     private let threshold: CGFloat = 6
