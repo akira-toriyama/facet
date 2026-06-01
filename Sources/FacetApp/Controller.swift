@@ -52,6 +52,11 @@ final class Controller: NSObject {
     /// Latest workspaces snapshot — held so the grid view can render
     /// immediately on first show without round-tripping the backend.
     private(set) var lastWorkspaces: [Workspace] = []
+    /// Active-WS index at the previous ``apply`` — lets the
+    /// event-driven preview refresh spot a workspace switch (the
+    /// snapshot frame is switch-stable by design, so an index change is
+    /// the only reliable signal that windows were parked / unparked).
+    private var prevActiveWSIndex: Int?
     private var userHidden = false
 
     /// Last surfaced operational error (e.g. out-of-range workspace
@@ -695,9 +700,32 @@ final class Controller: NSObject {
         // icons. The background timer's first tick is `interval` s
         // away — too late if the user opens the grid immediately.
         let firstRealApply = lastWorkspaces.isEmpty && !wss.isEmpty
+        // Snapshot the OLD active workspace's live frames before the new
+        // snapshot replaces them — the event-driven preview diff below
+        // compares against these to spot in-place moves / retiles. Only
+        // the active WS reports a live frame (inactive WSs report a
+        // would-be tile slot that doesn't track real pixels), so we
+        // capture only the active set, and only when a preview surface
+        // exists (skipped entirely on macOS 13).
+        // Also remember which WS each window lived in, to spot a
+        // cross-workspace move (trigger 3 below).
+        var prevActiveFrames: [WindowID: CGRect] = [:]
+        var prevWSofWindow: [WindowID: Int] = [:]
+        if #available(macOS 14.0, *), winPreview != nil {
+            let oldActiveIdx = lastWorkspaces.first(where: { $0.isActive })?.index
+            for ws in lastWorkspaces {
+                let active = ws.index == oldActiveIdx
+                for w in ws.windows {
+                    prevWSofWindow[w.id] = ws.index
+                    if active, let f = w.frame { prevActiveFrames[w.id] = f }
+                }
+            }
+        }
+        let prevActive = prevActiveWSIndex
         // Keep the snapshot fresh even when hidden so the grid can
         // render immediately without a backend round-trip.
         lastWorkspaces = wss
+        prevActiveWSIndex = wss.first(where: { $0.isActive })?.index
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index
@@ -713,6 +741,60 @@ final class Controller: NSObject {
         }
         if firstRealApply, #available(macOS 14.0, *) {
             refreshThumbnailCache()
+        }
+        // Event-driven preview refresh — the geometry / visibility half
+        // that the ~4 s background timer (content freshness) can't react
+        // to promptly. Three triggers feed one stale-id set:
+        //   (1) WS switch — the snapshot frame is switch-stable by
+        //       design and parking keeps a window on a 1×41 on-screen
+        //       sliver, so neither a frame nor an isOnscreen delta
+        //       fires; the active-WS index changing is the only
+        //       reliable signal. Re-warm the now-active desktop.
+        //   (2) In-place move / resize on the ACTIVE WS (retile, live
+        //       drag-resize, external move) — its windows report a live
+        //       frame, so an epsilon-gated delta is the real signal.
+        //   (3) Cross-WS move — a window whose workspace membership
+        //       changed (CLI --move-to without --follow, keyboard
+        //       file-into-WS, grid / rail drop). A window that lands on
+        //       an INACTIVE WS reports a would-be frame that (2) can't
+        //       trust, but the membership change itself is unambiguous.
+        //       (A tree DnD lands in (1)+(3): it moves AND switches.)
+        // Invalidate drops the stale cache for every surface (tree
+        // re-captures lazily on the next hover); the open grid / rail
+        // then gets a fresh capture pushed via `pushFreshThumbnails`.
+        if #available(macOS 14.0, *), let wp = winPreview as? WindowPreview {
+            let newActive = wss.first(where: { $0.isActive })
+            var stale: [WindowID] = []
+            if newActive?.index != prevActive {                  // (1) switch
+                stale.append(contentsOf: newActive?.windows.map(\.id) ?? [])
+            }
+            if let active = newActive {                          // (2) in-place
+                for w in active.windows {
+                    guard let nf = w.frame, let of = prevActiveFrames[w.id]
+                    else { continue }
+                    // 2 pt epsilon: ignore sub-pixel / mid-animation
+                    // jitter, catch real moves (tens of points).
+                    if abs(of.minX - nf.minX) > 2 || abs(of.minY - nf.minY) > 2
+                        || abs(of.width - nf.width) > 2
+                        || abs(of.height - nf.height) > 2 {
+                        stale.append(w.id)
+                    }
+                }
+            }
+            for ws in wss {                                      // (3) cross-WS move
+                for w in ws.windows where prevWSofWindow[w.id].map({
+                    $0 != ws.index
+                }) == true {
+                    stale.append(w.id)
+                }
+            }
+            if !stale.isEmpty {
+                let ids = Array(Set(stale))
+                for id in ids { wp.invalidate(id) }   // all surfaces; tree = lazy
+                pushFreshThumbnails(ids, wp)          // no-op if no overview open
+                Log.debug("preview-refresh: \(ids.count) window(s) "
+                    + "(switch=\(newActive?.index != prevActive))")
+            }
         }
         if userHidden { return }
         guard !wss.isEmpty, NSScreen.main != nil else {
@@ -875,6 +957,31 @@ final class Controller: NSObject {
             for id in ids {
                 wp.request(id) { [weak self] img, _, gotID in
                     MainActor.assumeIsolated {
+                        self?.railView?.setThumbnail(img, for: gotID)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Re-capture the given windows and push the fresh image into
+    /// whichever overview is open. Unlike ``refreshGridThumbnails`` /
+    /// ``refreshRailThumbnails`` (single-shot DnD/swap call sites), this
+    /// does NOT pre-invalidate — the event-driven caller already dropped
+    /// the truly-stale entries, so ``request``'s 5 s TTL / inflight
+    /// guards can short-circuit a burst of reconcile passes into one
+    /// capture per window. No-op when neither overview is on screen (the
+    /// tree refreshes lazily on the next hover off the invalidated
+    /// cache, so it needs no push).
+    @available(macOS 14.0, *)
+    private func pushFreshThumbnails(_ ids: [WindowID], _ wp: WindowPreview) {
+        guard gridView != nil || railView != nil, !ids.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard self != nil else { return }
+            for id in ids {
+                wp.request(id) { [weak self] img, _, gotID in
+                    MainActor.assumeIsolated {
+                        self?.gridView?.setThumbnail(img, for: gotID)
                         self?.railView?.setThumbnail(img, for: gotID)
                     }
                 }
