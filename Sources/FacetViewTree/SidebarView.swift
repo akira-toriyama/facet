@@ -713,7 +713,7 @@ public final class SidebarView: NSView {
                 // line. App centres only on a bare single-line row.
                 let appY = (hasTitle || hasLabel || hasMark)
                     ? row.minY + 8 : row.midY - 9
-                let titleY = row.minY + 30
+                let titleY = row.minY + 28        // tucked up under the app
                 // Icon centres on the app (+ title) identity block, not
                 // the whole row, so the third line doesn't drag it down.
                 let identityBottom = hasTitle ? titleY + 15 : appY + 18
@@ -744,7 +744,8 @@ public final class SidebarView: NSView {
                 // Third line: the mark pill (left) then the master /
                 // float label after it.
                 if hasLabel || hasMark {
-                    let labelY = hasTitle ? row.minY + 51 : row.minY + 32
+                    // Wider gap below the title before the mark / status.
+                    let labelY = hasTitle ? row.minY + 55 : row.minY + 32
                     var lx = tx
                     if let mark = c.mark {
                         let markFont = uiFont(windowFontSize - 1, .bold)
