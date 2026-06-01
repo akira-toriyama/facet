@@ -234,10 +234,11 @@ public final class SidebarView: NSView {
                     else { continue }
                     let hasLabel = win.isMaster || win.isFloating
                     let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
-                    // master / float gets its own line under the title;
-                    // the mark rides inline on the app-name line (no
-                    // extra height).
-                    let rh = baseRH + (hasLabel ? 14 : 0)
+                    // Third line under the title holds the mark pill
+                    // (left) and the master / float label — present when
+                    // either exists.
+                    let rh = baseRH
+                        + ((hasLabel || win.mark != nil) ? 16 : 0)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -277,10 +278,11 @@ public final class SidebarView: NSView {
                     // A 3rd line (master / float) adds 14 pt so the
                     // label has its own row instead of crowding the
                     // title baseline.
-                    // master / float gets its own line under the title;
-                    // the mark rides inline on the app-name line (no
-                    // extra height).
-                    let rh = baseRH + (hasLabel ? 14 : 0)
+                    // Third line under the title holds the mark pill
+                    // (left) and the master / float label — present when
+                    // either exists.
+                    let rh = baseRH
+                        + ((hasLabel || win.mark != nil) ? 16 : 0)
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -694,53 +696,21 @@ public final class SidebarView: NSView {
                     c.isFloating ? "float" : nil
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
+                let hasMark = c.mark != nil
                 let tx = iconX + iconSize + 8
-                let appY = (hasTitle || hasLabel)
+                let tw = max(bounds.width - tx - rowPadX, 0)
+                // App name pins to the top when a title or the third
+                // (mark / status) line sits below it; else centres.
+                let appY = (hasTitle || hasLabel || hasMark)
                     ? row.minY + 6 : row.midY - 9
-                // Mark rides inline at the head of the app-name line as a
-                // filled pill; the app name flows after it. No extra row
-                // height, tied to the window's identity.
-                var nameX = tx
-                if let mark = c.mark {
-                    let markFont = uiFont(windowFontSize - 1, .bold)
-                    let maxTextW: CGFloat = 60   // long names tail-truncate
-                    let textW = min(maxTextW, ceil((mark as NSString).size(
-                        withAttributes: [.font: markFont]).width))
-                    let padX: CGFloat = 6
-                    let pillH: CGFloat = 15
-                    let pillW = textW + padX * 2
-                    let pillY = appY + 1         // centre on the 18pt line
-                    let pillRect = NSRect(x: tx, y: pillY,
-                                          width: pillW, height: pillH)
-                    (sel ? pal.accent : pal.accent2).setFill()
-                    NSBezierPath(roundedRect: pillRect,
-                                 xRadius: pillH / 2, yRadius: pillH / 2).fill()
-                    let pillPara = NSMutableParagraphStyle()
-                    pillPara.alignment = .center
-                    pillPara.lineBreakMode = .byTruncatingTail
-                    let pillAttrs: [NSAttributedString.Key: Any] = [
-                        .font: markFont,
-                        .foregroundColor: pal.bg ?? .black,
-                        .paragraphStyle: pillPara,
-                    ]
-                    let textH = (mark as NSString).size(
-                        withAttributes: pillAttrs).height
-                    (mark as NSString).draw(
-                        in: NSRect(x: tx, y: pillY + (pillH - textH) / 2 - 1.5,
-                                   width: pillW, height: textH),
-                        withAttributes: pillAttrs)
-                    nameX = tx + pillW + 6
-                }
-                let nameW = max(bounds.width - nameX - rowPadX, 0)
                 (c.app as NSString).draw(
-                    in: NSRect(x: nameX, y: appY, width: nameW, height: 18),
+                    in: NSRect(x: tx, y: appY, width: tw, height: 18),
                     withAttributes: [
                         .font: uiFont(windowFontSize,
                                       sel ? .semibold : .medium),
                         .foregroundColor: sel ? pal.accent : pal.text,
                         .paragraphStyle: para,
                     ])
-                let tw = max(bounds.width - tx - rowPadX, 0)
                 if hasTitle {
                     (c.title as NSString).draw(
                         in: NSRect(x: tx, y: row.minY + 25,
@@ -751,15 +721,53 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
-                if let labelText {
+                // Third line: the mark pill (left) then the master /
+                // float label after it.
+                if hasLabel || hasMark {
                     let labelY = hasTitle ? row.minY + 42 : row.minY + 24
-                    (labelText as NSString).draw(
-                        in: NSRect(x: tx, y: labelY, width: tw, height: 14),
-                        withAttributes: [
-                            .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.accent2,
-                            .paragraphStyle: para,
-                        ])
+                    var lx = tx
+                    if let mark = c.mark {
+                        let markFont = uiFont(windowFontSize - 1, .bold)
+                        let maxTextW: CGFloat = 60   // long → tail-truncate
+                        let textW = min(maxTextW, ceil((mark as NSString)
+                            .size(withAttributes: [.font: markFont]).width))
+                        let padX: CGFloat = 6
+                        let pillH: CGFloat = 15
+                        let pillW = textW + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        (sel ? pal.accent : pal.accent2).setFill()
+                        NSBezierPath(roundedRect: pillRect,
+                                     xRadius: pillH / 2,
+                                     yRadius: pillH / 2).fill()
+                        let pillPara = NSMutableParagraphStyle()
+                        pillPara.alignment = .center
+                        pillPara.lineBreakMode = .byTruncatingTail
+                        let pillAttrs: [NSAttributedString.Key: Any] = [
+                            .font: markFont,
+                            .foregroundColor: pal.bg ?? .black,
+                            .paragraphStyle: pillPara,
+                        ]
+                        let textH = (mark as NSString).size(
+                            withAttributes: pillAttrs).height
+                        (mark as NSString).draw(
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - textH) / 2 - 1.5,
+                                       width: pillW, height: textH),
+                            withAttributes: pillAttrs)
+                        lx += pillW + 6
+                    }
+                    if let labelText {
+                        (labelText as NSString).draw(
+                            in: NSRect(x: lx, y: labelY,
+                                       width: max(bounds.width - lx - rowPadX, 0),
+                                       height: 14),
+                            withAttributes: [
+                                .font: uiFont(windowFontSize - 1, .semibold),
+                                .foregroundColor: pal.accent2,
+                                .paragraphStyle: para,
+                            ])
+                    }
                 }
             }
 
