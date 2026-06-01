@@ -235,6 +235,7 @@ public final class SidebarView: NSView {
                     let hasLabel = win.isMaster || win.isFloating
                     let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
                     let rh = baseRH + (hasLabel ? 14 : 0)
+                        + (win.mark != nil ? 17 : 0)   // mark pill line
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -275,6 +276,7 @@ public final class SidebarView: NSView {
                     // label has its own row instead of crowding the
                     // title baseline.
                     let rh = baseRH + (hasLabel ? 14 : 0)
+                        + (win.mark != nil ? 17 : 0)   // mark pill line
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
                         workspaceIndex: ws.index, pid: win.pid,
@@ -696,23 +698,12 @@ public final class SidebarView: NSView {
                     c.isFloating ? "float" : nil
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
+                let hasMark = c.mark != nil
                 let tx = iconX + iconSize + 8
-                // Reserve right-edge room for the mark badge so the
-                // app / title text never runs under it. Cap the width
-                // so a long mark name can't eat the row — it tail-
-                // truncates inside the badge (the full name still lives
-                // in the catalog; the badge is just a glance affordance).
-                let markFont = uiFont(windowFontSize - 1, .bold)
-                let markMaxW: CGFloat = 72
-                let markW: CGFloat = c.mark.map {
-                    min(markMaxW, ceil(($0 as NSString).size(
-                        withAttributes: [.font: markFont]).width))
-                } ?? 0
-                let markGap: CGFloat = markW > 0 ? 10 : 0
-                let tw = max(bounds.width - tx - rowPadX - markW - markGap, 0)
-                // Pin the app name to the top whenever a title or a
-                // status label sits below it; otherwise center it.
-                let appY = (hasTitle || hasLabel)
+                let tw = max(bounds.width - tx - rowPadX, 0)
+                // Pin the app name to the top whenever a title, a mark
+                // pill, or a status line sits below it; else center it.
+                let appY = (hasTitle || hasLabel || hasMark)
                     ? row.minY + 6 : row.midY - 9
                 (c.app as NSString).draw(
                     in: NSRect(x: tx, y: appY, width: tw, height: 18),
@@ -732,31 +723,45 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
+                // Stacked lines below the title (or app). The mark sits
+                // on top as a filled pill — the user's own handle, made
+                // to stand out — with the master / float status line
+                // beneath it.
+                var lineY = row.minY + (hasTitle ? 42 : 24)
+                if let mark = c.mark {
+                    let markFont = uiFont(windowFontSize - 1, .bold)
+                    let maxTextW: CGFloat = 72   // long names tail-truncate
+                    let textW = min(maxTextW, ceil((mark as NSString).size(
+                        withAttributes: [.font: markFont]).width))
+                    let padX: CGFloat = 7
+                    let pillH: CGFloat = 15
+                    let pillRect = NSRect(x: tx, y: lineY,
+                                          width: textW + padX * 2,
+                                          height: pillH)
+                    (sel ? pal.accent : pal.accent2).setFill()
+                    NSBezierPath(roundedRect: pillRect,
+                                 xRadius: pillH / 2, yRadius: pillH / 2).fill()
+                    let pillPara = NSMutableParagraphStyle()
+                    pillPara.alignment = .center
+                    pillPara.lineBreakMode = .byTruncatingTail
+                    (mark as NSString).draw(
+                        in: NSRect(x: tx, y: lineY + 1,
+                                   width: textW + padX * 2, height: 13),
+                        withAttributes: [
+                            .font: markFont,
+                            .foregroundColor: pal.bg ?? .black,
+                            .paragraphStyle: pillPara,
+                        ])
+                    lineY += 17
+                }
                 if let labelText {
-                    let labelY = hasTitle
-                        ? row.minY + 42   // app(6-24) + title(25-40) + gap
-                        : row.minY + 24   // app(6-24) + tiny gap
                     (labelText as NSString).draw(
-                        in: NSRect(x: tx, y: labelY,
+                        in: NSRect(x: tx, y: lineY,
                                    width: tw, height: 14),
                         withAttributes: [
                             .font: uiFont(windowFontSize - 1, .semibold),
                             .foregroundColor: pal.accent2,
                             .paragraphStyle: para,
-                        ])
-                }
-                // Mark badge — right-edge, vertically centred, bold so
-                // it reads as the user's own handle distinct from the
-                // master / float status line.
-                if let mark = c.mark {
-                    let mx = bounds.width - rowPadX - markW
-                    (mark as NSString).draw(
-                        in: NSRect(x: mx, y: row.midY - 8,
-                                   width: markW, height: 16),
-                        withAttributes: [
-                            .font: markFont,
-                            .foregroundColor: sel ? pal.accent : pal.accent2,
-                            .paragraphStyle: para,   // tail-truncate if long
                         ])
                 }
             }

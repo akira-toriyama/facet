@@ -361,6 +361,14 @@ final class Controller: NSObject {
                         self.scheduleReconcile(after: 0.05)
                     }
 
+                case let s where s.hasPrefix("window-unmark:"):
+                    let name = String(s.dropFirst("window-unmark:".count))
+                    if !self.backend.unmark(name) {
+                        self.setError(
+                            "window --unmark=\(name): no such mark")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
                 case let s where s.hasPrefix("set-layout:"):
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)

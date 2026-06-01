@@ -180,6 +180,10 @@ public protocol WindowBackend: Sendable {
     /// its window has since closed (caller surfaces the error).
     func focusMark(_ name: String) -> Bool
 
+    /// Remove mark `name` (`facet window --unmark=NAME`). Returns
+    /// `false` when the name wasn't set (caller surfaces the error).
+    func unmark(_ name: String) -> Bool
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as
@@ -222,4 +226,5 @@ public extension WindowBackend {
     func mirrorActiveWorkspace(_ axis: MirrorAxis) {}
     func markFocusedWindow(_ name: String) -> Bool { false }
     func focusMark(_ name: String) -> Bool { false }
+    func unmark(_ name: String) -> Bool { false }
 }
