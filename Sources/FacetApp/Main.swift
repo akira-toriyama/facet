@@ -24,8 +24,9 @@
 //   Server  : --quit / --reload / --resign / --help
 //   Status  : facet status (read-only, no `--`)
 //   Workspace : facet workspace --focus=N|NAME|next|prev|recent / --layout=NAME
-//               / --retile / --add / --remove[=N] / --rename=NAME / --move=N
-//   Window    : facet window --move-to=N / --toggle-float /
+//               / --retile / --balance / --add / --remove[=N] / --rename=NAME
+//               / --move=N
+//   Window    : facet window --move-to=N[ --follow] / --toggle-float /
 //               --toggle-orientation / --cycle-stack=next|prev /
 //               --grow-master / --shrink-master / --inc-master / --dec-master
 //
@@ -115,6 +116,8 @@ enum FacetApp {
                                              spiral | float)
           facet workspace --retile           re-apply the layout
                                              (no-op when float)
+          facet workspace --balance          reset master ratio / count
+                                             to the even baseline
           facet workspace --add              append a new workspace
           facet workspace --remove[=N]       remove workspace N (or the
                                              active one); its windows
@@ -125,6 +128,7 @@ enum FacetApp {
 
         WINDOW                               (focused window)
           facet window --move-to=N           move it to workspace N
+          facet window --move-to=N --follow  …and switch there too
           facet window --toggle-float        flip its float flag
           facet window --toggle-orientation  bsp: rotate parent split /
                                              tall⇄wide: swap layout
@@ -309,6 +313,13 @@ enum FacetApp {
         postControl("window-move:\(index)")
     }
 
+    /// Post ``window-move-follow:N`` — move the focused window to the
+    /// Nth workspace, then switch the active workspace to N so focus
+    /// follows the window (send-and-follow).
+    static func postWindowMoveFollow(_ index: Int) -> Never {
+        postControl("window-move-follow:\(index)")
+    }
+
     /// Post ``set-layout:NAME``. NAME must be one of
     /// ``canonicalLayoutModes`` (validated by ``canonicalLayoutMode``
     /// at parse time). Targets the currently-active workspace.
@@ -463,6 +474,7 @@ enum FacetApp {
         var focusArg: String?
         var layoutArg: String?
         var retileFlag = false
+        var balanceFlag = false
         var addFlag = false
         var removeArg: String?      // "" = active, else 1-based index
         var renameArg: String?
@@ -479,6 +491,8 @@ enum FacetApp {
                     String(a.dropFirst("--layout=".count)))
             case a == "--retile":
                 retileFlag = true
+            case a == "--balance":
+                balanceFlag = true
             case a == "--add":
                 addFlag = true
             case a == "--remove":
@@ -497,8 +511,8 @@ enum FacetApp {
             }
         }
         let count = [focusArg != nil, layoutArg != nil, retileFlag,
-                     addFlag, removeArg != nil, renameArg != nil,
-                     moveArg != nil].filter { $0 }.count
+                     balanceFlag, addFlag, removeArg != nil,
+                     renameArg != nil, moveArg != nil].filter { $0 }.count
         guard count > 0 else {
             die("facet workspace: no action specified — "
                 + "see `facet --help`")
@@ -511,6 +525,7 @@ enum FacetApp {
         if let f = focusArg  { postWorkspaceFocus(f) }
         if let l = layoutArg { postSetLayout(l) }
         if retileFlag        { postRetile() }
+        if balanceFlag       { postControl("workspace-balance") }
         if addFlag           { postControl("workspace-add") }
         if let r = removeArg { postControl("workspace-remove:" + r) }
         if let n = renameArg { postControl("workspace-rename:" + n) }
@@ -524,6 +539,7 @@ enum FacetApp {
     /// flag namespace.
     static func runWindowCommand(_ args: [String]) -> Never {
         var moveToArg: Int?
+        var follow = false
         var toggleFloat = false
         var toggleOrientation = false
         var cycleStackDir: String?
@@ -538,6 +554,8 @@ enum FacetApp {
             switch true {
             case a.hasPrefix("--move-to="):
                 moveToArg = parseMoveToInt(a)
+            case a == "--follow":
+                follow = true
             case a == "--toggle-float":
                 toggleFloat = true
             case a == "--toggle-orientation":
@@ -577,8 +595,16 @@ enum FacetApp {
             die("facet window: pick one action per invocation — "
                 + "see `facet --help`")
         }
+        // `--follow` is a modifier on `--move-to`, not a standalone
+        // action: move the window *and* switch to its new workspace.
+        // Loud reject when used without a destination.
+        if follow && moveToArg == nil {
+            die("facet window: --follow only applies with --move-to=N — "
+                + "see `facet --help`")
+        }
         requireServerAlive()
-        if let n = moveToArg { postWindowMove(n) }
+        if let n = moveToArg { follow ? postWindowMoveFollow(n)
+                                      : postWindowMove(n) }
         if toggleFloat { postWindowToggleFloat() }
         if toggleOrientation { postWindowToggleOrientation() }
         if let d = cycleStackDir { postWindowCycleStack(d) }

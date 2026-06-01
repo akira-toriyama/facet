@@ -108,4 +108,18 @@ final class GapConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveOuterGapTop, 12, accuracy: 0.001)
         XCTAssertEqual(c.effectiveOuterGapLeft, 24, accuracy: 0.001)
     }
+
+    // MARK: - Smart gaps
+
+    func testSmartGapsDefaultsOff() {
+        XCTAssertFalse(FacetConfig().effectiveSmartGaps,
+                       "smart gaps must be opt-in (off by default)")
+    }
+
+    func testSmartGapsParsedFromTOML() {
+        let on = FacetConfig.from(toml: ["layout": ["smart-gaps": .bool(true)]])
+        XCTAssertTrue(on.effectiveSmartGaps)
+        let off = FacetConfig.from(toml: ["layout": ["smart-gaps": .bool(false)]])
+        XCTAssertFalse(off.effectiveSmartGaps)
+    }
 }

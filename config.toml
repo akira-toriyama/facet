@@ -159,6 +159,12 @@ outer-gap = 0
 # outer-gap-bottom = 0
 # outer-gap-left = 0
 # outer-gap-right = 0
+#
+# smart-gaps — when a workspace holds a single tiled window, drop the
+#              outer gap so that lone window goes edge-to-edge (the
+#              gaps reappear as soon as a second window joins). Off by
+#              default; only matters when outer-gap > 0.
+# smart-gaps = true
 
 
 # -----------------------------------------------------------------

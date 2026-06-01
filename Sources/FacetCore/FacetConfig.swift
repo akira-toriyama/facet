@@ -64,6 +64,10 @@ public struct FacetConfig: Sendable {
     public var outerGapBottom: CGFloat?
     public var outerGapLeft: CGFloat?
     public var outerGapRight: CGFloat?
+    /// Smart gaps: drop the outer gap when a workspace holds a single
+    /// tiled window, so a lone window goes full-bleed (no screen-edge
+    /// inset). Raw; read `effectiveSmartGaps`. Default off.
+    public var smartGaps: Bool?
 
     // [animation]
     /// Window-move animation (枠 E). When on, geometry transitions
@@ -207,6 +211,10 @@ public struct FacetConfig: Sendable {
 
     private func clampedGap(_ v: CGFloat?) -> CGFloat { max(0, min(1000,v ?? 0)) }
 
+    /// Whether smart gaps are on. Default off — a lone tiled window
+    /// keeps its outer-gap inset unless the user opts in.
+    public var effectiveSmartGaps: Bool { smartGaps ?? false }
+
     /// Facet workspace defaults for a Space without a `[space.N]`
     /// section. 5 is the memory-confirmed (`facet-workspace-model`
     /// N2) "control above zero, easy to expand" starting point.
@@ -305,6 +313,9 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["layout"]?["outer-gap-right"] {
             c.outerGapRight = CGFloat(n)
+        }
+        if case .bool(let b)? = toml["layout"]?["smart-gaps"] {
+            c.smartGaps = b
         }
         // [animation]
         if case .bool(let b)? = toml["animation"]?["enabled"] {

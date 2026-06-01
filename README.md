@@ -274,6 +274,8 @@ Frequently-touched keys:
   sets all four edges; `outer-gap-top` / `-bottom` / `-left` /
   `-right` override individual edges. All default 0 (flush tiling);
   clamp to [0, 1000]. Applies to every layout; floating windows excluded.
+  `smart-gaps` (default `false`) drops the outer gap when a workspace
+  holds a single tiled window, so a lone window goes edge-to-edge.
 - `[animation]` table — animate transitions instead of snapping.
   `enabled` (default `false` — opt in by setting `true`) is the master
   switch; `curve` picks the feel: `cubic` (default, ease-out), `spring`
@@ -324,6 +326,7 @@ facet --toggle=NAME               # toggle NAME
 # Tiling (M5 Phase γ)
 facet workspace --layout=NAME     # bsp | stack | tall | wide | centered | grid | spiral | float
 facet workspace --retile          # re-apply active WS's layout (any tiling mode)
+facet workspace --balance         # reset master ratio / count to the even baseline
 facet window --toggle-float          # flip focused window float flag
 facet window --toggle-orientation    # bsp: rotate parent split / tall⇄wide: swap layout
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
@@ -346,6 +349,7 @@ facet workspace --remove[=N]            # remove WS N (or active); windows → n
 facet workspace --rename=NAME           # rename the active workspace
 facet workspace --move=N                # move active workspace to position N
 facet window --move-to=N          # move focused window to workspace N
+facet window --move-to=N --follow # …and switch to N too (send-and-follow)
 facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp
 

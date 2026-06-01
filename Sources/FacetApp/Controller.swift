@@ -338,12 +338,21 @@ final class Controller: NSObject {
                     let n = Int(s.dropFirst("window-move:".count)) ?? 0
                     self.dispatchWindowMove(n)
 
+                case let s where s.hasPrefix("window-move-follow:"):
+                    let n = Int(
+                        s.dropFirst("window-move-follow:".count)) ?? 0
+                    self.dispatchWindowMove(n, follow: true)
+
                 case let s where s.hasPrefix("set-layout:"):
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)
 
                 case "retile":
                     self.dispatchRetile()
+
+                case "workspace-balance":
+                    self.backend.balanceActiveWorkspace()
+                    self.scheduleReconcile(after: 0.05)
 
                 case "window-toggle-float":
                     self.dispatchWindowAction(.toggleFloat)
@@ -530,7 +539,7 @@ final class Controller: NSObject {
     /// no-op (debug log only) when no focused window or N is out
     /// of range — a stale hotkey on an empty desktop shouldn't
     /// take down the server.
-    private func dispatchWindowMove(_ n: Int) {
+    private func dispatchWindowMove(_ n: Int, follow: Bool = false) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {
             setError("window --move-to=\(n) out of range "
@@ -542,6 +551,14 @@ final class Controller: NSObject {
             return
         }
         backend.moveWindow(id, toWorkspaceIndex: n - 1)
+        // send-and-follow: switch the active workspace to the
+        // destination so focus follows the window over. autoFocus
+        // lands on the just-moved window (now the last-touched
+        // member there). Without --follow the window departs and
+        // the user stays put.
+        if follow {
+            backend.switchWorkspace(toIndex: n - 1, autoFocus: true)
+        }
         scheduleReconcile(after: 0.05)
     }
 
