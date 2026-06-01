@@ -354,6 +354,9 @@ facet window --move-to=N          # move focused window to workspace N
 facet window --move-to=N --follow # …and switch to N too (send-and-follow)
 facet window --mark=NAME          # tag the focused window with a mark
 facet window --focus-mark=NAME    # jump focus to that window (switches WS)
+                                  # 1:1 — a window holds one mark; reassigning
+                                  # a name moves it off the old window.
+                                  # session-only, per native Space.
 facet status                      # snapshot: backend, theme,
                                   # workspaces, lastError, timestamp
 

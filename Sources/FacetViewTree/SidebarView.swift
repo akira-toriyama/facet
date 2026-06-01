@@ -698,11 +698,15 @@ public final class SidebarView: NSView {
                 let hasTitle = !c.title.isEmpty
                 let tx = iconX + iconSize + 8
                 // Reserve right-edge room for the mark badge so the
-                // app / title text never runs under it.
+                // app / title text never runs under it. Cap the width
+                // so a long mark name can't eat the row — it tail-
+                // truncates inside the badge (the full name still lives
+                // in the catalog; the badge is just a glance affordance).
                 let markFont = uiFont(windowFontSize - 1, .bold)
+                let markMaxW: CGFloat = 72
                 let markW: CGFloat = c.mark.map {
-                    ceil(($0 as NSString).size(
-                        withAttributes: [.font: markFont]).width)
+                    min(markMaxW, ceil(($0 as NSString).size(
+                        withAttributes: [.font: markFont]).width))
                 } ?? 0
                 let markGap: CGFloat = markW > 0 ? 10 : 0
                 let tw = max(bounds.width - tx - rowPadX - markW - markGap, 0)
@@ -752,6 +756,7 @@ public final class SidebarView: NSView {
                         withAttributes: [
                             .font: markFont,
                             .foregroundColor: sel ? pal.accent : pal.accent2,
+                            .paragraphStyle: para,   // tail-truncate if long
                         ])
                 }
             }

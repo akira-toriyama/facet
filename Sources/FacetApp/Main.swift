@@ -135,7 +135,8 @@ enum FacetApp {
         WINDOW                               (focused window)
           facet window --move-to=N           move it to workspace N
           facet window --move-to=N --follow  …and switch there too
-          facet window --mark=NAME           tag it with a mark (label)
+          facet window --mark=NAME           tag it with a mark (label;
+                                             1:1 — one mark per window)
           facet window --focus-mark=NAME     jump focus to the marked
                                              window (switches WS if needed)
           facet window --toggle-float        flip its float flag
