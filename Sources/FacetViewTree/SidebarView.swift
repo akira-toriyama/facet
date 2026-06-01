@@ -723,10 +723,11 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
-                // Stacked lines below the title (or app). The mark sits
-                // on top as a filled pill — the user's own handle, made
-                // to stand out — with the master / float status line
-                // beneath it.
+                // Stacked lines below the title (or app), right-aligned.
+                // The mark sits on top as a filled pill — the user's own
+                // handle, made to stand out — with the master / float
+                // status line beneath it.
+                let rightEdge = bounds.width - rowPadX
                 var lineY = row.minY + (hasTitle ? 42 : 24)
                 if let mark = c.mark {
                     let markFont = uiFont(windowFontSize - 1, .bold)
@@ -735,9 +736,9 @@ public final class SidebarView: NSView {
                         withAttributes: [.font: markFont]).width))
                     let padX: CGFloat = 7
                     let pillH: CGFloat = 15
-                    let pillRect = NSRect(x: tx, y: lineY,
-                                          width: textW + padX * 2,
-                                          height: pillH)
+                    let pillW = textW + padX * 2
+                    let pillRect = NSRect(x: rightEdge - pillW, y: lineY,
+                                          width: pillW, height: pillH)
                     (sel ? pal.accent : pal.accent2).setFill()
                     NSBezierPath(roundedRect: pillRect,
                                  xRadius: pillH / 2, yRadius: pillH / 2).fill()
@@ -745,8 +746,8 @@ public final class SidebarView: NSView {
                     pillPara.alignment = .center
                     pillPara.lineBreakMode = .byTruncatingTail
                     (mark as NSString).draw(
-                        in: NSRect(x: tx, y: lineY + 1,
-                                   width: textW + padX * 2, height: 13),
+                        in: NSRect(x: pillRect.minX, y: lineY + 1,
+                                   width: pillW, height: 13),
                         withAttributes: [
                             .font: markFont,
                             .foregroundColor: pal.bg ?? .black,
@@ -755,13 +756,16 @@ public final class SidebarView: NSView {
                     lineY += 17
                 }
                 if let labelText {
+                    let rightPara = NSMutableParagraphStyle()
+                    rightPara.alignment = .right
+                    rightPara.lineBreakMode = .byTruncatingTail
                     (labelText as NSString).draw(
                         in: NSRect(x: tx, y: lineY,
                                    width: tw, height: 14),
                         withAttributes: [
                             .font: uiFont(windowFontSize - 1, .semibold),
                             .foregroundColor: pal.accent2,
-                            .paragraphStyle: para,
+                            .paragraphStyle: rightPara,
                         ])
                 }
             }
