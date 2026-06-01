@@ -327,6 +327,8 @@ facet --toggle=NAME               # toggle NAME
 facet workspace --layout=NAME     # bsp | stack | tall | wide | centered | grid | spiral | float
 facet workspace --retile          # re-apply active WS's layout (any tiling mode)
 facet workspace --balance         # reset master ratio / count to the even baseline
+facet workspace --rotate=90|180|270        # rotate the bsp tree clockwise (bsp only)
+facet workspace --mirror=horizontal|vertical # flip the bsp tree left↔right / top↔bottom
 facet window --toggle-float          # flip focused window float flag
 facet window --toggle-orientation    # bsp: rotate parent split / tall⇄wide: swap layout
 facet window --cycle-stack=next|prev # rotate stack to next / previous member

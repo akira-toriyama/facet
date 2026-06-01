@@ -24,8 +24,9 @@
 //   Server  : --quit / --reload / --resign / --help
 //   Status  : facet status (read-only, no `--`)
 //   Workspace : facet workspace --focus=N|NAME|next|prev|recent / --layout=NAME
-//               / --retile / --balance / --add / --remove[=N] / --rename=NAME
-//               / --move=N
+//               / --retile / --balance / --rotate=90|180|270
+//               / --mirror=horizontal|vertical / --add / --remove[=N]
+//               / --rename=NAME / --move=N
 //   Window    : facet window --move-to=N[ --follow] / --toggle-float /
 //               --toggle-orientation / --cycle-stack=next|prev /
 //               --grow-master / --shrink-master / --inc-master / --dec-master
@@ -118,6 +119,10 @@ enum FacetApp {
                                              (no-op when float)
           facet workspace --balance          reset master ratio / count
                                              to the even baseline
+          facet workspace --rotate=90|180|270  rotate the bsp tree
+                                             clockwise (bsp only)
+          facet workspace --mirror=horizontal|vertical  flip the bsp
+                                             tree left↔right / top↔bottom
           facet workspace --add              append a new workspace
           facet workspace --remove[=N]       remove workspace N (or the
                                              active one); its windows
@@ -475,6 +480,8 @@ enum FacetApp {
         var layoutArg: String?
         var retileFlag = false
         var balanceFlag = false
+        var rotateArg: Int?
+        var mirrorArg: String?
         var addFlag = false
         var removeArg: String?      // "" = active, else 1-based index
         var renameArg: String?
@@ -493,6 +500,10 @@ enum FacetApp {
                 retileFlag = true
             case a == "--balance":
                 balanceFlag = true
+            case a.hasPrefix("--rotate="):
+                rotateArg = parseRotateDegrees(a)
+            case a.hasPrefix("--mirror="):
+                mirrorArg = parseMirrorAxis(a)
             case a == "--add":
                 addFlag = true
             case a == "--remove":
@@ -511,8 +522,9 @@ enum FacetApp {
             }
         }
         let count = [focusArg != nil, layoutArg != nil, retileFlag,
-                     balanceFlag, addFlag, removeArg != nil,
-                     renameArg != nil, moveArg != nil].filter { $0 }.count
+                     balanceFlag, rotateArg != nil, mirrorArg != nil,
+                     addFlag, removeArg != nil, renameArg != nil,
+                     moveArg != nil].filter { $0 }.count
         guard count > 0 else {
             die("facet workspace: no action specified — "
                 + "see `facet --help`")
@@ -526,6 +538,8 @@ enum FacetApp {
         if let l = layoutArg { postSetLayout(l) }
         if retileFlag        { postRetile() }
         if balanceFlag       { postControl("workspace-balance") }
+        if let d = rotateArg { postControl("workspace-rotate:\(d)") }
+        if let m = mirrorArg { postControl("workspace-mirror:" + m) }
         if addFlag           { postControl("workspace-add") }
         if let r = removeArg { postControl("workspace-remove:" + r) }
         if let n = renameArg { postControl("workspace-rename:" + n) }
@@ -614,6 +628,27 @@ enum FacetApp {
         if decMaster { postWindowDecMaster() }
         // Unreachable — `count == 1` guarantees one branch fired.
         die("facet window: dispatch fell through (bug)")
+    }
+
+    /// Parse `--rotate=90|180|270`. Loud reject on anything else
+    /// (exit 2), matching the typo-fails-loudly rule.
+    static func parseRotateDegrees(_ arg: String) -> Int {
+        let raw = String(arg.dropFirst("--rotate=".count))
+        guard let n = Int(raw), [90, 180, 270].contains(n) else {
+            die("--rotate: expected 90 | 180 | 270, got \"\(raw)\"")
+        }
+        return n
+    }
+
+    /// Parse `--mirror=horizontal|vertical`. Loud reject on anything
+    /// else (exit 2). horizontal = swap left↔right, vertical = top↔bottom.
+    static func parseMirrorAxis(_ arg: String) -> String {
+        let raw = String(arg.dropFirst("--mirror=".count))
+        let lower = raw.lowercased()
+        guard ["horizontal", "vertical"].contains(lower) else {
+            die("--mirror: expected horizontal | vertical, got \"\(raw)\"")
+        }
+        return lower
     }
 
     /// Parse `--cycle-stack=next|prev`. Loud reject on anything

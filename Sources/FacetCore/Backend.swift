@@ -56,6 +56,13 @@ public enum RelativeWorkspace: Sendable, Equatable {
     case next, prev, recent
 }
 
+/// Axis to mirror a layout across (`mirrorActiveWorkspace`).
+/// `horizontal` reflects left↔right, `vertical` reflects top↔bottom
+/// (image-editor "flip horizontal / vertical" semantics).
+public enum MirrorAxis: Sendable, Equatable {
+    case horizontal, vertical
+}
+
 /// The only surface the rest of the app knows about. rift / native
 /// each implement it; the UI, AX focus glue, themes and DnD are all
 /// WM-agnostic.
@@ -150,6 +157,17 @@ public protocol WindowBackend: Sendable {
     /// grid / spiral / float) and for backends without layout state.
     func balanceActiveWorkspace()
 
+    /// Rotate the active workspace's bsp tree clockwise by `degrees`
+    /// (90 / 180 / 270) — `facet workspace --rotate=N`. No-op outside
+    /// bsp mode (the tree is the only rotatable layout state) and for
+    /// backends without one.
+    func rotateActiveWorkspace(degrees: Int)
+
+    /// Mirror the active workspace's bsp tree across `axis`
+    /// (`facet workspace --mirror=horizontal|vertical`). Same bsp-only
+    /// no-op contract as `rotateActiveWorkspace`.
+    func mirrorActiveWorkspace(_ axis: MirrorAxis)
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as
@@ -188,4 +206,6 @@ public extension WindowBackend {
     func renameWorkspace(at position: Int?, to name: String) {}
     func moveActiveWorkspace(to position: Int) {}
     func balanceActiveWorkspace() {}
+    func rotateActiveWorkspace(degrees: Int) {}
+    func mirrorActiveWorkspace(_ axis: MirrorAxis) {}
 }

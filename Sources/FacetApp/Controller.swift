@@ -354,6 +354,19 @@ final class Controller: NSObject {
                     self.backend.balanceActiveWorkspace()
                     self.scheduleReconcile(after: 0.05)
 
+                case let s where s.hasPrefix("workspace-rotate:"):
+                    let deg = Int(
+                        s.dropFirst("workspace-rotate:".count)) ?? 0
+                    self.backend.rotateActiveWorkspace(degrees: deg)
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("workspace-mirror:"):
+                    let axis: MirrorAxis =
+                        s.dropFirst("workspace-mirror:".count) == "vertical"
+                        ? .vertical : .horizontal
+                    self.backend.mirrorActiveWorkspace(axis)
+                    self.scheduleReconcile(after: 0.05)
+
                 case "window-toggle-float":
                     self.dispatchWindowAction(.toggleFloat)
 

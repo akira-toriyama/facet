@@ -263,6 +263,74 @@ struct LayoutTree: Equatable, Sendable {
             second: s.second.node))
     }
 
+    // MARK: - Rotate / mirror (whole-tree)
+
+    /// Rotate the whole tree clockwise by `degrees` (90 / 180 / 270).
+    /// A 90° CW step maps a vertical (left|right) split to a horizontal
+    /// (top|bottom) one keeping child order (left → top), and a
+    /// horizontal split to a vertical one with the children swapped
+    /// (top → right). 180° = every split's children reversed
+    /// (orientation unchanged); 270° = three CW steps (= one CCW).
+    /// Unknown degree values are a no-op. Ratios are preserved.
+    mutating func rotate(degrees: Int) {
+        guard let r = root else { return }
+        let steps = ((degrees / 90) % 4 + 4) % 4   // 90→1, 180→2, 270→3
+        guard degrees % 90 == 0, steps != 0 else { return }
+        var node = r
+        for _ in 0..<steps { node = Self.rotated90CW(node) }
+        root = node
+    }
+
+    private static func rotated90CW(_ node: LayoutNode) -> LayoutNode {
+        switch node {
+        case .leaf:
+            return node
+        case .split(let s):
+            switch s.orientation {
+            case .vertical:   // left|right → top|bottom, order kept
+                return .split(.init(
+                    orientation: .horizontal, ratio: s.ratio,
+                    first: rotated90CW(s.first.node),
+                    second: rotated90CW(s.second.node)))
+            case .horizontal: // top|bottom → left|right, order swapped
+                return .split(.init(
+                    orientation: .vertical, ratio: s.ratio,
+                    first: rotated90CW(s.second.node),
+                    second: rotated90CW(s.first.node)))
+            }
+        }
+    }
+
+    /// Mirror the whole tree across an axis. `horizontal` reflects
+    /// left↔right (swap the children of every *vertical* split);
+    /// `vertical` reflects top↔bottom (swap the children of every
+    /// *horizontal* split). Ratios are preserved. No-op on an empty
+    /// tree.
+    enum Axis: Sendable { case horizontal, vertical }
+
+    mutating func mirror(_ axis: Axis) {
+        guard let r = root else { return }
+        root = Self.mirrored(r, axis: axis)
+    }
+
+    private static func mirrored(_ node: LayoutNode,
+                                 axis: Axis) -> LayoutNode {
+        switch node {
+        case .leaf:
+            return node
+        case .split(let s):
+            // Swap the children when this split runs along the
+            // mirrored axis; recurse into both children either way.
+            let swap = (axis == .horizontal && s.orientation == .vertical)
+                || (axis == .vertical && s.orientation == .horizontal)
+            let f = mirrored(s.first.node, axis: axis)
+            let g = mirrored(s.second.node, axis: axis)
+            return .split(.init(orientation: s.orientation, ratio: s.ratio,
+                                first: swap ? g : f,
+                                second: swap ? f : g))
+        }
+    }
+
     // MARK: - Queries
 
     func contains(_ id: WindowID) -> Bool {
