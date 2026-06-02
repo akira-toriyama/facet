@@ -82,6 +82,12 @@ enum FacetApp {
           can jump straight in (Spotlight-style). --view=grid
           silently ignores; the overlay is always key/active.
 
+          --edge=top|bottom|left|right is a --view=rail modifier:
+          dock the rail's workspace strip against that screen edge
+          (default bottom, or [rail] edge in config). Top/bottom
+          browse with ←/→, left/right with ↑/↓. Example:
+            facet --view=rail --edge=left
+
           --loading[=MS] is a --view=tree modifier: paint a loading
           skeleton over the tree, cleared as soon as new content
           loads OR after MS milliseconds (default 500), whichever
@@ -301,20 +307,23 @@ enum FacetApp {
     /// Default skeleton duration (ms) for a bare ``--loading``.
     static let defaultLoadingMs = 500
 
-    /// Post ``view:NAME[+active][+loading:MS][+geom:X,Y,W,H]``. Name
-    /// must already be canonical. Geom + loading are optional and
-    /// only meaningful for tree (grid silently ignores them, same
-    /// pattern as +active).
+    /// Post ``view:NAME[+active][+loading:MS][+geom:X,Y,W,H][+edge:E]``.
+    /// Name must already be canonical. Geom + loading are optional and
+    /// only meaningful for tree; edge is only meaningful for rail (each
+    /// view silently ignores the modifiers it doesn't use, same pattern
+    /// as +active).
     static func postView(_ name: String,
                          active: Bool,
                          loadingMs: Int?,
-                         geom: (Int, Int, Int, Int)?) -> Never {
+                         geom: (Int, Int, Int, Int)?,
+                         edge: String? = nil) -> Never {
         var payload = "view:\(name)"
         if active { payload += "+active" }
         if let ms = loadingMs { payload += "+loading:\(ms)" }
         if let g = geom {
             payload += "+geom:\(g.0),\(g.1),\(g.2),\(g.3)"
         }
+        if let e = edge { payload += "+edge:\(e)" }
         postControl(payload)
     }
 
@@ -785,6 +794,22 @@ enum FacetApp {
         }
     }
 
+    /// The four edges a rail can dock against (`--edge=`).
+    static let canonicalEdges = ["top", "bottom", "left", "right"]
+
+    /// Validate + canonicalise a rail edge. Loud reject on typo
+    /// (``exit(2)``) — same contract as ``canonicalView``.
+    static func canonicalEdge(_ name: String) -> String {
+        switch canonicalize(name, allowed: canonicalEdges) {
+        case .success(let n): return n
+        case .failure(.unknownValue(let v, let expected)):
+            die("unknown edge \"\(v)\" — expected one of: "
+                + expected.joined(separator: ", "))
+        case .failure:
+            die("unknown edge \"\(name)\"")
+        }
+    }
+
     /// Parse a geometry integer flag (``--pos-x=100`` etc). Loud
     /// reject on non-integer / out-of-range so the user doesn't
     /// end up with a panel they can't see.
@@ -1007,6 +1032,7 @@ enum FacetApp {
         var toggleArg: String?
         var styleArg: String?
         var activeFlag = false
+        var edgeArg: String?            // rail dock edge (--edge=); nil = config default
         var loadingArg: Int?            // nil = not requested; ms otherwise
         var quitFlag = false
         var reloadFlag = false
@@ -1078,6 +1104,8 @@ enum FacetApp {
                 hideArg = canonicalView(String(a.dropFirst("--hide=".count)))
             case a.hasPrefix("--toggle="):
                 toggleArg = canonicalView(String(a.dropFirst("--toggle=".count)))
+            case a.hasPrefix("--edge="):
+                edgeArg = canonicalEdge(String(a.dropFirst("--edge=".count)))
             case a.hasPrefix("--theme="):
                 styleArg = canonicalStyle(String(a.dropFirst("--theme=".count)))
             case a == "--theme":
@@ -1109,6 +1137,16 @@ enum FacetApp {
         // (would be ambiguous about which view to activate).
         if activeFlag && viewArg == nil {
             let msg = "facet: --active requires --view=NAME — "
+                + "see `facet --help`\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(2)
+        }
+
+        // ``--edge`` only means something for the rail (it picks the
+        // strip's screen edge); requiring ``--view=rail`` keeps a stray
+        // ``--edge`` from silently doing nothing on tree / grid.
+        if edgeArg != nil && viewArg != "rail" {
+            let msg = "facet: --edge requires --view=rail — "
                 + "see `facet --help`\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
@@ -1164,7 +1202,7 @@ enum FacetApp {
         if quitFlag                  { postControl("quit") }
         if reloadFlag                { postControl("reload") }
 
-        if let v = viewArg           { postView(v, active: activeFlag, loadingMs: loadingArg, geom: geom) }
+        if let v = viewArg           { postView(v, active: activeFlag, loadingMs: loadingArg, geom: geom, edge: edgeArg) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
 

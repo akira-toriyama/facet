@@ -54,6 +54,39 @@ public func gridScaledWindowRect(windowFrame: CGRect,
                   height: windowFrame.height * scaleY)
 }
 
+/// Wrap the grid cursor at `index` by `(dx, dy)` in a `cols`-wide,
+/// row-major grid of `count` workspaces whose final row may be ragged
+/// (M9-4). Horizontal moves wrap within the cursor's row (over the
+/// cells that row actually holds); vertical moves wrap within the
+/// cursor's column (over the rows that hold that column). The result is
+/// always a real index in `0..<count` — a wrap toward a phantom
+/// last-row slot snaps to the nearest real cell in that row/column
+/// rather than no-opping. dx is tried before dy (arrows are
+/// single-axis). Pure / testable.
+public func gridWrapIndex(index: Int, dx: Int, dy: Int,
+                          cols: Int, count: Int) -> Int {
+    guard count > 0 else { return 0 }
+    let c0 = max(1, cols)
+    let rows = gridRowCount(wsCount: count, cols: c0)
+    let i = max(0, min(count - 1, index))
+    let r = i / c0, c = i % c0
+    let lastRowCells = count - (rows - 1) * c0          // 1…c0
+    if dx != 0 {
+        // Wrap within the row over its present cells (ragged-safe).
+        let rowCells = (r < rows - 1) ? c0 : lastRowCells
+        let nc = ((c + dx) % rowCells + rowCells) % rowCells
+        return r * c0 + nc
+    }
+    if dy != 0 {
+        // Wrap within the column over the rows that have it. A column
+        // past the ragged last row's width skips that phantom slot.
+        let colRows = max(1, (c < lastRowCells) ? rows : rows - 1)
+        let nr = ((r + dy) % colRows + colRows) % colRows
+        return nr * c0 + c
+    }
+    return i
+}
+
 /// Short label for a workspace cell. Strips a leading "workspace "
 /// prefix (case-insensitive) so a user named workspace
 /// "WORKSPACE Q" displays as "Q" — matches the Mission Control

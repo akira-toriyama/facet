@@ -37,6 +37,26 @@ public final class RailView: NSView {
     /// coords). Mini-thumb rects scale from this; `.zero` falls back
     /// to the view bounds.
     public var screenFrame: CGRect = .zero
+    /// Which edge the strip docks against (M9-3). Set by the Controller
+    /// from the CLI `--edge=` / `[rail] edge` config; drives the strip
+    /// orientation and which arrow keys browse it.
+    public var edge: RailEdge = .bottom
+    /// How many strip cells are shown at once before the strip scrolls
+    /// (M9-4, `[rail] cells`). Cells stay this fixed size as workspaces
+    /// pile up; overflow scrolls instead of shrinking.
+    public var cellsTarget: Int = 7
+
+    /// Scroll position along the strip (points). 0 when every workspace
+    /// fits; grows as the browse cursor / wheel scrolls past the
+    /// viewport. Clamped to `maxScrollOffset` on every relayout.
+    var scrollOffset: CGFloat = 0
+    /// Maximum scroll, recomputed each relayout (`0` when all fit).
+    private var maxScrollOffset: CGFloat = 0
+    /// The strip band rect (drawing-space) — cells are clipped to it so
+    /// a partially-scrolled cell "peeks" at the viewport edge.
+    private var stripRect: NSRect = .zero
+    /// Strip running-axis length per cell slot (fixed-size cells).
+    private var slotAlong: CGFloat = 0
 
     // MARK: - Callbacks
 
@@ -181,76 +201,97 @@ public final class RailView: NSView {
         }
         let useScreen = screenFrame.width > 1 ? screenFrame : bounds
         let aspect = useScreen.width / max(1, useScreen.height)
+        let horizontal = edge.axis == .horizontal
 
-        // -- Bottom band: every workspace as a small mini-screen with a
-        //    grid-style header above it. Stays ONE row up to ~16 WS by
-        //    shrinking the gap first, then the cells, then letting the
-        //    row overflow the pad rather than shrink past a legibility
-        //    floor (no paging / scroll). --
-        let n = CGFloat(workspaces.count)
-        let bandH = (bounds.height * railBottomBandFrac).rounded()
-        let bandTop = bounds.height - bandH        // flipped: bottom of screen
-        // Carve a header band out of the cell's vertical budget. The
-        // `railHeaderMinH` floor is clamped against the budget so it
-        // can never swallow the whole cell (keeps the mini-screen
-        // drawable on a pathologically short display).
-        let nominalCellH = max(1, bandH - railOuterPad)
+        // -- Strip band + hero area for the docked edge (pure split). --
+        let crossScreen = horizontal ? bounds.height : bounds.width
+        let thickness = (crossScreen * railStripSizeFrac).rounded()
+        let (strip, heroArea) = railBands(in: bounds, edge: edge,
+                                          thickness: thickness,
+                                          outerPad: railOuterPad,
+                                          heroGap: railCellGap)
+        stripRect = strip
+
+        // -- Strip cells: every workspace as a fixed-size mini-screen +
+        //    header, stacked along the cross axis (header band always a
+        //    horizontal band — above the thumb, or below on a top rail).
+        //    `cellsTarget` slots fit along the strip; extra workspaces
+        //    SCROLL rather than shrink (M9-4). --
+        let n = workspaces.count
+        let along = horizontal ? strip.width : strip.height
+        let availAlong = max(1, along - railOuterPad * 2)
+        let visible = max(1, cellsTarget)
+        let slot = max(railCellMinDim, availAlong / CGFloat(visible))
+        slotAlong = slot
+
+        // Header height + thumb box. The header+gap+thumb block always
+        // stacks vertically; it fits inside the cross thickness on a
+        // horizontal strip, inside the slot on a vertical one.
+        let crossBudget = max(1, thickness - railOuterPad)
+        let stackBudget = horizontal ? crossBudget : slot
         let rawHeaderH = min(railHeaderMaxH,
                              max(railHeaderMinH,
-                                 (nominalCellH * railHeaderRatio).rounded()))
-        let headerH = min(rawHeaderH, max(8, nominalCellH - railLabelGap - 8))
-        var cellH = max(1, nominalCellH - headerH - railLabelGap)
-        var cellW = cellH * aspect
-        let availW = bounds.width - railOuterPad * 2
-        var gap = railCellGap
-        if n > 1, cellW * n + gap * (n - 1) > availW {
-            // 1) collapse the gap toward its min (cheap — no legibility cost).
-            let over = cellW * n + gap * (n - 1) - availW
-            gap = max(railCellMinGap, gap - over / (n - 1))
-        }
-        if cellW * n + gap * (n - 1) > availW, cellW > 0 {
-            // 2) shrink cells uniformly, but not below the width floor.
-            let fit = (availW - gap * (n - 1)) / (cellW * n)
-            let s = max(fit, railCellMinW / cellW)
-            cellW *= s; cellH *= s
-        }
-        let totalW = cellW * n + gap * max(0, n - 1)
-        let blockH = headerH + railLabelGap + cellH
-        let blockTop = (bandTop + (bandH - blockH) / 2).rounded()
-        let headerY = blockTop
-        let cellY = blockTop + headerH + railLabelGap
-        var x = ((bounds.width - totalW) / 2).rounded()
-        for ws in workspaces {
-            let cellRect = NSRect(x: x.rounded(), y: cellY.rounded(),
-                                  width: cellW, height: cellH)
-            let headerRect = NSRect(x: x.rounded(), y: headerY.rounded(),
-                                    width: cellW, height: headerH)
+                                 (stackBudget * railHeaderRatio).rounded()))
+        let headerH = min(rawHeaderH, max(8, stackBudget - railLabelGap - 8))
+        // Thumb box (boxW × boxH) and the largest landscape thumb in it.
+        let boxW = horizontal ? slot : crossBudget
+        let boxH = horizontal ? max(1, crossBudget - headerH - railLabelGap)
+                              : max(1, slot - headerH - railLabelGap)
+        let thumbH = min(boxH, boxW / aspect)
+        let thumbW = thumbH * aspect
+        let headerOnTop = edge != .top   // top rail flips the header below
+
+        // Scroll: fit-or-scroll. n ≤ visible → centre, no scroll.
+        let content = CGFloat(n) * slot
+        maxScrollOffset = max(0, content - availAlong)
+        let centred = maxScrollOffset <= 0
+        if centred { scrollOffset = 0 }
+        else { scrollOffset = max(0, min(maxScrollOffset, scrollOffset)) }
+        let alongOrigin = (horizontal ? strip.minX : strip.minY) + railOuterPad
+        let alongBase = centred
+            ? alongOrigin + (availAlong - content) / 2
+            : alongOrigin - scrollOffset
+        // The header+gap+thumb block is a fixed (thumbW × blockH) box;
+        // it tiles along the strip and centres across the thickness.
+        // The header is always a horizontal band, stacked in screen-Y
+        // above the thumb (or below on a `.top` rail).
+        let blockH = headerH + railLabelGap + thumbH
+        for (i, ws) in workspaces.enumerated() {
+            let slotStart = alongBase + CGFloat(i) * slot
+            let blockX: CGFloat, blockY: CGFloat
+            if horizontal {
+                blockX = slotStart + (slot - thumbW) / 2
+                blockY = strip.minY + (strip.height - blockH) / 2
+            } else {
+                blockX = strip.minX + (strip.width - thumbW) / 2
+                blockY = slotStart + (slot - blockH) / 2
+            }
+            let headerY = headerOnTop ? blockY : blockY + thumbH + railLabelGap
+            let thumbY  = headerOnTop ? blockY + headerH + railLabelGap : blockY
+            let cellRect = NSRect(x: blockX.rounded(), y: thumbY.rounded(),
+                                  width: thumbW, height: thumbH)
+            let headerRect = NSRect(x: blockX.rounded(), y: headerY.rounded(),
+                                    width: thumbW, height: headerH)
             cells.append(Cell(wsIndex: ws.index, rect: cellRect,
                               headerRect: headerRect, isActive: ws.isActive,
                               name: ws.name, mode: ws.layoutMode,
                               count: ws.windows.count,
                               wins: scaledWins(ws, cellRect, useScreen),
                               isHero: false))
-            x += cellW + gap
         }
 
-        // -- Centre hero: the SELECTED workspace (browse), falling back
-        //    to the active one. --
-        if let act = workspaces.first(where: { $0.index == selectedWS })
+        // -- Hero: the SELECTED workspace (browse) — aspect-fit, centred
+        //    in the area the strip left free. --
+        if heroArea.width > 1, heroArea.height > 1,
+           let act = workspaces.first(where: { $0.index == selectedWS })
             ?? workspaces.first(where: { $0.isActive })
             ?? workspaces.first {
-            // Fills the area above the bottom band, aspect-correct and
-            // centred. No caption — the bottom row carries the names.
-            let areaTop = railOuterPad
-            let areaH = bandTop - railCellGap - areaTop
-            var hCellH = max(1, areaH)
-            var hCellW = hCellH * aspect
-            let hAvailW = bounds.width - railOuterPad * 2
-            if hCellW > hAvailW, hCellW > 0 {
-                let s = hAvailW / hCellW; hCellW *= s; hCellH *= s
-            }
-            let hx = ((bounds.width - hCellW) / 2).rounded()
-            let hy = (areaTop + (areaH - hCellH) / 2).rounded()
+            var hCellW = heroArea.width
+            var hCellH = heroArea.height
+            if hCellW / hCellH > aspect { hCellW = hCellH * aspect }
+            else { hCellH = hCellW / aspect }
+            let hx = (heroArea.minX + (heroArea.width - hCellW) / 2).rounded()
+            let hy = (heroArea.minY + (heroArea.height - hCellH) / 2).rounded()
             let hCellRect = NSRect(x: hx, y: hy, width: hCellW, height: hCellH)
             hero = Cell(wsIndex: act.index, rect: hCellRect,
                         headerRect: .zero, isActive: act.isActive,
@@ -304,8 +345,12 @@ public final class RailView: NSView {
         return out
     }
 
-    private func bottomCellAt(_ p: NSPoint) -> Cell? {
-        cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }
+    private func stripCellAt(_ p: NSPoint) -> Cell? {
+        // Only cells whose visible (clipped-to-strip) area is under the
+        // pointer count — a fully-scrolled-off cell never matches even
+        // though it still exists in `cells` (kept for peek + hit order).
+        guard stripRect.isEmpty || stripRect.contains(p) else { return nil }
+        return cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }
     }
 
     // MARK: - Thumbnails
@@ -327,7 +372,31 @@ public final class RailView: NSView {
         bounds.fill()
 
         if let h = hero { drawCell(h) }
-        for c in cells { drawCell(c) }
+        // Strip cells are clipped to the strip band so an overflow-
+        // scrolled cell "peeks" half-off the viewport edge (the "there's
+        // more" cue) instead of drawing over the hero. A drag ghost is a
+        // separate subview, unaffected by this clip.
+        if stripRect.isEmpty {
+            for c in cells { drawCell(c) }
+        } else {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: stripRect).addClip()
+            for c in cells { drawCell(c) }
+            NSGraphicsContext.restoreGraphicsState()
+        }
+    }
+
+    public override func scrollWheel(with event: NSEvent) {
+        // Wheel / two-finger scroll moves the strip along its axis when
+        // there's overflow; a no-op otherwise (everything already fits).
+        guard maxScrollOffset > 0 else { return }
+        let d = edge.axis == .horizontal ? (event.scrollingDeltaX != 0
+                    ? event.scrollingDeltaX : event.scrollingDeltaY)
+                                         : event.scrollingDeltaY
+        let next = max(0, min(maxScrollOffset, scrollOffset - d))
+        guard next != scrollOffset else { return }
+        scrollOffset = next
+        layoutCells()
     }
 
     private func drawCell(_ c: Cell) {
@@ -426,8 +495,9 @@ public final class RailView: NSView {
 
     public override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        hoverWS = bottomCellAt(p)?.wsIndex
-        let hh = cells.first { $0.headerRect.contains(p) }?.wsIndex
+        hoverWS = stripCellAt(p)?.wsIndex
+        let hh = stripCellAt(p).flatMap {
+            $0.headerRect.contains(p) ? $0.wsIndex : nil }
         if hh != hoverHeaderWS { hoverHeaderWS = hh; needsDisplay = true }
         // The overlay is key, so the cursor sticks: an open hand over a
         // header advertises the grab (header drag = swap, Phase R3).
@@ -596,21 +666,38 @@ public final class RailView: NSView {
         return ordered[max(0, min(ordered.count - 1, kbSelectedWindowIdx))]
     }
 
-    /// ←/→ : not lifted → move the WS browse cursor (hero previews it);
-    /// lifted → re-aim the drop target along the bottom row (dual role,
-    /// mirrors the grid).
+    /// Browse-axis arrow : not lifted → move the WS browse cursor (hero
+    /// previews it); lifted → re-aim the drop target along the strip
+    /// (dual role, mirrors the grid). `dx` is +1 / −1 along the strip,
+    /// supplied by the Controller for whichever axis the edge runs. The
+    /// cursor WRAPS (last→first, first→last) — M9-4.
     public func kbMoveSelection(dx: Int) {
         guard !cells.isEmpty else { return }
         let cur = cells.firstIndex { $0.wsIndex == selectedWS } ?? 0
-        let ni = max(0, min(cells.count - 1, cur + dx))
+        let ni = (cur + dx + cells.count) % cells.count   // wrap
         guard cells[ni].wsIndex != selectedWS else { return }
         selectedWS = cells[ni].wsIndex
+        keepSelectedWSVisible()
         if drag != nil {
             syncRailDragToSelection()      // lifted → arrows AIM the destination
         } else {
             kbSelectedWindowIdx = -1       // browse → reset window cursor for the new WS
             layoutCells()                  // rebuild hero (+ selection cursor)
         }
+    }
+
+    /// Scroll the strip so the browse-selected workspace is fully in
+    /// view (no-op when everything already fits). Pure offset maths in
+    /// `railScrollToShow`; the relayout that follows applies it.
+    private func keepSelectedWSVisible() {
+        guard maxScrollOffset > 0, slotAlong > 0,
+              let idx = cells.firstIndex(where: { $0.wsIndex == selectedWS })
+        else { return }
+        let along = (edge.axis == .horizontal ? stripRect.width : stripRect.height)
+            - railOuterPad * 2
+        scrollOffset = railScrollToShow(index: idx, count: cells.count,
+                                        slot: slotAlong, avail: max(1, along),
+                                        offset: scrollOffset)
     }
 
     /// Tab / Shift-Tab : cycle the SELECTED WS's bottom-cell windows +

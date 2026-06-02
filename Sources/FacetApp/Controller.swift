@@ -324,7 +324,7 @@ final class Controller: NSObject {
 
                 // Symmetric view ops — canonical-only, no aliases.
                 case let s where s.hasPrefix("view:"):
-                    // Payload: NAME[+active][+loading:MS][+geom:X,Y,W,H]
+                    // Payload: NAME[+active][+loading:MS][+geom:X,Y,W,H][+edge:E]
                     let rest = String(s.dropFirst("view:".count))
                     let parts = rest.split(separator: "+")
                     let name = String(parts.first ?? "")
@@ -336,8 +336,11 @@ final class Controller: NSObject {
                     let loadingMs: Int? = mods
                         .first(where: { $0.hasPrefix("loading:") })
                         .flatMap { Int($0.dropFirst("loading:".count)) }
+                    let edge: RailEdge? = mods
+                        .first(where: { $0.hasPrefix("edge:") })
+                        .flatMap { RailEdge(rawValue: String($0.dropFirst("edge:".count))) }
                     self.dispatchView(name, active: active,
-                                      geom: geom, loadingMs: loadingMs)
+                                      geom: geom, loadingMs: loadingMs, edge: edge)
                 case let s where s.hasPrefix("hide:"):
                     self.dispatchHide(
                         String(s.dropFirst("hide:".count)))
@@ -540,7 +543,7 @@ final class Controller: NSObject {
     }
 
     private func dispatchView(_ name: String, active: Bool, geom: NSRect?,
-                              loadingMs: Int? = nil) {
+                              loadingMs: Int? = nil, edge: RailEdge? = nil) {
         // Views are mutually exclusive: requesting any non-grid view
         // drops the full-screen grid overlay first. This is also how
         // the grid closes on a mac-desktop switch — the chord ctrl+→
@@ -572,9 +575,11 @@ final class Controller: NSObject {
             // likewise ignored (grid is always full-screen).
             showGrid()
         case "rail":
-            // ``+active`` / geom are no-ops — the rail is a passive,
-            // bottom-anchored bar (never key, fixed position).
-            showRail()
+            // ``+active`` / geom are no-ops — the rail is a passive
+            // overview bar (never key). ``+edge`` (CLI ``--edge=``)
+            // picks which screen edge it docks against; nil falls back
+            // to the ``[rail] edge`` config default.
+            showRail(edge: edge ?? config.effectiveRailEdge)
         default:
             Log.debug("dispatchView unknown=\(name) — ignored")
         }
@@ -1583,8 +1588,9 @@ final class Controller: NSObject {
         if isRailVisible { hideRail() } else { showRail() }
     }
 
-    func showRail() {
-        Log.debug("showRail request (isVisible=\(isRailVisible))")
+    func showRail(edge: RailEdge? = nil) {
+        let edge = edge ?? config.effectiveRailEdge
+        Log.debug("showRail request (isVisible=\(isRailVisible) edge=\(edge.rawValue))")
         if isRailVisible { return }
         guard let scr = NSScreen.main else { return }
         // No snapshot yet (cold start): fetch then re-enter so the rail
@@ -1600,7 +1606,7 @@ final class Controller: NSObject {
                         guard let self else { return }
                         self.lastWorkspaces = wss
                         if wss.isEmpty { return }   // nothing to show
-                        self.showRail()
+                        self.showRail(edge: edge)   // forward the requested edge
                     }
                 }
             }
@@ -1627,6 +1633,8 @@ final class Controller: NSObject {
         let rv = RailView(frame: NSRect(origin: .zero, size: scr.frame.size))
         rv.autoresizingMask = [.width, .height]
         rv.screenFrame = scr.frame
+        rv.edge = edge                              // M9-3: docked edge
+        rv.cellsTarget = config.effectiveRailCells  // M9-4: fixed-N strip
         rv.workspaces = lastWorkspaces
         rv.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS
@@ -1707,20 +1715,25 @@ final class Controller: NSObject {
             overlay.animator().alphaValue = 1
         }
 
-        // Keyboard: ←/→ browse, Return commits, Esc dismisses (the
-        // overlay is key, so a local monitor fires).
+        // Keyboard: browse along the strip's axis (←/→ for a top/bottom
+        // rail, ↑/↓ for left/right), Return commits, Esc dismisses (the
+        // overlay is key, so a local monitor fires). The cross-axis
+        // arrows pass through (inert) so they don't fight the browse.
         railKbMonitor = NSEvent.addLocalMonitorForEvents(
             matching: .keyDown
         ) { [weak self] e in
             guard let rv = self?.railView else { return e }
             let shift = e.modifierFlags.contains(.shift)
+            let horizontal = rv.edge.axis == .horizontal
             switch e.keyCode {
             case 53:     rv.kbEscape();                     return nil  // Esc → cancel/close
             case 36, 76: rv.kbCommit();                     return nil  // Return → commit
             case 49:     rv.kbSpaceLift();                  return nil  // Space → lift
             case 48:     rv.kbCycleWindow(forward: !shift); return nil  // Tab / Shift-Tab
-            case 123:    rv.kbMoveSelection(dx: -1);            return nil  // ←
-            case 124:    rv.kbMoveSelection(dx:  1);            return nil  // →
+            case 123 where horizontal: rv.kbMoveSelection(dx: -1); return nil  // ← prev
+            case 124 where horizontal: rv.kbMoveSelection(dx:  1); return nil  // → next
+            case 126 where !horizontal: rv.kbMoveSelection(dx: -1); return nil  // ↑ prev
+            case 125 where !horizontal: rv.kbMoveSelection(dx:  1); return nil  // ↓ next
             default:     return e
             }
         }

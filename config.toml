@@ -80,6 +80,30 @@ thumbnail-refresh-seconds = 4
 
 
 # -----------------------------------------------------------------
+# Rail-view (full-screen workspace overview) options
+# -----------------------------------------------------------------
+[rail]
+
+# Which screen edge the rail's workspace strip docks against:
+#
+#   "bottom" (default) — strip along the bottom, browse with ←/→
+#   "top"              — strip along the top, browse with ←/→
+#   "left"             — strip down the left, browse with ↑/↓
+#   "right"            — strip down the right, browse with ↑/↓
+#
+# A one-off `facet --view=rail --edge=NAME` overrides this for that
+# open. Unknown / unset → "bottom".
+edge = "bottom"
+
+# How many workspace cells the strip shows at once. Cells stay this
+# fixed size as workspaces pile up — extra workspaces SCROLL into view
+# (the browse cursor / two-finger scroll moves the strip; a half-cell
+# "peek" at the viewport edge signals there's more) rather than
+# shrinking. Clamped 1..20; built-in fallback is 7.
+cells = 7
+
+
+# -----------------------------------------------------------------
 # Tree-view (sidebar) options
 # -----------------------------------------------------------------
 [tree]

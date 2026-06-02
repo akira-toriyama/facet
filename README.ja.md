@@ -31,9 +31,12 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   swap。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
   で閉じる。
 - **Rail** — フルスクリーンの Mission Control 風ワークスペース
-  オーバービュー。 各ワークスペースを画面下部に window サムネイルの
-  ミニ画面として並べ、 active を中央に大きく表示。 ←/→ で browse、
-  クリックで切替、 window を ws 間ドラッグ / header ドラッグで swap。
+  オーバービュー。 各ワークスペースを画面のいずれかの辺に window
+  サムネイルのミニ画面の strip として並べ、 active を中央に大きく表示。
+  strip 軸で browse（上下辺＝←/→、 左右辺＝↑/↓）、 クリックで切替、
+  window を ws 間ドラッグ / header ドラッグで swap。 `--edge=top|bottom|
+  left|right` で辺を選ぶ（既定 bottom）。 `[rail] cells` を超えると縮小せず
+  スクロール（見切れ peek 付き）、 browse は端で循環。
   `facet --view=rail` で呼び出し、 Esc で閉じる。
 
 DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**: window を
@@ -343,6 +346,7 @@ Karabiner / Raycast / Hammerspoon / macOS Shortcuts 等) からこれら
 ```sh
 # View 対称コマンド — NAME ∈ tree | grid | rail、 全 op で必須
 facet --view=NAME [--active]      # NAME 開く (idempotent)
+facet --view=rail --edge=left     # rail strip を辺に dock (top|bottom|left|right)
 facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
 

@@ -21,6 +21,28 @@ final class FacetConfigTests: XCTestCase {
                      "missing key → agent-only mode")
     }
 
+    func testEffectiveRailEdgeClampsToBottom() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveRailEdge, .bottom, "unset → bottom")
+        c.railEdge = "LEFT"
+        XCTAssertEqual(c.effectiveRailEdge, .left, "case-insensitive")
+        c.railEdge = "top"
+        XCTAssertEqual(c.effectiveRailEdge, .top)
+        c.railEdge = "diagonal"
+        XCTAssertEqual(c.effectiveRailEdge, .bottom, "unknown → bottom")
+    }
+
+    func testEffectiveRailCellsClamps() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveRailCells, 7, "default")
+        c.railCells = 10
+        XCTAssertEqual(c.effectiveRailCells, 10)
+        c.railCells = 0
+        XCTAssertEqual(c.effectiveRailCells, 1, "floor 1")
+        c.railCells = 999
+        XCTAssertEqual(c.effectiveRailCells, 20, "ceiling 20")
+    }
+
     func testEffectiveThemeFallsBackToTerminal() {
         var c = FacetConfig()
         XCTAssertEqual(c.effectiveTheme, "terminal")

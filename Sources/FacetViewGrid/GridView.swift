@@ -1097,21 +1097,19 @@ public final class GridView: NSView {
     // and keyboard both produce the same `drag` state; only the
     // input differs. dropTargetWS for kb = currently-selected cell.
 
-    /// Move the selection cursor by (dx, dy) cells. Clamps at edges.
-    /// On cell change, the window cursor resets to the cell's
-    /// focused window (or 0 if none). While lifted, also re-aims
-    /// drag target + repositions ghost to the new selection's
-    /// centre.
+    /// Move the selection cursor by (dx, dy) cells. WRAPS at the edges
+    /// (M9-4) — last column→first, last row→first — with a ragged final
+    /// row snapping to the nearest real cell in the same row/column
+    /// rather than landing on a phantom. On cell change, the window
+    /// cursor resets to the header slot. While lifted, also re-aims the
+    /// drag target + repositions the ghost.
     public func kbMoveSelection(dx: Int, dy: Int) {
         let cols = effectiveCols
-        let rows = gridRowCount(wsCount: workspaces.count, cols: cols)
         guard let sel = kbSelectedWS,
               let cur = cells.firstIndex(where: { $0.wsIndex == sel })
         else { return }
-        let r = cur / cols, c = cur % cols
-        let nr = max(0, min(rows - 1, r + dy))
-        let nc = max(0, min(cols - 1, c + dx))
-        let ni = nr * cols + nc
+        let ni = gridWrapIndex(index: cur, dx: dx, dy: dy,
+                               cols: cols, count: cells.count)
         guard ni < cells.count else { return }
         kbSelectedWS = cells[ni].wsIndex
         // Arrow moves the WS cursor only — land on the header (WS-name)

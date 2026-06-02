@@ -16,21 +16,19 @@ let railBackdropAlpha: CGFloat = 0.97
 
 /// Outer padding: screen edge → content.
 let railOuterPad: CGFloat = 40
-/// Nominal gap between adjacent bottom cells; collapses toward
-/// `railCellMinGap` first (before the cells themselves shrink) when a
-/// many-workspace row needs to reclaim width.
+/// Gap between adjacent strip cells, along the strip's running axis.
 let railCellGap: CGFloat = 16
-let railCellMinGap: CGFloat = 8
-/// Floor for a bottom mini-screen width — past this the row is allowed
-/// to overflow the outer pad rather than shrink further, so up to ~16
-/// workspaces stay one recognisable row (no paging / scroll).
-let railCellMinW: CGFloat = 96
+/// Sanity floor for a strip cell's short dimension — cells are
+/// fixed-size (`[rail] cells` slots), so this only guards a
+/// pathologically thin strip, not the old shrink-to-fit chain.
+let railCellMinDim: CGFloat = 40
 /// Breathing room between a cell and its header.
 let railLabelGap: CGFloat = 6
 
-/// Bottom band height (the all-workspaces row + headers) as a fraction
-/// of the screen height. The hero cell fills the area above it.
-let railBottomBandFrac: CGFloat = 0.30
+/// Strip thickness — the all-workspaces band's cross-axis size (height
+/// for a top/bottom rail, width for left/right) as a fraction of that
+/// screen dimension. The hero fills the rest.
+let railStripSizeFrac: CGFloat = 0.30
 
 /// Rounded mini-screen corner.
 let railCellRadius: CGFloat = 8
