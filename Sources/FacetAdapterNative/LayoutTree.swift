@@ -409,65 +409,83 @@ struct LayoutTree: Equatable, Sendable {
     /// `.vertical` split where `id` is in the FIRST (left) child, etc.
     /// The new ratio is computed from `newFrame`'s ABSOLUTE edge against
     /// the split's rect (snapshot, not per-tick delta — no drift).
+    /// Returns the leaves that COMOVE with the dragged window — the
+    /// dragged side of every fence touched. A live reflow must FREEZE
+    /// these (not re-tile them): they're positioned off the divider that's
+    /// anchored to the dragged window's actual frame, which the live reflow
+    /// deliberately leaves alone, so re-tiling them to their computed slots
+    /// would drift them off it and open a gap. Only the OPPOSITE subtree
+    /// follows. Empty when no fence moved.
+    @discardableResult
     mutating func resize(_ id: WindowID, to newFrame: CGRect,
-                         in rect: CGRect) {
-        guard let cur = frames(in: rect)[id], root != nil else { return }
+                         in rect: CGRect) -> Set<WindowID> {
+        guard let cur = frames(in: rect)[id], root != nil else { return [] }
         let eps: CGFloat = 0.5
+        var frozen: Set<WindowID> = []
         // X axis — whichever vertical edge moved more is the dragged one.
         let dMaxX = newFrame.maxX - cur.maxX, dMinX = newFrame.minX - cur.minX
         if abs(dMaxX) > eps, abs(dMaxX) >= abs(dMinX) {
-            root = setFence(root!, rect, id, axis: .vertical,
-                            leafInFirst: true, edgePos: newFrame.maxX).0
+            let (r, f) = setFence(root!, rect, id, axis: .vertical,
+                                  leafInFirst: true, edgePos: newFrame.maxX)
+            root = r; frozen.formUnion(f)
         } else if abs(dMinX) > eps {
-            root = setFence(root!, rect, id, axis: .vertical,
-                            leafInFirst: false, edgePos: newFrame.minX).0
+            let (r, f) = setFence(root!, rect, id, axis: .vertical,
+                                  leafInFirst: false, edgePos: newFrame.minX)
+            root = r; frozen.formUnion(f)
         }
         // Y axis — likewise. facet `.horizontal`: first = top (minY).
         let dMaxY = newFrame.maxY - cur.maxY, dMinY = newFrame.minY - cur.minY
         if abs(dMaxY) > eps, abs(dMaxY) >= abs(dMinY) {
-            root = setFence(root!, rect, id, axis: .horizontal,
-                            leafInFirst: true, edgePos: newFrame.maxY).0
+            let (r, f) = setFence(root!, rect, id, axis: .horizontal,
+                                  leafInFirst: true, edgePos: newFrame.maxY)
+            root = r; frozen.formUnion(f)
         } else if abs(dMinY) > eps {
-            root = setFence(root!, rect, id, axis: .horizontal,
-                            leafInFirst: false, edgePos: newFrame.minY).0
+            let (r, f) = setFence(root!, rect, id, axis: .horizontal,
+                                  leafInFirst: false, edgePos: newFrame.minY)
+            root = r; frozen.formUnion(f)
         }
+        return frozen
     }
 
     /// Recurse toward `id`; the DEEPEST split matching (`axis`,
     /// `leafInFirst`) is the fence — set its ratio from `edgePos`. Returns
-    /// (rebuilt node, didSet). `rect` is this node's rect.
+    /// (rebuilt node, leaves to freeze). `rect` is this node's rect. The
+    /// freeze set is the leaves on the dragged window's side of the fence
+    /// (incl. `id`); empty when this branch holds no fence.
     private func setFence(_ node: LayoutNode, _ rect: CGRect, _ id: WindowID,
                           axis: LayoutNode.Split.Orientation,
                           leafInFirst: Bool, edgePos: CGFloat)
-        -> (LayoutNode, Bool)
+        -> (LayoutNode, Set<WindowID>)
     {
-        guard case .split(let s) = node else { return (node, false) }
+        guard case .split(let s) = node else { return (node, []) }
         let (firstRect, secondRect) = splitRect(rect, orientation: s.orientation,
                                                 ratio: s.ratio)
         let inFirst = contains(s.first.node, id: id)
         guard inFirst || contains(s.second.node, id: id) else {
-            return (node, false)            // id not under this split
+            return (node, [])               // id not under this split
         }
         let childRect = inFirst ? firstRect : secondRect
         let childNode = inFirst ? s.first.node : s.second.node
-        let (newChild, deepSet) = setFence(childNode, childRect, id, axis: axis,
-                                           leafInFirst: leafInFirst,
-                                           edgePos: edgePos)
+        let (newChild, deepFrozen) = setFence(childNode, childRect, id, axis: axis,
+                                              leafInFirst: leafInFirst,
+                                              edgePos: edgePos)
         func rebuilt(ratio: CGFloat) -> LayoutNode {
             .split(.init(orientation: s.orientation, ratio: ratio,
                          first: inFirst ? newChild : s.first.node,
                          second: inFirst ? s.second.node : newChild))
         }
-        if deepSet { return (rebuilt(ratio: s.ratio), true) }
+        if !deepFrozen.isEmpty { return (rebuilt(ratio: s.ratio), deepFrozen) }
         // Is THIS split the fence? matching orientation + leaf on the
-        // required side → its divider is the dragged edge.
+        // required side → its divider is the dragged edge. The dragged
+        // window's whole child subtree comoves off this divider → freeze it.
         if s.orientation == axis, inFirst == leafInFirst {
             let ratio = axis == .vertical
                 ? (edgePos - rect.minX) / rect.width
                 : (edgePos - rect.minY) / rect.height
-            return (rebuilt(ratio: ratio), true)
+            let frozen = Set(collectLeaves(inFirst ? s.first.node : s.second.node))
+            return (rebuilt(ratio: ratio), frozen)
         }
-        return (rebuilt(ratio: s.ratio), false)
+        return (rebuilt(ratio: s.ratio), [])
     }
 
     // MARK: - Queries

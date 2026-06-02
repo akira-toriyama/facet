@@ -798,26 +798,62 @@ struct WorkspaceCatalog {
     /// only. No-op (false) for any other mode, an off-tree window, or a
     /// drag that doesn't move a divider-controlling edge. `rect` is the
     /// active display rect.
-    @discardableResult
+    /// Follow a real resize of `id` to `newFrame`. Returns the set of
+    /// windows a LIVE reflow must freeze (the dragged window + the same-
+    /// subtree mates that comove off its divider), or `nil` when nothing
+    /// changed. The settle path reflows everyone and ignores the set;
+    /// master layouts have no subtree so the set is just `{id}`.
     mutating func applyResize(_ id: WindowID, to newFrame: CGRect,
-                              workspace n1Based: Int, in rect: CGRect) -> Bool {
+                              workspace n1Based: Int, in rect: CGRect,
+                              innerGap: CGFloat = 0) -> Set<WindowID>? {
         let m = mode(of: n1Based)
         if m == "bsp" {
-            guard var tree = layoutTrees[n1Based] else { return false }
+            guard var tree = layoutTrees[n1Based],
+                  let cur = tree.frames(in: rect)[id] else { return nil }
+            // The live frame is gap-inset; the tree works in un-gapped
+            // coords. Map the dragged edges back, else the constant gap
+            // offset reads as a cross-axis edge move and a pure vertical
+            // resize wrongly nudges the horizontal neighbour. See `ungap`.
+            let target = Self.ungap(newFrame, current: cur, in: rect,
+                                    gap: innerGap)
             let before = tree
-            tree.resize(id, to: newFrame, in: rect)
-            guard tree != before else { return false }
+            let frozen = tree.resize(id, to: target, in: rect)
+            guard tree != before else { return nil }
             layoutTrees[n1Based] = tree
-            return true
+            return frozen.union([id])
         }
-        guard let ratio = masterRatioFromResize(id, to: newFrame, mode: m,
+        guard let cur = engineFrames(for: n1Based, in: rect)[id] else {
+            return nil
+        }
+        let target = Self.ungap(newFrame, current: cur, in: rect, gap: innerGap)
+        guard let ratio = masterRatioFromResize(id, to: target, mode: m,
                                                  workspace: n1Based, in: rect)
-        else { return false }
-        let cur = params(of: n1Based)
-        let next = LayoutParams(masterRatio: ratio, masterCount: cur.masterCount)
-        guard next.masterRatio != cur.masterRatio else { return false }
+        else { return nil }
+        let params0 = params(of: n1Based)
+        let next = LayoutParams(masterRatio: ratio,
+                                masterCount: params0.masterCount)
+        guard next.masterRatio != params0.masterRatio else { return nil }
         layoutParams[n1Based] = next
-        return true
+        return [id]
+    }
+
+    /// Map a gap-inset on-screen frame back to the un-gapped layout coords
+    /// the tree / engine math uses. `applyInnerGap` shrinks every edge that
+    /// has a neighbour by `gap/2`; this adds exactly that back per edge,
+    /// using `current` (the window's computed un-gapped frame) to tell
+    /// which edges are interior — so the resize ratio is read from the true
+    /// divider position, not a gap-offset one. `gap <= 0` is identity.
+    private static func ungap(_ f: CGRect, current cur: CGRect,
+                              in rect: CGRect, gap: CGFloat) -> CGRect {
+        guard gap > 0 else { return f }
+        let key = WindowID(serverID: 0)
+        let g = applyInnerGap([key: cur], in: rect, gap: gap)[key] ?? cur
+        let minX = f.minX - (g.minX - cur.minX)
+        let maxX = f.maxX - (g.maxX - cur.maxX)
+        let minY = f.minY - (g.minY - cur.minY)
+        let maxY = f.maxY - (g.maxY - cur.maxY)
+        return CGRect(x: minX, y: minY,
+                      width: maxX - minX, height: maxY - minY)
     }
 
     /// The master/stack divider fraction implied by resizing `id` to

@@ -205,7 +205,21 @@ public protocol WindowBackend: Sendable {
     /// opposite side tracks it, then re-tiles. No-op outside those modes,
     /// for an off-tree window, or when no divider-controlling edge moved.
     /// Not a CLI verb — DnD/resize-only. `frame` is backend (Quartz) coords.
-    func resizeWindow(_ id: WindowID, to frame: CGRect)
+    ///
+    /// `reflowDragged` picks the re-tile scope. `false` (PR-2 live tick):
+    /// reflow the NEIGHBOURS only and leave `id` exactly where the OS is
+    /// drawing it, so facet never fights the in-progress native resize.
+    /// `true` (gesture settle / one-shot): reflow everything incl. `id`,
+    /// snapping it onto its freshly-computed tile slot.
+    func resizeWindow(_ id: WindowID, to frame: CGRect, reflowDragged: Bool)
+
+    /// The window's current on-screen frame in backend (Quartz, top-left)
+    /// coords, read live from the OS — or `nil` when it isn't a managed /
+    /// resolvable window. Used by the real-window resize gesture (枠C 機能2)
+    /// to poll the natively-resized window each tick and self-classify the
+    /// drag (size changed ⇒ resize, position only ⇒ move). Read-only; no
+    /// side-effects.
+    func windowFrame(_ id: WindowID) -> CGRect?
 
     /// The layout the active workspace WOULD have if `dragged` were
     /// dropped onto `target` with intent `zone` — without committing.
@@ -279,7 +293,8 @@ public extension WindowBackend {
     func swapWindows(_ a: WindowID, _ b: WindowID) {}
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge) {}
-    func resizeWindow(_ id: WindowID, to frame: CGRect) {}
+    func resizeWindow(_ id: WindowID, to frame: CGRect, reflowDragged: Bool) {}
+    func windowFrame(_ id: WindowID) -> CGRect? { nil }
     func predictedDrop(dragged: WindowID, target: WindowID,
                        zone: IntentZone) -> DropPrediction { .none }
     func markFocusedWindow(_ name: String) -> Bool { false }

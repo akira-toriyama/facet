@@ -771,9 +771,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///     so main is always free to service the hop. Cost:
     ///     ~1 ms per refresh tick, acceptable at the current
     ///     2 s poll cadence.
-    private func activeDisplayRect() -> CGRect {
+    private func activeDisplayRect(probe probeOverride: CGPoint? = nil) -> CGRect {
+        // `probeOverride` lets a caller name the display directly (the live
+        // resize follow passes the dragged window's centre) so we skip the
+        // focused-window AX dance — that frontmost lookup + position/size
+        // read per ~30fps tick was a real drag-jank source.
         let probe: CGPoint
-        if let id = focusedWindow(),
+        if let probeOverride {
+            probe = probeOverride
+        } else if let id = focusedWindow(),
            let pid = catalog.pid(for: id),
            let ax = AXGeom.window(for: CGWindowID(id.serverID),
                                   pid: pid_t(pid)),
@@ -1717,18 +1723,58 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: activeDisplayRect())
     }
 
-    public func resizeWindow(_ id: WindowID, to frame: CGRect) {
-        let rect = activeDisplayRect()
-        guard catalog.applyResize(id, to: frame,
-                                  workspace: catalog.activeIndex, in: rect) else {
+    public func resizeWindow(_ id: WindowID, to frame: CGRect,
+                             reflowDragged: Bool) {
+        // Name the display from the dragged window's centre — it's on the
+        // active display, and this avoids the focused-window AX probe every
+        // live tick.
+        let rect = activeDisplayRect(
+            probe: CGPoint(x: frame.midX, y: frame.midY))
+        let frozen = catalog.applyResize(id, to: frame,
+                                         workspace: catalog.activeIndex, in: rect,
+                                         innerGap: config.effectiveInnerGap)
+        if reflowDragged {
+            // Settle (gesture end / one-shot): a full reflow re-applies the
+            // new ratio to everyone, snapping the dragged window onto its
+            // freshly-computed slot (≈ where the user left it). Run even
+            // when no ratio moved so a native resize the layout can't
+            // follow (an out-of-scope grid / stack mode, or a window edge
+            // dragged against a screen boundary) snaps the window back to
+            // its slot rather than being left at its off-layout size.
+            reflowActive(rect: rect)
+        } else if let frozen {
+            // PR-2 live tick: re-tile only the OPPOSITE subtree. Freeze the
+            // dragged window AND its same-subtree mates — the OS is still
+            // drawing the native resize, and those mates sit off the divider
+            // anchored to the dragged window's (excluded) frame, so re-tiling
+            // them to their computed slots would open a gap. Instant (no
+            // animation) so the opposite side tracks the drag.
+            applyLayout(workspace: catalog.activeIndex, rect: rect, skip: frozen)
+        } else {
             Log.debug("native: resize noop id=\(id.serverID)")
-            return
         }
-        // PR-1: a full reflow re-applies the new ratio to everyone. The
-        // dragged window snaps to its computed slot (≈ where it was
-        // dragged). PR-2's live drag will exclude the dragged window so
-        // the OS-native resize isn't fought tick-by-tick.
-        reflowActive(rect: rect)
+    }
+
+    public func windowFrame(_ id: WindowID) -> CGRect? {
+        // Prefer the window server (CGWindowList): a single-id description
+        // is fast and DOESN'T round-trip to the window's app — which
+        // matters during a live resize, when the dragged app (Chrome等) is
+        // busy and its AX answers slowly, the main per-tick jank source.
+        // kCGWindowBounds is top-left global coords, the same Quartz space
+        // as the catalog's tile frames. Fall back to AX if the server has
+        // no entry (rare). Read off-main (Controller dispatches on cliQueue).
+        let cgID = CGWindowID(id.serverID)
+        if let info = CGWindowListCreateDescriptionFromArray(
+                [cgID] as CFArray) as? [[String: Any]],
+           let b = info.first?[kCGWindowBounds as String] as? [String: Any],
+           let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,
+           let w = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat {
+            return CGRect(x: x, y: y, width: w, height: h)
+        }
+        guard let ax = axWin(id: id),
+              let pos = AXGeom.position(ax),
+              let size = AXGeom.size(ax) else { return nil }
+        return CGRect(origin: pos, size: size)
     }
 
     public func predictedDrop(dragged a: WindowID, target b: WindowID,
@@ -1847,24 +1893,27 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Iterate the WS's tree-computed frames and push each one
     /// through AX. Floating windows are skipped (they're not in
     /// the tree). No-op when the WS has no tree.
-    private func applyTile(workspace n1Based: Int, rect: CGRect) {
+    private func applyTile(workspace n1Based: Int, rect: CGRect,
+                           skip: Set<WindowID> = []) {
         applyFrames(catalog.tiledFrames(for: n1Based, in: rect),
-                    label: "tile WS \(n1Based)", rect: rect)
+                    label: "tile WS \(n1Based)", rect: rect, skip: skip)
     }
 
     /// Apply a stateless `LayoutEngine`'s frames for `n1Based`. The
     /// engine path: catalog computes pure geometry, this pushes it
     /// through AX exactly like `applyTile`.
-    private func applyEngine(workspace n1Based: Int, rect: CGRect) {
+    private func applyEngine(workspace n1Based: Int, rect: CGRect,
+                             skip: Set<WindowID> = []) {
         applyFrames(catalog.engineFrames(for: n1Based, in: rect),
-                    label: "engine WS \(n1Based)", rect: rect)
+                    label: "engine WS \(n1Based)", rect: rect, skip: skip)
     }
 
     /// Shared AX writer: set each window's position + size from a
     /// pre-computed frame map. Used by both the bsp tree path and
     /// the stateless-engine path.
     private func applyFrames(_ frames: [WindowID: CGRect],
-                             label: String, rect: CGRect) {
+                             label: String, rect: CGRect,
+                             skip: Set<WindowID> = []) {
         // Inner gap: pull abutting windows apart. The screen-edge
         // side of an outermost window stays flush — that distance is
         // the outer gap, already inset into `rect`. No-op when 0.
@@ -1885,6 +1934,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let eps: CGFloat = 1.0
         var applied = 0
         for (id, frame) in frames {
+            // Live resize follow: the dragged window is being resized
+            // natively by the user — skip it so we don't fight the OS.
+            if skip.contains(id) { continue }
             guard let pid = catalog.pid(for: id) else { continue }
             guard let ax = AXGeom.window(
                 for: CGWindowID(id.serverID),
@@ -2080,14 +2132,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the catalog and might need to push fresh frames through AX
     /// (refresh / switch / move / setMode / retile / perform)
     /// funnels through here.
-    private func applyLayout(workspace n1Based: Int, rect: CGRect) {
+    private func applyLayout(workspace n1Based: Int, rect: CGRect,
+                             skip: Set<WindowID> = []) {
         let mode = catalog.mode(of: n1Based)
         switch mode {
-        case "bsp":   applyTile(workspace: n1Based, rect: rect)
+        case "bsp":   applyTile(workspace: n1Based, rect: rect, skip: skip)
         case "stack": applyStack(workspace: n1Based, rect: rect)
         default:
             if LayoutRegistry.engine(named: mode) != nil {
-                applyEngine(workspace: n1Based, rect: rect)
+                applyEngine(workspace: n1Based, rect: rect, skip: skip)
             }
         }
     }
