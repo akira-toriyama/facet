@@ -17,8 +17,9 @@ native 実装、 外部依存なし。 レイヤー図は
 ## 何ができるか
 
 facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
-ワークスペースを 2 種類の view で見せる。 起動時にどちらを表示する
-かは [`config.toml`](config.toml) の `default-view` で選ぶ:
+ワークスペースを view で見せる。 起動 view (tree / grid) は
+[`config.toml`](config.toml) の `default-view` で選び、 加えて
+オンデマンドの rail オーバービューがある:
 
 - **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
   その windows をツリー表示。 行クリックで focus、 window 行ドラッグで
@@ -29,20 +30,26 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   window サムネイルドラッグで移動、 セル header ドラッグでセル丸ごと
   swap。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
   で閉じる。
+- **Rail** — フルスクリーンの Mission Control 風ワークスペース
+  オーバービュー。 各ワークスペースを画面下部に window サムネイルの
+  ミニ画面として並べ、 active を中央に大きく表示。 ←/→ で browse、
+  クリックで切替、 window を ws 間ドラッグ / header ドラッグで swap。
+  `facet --view=rail` で呼び出し、 Esc で閉じる。
 
-DnD は両 view 共通のモデル — **掴んだ対象が動作を決める**: window を
+DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**: window を
 掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を
 swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾
 キーは使わない。
 
-両 view は同じ backend と同じテーマ (terminal / cute / system、
+各 view は同じ backend と同じテーマ (terminal / cute / system、
 ライブ切替) を共有。
 
 ## レイアウト
 
 各ワークスペースは 1 つのレイアウトで動作し、 実行時に
 `facet workspace --layout=NAME` で切り替える (per-WS、 永続化しない —
-起動時に選ぶなら [setup hook](#workspace-setup-hooks) を使う)。 facet
+起動時の layout は [`config.toml`](config.toml) の `[space.N]` で
+per-Space に指定。 例: `1 = { name = "Dev", layout = "bsp" }`)。 facet
 は window を隠さないので、 レイアウトは window を*配置*するだけで、
 focus 中の window は常に前面に来る。 図は 4 window 想定、 **1** が
 master / focus。
@@ -308,7 +315,7 @@ Karabiner / Raycast / Hammerspoon / macOS Shortcuts 等) からこれら
 を bind して使う想定。 完全リファレンスは `facet --help`。
 
 ```sh
-# View 対称コマンド — NAME ∈ tree | grid、 全 op で必須
+# View 対称コマンド — NAME ∈ tree | grid | rail、 全 op で必須
 facet --view=NAME [--active]      # NAME 開く (idempotent)
 facet --hide=NAME                 # NAME 閉じる
 facet --toggle=NAME               # NAME トグル
@@ -364,7 +371,7 @@ facet status                      # スナップショット: backend /
 # Server 制御
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # config.toml 再読込 + 反映
-                                  # (theme / preview-mode / [workspaces])
+                                  # (theme / preview-mode)
 facet --quit                      # server 終了
 facet --resign                    # Facet.app 再 sign (brew install 後)
 facet --help                      # 完全リファレンス

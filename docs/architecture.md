@@ -12,7 +12,7 @@ stub seam.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  FacetViewTree         FacetViewGrid     (future ...)   │  view
+│  FacetViewTree   FacetViewGrid   FacetViewRail  (future)│  view
 │           \                  /                          │
 │            └──── FacetView ──┘  (shared primitives)     │
 └──────────────────────┬──────────────────────────────────┘
@@ -58,7 +58,7 @@ is preserved for unit-test stubs (`StubBackend` in `BackendTests`).
 | **M2** | tree + grid views + CLI working (originally via rift adapter, retired at ε) | tree + grid panels render against live backend |
 | **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
 | **M5** | Native adapter Phase α–ε. All five phases shipped (α/β/γ.1/γ.2/γ.3/δ/ε); v2.0.0 retired rift, native is the only backend | see below |
-| **M6+** | **Polish + future themes (M7+)** — Surface stabilization period after M5 ship. 4 stocked themes (tree DnD parity / extended layouts / CLI redesign / new view types); independent, each requires grill round before scope-freeze | see [`facet-future-roadmap` memory] + "Future themes" below |
+| **M6–M11** | **Polish → window mgmt → WS ops → tag/scrollable → macOS 26.** M6 brushup done; **M7 is a numbering gap**; **M8 window management is code-complete (2026-06-02)** — themes A–D incl. rail (#109), marks / sticky / scratchpad, real-window DnD + resize, cheap tiling verbs; M9 (WS ops + view unification), M10 (tag model + scrolling columns), M11 (macOS 26 native-Space WS, v3.0.0) are the forward roadmap | `facet-future-roadmap` memory is canonical + "Themes A–D" below |
 
 ## Native adapter phases
 
@@ -68,7 +68,7 @@ matches how rift / aerospace operate today.
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet --workspace=N`. Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus=N` (α 期の flag は `--workspace=N`、Theme C #81/#82 で subject-verb 化). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow. **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
@@ -78,20 +78,24 @@ Each phase is gated by being usable end-to-end through the view layer
 — no Phase α–δ landings ship unless the existing UI still works
 against them.
 
-## Future themes (M7+, deferred)
+## Themes A–D (M8 window management, shipped 2026-06-02)
 
-M5 shipped at v2.0.0 (themes stocked 2026-05-27). Of the four themes
-below, **A / B / C shipped during M7** (#72 / #73–80 / #81–82, each
-after a grill round — Phase γ/δ/ε pattern; see the Status column).
-**D remains** (M7's last, low confidence). Independent themes — can
-land in any order. Details in `facet-future-roadmap` memory.
+M5 shipped at v2.0.0 (themes stocked 2026-05-27). **All four themes
+below shipped under M8** (#72 / #73–80 / #81–82 / rail #109), each
+after a grill round (Phase γ/δ/ε pattern; see the Status column). M8
+also shipped the stocked slots — window marks (#118/#119), sticky
+(#128/#129), scratchpad (#135), real-window DnD (#122–124) + resize
+(#125/#127), cheap tiling verbs (#115/#117). The forward roadmap is
+**M9** (WS ops + view unification), **M10** (tag model + scrolling
+columns), **M11** (macOS 26 native-Space WS, v3.0.0). M7 is a numbering
+gap. Canonical: `facet-future-roadmap` memory.
 
 | Theme | Goal | Status |
 |---|---|---|
 | **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | ✅ shipped (#72) |
 | **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。**後日命名整理**: monocle→stack 統合・centered-master→centered 改名・wide を実 layout 化 ⇒ 現行 tall / wide / centered / grid / spiral。scrolling columns (niri 風) は未実装 |
 | **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
-| **D. New view types** | (i) 自由配置ビュー Google Maps 風 (modifier + wheel zoom, WS/window grab & place); (ii) WS DnD reorder Mission Control 風 | spec TBD; トミー曰く「微妙、提案あれば」 = 確定度低 |
+| **D. New view types** | 当初候補 (i) 自由配置 canvas Google Maps 風 / (ii) WS DnD reorder Mission Control 風 はいずれも却下 → 別案 **rail view** (全画面 WS overview バー) を採用 | ✅ shipped as `facet --view=rail` (#109) |
 
 着手前 invariants: `facet-buddha-palm-principle` (OS 尊重) を壊さない / `facet-scope-exclusions` (15 not-do) と矛盾しない / `WindowBackend` protocol 経由設計を維持 (unit-test stub seam を壊さない)。
 
@@ -127,10 +131,19 @@ is the index. **Do not relitigate** without explicit grill round.
   dropped (the genie animation makes workspace switching feel
   slow); no config knob remains, `anchor` is unconditional. True
   hide (MC/Cmd-Tab disappearance) is impossible in public API —
-  out of scope for facet.
-- **CLI surface**: `--workspace=N` switch, `window --move-to=N`
-  move, `--reload` explicit + auto FSEvents watcher, `status` for
-  state dump. TOML atomic write enforced in shipped templates.
+  out of scope for facet. A genuine *user* hide (Cmd+H / Cmd+M →
+  `isOnscreen=false`) gives up the window's tile slot so neighbours
+  reclaim it (`WorkspaceCatalog.reconcileHidden`); the window keeps
+  its WS assignment + marks, shows dimmed with a `hidden` badge in the
+  tree, and re-attaches at the tail when it returns on-screen (click
+  restores via `WindowBackend.revealWindow`). facet's own anchor park
+  keeps `isOnscreen` true, so only user hides trigger this (#131 /
+  #132 / #133; memory `facet-hide-reclaim-decisions`).
+- **CLI surface**: `facet workspace --focus=N` switch, `facet window
+  --move-to=N` move, `--reload` explicit + auto FSEvents watcher,
+  `status` for state dump. Subject-verb form since Theme C (#81/#82);
+  the α-era top-level `--workspace=N` was deleted. TOML atomic write
+  enforced in shipped templates.
 - **Shortcut**: out of scope. README recommends skhd / Karabiner /
   hammerspoon (compose-friendly, like yabai + skhd).
 - **New window detection**: per-app AX subscription via
@@ -203,10 +216,10 @@ not relitigate** without explicit grill round.
   re-inserts members in focus order via auto-balance. **Default
   mode for a new WS = `"float"`** (not `"bsp"`) so existing
   users see no surprise behaviour; opt-in per WS via
-  `facet --set-layout=bsp`.
-- **CLI surface (5 new verbs)**:
-  - `facet --set-layout=NAME` — active WS mode (`bsp` / `stack` / `float`)
-  - `facet --retile` — recompute + re-apply the active WS layout
+  `facet workspace --layout=bsp` (subject-verb since Theme C #81/#82).
+- **CLI surface (5 new verbs)** (reshaped to subject-verb by Theme C #81/#82):
+  - `facet workspace --layout=NAME` — active WS mode (`bsp` / `stack` / `float`)
+  - `facet workspace --retile` — recompute + re-apply the active WS layout
   - `facet window --toggle-float`
   - `facet window --toggle-orientation`
   - `facet window --cycle-stack=next|prev`
@@ -354,11 +367,13 @@ two vocabularies don't drift apart:
 
 Strict Clean Architecture splits *application logic* (use cases /
 interactors) from *coordination* (controller). facet collapses
-both into `Controller` because at the current view count (2 — tree
-+ grid) the use-case shapes are 1-line wrappers around backend
+both into `Controller` because at the current view count (3 — tree,
+grid, rail) the use-case shapes are 1-line wrappers around backend
 calls plus AX retry — a separate layer would be 100% boilerplate.
 
-If a third / fourth view lands (dock, palette, hover-bar) **and**
+The third view (rail, #109) landed without duplicating an operation
+across view code paths, so YAGNI still holds. If a fourth view lands
+(dock, palette, hover-bar) **and**
 the same operation (e.g. "switch + focus this window") starts
 appearing in two view code paths, that's the signal to extract a
 `FacetUseCases` module. Until then, the rule is YAGNI (memory:

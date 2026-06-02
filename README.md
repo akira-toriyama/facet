@@ -17,8 +17,8 @@ the layer diagram.
 ## What it does
 
 facet runs as a menu-bar-less agent (`LSUIElement`) and surfaces
-your workspaces through one of two views — your choice at startup
-via [`config.toml`](config.toml):
+your workspaces through one of its views — tree or grid at startup
+via [`config.toml`](config.toml), plus the on-demand rail overview:
 
 - **Tree** — a translucent always-on-top sidebar listing every
   workspace and its windows as a tree. Click rows to focus, drag a
@@ -30,21 +30,28 @@ via [`config.toml`](config.toml):
   window thumb to move it, drag a cell's header to swap whole cells.
   The grid is summoned on demand (`facet --view=grid`) and dismissed
   with Esc / backdrop click.
+- **Rail** — a full-screen Mission-Control-style workspace overview:
+  every workspace rendered as a window-thumbnail mini-screen along the
+  bottom with the active one shown large in the centre; browse with
+  ←/→, click to switch, drag a window between workspaces or a header
+  to swap. Summoned with `facet --view=rail`, dismissed with Esc.
 
-Drag-and-drop follows one model across both views: the **grabbed
+Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a
 workspace header to swap the two workspaces' contents (the workspace
 slots themselves don't move, so hotkey numbering is preserved). No
 modifier keys.
 
-Both views share the same backend and the same theme
+All views share the same backend and the same theme
 (terminal / cute / system, live toggleable).
 
 ## Layouts
 
 Each workspace runs a layout, set at runtime with
-`facet workspace --layout=NAME` (per-WS, never persisted — use a
-[setup hook](#workspace-setup-hooks) to pick one at launch). facet
+`facet workspace --layout=NAME` (per-WS, never persisted — set a
+per-Space startup layout via `[space.N]` in
+[`config.toml`](config.toml), e.g. `1 = { name = "Dev", layout =
+"bsp" }`). facet
 never hides windows, so a layout only *positions* them and the
 focused window is always raised. Diagrams use four windows; **1** is
 the master / focus where that matters.
@@ -320,7 +327,7 @@ Hammerspoon, macOS Shortcuts, …). Full cheatsheet:
 `facet --help`.
 
 ```sh
-# Per-view ops — NAME ∈ tree | grid, required for every op.
+# Per-view ops — NAME ∈ tree | grid | rail, required for every op.
 facet --view=NAME [--active]      # open NAME (idempotent)
 facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
@@ -381,7 +388,7 @@ facet status                      # snapshot: backend, theme, workspaces,
 # Server controls
 facet --theme=NAME                # terminal | cute | system
 facet --reload                    # re-read config.toml + apply
-                                  # (theme / preview-mode / [workspaces])
+                                  # (theme / preview-mode)
 facet --quit                      # terminate the running server
 facet --resign                    # re-sign Facet.app (after brew install)
 facet --help                      # full reference
