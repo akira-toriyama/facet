@@ -86,6 +86,13 @@ public struct Window: Sendable {
     /// (switching workspace if needed). Session-only, per-native-Space.
     /// Views surface it as a small badge.
     public let mark: String?
+    /// Whether this window is *sticky* — pinned visible across every
+    /// facet workspace in its native Space (`facet window
+    /// --toggle-sticky`). A sticky window is exempt from the WS-switch
+    /// anchor park and is force-floating (it never joins a WS's
+    /// tiling). Session-only, per-native-Space; orthogonal to `mark`.
+    /// Views surface it as a small 📌 badge.
+    public let isSticky: Bool
 
     public init(id: WindowID,
                 pid: Int,
@@ -97,7 +104,8 @@ public struct Window: Sendable {
                 isOnscreen: Bool = true,
                 isMaster: Bool = false,
                 bundleId: String? = nil,
-                mark: String? = nil) {
+                mark: String? = nil,
+                isSticky: Bool = false) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -109,6 +117,7 @@ public struct Window: Sendable {
         self.isOnscreen = isOnscreen
         self.isMaster = isMaster
         self.mark = mark
+        self.isSticky = isSticky
     }
 }
 

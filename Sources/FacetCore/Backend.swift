@@ -15,6 +15,7 @@ import CoreGraphics
 /// only surfacing applicable items in the first place.
 public enum WindowAction: Sendable, Equatable {
     case toggleFloat, toggleFullscreen
+    case toggleSticky                              // pin across all WSs
     case promoteToMaster, swapMasterStack          // master_stack
     case toggleStack, toggleOrientation            // traditional / bsp / stack
     case centerColumn, snapStrip                   // scrolling
@@ -152,7 +153,8 @@ public protocol WindowBackend: Sendable {
     /// master", stack cycling) are gated so the menu matches the
     /// window's actual state.
     func windowMenu(mode: String, floating: Bool,
-                    isMaster: Bool, windowCount: Int) -> [WindowMenuItem]
+                    isMaster: Bool, windowCount: Int,
+                    isSticky: Bool) -> [WindowMenuItem]
 
     /// Re-apply the active workspace's layout. Phase γ escape
     /// hatch: when the on-screen state has drifted from what the

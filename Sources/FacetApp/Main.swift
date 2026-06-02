@@ -29,8 +29,9 @@
 //               / --rename=NAME / --move=N
 //   Window    : facet window --move-to=N[ --follow] / --mark=NAME
 //               / --focus-mark=NAME / --unmark=NAME / --toggle-float /
-//               --toggle-orientation / --cycle-stack=next|prev /
-//               --grow-master / --shrink-master / --inc-master / --dec-master
+//               --toggle-sticky / --toggle-orientation /
+//               --cycle-stack=next|prev / --grow-master / --shrink-master
+//               / --inc-master / --dec-master
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
@@ -141,6 +142,9 @@ enum FacetApp {
                                              window (switches WS if needed)
           facet window --unmark=NAME         remove a mark
           facet window --toggle-float        flip its float flag
+          facet window --toggle-sticky       pin it across every workspace
+                                             (PiP / timer / chat); flip off
+                                             to drop it as a tiled window
           facet window --toggle-orientation  bsp: rotate parent split /
                                              tall⇄wide: swap layout
           facet window --cycle-stack=next    rotate stack to next member
@@ -345,10 +349,14 @@ enum FacetApp {
         postControl("retile")
     }
 
-    /// Post ``window-toggle-float`` / ``window-toggle-orientation``.
-    /// Target is the focused window.
+    /// Post ``window-toggle-float`` / ``window-toggle-sticky`` /
+    /// ``window-toggle-orientation``. Target is the focused window.
     static func postWindowToggleFloat() -> Never {
         postControl("window-toggle-float")
+    }
+
+    static func postWindowToggleSticky() -> Never {
+        postControl("window-toggle-sticky")
     }
 
     static func postWindowToggleOrientation() -> Never {
@@ -564,6 +572,7 @@ enum FacetApp {
         var focusMarkArg: String?
         var unmarkArg: String?
         var toggleFloat = false
+        var toggleSticky = false
         var toggleOrientation = false
         var cycleStackDir: String?
         var growMaster = false
@@ -587,6 +596,8 @@ enum FacetApp {
                 unmarkArg = parseMarkName(a, prefix: "--unmark=")
             case a == "--toggle-float":
                 toggleFloat = true
+            case a == "--toggle-sticky":
+                toggleSticky = true
             case a == "--toggle-orientation":
                 toggleOrientation = true
             case a.hasPrefix("--cycle-stack="):
@@ -613,6 +624,7 @@ enum FacetApp {
             + (focusMarkArg != nil ? 1 : 0)
             + (unmarkArg != nil ? 1 : 0)
             + (toggleFloat ? 1 : 0)
+            + (toggleSticky ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
             + (cycleStackDir != nil ? 1 : 0)
             + (growMaster ? 1 : 0)
@@ -641,6 +653,7 @@ enum FacetApp {
         if let m = focusMarkArg { postControl("window-focus-mark:" + m) }
         if let m = unmarkArg { postControl("window-unmark:" + m) }
         if toggleFloat { postWindowToggleFloat() }
+        if toggleSticky { postWindowToggleSticky() }
         if toggleOrientation { postWindowToggleOrientation() }
         if let d = cycleStackDir { postWindowCycleStack(d) }
         if growMaster { postWindowGrowMaster() }

@@ -174,6 +174,22 @@ struct WorkspaceCatalog {
     /// reorder (WindowID is the window-server id), so no remap needed.
     private(set) var marks: [String: WindowID] = [:]
 
+    /// Sticky windows (`facet window --toggle-sticky`): pinned visible
+    /// across **every facet workspace in this native Space**. Two
+    /// invariants give the behaviour almost for free:
+    ///   1. **Park-exempt** — `shouldParkAnchor` returns false for a
+    ///      sticky id, so a WS switch never sweeps it to the anchor
+    ///      sliver (it stays exactly on-screen, on every WS).
+    ///   2. **Force-floating** — a sticky id is also in
+    ///      `floatingWindows`, so it never joins a WS's tiling (a tiled
+    ///      window that reflows per-WS can't also stay put everywhere).
+    /// Native-Space crossing is out of scope (READ-only SkyLight, memory
+    /// `facet-per-native-space-ws`) — that's macOS's "all desktops"
+    /// job. Session-only, per-native-Space (this catalog is swapped per
+    /// Space). Pruned in `forgetWindow` on close. Orthogonal to `marks`
+    /// (a window can carry both).
+    private(set) var everywhereWindows: Set<WindowID> = []
+
     /// IDs that have been observed `isOnscreen=true` once but not
     /// yet committed to `windowMap`. Reconcile requires **two
     /// consecutive on-screen observations** before adding so a
@@ -429,6 +445,7 @@ struct WorkspaceCatalog {
         examinedIDs.remove(id)
         pendingAddCandidates.remove(id)
         marks = marks.filter { $0.value != id }   // drop any mark on it
+        everywhereWindows.remove(id)              // drop sticky on it
     }
 
     /// Clear all hide-state bookkeeping for `id` without
@@ -675,6 +692,15 @@ struct WorkspaceCatalog {
                                      focused: WindowID? = nil,
                                      in rect: CGRect = .zero) {
         guard let slot = windowMap[id] else { return }
+        // Float-exit = sticky-exit (Q13): a sticky window is always
+        // floating, so the only thing "toggle float" can mean for it is
+        // "stop". Clearing sticky already un-floats + re-homes it as a
+        // tiled window of the active WS — the same landing as
+        // `--toggle-sticky` off — so defer to that one path.
+        if everywhereWindows.contains(id) {
+            clearSticky(id, focused: focused, in: rect)
+            return
+        }
         let wasFloating = floatingWindows.contains(id)
         if wasFloating {
             floatingWindows.remove(id)
@@ -1009,6 +1035,44 @@ struct WorkspaceCatalog {
         marks.first { $0.value == id }?.key
     }
 
+    // MARK: - Sticky windows (pin across every WS)
+
+    /// Whether `id` is sticky (pinned visible across every WS in this
+    /// native Space). Stamped on `Window.isSticky` in the snapshot.
+    func isSticky(_ id: WindowID) -> Bool {
+        everywhereWindows.contains(id)
+    }
+
+    /// Make `id` sticky: a member of every facet WS in this native
+    /// Space and force-floating (Q2). No-op for an unknown window.
+    /// Idempotent. Stays at its current frame — pinning shouldn't
+    /// teleport the window (the caller leaves floating windows where
+    /// they are; only the *other* windows of the WS reflow to fill the
+    /// gap it left).
+    mutating func setSticky(_ id: WindowID) {
+        guard windowMap[id] != nil else { return }
+        everywhereWindows.insert(id)
+        floatingWindows.insert(id)   // force floating (Q2)
+        detachFromLayouts(id)        // leave its home WS's tiling
+    }
+
+    /// Clear sticky on `id`: stop pinning it, drop the forced float,
+    /// and re-home it as a normal tiled window of the **active** WS
+    /// (Q4 — it lands in front of the user, not back at its old home,
+    /// so the window the user is looking at never vanishes). No-op when
+    /// `id` isn't sticky / is unknown.
+    mutating func clearSticky(_ id: WindowID,
+                              focused: WindowID? = nil,
+                              in rect: CGRect = .zero) {
+        guard everywhereWindows.contains(id),
+              let slot = windowMap[id] else { return }
+        everywhereWindows.remove(id)
+        floatingWindows.remove(id)
+        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
+        attachToLayout(id, workspace: activeIndex,
+                       focused: focused, in: rect)
+    }
+
     /// Swap a workspace between the `tall` and `wide` layouts — the two
     /// orientations of the master-stack, now distinct engines rather
     /// than an orientation knob. No-op for any other mode. Window order
@@ -1245,9 +1309,16 @@ struct WorkspaceCatalog {
     @discardableResult
     mutating func moveWindow(_ id: WindowID, to n1Based: Int,
                                     in rect: CGRect = .zero) -> MoveOutcome {
+        // A sticky window is a member of *every* WS in this Space, so
+        // "move it to WS N" is incoherent — reject it (unstick first).
+        // Without this guard the slot would change but `attachToLayout`
+        // skips floating windows and `clearSticky` re-homes to the
+        // active WS anyway, so the move would be a silent no-op that
+        // only relocated the tree badge.
         guard isValid(n1Based),
               let current = windowMap[id],
-              current.workspace != n1Based else { return .rejected }
+              current.workspace != n1Based,
+              !everywhereWindows.contains(id) else { return .rejected }
         windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
         // Detach from source's layout container (if any), then
         // attach to dest's. Both helpers are no-ops when the
@@ -1270,10 +1341,14 @@ struct WorkspaceCatalog {
     // MARK: - Park bookkeeping (adapter calls after AX success)
 
     /// True when the anchor park should actually run (the window
-    /// isn't already parked). Caller uses this as the early-exit
-    /// guard before invoking AX.
+    /// isn't already parked, and isn't sticky). Caller uses this as
+    /// the early-exit guard before invoking AX. This is the single
+    /// chokepoint that makes sticky windows stay on-screen across WS
+    /// switches: every park path (`parkAnchor`, `animateSwitch`'s
+    /// outgoing slide, `applyStack`'s non-top members) gates on it, so
+    /// a sticky id is never swept to the anchor sliver.
     func shouldParkAnchor(_ id: WindowID) -> Bool {
-        !anchorParked.contains(id)
+        !anchorParked.contains(id) && !everywhereWindows.contains(id)
     }
 
     mutating func markAnchorParked(_ id: WindowID,
@@ -1362,7 +1437,8 @@ struct WorkspaceCatalog {
                            activeRect: activeRect),
                        isOnscreen: w.isOnscreen,
                        isMaster: w.id == master,
-                       mark: mark(forWindow: w.id))
+                       mark: mark(forWindow: w.id),
+                       isSticky: everywhereWindows.contains(w.id))
             }
             return Workspace(
                 index: entry.index - 1,

@@ -22,13 +22,32 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
     public let name: String
     public let active: Bool
     public let windowCount: Int
+    /// How many of `windowCount` are sticky (pinned across every WS).
+    /// Surfaced by `facet status` as a "N sticky" suffix.
+    public let stickyCount: Int
 
     public init(index: Int, name: String,
-                active: Bool, windowCount: Int) {
+                active: Bool, windowCount: Int,
+                stickyCount: Int = 0) {
         self.index = index
         self.name = name
         self.active = active
         self.windowCount = windowCount
+        self.stickyCount = stickyCount
+    }
+
+    // Tolerate a status file written before `stickyCount` existed: a
+    // stale `/tmp/facet-status.json` from an old server lingering across
+    // an in-place upgrade would otherwise throw `keyNotFound` and make
+    // `facet status` fail until the next reconcile rewrites the file.
+    // A missing key decodes to 0. (`Encodable` stays synthesized.)
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        index = try c.decode(Int.self, forKey: .index)
+        name = try c.decode(String.self, forKey: .name)
+        active = try c.decode(Bool.self, forKey: .active)
+        windowCount = try c.decode(Int.self, forKey: .windowCount)
+        stickyCount = try c.decodeIfPresent(Int.self, forKey: .stickyCount) ?? 0
     }
 }
 
@@ -116,7 +135,10 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
                 let activeMark = w.active ? "[active]" : "        "
                 let count = "\(w.windowCount) window"
                     + (w.windowCount == 1 ? "" : "s")
-                lines.append("  \(idx) \(namePadded) \(activeMark)  \(count)")
+                let sticky = w.stickyCount > 0
+                    ? ", \(w.stickyCount) sticky" : ""
+                lines.append(
+                    "  \(idx) \(namePadded) \(activeMark)  \(count)\(sticky)")
             }
         }
         lines.append("last error: \(lastError ?? "(none)")")
