@@ -198,6 +198,15 @@ public protocol WindowBackend: Sendable {
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge)
 
+    /// Follow a real edge-drag resize of `id` to `frame` within the
+    /// active workspace (real-window resize, 枠C 機能2). The window was
+    /// resized natively by the user; facet only updates the controlling
+    /// split ratio (bsp) / master divider (tall/wide/centered) so the
+    /// opposite side tracks it, then re-tiles. No-op outside those modes,
+    /// for an off-tree window, or when no divider-controlling edge moved.
+    /// Not a CLI verb — DnD/resize-only. `frame` is backend (Quartz) coords.
+    func resizeWindow(_ id: WindowID, to frame: CGRect)
+
     /// The layout the active workspace WOULD have if `dragged` were
     /// dropped onto `target` with intent `zone` — without committing.
     /// Computed on a copy of the layout state through the SAME swap /
@@ -270,6 +279,7 @@ public extension WindowBackend {
     func swapWindows(_ a: WindowID, _ b: WindowID) {}
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge) {}
+    func resizeWindow(_ id: WindowID, to frame: CGRect) {}
     func predictedDrop(dragged: WindowID, target: WindowID,
                        zone: IntentZone) -> DropPrediction { .none }
     func markFocusedWindow(_ name: String) -> Bool { false }

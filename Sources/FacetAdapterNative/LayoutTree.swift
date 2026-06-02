@@ -394,6 +394,82 @@ struct LayoutTree: Equatable, Sendable {
         }
     }
 
+    // MARK: - Resize (real-window edge drag, 枠C 機能2)
+
+    /// Follow a real resize of leaf `id` to `newFrame`: for each edge
+    /// that moved vs its current tiled position, find the *controlling
+    /// split* — the nearest ancestor whose divider IS that edge — and set
+    /// its ratio so the divider lands on the new edge. The opposite
+    /// subtree reflows; `id` keeps its place in the tree. No-op when `id`
+    /// isn't tiled, nothing moved, or the edge is a screen boundary (no
+    /// ancestor split on that side). Ratios clamp to [0.05, 0.95].
+    ///
+    /// Algorithm = yabai's `window_node_fence` adapted to the value tree:
+    /// the controlling split for the right edge is the deepest ancestor
+    /// `.vertical` split where `id` is in the FIRST (left) child, etc.
+    /// The new ratio is computed from `newFrame`'s ABSOLUTE edge against
+    /// the split's rect (snapshot, not per-tick delta — no drift).
+    mutating func resize(_ id: WindowID, to newFrame: CGRect,
+                         in rect: CGRect) {
+        guard let cur = frames(in: rect)[id], root != nil else { return }
+        let eps: CGFloat = 0.5
+        // X axis — whichever vertical edge moved more is the dragged one.
+        let dMaxX = newFrame.maxX - cur.maxX, dMinX = newFrame.minX - cur.minX
+        if abs(dMaxX) > eps, abs(dMaxX) >= abs(dMinX) {
+            root = setFence(root!, rect, id, axis: .vertical,
+                            leafInFirst: true, edgePos: newFrame.maxX).0
+        } else if abs(dMinX) > eps {
+            root = setFence(root!, rect, id, axis: .vertical,
+                            leafInFirst: false, edgePos: newFrame.minX).0
+        }
+        // Y axis — likewise. facet `.horizontal`: first = top (minY).
+        let dMaxY = newFrame.maxY - cur.maxY, dMinY = newFrame.minY - cur.minY
+        if abs(dMaxY) > eps, abs(dMaxY) >= abs(dMinY) {
+            root = setFence(root!, rect, id, axis: .horizontal,
+                            leafInFirst: true, edgePos: newFrame.maxY).0
+        } else if abs(dMinY) > eps {
+            root = setFence(root!, rect, id, axis: .horizontal,
+                            leafInFirst: false, edgePos: newFrame.minY).0
+        }
+    }
+
+    /// Recurse toward `id`; the DEEPEST split matching (`axis`,
+    /// `leafInFirst`) is the fence — set its ratio from `edgePos`. Returns
+    /// (rebuilt node, didSet). `rect` is this node's rect.
+    private func setFence(_ node: LayoutNode, _ rect: CGRect, _ id: WindowID,
+                          axis: LayoutNode.Split.Orientation,
+                          leafInFirst: Bool, edgePos: CGFloat)
+        -> (LayoutNode, Bool)
+    {
+        guard case .split(let s) = node else { return (node, false) }
+        let (firstRect, secondRect) = splitRect(rect, orientation: s.orientation,
+                                                ratio: s.ratio)
+        let inFirst = contains(s.first.node, id: id)
+        guard inFirst || contains(s.second.node, id: id) else {
+            return (node, false)            // id not under this split
+        }
+        let childRect = inFirst ? firstRect : secondRect
+        let childNode = inFirst ? s.first.node : s.second.node
+        let (newChild, deepSet) = setFence(childNode, childRect, id, axis: axis,
+                                           leafInFirst: leafInFirst,
+                                           edgePos: edgePos)
+        func rebuilt(ratio: CGFloat) -> LayoutNode {
+            .split(.init(orientation: s.orientation, ratio: ratio,
+                         first: inFirst ? newChild : s.first.node,
+                         second: inFirst ? s.second.node : newChild))
+        }
+        if deepSet { return (rebuilt(ratio: s.ratio), true) }
+        // Is THIS split the fence? matching orientation + leaf on the
+        // required side → its divider is the dragged edge.
+        if s.orientation == axis, inFirst == leafInFirst {
+            let ratio = axis == .vertical
+                ? (edgePos - rect.minX) / rect.width
+                : (edgePos - rect.minY) / rect.height
+            return (rebuilt(ratio: ratio), true)
+        }
+        return (rebuilt(ratio: s.ratio), false)
+    }
+
     // MARK: - Queries
 
     func contains(_ id: WindowID) -> Bool {

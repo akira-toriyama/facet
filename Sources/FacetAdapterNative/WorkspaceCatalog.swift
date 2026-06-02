@@ -789,6 +789,64 @@ struct WorkspaceCatalog {
         return m == "stack" || LayoutRegistry.engine(named: m) != nil
     }
 
+    // MARK: - Resize (real-window edge drag, 枠C 機能2)
+
+    /// Follow a real resize of `id` to `newFrame` (FOLLOW model — the
+    /// window was resized natively, we only adjust the ratio so the
+    /// neighbour tracks it). bsp → mutate the controlling `Split.ratio`;
+    /// tall / wide / centered → the master / stack divider (`masterRatio`)
+    /// only. No-op (false) for any other mode, an off-tree window, or a
+    /// drag that doesn't move a divider-controlling edge. `rect` is the
+    /// active display rect.
+    @discardableResult
+    mutating func applyResize(_ id: WindowID, to newFrame: CGRect,
+                              workspace n1Based: Int, in rect: CGRect) -> Bool {
+        let m = mode(of: n1Based)
+        if m == "bsp" {
+            guard var tree = layoutTrees[n1Based] else { return false }
+            let before = tree
+            tree.resize(id, to: newFrame, in: rect)
+            guard tree != before else { return false }
+            layoutTrees[n1Based] = tree
+            return true
+        }
+        guard let ratio = masterRatioFromResize(id, to: newFrame, mode: m,
+                                                 workspace: n1Based, in: rect)
+        else { return false }
+        let cur = params(of: n1Based)
+        let next = LayoutParams(masterRatio: ratio, masterCount: cur.masterCount)
+        guard next.masterRatio != cur.masterRatio else { return false }
+        layoutParams[n1Based] = next
+        return true
+    }
+
+    /// The master/stack divider fraction implied by resizing `id` to
+    /// `newFrame` in a stateless master layout — `nil` when the mode has
+    /// no master divider or `id`'s divider-facing edge didn't move (the
+    /// caller's change-detection then no-ops). tall = master right edge /
+    /// stack left edge; wide = master bottom / stack top; centered =
+    /// (symmetric) the master's own width fraction.
+    private func masterRatioFromResize(_ id: WindowID, to f: CGRect,
+                                       mode m: String, workspace n1Based: Int,
+                                       in rect: CGRect) -> CGFloat? {
+        guard rect.width > 0, rect.height > 0,
+              let idx = orderedMembers(of: n1Based).firstIndex(of: id)
+        else { return nil }
+        let isMaster = idx < params(of: n1Based).masterCount
+        switch m {
+        case "tall":
+            return isMaster ? (f.maxX - rect.minX) / rect.width
+                            : (f.minX - rect.minX) / rect.width
+        case "wide":
+            return isMaster ? (f.maxY - rect.minY) / rect.height
+                            : (f.minY - rect.minY) / rect.height
+        case "centered":
+            return isMaster ? f.width / rect.width : nil   // sides: not v1
+        default:
+            return nil
+        }
+    }
+
     /// Tree-computed frames for every tiled window in the WS,
     /// keyed by `WindowID`. Empty when the WS isn't in `"bsp"`
     /// mode or has no tree.
