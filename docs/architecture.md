@@ -93,7 +93,7 @@ gap. Canonical: `facet-future-roadmap` memory.
 | Theme | Goal | Status |
 |---|---|---|
 | **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | ✅ shipped (#72) |
-| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。**後日命名整理**: monocle→stack 統合・centered-master→centered 改名・wide を実 layout 化 ⇒ 現行 tall / wide / centered / grid / spiral。scrolling columns (niri 風) は未実装 |
+| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。命名整理は #108 (monocle→stack 統合・centered-master→centered) 経て **M9-2 で master 5 辺化に確定**: `master-left` / `master-right` / `master-top` / `master-bottom` / `master-center` + grid / spiral (tall/wide/centered は破壊的リネーム・`--toggle-orientation` の master flip 廃止)。scrolling columns (niri 風) は未実装 (M11-4) |
 | **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
 | **D. New view types** | 当初候補 (i) 自由配置 canvas Google Maps 風 / (ii) WS DnD reorder Mission Control 風 はいずれも却下 → 別案 **rail view** (全画面 WS overview バー) を採用 | ✅ shipped as `facet --view=rail` (#109) |
 

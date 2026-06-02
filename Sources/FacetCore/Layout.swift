@@ -15,13 +15,14 @@
 
 import CoreGraphics
 
-/// Tunable knobs shared across the master layouts (`tall` / `wide` /
-/// `centered`). Per-workspace runtime state (never persisted to
-/// config); the adapter owns the values and passes a snapshot in on
-/// each `frames` call. Engines read only the knobs they care about —
-/// grid / spiral read none. The Tall-vs-Wide axis is *not* a knob: it
-/// is encoded by which engine runs (`TallLayout` vs `WideLayout`),
-/// swapped via `--toggle-orientation`.
+/// Tunable knobs shared across the master layouts (`master-left` /
+/// `master-right` / `master-top` / `master-bottom` / `master-center`).
+/// Per-workspace runtime state (never persisted to config); the adapter
+/// owns the values and passes a snapshot in on each `frames` call.
+/// Engines read only the knobs they care about — grid / spiral read
+/// none. The master *edge* is not a knob: it is encoded by which engine
+/// runs (`MasterLeftLayout` … `MasterCenterLayout`), picked directly
+/// with `--layout=master-EDGE`.
 public struct LayoutParams: Sendable, Equatable {
     /// Fraction of the rect the master area receives (clamped 0.05…0.95).
     public var masterRatio: CGFloat
@@ -38,7 +39,7 @@ public struct LayoutParams: Sendable, Equatable {
 /// list to per-window frames within `rect`.
 public protocol LayoutEngine: Sendable {
     /// Canonical mode name — lower-case, kebab-case if multi-word.
-    /// Used by `--set-layout=NAME` and `Workspace.layoutMode`.
+    /// Used by `--layout=NAME` and `Workspace.layoutMode`.
     var name: String { get }
 
     /// Map each id in `order` to a frame inside `rect`. `order` is the
@@ -51,127 +52,191 @@ public protocol LayoutEngine: Sendable {
     /// Whether this engine has a privileged *master* window
     /// (`order[0]`) — the flag behind `Window.isMaster` and the tree's
     /// `master` chip. `true` for the master-stack engines
-    /// (tall / wide / centered); `false` for grid / spiral, which tile
-    /// every window co-equally. Engines that keep their own stateful
-    /// adapter path and aren't in `LayoutRegistry` (bsp / stack /
-    /// float) report no master via the `?? false` at the call site.
+    /// (`master-left` … `master-center`); `false` for grid / spiral,
+    /// which tile every window co-equally. Engines that keep their own
+    /// stateful adapter path and aren't in `LayoutRegistry` (bsp /
+    /// stack / float) report no master via the `?? false` at the call
+    /// site. The adapter also reuses this as the single predicate
+    /// behind the master-ratio / -count knobs (`hasMasterKnob`).
     var hasMaster: Bool { get }
 }
 
 extension LayoutEngine {
     /// Default: an engine has a master unless it opts out. The master-
-    /// stack engines (tall / wide / centered) inherit this; grid /
-    /// spiral override to `false`.
+    /// stack engines (`master-left` … `master-center`) inherit this;
+    /// grid / spiral override to `false`.
     public var hasMaster: Bool { true }
 }
 
-/// Tall / master-stack (dwm `tile`, xmonad `Tall`, Amethyst "Tall").
-/// The first `masterCount` windows fill the left master column
-/// (`masterRatio` of the width) as equal-height rows; the rest stack
-/// as rows in the right column. ≤ `masterCount` windows → master
-/// fills the whole rect. `order[0]` is the primary master
-/// (`promoteToMaster` reorders). The horizontal twin is `WideLayout`;
-/// `--toggle-orientation` swaps a workspace between the two.
-public struct TallLayout: LayoutEngine {
-    public let name = "tall"
-    public init() {}
+// MARK: - Master-stack layouts (5 edges)
+//
+// The four edge engines (master-left / -right / -top / -bottom) share
+// one geometry function, `masterEdgeFrames`, differing only by a
+// `MasterEdge`: left/right split the width, top/bottom split the
+// height, and opposite-edge pairs are mirror images (right is left
+// mirrored across X; the 90° twin of left is top). This is the DRY
+// half of M9-2's "two base geometries, five public names". The fifth,
+// `MasterCenterLayout`, has a genuinely different three-zone geometry
+// and stands alone.
 
-    public func frames(order: [WindowID], focused: WindowID?,
-                       params: LayoutParams,
-                       in rect: CGRect) -> [WindowID: CGRect] {
-        guard !order.isEmpty else { return [:] }
-        var out: [WindowID: CGRect] = [:]
-        let m = min(params.masterCount, order.count)
-        let masters = Array(order.prefix(m))
-        let stack = Array(order.dropFirst(m))
-        guard !stack.isEmpty else {
-            rows(masters, in: rect, into: &out); return out
-        }
-        let masterW = rect.width * params.masterRatio
-        rows(masters,
-             in: CGRect(x: rect.minX, y: rect.minY,
-                        width: masterW, height: rect.height),
-             into: &out)
-        rows(stack,
-             in: CGRect(x: rect.minX + masterW, y: rect.minY,
-                        width: rect.width - masterW,
-                        height: rect.height),
-             into: &out)
+/// Which screen edge a master-stack layout docks its master band
+/// against. `master-left`/`-right` dock on the X axis, `-top`/`-bottom`
+/// on the Y axis.
+private enum MasterEdge { case left, right, top, bottom }
+
+/// Shared geometry for the four edge-master layouts. The first
+/// `masterCount` windows fill the master band — `masterRatio` of the
+/// split dimension, docked against `edge` — and the rest fill the
+/// remaining band. Windows within each band are equal slices along the
+/// *other* axis: rows for a left/right master, columns for a top/bottom
+/// one (so the master "axis" matches the split axis, preserving the old
+/// tall=rows / wide=cols behaviour). ≤ `masterCount` windows → master
+/// fills the whole rect. Pure — the engines below just pass their edge.
+private func masterEdgeFrames(order: [WindowID], params: LayoutParams,
+                              in rect: CGRect,
+                              edge: MasterEdge) -> [WindowID: CGRect] {
+    guard !order.isEmpty else { return [:] }
+    var out: [WindowID: CGRect] = [:]
+    let m = min(params.masterCount, order.count)
+    let masters = Array(order.prefix(m))
+    let stack = Array(order.dropFirst(m))
+    let asRows = (edge == .left || edge == .right)
+    guard !stack.isEmpty else {
+        masterSlice(masters, in: rect, asRows: asRows, into: &out)
         return out
     }
+    let (masterRect, stackRect) = masterSplit(rect, edge: edge,
+                                              ratio: params.masterRatio)
+    masterSlice(masters, in: masterRect, asRows: asRows, into: &out)
+    masterSlice(stack, in: stackRect, asRows: asRows, into: &out)
+    return out
+}
 
-    /// Split `ids` into equal-height rows filling `rect`, first id at
-    /// `minY` — matching `LayoutTree`'s horizontal-split convention.
-    private func rows(_ ids: [WindowID], in rect: CGRect,
-                      into out: inout [WindowID: CGRect]) {
-        guard !ids.isEmpty else { return }
-        let h = rect.height / CGFloat(ids.count)
-        for (i, id) in ids.enumerated() {
-            out[id] = CGRect(x: rect.minX,
-                             y: rect.minY + CGFloat(i) * h,
-                             width: rect.width, height: h)
-        }
+/// Split `rect` into (master, stack) sub-rects for `edge`: the master
+/// gets `ratio` of the split dimension docked against the edge, the
+/// stack the remainder. left/right ↔ master on the min/max-X side;
+/// top/bottom ↔ master on the min/max-Y side. (`master-top` keeps the
+/// old `wide` convention of the master at `minY`.)
+private func masterSplit(_ rect: CGRect, edge: MasterEdge,
+                         ratio: CGFloat) -> (master: CGRect, stack: CGRect) {
+    switch edge {
+    case .left:
+        let w = rect.width * ratio
+        return (CGRect(x: rect.minX, y: rect.minY,
+                       width: w, height: rect.height),
+                CGRect(x: rect.minX + w, y: rect.minY,
+                       width: rect.width - w, height: rect.height))
+    case .right:
+        let w = rect.width * ratio
+        return (CGRect(x: rect.maxX - w, y: rect.minY,
+                       width: w, height: rect.height),
+                CGRect(x: rect.minX, y: rect.minY,
+                       width: rect.width - w, height: rect.height))
+    case .top:
+        let h = rect.height * ratio
+        return (CGRect(x: rect.minX, y: rect.minY,
+                       width: rect.width, height: h),
+                CGRect(x: rect.minX, y: rect.minY + h,
+                       width: rect.width, height: rect.height - h))
+    case .bottom:
+        let h = rect.height * ratio
+        return (CGRect(x: rect.minX, y: rect.maxY - h,
+                       width: rect.width, height: h),
+                CGRect(x: rect.minX, y: rect.minY,
+                       width: rect.width, height: rect.height - h))
     }
 }
 
-/// Wide — `TallLayout` rotated 90°. The first `masterCount` windows
-/// fill the top master row (`masterRatio` of the height) split into
-/// equal-width columns; the rest fill a bottom row of columns. ≤
-/// `masterCount` windows → master fills the whole rect. `order[0]` is
-/// the primary master (`promoteToMaster` reorders). The vertical twin
-/// is `TallLayout`; `--toggle-orientation` swaps a workspace between
-/// the two.
-public struct WideLayout: LayoutEngine {
-    public let name = "wide"
-    public init() {}
-
-    public func frames(order: [WindowID], focused: WindowID?,
-                       params: LayoutParams,
-                       in rect: CGRect) -> [WindowID: CGRect] {
-        guard !order.isEmpty else { return [:] }
-        var out: [WindowID: CGRect] = [:]
-        let m = min(params.masterCount, order.count)
-        let masters = Array(order.prefix(m))
-        let stack = Array(order.dropFirst(m))
-        guard !stack.isEmpty else {
-            cols(masters, in: rect, into: &out); return out
-        }
-        let masterH = rect.height * params.masterRatio
-        cols(masters,
-             in: CGRect(x: rect.minX, y: rect.minY,
-                        width: rect.width, height: masterH),
-             into: &out)
-        cols(stack,
-             in: CGRect(x: rect.minX, y: rect.minY + masterH,
-                        width: rect.width,
-                        height: rect.height - masterH),
-             into: &out)
-        return out
-    }
-
-    /// Split `ids` into equal-width columns filling `rect`, first id
-    /// at `minX`.
-    private func cols(_ ids: [WindowID], in rect: CGRect,
-                      into out: inout [WindowID: CGRect]) {
-        guard !ids.isEmpty else { return }
-        let w = rect.width / CGFloat(ids.count)
+/// Tile `ids` as equal slices filling `rect` — vertical rows (first id
+/// at `minY`) when `asRows`, else horizontal columns (first id at
+/// `minX`). Matches `LayoutTree`'s split conventions.
+private func masterSlice(_ ids: [WindowID], in rect: CGRect,
+                         asRows: Bool, into out: inout [WindowID: CGRect]) {
+    guard !ids.isEmpty else { return }
+    let n = CGFloat(ids.count)
+    if asRows {
+        let h = rect.height / n
         for (i, id) in ids.enumerated() {
-            out[id] = CGRect(x: rect.minX + CGFloat(i) * w,
-                             y: rect.minY,
+            out[id] = CGRect(x: rect.minX, y: rect.minY + CGFloat(i) * h,
+                             width: rect.width, height: h)
+        }
+    } else {
+        let w = rect.width / n
+        for (i, id) in ids.enumerated() {
+            out[id] = CGRect(x: rect.minX + CGFloat(i) * w, y: rect.minY,
                              width: w, height: rect.height)
         }
     }
 }
 
-/// Centered master (dwm `centeredmaster`, xmonad ThreeColMid). The
-/// first `masterCount` windows fill a centered column (`masterRatio`
-/// of the width) as equal-height rows; the rest split between left
-/// and right side columns (right gets the extra one on an odd count).
-/// With ≤ `masterCount` windows the master fills the whole rect. The
-/// master stays centered even when only one side has windows — the
-/// defining ultrawide look. CLI name `centered`.
-public struct CenteredLayout: LayoutEngine {
-    public let name = "centered"
+/// Master-left (dwm `tile`, xmonad `Tall`, Amethyst "Tall"). The first
+/// `masterCount` windows fill the left master column (`masterRatio` of
+/// the width) as equal-height rows; the rest stack as rows in the right
+/// column. ≤ `masterCount` windows → master fills the rect. `order[0]`
+/// is the primary master (`promoteToMaster` reorders). Mirror of
+/// `MasterRightLayout`; 90° twin of `MasterTopLayout`. Pick with
+/// `--layout=master-left`.
+public struct MasterLeftLayout: LayoutEngine {
+    public let name = "master-left"
+    public init() {}
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        masterEdgeFrames(order: order, params: params, in: rect, edge: .left)
+    }
+}
+
+/// Master-right — `MasterLeftLayout` mirrored across X: the master
+/// column docks on the *right* (`masterRatio` of the width) as
+/// equal-height rows, the stack fills the left column. Pick with
+/// `--layout=master-right`.
+public struct MasterRightLayout: LayoutEngine {
+    public let name = "master-right"
+    public init() {}
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        masterEdgeFrames(order: order, params: params, in: rect, edge: .right)
+    }
+}
+
+/// Master-top (the old `wide` — `MasterLeftLayout` rotated 90°). The
+/// first `masterCount` windows fill the top master row (`masterRatio`
+/// of the height) as equal-width columns; the rest fill a bottom row of
+/// columns. Pick with `--layout=master-top`.
+public struct MasterTopLayout: LayoutEngine {
+    public let name = "master-top"
+    public init() {}
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        masterEdgeFrames(order: order, params: params, in: rect, edge: .top)
+    }
+}
+
+/// Master-bottom — `MasterTopLayout` mirrored across Y: the master row
+/// docks on the *bottom* (`masterRatio` of the height) as equal-width
+/// columns, the stack fills the top row. Pick with
+/// `--layout=master-bottom`.
+public struct MasterBottomLayout: LayoutEngine {
+    public let name = "master-bottom"
+    public init() {}
+    public func frames(order: [WindowID], focused: WindowID?,
+                       params: LayoutParams,
+                       in rect: CGRect) -> [WindowID: CGRect] {
+        masterEdgeFrames(order: order, params: params, in: rect, edge: .bottom)
+    }
+}
+
+/// Master-center (dwm `centeredmaster`, xmonad ThreeColMid). The first
+/// `masterCount` windows fill a centered column (`masterRatio` of the
+/// width) as equal-height rows; the rest split between left and right
+/// side columns (right gets the extra one on an odd count). With ≤
+/// `masterCount` windows the master fills the whole rect. The master
+/// stays centered even when only one side has windows — the defining
+/// ultrawide look. CLI name `master-center`.
+public struct MasterCenterLayout: LayoutEngine {
+    public let name = "master-center"
     public init() {}
 
     public func frames(order: [WindowID], focused: WindowID?,
@@ -314,9 +379,11 @@ public struct SpiralLayout: LayoutEngine {
 /// one is a value type plus a line in `all`.
 public enum LayoutRegistry {
     public static let all: [any LayoutEngine] = [
-        TallLayout(),
-        WideLayout(),
-        CenteredLayout(),
+        MasterLeftLayout(),
+        MasterRightLayout(),
+        MasterTopLayout(),
+        MasterBottomLayout(),
+        MasterCenterLayout(),
         GridLayout(),
         SpiralLayout(),
     ]

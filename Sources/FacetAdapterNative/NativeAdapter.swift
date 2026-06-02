@@ -652,7 +652,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///      to `AXStandardWindow` within a poll or two and tiles then; a
     ///      transient popup (VSCode autocomplete, Chrome dropdown)
     ///      vanishes before it ever resolves and so never joins the
-    ///      layout. (This defer is what keeps `tall` from breaking when
+    ///      layout. (This defer is what keeps `master-left` from breaking when
     ///      an app spawns short-lived normal-level windows — the old
     ///      lean-MANAGED default tiled them for a frame and reflowed.)
     /// User `[[exclude]]` rules win over the heuristic (incl. the
@@ -763,7 +763,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 // autocomplete, Chrome dropdown) vanishes before it ever
                 // resolves, so it never joins the layout. Replaces the
                 // old lean-MANAGED default that let those transients
-                // tile for a frame and break `tall`.
+                // tile for a frame and break `master-left`.
                 deferred.insert(w.id)
                 Log.debug("native: gate=defer(unresolved) "
                     + "wsid=\(w.id.serverID) app=\(w.appName)")
@@ -2233,22 +2233,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "\(id.serverID) → isSticky=\(catalog.isSticky(id))")
             reflowActive(rect: rect, extra: extra)
         case .toggleOrientation:
-            // bsp: rotate the focused window's parent split.
-            // tall/wide: swap the workspace between the tall ⇄ wide layout.
-            switch catalog.mode(of: catalog.activeIndex) {
-            case "tall", "wide":
-                _ = catalog.flipTallWide(workspace: catalog.activeIndex)
-                Log.debug("native: perform toggleOrientation (tall⇄wide)")
-                reflowActive(rect: rect)
-            case "bsp":
-                guard let id = focusedWindow() else { return }
-                catalog.toggleOrientation(of: id)
-                Log.debug("native: perform toggleOrientation "
-                    + "\(id.serverID)")
-                reflowActive(rect: rect)
-            default:
-                break
-            }
+            // bsp-only: rotate the focused window's parent split. The
+            // master engines pick their edge directly via
+            // `--layout=master-EDGE` (M9-2), so there's no orientation
+            // knob left to flip here.
+            guard catalog.mode(of: catalog.activeIndex) == "bsp",
+                  let id = focusedWindow() else { return }
+            catalog.toggleOrientation(of: id)
+            Log.debug("native: perform toggleOrientation "
+                + "\(id.serverID)")
+            reflowActive(rect: rect)
         case .cycleStackNext, .cycleStackPrev:
             // Cycle is per-active-WS; no need for `focusedWindow`
             // — the catalog owns "who's the current top" via the
@@ -2270,7 +2264,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 }
             }
         case .promoteToMaster:
-            // Tall / master-stack: move the focused window to the
+            // master-stack: move the focused window to the
             // master slot (index 0 of the WS's shared order).
             guard let id = focusedWindow() else { return }
             let moved = catalog.promoteToMaster(
@@ -2307,12 +2301,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// Whether the WS's mode reads the master ratio / count knobs
-    /// (tall / wide / centered). Other modes ignore them, so master
+    /// Whether the WS's mode reads the master ratio / count knobs — true
+    /// exactly for the master-stack engines (`master-left` …
+    /// `master-center`), which is what `LayoutEngine.hasMaster` reports.
+    /// Data-driven so new master engines need no edit here. Other modes
+    /// (bsp / stack / grid / spiral / float) ignore the knobs, so master
     /// adjustments no-op there.
     private func hasMasterKnob(_ n1Based: Int) -> Bool {
-        let m = catalog.mode(of: n1Based)
-        return m == "tall" || m == "wide" || m == "centered"
+        LayoutRegistry.engine(named: catalog.mode(of: n1Based))?.hasMaster ?? false
     }
 
     /// Apply the workspace's mode-specific layout (tile / stack /
@@ -2353,8 +2349,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("Previous stack window",
                                [.cycleStackPrev]))
         }
-        if (mode == "tall" || mode == "wide" || mode == "centered"),
-           !floating {
+        if LayoutRegistry.engine(named: mode)?.hasMaster == true, !floating {
             // "Promote to master" is meaningless for the window that
             // already holds the master slot.
             if !isMaster {
@@ -2365,10 +2360,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("Narrower master", [.shrinkMaster]))
             items.append(.init("More masters", [.incMaster]))
             items.append(.init("Fewer masters", [.decMaster]))
-        }
-        if mode == "tall" || mode == "wide", !floating {
-            items.append(.init("Flip wide / tall",
-                               [.toggleOrientation]))
         }
         // A sticky window is always floating, and float-exit =
         // sticky-exit, so "Unfloat" and "Unstick" would do the same

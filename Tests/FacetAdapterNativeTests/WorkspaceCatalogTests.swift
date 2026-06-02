@@ -177,7 +177,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // master slot (order[0]). The first-seen window stays master;
         // master is taken only by the explicit promoteToMaster.
         var c = seededCatalog()
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.reconcile(live: [window(10)])
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.reconcile(live: [window(10), window(20), window(30)])
@@ -190,7 +190,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         // behind the existing master — a move-in must not displace the
         // destination WS's established master either.
         var c = seededCatalog()
-        _ = c.setMode(workspace: 2, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 2, to: "master-left", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)])      // both → WS1
         _ = c.setActive(2)
         _ = c.reconcile(live: [window(10), window(20), window(30)]) // 30 → WS2
@@ -795,7 +795,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testSetModeTallSeedsSharedOrderFromMembers() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(20), window(10)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         // Stateless engines reuse the stack order; seeded id-sorted.
         XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
         XCTAssertNil(c.layoutTrees[1], "tall must discard any tree")
@@ -804,7 +804,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testReconcileNewWindowDoesNotSeizeTallMaster() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         // New window APPENDS — the established master (10) keeps the
@@ -818,7 +818,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testPromoteToMasterMovesChosenWindowToFront() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         XCTAssertEqual(c.stackOrder(of: 1),
                        [wid(10), wid(20), wid(30)])
         XCTAssertTrue(c.promoteToMaster(wid(30), workspace: 1))
@@ -829,7 +829,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testPromoteToMasterAlreadyMasterIsNoop() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         XCTAssertFalse(c.promoteToMaster(wid(10), workspace: 1),
                        "already at index 0 → no change")
         XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
@@ -838,14 +838,14 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testPromoteToMasterUnknownWindowIsNoop() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         XCTAssertFalse(c.promoteToMaster(wid(99), workspace: 1))
     }
 
     func testOrderedMembersReflectsSharedOrder() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.promoteToMaster(wid(30), workspace: 1)
         XCTAssertEqual(c.orderedMembers(of: 1),
                        [wid(30), wid(10), wid(20)])
@@ -854,7 +854,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testTallDropEvictsFromSharedOrder() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         c.drop(wid(10))
         XCTAssertEqual(c.stackOrder(of: 1), [wid(20)])
     }
@@ -891,10 +891,10 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testParamsPersistAcrossModeFlip() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // → 0.6
         _ = c.setMode(workspace: 1, to: "grid", in: displayRect)
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         XCTAssertEqual(c.params(of: 1).masterRatio, 0.6, accuracy: 1e-9,
                        "ratio remembered across a mode round-trip")
     }
@@ -902,7 +902,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testEngineFramesReflectAdjustedRatio() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
-        _ = c.setMode(workspace: 1, to: "tall", in: displayRect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // 0.5 → 0.6
         let frames = c.engineFrames(for: 1, in: displayRect)
         // Master (lower id = order[0]) gets 0.6 * 1600 = 960 wide.

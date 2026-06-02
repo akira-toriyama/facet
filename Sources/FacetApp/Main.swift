@@ -116,9 +116,10 @@ enum FacetApp {
           facet workspace --focus=prev       workspace (wraps)
           facet workspace --focus=recent     return to the previous one
           facet workspace --layout=NAME      set the workspace's layout
-                                             (bsp | stack | tall |
-                                             wide | centered | grid |
-                                             spiral | float)
+                                             (bsp | stack | master-left |
+                                             master-right | master-top |
+                                             master-bottom | master-center |
+                                             grid | spiral | float)
           facet workspace --retile           re-apply the layout
                                              (no-op when float)
           facet workspace --balance          reset master ratio / count
@@ -147,8 +148,8 @@ enum FacetApp {
           facet window --toggle-sticky       pin it across every workspace
                                              (PiP / timer / chat); flip off
                                              to drop it as a tiled window
-          facet window --toggle-orientation  bsp: rotate parent split /
-                                             tall⇄wide: swap layout
+          facet window --toggle-orientation  bsp: rotate the focused
+                                             window's parent split
           facet window --cycle-stack=next    rotate stack to next member
           facet window --cycle-stack=prev    rotate stack to previous
                                              member (stack only)
@@ -156,7 +157,7 @@ enum FacetApp {
           facet window --shrink-master       narrow the master area -0.05
           facet window --inc-master          one more window in master
           facet window --dec-master          one fewer window in master
-                                             (tall / wide / centered only)
+                                             (master-* engines only)
 
         SCRATCHPAD                           (named hidden shelves)
           facet scratchpad --stash=NAME      park the focused window onto
@@ -380,7 +381,7 @@ enum FacetApp {
         postControl("window-cycle-stack:" + direction)
     }
 
-    /// Post master-knob nudges (tall / wide / centered). The active
+    /// Post master-knob nudges (the master-* engines). The active
     /// WS's master ratio (`grow` / `shrink`, ±0.05) or master count
     /// (`inc` / `dec`, ±1); no-op for other modes.
     static func postWindowGrowMaster() -> Never {

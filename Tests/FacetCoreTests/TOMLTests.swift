@@ -196,7 +196,7 @@ final class TOMLTests: XCTestCase {
             max_width = 400
 
             [layout]
-            mode = "tall"
+            mode = "master-left"
             """, table: "exclude")
         XCTAssertEqual(tables.count, 1)
         XCTAssertEqual(tables[0]["app"], .string("x"))

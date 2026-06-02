@@ -99,7 +99,7 @@ final class RotateMirrorTests: XCTestCase {
 
     func testCatalogRotateNoOpOutsideBsp() {
         var c = WorkspaceCatalog()
-        _ = c.setMode(workspace: 1, to: "tall")
+        _ = c.setMode(workspace: 1, to: "master-left")
         XCTAssertFalse(c.rotateTree(workspace: 1, degrees: 90),
                        "rotate only applies to bsp mode")
         XCTAssertFalse(c.mirrorTree(workspace: 1, axis: .horizontal),

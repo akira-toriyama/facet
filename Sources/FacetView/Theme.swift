@@ -26,3 +26,15 @@ public func uiFont(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont {
         return .systemFont(ofSize: size, weight: weight)
     }
 }
+
+/// Compact label for a workspace's layout mode, shown on the small
+/// per-WS header badge across tree / grid / rail. The master-edge
+/// engines have long canonical names (`master-bottom` is 13 chars)
+/// that overflow the narrow rail band, so abbreviate `master-EDGE` to
+/// `m-EDGE` (≤ 8 chars — the same budget the old `centered` fit).
+/// Display-only: the layout picker, CLI, and config keep the full
+/// canonical name. Any non-master mode is returned verbatim.
+public func layoutBadgeLabel(_ mode: String) -> String {
+    guard mode.hasPrefix("master-") else { return mode }
+    return "m-" + String(mode.dropFirst("master-".count))
+}

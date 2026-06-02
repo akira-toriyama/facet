@@ -48,7 +48,7 @@ final class HideReclaimTests: XCTestCase {
     // MARK: - Two-tick gate
 
     func testFirstOffscreenTickOnlyArmsCandidate() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         let r = c.reconcileHidden(liveByID: live(twenty: false),
                                   focused: nil, activeRect: rect)
         XCTAssertEqual(r.hidden, [])
@@ -60,7 +60,7 @@ final class HideReclaimTests: XCTestCase {
     }
 
     func testBackOnscreenBeforeConfirmCancelsHide() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         _ = c.reconcileHidden(liveByID: live(twenty: false),
                               focused: nil, activeRect: rect)   // arm
         let r = c.reconcileHidden(liveByID: live(twenty: true),
@@ -74,7 +74,7 @@ final class HideReclaimTests: XCTestCase {
     // MARK: - Reclaim (stateless engine)
 
     func testSecondOffscreenTickReclaimsSlot() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         _ = c.reconcileHidden(liveByID: live(twenty: false),
                               focused: nil, activeRect: rect)   // arm
         let r = c.reconcileHidden(liveByID: live(twenty: false),
@@ -88,7 +88,7 @@ final class HideReclaimTests: XCTestCase {
     }
 
     func testReclaimedSlotIsFilledByRemainingWindow() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         // Before: tall 1-master / 1-stack → master gets left half.
         let before = c.engineFrames(for: 1, in: rect)
         XCTAssertEqual(before[wid(10)]?.width ?? 0, 500, accuracy: 0.5)
@@ -105,7 +105,7 @@ final class HideReclaimTests: XCTestCase {
     // MARK: - Reveal
 
     func testRevealReattachesAtTail() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         _ = c.reconcileHidden(liveByID: live(twenty: false),
                               focused: nil, activeRect: rect)
         _ = c.reconcileHidden(liveByID: live(twenty: false),
@@ -141,7 +141,7 @@ final class HideReclaimTests: XCTestCase {
     // MARK: - Exclusions (facet's own park / floating)
 
     func testAnchorParkedWindowIsNotTreatedAsHidden() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         // facet parks at the on-screen sliver; defend even if its
         // isOnscreen read ever drops to false.
         c.markAnchorParked(wid(20), originalPosition: .zero)
@@ -157,7 +157,7 @@ final class HideReclaimTests: XCTestCase {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)],
                         autoFloat: [wid(20)])
-        _ = c.setMode(workspace: 1, to: "tall", in: rect)
+        _ = c.setMode(workspace: 1, to: "master-left", in: rect)
         _ = c.reconcileHidden(liveByID: live(twenty: false),
                               focused: nil, activeRect: rect)
         _ = c.reconcileHidden(liveByID: live(twenty: false),
@@ -168,7 +168,7 @@ final class HideReclaimTests: XCTestCase {
     // MARK: - Cleanup
 
     func testForgettingHiddenWindowClearsState() {
-        var c = twoWindowCatalog(mode: "tall")
+        var c = twoWindowCatalog(mode: "master-left")
         _ = c.reconcileHidden(liveByID: live(twenty: false),
                               focused: nil, activeRect: rect)
         _ = c.reconcileHidden(liveByID: live(twenty: false),

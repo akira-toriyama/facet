@@ -122,8 +122,10 @@ preview-mode = "popover"
 #   "stack"           — one window fills the screen; others stacked
 #                       behind, cycled with `facet window --cycle-stack`
 #                       (full-screen focus mode).
-#   "tall" / "wide" / "centered" / "spiral" / "grid"
-#                     — stateless layout engines.
+#   "master-left" / "master-right" / "master-top" /
+#   "master-bottom" / "master-center" / "spiral" / "grid"
+#                     — stateless layout engines (master-* dock the
+#                       master band on that edge).
 #
 # Unknown / unset clamps to "float" (a typo can't break tiling). To
 # tile by default, set this to "bsp"; per-workspace tweaks are still
@@ -133,8 +135,8 @@ default = "float"
 # Spacing for tiled windows, in points. Everything here defaults to 0
 # — windows tile flush, edge-to-edge (facet's behaviour before gaps
 # existed) — so leaving this section out changes nothing. Applies to
-# every layout (bsp / stack / tall / wide / grid / centered /
-# spiral); floating windows are never touched.
+# every layout (bsp / stack / master-* / grid / spiral); floating
+# windows are never touched.
 #
 #   inner-gap — space between two adjacent windows (single value).
 #   outer-gap — distance from the screen edges. `outer-gap` sets all
@@ -326,9 +328,10 @@ action = "ignore"
 #
 # `layout` is optional — when omitted the WS starts at the global
 # `[layout] default` above. Valid `layout` values are the layout
-# engines registered at startup (float / bsp / stack / tall / wide /
-# centered / spiral / grid); an unknown value is
-# silently dropped (the WS then starts at the global default).
+# engines registered at startup (float / bsp / stack / master-left /
+# master-right / master-top / master-bottom / master-center / spiral /
+# grid); an unknown value is silently dropped (the WS then starts at
+# the global default).
 #
 # Two modes, decided by whether ANY [desktop.N] section exists:
 #   - NO [desktop.N] anywhere → every mac desktop is managed with the

@@ -56,7 +56,11 @@ never hides windows, so a layout only *positions* them and the
 focused window is always raised. Diagrams use four windows; **1** is
 the master / focus where that matters.
 
-### `tall` — master + stack
+The master sits on any of five edges — pick one directly with
+`--layout=master-EDGE`. They share one geometry (opposite edges are
+mirror images), differing only in where the master docks.
+
+### `master-left` — master on the left
 dwm `tile` / xmonad `Tall`. Master fills the left column (a tunable
 fraction of the width); the rest stack as rows on the right. The
 ultrawide bread-and-butter.
@@ -71,10 +75,23 @@ ultrawide bread-and-butter.
 └────────────┴───────────┘
 ```
 
-### `wide` — master on top
-`tall` rotated 90°: master is the top row, the rest become columns
-below. Selectable directly (`--layout=wide`) or flipped from `tall`
-with `--toggle-orientation`.
+### `master-right` — master on the right
+`master-left` mirrored: master fills the right column, the stack rows
+on the left.
+
+```
+┌───────────┬────────────┐
+│     2     │            │
+├───────────┤            │
+│     3     │     1      │
+├───────────┤  (master)  │
+│     4     │            │
+└───────────┴────────────┘
+```
+
+### `master-top` — master on top
+`master-left` rotated 90°: master is the top row, the rest become
+columns below.
 
 ```
 ┌─────────────────────────┐
@@ -84,7 +101,19 @@ with `--toggle-orientation`.
 └───────┴───────┴─────────┘
 ```
 
-### `centered` — master in the middle
+### `master-bottom` — master on the bottom
+`master-top` mirrored: master is the bottom row, the stack columns
+above.
+
+```
+┌───────┬───────┬─────────┐
+│   2   │   3   │    4    │
+├───────┴───────┴─────────┤
+│        1 (master)       │
+└─────────────────────────┘
+```
+
+### `master-center` — master in the middle
 dwm `centeredmaster` / xmonad ThreeColMid. Master centred; the rest
 split between the left and right side columns (right fills first).
 Built for ultrawide.
@@ -152,7 +181,7 @@ them.
 
 ### Master-stack operations
 
-`tall` / `wide` / `centered` are adjustable at runtime (per workspace).
+The `master-*` layouts are adjustable at runtime (per workspace).
 **Promote** the focused window to the master slot:
 
 ```
@@ -333,7 +362,7 @@ facet --hide=NAME                 # close NAME
 facet --toggle=NAME               # toggle NAME
 
 # Tiling (M5 Phase γ)
-facet workspace --layout=NAME     # bsp | stack | tall | wide | centered | grid | spiral | float
+facet workspace --layout=NAME     # bsp | stack | master-left | master-right | master-top | master-bottom | master-center | grid | spiral | float
 facet workspace --retile          # re-apply active WS's layout (any tiling mode)
 facet workspace --balance         # reset master ratio / count to the even baseline
 facet workspace --rotate=90|180|270        # rotate the bsp tree clockwise (bsp only)
@@ -343,10 +372,10 @@ facet window --toggle-sticky         # pin it across every workspace (PiP / time
                                      # chat); flip off → drops it as a tiled window
                                      # of the workspace you're on. session-only,
                                      # per mac desktop.
-facet window --toggle-orientation    # bsp: rotate parent split / tall⇄wide: swap layout
+facet window --toggle-orientation    # bsp: rotate the focused window's parent split
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
-facet window --grow-master|--shrink-master   # master width ±0.05 (tall / wide / centered)
-facet window --inc-master|--dec-master       # master window count ±1 (tall / wide / centered)
+facet window --grow-master|--shrink-master   # master width ±0.05 (master-* engines)
+facet window --inc-master|--dec-master       # master window count ±1 (master-* engines)
 
 # --active is a modifier — only meaningful with --view=tree.
 # Without it the tree panel still gains keyboard nav as soon as

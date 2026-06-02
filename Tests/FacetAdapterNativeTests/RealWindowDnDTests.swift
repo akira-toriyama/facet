@@ -93,21 +93,21 @@ final class RealWindowDnDTests: XCTestCase {
 
     func testCatalogSwapStatelessReordersOrder() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")     // order seeded [1,2,3]
+        _ = c.setMode(workspace: 1, to: "master-left")     // order seeded [1,2,3]
         XCTAssertTrue(c.swapWindows(wid(1), wid(3), workspace: 1))
         XCTAssertEqual(c.orderedMembers(of: 1), [wid(3), wid(2), wid(1)])
     }
 
     func testCatalogSwapSameWindowNoOp() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")
+        _ = c.setMode(workspace: 1, to: "master-left")
         XCTAssertFalse(c.swapWindows(wid(2), wid(2), workspace: 1))
     }
 
     func testCatalogSwapCrossWSNoOp() {
         // wid(99) is not a member of WS 1.
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")
+        _ = c.setMode(workspace: 1, to: "master-left")
         XCTAssertFalse(c.swapWindows(wid(1), wid(99), workspace: 1))
     }
 
@@ -120,7 +120,7 @@ final class RealWindowDnDTests: XCTestCase {
 
     func testCatalogInsertStatelessRepositions() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")     // [1,2,3]
+        _ = c.setMode(workspace: 1, to: "master-left")     // [1,2,3]
         XCTAssertTrue(c.insertWindow(wid(1), beside: wid(3),
                                      edge: .right, workspace: 1))
         XCTAssertEqual(c.orderedMembers(of: 1), [wid(2), wid(3), wid(1)])
@@ -128,7 +128,7 @@ final class RealWindowDnDTests: XCTestCase {
 
     func testCatalogInsertNoChangeNoOp() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")     // [1,2,3]
+        _ = c.setMode(workspace: 1, to: "master-left")     // [1,2,3]
         // wid(2) after wid(1) — already there.
         XCTAssertFalse(c.insertWindow(wid(2), beside: wid(1),
                                       edge: .right, workspace: 1))
@@ -164,7 +164,7 @@ final class RealWindowDnDTests: XCTestCase {
 
     func testSwapMovesExactlyTheSwappedPair() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")     // master=1, stack=[2,3]
+        _ = c.setMode(workspace: 1, to: "master-left")     // master=1, stack=[2,3]
         let before = c.engineFrames(for: 1, in: rect)
         var copy = c
         XCTAssertTrue(copy.swapWindows(wid(1), wid(3), workspace: 1))

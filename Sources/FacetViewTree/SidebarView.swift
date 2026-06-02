@@ -682,7 +682,7 @@ public final class SidebarView: NSView {
                     // caption reads as one unit. accent-2 on the active
                     // WS, dim when inactive so non-focused rows recede.
                     let modeColor = c.hot ? pal.accent2 : pal.dim
-                    (c.mode as NSString).draw(
+                    (layoutBadgeLabel(c.mode) as NSString).draw(
                         in: NSRect(x: rowPadX + gripSpace,
                                    y: capY + nameH + 4,
                                    width: bounds.width - rowPadX * 2 - gripSpace,

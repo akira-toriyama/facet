@@ -626,7 +626,7 @@ public final class GridView: NSView {
                                color: nameColor, para: lp,
                                in: NSRect(x: nameX, y: startY,
                                           width: nameW, height: nameH))
-                (cell.mode as NSString).draw(
+                (layoutBadgeLabel(cell.mode) as NSString).draw(
                     in: NSRect(x: nameX, y: startY + nameH + gap,
                                width: nameW, height: modeH),
                     withAttributes: mAttrs)

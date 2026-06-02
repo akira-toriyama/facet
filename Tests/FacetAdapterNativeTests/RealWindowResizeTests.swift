@@ -172,7 +172,7 @@ final class RealWindowResizeTests: XCTestCase {
 
     func testCatalogApplyResizeTallMaster() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")   // master=1 (ratio 0.5 → 800w)
+        _ = c.setMode(workspace: 1, to: "master-left")   // master=1 (ratio 0.5 → 800w)
         XCTAssertNotNil(c.applyResize(
             wid(1), to: CGRect(x: 0, y: 0, width: 1000, height: 900),
             workspace: 1, in: rect))
@@ -190,7 +190,7 @@ final class RealWindowResizeTests: XCTestCase {
 
     func testCatalogApplyResizeNoOpUnmovedEdge() {
         var c = seeded(3)
-        _ = c.setMode(workspace: 1, to: "tall")   // master right edge already 800
+        _ = c.setMode(workspace: 1, to: "master-left")   // master right edge already 800
         XCTAssertNil(c.applyResize(
             wid(1), to: CGRect(x: 0, y: 0, width: 800, height: 900),
             workspace: 1, in: rect))
