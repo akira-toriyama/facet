@@ -186,7 +186,7 @@ public final class GridView: NSView {
     // MARK: - Layout
 
     /// Columns actually used for layout. Capped at the workspace
-    /// count so a desktop with fewer workspaces than the configured
+    /// count so a mac desktop with fewer workspaces than the configured
     /// `cols` fills the width with larger cells (the row is centered
     /// by the existing `originX` math) instead of leaving a big empty
     /// gap on the right. Only shrinks: when `count >= cols` the

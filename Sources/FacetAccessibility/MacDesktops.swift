@@ -1,22 +1,28 @@
-// Read-only native macOS Space queries via private SkyLight.
+// Read-only **mac desktop** queries via private SkyLight.
 //
-// facet scopes its virtual workspaces per native macOS Space: each
-// Space keeps its own independent set of facet workspaces. To do
-// that the adapter needs to know which native Space is currently
-// active. That single fact is read here.
+// A "mac desktop" is one macOS native Space (what Mission Control
+// labels "Desktop 1", "Desktop 2", …) — distinct from a *facet
+// workspace* (facet's own virtual grouping). See docs/glossary.md.
 //
-// READ-only + SIP-on. Verified working 2026-05-28 across live Space
-// switches (memory: facet-per-native-space-ws). facet never MOVES a
-// window across Spaces — that path (the rejected hide "手法4") is a
-// no-op on macOS 15+ and needs SIP-off; staying read-only keeps
-// facet inside the public-API/"釈迦の掌" contract
+// facet scopes its workspaces per mac desktop: each mac desktop keeps
+// its own independent set of facet workspaces. To do that the adapter
+// needs to know which mac desktop is currently active. That single
+// fact is read here.
+//
+// READ-only + SIP-on. Verified working 2026-05-28 across live
+// mac-desktop switches (memory: facet-per-native-space-ws). facet
+// never MOVES a window across mac desktops — that path (the rejected
+// hide "手法4") is a no-op on macOS 15+ and needs SIP-off; staying
+// read-only keeps facet inside the public-API/"釈迦の掌" contract
 // (facet-buddha-palm-principle).
 //
-// Symbols are dlsym-bound (like `_AXUIElementGetWindow` in
-// AXFocus.swift) so we never link a private symbol at build time.
-// If a symbol moves / goes away, `activeSpaceID()` returns 0 and
-// the adapter falls back to a single shared catalog (= pre-feature
-// behaviour).
+// Apple's SkyLight (SLS) symbols below mirror the OS API verbatim
+// (`SLSGetActiveSpace`, `SLSCopySpacesForWindows`, …) — those names
+// stay as Apple ships them; only facet's own surface speaks "mac
+// desktop". Symbols are dlsym-bound (like `_AXUIElementGetWindow` in
+// AXFocus.swift) so we never link a private symbol at build time. If
+// a symbol moves / goes away, `activeID()` returns 0 and the adapter
+// falls back to a single shared catalog (= pre-feature behaviour).
 
 import AppKit
 import Darwin
@@ -62,9 +68,9 @@ private let copySpacesForWindowsFn: CopySpacesForWindowsFn? = {
 }()
 
 /// `0x7` = "all space types" selector (current + others + fullscreen),
-/// the same mask yabai uses to enumerate a window's spaces. A normal
-/// window resides on exactly one Space, so the returned array is
-/// usually single-element; sticky / all-Spaces windows return many.
+/// the same mask yabai uses to enumerate a window's mac desktops. A normal
+/// window resides on exactly one mac desktop, so the returned array is
+/// usually single-element; sticky / all-desktops windows return many.
 private let kSpacesAllMask: Int32 = 0x7
 
 private let getWindowLevelFn: GetWindowLevelFn? = {
@@ -72,18 +78,21 @@ private let getWindowLevelFn: GetWindowLevelFn? = {
     return unsafeBitCast(s, to: GetWindowLevelFn.self)
 }()
 
-public enum Spaces {
-    /// Current active native macOS Space id (SkyLight `id64`).
-    /// `0` means the private symbols are unavailable — callers
-    /// treat that as "one global space" and keep a single catalog,
-    /// i.e. the pre-per-Space behaviour.
-    public static func activeSpaceID() -> UInt64 {
+/// Read-only queries about the **mac desktop** (native macOS Space)
+/// layer, via private SkyLight. The facet-facing names below speak
+/// "mac desktop"; the SLS symbols they wrap keep Apple's wording.
+public enum MacDesktops {
+    /// Current active mac desktop id (SkyLight `id64`). `0` means the
+    /// private symbols are unavailable — callers treat that as "one
+    /// global desktop" and keep a single catalog, i.e. the
+    /// pre-per-desktop behaviour.
+    public static func activeID() -> UInt64 {
         guard let cid = mainConnectionID, let f = getActiveSpaceFn
         else { return 0 }
         return f(cid)
     }
 
-    /// Whether the SkyLight active-space symbols resolved. Surfaced
+    /// Whether the SkyLight active-desktop symbols resolved. Surfaced
     /// in the adapter's init debug line so a future OS change that
     /// removes them is visible in the log (facet then falls back to
     /// a single shared catalog).
@@ -91,16 +100,16 @@ public enum Spaces {
         mainConnectionID != nil && getActiveSpaceFn != nil
     }
 
-    /// Native macOS Space id64s that `windowID` (a CGWindowID) is
-    /// resident on, read-only via SkyLight `SLSCopySpacesForWindows`.
-    /// Returns an EMPTY array when the symbol is unavailable, the
-    /// query fails, or the window genuinely reports no space —
-    /// callers MUST treat empty as "unknown, don't act" so a
-    /// transient SkyLight miss can't wrongly evict a real window.
-    /// Per memory `sls-copy-spaces-behavior` a single-window query
-    /// returns that window's own spaces (no union ambiguity), so the
-    /// result is directly usable for "is this window on Space X?".
-    public static func spaces(forWindow windowID: Int) -> [UInt64] {
+    /// Mac desktop id64s that `windowID` (a CGWindowID) is resident
+    /// on, read-only via SkyLight `SLSCopySpacesForWindows`. Returns
+    /// an EMPTY array when the symbol is unavailable, the query fails,
+    /// or the window genuinely reports no desktop — callers MUST treat
+    /// empty as "unknown, don't act" so a transient SkyLight miss
+    /// can't wrongly evict a real window. Per memory
+    /// `sls-copy-spaces-behavior` a single-window query returns that
+    /// window's own desktops (no union ambiguity), so the result is
+    /// directly usable for "is this window on desktop X?".
+    public static func ids(forWindow windowID: Int) -> [UInt64] {
         guard windowID > 0, let cid = mainConnectionID,
               let f = copySpacesForWindowsFn else { return [] }
         let list = [NSNumber(value: windowID)] as CFArray
@@ -124,15 +133,15 @@ public enum Spaces {
         return Int(level)
     }
 
-    /// 1-based position of `activeID` among **user** Spaces
+    /// 1-based position of `activeID` among **user** mac desktops
     /// (`type == 0`, i.e. excluding fullscreen Spaces), in Mission
     /// Control order across displays. This is the ordinal the user
-    /// thinks in ("native WS1 / WS2") and what `[space.N]` config
-    /// keys against. Takes the already-known active id (callers have
-    /// just read it) to avoid a redundant `SLSGetActiveSpace`. `nil`
-    /// when SkyLight is unavailable or `activeID` isn't in the
+    /// thinks in ("Desktop 1 / Desktop 2") and what `[desktop.N]`
+    /// config keys against. Takes the already-known active id (callers
+    /// have just read it) to avoid a redundant `SLSGetActiveSpace`.
+    /// `nil` when SkyLight is unavailable or `activeID` isn't in the
     /// managed list.
-    public static func activeSpaceOrdinal(for activeID: UInt64) -> Int? {
+    public static func ordinal(for activeID: UInt64) -> Int? {
         guard activeID != 0, let cid = mainConnectionID,
               let copy = copyManagedSpacesFn,
               let displays = copy(cid)?.takeRetainedValue()
@@ -141,6 +150,8 @@ public enum Spaces {
         let active = activeID
         var ordinal = 0
         for display in displays {
+            // "Spaces" is Apple's SLS dict key (kept verbatim); each
+            // element is one mac desktop on this display.
             let spaces = display["Spaces"] as? [[String: Any]] ?? []
             for sp in spaces {
                 let type = (sp["type"] as? NSNumber)?.intValue ?? 0

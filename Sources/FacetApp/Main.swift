@@ -86,7 +86,7 @@ enum FacetApp {
           skeleton over the tree, cleared as soon as new content
           loads OR after MS milliseconds (default 500), whichever
           comes first — so MS is just a safety cap. Fire it just
-          BEFORE a native-Space switch (bind it ahead of your switch
+          BEFORE a mac-desktop switch (bind it ahead of your switch
           hotkey) so the panel shows a placeholder during the switch
           instead of the previous desktop's tree. grid ignores it.
           Example:

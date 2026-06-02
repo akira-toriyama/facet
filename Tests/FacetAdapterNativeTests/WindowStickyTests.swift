@@ -5,7 +5,7 @@ import XCTest
 
 /// Pure tests for sticky windows in `WorkspaceCatalog`
 /// (`facet window --toggle-sticky`). Sticky = pinned visible across
-/// every facet workspace in the native Space, built on two reused
+/// every facet workspace in the mac desktop, built on two reused
 /// invariants: park-exempt (`shouldParkAnchor`) + force-floating
 /// (`floatingWindows`). All AX side-effects live in the adapter; here
 /// we cover the catalog state machine without AX / AppKit / OS.

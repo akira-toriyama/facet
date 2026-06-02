@@ -58,7 +58,7 @@ is preserved for unit-test stubs (`StubBackend` in `BackendTests`).
 | **M2** | tree + grid views + CLI working (originally via rift adapter, retired at ε) | tree + grid panels render against live backend |
 | **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
 | **M5** | Native adapter Phase α–ε. All five phases shipped (α/β/γ.1/γ.2/γ.3/δ/ε); v2.0.0 retired rift, native is the only backend | see below |
-| **M6–M11** | **Polish → window mgmt → WS ops → tag/scrollable → macOS 26.** M6 brushup done; **M7 is a numbering gap**; **M8 window management is code-complete (2026-06-02)** — themes A–D incl. rail (#109), marks / sticky / scratchpad, real-window DnD + resize, cheap tiling verbs; M9 (WS ops + view unification), M10 (tag model + scrolling columns), M11 (macOS 26 native-Space WS, v3.0.0) are the forward roadmap | `facet-future-roadmap` memory is canonical + "Themes A–D" below |
+| **M6–M11** | **Polish → window mgmt → WS ops → tag/scrollable → macOS 26.** M6 brushup done; **M7 is a numbering gap**; **M8 window management is code-complete (2026-06-02)** — themes A–D incl. rail (#109), marks / sticky / scratchpad, real-window DnD + resize, cheap tiling verbs; M9 (WS ops + view unification), M10 (tag model + scrolling columns), M11 (macOS 26 mac-desktop WS, v3.0.0) are the forward roadmap | `facet-future-roadmap` memory is canonical + "Themes A–D" below |
 
 ## Native adapter phases
 
@@ -68,7 +68,7 @@ matches how rift / aerospace operate today.
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (macOS Space × facet Space), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus=N` (α 期の flag は `--workspace=N`、Theme C #81/#82 で subject-verb 化). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (mac desktop × facet workspace), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus=N` (α 期の flag は `--workspace=N`、Theme C #81/#82 で subject-verb 化). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow. **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
@@ -87,7 +87,7 @@ also shipped the stocked slots — window marks (#118/#119), sticky
 (#128/#129), scratchpad (#135), real-window DnD (#122–124) + resize
 (#125/#127), cheap tiling verbs (#115/#117). The forward roadmap is
 **M9** (WS ops + view unification), **M10** (tag model + scrolling
-columns), **M11** (macOS 26 native-Space WS, v3.0.0). M7 is a numbering
+columns), **M11** (macOS 26 mac-desktop WS, v3.0.0). M7 is a numbering
 gap. Canonical: `facet-future-roadmap` memory.
 
 | Theme | Goal | Status |
@@ -104,27 +104,27 @@ gap. Canonical: `facet-future-roadmap` memory.
 Phase α design is fully decided. Details live in memory; this list
 is the index. **Do not relitigate** without explicit grill round.
 
-- **Workspace model**: (b) rift-style hybrid (macOS Space × facet
-  Space, 2 dimensions). Window-unit management (not app-rules).
-  Default 5 WS per Space; dynamic add/remove/rename/move at
+- **Workspace model**: (b) rift-style hybrid (mac desktop × facet
+  workspace, 2 dimensions). Window-unit management (not app-rules).
+  Default 5 WS per mac desktop; dynamic add/remove/rename/move at
   runtime via `facet workspace --add` / `--remove` / `--rename` /
-  `--move`. Persistent naming is via `[space.N]` in config.toml
+  `--move`. Persistent naming is via `[desktop.N]` in config.toml
   (read-only seed — facet never writes config).
-- **Per-native-Space workspaces**: each native macOS Space keeps an
+- **Per-mac-desktop workspaces**: each mac desktop keeps an
   independent set of facet workspaces (own `WorkspaceCatalog`,
-  parked/swapped on Space change). The active Space id + ordinal
-  are read read-only via private SkyLight (`Spaces`,
+  parked/swapped on mac-desktop switch). The active mac-desktop id + ordinal
+  are read read-only via private SkyLight (`MacDesktops`,
   `SLSGetActiveSpace` / `SLSCopyManagedDisplaySpaces`); facet never
-  moves windows across Spaces, so it stays SIP-on / public-contract
-  (the rejected cross-Space move was hide 手法4). `[space.N]` config
-  customises a Space's WS list by Mission-Control ordinal — each
+  moves windows across mac desktops, so it stays SIP-on / public-contract
+  (the rejected cross-mac-desktop move was hide 手法4). `[desktop.N]` config
+  customises a mac desktop's WS list by Mission-Control ordinal — each
   entry is an inline-table value (`1 = { name = "...", layout = "..." }`,
-  layout optional). Catalog state is session-only. Opt-in: any `[space.N]` → facet
-  manages only configured desktops, others hands-off (panel hidden);
-  no `[space.N]` → all desktops managed by default. SkyLight gone → single shared
+  layout optional). Catalog state is session-only. Opt-in: any `[desktop.N]` → facet
+  manages only configured mac desktops, others hands-off (panel hidden);
+  no `[desktop.N]` → all mac desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the
-  earlier "macOS Space co-use discouraged" stance — facet now nests
-  under native Spaces by design.)
+  earlier "mac desktop co-use discouraged" stance — facet now nests
+  under mac desktops by design.)
 - **Hide method**: 7 candidates evaluated; only `anchor` (1×41 px
   corner park) is used — instant, no animation, recoverable from
   Mission Control. `minimize` (Dock genie) was trialed then
@@ -159,7 +159,7 @@ is the index. **Do not relitigate** without explicit grill round.
 - **Fullscreen apps**: excluded from facet management, left to
   macOS.
 - **Persistence**: not in facet. Persistent WS names live in
-  `[space.N]` config sections (read-only seed). Runtime layout /
+  `[desktop.N]` config sections (read-only seed). Runtime layout /
   catalog mutations are session-only.
 - **Startup**: don't touch existing windows. **Shutdown**: restore
   all hidden windows (treat shutdown = workspace feature OFF).
@@ -393,7 +393,7 @@ windows or hosts.
 ## Non-goals
 
 - **SIP-disabled features in `facet`** — out of scope.
-  Mouse-follows-focus / true hide / programmable Spaces / etc.
+  Mouse-follows-focus / true hide / programmable mac desktops / etc.
   all require SIP off + Dock.app injection, which conflicts with
   facet's "釈迦の掌の上" philosophy (`facet-buddha-palm-principle`).
   If a user genuinely needs them, the answer is a separate
@@ -410,7 +410,7 @@ windows or hosts.
   current active WS; user moves them with `facet window
   --move-to=N`.
 - **Persistence of workspace state across restart** — out of
-  scope for facet itself. WS names persist via `[space.N]`
+  scope for facet itself. WS names persist via `[desktop.N]`
   config (read-only seed); runtime layout / catalog mutations
   are session-only by design.
 - **Plugin / extension system, menubar icon, system notifications,

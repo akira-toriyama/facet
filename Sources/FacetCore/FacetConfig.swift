@@ -14,7 +14,7 @@
 import CoreGraphics
 import Foundation
 
-/// Per-WS configuration parsed from a `[space.N]` inline table:
+/// Per-WS configuration parsed from a `[desktop.N]` inline table:
 /// `1 = { name = "Dev", layout = "bsp" }`. `name` is required;
 /// `layout` is the optional seed for `facet workspace --layout`
 /// (the runtime catalog can still override it for the session).
@@ -49,7 +49,7 @@ public struct FacetConfig: Sendable {
     /// Startup layout mode every workspace begins in (`float` / `bsp`
     /// / `stack` / a registered engine name). Layout mode is otherwise
     /// session-only, so this is the seed each fresh launch (and each
-    /// per-native-Space catalog) starts from. Raw; read
+    /// per-mac-desktop catalog) starts from. Raw; read
     /// `effectiveDefaultLayout`.
     public var defaultLayout: String?
     /// Gap between adjacent tiled windows, px (inner gap). Raw value;
@@ -87,14 +87,13 @@ public struct FacetConfig: Sendable {
     /// `effectiveAnimationEventDriven`.
     public var animationEventDriven: Bool?
 
-    /// Per-native-Space `[space.N]` workspace configs. Outer key is
-    /// the native macOS Space ordinal (Mission Control order,
-    /// 1-based, user Spaces only); inner is `facet WS index ->
-    /// WorkspaceConfig` (name + optional layout). A native Space
-    /// without a section falls back to `defaultWorkspaceCount`
-    /// unnamed slots with the global `[layout] default`. See
-    /// memory `facet-per-native-space-ws`.
-    public var spaceWorkspaceConfigs: [Int: [Int: WorkspaceConfig]] = [:]
+    /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
+    /// the mac desktop ordinal (Mission Control order, 1-based, user
+    /// desktops only); inner is `facet WS index -> WorkspaceConfig`
+    /// (name + optional layout). A mac desktop without a section falls
+    /// back to `defaultWorkspaceCount` unnamed slots with the global
+    /// `[layout] default`. See memory `facet-per-native-space-ws`.
+    public var macDesktopWorkspaceConfigs: [Int: [Int: WorkspaceConfig]] = [:]
 
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
@@ -215,22 +214,22 @@ public struct FacetConfig: Sendable {
     /// keeps its outer-gap inset unless the user opts in.
     public var effectiveSmartGaps: Bool { smartGaps ?? false }
 
-    /// Facet workspace defaults for a Space without a `[space.N]`
-    /// section. 5 is the memory-confirmed (`facet-workspace-model`
+    /// Facet workspace defaults for a mac desktop without a
+    /// `[desktop.N]` section. 5 is the memory-confirmed (`facet-workspace-model`
     /// N2) "control above zero, easy to expand" starting point.
     public static let defaultWorkspaceCount = 5
 
-    /// Workspace list for a given native-Space ordinal (1-based,
-    /// Mission Control order). Returns the `[space.N]` config when
-    /// that Space has a non-empty section, else
+    /// Workspace list for a given mac-desktop ordinal (1-based,
+    /// Mission Control order). Returns the `[desktop.N]` config when
+    /// that mac desktop has a non-empty section, else
     /// `defaultWorkspaceCount` unnamed slots with no layout
-    /// override. `nil` ordinal (SkyLight unavailable / single-space
+    /// override. `nil` ordinal (SkyLight unavailable / single-desktop
     /// mode) → default slots.
-    public func effectiveWorkspaceList(forSpaceOrdinal ordinal: Int?)
+    public func effectiveWorkspaceList(forMacDesktopOrdinal ordinal: Int?)
         -> [(index: Int, config: WorkspaceConfig)]
     {
         guard let ordinal,
-              let configs = spaceWorkspaceConfigs[ordinal],
+              let configs = macDesktopWorkspaceConfigs[ordinal],
               let list = Self.sortedSlots(configs)
         else {
             return (1...Self.defaultWorkspaceCount).map {
@@ -251,20 +250,20 @@ public struct FacetConfig: Sendable {
         return valid.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
 
-    /// Whether facet manages the native Space at `ordinal`.
+    /// Whether facet manages the mac desktop at `ordinal`.
     ///
-    /// - With **any** `[space.N]` section present, facet is opt-in:
-    ///   it manages ONLY the Spaces that have a section. A Space
-    ///   without one is left untouched — no facet workspaces, no
-    ///   window parking, and the panel hides there.
-    /// - With **no** `[space.N]` sections at all, every native Space
+    /// - With **any** `[desktop.N]` section present, facet is opt-in:
+    ///   it manages ONLY the mac desktops that have a section. A mac
+    ///   desktop without one is left untouched — no facet workspaces,
+    ///   no window parking, and the panel hides there.
+    /// - With **no** `[desktop.N]` sections at all, every mac desktop
     ///   is managed with `defaultWorkspaceCount` unnamed slots.
-    /// - `nil` ordinal (SkyLight unavailable / single-space mode) is
+    /// - `nil` ordinal (SkyLight unavailable / single-desktop mode) is
     ///   always managed.
-    public func isSpaceManaged(ordinal: Int?) -> Bool {
-        if spaceWorkspaceConfigs.isEmpty { return true }
+    public func isMacDesktopManaged(ordinal: Int?) -> Bool {
+        if macDesktopWorkspaceConfigs.isEmpty { return true }
         guard let ordinal else { return true }
-        return spaceWorkspaceConfigs[ordinal] != nil
+        return macDesktopWorkspaceConfigs[ordinal] != nil
     }
 
     // MARK: - Construction from parsed TOML
@@ -330,17 +329,18 @@ public struct FacetConfig: Sendable {
         if case .bool(let b)? = toml["animation"]?["event-driven"] {
             c.animationEventDriven = b
         }
-        // [space.N] per-native-Space workspace configs. The TOML
-        // parser flattens `[space.1]` to the section name "space.1";
-        // N is the native-Space ordinal (Mission Control order).
-        // Each int key is a WS index whose value is an inline table:
+        // [desktop.N] per-mac-desktop workspace configs. The TOML
+        // parser flattens `[desktop.1]` to the section name
+        // "desktop.1"; N is the mac desktop ordinal (Mission Control
+        // order). Each int key is a WS index whose value is an inline
+        // table:
         //   1 = { name = "Dev", layout = "bsp" }
         // `layout` is optional; a missing / mistyped value is left
         // to the catalog's seed step to clamp to the global default.
         // A non-table value (typo) is silently dropped.
         for (sectionName, section) in toml
-        where sectionName.hasPrefix("space.") {
-            guard let ordinal = Int(sectionName.dropFirst("space.".count)),
+        where sectionName.hasPrefix("desktop.") {
+            guard let ordinal = Int(sectionName.dropFirst("desktop.".count)),
                   ordinal >= 1 else { continue }
             var configs: [Int: WorkspaceConfig] = [:]
             for (key, value) in section {
@@ -352,7 +352,7 @@ public struct FacetConfig: Sendable {
                 if case .string(let l)? = t["layout"] { layout = l }
                 configs[idx] = WorkspaceConfig(name: name, layout: layout)
             }
-            if !configs.isEmpty { c.spaceWorkspaceConfigs[ordinal] = configs }
+            if !configs.isEmpty { c.macDesktopWorkspaceConfigs[ordinal] = configs }
         }
         return c
     }

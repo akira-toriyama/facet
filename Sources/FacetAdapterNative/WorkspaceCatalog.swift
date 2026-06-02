@@ -19,7 +19,7 @@
 //   `NativeAdapter` translates at the seam (`index + 1` on entry,
 //   `index - 1` on snapshot emit). Keeping the catalog 1-based
 //   internally matches what the user sees in `facet status` and
-//   `config.toml`'s `[space.N]` tables.
+//   `config.toml`'s `[desktop.N]` tables.
 //
 // Why `WindowSlot` carries `pid` alongside `workspace`
 //
@@ -77,7 +77,7 @@ struct WorkspaceCatalog {
     /// (`""` = show the number). Seeded once from config via
     /// `seed(names:)`, then mutated by `add`/`remove`/`rename`/`move`
     /// (session-only — config stays the read-only seed, memory
-    /// `facet-cli-dynamic-runtime-model`). Per native Space: each
+    /// `facet-cli-dynamic-runtime-model`). Per mac desktop: each
     /// catalog owns its own set.
     private(set) var workspaceNames: [String] = []
 
@@ -168,14 +168,14 @@ struct WorkspaceCatalog {
     /// bijection between mark name and window: each name maps to one
     /// window and each window carries at most one name. Setting a name
     /// reassigns it (the old window loses it) and clears any prior mark
-    /// on the target window. Session-only and per-native-Space (this
-    /// catalog is swapped per Space). Pruned in `forgetWindow` when a
+    /// on the target window. Session-only and per-mac-desktop (this
+    /// catalog is swapped per mac desktop). Pruned in `forgetWindow` when a
     /// window closes. Keyed by name → `WindowID`; stable across WS
     /// reorder (WindowID is the window-server id), so no remap needed.
     private(set) var marks: [String: WindowID] = [:]
 
     /// Sticky windows (`facet window --toggle-sticky`): pinned visible
-    /// across **every facet workspace in this native Space**. Two
+    /// across **every facet workspace in this mac desktop**. Two
     /// invariants give the behaviour almost for free:
     ///   1. **Park-exempt** — `shouldParkAnchor` returns false for a
     ///      sticky id, so a WS switch never sweeps it to the anchor
@@ -183,10 +183,10 @@ struct WorkspaceCatalog {
     ///   2. **Force-floating** — a sticky id is also in
     ///      `floatingWindows`, so it never joins a WS's tiling (a tiled
     ///      window that reflows per-WS can't also stay put everywhere).
-    /// Native-Space crossing is out of scope (READ-only SkyLight, memory
+    /// Mac-desktop crossing is out of scope (READ-only SkyLight, memory
     /// `facet-per-native-space-ws`) — that's macOS's "all desktops"
-    /// job. Session-only, per-native-Space (this catalog is swapped per
-    /// Space). Pruned in `forgetWindow` on close. Orthogonal to `marks`
+    /// job. Session-only, per-mac-desktop (this catalog is swapped per
+    /// mac desktop). Pruned in `forgetWindow` on close. Orthogonal to `marks`
     /// (a window can carry both).
     private(set) var everywhereWindows: Set<WindowID> = []
 
@@ -194,8 +194,8 @@ struct WorkspaceCatalog {
     /// 1:1 bijection name ⇄ window, like `marks`, but the window is
     /// parked off-screen (anchor sliver) while *stashed*. Summoning
     /// re-homes it onto the current WS as a floating overlay (settle).
-    /// Session-only, per-native-Space (this catalog is swapped per
-    /// Space); pruned in `forgetWindow`. Mutually exclusive with sticky
+    /// Session-only, per-mac-desktop (this catalog is swapped per
+    /// mac desktop); pruned in `forgetWindow`. Mutually exclusive with sticky
     /// (`stashWindow` clears sticky; `setSticky` clears the shelf).
     private(set) var scratchpads: [String: WindowID] = [:]
 
@@ -212,10 +212,10 @@ struct WorkspaceCatalog {
     /// IDs that have been observed `isOnscreen=true` once but not
     /// yet committed to `windowMap`. Reconcile requires **two
     /// consecutive on-screen observations** before adding so a
-    /// transient cross-Space visibility flip during a macOS
-    /// Space-switch animation doesn't get mistaken for a genuine
+    /// transient cross-mac-desktop visibility flip during a macOS
+    /// mac-desktop switch animation doesn't get mistaken for a genuine
     /// new window. Cleared when the window goes off-screen, the
-    /// catalog leaves the facet Space, or the window enters
+    /// catalog leaves the mac desktop, or the window enters
     /// `windowMap` for real. See memory
     /// `facet-macos-spaces-coexistence`.
     private(set) var pendingAddCandidates: Set<WindowID> = []
@@ -227,7 +227,7 @@ struct WorkspaceCatalog {
     ///      on every `activeSpaceDidChange` with the post-switch
     ///      enumeration. Every CGWindowList ID at that moment is
     ///      flagged, so a window already alive when facet (or the
-    ///      Space change) appeared can never grab a slot in
+    ///      mac-desktop change) appeared can never grab a slot in
     ///      `activeIndex` later when its on-screen state flips.
     ///   2. **Self-marked on successful add** — when reconcile
     ///      genuinely adds a window to `windowMap` (saw it as
@@ -259,7 +259,7 @@ struct WorkspaceCatalog {
     /// reclaimed. Mirrors `pendingAddCandidates`: a window must read
     /// off-screen on TWO consecutive reconciles before `reconcileHidden`
     /// pulls its slot, so the transient off-screen flip during a
-    /// native-Space switch animation isn't mistaken for a user Cmd+H /
+    /// mac-desktop switch animation isn't mistaken for a user Cmd+H /
     /// minimize. Cleared when the window comes back on-screen or is
     /// forgotten.
     private(set) var pendingHideCandidates: Set<WindowID> = []
@@ -279,7 +279,7 @@ struct WorkspaceCatalog {
         let addedIDs: [WindowID]
         /// IDs that left `windowMap` this reconcile (truly gone from
         /// the CGWindowList enumeration — `.optionAll` is on, so an
-        /// off-screen / cross-Space window stays managed, not in
+        /// off-screen / cross-mac-desktop window stays managed, not in
         /// here). Empty when `removed == 0`.
         let removedIDs: [WindowID]
         init(added: Int, removed: Int,
@@ -305,10 +305,10 @@ struct WorkspaceCatalog {
     /// id is ever reused after its owner died the fresh value wins.
     ///
     /// `trusted` lists ids the adapter saw a `kAXWindowCreated` for —
-    /// genuinely new windows, which can't be a Space-switch
+    /// genuinely new windows, which can't be a mac-desktop switch
     /// `isOnscreen` flip of an existing one. They skip the two-tick
     /// gate (added on first on-screen sight) but still honour
-    /// `allowAutoAdd` and the off-screen defer, so off-Space windows
+    /// `allowAutoAdd` and the off-screen defer, so off-desktop windows
     /// and the flip case remain protected.
     ///
     /// `ignore` lists ids that matched a config `[[exclude]]` rule
@@ -332,23 +332,23 @@ struct WorkspaceCatalog {
         // Truly-gone IDs only: a window absent from the full
         // CGWindowList enumeration (which now includes off-screen
         // windows via .optionAll). A window that's merely on a
-        // different macOS Space, minimized to the Dock, or Cmd+H'd
+        // different mac desktop, minimized to the Dock, or Cmd+H'd
         // stays in `liveByID` with `isOnscreen=false` — we keep its
         // WS assignment (a user hide gives up only its tile slot, which
         // `reconcileHidden` reclaims for the neighbours; the window
         // itself is never forgotten until it truly closes).
         let goneIDs = windowMap.keys.filter { !liveIDs.contains($0) }
         for id in goneIDs { forgetWindow(id) }
-        // "Are we on a macOS Space that holds at least one window
+        // "Are we on a mac desktop that holds at least one window
         // facet already manages?" If not, suppress auto-add so a
-        // window the user opens while parked on an unrelated Space
-        // (e.g. open Finder after switching to Space 2) doesn't
+        // window the user opens while parked on an unrelated mac desktop
+        // (e.g. open Finder after switching to mac desktop 2) doesn't
         // slide into `activeIndex` and pollute the user's facet
         // tree. The catalog has no public way to know its own
-        // Space membership without dipping into private SkyLight
+        // mac-desktop membership without dipping into private SkyLight
         // APIs, so this heuristic uses the visibility of an
         // already-managed window as a proxy: if one of ours is
-        // on-screen, the user is on "our" Space. Empty-catalog
+        // on-screen, the user is on "our" mac desktop. Empty-catalog
         // bootstrap is exempt — facet has to be able to pick up
         // its first batch of windows.
         let onFacetSpace = windowMap.keys.contains { id in
@@ -365,8 +365,8 @@ struct WorkspaceCatalog {
                 }
                 continue
             }
-            // Bulk-marked pre-existing (other Space at startup /
-            // Space-change snapshot, Cmd+H'd window seen at
+            // Bulk-marked pre-existing (other mac desktop at startup /
+            // mac-desktop-change snapshot, Cmd+H'd window seen at
             // startup, etc.). Stay out of `windowMap` even if
             // the OS later flips them on-screen.
             if examinedIDs.contains(id) { continue }
@@ -389,9 +389,9 @@ struct WorkspaceCatalog {
                 pendingAddCandidates.remove(id)
                 continue
             }
-            // Off-Space new window: see `allowAutoAdd` above.
+            // Off-desktop new window: see `allowAutoAdd` above.
             // Don't mark examined either — when the user comes
-            // back to facet's Space and the window is moved here
+            // back to facet's mac desktop and the window is moved here
             // (or any managed window becomes visible alongside
             // it), the next reconcile will add it.
             if !allowAutoAdd {
@@ -411,10 +411,10 @@ struct WorkspaceCatalog {
             // Two-tick gate. A window must be seen `isOnscreen=
             // true` on TWO consecutive reconciles before joining
             // `windowMap`. This swallows the transient cross-
-            // Space visibility flip that happens during a
-            // macOS-Space switch animation: a Finder window
-            // opened on Space N briefly reads `isOnscreen=true`
-            // when the user swipes back to Space 1, but settles
+            // mac-desktop visibility flip that happens during a
+            // mac-desktop switch animation: a Finder window
+            // opened on mac desktop N briefly reads `isOnscreen=true`
+            // when the user swipes back to mac desktop 1, but settles
             // to `false` by the next reconcile — without the
             // gate it would pile into `activeIndex`. Cost: a
             // genuine new window takes one extra ~2 s poll
@@ -425,7 +425,7 @@ struct WorkspaceCatalog {
             // single-call commit behaviour.
             //
             // `trusted` ids (a `kAXWindowCreated` fired for them) skip
-            // the gate: a brand-new window can't be the cross-Space
+            // the gate: a brand-new window can't be the cross-mac-desktop
             // flip the gate defends against, so making it wait a
             // second tick only adds the ~2s latency we're removing.
             if requireConfirm,
@@ -466,11 +466,11 @@ struct WorkspaceCatalog {
     /// on-screen it re-attaches at the tail (like a newly-opened
     /// window, per the grill).
     ///
-    /// MUST run AFTER the adapter's off-Space drift heal so a window
-    /// merely parked on another native Space (also `isOnscreen=false`)
+    /// MUST run AFTER the adapter's off-desktop drift heal so a window
+    /// merely parked on another mac desktop (also `isOnscreen=false`)
     /// has already been evicted from this catalog and isn't mistaken
     /// for a hide. The two-tick `pendingHideCandidates` gate additionally
-    /// swallows the transient off-screen flip during a Space-switch
+    /// swallows the transient off-screen flip during a mac-desktop switch
     /// animation (mirrors the add path's `pendingAddCandidates`).
     ///
     /// Returns the ids whose state changed this pass so the caller can
@@ -508,7 +508,7 @@ struct WorkspaceCatalog {
                 continue
             }
             // Two-tick confirm: detach only after a second consecutive
-            // off-screen sighting, so a Space-switch transient doesn't
+            // off-screen sighting, so a mac-desktop switch transient doesn't
             // strip a window's slot then re-grant it (a visible flicker).
             guard pendingHideCandidates.contains(id) else {
                 pendingHideCandidates.insert(id)
@@ -526,7 +526,7 @@ struct WorkspaceCatalog {
     /// auto-add later on an `isOnscreen` flip). Called from the
     /// adapter at startup (with the first enumeration) and on
     /// every `activeSpaceDidChange` (with the post-switch
-    /// enumeration) — so windows revealed by a Space transition
+    /// enumeration) — so windows revealed by a mac-desktop transition
     /// stay out of `activeIndex`. Idempotent.
     mutating func markPreExisting(_ ids: some Sequence<WindowID>) {
         examinedIDs.formUnion(ids)
@@ -637,7 +637,7 @@ struct WorkspaceCatalog {
     /// Seeded from `[layout] default` (config) by the adapter on
     /// every refresh; `"float"` (Phase γ frozen default) until set.
     /// Layout mode is otherwise session-only, so this is what a
-    /// fresh launch / per-native-Space catalog starts every WS in.
+    /// fresh launch / per-mac-desktop catalog starts every WS in.
     var defaultMode: String = "float"
 
     /// 1-based WS index → mode string. Missing entries fall back to
@@ -1164,13 +1164,13 @@ struct WorkspaceCatalog {
     // MARK: - Sticky windows (pin across every WS)
 
     /// Whether `id` is sticky (pinned visible across every WS in this
-    /// native Space). Stamped on `Window.isSticky` in the snapshot.
+    /// mac desktop). Stamped on `Window.isSticky` in the snapshot.
     func isSticky(_ id: WindowID) -> Bool {
         everywhereWindows.contains(id)
     }
 
     /// Make `id` sticky: a member of every facet WS in this native
-    /// Space and force-floating (Q2). No-op for an unknown window.
+    /// mac desktop and force-floating (Q2). No-op for an unknown window.
     /// Idempotent. Stays at its current frame — pinning shouldn't
     /// teleport the window (the caller leaves floating windows where
     /// they are; only the *other* windows of the WS reflow to fill the
@@ -1555,7 +1555,7 @@ struct WorkspaceCatalog {
     @discardableResult
     mutating func moveWindow(_ id: WindowID, to n1Based: Int,
                                     in rect: CGRect = .zero) -> MoveOutcome {
-        // A sticky window is a member of *every* WS in this Space, so
+        // A sticky window is a member of *every* WS in this mac desktop, so
         // "move it to WS N" is incoherent — reject it (unstick first).
         // Without this guard the slot would change but `attachToLayout`
         // skips floating windows and `clearSticky` re-homes to the
@@ -1643,7 +1643,7 @@ struct WorkspaceCatalog {
         // `windowMap` is the authority on which windows facet
         // manages — drop anything else (the `.optionAll`
         // enumeration deliberately returns Cmd+H'd /
-        // other-Space / minimized windows we never accepted as
+        // other-mac-desktop / minimized windows we never accepted as
         // entries, and falling those back to `activeIndex`
         // would pile them all into WS1).
         // Stashed scratchpad windows stay in `windowMap` (so their WS

@@ -53,7 +53,7 @@ public final class WindowPreview {
             defer { self.inflight.remove(id) }
             do {
                 // `excludingDesktopWindows(false, onScreenWindowsOnly: false)`:
-                // include windows on other Spaces / off-screen too —
+                // include windows on other mac desktops / off-screen too —
                 // that's the whole point (preview windows the user
                 // can't currently see).
                 let content = try await SCShareableContent
