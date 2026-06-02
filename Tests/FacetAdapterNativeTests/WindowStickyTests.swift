@@ -75,6 +75,29 @@ final class WindowStickyTests: XCTestCase {
                       "a normal, unparked window still parks")
     }
 
+    func testSwitchPlanExcludesStickyFromParkAndRestore() {
+        // The WS-switch plan must omit sticky windows from both lists —
+        // they stay on-screen, so parking/restoring them is wrong (and
+        // would make the adapter's park/restore counts lie).
+        var c = seededCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])  // both home = WS1
+        c.setSticky(wid(10))
+        let plan = c.setActive(2)
+        XCTAssertNotNil(plan)
+        let parked = Set((plan?.toPark ?? []).map(\.id))
+        XCTAssertFalse(parked.contains(wid(10)),
+                       "sticky window must not be in the park list")
+        XCTAssertTrue(parked.contains(wid(20)),
+                      "a normal window still parks on leave")
+        // Returning to WS1 must not try to restore the sticky window.
+        let back = c.setActive(1)
+        let restored = Set((back?.toRestore ?? []).map(\.id))
+        XCTAssertFalse(restored.contains(wid(10)),
+                       "sticky window must not be in the restore list")
+        XCTAssertTrue(restored.contains(wid(20)),
+                      "a normal window restores on return")
+    }
+
     // MARK: - clearSticky
 
     func testClearStickyDropsStateAndUnfloats() {

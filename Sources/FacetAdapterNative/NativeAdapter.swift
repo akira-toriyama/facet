@@ -1524,6 +1524,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         var toPark: [WindowRef] = []
         var toRestore: [WindowRef] = []
         for (id, slot) in catalog.windowMap {
+            // Sticky windows are park-exempt and stay on-screen
+            // everywhere — never park or restore them.
+            if catalog.isSticky(id) { continue }
             let ref = WindowRef(id: id, pid: slot.pid)
             if slot.workspace == active { toRestore.append(ref) }
             else { toPark.append(ref) }
@@ -2052,17 +2055,34 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // (Q4). Either way the active WS reflows: setting fills the
             // gap the window left, clearing tiles the returning window.
             guard let id = focusedWindow() else { return }
+            var extra: (id: WindowID, target: CGRect)? = nil
             if catalog.isSticky(id) {
                 catalog.clearSticky(id, focused: id, in: rect)
             } else {
+                // Center a *tiled* window as it becomes sticky: it's
+                // about to float and would otherwise overlap whatever
+                // reflows into its freed slot — same rule as
+                // toggle-float ("a tiled window turning floating lands
+                // centered"). A window ALREADY floating (PiP / timer /
+                // music) keeps its position — pinning shouldn't teleport
+                // it (POLA).
+                let wasFloating = catalog.isFloating(id)
                 catalog.setSticky(id)
+                if !wasFloating, let ax = axWin(id: id),
+                   let sz = AXGeom.size(ax) {
+                    let target = CGRect(
+                        x: rect.midX - sz.width / 2,
+                        y: rect.midY - sz.height / 2,
+                        width: sz.width, height: sz.height)
+                    extra = (id, target)
+                }
             }
             // Log the *actual* post-state — setSticky no-ops for a
             // window not yet in `windowMap`, so the intended flag would
             // lie about the outcome.
             Log.debug("native: perform toggleSticky "
                 + "\(id.serverID) → isSticky=\(catalog.isSticky(id))")
-            reflowActive(rect: rect)
+            reflowActive(rect: rect, extra: extra)
         case .toggleOrientation:
             // bsp: rotate the focused window's parent split.
             // tall/wide: swap the workspace between the tall ⇄ wide layout.
