@@ -1,7 +1,7 @@
 # rail — summoned WS switcher（Theme D (ii) 設計メモ）
 
 Status: **設計確定（未実装）**。Theme D「New view types」の (ii) を詰めたもの。
-図解: [`theme-d-rail.excalidraw`](theme-d-rail.excalidraw) / [`theme-d-rail.png`](theme-d-rail.png)
+図解: [`theme-d-rail.excalidraw`](theme-d-rail.excalidraw)
 （Excalidraw で再編集可。Theme D 全体は [architecture.md](architecture.md) の "Future themes" 参照）
 
 ## rail とは
