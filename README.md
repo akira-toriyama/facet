@@ -185,7 +185,7 @@ and change **how many** windows share it (`--inc-master` /
 | Click a window row (tree) | switch to its workspace + focus that exact window |
 | Hide a window (⌘H / ⌘M) | tiled neighbours reclaim its slot; it stays in the tree dimmed with a `hidden` badge — click the row to restore it |
 | Click a workspace header (tree) | switch to that workspace |
-| Drag a window row onto another workspace (tree) | move that window |
+| Drag a window row onto another workspace (tree) | move that window in the background — no switch, focus stays put |
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
 | Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel — position persists |
 | Right-click (tree) | context menu — window actions / workspace layout picker |

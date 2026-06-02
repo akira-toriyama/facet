@@ -179,7 +179,7 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | window 行クリック (tree) | そのワークスペースに切替 + その window に focus |
 | window を隠す (⌘H / ⌘M) | タイルしてた隣の window が空き枠を埋める。 隠れた window は tree に薄く `hidden` バッジ付きで残る — 行クリックで復帰 |
 | ワークスペース header クリック (tree) | そのワークスペースに切替 |
-| window 行を別ワークスペースにドラッグ (tree) | その window を移動 |
+| window 行を別ワークスペースにドラッグ (tree) | その window を裏で移動 — 切替なし・focus 不動 |
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
 | 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 — 位置は永続 |
 | 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
