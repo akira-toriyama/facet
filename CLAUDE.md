@@ -14,7 +14,7 @@ same PR as the code change.
 ## What this is
 
 `facet` — Swift workspace + window manager for macOS. Multiple
-views (`--view=tree|grid|…`), native AX/CGS backend
+views (`--view=tree|grid|rail`), native AX/CGS backend
 (`FacetAdapterNative`, sole backend since v2.0.0). SIP-on,
 public API + AX only. Swift 6, macOS 13+.
 
@@ -46,9 +46,11 @@ use:
 ```sh
 ./run.sh          # build release → kill any running facet → launch Facet.app
 ./stop.sh         # kill all facet instances (release / dev / raw SwiftPM)
-.build/release/facet --debug 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log &
-                  # foreground server with verbose log (timestamped so
-                  # runs don't pile up); read the file directly to inspect
+FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log &
+                  # foreground server with verbose log (FACET_DEBUG
+                  # mirrors to stderr; no --debug flag since #114, it's
+                  # env-var-triggered; timestamped so runs don't pile
+                  # up); read the file directly to inspect
 ```
 
 - **The agent may run `./stop.sh` / `./run.sh` / `swift build`
