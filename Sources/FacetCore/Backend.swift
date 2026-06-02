@@ -141,6 +141,15 @@ public protocol WindowBackend: Sendable {
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)
 
+    /// Un-hide / un-minimize `id`, then focus it — the tree-click
+    /// gesture on a *hidden* row (a window the user Cmd+H'd or Cmd+M'd,
+    /// so `isOnscreen == false` and hide-reclaim pulled its tile slot).
+    /// Probe-based: unhides the owning app AND clears `kAXMinimized`,
+    /// each a no-op when not applicable, so the hide-type needn't be
+    /// tracked. No-op when `id` isn't managed. Tree-click only — not a
+    /// CLI verb. Memory: `facet-hide-reclaim-decisions`.
+    func revealWindow(_ id: WindowID)
+
     /// Run an action against the currently-focused window.
     func perform(_ action: WindowAction)
 
@@ -296,6 +305,7 @@ public extension WindowBackend {
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge) {}
     func resizeWindow(_ id: WindowID, to frame: CGRect, reflowDragged: Bool) {}
+    func revealWindow(_ id: WindowID) {}
     func windowFrame(_ id: WindowID) -> CGRect? { nil }
     func predictedDrop(dragged: WindowID, target: WindowID,
                        zone: IntentZone) -> DropPrediction { .none }

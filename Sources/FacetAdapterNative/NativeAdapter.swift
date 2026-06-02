@@ -177,6 +177,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     eventContinuation.yield(.refreshNeeded)
                 }
             }
+            if case .visibilityChanged = event {
+                // Hide-reclaim fast path. The immediate refresh below
+                // arms the hide (first of `reconcileHidden`'s two-tick
+                // gate, which guards Space-switch transients); this
+                // follow-up confirms + detaches it ~0.3 s later instead
+                // of waiting for the 2 s poll. A reveal is single-tick
+                // (no gate) so for it the follow-up is just a harmless
+                // re-check. Memory: `facet-hide-reclaim-decisions`.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    eventContinuation.yield(.refreshNeeded)
+                }
+            }
             eventContinuation.yield(.refreshNeeded)
         }
         self.eventObserver = observer
@@ -2019,6 +2031,35 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // poll reconcile will fix it anyway if the app intercepted
         // (e.g. unsaved-changes dialog) and the window survives.
         if pressed { catalog.drop(id) }
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    public func revealWindow(_ id: WindowID) {
+        // Tree-click on a hidden row. Probe BOTH restore paths — each
+        // no-ops when not applicable — rather than tracking whether the
+        // window was Cmd+H'd or Cmd+M'd. The catalog re-attaches it to
+        // the layout on the next reconcile (the AX deminiaturize/shown
+        // event already nudged one). Memory: `facet-hide-reclaim-decisions`.
+        guard let pid = catalog.pid(for: id) else {
+            Log.debug("native: revealWindow \(id.serverID): not in catalog")
+            return
+        }
+        // 1) Cmd+H app-hide → unhide the owning app (macOS has no
+        //    per-window un-hide, so this reveals all its windows).
+        NSRunningApplication(processIdentifier: pid_t(pid))?.unhide()
+        // 2) Cmd+M minimize → clear kAXMinimized on the window.
+        if let ax = AXGeom.window(for: CGWindowID(id.serverID),
+                                  pid: pid_t(pid)) {
+            AXGeom.setMinimized(ax, false)
+        }
+        // 3) Focus the restored window (backend-confirmed retry, like
+        //    every other focus path here).
+        Focus.assert(
+            Window(id: id, pid: pid, appName: "", title: "",
+                   isFocused: false, isFloating: false, frame: nil),
+            backend: self)
+        Log.debug("native: revealWindow \(id.serverID) "
+            + "(unhide + unminimize + focus)")
         eventContinuation.yield(.refreshNeeded)
     }
 

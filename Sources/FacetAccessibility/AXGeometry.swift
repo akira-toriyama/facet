@@ -165,6 +165,16 @@ public enum AXGeom {
         return AXUIElementPerformAction(
             btn, kAXPressAction as CFString) == .success
     }
+
+    /// Set (or clear) the window's miniaturized state. `false`
+    /// un-minimizes a Cmd+M'd window — used by hide-reclaim's
+    /// click-to-restore. Returns false when AX rejected.
+    @discardableResult
+    public static func setMinimized(_ win: AXUIElement, _ on: Bool) -> Bool {
+        AXUIElementSetAttributeValue(
+            win, kAXMinimizedAttribute as CFString,
+            on as CFBoolean) == .success
+    }
 }
 
 public enum Displays {
