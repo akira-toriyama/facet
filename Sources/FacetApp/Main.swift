@@ -88,7 +88,7 @@ enum FacetApp {
           comes first — so MS is just a safety cap. Fire it just
           BEFORE a mac-desktop switch (bind it ahead of your switch
           hotkey) so the panel shows a placeholder during the switch
-          instead of the previous desktop's tree. grid ignores it.
+          instead of the previous mac desktop's tree. grid ignores it.
           Example:
             facet --view=tree --loading=2000
 
