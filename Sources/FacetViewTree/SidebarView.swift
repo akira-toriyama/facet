@@ -243,7 +243,7 @@ public final class SidebarView: NSView {
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
                         if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                        if hasThird { rh += 28 }       // gap 6 + badge 22
+                        if hasThird { rh += 24 }       // gap 2 + badge 22
                     }
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
@@ -293,7 +293,7 @@ public final class SidebarView: NSView {
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
                         if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                        if hasThird { rh += 28 }       // gap 6 + badge 22
+                        if hasThird { rh += 24 }       // gap 2 + badge 22
                     }
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
@@ -676,9 +676,9 @@ public final class SidebarView: NSView {
                         in: NSRect(x: rowPadX + gripSpace,
                                    y: capY + nameH + 4,
                                    width: bounds.width - rowPadX * 2 - gripSpace,
-                                   height: 14),
+                                   height: 18),
                         withAttributes: [
-                            .font: uiFont(10.5, .bold),
+                            .font: uiFont(fs, .bold),
                             .foregroundColor: modeColor,
                             .paragraphStyle: hp,
                         ])
@@ -752,7 +752,7 @@ public final class SidebarView: NSView {
                 // sticky badge, then the master / float label after it.
                 if hasLabel || hasMark || c.isSticky {
                     // Wider gap below the title before the mark / status.
-                    let labelY = hasTitle ? row.minY + 55 : row.minY + 32
+                    let labelY = hasTitle ? row.minY + 51 : row.minY + 32
                     var lx = tx
                     if let mark = c.mark {
                         let markFont = uiFont(windowFontSize, .bold)
