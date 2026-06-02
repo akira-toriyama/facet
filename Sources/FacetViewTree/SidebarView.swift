@@ -1008,9 +1008,6 @@ public final class SidebarView: NSView {
         var mode = 0          // 0 undecided · 1 panel-move · 2 window-drag
         var dragWS = 0
         var dragWindowID = WindowID(serverID: 0)
-        var dragPID = 0
-        var dragTitle = ""
-        var movedFocused = false      // moved window took focus
         let mask: NSEvent.EventTypeMask = [.leftMouseDragged, .leftMouseUp]
 
         loop: while let ev = win.nextEvent(matching: mask) {
@@ -1022,25 +1019,20 @@ public final class SidebarView: NSView {
                 } else if mode == 2 {
                     let tgt = wsBands.first { $0.value.contains(cp.y) }?.key
                     if let tgt, tgt != dragWS {
-                        // Move it, then land focus ON the moved
-                        // window in its new workspace (not the app
-                        // that was frontmost before).
+                        // M9-1: background move — file the window into
+                        // the target WS without switching to it or
+                        // focus-following. This matches the grid drop
+                        // and the keyboard lift; the tree mouse drop
+                        // was the lone exception. No setOptimistic (it
+                        // would mislabel the active WS) — the reconcile
+                        // relocates the row; prevApp is restored below
+                        // so focus stays put.
                         let id = dragWindowID
-                        let window = Window(
-                            id: id, pid: dragPID, appName: "",
-                            title: dragTitle, isFocused: false,
-                            isFloating: false, frame: nil)
-                        movedFocused = true
-                        setOptimistic(windowID: id, workspaceIndex: tgt)
                         let bk = backend
-                        let ctrl = controller
                         cliQueue.async {
                             bk.moveWindow(id, toWorkspaceIndex: tgt)
-                            bk.switchWorkspace(toIndex: tgt)
-                            Task { @MainActor in
-                                ctrl?.focusWindow(window, postSwitch: true)
-                            }
                         }
+                        controller?.scheduleReconcile(after: 0.05)
                     }
                 } else if mode == 3 {
                     let tgt = wsBands.first { $0.value.contains(cp.y) }?.key
@@ -1060,12 +1052,10 @@ public final class SidebarView: NSView {
                         switch row?.kind {
                         case .none, .handle?, .search?:
                             mode = 1                   // empty / search → move
-                        case .window(let ws, let pid, let wid, let title)?:
+                        case .window(let ws, _, let wid, _)?:
                             mode = 2
                             dragWS = ws
                             dragWindowID = wid
-                            dragPID = pid
-                            dragTitle = title
                             draggingWid = (ws, wid)
                             if let rr = row?.rect,
                                let c = cells.first(where: {
@@ -1121,11 +1111,12 @@ public final class SidebarView: NSView {
         lastDropWS = nil
         chip.isHidden = true
         NSCursor.arrow.set()
-        // Restore the previously-frontmost app only when the moved
-        // window did NOT take focus (cancelled drag / same-WS drop
-        // / panel move).
+        // Restore the previously-frontmost app. A tree drag activates
+        // facet only so the drag cursor shows (see mouseDown top); the
+        // M9-1 drop is a background move that never takes focus, so
+        // focus always returns to whoever was frontmost.
         if let prev = prevApp {
-            if !movedFocused { prev.activate() }
+            prev.activate()
             prevApp = nil
         }
         needsDisplay = true
@@ -1393,10 +1384,10 @@ public final class SidebarView: NSView {
         return true
     }
 
-    /// Commit the lift: a window moves to the target WS (mirrors the
-    /// mouse drop — optimistic highlight, then move + switch +
-    /// focus-follow); a header swaps its WS's contents with the
-    /// target. Returns true if a lift was in progress.
+    /// Commit the lift: a window moves to the target WS (a background
+    /// move — no switch, no focus-follow — same as the mouse drop
+    /// since M9-1); a header swaps its WS's contents with the target.
+    /// Returns true if a lift was in progress.
     @discardableResult
     public func kbCommitLift() -> Bool {
         guard let s = kbLifted else { return false }
@@ -1406,12 +1397,11 @@ public final class SidebarView: NSView {
         guard let tgt else { return true }
         switch s {
         case .win(let id):
-            // Move-only: unlike the mouse drop (which switches +
-            // focus-follows), a keyboard lift "files" the window into
-            // the target WS and stays in --active so the user can
-            // keep organizing. No switch → don't claim tgt is active
-            // (so no setOptimistic, which would mislabel the active
-            // WS). The reconcile relocates the row; kbSel follows it.
+            // Move-only background move (same model as the mouse drop
+            // since M9-1): "file" the window into the target WS and
+            // stay put — no switch, so don't claim tgt is active (no
+            // setOptimistic, which would mislabel the active WS). The
+            // reconcile relocates the row; kbSel follows it.
             guard let src = wsOf(windowID: id), src != tgt else { return true }
             let bk = backend
             cliQueue.async {
