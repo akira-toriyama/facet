@@ -32,12 +32,16 @@ final class RealWindowDragMonitor {
     private var liftQuartz: CGPoint = .zero
     private var dragging = false
 
-    /// True from the moment a tiled-window drag passes the threshold
-    /// until mouse-up. The Controller gates its refresh on this so
-    /// facet's per-refresh re-tile can't fight the drag (snap the window
-    /// back) — and `lastWorkspaces` stays frozen at the pre-drag layout,
-    /// which keeps the drop hit-test's reference frames stable.
-    var isDragging: Bool { dragging }
+    /// True from the moment the press lands on a tiled window until
+    /// mouse-up — i.e. the *whole* gesture, not just after the drag
+    /// threshold. The Controller gates its refresh on this so facet's
+    /// per-refresh re-tile can't fight the drag (snap the window back),
+    /// including the brief pre-threshold window where the OS has already
+    /// started moving the window but we haven't armed yet. Also freezes
+    /// `lastWorkspaces` at the pre-drag layout, keeping the drop
+    /// hit-test's reference frames stable. A plain click gates it for
+    /// only the few ms between mouse-down and -up — harmless.
+    var inProgress: Bool { dragged != nil }
     /// Pointer travel before a mouse-down becomes a drag (matches the
     /// tree's `dragThreshold`); below it the gesture stays a click.
     private let threshold: CGFloat = 6
@@ -84,14 +88,16 @@ final class RealWindowDragMonitor {
             }
         case .leftMouseUp:
             defer { reset() }
-            guard let id = dragged, dragging else { return }   // a click, not a drag
-            let drop = Self.quartzMouse()
-            if let decision = RealWindowDrop.drop(tiles(), dragged: id,
-                                                  at: drop) {
-                commit(decision)
-            }
-            // No target (empty / self) → leave it: facet's normal reflow
-            // re-tiles the dragged window back into its slot.
+            // A press without a drag is a click — leave it alone. A drag
+            // onto empty space / the window's own slot resolves to nil;
+            // facet's normal reflow then re-tiles it back into place.
+            guard let id = dragged, dragging,
+                  let decision = RealWindowDrop.drop(tiles(), dragged: id,
+                                                     at: Self.quartzMouse())
+            else { return }
+            Log.debug("rwdrag commit \(decision.zone) "
+                + "dragged=\(id.serverID) target=\(decision.target.serverID)")
+            commit(decision)
         default:
             break
         }

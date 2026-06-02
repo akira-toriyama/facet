@@ -689,7 +689,7 @@ final class Controller: NSObject {
         // tiled window — the per-refresh re-tile in the adapter would
         // snap the window back to its slot mid-drag. The drop commit (or
         // the next refresh after release) re-tiles to the final layout.
-        if realWindowDrag?.isDragging == true {
+        if realWindowDrag?.inProgress == true {
             Log.debug("refresh skipped (real-window drag in progress)")
             return
         }
