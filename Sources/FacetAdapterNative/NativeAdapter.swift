@@ -411,6 +411,22 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     + "(SLS space query untrustworthy, space=\(activeSpaceID))")
             }
         }
+        // Hide-reclaim: a managed window the user Cmd+H'd / minimized
+        // reads `isOnscreen=false` (facet's own anchor-sliver park stays
+        // on-screen), so reclaim its tile slot — detach from the layout,
+        // keep the WS assignment, re-attach at the tail when it returns.
+        // Runs AFTER the off-Space heal so only same-Space hides remain;
+        // its result feeds the open/close reflow below (hide = close,
+        // reveal = open). Memory: `facet-hide-reclaim-decisions`.
+        let liveByID = Dictionary(live.map { ($0.id, $0) },
+                                  uniquingKeysWith: { a, _ in a })
+        let hideResult = catalog.reconcileHidden(
+            liveByID: liveByID, focused: focused, activeRect: rect)
+        if !hideResult.hidden.isEmpty || !hideResult.revealed.isEmpty {
+            Log.debug("native: hide-reclaim "
+                + "hidden=\(hideResult.hidden.count) "
+                + "revealed=\(hideResult.revealed.count)")
+        }
         // D (event-driven re-tile): re-tile the active WS on every
         // refresh, not only when windows were added/removed. Cheap
         // when nothing drifted (applyFrames' frame-match skip reads
@@ -433,10 +449,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // pass coincided with a Space swap).
         let shouldAnimateOpenClose = config.effectiveAnimationEventDriven
             && !spaceSwapped
-            && (!result.addedIDs.isEmpty || !result.removedIDs.isEmpty)
+            && (!result.addedIDs.isEmpty || !result.removedIDs.isEmpty
+                || !hideResult.hidden.isEmpty || !hideResult.revealed.isEmpty)
         if shouldAnimateOpenClose {
             cancelSlideForRetarget()
-            let snapNew = Set(result.addedIDs)
+            // A revealed window snaps into its tile like a newly-opened
+            // one (no glide from its off-screen resting frame); the
+            // windows reflowing to fill a hidden window's freed slot
+            // glide normally.
+            let snapNew = Set(result.addedIDs).union(hideResult.revealed)
             if !animateRetile(workspace: catalog.activeIndex, rect: rect,
                               skipAnimation: snapNew) {
                 applyLayout(workspace: catalog.activeIndex, rect: rect)

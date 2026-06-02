@@ -223,6 +223,28 @@ struct WorkspaceCatalog {
     /// `facet-macos-spaces-coexistence`.
     private(set) var examinedIDs: Set<WindowID> = []
 
+    /// Windows the user hid (Cmd+H) or minimized (Cmd+M): kept in
+    /// `windowMap` (their WS assignment + marks survive) but detached
+    /// from the layout containers so the remaining tiled windows
+    /// reclaim the freed slot. `nonFloatingMembers` excludes them, so
+    /// every stateless engine and the bsp re-seed skip them; the bsp
+    /// tree node itself is removed by `detachFromLayouts`. Re-attached
+    /// at the tail by `reconcileHidden` when the window returns
+    /// on-screen. facet's own parking uses the on-screen anchor sliver
+    /// (`isOnscreen` stays true), so it never lands a window here —
+    /// only a user hide / minimize does. See memory
+    /// `facet-hide-reclaim-decisions`.
+    private(set) var hiddenMembers: Set<WindowID> = []
+
+    /// Managed windows seen `isOnscreen=false` once but not yet
+    /// reclaimed. Mirrors `pendingAddCandidates`: a window must read
+    /// off-screen on TWO consecutive reconciles before `reconcileHidden`
+    /// pulls its slot, so the transient off-screen flip during a
+    /// native-Space switch animation isn't mistaken for a user Cmd+H /
+    /// minimize. Cleared when the window comes back on-screen or is
+    /// forgotten.
+    private(set) var pendingHideCandidates: Set<WindowID> = []
+
     init() {}
 
     // MARK: - Reconcile
@@ -414,6 +436,72 @@ struct WorkspaceCatalog {
                                addedIDs: addedIDs, removedIDs: goneIDs)
     }
 
+    /// Hide-reclaim pass. A managed window reading `isOnscreen=false`
+    /// was hidden by the user (Cmd+H app-hide / Cmd+M minimize) — facet
+    /// parks its own off-WS / stack windows at the on-screen anchor
+    /// sliver, which keeps `isOnscreen=true`, so it never produces this
+    /// state. Such a window keeps its `windowMap` slot (WS assignment +
+    /// marks survive) but is pulled out of the layout containers so the
+    /// remaining tiled windows reclaim its freed slot; when it returns
+    /// on-screen it re-attaches at the tail (like a newly-opened
+    /// window, per the grill).
+    ///
+    /// MUST run AFTER the adapter's off-Space drift heal so a window
+    /// merely parked on another native Space (also `isOnscreen=false`)
+    /// has already been evicted from this catalog and isn't mistaken
+    /// for a hide. The two-tick `pendingHideCandidates` gate additionally
+    /// swallows the transient off-screen flip during a Space-switch
+    /// animation (mirrors the add path's `pendingAddCandidates`).
+    ///
+    /// Returns the ids whose state changed this pass so the caller can
+    /// drive the open/close reflow animation (a hide reflows like a
+    /// close; a reveal snaps in like an open).
+    mutating func reconcileHidden(liveByID: [WindowID: Window],
+                                  focused: WindowID?,
+                                  activeRect: CGRect)
+        -> (hidden: [WindowID], revealed: [WindowID])
+    {
+        var newlyHidden: [WindowID] = []
+        var newlyRevealed: [WindowID] = []
+        for (id, slot) in windowMap {
+            // Default to on-screen when the live snapshot lacks the id
+            // (shouldn't happen post-reconcile, but never strand a
+            // window as hidden on a missing read).
+            let onscreen = liveByID[id]?.isOnscreen ?? true
+            if hiddenMembers.contains(id) {
+                guard onscreen else { continue }   // still hidden
+                hiddenMembers.remove(id)
+                pendingHideCandidates.remove(id)
+                attachToLayout(id, workspace: slot.workspace,
+                               focused: focused, in: activeRect)
+                newlyRevealed.append(id)
+                continue
+            }
+            // Not currently hidden. A hide candidate is off-screen,
+            // not parked by facet (sliver = on-screen), and tiled
+            // (floating / sticky windows hold no tile slot to reclaim).
+            guard !onscreen,
+                  !anchorParked.contains(id),
+                  !floatingWindows.contains(id)
+            else {
+                pendingHideCandidates.remove(id)
+                continue
+            }
+            // Two-tick confirm: detach only after a second consecutive
+            // off-screen sighting, so a Space-switch transient doesn't
+            // strip a window's slot then re-grant it (a visible flicker).
+            guard pendingHideCandidates.contains(id) else {
+                pendingHideCandidates.insert(id)
+                continue
+            }
+            pendingHideCandidates.remove(id)
+            hiddenMembers.insert(id)
+            detachFromLayouts(id)
+            newlyHidden.append(id)
+        }
+        return (newlyHidden, newlyRevealed)
+    }
+
     /// Bulk-mark every id in `live` as pre-existing (don't
     /// auto-add later on an `isOnscreen` flip). Called from the
     /// adapter at startup (with the first enumeration) and on
@@ -444,6 +532,8 @@ struct WorkspaceCatalog {
         clearLeaveFocus(of: id)
         examinedIDs.remove(id)
         pendingAddCandidates.remove(id)
+        hiddenMembers.remove(id)                  // drop hide-reclaim state
+        pendingHideCandidates.remove(id)
         marks = marks.filter { $0.value != id }   // drop any mark on it
         everywhereWindows.remove(id)              // drop sticky on it
     }
@@ -926,7 +1016,12 @@ struct WorkspaceCatalog {
     func nonFloatingMembers(of n1Based: Int) -> [WindowID] {
         windowMap
             .filter { $0.value.workspace == n1Based
-                && !floatingWindows.contains($0.key) }
+                && !floatingWindows.contains($0.key)
+                // Hidden (Cmd+H / minimized) windows give up their tile
+                // slot — excluding them here makes every stateless engine
+                // and the bsp re-seed reclaim it (memory
+                // `facet-hide-reclaim-decisions`).
+                && !hiddenMembers.contains($0.key) }
             .map(\.key)
             .sorted { $0.serverID < $1.serverID }
     }
