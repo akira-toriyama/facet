@@ -97,6 +97,17 @@ public struct Window: Sendable {
     /// tiling). Session-only, per-native-Space; orthogonal to `mark`.
     /// Views surface it as a small 📌 badge.
     public let isSticky: Bool
+    /// Name of the scratchpad shelf this window is *settled* on, or
+    /// `nil` when it isn't a scratchpad window. A scratchpad is a
+    /// named hidden shelf (`facet scratchpad --stash=NAME`): the
+    /// window parks off-screen until summoned (`--toggle=NAME`) onto
+    /// the current workspace as a floating overlay. Only *settled*
+    /// (summoned, on-screen) scratchpad windows reach the snapshot and
+    /// carry this name; *stashed* ones are filtered out entirely and
+    /// surface only in `facet status`. Session-only, per-native-Space;
+    /// orthogonal to `mark`, mutually exclusive with `isSticky`.
+    /// Views surface it as a small `scratchpad:NAME` badge.
+    public let scratchpad: String?
 
     public init(id: WindowID,
                 pid: Int,
@@ -109,7 +120,8 @@ public struct Window: Sendable {
                 isMaster: Bool = false,
                 bundleId: String? = nil,
                 mark: String? = nil,
-                isSticky: Bool = false) {
+                isSticky: Bool = false,
+                scratchpad: String? = nil) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -122,6 +134,7 @@ public struct Window: Sendable {
         self.isMaster = isMaster
         self.mark = mark
         self.isSticky = isSticky
+        self.scratchpad = scratchpad
     }
 }
 

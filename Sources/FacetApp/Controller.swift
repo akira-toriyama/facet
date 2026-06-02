@@ -405,6 +405,30 @@ final class Controller: NSObject {
                     }
                     self.scheduleReconcile(after: 0.05)
 
+                case let s where s.hasPrefix("scratchpad-stash:"):
+                    let name = String(s.dropFirst("scratchpad-stash:".count))
+                    if !self.backend.stashScratchpad(name) {
+                        self.setError(
+                            "scratchpad --stash=\(name): no focused window")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("scratchpad-toggle:"):
+                    let name = String(s.dropFirst("scratchpad-toggle:".count))
+                    if !self.backend.toggleScratchpad(name) {
+                        self.setError(
+                            "scratchpad --toggle=\(name): no such shelf")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("scratchpad-release:"):
+                    let name = String(s.dropFirst("scratchpad-release:".count))
+                    if !self.backend.releaseScratchpad(name) {
+                        self.setError(
+                            "scratchpad --release=\(name): no such shelf")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
                 case let s where s.hasPrefix("set-layout:"):
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)
@@ -895,6 +919,7 @@ final class Controller: NSObject {
             theme: config.effectiveTheme,
             defaultView: config.effectiveDefaultView,
             workspaces: entries,
+            stashed: backend.stashedScratchpads(),
             lastError: lastError,
             timestamp: ISO8601DateFormatter().string(from: Date()))
         do { try snap.write() } catch {

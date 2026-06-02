@@ -1560,6 +1560,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // Sticky windows are park-exempt and stay on-screen
             // everywhere — never park or restore them.
             if catalog.isSticky(id) { continue }
+            // Stashed scratchpad windows are the opposite: they must
+            // STAY parked off-screen regardless of which WS is active —
+            // restoring one when its home WS activates would un-hide the
+            // shelf. (A settled scratchpad window isn't stashed, so it
+            // parks / restores normally as a floating window.)
+            if catalog.isStashed(id) { continue }
             let ref = WindowRef(id: id, pid: slot.pid)
             if slot.workspace == active { toRestore.append(ref) }
             else { toPark.append(ref) }
@@ -1892,6 +1898,87 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Log.debug("native: unmark \"\(name)\"")
         eventContinuation.yield(.refreshNeeded)   // repaint — badge gone
         return true
+    }
+
+    // MARK: - Scratchpad shelf (stash / toggle / release)
+
+    public func stashScratchpad(_ name: String) -> Bool {
+        guard let id = focusedWindow() else {
+            Log.debug("native: scratchpad --stash=\"\(name)\" — no focus")
+            return false
+        }
+        let rect = activeDisplayRect()
+        guard catalog.stashWindow(name, id: id) else {
+            Log.debug("native: scratchpad --stash=\"\(name)\" — "
+                + "\(id.serverID) not managed")
+            return false
+        }
+        // Hide it off-screen (the catalog already detached + force-
+        // floated it), then reflow so the neighbours fill the freed slot.
+        if let slot = catalog.windowMap[id] {
+            parkAnchor(WindowRef(id: id, pid: slot.pid))
+        }
+        Log.debug("native: scratchpad --stash=\"\(name)\" -> \(id.serverID)")
+        reflowActive(rect: rect)
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
+    public func toggleScratchpad(_ name: String) -> Bool {
+        guard let id = catalog.window(forScratchpad: name),
+              let slot = catalog.windowMap[id] else {
+            Log.debug("native: scratchpad --toggle=\"\(name)\" — unset / gone")
+            return false
+        }
+        let rect = activeDisplayRect()
+        let ref = WindowRef(id: id, pid: slot.pid)
+        if catalog.isScratchpadVisibleHere(name) {
+            // Visible on the current WS → re-park it onto the shelf.
+            _ = catalog.restashScratchpad(name)
+            parkAnchor(ref)
+        } else {
+            // Stashed, or settled on another WS → summon it onto the
+            // current WS. `restoreAnchor` no-ops when not parked.
+            _ = catalog.summonScratchpad(name)
+            restoreAnchor(ref)
+            if let win = enumerateCGWindows().first(where: { $0.id == id }) {
+                Focus.assert(win, backend: self)   // focus doesn't auto-jump
+            }
+        }
+        Log.debug("native: scratchpad --toggle=\"\(name)\" -> "
+            + "\(id.serverID) stashed=\(catalog.isStashed(id))")
+        reflowActive(rect: rect)
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
+    public func releaseScratchpad(_ name: String) -> Bool {
+        guard let id = catalog.window(forScratchpad: name),
+              let slot = catalog.windowMap[id] else {
+            Log.debug("native: scratchpad --release=\"\(name)\" — no such shelf")
+            return false
+        }
+        let rect = activeDisplayRect()
+        let ref = WindowRef(id: id, pid: slot.pid)
+        // Drop the shelf + un-float + attach to the active WS's layout
+        // first, then position it. A tiling WS re-tiles it from wherever
+        // it sits, so just clear the stale park bookkeeping (no
+        // intermediate jump to the recorded position). A float-mode WS
+        // doesn't tile, so restore it to its pre-stash position on-screen.
+        _ = catalog.releaseScratchpad(name, focused: id, in: rect)
+        if catalog.mode(of: catalog.activeIndex) == "float" {
+            restoreAnchor(ref)
+        } else {
+            catalog.clearParkedState(of: id)
+        }
+        Log.debug("native: scratchpad --release=\"\(name)\" -> \(id.serverID)")
+        reflowActive(rect: rect)
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
+    public func stashedScratchpads() -> [String] {
+        catalog.stashedScratchpadNames()
     }
 
     /// Apply stack mode to `n1Based`: the catalog's

@@ -364,8 +364,19 @@ facet window --unmark=NAME        # remove a mark
                                   # 1:1 — a window holds one mark; reassigning
                                   # a name moves it off the old window.
                                   # session-only, per native Space.
-facet status                      # snapshot: backend, theme,
-                                  # workspaces, lastError, timestamp
+
+# Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
+facet scratchpad --stash=NAME     # park the focused window onto a named
+                                  # shelf (hides it off-screen)
+facet scratchpad --toggle=NAME    # summon it onto the current workspace as
+                                  # a floating overlay — or re-park it to the
+                                  # shelf if it's already visible here
+facet scratchpad --release=NAME   # drop it off the shelf as a normal tiled
+                                  # window of the workspace you're on
+                                  # no spawn (existing windows only); 1:1
+                                  # name↔window; session-only, per native Space.
+facet status                      # snapshot: backend, theme, workspaces,
+                                  # stashed shelves, lastError, timestamp
 
 # Server controls
 facet --theme=NAME                # terminal | cute | system

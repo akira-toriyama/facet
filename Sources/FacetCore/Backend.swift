@@ -261,6 +261,31 @@ public protocol WindowBackend: Sendable {
     /// `false` when the name wasn't set (caller surfaces the error).
     func unmark(_ name: String) -> Bool
 
+    /// Stash the focused window onto scratchpad shelf `name`, parking
+    /// it off-screen (`facet scratchpad --stash=NAME`). A named hidden
+    /// shelf, 1:1 like marks; clears any sticky (XOR), force-floats and
+    /// detaches the window. Returns `false` when there is no managed
+    /// focused window (caller surfaces the error).
+    func stashScratchpad(_ name: String) -> Bool
+
+    /// Toggle scratchpad shelf `name` (`facet scratchpad --toggle=NAME`):
+    /// if its window is *visible on the current workspace*, re-park it to
+    /// the shelf; otherwise (stashed, or settled on another WS) summon it
+    /// onto the current workspace as a floating overlay. Returns `false`
+    /// when the shelf is unset / its window has closed.
+    func toggleScratchpad(_ name: String) -> Bool
+
+    /// Release shelf `name` (`facet scratchpad --release=NAME`): drop it
+    /// from the shelf and re-home the window as a normal tiled window of
+    /// the current workspace (same landing as un-sticky). Returns `false`
+    /// when the shelf is unset.
+    func releaseScratchpad(_ name: String) -> Bool
+
+    /// Names of currently *stashed* scratchpad shelves (for
+    /// `facet status`). Settled (summoned) shelves are excluded — they
+    /// show in the tree under their workspace. Empty when none.
+    func stashedScratchpads() -> [String]
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as
@@ -312,4 +337,8 @@ public extension WindowBackend {
     func markFocusedWindow(_ name: String) -> Bool { false }
     func focusMark(_ name: String) -> Bool { false }
     func unmark(_ name: String) -> Bool { false }
+    func stashScratchpad(_ name: String) -> Bool { false }
+    func toggleScratchpad(_ name: String) -> Bool { false }
+    func releaseScratchpad(_ name: String) -> Bool { false }
+    func stashedScratchpads() -> [String] { [] }
 }

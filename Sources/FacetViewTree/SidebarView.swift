@@ -40,6 +40,7 @@ public final class SidebarView: NSView {
         let isSticky: Bool     // window: shows a bare 📌 badge
         let mark: String?      // window: user mark → right-edge badge
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
+        let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
     }
     private var cells: [Cell] = []
     private var hoverIdx: Int?            // row under the pointer
@@ -224,7 +225,8 @@ public final class SidebarView: NSView {
                           pid: 0, app: "", title: "",
                           text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
                           mode: "", isMaster: false, isFloating: false,
-                          isSticky: false, mark: nil, isHidden: false))
+                          isSticky: false, mark: nil, isHidden: false,
+                          scratchpad: nil))
         y += handleRowH
 
         if searching {
@@ -239,7 +241,8 @@ public final class SidebarView: NSView {
                     // Third line under the title holds the mark pill
                     // (left) and the master / float label — present when
                     // either exists.
-                    let hasThird = hasLabel || (win.mark != nil) || !win.isOnscreen
+                    let hasThird = hasLabel || (win.mark != nil)
+                        || !win.isOnscreen || (win.scratchpad != nil)
                     var rh: CGFloat = baseRH           // compact single line
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
@@ -258,7 +261,8 @@ public final class SidebarView: NSView {
                                       isFloating: win.isFloating,
                                       isSticky: win.isSticky,
                                       mark: win.mark,
-                                      isHidden: !win.isOnscreen))
+                                      isHidden: !win.isOnscreen,
+                                      scratchpad: win.scratchpad))
                     y += rh
                 }
             }
@@ -277,7 +281,8 @@ public final class SidebarView: NSView {
                                   title: "", text: t.uppercased(),
                                   mode: ws.layoutMode,
                                   isMaster: false, isFloating: false,
-                                  isSticky: false, mark: nil, isHidden: false))
+                                  isSticky: false, mark: nil, isHidden: false,
+                                  scratchpad: nil))
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
@@ -290,7 +295,8 @@ public final class SidebarView: NSView {
                     // Third line under the title holds the mark pill
                     // (left) and the master / float label — present when
                     // either exists.
-                    let hasThird = hasLabel || (win.mark != nil) || !win.isOnscreen
+                    let hasThird = hasLabel || (win.mark != nil)
+                        || !win.isOnscreen || (win.scratchpad != nil)
                     var rh: CGFloat = baseRH           // compact single line
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
@@ -309,7 +315,8 @@ public final class SidebarView: NSView {
                                       isFloating: win.isFloating,
                                       isSticky: win.isSticky,
                                       mark: win.mark,
-                                      isHidden: !win.isOnscreen))
+                                      isHidden: !win.isOnscreen,
+                                      scratchpad: win.scratchpad))
                     y += rh
                 }
                 wsBands[ws.index] = start...(y + 3)
@@ -709,19 +716,25 @@ public final class SidebarView: NSView {
                 // Sticky renders as a bare 📌 (no pill) in the badge
                 // block below, so suppress the plain `float` label here
                 // (sticky ⇒ floating; a master window can't be sticky).
+                // A settled scratchpad window is force-floating, but it
+                // shows its own `scratchpad:NAME` badge below instead of
+                // the plain `float` label (like sticky's bare 📌).
                 let labelText: String? =
                     c.isMaster ? "master" :
                     c.isSticky ? nil :
+                    c.scratchpad != nil ? nil :
                     c.isFloating ? "float" : nil
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
                 let hasMark = c.mark != nil
+                let hasScratch = c.scratchpad != nil
                 let tx = iconX + iconSize + 8
                 let tw = max(bounds.width - tx - rowPadX, 0)
                 // Vertical rhythm (matches the row-height calc): top pad
                 // 8, app, +4 gap, title, +6 gap, third (mark / status)
                 // line. App centres only on a bare single-line row.
-                let appY = (hasTitle || hasLabel || hasMark || c.isSticky)
+                let appY = (hasTitle || hasLabel || hasMark
+                            || c.isSticky || hasScratch)
                     ? row.minY + 8 : row.midY - 9
                 let titleY = row.minY + 28        // tucked up under the app
                 // Icon centres on the whole row so it stays vertically
@@ -757,8 +770,10 @@ public final class SidebarView: NSView {
                         ])
                 }
                 // Third line: the mark pill (left), then the bare 📌
-                // sticky badge, then the master / float / hidden label.
-                if hasLabel || hasMark || c.isSticky || c.isHidden {
+                // sticky badge or the `scratchpad:NAME` shelf pill, then
+                // the master / float / hidden label.
+                if hasLabel || hasMark || c.isSticky || c.isHidden
+                    || hasScratch {
                     // Wider gap below the title before the mark / status.
                     let labelY = hasTitle ? row.minY + 51 : row.minY + 32
                     var lx = tx
@@ -813,6 +828,46 @@ public final class SidebarView: NSView {
                                 height: pinSize.height),
                             withAttributes: [.font: pinFont])
                         lx += ceil(pinSize.width) + 8
+                    }
+                    if let sp = c.scratchpad {
+                        // Scratchpad shelf badge: a dim outlined pill
+                        // `scratchpad:NAME`. Dim (not the mark's accent
+                        // green) so the shelf handle reads as secondary,
+                        // and labelled in full so it can't be mistaken
+                        // for a user mark. Sticky ⊻ scratchpad, so the
+                        // 📌 above and this never both appear.
+                        let spText = "scratchpad:\(sp)"
+                        let spFont = uiFont(windowFontSize, .semibold)
+                        let maxTextW: CGFloat = 130  // long → tail-truncate
+                        let textW = min(maxTextW, ceil((spText as NSString)
+                            .size(withAttributes: [.font: spFont]).width))
+                        let padX: CGFloat = 8
+                        let pillH: CGFloat = 22
+                        let pillW = textW + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        let spStroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: 5, yRadius: 5)
+                        spStroke.lineWidth = 1
+                        pal.dim.setStroke()
+                        spStroke.stroke()
+                        let spPara = NSMutableParagraphStyle()
+                        spPara.alignment = .center
+                        spPara.lineBreakMode = .byTruncatingTail
+                        let spAttrs: [NSAttributedString.Key: Any] = [
+                            .font: spFont,
+                            .foregroundColor: pal.dim,
+                            .paragraphStyle: spPara,
+                        ]
+                        let textH = (spText as NSString)
+                            .size(withAttributes: spAttrs).height
+                        (spText as NSString).draw(
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - textH) / 2 - 1.0,
+                                       width: pillW, height: textH),
+                            withAttributes: spAttrs)
+                        lx += pillW + 6
                     }
                     if let labelText {
                         // master / float as an outlined pill — same badge
