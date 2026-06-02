@@ -753,12 +753,16 @@ final class Controller: NSObject {
         // cross-workspace move (trigger 3 below).
         var prevActiveFrames: [WindowID: CGRect] = [:]
         var prevWSofWindow: [WindowID: Int] = [:]
+        var prevOnscreen: [WindowID: Bool] = [:]
         if #available(macOS 14.0, *), winPreview != nil {
             let oldActiveIdx = lastWorkspaces.first(where: { $0.isActive })?.index
             for ws in lastWorkspaces {
                 let active = ws.index == oldActiveIdx
                 for w in ws.windows {
                     prevWSofWindow[w.id] = ws.index
+                    // Capture for ALL windows (any WS): a hide-reclaim
+                    // reveal can land on an inactive WS too (trigger 4).
+                    prevOnscreen[w.id] = w.isOnscreen
                     if active, let f = w.frame { prevActiveFrames[w.id] = f }
                 }
             }
@@ -786,7 +790,7 @@ final class Controller: NSObject {
         }
         // Event-driven preview refresh — the geometry / visibility half
         // that the ~4 s background timer (content freshness) can't react
-        // to promptly. Three triggers feed one stale-id set:
+        // to promptly. Four triggers feed one stale-id set:
         //   (1) WS switch — the snapshot frame is switch-stable by
         //       design and parking keeps a window on a 1×41 on-screen
         //       sliver, so neither a frame nor an isOnscreen delta
@@ -801,6 +805,11 @@ final class Controller: NSObject {
         //       an INACTIVE WS reports a would-be frame that (2) can't
         //       trust, but the membership change itself is unambiguous.
         //       (A tree DnD lands in (1)+(3): it moves AND switches.)
+        //   (4) Reveal — a window whose `isOnscreen` flipped false→true
+        //       (hide-reclaim restore: Cmd+H unhide / Cmd+M deminiaturize
+        //       / tree-click reveal). It couldn't be captured while
+        //       hidden, so its cached thumbnail is stale / blank —
+        //       re-capture now. (トミー's hide-reclaim PR2 requirement.)
         // Invalidate drops the stale cache for every surface (tree
         // re-captures lazily on the next hover); the open grid / rail
         // then gets a fresh capture pushed via `pushFreshThumbnails`.
@@ -827,6 +836,12 @@ final class Controller: NSObject {
                 for w in ws.windows where prevWSofWindow[w.id].map({
                     $0 != ws.index
                 }) == true {
+                    stale.append(w.id)
+                }
+            }
+            for ws in wss {                                      // (4) reveal
+                for w in ws.windows
+                    where prevOnscreen[w.id] == false && w.isOnscreen {
                     stale.append(w.id)
                 }
             }

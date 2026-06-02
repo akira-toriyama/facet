@@ -39,6 +39,7 @@ public final class SidebarView: NSView {
         let isFloating: Bool   // window: shows a `float` status line
         let isSticky: Bool     // window: shows a bare 📌 badge
         let mark: String?      // window: user mark → right-edge badge
+        let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
     }
     private var cells: [Cell] = []
     private var hoverIdx: Int?            // row under the pointer
@@ -194,7 +195,7 @@ public final class SidebarView: NSView {
             + workspaces.map { ws in
                 "\(ws.index)\(ws.index == effActive ? "*" : "")\(ws.layoutMode)|"
                 + ws.windows.map {
-                    "\($0.id.serverID)\(hot($0) ? "f" : ""):\(eff($0))"
+                    "\($0.id.serverID)\(hot($0) ? "f" : "")\($0.isOnscreen ? "" : "h"):\(eff($0))"
                 }.joined(separator: ",")
             }.joined(separator: ";")
         // Loading skeleton: hold while content is UNCHANGED from when
@@ -223,7 +224,7 @@ public final class SidebarView: NSView {
                           pid: 0, app: "", title: "",
                           text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
                           mode: "", isMaster: false, isFloating: false,
-                          isSticky: false, mark: nil))
+                          isSticky: false, mark: nil, isHidden: false))
         y += handleRowH
 
         if searching {
@@ -238,7 +239,7 @@ public final class SidebarView: NSView {
                     // Third line under the title holds the mark pill
                     // (left) and the master / float label — present when
                     // either exists.
-                    let hasThird = hasLabel || (win.mark != nil)
+                    let hasThird = hasLabel || (win.mark != nil) || !win.isOnscreen
                     var rh: CGFloat = baseRH           // compact single line
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
@@ -256,7 +257,8 @@ public final class SidebarView: NSView {
                                       isMaster: win.isMaster,
                                       isFloating: win.isFloating,
                                       isSticky: win.isSticky,
-                                      mark: win.mark))
+                                      mark: win.mark,
+                                      isHidden: !win.isOnscreen))
                     y += rh
                 }
             }
@@ -275,7 +277,7 @@ public final class SidebarView: NSView {
                                   title: "", text: t.uppercased(),
                                   mode: ws.layoutMode,
                                   isMaster: false, isFloating: false,
-                                  isSticky: false, mark: nil))
+                                  isSticky: false, mark: nil, isHidden: false))
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
@@ -288,7 +290,7 @@ public final class SidebarView: NSView {
                     // Third line under the title holds the mark pill
                     // (left) and the master / float label — present when
                     // either exists.
-                    let hasThird = hasLabel || (win.mark != nil)
+                    let hasThird = hasLabel || (win.mark != nil) || !win.isOnscreen
                     var rh: CGFloat = baseRH           // compact single line
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
@@ -306,7 +308,8 @@ public final class SidebarView: NSView {
                                       isMaster: win.isMaster,
                                       isFloating: win.isFloating,
                                       isSticky: win.isSticky,
-                                      mark: win.mark))
+                                      mark: win.mark,
+                                      isHidden: !win.isOnscreen))
                     y += rh
                 }
                 wsBands[ws.index] = start...(y + 3)
@@ -735,7 +738,11 @@ public final class SidebarView: NSView {
                     withAttributes: [
                         .font: uiFont(windowFontSize,
                                       sel ? .semibold : .medium),
-                        .foregroundColor: sel ? pal.accent : pal.text,
+                        // Dim a hidden (Cmd+H/Cmd+M'd) row, but keep a
+                        // selected row at full strength so the highlight
+                        // stays legible.
+                        .foregroundColor: (sel ? pal.accent : pal.text)
+                            .withAlphaComponent(c.isHidden && !sel ? 0.45 : 1.0),
                         .paragraphStyle: para,
                     ])
                 if hasTitle {
@@ -744,13 +751,14 @@ public final class SidebarView: NSView {
                                    width: tw, height: 15),
                         withAttributes: [
                             .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.text,
+                            .foregroundColor: pal.text.withAlphaComponent(
+                                c.isHidden && !sel ? 0.45 : 1.0),
                             .paragraphStyle: para,
                         ])
                 }
                 // Third line: the mark pill (left), then the bare 📌
-                // sticky badge, then the master / float label after it.
-                if hasLabel || hasMark || c.isSticky {
+                // sticky badge, then the master / float / hidden label.
+                if hasLabel || hasMark || c.isSticky || c.isHidden {
                     // Wider gap below the title before the mark / status.
                     let labelY = hasTitle ? row.minY + 51 : row.minY + 32
                     var lx = tx
@@ -835,6 +843,45 @@ public final class SidebarView: NSView {
                         let lblH = (labelText as NSString).size(
                             withAttributes: lblAttrs).height
                         (labelText as NSString).draw(
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
+                                       width: pillW, height: lblH),
+                            withAttributes: lblAttrs)
+                    }
+                    if c.isHidden {
+                        // Hidden (Cmd+H / minimized): an outlined pill in
+                        // the muted `dim` hue — distinct from the accent
+                        // mark and accent2 master/float — confirming the
+                        // dimmed row is hidden, not gone. Click restores
+                        // it. (A hidden window is never master/float/sticky
+                        // — those are excluded from hide-reclaim — so this
+                        // is the only status pill on its row.)
+                        let lblFont = uiFont(windowFontSize, .semibold)
+                        let txt = "hidden"
+                        let textW = ceil((txt as NSString).size(
+                            withAttributes: [.font: lblFont]).width)
+                        let padX: CGFloat = 8
+                        let pillH: CGFloat = 22
+                        let pillW = textW + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        let stroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: 5, yRadius: 5)
+                        stroke.lineWidth = 1
+                        pal.dim.setStroke()
+                        stroke.stroke()
+                        let lblPara = NSMutableParagraphStyle()
+                        lblPara.alignment = .center
+                        lblPara.lineBreakMode = .byTruncatingTail
+                        let lblAttrs: [NSAttributedString.Key: Any] = [
+                            .font: lblFont,
+                            .foregroundColor: pal.dim,
+                            .paragraphStyle: lblPara,
+                        ]
+                        let lblH = (txt as NSString).size(
+                            withAttributes: lblAttrs).height
+                        (txt as NSString).draw(
                             in: NSRect(x: lx,
                                        y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
                                        width: pillW, height: lblH),
@@ -1115,6 +1162,13 @@ public final class SidebarView: NSView {
             // with the click target, otherwise the outline strands
             // on the previous selection beside the new sel fill.
             kbSel = .win(id)
+            // A *hidden* row (Cmd+H'd / minimized window — hide-reclaim
+            // pulled its tile slot, `isOnscreen == false`) is restored
+            // on click: the backend un-hides / un-minimizes + focuses,
+            // and the next reconcile re-tiles it. A normal row just
+            // focuses. Memory: `facet-hide-reclaim-decisions`.
+            let hidden = lastWorkspaces.first { $0.index == i }?
+                .windows.first { $0.id == id }?.isOnscreen == false
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
@@ -1124,8 +1178,12 @@ public final class SidebarView: NSView {
                 if needSwitch {
                     bk.switchWorkspace(toIndex: i)
                 }
-                Task { @MainActor in
-                    ctrl?.focusWindow(window, postSwitch: needSwitch)
+                if hidden {
+                    bk.revealWindow(id)
+                } else {
+                    Task { @MainActor in
+                        ctrl?.focusWindow(window, postSwitch: needSwitch)
+                    }
                 }
             }
         }

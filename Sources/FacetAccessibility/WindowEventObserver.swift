@@ -51,6 +51,14 @@ public final class WindowEventObserver: @unchecked Sendable {
     /// normal (slower, gated) add path.
     public enum Event: Sendable {
         case created(WindowID)
+        /// A window / app changed visibility — Cmd+H app hide/show or
+        /// Cmd+M window miniaturize/deminiaturize. Its own case (not
+        /// `.other`) so the adapter can schedule the follow-up refresh
+        /// that completes the hide-reclaim two-tick gate without waiting
+        /// for the 2 s poll. No id: an app-level hide has no single
+        /// window, and the reconcile re-reads every window's `isOnscreen`
+        /// regardless. See memory `facet-hide-reclaim-decisions`.
+        case visibilityChanged
         case other
     }
 
@@ -163,6 +171,13 @@ public final class WindowEventObserver: @unchecked Sendable {
             kAXUIElementDestroyedNotification,
             kAXWindowResizedNotification,
             kAXWindowMovedNotification,
+            // Hide-reclaim fast path: Cmd+H app hide/show + Cmd+M window
+            // miniaturize/deminiaturize fire these, so the slot is
+            // reclaimed / restored within a frame instead of the 2 s poll.
+            kAXApplicationHiddenNotification,
+            kAXApplicationShownNotification,
+            kAXWindowMiniaturizedNotification,
+            kAXWindowDeminiaturizedNotification,
         ] as [String] {
             AXObserverAddNotification(
                 obs, app, note as CFString, context)
@@ -208,6 +223,15 @@ private func axObserverCallback(
         if g(element, &cg) == .success, cg != 0 {
             event = .created(WindowID(serverID: Int(cg)))
         }
+    } else if note == kAXApplicationHiddenNotification as String
+        || note == kAXApplicationShownNotification as String
+        || note == kAXWindowMiniaturizedNotification as String
+        || note == kAXWindowDeminiaturizedNotification as String {
+        // App hide/show or window miniaturize/deminiaturize — the
+        // adapter re-reads isOnscreen for every window, so we don't
+        // need to resolve which one here (app-level events carry the
+        // app element, not a window, anyway).
+        event = .visibilityChanged
     }
     MainActor.assumeIsolated { obs.fire(event, notification: note) }
 }
