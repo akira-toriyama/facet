@@ -5,6 +5,8 @@
 // hold it as a protocol, never as a concrete type — see
 // docs/architecture.md.
 
+import CoreGraphics
+
 /// An action that operates on the WM's currently-selected window.
 ///
 /// Semantic enum, kept layout-mode-agnostic. Adapters silently no-op
@@ -196,6 +198,19 @@ public protocol WindowBackend: Sendable {
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge)
 
+    /// The layout the active workspace WOULD have if `dragged` were
+    /// dropped onto `target` with intent `zone` — without committing.
+    /// Computed on a copy of the layout state through the SAME swap /
+    /// insert + tiling math (incl. inner gap) the commit uses, so the
+    /// real-window-DnD prediction overlay (枠C PR-3) can't drift from
+    /// what actually lands. `frames` are backend (Quartz, top-left)
+    /// coords; `moved` is which windows the drop relocates (diffed
+    /// against the pre-drop computed layout, so it's exact — no live /
+    /// sub-pixel noise). `.none` when the drop changes nothing / isn't
+    /// applicable. Not a CLI verb — DnD-only.
+    func predictedDrop(dragged: WindowID, target: WindowID,
+                       zone: IntentZone) -> DropPrediction
+
     /// Assign mark `name` (vim-style label) to the focused window
     /// (`facet window --mark=NAME`). 1:1: the name's old window and the
     /// focused window's old mark are both cleared. Returns `false` when
@@ -255,6 +270,8 @@ public extension WindowBackend {
     func swapWindows(_ a: WindowID, _ b: WindowID) {}
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge) {}
+    func predictedDrop(dragged: WindowID, target: WindowID,
+                       zone: IntentZone) -> DropPrediction { .none }
     func markFocusedWindow(_ name: String) -> Bool { false }
     func focusMark(_ name: String) -> Bool { false }
     func unmark(_ name: String) -> Bool { false }
