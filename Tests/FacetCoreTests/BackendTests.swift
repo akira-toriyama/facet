@@ -44,7 +44,8 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
     var retileCalls = 0
 
     func windowMenu(mode: String, floating: Bool,
-                    isMaster: Bool, windowCount: Int) -> [WindowMenuItem] {
+                    isMaster: Bool, windowCount: Int,
+                    isSticky: Bool) -> [WindowMenuItem] {
         var items: [WindowMenuItem] = []
         if mode == "bsp" {
             items.append(.init("Toggle stack", [.toggleStack]))
@@ -111,13 +112,16 @@ final class BackendTests: XCTestCase {
     func testWindowMenuVariesByMode() {
         let b = StubBackend()
         XCTAssertEqual(b.windowMenu(mode: "bsp", floating: false,
-                                    isMaster: false, windowCount: 2)
+                                    isMaster: false, windowCount: 2,
+                                    isSticky: false)
                         .first?.label, "Toggle stack")
         XCTAssertEqual(b.windowMenu(mode: "stack", floating: false,
-                                    isMaster: false, windowCount: 2)
+                                    isMaster: false, windowCount: 2,
+                                    isSticky: false)
                         .first?.label, "Float")
         XCTAssertEqual(b.windowMenu(mode: "bsp", floating: true,
-                                    isMaster: false, windowCount: 2)
+                                    isMaster: false, windowCount: 2,
+                                    isSticky: false)
                         .map(\.label),
                        ["Toggle stack", "Unfloat", "Close window"])
     }

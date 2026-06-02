@@ -51,6 +51,20 @@ final class StatusTests: XCTestCase {
         XCTAssertThrowsError(try StatusSnapshot.read(from: missing))
     }
 
+    func testEntryDecodesMissingStickyCountAsZero() throws {
+        // A status file written by a pre-sticky server (no stickyCount
+        // key) must decode to 0, not throw `keyNotFound` — otherwise
+        // `facet status` would fail across an in-place upgrade until the
+        // next reconcile rewrote the file.
+        let json = Data("""
+        {"index":1,"name":"dev","active":true,"windowCount":3}
+        """.utf8)
+        let entry = try JSONDecoder().decode(
+            WorkspaceStatusEntry.self, from: json)
+        XCTAssertEqual(entry.stickyCount, 0)
+        XCTAssertEqual(entry.windowCount, 3)
+    }
+
     // MARK: - Rendering
 
     func testRenderIncludesAllHeaderFields() {
@@ -104,6 +118,26 @@ final class StatusTests: XCTestCase {
                       "plural for count > 1")
         XCTAssertFalse(out.contains("\"\""),
                        "empty workspace name should not be quoted")
+    }
+
+    func testRenderShowsStickyCountSuffixOnlyWhenNonZero() {
+        let snap = StatusSnapshot(
+            backend: "native",
+            theme: "terminal",
+            defaultView: "tree",
+            workspaces: [
+                .init(index: 1, name: "dev", active: true,
+                      windowCount: 3, stickyCount: 1),
+                .init(index: 2, name: "", active: false,
+                      windowCount: 2, stickyCount: 0),
+            ],
+            lastError: nil,
+            timestamp: "ts")
+        let out = snap.render()
+        XCTAssertTrue(out.contains("3 windows, 1 sticky"),
+                      "sticky suffix shown when count > 0")
+        XCTAssertFalse(out.contains("0 sticky"),
+                       "no sticky suffix when count is 0")
     }
 
     func testRenderSurfacesLastError() {

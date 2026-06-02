@@ -318,6 +318,9 @@ facet workspace --balance         # master 比率 / 数を均等な初期値に�
 facet workspace --rotate=90|180|270        # bsp tree を時計回りに回転 (bsp のみ)
 facet workspace --mirror=horizontal|vertical # bsp tree を左右 / 上下に反転
 facet window --toggle-float          # focused window の float flag flip
+facet window --toggle-sticky         # 全 workspace に常駐させる (PiP / タイマー /
+                                     # チャット)。 OFF にすると今いる workspace の
+                                     # タイル窓に戻る。 session 限り・native Space 単位
 facet window --toggle-orientation    # bsp: 親 split を 90 度回転 / tall⇄wide: レイアウト入替
 facet window --cycle-stack=next|prev # stack の次 / 前メンバーへ循環
 facet window --grow-master|--shrink-master   # master 幅 ±0.05 (tall / wide / centered)

@@ -2,10 +2,12 @@ import XCTest
 @testable import FacetCore
 @testable import FacetAdapterNative
 
-/// `NativeAdapter.windowMenu(mode:floating:isMaster:windowCount:)` is
-/// pure (no AX, no catalog state) — a per-mode lookup table for the
-/// right-click menu, gated by the window's state so master vs
-/// non-master (and a lone stack window) get the right items.
+/// `NativeAdapter.windowMenu(mode:floating:isMaster:windowCount:isSticky:)`
+/// is pure (no AX, no catalog state) — a per-mode lookup table for the
+/// right-click / keyboard (`m` in --active) context menu, gated by the
+/// window's state so master vs non-master (and a lone stack window) get
+/// the right items. Every non-sticky window also offers "Sticky"; a
+/// sticky window collapses to "Unstick" + "Close".
 final class WindowMenuTests: XCTestCase {
 
     private func adapter() -> NativeAdapter {
@@ -23,20 +25,23 @@ final class WindowMenuTests: XCTestCase {
 
     private func menu(_ mode: String, floating: Bool = false,
                       isMaster: Bool = false,
-                      windowCount: Int = 2) -> [WindowMenuItem] {
+                      windowCount: Int = 2,
+                      isSticky: Bool = false) -> [WindowMenuItem] {
         adapter().windowMenu(mode: mode, floating: floating,
-                             isMaster: isMaster, windowCount: windowCount)
+                             isMaster: isMaster, windowCount: windowCount,
+                             isSticky: isSticky)
     }
 
     // MARK: - Float mode
 
     func testFloatModeNonFloatingMenu() {
-        XCTAssertEqual(labels(menu("float")), ["Float", "Close window"])
+        XCTAssertEqual(labels(menu("float")),
+                       ["Float", "Sticky", "Close window"])
     }
 
     func testFloatModeFloatingMenu() {
         XCTAssertEqual(labels(menu("float", floating: true)),
-                       ["Unfloat", "Close window"])
+                       ["Unfloat", "Sticky", "Close window"])
     }
 
     // MARK: - BSP mode
@@ -44,16 +49,17 @@ final class WindowMenuTests: XCTestCase {
     func testBspModeNonFloatingMenu() {
         let items = menu("bsp")
         XCTAssertEqual(labels(items),
-                       ["Toggle orientation", "Float", "Close window"])
+                       ["Toggle orientation", "Float",
+                        "Sticky", "Close window"])
         XCTAssertEqual(items[0].ops, [.toggleOrientation])
     }
 
     func testBspModeFloatingMenu() {
         // Floating window in a bsp WS still has no orientation
         // (it's outside the tree) — menu collapses to Unfloat +
-        // Close.
+        // Sticky + Close.
         XCTAssertEqual(labels(menu("bsp", floating: true)),
-                       ["Unfloat", "Close window"])
+                       ["Unfloat", "Sticky", "Close window"])
     }
 
     // MARK: - Stack mode
@@ -63,7 +69,7 @@ final class WindowMenuTests: XCTestCase {
         XCTAssertEqual(labels(items),
                        ["Next stack window",
                         "Previous stack window",
-                        "Float",
+                        "Float", "Sticky",
                         "Close window"])
         XCTAssertEqual(items[0].ops, [.cycleStackNext])
         XCTAssertEqual(items[1].ops, [.cycleStackPrev])
@@ -72,14 +78,14 @@ final class WindowMenuTests: XCTestCase {
     func testStackModeSingleWindowHidesCycle() {
         // Nothing to cycle to with one window — cycle items drop out.
         XCTAssertEqual(labels(menu("stack", windowCount: 1)),
-                       ["Float", "Close window"])
+                       ["Float", "Sticky", "Close window"])
     }
 
     func testStackModeFloatingMenu() {
         // Same logic as bsp floating: a floating window in a
         // stack WS isn't on the stack, so cycle items disappear.
         XCTAssertEqual(labels(menu("stack", floating: true)),
-                       ["Unfloat", "Close window"])
+                       ["Unfloat", "Sticky", "Close window"])
     }
 
     // MARK: - Master-stack modes (tall / wide / centered)
@@ -91,7 +97,7 @@ final class WindowMenuTests: XCTestCase {
                         "Wider master", "Narrower master",
                         "More masters", "Fewer masters",
                         "Flip wide / tall",
-                        "Float", "Close window"])
+                        "Float", "Sticky", "Close window"])
     }
 
     func testTallMasterHidesPromote() {
@@ -102,7 +108,7 @@ final class WindowMenuTests: XCTestCase {
                        ["Wider master", "Narrower master",
                         "More masters", "Fewer masters",
                         "Flip wide / tall",
-                        "Float", "Close window"])
+                        "Float", "Sticky", "Close window"])
     }
 
     func testWideMirrorsTall() {
@@ -113,7 +119,7 @@ final class WindowMenuTests: XCTestCase {
                         "Wider master", "Narrower master",
                         "More masters", "Fewer masters",
                         "Flip wide / tall",
-                        "Float", "Close window"])
+                        "Float", "Sticky", "Close window"])
     }
 
     func testCenteredNonMasterShowsPromote() {
@@ -122,7 +128,7 @@ final class WindowMenuTests: XCTestCase {
                        ["Promote to master",
                         "Wider master", "Narrower master",
                         "More masters", "Fewer masters",
-                        "Float", "Close window"])
+                        "Float", "Sticky", "Close window"])
     }
 
     func testCenteredMasterHidesPromote() {
@@ -137,9 +143,35 @@ final class WindowMenuTests: XCTestCase {
 
     func testMasterStackFloatingDropsTilingItems() {
         // A floating window in a master-stack WS gets neither promote
-        // nor the master knobs.
+        // nor the master knobs — just Unfloat + Sticky + Close.
         let items = menu("tall", floating: true, isMaster: false)
-        XCTAssertEqual(labels(items), ["Unfloat", "Close window"])
+        XCTAssertEqual(labels(items), ["Unfloat", "Sticky", "Close window"])
+    }
+
+    // MARK: - Sticky
+
+    func testStickyWindowShowsUnstickOnly() {
+        // A sticky window is always floating; float-exit = sticky-exit,
+        // so the menu collapses to a single "Unstick" (no "Unfloat",
+        // no "Sticky") + Close. Layout items are gated out by floating.
+        for mode in ["float", "bsp", "stack", "tall", "centered"] {
+            let items = menu(mode, floating: true, isSticky: true)
+            XCTAssertEqual(labels(items), ["Unstick", "Close window"],
+                           "mode=\(mode)")
+            XCTAssertEqual(items.first?.ops, [.toggleSticky])
+        }
+    }
+
+    func testNonStickyOffersStickyToggle() {
+        // Every non-sticky window — tiled or floating — can be pinned.
+        for mode in ["float", "bsp", "stack", "tall", "centered"] {
+            for floating in [false, true] {
+                let item = menu(mode, floating: floating)
+                    .first { $0.label == "Sticky" }
+                XCTAssertEqual(item?.ops, [.toggleSticky],
+                               "mode=\(mode) floating=\(floating)")
+            }
+        }
     }
 
     // MARK: - Universal items
@@ -170,7 +202,8 @@ final class WindowMenuTests: XCTestCase {
     func testUnknownModeFallsBackToFloatShape() {
         // A typo or future mode that the backend doesn't know
         // about should still produce a usable menu — at minimum
-        // Float/Unfloat + Close. Same as float mode.
-        XCTAssertEqual(labels(menu("scrolling")), ["Float", "Close window"])
+        // Float/Unfloat + Sticky + Close. Same as float mode.
+        XCTAssertEqual(labels(menu("scrolling")),
+                       ["Float", "Sticky", "Close window"])
     }
 }

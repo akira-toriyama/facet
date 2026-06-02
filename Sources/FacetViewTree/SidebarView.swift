@@ -37,6 +37,7 @@ public final class SidebarView: NSView {
         let mode: String       // header: WS layout engine
         let isMaster: Bool     // window: shows a `master` status line
         let isFloating: Bool   // window: shows a `float` status line
+        let isSticky: Bool     // window: shows a bare 📌 badge
         let mark: String?      // window: user mark → right-edge badge
     }
     private var cells: [Cell] = []
@@ -222,7 +223,7 @@ public final class SidebarView: NSView {
                           pid: 0, app: "", title: "",
                           text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
                           mode: "", isMaster: false, isFloating: false,
-                          mark: nil))
+                          isSticky: false, mark: nil))
         y += handleRowH
 
         if searching {
@@ -254,6 +255,7 @@ public final class SidebarView: NSView {
                                       text: "", mode: "",
                                       isMaster: win.isMaster,
                                       isFloating: win.isFloating,
+                                      isSticky: win.isSticky,
                                       mark: win.mark))
                     y += rh
                 }
@@ -273,7 +275,7 @@ public final class SidebarView: NSView {
                                   title: "", text: t.uppercased(),
                                   mode: ws.layoutMode,
                                   isMaster: false, isFloating: false,
-                                  mark: nil))
+                                  isSticky: false, mark: nil))
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
@@ -303,6 +305,7 @@ public final class SidebarView: NSView {
                                       text: "", mode: "",
                                       isMaster: win.isMaster,
                                       isFloating: win.isFloating,
+                                      isSticky: win.isSticky,
                                       mark: win.mark))
                     y += rh
                 }
@@ -700,8 +703,12 @@ public final class SidebarView: NSView {
                         .fill()
                 }
                 let iconX = rowPadX + 2
+                // Sticky renders as a bare 📌 (no pill) in the badge
+                // block below, so suppress the plain `float` label here
+                // (sticky ⇒ floating; a master window can't be sticky).
                 let labelText: String? =
                     c.isMaster ? "master" :
+                    c.isSticky ? nil :
                     c.isFloating ? "float" : nil
                 let hasLabel = labelText != nil
                 let hasTitle = !c.title.isEmpty
@@ -711,7 +718,7 @@ public final class SidebarView: NSView {
                 // Vertical rhythm (matches the row-height calc): top pad
                 // 8, app, +4 gap, title, +6 gap, third (mark / status)
                 // line. App centres only on a bare single-line row.
-                let appY = (hasTitle || hasLabel || hasMark)
+                let appY = (hasTitle || hasLabel || hasMark || c.isSticky)
                     ? row.minY + 8 : row.midY - 9
                 let titleY = row.minY + 28        // tucked up under the app
                 // Icon centres on the whole row so it stays vertically
@@ -741,9 +748,9 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
-                // Third line: the mark pill (left) then the master /
-                // float label after it.
-                if hasLabel || hasMark {
+                // Third line: the mark pill (left), then the bare 📌
+                // sticky badge, then the master / float label after it.
+                if hasLabel || hasMark || c.isSticky {
                     // Wider gap below the title before the mark / status.
                     let labelY = hasTitle ? row.minY + 55 : row.minY + 32
                     var lx = tx
@@ -782,6 +789,22 @@ public final class SidebarView: NSView {
                                        width: pillW, height: textH),
                             withAttributes: pillAttrs)
                         lx += pillW + 6
+                    }
+                    if c.isSticky {
+                        // Sticky badge: a bare 📌 glyph, no pill outline.
+                        let pinFont = uiFont(windowFontSize, .regular)
+                        let pin = "📌"
+                        let pillH: CGFloat = 22
+                        let pinSize = (pin as NSString)
+                            .size(withAttributes: [.font: pinFont])
+                        (pin as NSString).draw(
+                            in: NSRect(
+                                x: lx,
+                                y: labelY - 1 + (pillH - pinSize.height) / 2 - 1.0,
+                                width: ceil(pinSize.width) + 2,
+                                height: pinSize.height),
+                            withAttributes: [.font: pinFont])
+                        lx += ceil(pinSize.width) + 8
                     }
                     if let labelText {
                         // master / float as an outlined pill — same badge
@@ -1371,11 +1394,13 @@ public final class SidebarView: NSView {
         let win = wsModel?.windows.first { $0.id == id }
         let floating = win?.isFloating ?? false
         let isMaster = win?.isMaster ?? false
+        let isSticky = win?.isSticky ?? false
         // Non-floating tiled members — what stack cycling rotates over.
         let windowCount = wsModel?.windows.filter { !$0.isFloating }.count ?? 0
         let menu = backend.windowMenu(mode: mode, floating: floating,
                                       isMaster: isMaster,
-                                      windowCount: windowCount)
+                                      windowCount: windowCount,
+                                      isSticky: isSticky)
         let bk = backend
         let ctrl = controller
         PopupMenu.shared.show(at: scr,

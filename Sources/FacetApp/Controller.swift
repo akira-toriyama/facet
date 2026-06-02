@@ -432,6 +432,9 @@ final class Controller: NSObject {
                 case "window-toggle-float":
                     self.dispatchWindowAction(.toggleFloat)
 
+                case "window-toggle-sticky":
+                    self.dispatchWindowAction(.toggleSticky)
+
                 case "window-toggle-orientation":
                     self.dispatchWindowAction(.toggleOrientation)
 
@@ -869,7 +872,8 @@ final class Controller: NSObject {
                 index: w.index + 1,     // 1-indexed for the CLI surface
                 name: w.name,
                 active: w.isActive,
-                windowCount: w.windows.count)
+                windowCount: w.windows.count,
+                stickyCount: w.windows.filter(\.isSticky).count)
         }
         let snap = StatusSnapshot(
             backend: backend.name,

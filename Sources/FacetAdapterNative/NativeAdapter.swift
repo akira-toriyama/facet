@@ -2044,6 +2044,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 extra = (id, target)
             }
             reflowActive(rect: rect, extra: extra)
+        case .toggleSticky:
+            // Pin / unpin the focused window across every WS in this
+            // native Space. Setting: catalog force-floats + park-exempts
+            // it (it stays at its current frame). Clearing: catalog
+            // un-floats + re-homes it as a tiled window of the active WS
+            // (Q4). Either way the active WS reflows: setting fills the
+            // gap the window left, clearing tiles the returning window.
+            guard let id = focusedWindow() else { return }
+            if catalog.isSticky(id) {
+                catalog.clearSticky(id, focused: id, in: rect)
+            } else {
+                catalog.setSticky(id)
+            }
+            // Log the *actual* post-state — setSticky no-ops for a
+            // window not yet in `windowMap`, so the intended flag would
+            // lie about the outcome.
+            Log.debug("native: perform toggleSticky "
+                + "\(id.serverID) → isSticky=\(catalog.isSticky(id))")
+            reflowActive(rect: rect)
         case .toggleOrientation:
             // bsp: rotate the focused window's parent split.
             // tall/wide: swap the workspace between the tall ⇄ wide layout.
@@ -2147,7 +2166,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     public func windowMenu(mode: String, floating: Bool,
                            isMaster: Bool,
-                           windowCount: Int) -> [WindowMenuItem] {
+                           windowCount: Int,
+                           isSticky: Bool) -> [WindowMenuItem] {
         // Menu items per layout mode (Phase γ), gated by the window's
         // actual state so master vs non-master (and a lone stack
         // window) get the right menu — no dead items. Floating windows
@@ -2181,8 +2201,18 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             items.append(.init("Flip wide / tall",
                                [.toggleOrientation]))
         }
-        items.append(.init(floating ? "Unfloat" : "Float",
-                           [.toggleFloat]))
+        // A sticky window is always floating, and float-exit =
+        // sticky-exit, so "Unfloat" and "Unstick" would do the same
+        // thing — show only the clearer "Unstick" and skip "Sticky"
+        // (it already is). Any other window gets Float/Unfloat plus a
+        // "Sticky" entry (setSticky force-floats a tiled window).
+        if isSticky {
+            items.append(.init("Unstick", [.toggleSticky]))
+        } else {
+            items.append(.init(floating ? "Unfloat" : "Float",
+                               [.toggleFloat]))
+            items.append(.init("Sticky", [.toggleSticky]))
+        }
         items.append(.init("Close window", [], close: true))
         return items
     }
