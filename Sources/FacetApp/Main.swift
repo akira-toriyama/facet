@@ -1144,10 +1144,14 @@ enum FacetApp {
 
         // ``--edge`` only means something for the rail (it picks the
         // strip's screen edge); requiring ``--view=rail`` keeps a stray
-        // ``--edge`` from silently doing nothing on tree / grid.
+        // ``--edge`` from silently doing nothing on tree / grid. A
+        // ``--toggle=rail`` gets a clearer hint — the rail was targeted,
+        // but ``--edge`` rides the show (``--view=rail``), not toggle.
         if edgeArg != nil && viewArg != "rail" {
-            let msg = "facet: --edge requires --view=rail — "
-                + "see `facet --help`\n"
+            let hint = toggleArg == "rail"
+                ? "--edge applies to --view=rail (show), not --toggle=rail"
+                : "--edge requires --view=rail"
+            let msg = "facet: \(hint) — see `facet --help`\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
         }

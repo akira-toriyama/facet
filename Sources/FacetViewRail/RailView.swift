@@ -391,7 +391,9 @@ public final class RailView: NSView {
     public override func scrollWheel(with event: NSEvent) {
         // Wheel / two-finger scroll moves the strip along its axis when
         // there's overflow; a no-op otherwise (everything already fits).
-        guard maxScrollOffset > 0 else { return }
+        // Ignored mid-drag: `layoutCells` is frozen then, so the offset
+        // would silently accumulate and jump the strip on drop.
+        guard drag == nil, maxScrollOffset > 0 else { return }
         let d = edge.axis == .horizontal ? (event.scrollingDeltaX != 0
                     ? event.scrollingDeltaX : event.scrollingDeltaY)
                                          : event.scrollingDeltaY
@@ -692,13 +694,44 @@ public final class RailView: NSView {
         let ni = (cur + dx + cells.count) % cells.count   // wrap
         guard cells[ni].wsIndex != selectedWS else { return }
         selectedWS = cells[ni].wsIndex
+        let before = scrollOffset
         keepSelectedWSVisible()
         if drag != nil {
+            // Lifted: `layoutCells` is frozen (layoutSuppressed) so the
+            // source cell can't shift under the cursor, but the aim must
+            // still scroll the strip when the target is past the
+            // viewport. Translate the existing (frozen) cells by the
+            // scroll delta so the aimed cell comes into view and the
+            // ghost lands on its real, scrolled rect — no rebuild, and
+            // no post-commit jump (the eventual relayout matches).
+            shiftStripCells(by: -(scrollOffset - before))
             syncRailDragToSelection()      // lifted → arrows AIM the destination
         } else {
             kbSelectedWindowIdx = -1       // browse → reset window cursor for the new WS
             layoutCells()                  // rebuild hero (+ selection cursor)
         }
+    }
+
+    /// Translate the strip cells along the strip axis by `delta` points
+    /// without a full relayout — the scroll-follow path used while a
+    /// drag freezes `layoutCells`. Pure rect translation (content is
+    /// untouched, honouring the drag freeze invariant).
+    private func shiftStripCells(by delta: CGFloat) {
+        guard delta != 0 else { return }
+        let dx = edge.axis == .horizontal ? delta : 0
+        let dy = edge.axis == .horizontal ? 0 : delta
+        func moved(_ r: NSRect) -> NSRect { r.offsetBy(dx: dx, dy: dy) }
+        cells = cells.map { c in
+            Cell(wsIndex: c.wsIndex, rect: moved(c.rect),
+                 headerRect: moved(c.headerRect), isActive: c.isActive,
+                 name: c.name, mode: c.mode, count: c.count,
+                 wins: c.wins.map {
+                     WinHit(id: $0.id, pid: $0.pid, isFocused: $0.isFocused,
+                            rect: moved($0.rect), mark: $0.mark)
+                 },
+                 isHero: c.isHero)
+        }
+        needsDisplay = true
     }
 
     /// Scroll the strip so the browse-selected workspace is fully in
