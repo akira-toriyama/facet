@@ -93,6 +93,24 @@ final class Controller: NSObject {
     /// `predictedDropFrames` requests to the backend's response rate.
     var dndPredictionInFlight = false
 
+    /// Live real-window RESIZE follow (枠C 機能2). The gesture shares the
+    /// DnD monitor; these track the resize half. `liveGestureIsResize`
+    /// latches once a tick classifies the drag as a resize, so the move
+    /// drop-overlay stays hidden for the rest of the gesture;
+    /// `liveResizeLastFrame` feeds the per-tick dead-zone; the in-flight
+    /// flag + timestamp throttle the neighbour AX writes to ~30fps. See
+    /// `liveDragTick` / `resolveLiveDragEnd` (RealWindowDrag.swift).
+    var liveGestureIsResize = false
+    var liveResizeLastFrame: CGRect?
+    var liveResizeInFlight = false
+    var liveResizeLastAt = Date.distantPast
+    /// Was the PREVIOUS tick classified as a resize? A drag is only
+    /// latched to resize once TWO consecutive ticks see the size changed,
+    /// so a single-frame OS size blip during a title-bar move (display
+    /// clamp / app self-resize) can't latch resize or write a stray ratio.
+    /// The in-flight gate serialises ticks, so this reads consistently.
+    var liveResizePrevResized = false
+
     // MARK: - Grid overview
 
     private var gridOverlay: GridOverlay?

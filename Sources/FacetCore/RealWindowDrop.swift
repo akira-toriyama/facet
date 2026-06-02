@@ -35,14 +35,45 @@ public enum RealWindowDrop {
         }
     }
 
-    /// The id of the tiled window whose frame contains `point` (the
-    /// grab point), or `nil` when the point is over no tiled window —
-    /// i.e. not the start of a window drag we manage. `windows` are the
-    /// active workspace's non-floating tiled windows with their live
-    /// on-screen frames; tile slots don't overlap, so at most one hits.
+    /// Native resize handles sit ON / a few px OUTSIDE a window's frame
+    /// edge, so a plain `contains` test misses an edge grab. Match anything
+    /// within this band (in points) of a tile's edge as still belonging to
+    /// that tile — the peers do the same (winmux uses a 32px candidate
+    /// band). Kept modest so a grab in a wide inner gap still resolves to
+    /// the nearer window rather than reaching across it.
+    public static let grabEdgeMargin: CGFloat = 8
+
+    /// The id of the tiled window the grab `point` belongs to, or `nil`
+    /// when it's over none — i.e. not the start of a window gesture we
+    /// manage. An interior grab (title bar / body) matches by exact
+    /// containment; an EDGE grab (the native resize handle, which straddles
+    /// the frame border) matches the NEAREST window whose edge is within
+    /// `grabEdgeMargin` — without this, edge-drag resizes intermittently
+    /// fail to arm and facet's reflow fights the native resize. `windows`
+    /// are the active workspace's non-floating tiled windows with their
+    /// live on-screen frames.
     public static func window(_ windows: [(id: WindowID, frame: CGRect)],
-                              at point: CGPoint) -> WindowID? {
-        windows.first { $0.frame.contains(point) }?.id
+                              at point: CGPoint,
+                              edgeMargin: CGFloat = grabEdgeMargin) -> WindowID? {
+        if let hit = windows.first(where: { $0.frame.contains(point) }) {
+            return hit.id                              // interior grab
+        }
+        let m2 = edgeMargin * edgeMargin
+        return windows
+            .map { (id: $0.id, d2: Self.edgeDistanceSq($0.frame, point)) }
+            .filter { $0.d2 <= m2 }
+            .min { $0.d2 < $1.d2 }?
+            .id                                        // nearest edge within band
+    }
+
+    /// Squared distance from `point` to the nearest edge of `frame`
+    /// (0 when inside). Squared to skip the sqrt — only used for
+    /// thresholding + nearest comparison, both monotonic.
+    private static func edgeDistanceSq(_ frame: CGRect,
+                                       _ p: CGPoint) -> CGFloat {
+        let dx = max(0, max(frame.minX - p.x, p.x - frame.maxX))
+        let dy = max(0, max(frame.minY - p.y, p.y - frame.maxY))
+        return dx * dx + dy * dy
     }
 
     /// Resolve dropping `dragged` at `point`: find the tiled window

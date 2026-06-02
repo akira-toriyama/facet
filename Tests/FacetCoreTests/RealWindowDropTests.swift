@@ -29,6 +29,38 @@ final class RealWindowDropTests: XCTestCase {
         XCTAssertNil(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 2000)))
     }
 
+    // MARK: - grab edge band (枠C 機能2: native resize handle grabs)
+
+    func testEdgeGrabJustOutsideArmsNearestWindow() {
+        // The native resize handle sits ON / just outside the frame edge,
+        // which a plain `contains` misses. 5px outside an outer edge → that
+        // window (within the 8px band).
+        XCTAssertEqual(RealWindowDrop.window(wins, at: CGPoint(x: -5, y: 450)),
+                       wid(1))
+        XCTAssertEqual(RealWindowDrop.window(wins, at: CGPoint(x: 1605, y: 450)),
+                       wid(2))
+    }
+
+    func testEdgeGrabInGapPicksNearer() {
+        // 20px inner gap: A = [0,790], B = [810,1600].
+        let g = [(id: wid(1),
+                  frame: CGRect(x: 0, y: 0, width: 790, height: 900)),
+                 (id: wid(2),
+                  frame: CGRect(x: 810, y: 0, width: 790, height: 900))]
+        // 4px past A's edge (16px from B) → A; mirror → B.
+        XCTAssertEqual(RealWindowDrop.window(g, at: CGPoint(x: 794, y: 450)),
+                       wid(1))
+        XCTAssertEqual(RealWindowDrop.window(g, at: CGPoint(x: 806, y: 450)),
+                       wid(2))
+        // Dead centre of a wide gap (>8px from either edge) → no arm.
+        XCTAssertNil(RealWindowDrop.window(g, at: CGPoint(x: 800, y: 450)))
+    }
+
+    func testGrabBeyondBandIsNil() {
+        // 30px below every tile → outside the 8px band → no arm.
+        XCTAssertNil(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 930)))
+    }
+
     // MARK: - drop
 
     func testDropOnOtherCenterIsSwap() {
