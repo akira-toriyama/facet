@@ -159,6 +159,18 @@ use:
   activeSpaceDidChange auto-trigger — it's always too late (the
   Space commits ~0.7s post-keypress). Memory:
   [[facet-per-native-space-ws]].
+- **A user-hidden window gives up its tile slot** (Cmd+H / Cmd+M).
+  `WorkspaceCatalog.reconcileHidden` detaches an `isOnscreen=false`
+  managed window from its layout so the neighbours reclaim the slot,
+  keeps it in `windowMap` (WS assignment + marks survive), and
+  re-attaches it at the tail when it returns on-screen. facet's own
+  parking uses the on-screen anchor sliver (`isOnscreen` stays true),
+  so only a genuine user hide triggers this — never facet itself. The
+  tree shows the window dimmed with a `hidden` badge; clicking it
+  restores (`WindowBackend.revealWindow`: unhide app + un-minimize +
+  focus). Detection is AX-event-driven (≈0.3s) with the 2s poll as a
+  safety net, behind a two-tick gate that ignores the Space-switch
+  off-screen transient. Memory: [[facet-hide-reclaim-decisions]].
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. The id keys the TCC grant
   and self-signed cert identity — don't change it.

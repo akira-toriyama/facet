@@ -17,3 +17,7 @@ Package.resolved
 
 # Logs (local dev)
 /tmp/*.log
+
+# Claude Code per-session scheduled-tasks lock (transient harness state;
+# the rest of .claude/ — settings, commands — can still be committed)
+.claude/scheduled_tasks.lock

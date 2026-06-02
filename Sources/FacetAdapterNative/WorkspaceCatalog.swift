@@ -314,9 +314,10 @@ struct WorkspaceCatalog {
         // CGWindowList enumeration (which now includes off-screen
         // windows via .optionAll). A window that's merely on a
         // different macOS Space, minimized to the Dock, or Cmd+H'd
-        // stays in `liveByID` with `isOnscreen=false` — we keep
-        // its WS assignment so the user gets it back where they
-        // left it.
+        // stays in `liveByID` with `isOnscreen=false` — we keep its
+        // WS assignment (a user hide gives up only its tile slot, which
+        // `reconcileHidden` reclaims for the neighbours; the window
+        // itself is never forgotten until it truly closes).
         let goneIDs = windowMap.keys.filter { !liveIDs.contains($0) }
         for id in goneIDs { forgetWindow(id) }
         // "Are we on a macOS Space that holds at least one window
