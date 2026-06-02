@@ -92,6 +92,7 @@ public final class RailView: NSView {
         let pid: Int
         let isFocused: Bool
         let rect: NSRect
+        let mark: String?      // user mark (M9-5 #3 corner badge)
     }
     /// One workspace mini-screen — used for both the bottom row and
     /// the centre hero. Recomputed on every relayout so paint and
@@ -340,7 +341,8 @@ public final class RailView: NSView {
                            width: f.width * sx, height: f.height * sy)
             guard r.width >= 2, r.height >= 2 else { continue }
             out.append(WinHit(id: win.id, pid: win.pid,
-                              isFocused: win.isFocused, rect: r))
+                              isFocused: win.isFocused, rect: r,
+                              mark: win.mark))
         }
         return out
     }
@@ -422,11 +424,23 @@ public final class RailView: NSView {
         }
         NSGraphicsContext.restoreGraphicsState()
 
-        // Border priority: drop target → hero (focal) → active WS →
-        // keyboard-browse selection → hover → divider.
+        // Border priority: drop target → swap source → hero (focal) →
+        // active WS → keyboard-browse selection → hover → divider. The
+        // drop target is colour-coded by drag kind and the lifted source
+        // is tinted — matching the grid so a window-move vs a whole-WS
+        // swap reads at a glance (M9-5 #1).
         if let d = drag, d.dropTargetWS == c.wsIndex {
-            pal.accent.withAlphaComponent(0.22).setFill(); path.fill()
-            pal.accent.setStroke(); path.lineWidth = 2
+            switch d.kind {
+            case .workspace:
+                pal.text.withAlphaComponent(0.18).setFill(); path.fill()
+                pal.text.withAlphaComponent(0.85).setStroke(); path.lineWidth = 2
+            case .window:
+                pal.accent.withAlphaComponent(0.28).setFill(); path.fill()
+                pal.accent.setStroke(); path.lineWidth = 2
+            }
+        } else if let d = drag, d.kind == .workspace, d.sourceWS == c.wsIndex {
+            pal.text.withAlphaComponent(0.06).setFill(); path.fill()
+            pal.text.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
         } else if c.isHero {
             // Always prominent: accent when it's also the live active
             // WS, bright neutral when browsing a different WS.
@@ -477,6 +491,7 @@ public final class RailView: NSView {
             NSGraphicsContext.restoreGraphicsState()
         }
         stroke.setStroke(); p.lineWidth = 0.5; p.stroke()
+        if let mark = w.mark { drawMiniMarkBadge(mark, in: w.rect) }
     }
 
     // MARK: - Hover

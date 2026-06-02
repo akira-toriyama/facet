@@ -60,6 +60,7 @@ public final class GridView: NSView {
         let id: WindowID
         let isFocused: Bool
         let rect: NSRect
+        let mark: String?      // user mark (M9-5 #3 corner badge)
     }
 
     /// One layout-pass snapshot per workspace cell. Holds everything
@@ -112,6 +113,9 @@ public final class GridView: NSView {
     // Workspace whose header the pointer is hovering — brightens the
     // header band + grip (mirrors the tree header hover affordance).
     private var hoverHeaderWS: Int?
+    // Workspace whose cell (anywhere) the pointer is over — outlines it
+    // with a faint stroke, matching the rail's cell-hover (M9-5 #5).
+    private var hoverWS: Int?
     private var drag: Drag?
     private var dragGhost: NSView?
     private var isDragging: Bool { drag != nil }
@@ -331,7 +335,8 @@ public final class GridView: NSView {
                         pid: win.pid,
                         id: win.id,
                         isFocused: win.isFocused,
-                        rect: wr))
+                        rect: wr,
+                        mark: win.mark))
                 }
             }
             // Header band rect (matches the label draw position) —
@@ -495,9 +500,18 @@ public final class GridView: NSView {
             } else {
                 (cell.isActive ? activeFill : cellFill).setFill()
                 path.fill()
-                (cell.isActive ? activeColor.withAlphaComponent(0.7)
-                               : cellStroke).setStroke()
-                path.lineWidth = cell.isActive ? 1 : 0.5
+                // Active border wins; otherwise a hovered cell gets a
+                // faint outline (M9-5 #5, rail parity), else the divider.
+                if cell.isActive {
+                    activeColor.withAlphaComponent(0.7).setStroke()
+                    path.lineWidth = 1
+                } else if drag == nil, hoverWS == cell.wsIndex {
+                    pal.text.withAlphaComponent(0.7).setStroke()
+                    path.lineWidth = 1.5
+                } else {
+                    cellStroke.setStroke()
+                    path.lineWidth = 0.5
+                }
                 path.stroke()
             }
             // Keyboard selection cursor — outline the currently
@@ -660,16 +674,15 @@ public final class GridView: NSView {
         ])
     }
 
-    /// A 3-column dot grid — the "drag handle" affordance at the left
-    /// of each workspace header band (header drag = WS-swap). Two-
-    /// state height awareness mirrors the tree's grip: 10 rows in a
-    /// tall rect (the 2-line header) and 3 rows in compact rects, so
-    /// the same dot texture renders whether the user is on the tree
-    /// or the grid.
+    /// A 2-column dot grid — the "drag handle" affordance at the left
+    /// of each workspace header band (header drag = WS-swap). Matches
+    /// the tree's canonical grip (`dotR` 1.15, two columns) so the same
+    /// texture renders across tree / grid / rail (M9-5 #4). Two-state
+    /// height awareness: 10 rows in a tall rect (the 2-line header) and
+    /// 3 rows in compact rects.
     private func drawGridGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
-        let dotR: CGFloat = 1.5
-        let xs = [r.minX + dotR + 2, r.minX + dotR + 7,
-                  r.minX + dotR + 12]
+        let dotR: CGFloat = 1.15
+        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
         let ys: [CGFloat] = r.height >= 28
             ? stride(from: -18.0, through: 18.0, by: 4.0)
                 .map { r.midY + $0 }
@@ -718,6 +731,8 @@ public final class GridView: NSView {
         stroke.setStroke()
         wp.lineWidth = 0.5
         wp.stroke()
+        // Mark badge — same corner pill / dot as the rail (M9-5 #3).
+        if let mark = w.mark { drawMiniMarkBadge(mark, in: r) }
     }
 
     // MARK: - Hover (header highlight)
@@ -735,16 +750,20 @@ public final class GridView: NSView {
     public override func mouseMoved(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
         let ws = cells.first(where: { $0.headerRect.contains(p) })?.wsIndex
-        if ws != hoverHeaderWS {
+        let cellWS = cells.first(where: {
+            $0.rect.contains(p) || $0.headerRect.contains(p) })?.wsIndex
+        if ws != hoverHeaderWS || cellWS != hoverWS {
             hoverHeaderWS = ws
+            hoverWS = cellWS
             needsDisplay = true
         }
         (ws != nil ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     public override func mouseExited(with e: NSEvent) {
-        if hoverHeaderWS != nil {
+        if hoverHeaderWS != nil || hoverWS != nil {
             hoverHeaderWS = nil
+            hoverWS = nil
             needsDisplay = true
         }
         NSCursor.arrow.set()

@@ -91,13 +91,14 @@ extension RailView {
         ])
     }
 
-    /// A 3-column dot grid — the drag-handle affordance at the header's
-    /// left. Height-aware (10 rows tall / 3 rows compact) so it stays
-    /// legible in the rail's tiny bottom cells. (Copy of the grid's
-    /// `drawGridGrip`.)
+    /// A 2-column dot grid — the drag-handle affordance at the header's
+    /// left. Matches the tree's canonical grip (`dotR` 1.15, two
+    /// columns) so the same texture reads across tree / grid / rail
+    /// (M9-5 #4). Height-aware (10 rows tall / 3 rows compact) so it
+    /// stays legible in the rail's tiny cells.
     func drawRailGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
-        let dotR: CGFloat = 1.5
-        let xs = [r.minX + dotR + 2, r.minX + dotR + 7, r.minX + dotR + 12]
+        let dotR: CGFloat = 1.15
+        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
         let ys: [CGFloat] = r.height >= 28
             ? stride(from: -18.0, through: 18.0, by: 4.0).map { r.midY + $0 }
             : [r.midY - 4, r.midY, r.midY + 4]
