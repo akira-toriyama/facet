@@ -1260,11 +1260,17 @@ struct WorkspaceCatalog {
         let old = activeIndex
         activeIndex = n1Based
         previousActiveIndex = old
+        // Sticky windows stay on-screen across the switch (they're
+        // park-exempt via `shouldParkAnchor`), so leave them out of both
+        // lists entirely — keeps the adapter's park/restore counts
+        // honest and skips the pointless guarded calls.
         let toPark = windowMap
-            .filter { $0.value.workspace == old }
+            .filter { $0.value.workspace == old
+                && !everywhereWindows.contains($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         let toRestore = windowMap
-            .filter { $0.value.workspace == n1Based }
+            .filter { $0.value.workspace == n1Based
+                && !everywhereWindows.contains($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
