@@ -140,6 +140,34 @@ final class StatusTests: XCTestCase {
                        "no sticky suffix when count is 0")
     }
 
+    func testSnapshotDecodesMissingStashedAsEmpty() throws {
+        // A status file written by a pre-scratchpad server (no `stashed`
+        // key) must decode to [] rather than throw, so `facet status`
+        // survives an in-place upgrade until the next reconcile.
+        let json = Data("""
+        {"backend":"native","theme":"terminal","defaultView":"tree",
+         "workspaces":[],"timestamp":"ts"}
+        """.utf8)
+        let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
+        XCTAssertEqual(snap.stashed, [])
+        XCTAssertNil(snap.lastError)
+    }
+
+    func testRenderShowsStashedLineOnlyWhenNonEmpty() {
+        let withShelf = StatusSnapshot(
+            backend: "native", theme: "terminal", defaultView: "tree",
+            workspaces: [], stashed: ["editor", "notes"],
+            lastError: nil, timestamp: "ts")
+        XCTAssertTrue(withShelf.render().contains("stashed: editor, notes"),
+                      "stashed line lists shelf names when non-empty")
+        let none = StatusSnapshot(
+            backend: "native", theme: "terminal", defaultView: "tree",
+            workspaces: [], stashed: [],
+            lastError: nil, timestamp: "ts")
+        XCTAssertFalse(none.render().contains("stashed:"),
+                       "no stashed line when there are no shelves")
+    }
+
     func testRenderSurfacesLastError() {
         let snap = StatusSnapshot(
             backend: "rift",

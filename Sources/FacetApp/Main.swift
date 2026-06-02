@@ -32,6 +32,8 @@
 //               --toggle-sticky / --toggle-orientation /
 //               --cycle-stack=next|prev / --grow-master / --shrink-master
 //               / --inc-master / --dec-master
+//   Scratchpad: facet scratchpad --stash=NAME / --toggle=NAME
+//               / --release=NAME
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
@@ -155,6 +157,15 @@ enum FacetApp {
           facet window --inc-master          one more window in master
           facet window --dec-master          one fewer window in master
                                              (tall / wide / centered only)
+
+        SCRATCHPAD                           (named hidden shelves)
+          facet scratchpad --stash=NAME      park the focused window onto
+                                             a named shelf (hides it)
+          facet scratchpad --toggle=NAME     summon it onto the current
+                                             workspace, or re-park it if
+                                             already visible here
+          facet scratchpad --release=NAME    drop it off the shelf as a
+                                             tiled window of this workspace
 
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
@@ -664,13 +675,64 @@ enum FacetApp {
         die("facet window: dispatch fell through (bug)")
     }
 
-    /// Parse a mark name from `--mark=NAME` / `--focus-mark=NAME`.
-    /// Any non-empty string is accepted (single letter for hotkeys or
-    /// a memorable word); an empty name is a loud reject (exit 2).
-    static func parseMarkName(_ arg: String, prefix: String) -> String {
+    /// Sub-command parser for ``facet scratchpad <flag>``. A named
+    /// hidden shelf: ``--stash=NAME`` parks the focused window onto the
+    /// shelf, ``--toggle=NAME`` summons it onto the current workspace
+    /// (or re-parks it if already visible there), ``--release=NAME``
+    /// drops it from the shelf as a normal tiled window. One action per
+    /// invocation, same shape as ``runWindowCommand``.
+    static func runScratchpadCommand(_ args: [String]) -> Never {
+        var stashArg: String?
+        var toggleArg: String?
+        var releaseArg: String?
+        var i = 0
+        while i < args.count {
+            defer { i += 1 }
+            let a = args[i]
+            switch true {
+            case a.hasPrefix("--stash="):
+                stashArg = parseMarkName(a, prefix: "--stash=",
+                                         noun: "scratchpad name")
+            case a.hasPrefix("--toggle="):
+                toggleArg = parseMarkName(a, prefix: "--toggle=",
+                                          noun: "scratchpad name")
+            case a.hasPrefix("--release="):
+                releaseArg = parseMarkName(a, prefix: "--release=",
+                                           noun: "scratchpad name")
+            default:
+                die("unknown `scratchpad` flag \"\(a)\" — "
+                    + "see `facet --help`")
+            }
+        }
+        let count = (stashArg != nil ? 1 : 0)
+            + (toggleArg != nil ? 1 : 0)
+            + (releaseArg != nil ? 1 : 0)
+        guard count > 0 else {
+            die("facet scratchpad: no action specified — "
+                + "see `facet --help`")
+        }
+        guard count == 1 else {
+            die("facet scratchpad: pick one action per invocation — "
+                + "see `facet --help`")
+        }
+        requireServerAlive()
+        if let n = stashArg   { postControl("scratchpad-stash:" + n) }
+        if let n = toggleArg  { postControl("scratchpad-toggle:" + n) }
+        if let n = releaseArg { postControl("scratchpad-release:" + n) }
+        // Unreachable — `count == 1` guarantees one branch fired.
+        die("facet scratchpad: dispatch fell through (bug)")
+    }
+
+    /// Parse a name from a `--flag=NAME` argument (marks, scratchpad
+    /// shelves). Any non-empty string is accepted (single letter for
+    /// hotkeys or a memorable word); an empty name is a loud reject
+    /// (exit 2). `noun` tailors the message (`"mark name"` by default,
+    /// `"scratchpad name"` for shelves).
+    static func parseMarkName(_ arg: String, prefix: String,
+                              noun: String = "mark name") -> String {
         let raw = String(arg.dropFirst(prefix.count))
         guard !raw.isEmpty else {
-            die("\(prefix.dropLast()): expected a non-empty mark name")
+            die("\(prefix.dropLast()): expected a non-empty \(noun)")
         }
         return raw
     }
@@ -971,6 +1033,12 @@ enum FacetApp {
         // layout / retile). Subject-verb mirror of `facet window`.
         if argv.first == "workspace" {
             runWorkspaceCommand(Array(argv.dropFirst()))
+        }
+        // `facet scratchpad <flag>` — named hidden shelves (stash /
+        // toggle / release). A new subject (not a `window` verb) because
+        // it operates on a named slot, not the focused window alone.
+        if argv.first == "scratchpad" {
+            runScratchpadCommand(Array(argv.dropFirst()))
         }
         // Read-only query sub-command. Plain noun (no `--`)
         // because it returns data rather than triggering a verb.

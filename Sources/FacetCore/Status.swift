@@ -58,6 +58,13 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
     public let theme: String             // e.g. "terminal", "cute"
     public let defaultView: String?      // "tree" / "grid" / nil = agent
     public let workspaces: [WorkspaceStatusEntry]
+    /// Names of currently *stashed* scratchpad shelves — hidden,
+    /// off-screen windows summonable with `facet scratchpad
+    /// --toggle=NAME`. A *settled* (summoned) scratchpad window
+    /// instead appears in the tree under its workspace, so it's
+    /// absent here. Space-global (the shelf isn't per-WS), so it's a
+    /// top-level field rather than a per-`WorkspaceStatusEntry` count.
+    public let stashed: [String]
     public let lastError: String?        // nil = no error since startup
     public let timestamp: String         // ISO8601, for staleness check
 
@@ -65,14 +72,31 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
                 theme: String,
                 defaultView: String?,
                 workspaces: [WorkspaceStatusEntry],
+                stashed: [String] = [],
                 lastError: String?,
                 timestamp: String) {
         self.backend = backend
         self.theme = theme
         self.defaultView = defaultView
         self.workspaces = workspaces
+        self.stashed = stashed
         self.lastError = lastError
         self.timestamp = timestamp
+    }
+
+    // Tolerate a status file written before `stashed` existed (a stale
+    // `/tmp/facet-status.json` lingering across an in-place upgrade): a
+    // missing key decodes to []. (`Encodable` stays synthesized.)
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        backend = try c.decode(String.self, forKey: .backend)
+        theme = try c.decode(String.self, forKey: .theme)
+        defaultView = try c.decodeIfPresent(String.self, forKey: .defaultView)
+        workspaces = try c.decode([WorkspaceStatusEntry].self,
+                                  forKey: .workspaces)
+        stashed = try c.decodeIfPresent([String].self, forKey: .stashed) ?? []
+        lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
+        timestamp = try c.decode(String.self, forKey: .timestamp)
     }
 
     /// Canonical on-disk location. Same `/tmp` neighbourhood as
@@ -140,6 +164,9 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
                 lines.append(
                     "  \(idx) \(namePadded) \(activeMark)  \(count)\(sticky)")
             }
+        }
+        if !stashed.isEmpty {
+            lines.append("stashed: \(stashed.joined(separator: ", "))")
         }
         lines.append("last error: \(lastError ?? "(none)")")
         lines.append("timestamp: \(timestamp)")

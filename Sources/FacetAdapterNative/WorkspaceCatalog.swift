@@ -190,6 +190,25 @@ struct WorkspaceCatalog {
     /// (a window can carry both).
     private(set) var everywhereWindows: Set<WindowID> = []
 
+    /// Named scratchpad shelves (`facet scratchpad --stash=NAME`): a
+    /// 1:1 bijection name ⇄ window, like `marks`, but the window is
+    /// parked off-screen (anchor sliver) while *stashed*. Summoning
+    /// re-homes it onto the current WS as a floating overlay (settle).
+    /// Session-only, per-native-Space (this catalog is swapped per
+    /// Space); pruned in `forgetWindow`. Mutually exclusive with sticky
+    /// (`stashWindow` clears sticky; `setSticky` clears the shelf).
+    private(set) var scratchpads: [String: WindowID] = [:]
+
+    /// Subset of `scratchpads` values that are currently *stashed*
+    /// (hidden on the shelf), as opposed to *settled* (summoned, on a
+    /// WS). `anchorParked` alone can't tell "parked because shelved"
+    /// from "parked because its WS isn't active": a stashed window must
+    /// stay parked through every WS switch, so `setActive` /
+    /// `resyncVisibleState` skip it explicitly via this set. A settled
+    /// scratchpad window is in `scratchpads` but NOT here, so it parks /
+    /// restores like any normal floating window.
+    private(set) var stashedWindows: Set<WindowID> = []
+
     /// IDs that have been observed `isOnscreen=true` once but not
     /// yet committed to `windowMap`. Reconcile requires **two
     /// consecutive on-screen observations** before adding so a
@@ -537,6 +556,8 @@ struct WorkspaceCatalog {
         pendingHideCandidates.remove(id)
         marks = marks.filter { $0.value != id }   // drop any mark on it
         everywhereWindows.remove(id)              // drop sticky on it
+        scratchpads = scratchpads.filter { $0.value != id }  // drop shelf
+        stashedWindows.remove(id)
     }
 
     /// Clear all hide-state bookkeeping for `id` without
@@ -790,6 +811,15 @@ struct WorkspaceCatalog {
         // `--toggle-sticky` off — so defer to that one path.
         if everywhereWindows.contains(id) {
             clearSticky(id, focused: focused, in: rect)
+            return
+        }
+        // Float-exit = scratchpad-exit (Q13), same shape as sticky: a
+        // settled scratchpad window is force-floating, so "toggle float"
+        // means "let it go" — release drops the shelf entry and re-homes
+        // it as a tiled window of the active WS. (A stashed window is
+        // off-screen / unfocusable, so it never reaches here.)
+        if let name = scratchpad(forWindow: id) {
+            releaseScratchpad(name, focused: focused, in: rect)
             return
         }
         let wasFloating = floatingWindows.contains(id)
@@ -1147,6 +1177,12 @@ struct WorkspaceCatalog {
     /// gap it left).
     mutating func setSticky(_ id: WindowID) {
         guard windowMap[id] != nil else { return }
+        // Sticky and scratchpad are mutually exclusive (a window can't
+        // be both "always visible everywhere" and "hidden on a shelf").
+        // Drop any shelf membership so the XOR holds in both directions
+        // (`stashWindow` does the reverse).
+        scratchpads = scratchpads.filter { $0.value != id }
+        stashedWindows.remove(id)
         everywhereWindows.insert(id)
         floatingWindows.insert(id)   // force floating (Q2)
         detachFromLayouts(id)        // leave its home WS's tiling
@@ -1167,6 +1203,108 @@ struct WorkspaceCatalog {
         windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
         attachToLayout(id, workspace: activeIndex,
                        focused: focused, in: rect)
+    }
+
+    // MARK: - Scratchpad shelf (1:1 name ⇄ window, off-screen)
+
+    /// Whether `id` is currently stashed (hidden on a shelf, parked
+    /// off-screen). A *settled* (summoned) scratchpad window returns
+    /// `false` — it lives on a WS like a normal floating window.
+    func isStashed(_ id: WindowID) -> Bool { stashedWindows.contains(id) }
+
+    /// The window on shelf `name`, or nil when the name is unset.
+    func window(forScratchpad name: String) -> WindowID? { scratchpads[name] }
+
+    /// The shelf a window is registered on, or nil. Used by the
+    /// snapshot to stamp `Window.scratchpad` for the settled badge.
+    func scratchpad(forWindow id: WindowID) -> String? {
+        scratchpads.first { $0.value == id }?.key
+    }
+
+    /// Names of currently *stashed* shelves (hidden), for `facet
+    /// status`. Settled shelves are excluded (they show in the tree).
+    func stashedScratchpadNames() -> [String] {
+        scratchpads.filter { stashedWindows.contains($0.value) }
+            .map(\.key).sorted()
+    }
+
+    /// Whether shelf `name`'s window is *visible on the current
+    /// workspace* (settled here, not parked). Drives the toggle branch:
+    /// visible → re-park to shelf; not visible (stashed, or settled on
+    /// another WS) → summon to the current WS (Q8: "pull it here" and
+    /// "summon from shelf" are the same gesture).
+    func isScratchpadVisibleHere(_ name: String) -> Bool {
+        guard let id = scratchpads[name] else { return false }
+        return !stashedWindows.contains(id)
+            && windowMap[id]?.workspace == activeIndex
+    }
+
+    /// Stash the focused window onto shelf `name`, keeping the 1:1
+    /// bijection (the name's old window un-shelves, the window's old
+    /// shelf is released). Clears any sticky (XOR), force-floats so the
+    /// tiler ignores it, detaches it from its home WS's layout, and
+    /// marks it stashed. The adapter does the AX park afterwards. No-op
+    /// (returns false) for an unmanaged window.
+    @discardableResult
+    mutating func stashWindow(_ name: String, id: WindowID) -> Bool {
+        guard windowMap[id] != nil else { return false }
+        // bijection: the name's previous occupant un-shelves; the
+        // window's previous shelf (if any) is released.
+        if let prev = scratchpads[name] { stashedWindows.remove(prev) }
+        scratchpads = scratchpads.filter { $0.value != id }
+        scratchpads[name] = id
+        everywhereWindows.remove(id)   // XOR with sticky
+        floatingWindows.insert(id)     // overlay, not tiled
+        detachFromLayouts(id)
+        stashedWindows.insert(id)
+        return true
+    }
+
+    /// Summon shelf `name` onto the active WS as a settled floating
+    /// overlay: re-home its slot to `activeIndex`, clear the stashed
+    /// flag (so visibility logic stops skipping it), keep it floating.
+    /// The adapter restores it on-screen (`restoreAnchor`) + focuses it.
+    /// Returns the window id, or nil when the shelf is unset / gone.
+    @discardableResult
+    mutating func summonScratchpad(_ name: String) -> WindowID? {
+        guard let id = scratchpads[name], let slot = windowMap[id]
+        else { return nil }
+        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
+        stashedWindows.remove(id)      // now settled / visible
+        floatingWindows.insert(id)     // settle = floating overlay
+        return id
+    }
+
+    /// Re-park (toggle off) a currently-summoned shelf window: mark it
+    /// stashed again and re-detach. The adapter parks it via
+    /// `parkAnchor`. Returns the window id, or nil when unset / gone.
+    @discardableResult
+    mutating func restashScratchpad(_ name: String) -> WindowID? {
+        guard let id = scratchpads[name], windowMap[id] != nil
+        else { return nil }
+        stashedWindows.insert(id)
+        floatingWindows.insert(id)
+        detachFromLayouts(id)
+        return id
+    }
+
+    /// Release shelf `name`: drop it from the shelf entirely and re-home
+    /// the window as a normal *tiled* window of the active WS (Q4 — same
+    /// landing as un-sticky, in front of the user). The adapter brings
+    /// it on-screen first if it was parked. Returns the freed window id,
+    /// or nil when the shelf was unset.
+    @discardableResult
+    mutating func releaseScratchpad(_ name: String,
+                                    focused: WindowID? = nil,
+                                    in rect: CGRect = .zero) -> WindowID? {
+        guard let id = scratchpads.removeValue(forKey: name),
+              let slot = windowMap[id] else { return nil }
+        stashedWindows.remove(id)
+        floatingWindows.remove(id)
+        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
+        attachToLayout(id, workspace: activeIndex,
+                       focused: focused, in: rect)
+        return id
     }
 
     /// Swap a workspace between the `tall` and `wide` layouts — the two
@@ -1359,14 +1497,20 @@ struct WorkspaceCatalog {
         // Sticky windows stay on-screen across the switch (they're
         // park-exempt via `shouldParkAnchor`), so leave them out of both
         // lists entirely — keeps the adapter's park/restore counts
-        // honest and skips the pointless guarded calls.
+        // honest and skips the pointless guarded calls. Stashed
+        // scratchpad windows are the mirror image: already parked on the
+        // shelf and must STAY parked through the switch, so they're
+        // excluded too (restoring one when its home WS activates would
+        // un-hide the shelf).
         let toPark = windowMap
             .filter { $0.value.workspace == old
-                && !everywhereWindows.contains($0.key) }
+                && !everywhereWindows.contains($0.key)
+                && !stashedWindows.contains($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         let toRestore = windowMap
             .filter { $0.value.workspace == n1Based
-                && !everywhereWindows.contains($0.key) }
+                && !everywhereWindows.contains($0.key)
+                && !stashedWindows.contains($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
@@ -1417,10 +1561,15 @@ struct WorkspaceCatalog {
         // skips floating windows and `clearSticky` re-homes to the
         // active WS anyway, so the move would be a silent no-op that
         // only relocated the tree badge.
+        // A stashed scratchpad window lives off-screen on a named shelf,
+        // not on any visible WS, so "move it to WS N" is incoherent —
+        // reject it (release or summon first). A *settled* scratchpad
+        // window is a normal floating window and moves fine.
         guard isValid(n1Based),
               let current = windowMap[id],
               current.workspace != n1Based,
-              !everywhereWindows.contains(id) else { return .rejected }
+              !everywhereWindows.contains(id),
+              !stashedWindows.contains(id) else { return .rejected }
         windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
         // Detach from source's layout container (if any), then
         // attach to dest's. Both helpers are no-ops when the
@@ -1497,7 +1646,15 @@ struct WorkspaceCatalog {
         // other-Space / minimized windows we never accepted as
         // entries, and falling those back to `activeIndex`
         // would pile them all into WS1).
-        let tracked = live.filter { windowMap[$0.id] != nil }
+        // Stashed scratchpad windows stay in `windowMap` (so their WS
+        // assignment + shelf survive) but must be invisible to the
+        // views: drop them here so they appear in neither the tree nor
+        // a WS's window count. They surface only via `facet status`'s
+        // `stashed:` line. A *settled* (summoned) scratchpad window is
+        // NOT in `stashedWindows`, so it stays and carries its badge.
+        let tracked = live.filter {
+            windowMap[$0.id] != nil && !stashedWindows.contains($0.id)
+        }
         let byWS = Dictionary(grouping: tracked) { w in
             windowMap[w.id]!.workspace
         }
@@ -1542,7 +1699,8 @@ struct WorkspaceCatalog {
                        isOnscreen: w.isOnscreen,
                        isMaster: w.id == master,
                        mark: mark(forWindow: w.id),
-                       isSticky: everywhereWindows.contains(w.id))
+                       isSticky: everywhereWindows.contains(w.id),
+                       scratchpad: scratchpad(forWindow: w.id))
             }
             return Workspace(
                 index: entry.index - 1,
