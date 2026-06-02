@@ -176,6 +176,7 @@ and change **how many** windows share it (`--inc-master` /
 | Action | Result |
 |---|---|
 | Click a window row (tree) | switch to its workspace + focus that exact window |
+| Hide a window (⌘H / ⌘M) | tiled neighbours reclaim its slot; it stays in the tree dimmed with a `hidden` badge — click the row to restore it |
 | Click a workspace header (tree) | switch to that workspace |
 | Drag a window row onto another workspace (tree) | move that window |
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
@@ -238,12 +239,13 @@ so the overlay opens with real screenshots, not icon fallbacks.
 ```sh
 brew install akira-toriyama/tap/facet
 
-# facet is a GUI agent — installing doesn't launch it. Open the app once:
-open "$(brew --prefix)/opt/facet/Facet.app"
-
-# Drop a fully-commented config into place (sane defaults):
+# Drop a fully-commented config into place (sane defaults) — do this
+# BEFORE the first launch so facet reads it straight away:
 curl --create-dirs -o ~/.config/facet/config.toml \
   https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
+
+# facet is a GUI agent — installing doesn't launch it. Open the app once:
+open "$(brew --prefix)/opt/facet/Facet.app"
 ```
 
 On first launch, grant **Accessibility** to *facet* (System

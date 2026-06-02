@@ -70,8 +70,12 @@ public struct Window: Sendable {
     /// window entries** only (off-screen-on-first-sight windows
     /// stay unmanaged); existing windows in the map are kept
     /// regardless of this flag so a Space switch / minimize
-    /// doesn't lose the WS assignment. See memory
-    /// `facet-macos-spaces-coexistence`.
+    /// doesn't lose the WS assignment. A user hide (Cmd+H / Cmd+M)
+    /// additionally gives up the window's tile slot to its neighbours
+    /// — it re-tiles at the tail when it returns on-screen — while
+    /// facet's own parking uses an on-screen sliver, so it never reads
+    /// `false` here. See memory `facet-macos-spaces-coexistence` +
+    /// `facet-hide-reclaim-decisions`.
     public let isOnscreen: Bool
     /// Whether this window occupies the master slot of its workspace
     /// — i.e. it is first in the workspace's tiling order

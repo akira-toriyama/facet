@@ -170,6 +170,7 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | 操作 | 結果 |
 |---|---|
 | window 行クリック (tree) | そのワークスペースに切替 + その window に focus |
+| window を隠す (⌘H / ⌘M) | タイルしてた隣の window が空き枠を埋める。 隠れた window は tree に薄く `hidden` バッジ付きで残る — 行クリックで復帰 |
 | ワークスペース header クリック (tree) | そのワークスペースに切替 |
 | window 行を別ワークスペースにドラッグ (tree) | その window を移動 |
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
@@ -231,12 +232,13 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 ```sh
 brew install akira-toriyama/tap/facet
 
-# facet は GUI agent — install だけでは起動しない。 1 度 app を開く:
-open "$(brew --prefix)/opt/facet/Facet.app"
-
-# 詳細コメント付き config を配置 (デフォルト値は妥当):
+# 詳細コメント付き config を配置 (デフォルト値は妥当)。 初回起動で
+# すぐ読まれるよう、 app を開く前に置く:
 curl --create-dirs -o ~/.config/facet/config.toml \
   https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
+
+# facet は GUI agent — install だけでは起動しない。 1 度 app を開く:
+open "$(brew --prefix)/opt/facet/Facet.app"
 ```
 
 初回起動時、 *facet* に **Accessibility** 権限を付与 (System
