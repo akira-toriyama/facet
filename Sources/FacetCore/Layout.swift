@@ -47,6 +47,22 @@ public protocol LayoutEngine: Sendable {
     /// — ignore it).
     func frames(order: [WindowID], focused: WindowID?,
                 params: LayoutParams, in rect: CGRect) -> [WindowID: CGRect]
+
+    /// Whether this engine has a privileged *master* window
+    /// (`order[0]`) — the flag behind `Window.isMaster` and the tree's
+    /// `master` chip. `true` for the master-stack engines
+    /// (tall / wide / centered); `false` for grid / spiral, which tile
+    /// every window co-equally. Engines that keep their own stateful
+    /// adapter path and aren't in `LayoutRegistry` (bsp / stack /
+    /// float) report no master via the `?? false` at the call site.
+    var hasMaster: Bool { get }
+}
+
+extension LayoutEngine {
+    /// Default: an engine has a master unless it opts out. The master-
+    /// stack engines (tall / wide / centered) inherit this; grid /
+    /// spiral override to `false`.
+    public var hasMaster: Bool { true }
 }
 
 /// Tall / master-stack (dwm `tile`, xmonad `Tall`, Amethyst "Tall").
@@ -211,6 +227,7 @@ public struct CenteredLayout: LayoutEngine {
 /// grid has no master.
 public struct GridLayout: LayoutEngine {
     public let name = "grid"
+    public let hasMaster = false   // co-equal grid — no master
     public init() {}
 
     public func frames(order: [WindowID], focused: WindowID?,
@@ -248,6 +265,7 @@ public struct GridLayout: LayoutEngine {
 /// persisted ratios, out of scope here). Master knobs unused.
 public struct SpiralLayout: LayoutEngine {
     public let name = "spiral"
+    public let hasMaster = false   // fibonacci spiral — no master
     public init() {}
 
     public func frames(order: [WindowID], focused: WindowID?,

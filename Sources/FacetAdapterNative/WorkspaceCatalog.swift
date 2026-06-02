@@ -1420,13 +1420,15 @@ struct WorkspaceCatalog {
                 : [:]
             // Master = first in the WS's tiling order (order[0]) —
             // consumed by the right-click menu's master-aware
-            // actions AND the tree's right-edge `master` chip.
-            // Gated on a layout that actually has a primary slot:
-            // `float` tiles nothing, so a master label there would
-            // be a lie (an unknown mode is treated the same way —
-            // safer to render no chip than the wrong one).
-            let hasMasterSlot = m == "bsp" || m == "stack"
-                || LayoutRegistry.engine(named: m) != nil
+            // actions AND the tree's right-edge `master` chip. Only
+            // the master-stack engines (tall / wide / centered) have a
+            // real master; bsp / stack / float keep their stateful
+            // adapter paths (absent from the registry) and grid /
+            // spiral tile co-equally (`hasMaster == false`), so all of
+            // them report no master — a chip there would be a lie. The
+            // engine declares its own master-ness via `hasMaster`.
+            let hasMasterSlot =
+                LayoutRegistry.engine(named: m)?.hasMaster ?? false
             let master = hasMasterSlot
                 ? orderedMembers(of: entry.index).first
                 : nil
