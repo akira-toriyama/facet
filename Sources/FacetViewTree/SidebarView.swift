@@ -242,7 +242,7 @@ public final class SidebarView: NSView {
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
                         if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                        if hasThird { rh += 22 }       // gap 6 + third 16
+                        if hasThird { rh += 28 }       // gap 6 + badge 22
                     }
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
@@ -291,7 +291,7 @@ public final class SidebarView: NSView {
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
                         if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                        if hasThird { rh += 22 }       // gap 6 + third 16
+                        if hasThird { rh += 28 }       // gap 6 + badge 22
                     }
                     let wr = NSRect(x: 0, y: y, width: w, height: rh)
                     rows.append(TreeRow(rect: wr, kind: .window(
@@ -736,8 +736,8 @@ public final class SidebarView: NSView {
                         in: NSRect(x: tx, y: titleY,
                                    width: tw, height: 15),
                         withAttributes: [
-                            .font: uiFont(windowFontSize - 1, .regular),
-                            .foregroundColor: pal.dim,
+                            .font: uiFont(windowFontSize - 1, .semibold),
+                            .foregroundColor: pal.text,
                             .paragraphStyle: para,
                         ])
                 }
@@ -748,18 +748,18 @@ public final class SidebarView: NSView {
                     let labelY = hasTitle ? row.minY + 55 : row.minY + 32
                     var lx = tx
                     if let mark = c.mark {
-                        let markFont = uiFont(windowFontSize - 1, .bold)
+                        let markFont = uiFont(windowFontSize, .bold)
                         let maxTextW: CGFloat = 60   // long → tail-truncate
                         let textW = min(maxTextW, ceil((mark as NSString)
                             .size(withAttributes: [.font: markFont]).width))
-                        let padX: CGFloat = 6
-                        let pillH: CGFloat = 15
+                        let padX: CGFloat = 8
+                        let pillH: CGFloat = 22   // inner padding around text
                         let pillW = textW + padX * 2
                         let pillRect = NSRect(x: lx, y: labelY - 1,
                                               width: pillW, height: pillH)
                         let markStroke = NSBezierPath(
                             roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: pillH / 2, yRadius: pillH / 2)
+                            xRadius: 5, yRadius: 5)   // rounded rect, not capsule
                         markStroke.lineWidth = 1
                         // Mark = primary accent (green) so the user's own
                         // handle stands apart from the accent-2 master /
@@ -778,7 +778,7 @@ public final class SidebarView: NSView {
                             withAttributes: pillAttrs).height
                         (mark as NSString).draw(
                             in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - textH) / 2 - 1.5,
+                                       y: labelY - 1 + (pillH - textH) / 2 - 1.0,
                                        width: pillW, height: textH),
                             withAttributes: pillAttrs)
                         lx += pillW + 6
@@ -787,17 +787,17 @@ public final class SidebarView: NSView {
                         // master / float as an outlined pill — same badge
                         // shape as the mark, lighter (stroke, no fill) so
                         // the solid mark stays the primary handle.
-                        let lblFont = uiFont(windowFontSize - 1, .semibold)
+                        let lblFont = uiFont(windowFontSize, .semibold)
                         let textW = ceil((labelText as NSString).size(
                             withAttributes: [.font: lblFont]).width)
-                        let padX: CGFloat = 6
-                        let pillH: CGFloat = 15
+                        let padX: CGFloat = 8
+                        let pillH: CGFloat = 22   // inner padding around text
                         let pillW = textW + padX * 2
                         let pillRect = NSRect(x: lx, y: labelY - 1,
                                               width: pillW, height: pillH)
                         let stroke = NSBezierPath(
                             roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: pillH / 2, yRadius: pillH / 2)
+                            xRadius: 5, yRadius: 5)   // rounded rect, not capsule
                         stroke.lineWidth = 1
                         pal.accent2.setStroke()
                         stroke.stroke()
@@ -813,7 +813,7 @@ public final class SidebarView: NSView {
                             withAttributes: lblAttrs).height
                         (labelText as NSString).draw(
                             in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.5,
+                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
                                        width: pillW, height: lblH),
                             withAttributes: lblAttrs)
                     }
