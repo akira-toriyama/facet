@@ -63,8 +63,8 @@ public final class SidebarView: NSView {
     /// holds (incoming refreshes don't replace the skeleton). Driven
     /// by the CLI `facet --view=tree --loading[=MS]`: an external
     /// tool (e.g. chord) shows the skeleton just BEFORE triggering a
-    /// native-Space switch, so the shared panel never flashes the
-    /// previous desktop's tree. The Controller clears it on a timer.
+    /// mac-desktop switch, so the shared panel never flashes the
+    /// previous mac desktop's tree. The Controller clears it on a timer.
     /// Memory: facet-per-native-space-ws.
     private var skeleton = false
     /// Content signature at the moment the skeleton was shown. While
@@ -78,12 +78,12 @@ public final class SidebarView: NSView {
     // immediately and hold briefly; the next real query reconciles
     // (reverts if rift's focus actually failed).
     private var lastWorkspaces: [Workspace] = []
-    // Native macOS desktop ordinal (Mission Control order) for the
+    // Mac desktop ordinal (Mission Control order) for the
     // top handle band's "Desktop N" label. nil = SkyLight
-    // unavailable / single-space → band shows no name. Preserved
-    // across internal relayouts (update's `nativeDesktop` arg is a
+    // unavailable / single-desktop → band shows no name. Preserved
+    // across internal relayouts (update's `macDesktop` arg is a
     // double-optional: omitted = keep current).
-    private var nativeDesktopOrdinal: Int?
+    private var macDesktopOrdinal: Int?
     // AX-resolved titles for windows the backend left blank; kept
     // across internal relayouts that don't re-resolve.
     private var titleOverride: [WindowID: String] = [:]
@@ -170,13 +170,13 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(_ workspaces: [Workspace],
                        titles: [WindowID: String]? = nil,
-                       nativeDesktop: Int?? = nil) -> CGFloat {
+                       macDesktop: Int?? = nil) -> CGFloat {
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         // Double-optional: omitting the arg (internal relayouts) keeps
         // the current ordinal; passing it (the Controller refresh)
         // sets it — including to nil when SkyLight is unavailable.
-        if let nativeDesktop { nativeDesktopOrdinal = nativeDesktop }
+        if let macDesktop { macDesktopOrdinal = macDesktop }
         activeWS = workspaces.first(where: { $0.isActive })?.index   // always REAL
         let opt = optimisticHeld()
         let effActive = opt ? optActiveWS : activeWS
@@ -189,7 +189,7 @@ public final class SidebarView: NSView {
                 ? (titleOverride[win.id] ?? "") : win.title
         }
         let sig = (searching ? "S:\(query);" : "")
-            + "D\(nativeDesktopOrdinal ?? -1);"
+            + "D\(macDesktopOrdinal ?? -1);"
             + (opt
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
@@ -200,9 +200,9 @@ public final class SidebarView: NSView {
                 }.joined(separator: ",")
             }.joined(separator: ";")
         // Loading skeleton: hold while content is UNCHANGED from when
-        // `--loading` fired (e.g. a refresh mid native-Space switch
-        // still returns the previous desktop), but clear the instant
-        // genuinely new content arrives (the new desktop finished
+        // `--loading` fired (e.g. a refresh mid mac-desktop switch
+        // still returns the previous mac desktop), but clear the instant
+        // genuinely new content arrives (the new mac desktop finished
         // loading). The Controller's timer is only an upper bound.
         if skeleton {
             if sig == skeletonBaseSig { return skeletonHeight }
@@ -217,13 +217,13 @@ public final class SidebarView: NSView {
 
         // Top drag-handle band: grab to move the panel (mouseDown
         // routes a `.handle` drag to panel-move, mode 1) and shows the
-        // native macOS desktop ("Desktop N") when SkyLight resolves the
+        // mac desktop ("Desktop N") when SkyLight resolves the
         // ordinal — the panel previously had no grab affordance.
         let hbr = NSRect(x: 0, y: y, width: w, height: handleRowH)
         rows.append(TreeRow(rect: hbr, kind: .handle))
         cells.append(Cell(row: hbr, kind: 0, hot: false, firstHeader: false,
                           pid: 0, app: "", title: "",
-                          text: nativeDesktopOrdinal.map { "Desktop \($0)" } ?? "",
+                          text: macDesktopOrdinal.map { "Desktop \($0)" } ?? "",
                           mode: "", isMaster: false, isFloating: false,
                           isSticky: false, mark: nil, isHidden: false,
                           scratchpad: nil))
@@ -539,7 +539,7 @@ public final class SidebarView: NSView {
     /// in a tall rect (the WS header's full 2-line caption) so the
     /// grip reads as a proper anchor for the whole header; falls
     /// back to the compact 3-row form in shorter rects (the top
-    /// desktop-name band). The tree stays at 2×8 (vs the grid's 3×10)
+    /// mac desktop name band). The tree stays at 2×8 (vs the grid's 3×10)
     /// because the sidebar is narrow — a wider strip would crowd the
     /// WS name column.
     private func drawGrip(in r: NSRect, hot: Bool) {
@@ -602,7 +602,7 @@ public final class SidebarView: NSView {
             let row = c.row
             switch c.kind {
             case 0:   // top drag-handle band: grab to move the panel;
-                      // shows the native macOS desktop ("Desktop N").
+                      // shows the mac desktop ("Desktop N").
                       // Divider sits `dividerPadBelow` above the band's
                       // bottom edge; label + grip centre in the zone
                       // above it, so the line reads with breathing room

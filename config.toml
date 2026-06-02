@@ -113,7 +113,7 @@ preview-mode = "popover"
 # Startup layout mode every workspace begins in. Layout mode is
 # otherwise session-only (set live with `facet workspace --layout=NAME`
 # and lost on restart), so this is the seed each launch — and each
-# native macOS Space's independent catalog — starts every workspace
+# mac desktop's independent catalog — starts every workspace
 # from.
 #
 #   "float"           — facet tiles nothing; windows keep the size and
@@ -310,15 +310,15 @@ action = "ignore"
 # `[layout] default` above to control what every WS starts at.
 
 # -----------------------------------------------------------------
-# Per-native-Space workspaces  [space.N]
+# Per-mac-desktop workspaces  [desktop.N]
 # -----------------------------------------------------------------
-# facet keeps an INDEPENDENT set of workspaces for each native macOS
-# Space. Switch native Spaces (Mission Control / Ctrl+arrow) and the
-# tree shows that Space's own facet workspaces; a window stays in the
-# Space it was opened on (facet never moves windows across Spaces).
+# facet keeps an INDEPENDENT set of workspaces for each mac desktop.
+# Switch mac desktops (Mission Control / Ctrl+arrow) and the
+# tree shows that desktop's own facet workspaces; a window stays in the
+# desktop it was opened on (facet never moves windows across desktops).
 #
-# `[space.N]` gives the Nth native Space (Mission Control order,
-# 1-based, user Spaces only — fullscreen Spaces don't count) its own
+# `[desktop.N]` gives the Nth mac desktop (Mission Control order,
+# 1-based, user desktops only — fullscreen desktops don't count) its own
 # workspace list. Each entry is a 1-indexed inline-table value:
 #
 #   N = { name = "..." }                    # name only
@@ -330,34 +330,34 @@ action = "ignore"
 # centered / spiral / grid); an unknown value is
 # silently dropped (the WS then starts at the global default).
 #
-# Two modes, decided by whether ANY [space.N] section exists:
-#   - NO [space.N] anywhere → every native Space is managed with the
+# Two modes, decided by whether ANY [desktop.N] section exists:
+#   - NO [desktop.N] anywhere → every mac desktop is managed with the
 #     default 5 workspaces. Zero config, just works.
-#   - ANY [space.N] present → OPT-IN. facet manages ONLY the Spaces
-#     that have a section. A Space without one is left completely
+#   - ANY [desktop.N] present → OPT-IN. facet manages ONLY the desktops
+#     that have a section. A desktop without one is left completely
 #     untouched: no facet workspaces, windows stay as-is, and the
 #     facet panel is hidden on that desktop.
 #
 # Caveat: the mapping is by Mission Control position. Reordering your
-# Spaces re-points these sections (names/counts only — your windows
-# stay correctly scoped to their real Space).
+# desktops re-points these sections (names/counts only — your windows
+# stay correctly scoped to their real desktop).
 
-# Recommended starter — covers a common 3-Space dev workflow.
+# Recommended starter — covers a common 3-desktop dev workflow.
 # Edit the names / counts / layouts to taste, or comment the whole
-# block out to fall back to facet's default (5 unnamed WSs / Space).
+# block out to fall back to facet's default (5 unnamed WSs / desktop).
 
-[space.1]
+[desktop.1]
 1 = { name = "Dev" }
 2 = { name = "Web" }
 3 = { name = "Notes" }
 
-[space.2]
+[desktop.2]
 1 = { name = "Code" }
 2 = { name = "Build" }
 3 = { name = "Logs" }
 4 = { name = "Test" }
 
-[space.3]
+[desktop.3]
 1 = { name = "Mail" }
 2 = { name = "Chat" }
 3 = { name = "Cal" }

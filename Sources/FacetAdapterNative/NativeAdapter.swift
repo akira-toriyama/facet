@@ -47,7 +47,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// engines (Theme B — memory: facet-theme-b-decisions). `float`
     /// is the "no tiling applied" baseline: picking it leaves the
     /// WS's windows exactly where they are (facet stops controlling
-    /// geometry but still tracks them / parks on Space switch). The
+    /// geometry but still tracks them / parks on mac-desktop switch). The
     /// CLI's `canonicalLayoutModes` already lists it; advertise it
     /// here too so it appears in the right-click picker.
     public let layoutModes = ["bsp", "stack", "float"] + LayoutRegistry.names
@@ -55,34 +55,34 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // MARK: - State (delegated to catalog)
 
     /// Self-managed workspace state for the **currently active**
-    /// native macOS Space. All mutations go through here so the
+    /// mac desktop. All mutations go through here so the
     /// state machine stays pure and testable; this file only
     /// applies the AX side-effects the catalog hands back.
     private var catalog = WorkspaceCatalog()
 
-    /// Per-native-Space catalogs that aren't currently active.
+    /// Per-mac-desktop catalogs that aren't currently active.
     /// facet keeps an independent set of virtual workspaces per
-    /// native macOS Space (memory: facet-per-native-space-ws). On a
-    /// Space switch the active `catalog` is parked here under its
-    /// Space id and the destination Space's catalog is swapped in
+    /// mac desktop (memory: facet-per-native-space-ws). On a
+    /// mac-desktop switch the active `catalog` is parked here under its
+    /// mac desktop id and the destination mac desktop's catalog is swapped in
     /// (lazily created on first visit). Window state is session-only
-    /// (facet never persists), so on restart each Space's catalog
+    /// (facet never persists), so on restart each mac desktop's catalog
     /// rebuilds from its live windows.
     private var parkedCatalogs: [UInt64: WorkspaceCatalog] = [:]
 
-    /// SkyLight id of the native Space `catalog` belongs to. `0`
+    /// SkyLight id of the mac desktop `catalog` belongs to. `0`
     /// when SkyLight is unavailable — then facet runs a single
-    /// shared catalog (pre-per-Space behaviour) and never swaps.
-    private var activeSpaceID: UInt64 = 0
+    /// shared catalog (pre-per-mac-desktop behaviour) and never swaps.
+    private var activeMacDesktopID: UInt64 = 0
 
-    /// 1-based Mission-Control ordinal of the active native Space
-    /// (user Spaces only). Selects the `[space.N]` workspace config;
+    /// 1-based Mission-Control ordinal of the active mac desktop
+    /// (user mac desktops only). Selects the `[desktop.N]` workspace config;
     /// `nil` → fall back to `defaultWorkspaceCount` unnamed slots.
-    /// Refreshed on every Space swap. May briefly go stale if the
-    /// user reorders Spaces in Mission Control without switching —
+    /// Refreshed on every mac-desktop swap. May briefly go stale if the
+    /// user reorders mac desktops in Mission Control without switching —
     /// a cosmetic name/count mismatch only
     /// (memory: facet-per-native-space-ws).
-    private var activeSpaceOrdinal: Int?
+    private var activeMacDesktopOrdinal: Int?
 
     /// Snapshot of the last `workspaces()` build, returned as-is on
     /// the next call. Rebuilt every `refreshCatalog()` invocation.
@@ -92,7 +92,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// list each tick. Note: this captures the config at adapter
     /// init time; `Controller.reloadConfig()` re-reads
     /// `config.toml` but does NOT push the fresh value back to
-    /// the adapter, so `[space.N]` table edits during a session
+    /// the adapter, so `[desktop.N]` table edits during a session
     /// take effect only on restart. Wiring a config-push channel
     /// is a known follow-up.
     private let config: FacetConfig
@@ -119,7 +119,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private let errorContinuation: AsyncStream<String>.Continuation
 
     /// Init with config so workspace count + names come from the
-    /// user's `[space.N]` sections. The (default = 5) fallback in
+    /// user's `[desktop.N]` sections. The (default = 5) fallback in
     /// FacetConfig keeps a vanilla `~/.config/facet/config.toml`
     /// usable out of the box.
     public init(config: FacetConfig) {
@@ -131,16 +131,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         self.errorStream = AsyncStream { c in errC = c }
         self.errorContinuation = errC
 
-        // Seed the active native Space so the first refresh doesn't
+        // Seed the active mac desktop so the first refresh doesn't
         // spuriously swap. 0 (SkyLight unavailable) → single shared
         // catalog, never swaps.
-        self.activeSpaceID = Spaces.activeSpaceID()
-        self.activeSpaceOrdinal = Spaces.activeSpaceOrdinal(for: activeSpaceID)
+        self.activeMacDesktopID = MacDesktops.activeID()
+        self.activeMacDesktopOrdinal = MacDesktops.ordinal(for: activeMacDesktopID)
 
         Log.debug("native: init workspaces="
-            + "\(config.effectiveWorkspaceList(forSpaceOrdinal: activeSpaceOrdinal).count) "
-            + "space=\(activeSpaceID) ordinal=\(activeSpaceOrdinal.map(String.init) ?? "-") "
-            + "spaceAware=\(Spaces.available)")
+            + "\(config.effectiveWorkspaceList(forMacDesktopOrdinal: activeMacDesktopOrdinal).count) "
+            + "desktop=\(activeMacDesktopID) ordinal=\(activeMacDesktopOrdinal.map(String.init) ?? "-") "
+            + "desktopAware=\(MacDesktops.available)")
 
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
@@ -180,7 +180,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             if case .visibilityChanged = event {
                 // Hide-reclaim fast path. The immediate refresh below
                 // arms the hide (first of `reconcileHidden`'s two-tick
-                // gate, which guards Space-switch transients); this
+                // gate, which guards mac-desktop switch transients); this
                 // follow-up confirms + detaches it ~0.3 s later instead
                 // of waiting for the 2 s poll. A reveal is single-tick
                 // (no gate) so for it the follow-up is just a harmless
@@ -210,9 +210,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             MainActor.assumeIsolated { dObs.start() }
         }
 
-        // macOS Space switch observer. Nudges a refresh so
-        // `refreshCatalog` re-reads the active native Space and
-        // swaps to that Space's catalog (per-native-Space WS,
+        // macOS mac-desktop switch observer. Nudges a refresh so
+        // `refreshCatalog` re-reads the active mac desktop and
+        // swaps to that mac desktop's catalog (per-mac-desktop WS,
         // memory `facet-per-native-space-ws`). The poll loop would
         // catch the switch within ~2 s anyway; this just makes it
         // immediate.
@@ -222,14 +222,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             object: nil, queue: .main
         ) { [weak self, eventContinuation] _ in
             MainActor.assumeIsolated {
-                // After the Space transition settles (~500 ms
+                // After the mac-desktop transition settles (~500 ms
                 // covers the swipe animation +
                 // `kCGWindowIsOnscreen` flip), nudge focus onto a
-                // managed window visible on the new Space — but
+                // managed window visible on the new mac desktop — but
                 // only when the current frontmost isn't already
                 // one of ours, so the user explicitly landing on
                 // Finder / a non-managed app is left alone.
-                // Handles the "switch back to Space N, no window
+                // Handles the "switch back to mac desktop N, no window
                 // focused" gap the user reported.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     MainActor.assumeIsolated {
@@ -241,15 +241,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// See the comment on the Space-change observer in `init`.
+    /// See the comment on the mac-desktop-change observer in `init`.
     @MainActor
     private func handleSpaceChangeAutoFocus() {
         cliQueue.async { [weak self] in
             guard let self else { return }
-            // Ensure we're looking at the destination Space's
+            // Ensure we're looking at the destination mac desktop's
             // catalog even if the poll-driven refresh hasn't run
             // yet (both run on this serial queue, so this is safe).
-            self.swapCatalogIfSpaceChanged()
+            self.swapCatalogIfMacDesktopChanged()
             if let cur = self.focusedWindow(),
                self.catalog.windowMap[cur] != nil {
                 return
@@ -261,7 +261,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             }
             guard let pick = visibleManaged.predictedFocus()
             else { return }
-            Log.debug("native: spaceChange autoFocus "
+            Log.debug("native: macDesktopChange autoFocus "
                 + "pick=\(pick.id.serverID) app=\(pick.appName)")
             Focus.assert(pick, backend: self)
         }
@@ -295,24 +295,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// here — they go through `switchWorkspace` /
     /// `setLayoutMode` / `perform`.
     private func refreshCatalog() {
-        let preSpaceID = activeSpaceID
-        // Per-native-Space: if the user switched native macOS Spaces,
+        let preMacDesktopID = activeMacDesktopID
+        // Per-mac-desktop: if the user switched mac desktops,
         // park the current catalog and swap in the destination
-        // Space's. Done here (off-main, same context as every other
-        // catalog mutation) rather than from the main-thread Space
+        // mac desktop's. Done here (off-main, same context as every other
+        // catalog mutation) rather than from the main-thread mac-desktop
         // observer, so catalog access stays single-threaded.
-        swapCatalogIfSpaceChanged()
-        let spaceSwapped = activeSpaceID != preSpaceID
-        // Unmanaged native desktop (no `[space.N]` in opt-in mode):
+        swapCatalogIfMacDesktopChanged()
+        let macDesktopSwapped = activeMacDesktopID != preMacDesktopID
+        // Unmanaged mac desktop (no `[desktop.N]` in opt-in mode):
         // facet stays completely hands-off — adopt no windows, park
         // nothing, and return an empty workspace list so the
         // Controller hides the panel (its empty-list guard in
         // `apply`). Windows on the desktop are left exactly as the
         // user arranged them.
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal) else {
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal) else {
             if !workspaceList.isEmpty {
                 Log.debug("native: desktop ordinal="
-                    + "\(activeSpaceOrdinal.map(String.init) ?? "-") "
+                    + "\(activeMacDesktopOrdinal.map(String.init) ?? "-") "
                     + "unmanaged -> hands-off, panel hidden")
             }
             workspaceList = []
@@ -320,17 +320,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
         // Seed the per-WS default layout mode from config (`[layout]
         // default`). Layout mode is otherwise session-only, so without
-        // this every restart / per-native-Space catalog resets to the
+        // this every restart / per-mac-desktop catalog resets to the
         // hardcoded "float" and the user's windows stop tiling until
         // they re-issue `facet workspace --layout=…`. Set every refresh
         // (cheap, value-type field) so a config hot-reload takes too.
         catalog.defaultMode = config.effectiveDefaultLayout
         // Seed the live workspace set from config the first time this
-        // (per-Space) catalog is used. Idempotent — once seeded, the
+        // (per-mac-desktop) catalog is used. Idempotent — once seeded, the
         // catalog's set is authoritative and runtime add/remove/rename/
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
-            forSpaceOrdinal: activeSpaceOrdinal))
+            forMacDesktopOrdinal: activeMacDesktopOrdinal))
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
@@ -341,7 +341,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Drop expired trusted-new hints, then hand the survivors to
         // reconcile so a genuinely-new window joins on first on-screen
         // sight (skips the two-tick gate). Non-trusted windows — incl.
-        // Space-switch `isOnscreen` flips of existing windows — still
+        // mac-desktop switch `isOnscreen` flips of existing windows — still
         // go through the gate, so its flip protection is intact.
         let nowDate = Date()
         trustedNew = trustedNew.filter {
@@ -369,36 +369,36 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             Log.debug("native: refreshCatalog "
                 + "added=\(result.added) removed=\(result.removed) "
                 + "total=\(live.count)"
-                + (spaceSwapped ? " (space-swap)" : ""))
+                + (macDesktopSwapped ? " (desktop-swap)" : ""))
         }
         if result.removed > 0 { recentCloseAt = Date() }
-        // Heal (native-Space drift): a window can leak into this
+        // Heal (mac-desktop drift): a window can leak into this
         // catalog's WS when it was swept in during a native macOS
-        // Space switch (the destination Space's windows flip
-        // `isOnscreen=true` before `swapCatalogIfSpaceChanged` sees
-        // the new active-Space id, so the two-tick gate adds them to
+        // mac-desktop switch (the destination mac desktop's windows flip
+        // `isOnscreen=true` before `swapCatalogIfMacDesktopChanged` sees
+        // the new active-mac-desktop id, so the two-tick gate adds them to
         // the wrong catalog). Prevention is racy and トミー accepts the
         // leak; instead we recompute hard here. Read each managed
-        // window's TRUE native Space (read-only SkyLight) and evict any
-        // that isn't on the active Space — it'll be re-adopted by its
-        // real Space's catalog on visit. Only runs when SkyLight is
-        // live (`activeSpaceID != 0`); an empty query result leaves the
+        // window's TRUE mac desktop (read-only SkyLight) and evict any
+        // that isn't on the active mac desktop — it'll be re-adopted by its
+        // real mac desktop's catalog on visit. Only runs when SkyLight is
+        // live (`activeMacDesktopID != 0`); an empty query result leaves the
         // window untouched, so a transient SkyLight miss can't evict a
         // real window. Must run BEFORE applyLayout / snapshot so both
         // the tiling and the tree reflect the cleaned membership.
-        if activeSpaceID != 0 {
-            // Cache each window's Space query for this reconcile (the
+        if activeMacDesktopID != 0 {
+            // Cache each window's mac-desktop query for this reconcile (the
             // sanity gate + the eviction filter would otherwise double-
             // query the on-screen windows).
-            var spaceCache: [WindowID: [UInt64]] = [:]
-            func windowSpaces(_ id: WindowID) -> [UInt64] {
-                if let c = spaceCache[id] { return c }
-                let s = Spaces.spaces(forWindow: id.serverID)
-                spaceCache[id] = s
+            var macDesktopCache: [WindowID: [UInt64]] = [:]
+            func windowMacDesktops(_ id: WindowID) -> [UInt64] {
+                if let c = macDesktopCache[id] { return c }
+                let s = MacDesktops.ids(forWindow: id.serverID)
+                macDesktopCache[id] = s
                 return s
             }
             // Sanity gate: an on-screen managed window is, by
-            // definition, on the active Space right now — so if the
+            // definition, on the active mac desktop right now — so if the
             // SLS query is sound, at least one must report it. If NONE
             // do, the query is untrustworthy (selector / id-format
             // drift across an OS update) and evicting on its word could
@@ -406,28 +406,28 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // a no-op heal is harmless; a false mass-eviction is not.
             let trustworthy = live.contains { w in
                 w.isOnscreen && catalog.windowMap[w.id] != nil
-                    && windowSpaces(w.id).contains(activeSpaceID)
+                    && windowMacDesktops(w.id).contains(activeMacDesktopID)
             }
             if trustworthy {
                 let foreign = catalog.windowMap.keys.filter { id in
-                    let s = windowSpaces(id)
-                    return !s.isEmpty && !s.contains(activeSpaceID)
+                    let s = windowMacDesktops(id)
+                    return !s.isEmpty && !s.contains(activeMacDesktopID)
                 }
                 for id in foreign { catalog.drop(id) }
                 if !foreign.isEmpty {
                     Log.debug("native: heal evicted \(foreign.count) "
-                        + "off-Space window(s) from space=\(activeSpaceID)")
+                        + "off-desktop window(s) from desktop=\(activeMacDesktopID)")
                 }
             } else if !catalog.windowMap.isEmpty {
                 Log.debug("native: heal skipped "
-                    + "(SLS space query untrustworthy, space=\(activeSpaceID))")
+                    + "(SLS desktop query untrustworthy, desktop=\(activeMacDesktopID))")
             }
         }
         // Hide-reclaim: a managed window the user Cmd+H'd / minimized
         // reads `isOnscreen=false` (facet's own anchor-sliver park stays
         // on-screen), so reclaim its tile slot — detach from the layout,
         // keep the WS assignment, re-attach at the tail when it returns.
-        // Runs AFTER the off-Space heal so only same-Space hides remain;
+        // Runs AFTER the off-desktop heal so only same-desktop hides remain;
         // its result feeds the open/close reflow below (hide = close,
         // reveal = open). Memory: `facet-hide-reclaim-decisions`.
         let liveByID = Dictionary(live.map { ($0.id, $0) },
@@ -448,8 +448,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // engine). Supersedes the Phase γ lazy-retile invariant.
         //
         // Task 4 PR2 — open / close reflow animation: when a real
-        // add or remove happened on the current Space (NOT a
-        // catalog-swap shockwave from a Space switch) and the user
+        // add or remove happened on the current mac desktop (NOT a
+        // catalog-swap shockwave from a mac-desktop switch) and the user
         // opted in, route through `animateRetile` so the existing
         // tiled windows glide to their new sizes. Newly-added
         // windows skip animation — they snap to their tile slot to
@@ -458,9 +458,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // existing `cancelSlideForRetarget`. Fall through to the
         // instant `applyLayout` whenever animation isn't applicable
         // (master off, sub-key off, reduce-motion, no diff, or the
-        // pass coincided with a Space swap).
+        // pass coincided with a mac-desktop swap).
         let shouldAnimateOpenClose = config.effectiveAnimationEventDriven
-            && !spaceSwapped
+            && !macDesktopSwapped
             && (!result.addedIDs.isEmpty || !result.removedIDs.isEmpty
                 || !hideResult.hidden.isEmpty || !hideResult.revealed.isEmpty)
         if shouldAnimateOpenClose {
@@ -493,7 +493,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             focused: displayFocus,
             activeRect: rect)
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
-        // windows (Cmd+H'd apps, windows on other macOS Spaces,
+        // windows (Cmd+H'd apps, windows on other mac desktops,
         // minimized windows) as examined so a later
         // `isOnscreen` flip doesn't sweep them into
         // `activeIndex`. On-screen windows are intentionally
@@ -506,26 +506,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
     }
 
-    /// Park the active Space's catalog and swap in the destination
-    /// Space's (lazily created) when the user has switched native
-    /// macOS Spaces. No-op when SkyLight is unavailable
-    /// (`activeSpaceID` stays 0 → one shared catalog) or the Space
+    /// Park the active mac desktop's catalog and swap in the destination
+    /// mac desktop's (lazily created) when the user has switched mac
+    /// desktops. No-op when SkyLight is unavailable
+    /// (`activeMacDesktopID` stays 0 → one shared catalog) or the mac desktop
     /// is unchanged. Called only from `refreshCatalog` so all
-    /// catalog access stays on a single thread. The destination
-    /// Space's windows are picked up by the normal reconcile that
+    /// catalog access stays on a single thread. The destination mac
+    /// desktop's windows are picked up by the normal reconcile that
     /// follows (its on-screen windows enter that catalog's WS1);
-    /// other Spaces' windows read `isOnscreen=false` and are
-    /// ignored, so no cross-Space leakage occurs.
-    private func swapCatalogIfSpaceChanged() {
-        let live = Spaces.activeSpaceID()
-        guard live != 0, live != activeSpaceID else { return }
-        parkedCatalogs[activeSpaceID] = catalog
+    /// other mac desktops' windows read `isOnscreen=false` and are
+    /// ignored, so no cross-mac-desktop leakage occurs.
+    private func swapCatalogIfMacDesktopChanged() {
+        let live = MacDesktops.activeID()
+        guard live != 0, live != activeMacDesktopID else { return }
+        parkedCatalogs[activeMacDesktopID] = catalog
         let restored = parkedCatalogs.removeValue(forKey: live)
         catalog = restored ?? WorkspaceCatalog()
-        activeSpaceID = live
-        activeSpaceOrdinal = Spaces.activeSpaceOrdinal(for: live)
-        Log.debug("native: native-space -> \(live) "
-            + "ordinal=\(activeSpaceOrdinal.map(String.init) ?? "-") "
+        activeMacDesktopID = live
+        activeMacDesktopOrdinal = MacDesktops.ordinal(for: live)
+        Log.debug("native: mac-desktop -> \(live) "
+            + "ordinal=\(activeMacDesktopOrdinal.map(String.init) ?? "-") "
             + "(\(restored == nil ? "fresh" : "restored"), "
             + "parked=\(parkedCatalogs.count))")
     }
@@ -545,7 +545,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     /// CGWindowIDs of windows that fired `kAXWindowCreated`, mapped
     /// to the create timestamp. A genuinely-new window can't be a
-    /// Space-switch `isOnscreen` flip of an existing one, so
+    /// mac-desktop switch `isOnscreen` flip of an existing one, so
     /// `reconcile` adds these on first on-screen sight — skipping the
     /// two-tick gate that otherwise costs up to one ~2s poll. Touched
     /// only on `cliQueue` (write from the observer closure's
@@ -677,7 +677,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // 1. Cheap level gate (SkyLight read, no AX). nil = SkyLight
             //    down → unknown; defer to the AX gate rather than
             //    excluding on a missing signal.
-            let level = Spaces.windowLevel(forWindow: w.id.serverID)
+            let level = MacDesktops.windowLevel(forWindow: w.id.serverID)
             let normalOrUnknownLevel = (level == nil) || (level == normalLevel)
 
             // AX role/subrole — probe only windows that could still tile
@@ -883,8 +883,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `isOnscreen` flag (= `kCGWindowIsOnscreen`) instead. The
     /// catalog uses that flag to gate new-window entry while
     /// keeping the WS assignment of existing windows that
-    /// temporarily go off-screen (different macOS Space,
-    /// minimized to Dock, Cmd+H'd). Without this split, a Space
+    /// temporarily go off-screen (different mac desktop,
+    /// minimized to Dock, Cmd+H'd). Without this split, a mac desktop
     /// switch made every previously-managed window look "gone",
     /// `forgetWindow` dropped them, and they re-landed in the
     /// current activeIndex on next sight. See memory
@@ -1342,8 +1342,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
-        // No facet workspaces on an unmanaged native desktop.
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        // No facet workspaces on an unmanaged mac desktop.
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         // A slide already running? Finish it before mutating the catalog.
         cancelSlideForRetarget()
@@ -1401,7 +1401,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     public func switchWorkspaceRelative(_ target: RelativeWorkspace,
                                         autoFocus: Bool) {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         guard let t = catalog.relativeTarget(target) else {
             Log.debug("native: switchWorkspaceRelative \(target) → no-op")
@@ -1457,7 +1457,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         let target = index + 1
         let rect = activeDisplayRect()
@@ -1489,7 +1489,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // MARK: - Dynamic workspace commands (A: runtime WS set)
 
     public func switchWorkspace(named name: String, autoFocus: Bool) {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         guard let pos = catalog.index(ofName: name) else {
             Log.debug("native: switchWorkspace(named: \"\(name)\") → no match")
@@ -1499,7 +1499,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func addWorkspace() {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         let pos = catalog.addWorkspace()
         Log.debug("native: addWorkspace → position \(pos) "
@@ -1508,7 +1508,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func removeWorkspace(at position: Int?) {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         let target = position ?? catalog.activeIndex
         let rect = activeDisplayRect()
@@ -1526,7 +1526,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func renameWorkspace(at position: Int?, to name: String) {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         let target = position ?? catalog.activeIndex
         catalog.renameWorkspace(target, to: name)
@@ -1535,7 +1535,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func moveActiveWorkspace(to position: Int) {
-        guard config.isSpaceManaged(ordinal: activeSpaceOrdinal)
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         // 1-based position; active follows the moved WS. Pure
         // renumber — windows / visibility don't change.
@@ -2198,7 +2198,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             reflowActive(rect: rect, extra: extra)
         case .toggleSticky:
             // Pin / unpin the focused window across every WS in this
-            // native Space. Setting: catalog force-floats + park-exempts
+            // mac desktop. Setting: catalog force-floats + park-exempts
             // it (it stays at its current frame). Clearing: catalog
             // un-floats + re-homes it as a tiled window of the active WS
             // (Q4). Either way the active WS reflows: setting fills the

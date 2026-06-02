@@ -509,9 +509,9 @@ final class Controller: NSObject {
     /// CLI `facet --view=tree --loading[=MS]`: paint the tree
     /// skeleton now and hold it for `durationMs`, then repaint real
     /// content. An external tool (e.g. chord) fires this just before
-    /// triggering a native-Space switch, so the shared
+    /// triggering a mac-desktop switch, so the shared
     /// `.canJoinAllSpaces` panel never flashes the previous
-    /// desktop's tree during the switch (macOS gives no pre-switch
+    /// mac desktop's tree during the switch (macOS gives no pre-switch
     /// hook — memory facet-per-native-space-ws). No-op while the user
     /// has hidden the panel or the grid owns the screen.
     private func showLoading(durationMs: Int) {
@@ -543,16 +543,16 @@ final class Controller: NSObject {
                               loadingMs: Int? = nil) {
         // Views are mutually exclusive: requesting any non-grid view
         // drops the full-screen grid overlay first. This is also how
-        // the grid closes on a native-Space switch — the chord ctrl+→
+        // the grid closes on a mac-desktop switch — the chord ctrl+→
         // binding fires `--view=tree --loading` just *before* the
         // switch, so the grid is gone before the OS slide. (Keeping it
         // open across the slide only ever flickers: macOS composites
-        // no app window during the ~0.7s Space animation, regardless
+        // no app window during the ~0.7s mac-desktop animation, regardless
         // of level / collectionBehavior — proven by a 9-variant
         // sandbox A/B, memory facet-space-slide-overlay-flicker. A
         // clean close beats an involuntary blink-and-return.) Immediate
         // teardown also un-gates `showLoading` (which no-ops while the
-        // grid is up) so the tree skeleton paints on the new desktop.
+        // grid is up) so the tree skeleton paints on the new mac desktop.
         if name != "grid" && isGridVisible { hideGrid(immediate: true) }
         // The grid is a full-screen takeover that would cover the
         // rail; tear the rail down so it's not stranded underneath.
@@ -639,7 +639,7 @@ final class Controller: NSObject {
     /// Move the currently-focused window to the Nth workspace
     /// (1-indexed from the user; backend takes 0-indexed). Silent
     /// no-op (debug log only) when no focused window or N is out
-    /// of range — a stale hotkey on an empty desktop shouldn't
+    /// of range — a stale hotkey on an empty mac desktop shouldn't
     /// take down the server.
     private func dispatchWindowMove(_ n: Int, follow: Bool = false) {
         let count = backend.workspaces().count
@@ -819,7 +819,7 @@ final class Controller: NSObject {
         //       design and parking keeps a window on a 1×41 on-screen
         //       sliver, so neither a frame nor an isOnscreen delta
         //       fires; the active-WS index changing is the only
-        //       reliable signal. Re-warm the now-active desktop.
+        //       reliable signal. Re-warm the now-active mac desktop.
         //   (2) In-place move / resize on the ACTIVE WS (retile, live
         //       drag-resize, external move) — its windows report a live
         //       frame, so an epsilon-gated delta is the real signal.
@@ -883,13 +883,13 @@ final class Controller: NSObject {
         }
         sidebarView.frame.size.width = panelHost.userWidth
         sidebarView.forceRedraw()
-        // Native macOS desktop ordinal (read-only SkyLight) for the
-        // tree's top handle band. 0 = SkyLight unavailable → no name.
-        let activeSpace = Spaces.activeSpaceID()
-        let desktopOrdinal = activeSpace == 0
-            ? nil : Spaces.activeSpaceOrdinal(for: activeSpace)
+        // Mac desktop ordinal (read-only SkyLight) for the tree's top
+        // handle band. 0 = SkyLight unavailable → no name.
+        let activeMacDesktopID = MacDesktops.activeID()
+        let macDesktopOrdinal = activeMacDesktopID == 0
+            ? nil : MacDesktops.ordinal(for: activeMacDesktopID)
         let contentH = sidebarView.update(wss, titles: titles,
-                                          nativeDesktop: desktopOrdinal)
+                                          macDesktop: macDesktopOrdinal)
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
@@ -1546,7 +1546,7 @@ final class Controller: NSObject {
     /// Dismiss the grid overlay. `immediate` tears it down
     /// synchronously (no fade): used when switching to another view,
     /// where the grid must be gone *this turn* — both so it doesn't
-    /// ride a native-Space slide (the `--view=tree` chord binding
+    /// ride a mac-desktop slide (the `--view=tree` chord binding
     /// fires right before the switch) and so `isGridVisible` is false
     /// by the time the caller's `showLoading` / panel logic runs. The
     /// caller owns what shows next, so the immediate path skips the
@@ -1589,7 +1589,7 @@ final class Controller: NSObject {
         guard let scr = NSScreen.main else { return }
         // No snapshot yet (cold start): fetch then re-enter so the rail
         // never paints empty. Bail if the fetch comes back empty (e.g.
-        // an unmanaged native Space under opt-in `[space.N]` config) so
+        // an unmanaged mac desktop under opt-in `[desktop.N]` config) so
         // we don't spin re-fetching forever.
         if lastWorkspaces.isEmpty {
             let bk = backend

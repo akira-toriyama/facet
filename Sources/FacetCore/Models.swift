@@ -65,11 +65,11 @@ public struct Window: Sendable {
     /// Whether the window currently has a visible spot on any
     /// display — equivalent to `CGWindowList`'s
     /// `kCGWindowIsOnscreen`. `false` when the window lives on a
-    /// different macOS Space, is minimized to the Dock, or has
+    /// different mac desktop, is minimized to the Dock, or has
     /// been hidden via Cmd+H. The catalog uses this to gate **new
     /// window entries** only (off-screen-on-first-sight windows
     /// stay unmanaged); existing windows in the map are kept
-    /// regardless of this flag so a Space switch / minimize
+    /// regardless of this flag so a mac-desktop switch / minimize
     /// doesn't lose the WS assignment. A user hide (Cmd+H / Cmd+M)
     /// additionally gives up the window's tile slot to its neighbours
     /// — it re-tiles at the tail when it returns on-screen — while
@@ -87,14 +87,14 @@ public struct Window: Sendable {
     /// User-assigned mark (vim-style label) for this window, or `nil`
     /// when unmarked. A mark is a 1:1 handle: `facet window --mark=a`
     /// tags the focused window, `--focus-mark=a` jumps focus to it
-    /// (switching workspace if needed). Session-only, per-native-Space.
+    /// (switching workspace if needed). Session-only, per-mac-desktop.
     /// Views surface it as a small badge.
     public let mark: String?
     /// Whether this window is *sticky* — pinned visible across every
-    /// facet workspace in its native Space (`facet window
+    /// facet workspace in its mac desktop (`facet window
     /// --toggle-sticky`). A sticky window is exempt from the WS-switch
     /// anchor park and is force-floating (it never joins a WS's
-    /// tiling). Session-only, per-native-Space; orthogonal to `mark`.
+    /// tiling). Session-only, per-mac-desktop; orthogonal to `mark`.
     /// Views surface it as a small 📌 badge.
     public let isSticky: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
@@ -104,7 +104,7 @@ public struct Window: Sendable {
     /// the current workspace as a floating overlay. Only *settled*
     /// (summoned, on-screen) scratchpad windows reach the snapshot and
     /// carry this name; *stashed* ones are filtered out entirely and
-    /// surface only in `facet status`. Session-only, per-native-Space;
+    /// surface only in `facet status`. Session-only, per-mac-desktop;
     /// orthogonal to `mark`, mutually exclusive with `isSticky`.
     /// Views surface it as a small `scratchpad:NAME` badge.
     public let scratchpad: String?
@@ -138,7 +138,7 @@ public struct Window: Sendable {
     }
 }
 
-/// One workspace (virtual desktop) returned by the backend.
+/// One facet workspace returned by the backend.
 public struct Workspace: Sendable {
     public let index: Int
     public let name: String

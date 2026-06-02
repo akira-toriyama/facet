@@ -62,7 +62,7 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
     /// off-screen windows summonable with `facet scratchpad
     /// --toggle=NAME`. A *settled* (summoned) scratchpad window
     /// instead appears in the tree under its workspace, so it's
-    /// absent here. Space-global (the shelf isn't per-WS), so it's a
+    /// absent here. Mac-desktop-global (the shelf isn't per-WS), so it's a
     /// top-level field rather than a per-`WorkspaceStatusEntry` count.
     public let stashed: [String]
     public let lastError: String?        // nil = no error since startup

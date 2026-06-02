@@ -261,7 +261,7 @@ public final class RailView: NSView {
         }
 
         // Repair a stranded browse cursor: if the selected WS was
-        // removed mid-browse (auto-removed / native-Space catalog swap),
+        // removed mid-browse (auto-removed / mac-desktop catalog swap),
         // snap it to the hero so the ←/→ cursor and the previewed hero
         // stay in sync and the next arrow continues from what's shown.
         if !cells.contains(where: { $0.wsIndex == selectedWS }) {

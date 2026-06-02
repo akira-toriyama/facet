@@ -43,7 +43,7 @@ public final class WindowEventObserver: @unchecked Sendable {
 
     /// What the observer saw. `created` is the one event we can act
     /// on without ambiguity: a brand-new window can never be a
-    /// Space-switch `isOnscreen` flip of an *existing* window, so the
+    /// mac-desktop switch `isOnscreen` flip of an *existing* window, so the
     /// adapter can fast-path it past `reconcile`'s two-tick gate. The
     /// CGWindowID is resolved from the AX element via the private
     /// `_AXUIElementGetWindow`; if that symbol is unavailable the

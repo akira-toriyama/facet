@@ -49,7 +49,7 @@ All views share the same backend and the same theme
 
 Each workspace runs a layout, set at runtime with
 `facet workspace --layout=NAME` (per-WS, never persisted — set a
-per-Space startup layout via `[space.N]` in
+per-mac-desktop startup layout via `[desktop.N]` in
 [`config.toml`](config.toml), e.g. `1 = { name = "Dev", layout =
 "bsp" }`). facet
 never hides windows, so a layout only *positions* them and the
@@ -307,15 +307,15 @@ Frequently-touched keys:
   tracked but untiled; `"ignore"` drops it entirely. The template
   ships one default that floats tiny unnamed popups. (System sheets /
   dialogs / palettes are auto-floated by AX role regardless.)
-- `[space.N]` table — per-native-Space workspace list. `N` is the
-  Space's Mission Control position; each entry is a 1-indexed inline
+- `[desktop.N]` table — per-mac-desktop workspace list. `N` is the
+  mac desktop's Mission Control position; each entry is a 1-indexed inline
   table: `1 = { name = "Dev" }` (name only) or
   `1 = { name = "Dev", layout = "bsp" }` (name + startup layout).
   `layout` is optional — when omitted the WS starts at the global
-  `[layout] default`. Two modes: **no** `[space.N]` anywhere → every
-  native Space gets the default workspaces automatically; **any**
-  `[space.N]` present → **opt-in**: facet manages only the Spaces
-  that have a section; a Space without one is left untouched (windows
+  `[layout] default`. Two modes: **no** `[desktop.N]` anywhere → every
+  mac desktop gets the default workspaces automatically; **any**
+  `[desktop.N]` present → **opt-in**: facet manages only the mac desktops
+  that have a section; a mac desktop without one is left untouched (windows
   as-is, panel hidden there).
 
 ## CLI
@@ -342,7 +342,7 @@ facet window --toggle-float          # flip focused window float flag
 facet window --toggle-sticky         # pin it across every workspace (PiP / timer /
                                      # chat); flip off → drops it as a tiled window
                                      # of the workspace you're on. session-only,
-                                     # per native Space.
+                                     # per mac desktop.
 facet window --toggle-orientation    # bsp: rotate parent split / tall⇄wide: swap layout
 facet window --cycle-stack=next|prev # rotate stack to next / previous member
 facet window --grow-master|--shrink-master   # master width ±0.05 (tall / wide / centered)
@@ -370,7 +370,7 @@ facet window --focus-mark=NAME    # jump focus to that window (switches WS)
 facet window --unmark=NAME        # remove a mark
                                   # 1:1 — a window holds one mark; reassigning
                                   # a name moves it off the old window.
-                                  # session-only, per native Space.
+                                  # session-only, per mac desktop.
 
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
 facet scratchpad --stash=NAME     # park the focused window onto a named
@@ -381,7 +381,7 @@ facet scratchpad --toggle=NAME    # summon it onto the current workspace as
 facet scratchpad --release=NAME   # drop it off the shelf as a normal tiled
                                   # window of the workspace you're on
                                   # no spawn (existing windows only); 1:1
-                                  # name↔window; session-only, per native Space.
+                                  # name↔window; session-only, per mac desktop.
 facet status                      # snapshot: backend, theme, workspaces,
                                   # stashed shelves, lastError, timestamp
 
@@ -436,18 +436,18 @@ workspace --focus=1`).
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
 hs.execute("/opt/homebrew/bin/facet workspace --focus=1") end)`.
 
-#### Bonus: a loading skeleton for native-Space switches
+#### Bonus: a loading skeleton for mac-desktop switches
 
 For the flicker-obsessed — you know who you are. macOS hands out no
-"a Space switch is *about* to start" hook, so facet only hears about
+"a mac-desktop switch is *about* to start" hook, so facet only hears about
 the move *after* the slide — just late enough that the incoming
-desktop flashes the previous desktop's tree for a frame. Not the fix
-we'd frame and hang on the wall.
+mac desktop flashes the previous mac desktop's tree for a frame. Not the
+fix we'd frame and hang on the wall.
 
 But if that single-frame blink nags at you the way it nagged at us:
 have your hotkey tool fire `facet --view=tree --loading=2000` *right
-before* the Space-switch keys. facet lays a skeleton over the tree,
-holds it through the slide, and lifts it the instant the new
+before* the mac-desktop-switch keys. facet lays a skeleton over the tree,
+holds it through the slide, and lifts it the instant the new mac
 desktop's workspaces load (or at 2 s — whichever comes first). With
 [chord](https://github.com/akira-toriyama/chord), `action-shell`
 runs first and `action-keys` forwards the real keystroke through:

@@ -101,7 +101,7 @@ final class WorkspaceCatalogTests: XCTestCase {
     func testTwoTickGateDefersUntrustedNewWindow() {
         // Under requireConfirm a new on-screen window waits for a
         // SECOND sighting before joining the map (swallows the
-        // cross-Space `isOnscreen` flip during a Space switch).
+        // cross-mac-desktop `isOnscreen` flip during a mac-desktop switch).
         var c = seededCatalog()
         let r1 = c.reconcile(live: [window(10)], requireConfirm: true)
         XCTAssertEqual(r1.added, 0)
@@ -499,7 +499,7 @@ final class WorkspaceCatalogTests: XCTestCase {
 
     func testSnapshotSkipsWindowsNotInMap() {
         // Live windows that reconcile hasn't accepted (off-screen on
-        // first sight, marked pre-existing at startup / Space change,
+        // first sight, marked pre-existing at startup / mac-desktop change,
         // etc.) are filtered out of the per-WS snapshot. Previously
         // they fell back to `activeIndex` — that surfaced as the
         // "145 windows in WS1" bug after the `.optionAll` switch.

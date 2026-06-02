@@ -53,55 +53,55 @@ final class FacetConfigTests: XCTestCase {
                        "clamp high")
     }
 
-    func testEffectiveWorkspaceListReadsConfiguredSpaceEntries() {
+    func testEffectiveWorkspaceListReadsConfiguredDesktopEntries() {
         var c = FacetConfig()
-        c.spaceWorkspaceConfigs = [1: [
+        c.macDesktopWorkspaceConfigs = [1: [
             1: WorkspaceConfig(name: "dev"),
             3: WorkspaceConfig(name: "sns"),
             5: WorkspaceConfig(name: ""),
         ]]
-        let list = c.effectiveWorkspaceList(forSpaceOrdinal: 1)
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertEqual(list.map(\.index), [1, 3, 5])
         XCTAssertEqual(list.map(\.config.name), ["dev", "sns", ""])
     }
 
     func testEffectiveWorkspaceListDropsNonPositiveKeys() {
         var c = FacetConfig()
-        c.spaceWorkspaceConfigs = [1: [
+        c.macDesktopWorkspaceConfigs = [1: [
             0: WorkspaceConfig(name: "zero"),
             -1: WorkspaceConfig(name: "neg"),
             2: WorkspaceConfig(name: "ok"),
         ]]
-        let list = c.effectiveWorkspaceList(forSpaceOrdinal: 1)
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertEqual(list.map(\.index), [2])
         XCTAssertEqual(list.map(\.config.name), ["ok"])
     }
 
-    func testFromTOMLPopulatesSpaceWorkspaceConfigs() {
+    func testFromTOMLPopulatesMacDesktopWorkspaceConfigs() {
         let parsed = parseTOMLSubset("""
-            [space.1]
+            [desktop.1]
             1 = { name = "dev" }
             2 = { name = "sns", layout = "bsp" }
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?[1],
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?[1],
                        WorkspaceConfig(name: "dev"))
-        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?[2],
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?[2],
                        WorkspaceConfig(name: "sns", layout: "bsp"))
-        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?.count, 2)
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?.count, 2)
     }
 
-    func testFromTOMLDropsNonTableSpaceEntries() {
+    func testFromTOMLDropsNonTableDesktopEntries() {
         // Shorthand `1 = "Dev"` (post-PR2 disallowed) is silently
         // skipped: only inline-table values are accepted.
         let parsed = parseTOMLSubset("""
-            [space.1]
+            [desktop.1]
             1 = "Dev"
             2 = { name = "Web" }
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?.count, 1)
-        XCTAssertEqual(c.spaceWorkspaceConfigs[1]?[2]?.name, "Web")
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?.count, 1)
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?[2]?.name, "Web")
     }
 
     // MARK: - [[exclude]] rules
@@ -174,67 +174,67 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
     }
 
-    // MARK: - Per-native-Space [space.N]
+    // MARK: - Per-mac-desktop [desktop.N]
 
-    func testFromTOMLParsesPerSpaceSections() {
+    func testFromTOMLParsesPerDesktopSections() {
         let parsed = parseTOMLSubset("""
-            [space.1]
+            [desktop.1]
             1 = { name = "dev" }
             2 = { name = "build", layout = "bsp" }
 
-            [space.2]
+            [desktop.2]
             1 = { name = "mail" }
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.spaceWorkspaceConfigs[1], [
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1], [
             1: WorkspaceConfig(name: "dev"),
             2: WorkspaceConfig(name: "build", layout: "bsp"),
         ])
-        XCTAssertEqual(c.spaceWorkspaceConfigs[2], [
+        XCTAssertEqual(c.macDesktopWorkspaceConfigs[2], [
             1: WorkspaceConfig(name: "mail"),
         ])
-        XCTAssertNil(c.spaceWorkspaceConfigs[3])
+        XCTAssertNil(c.macDesktopWorkspaceConfigs[3])
     }
 
-    func testIsSpaceManagedOptInVsDefault() {
-        // No [space.N] anywhere → every Space managed (default).
+    func testIsMacDesktopManagedOptInVsDefault() {
+        // No [desktop.N] anywhere → every mac desktop managed (default).
         let none = FacetConfig()
-        XCTAssertTrue(none.isSpaceManaged(ordinal: 1))
-        XCTAssertTrue(none.isSpaceManaged(ordinal: 99))
-        XCTAssertTrue(none.isSpaceManaged(ordinal: nil))
+        XCTAssertTrue(none.isMacDesktopManaged(ordinal: 1))
+        XCTAssertTrue(none.isMacDesktopManaged(ordinal: 99))
+        XCTAssertTrue(none.isMacDesktopManaged(ordinal: nil))
 
-        // Any [space.N] present → opt-in: only configured ordinals.
+        // Any [desktop.N] present → opt-in: only configured ordinals.
         var optIn = FacetConfig()
-        optIn.spaceWorkspaceConfigs = [
+        optIn.macDesktopWorkspaceConfigs = [
             1: [1: WorkspaceConfig(name: "a")],
             3: [1: WorkspaceConfig(name: "b")],
         ]
-        XCTAssertTrue(optIn.isSpaceManaged(ordinal: 1))
-        XCTAssertTrue(optIn.isSpaceManaged(ordinal: 3))
-        XCTAssertFalse(optIn.isSpaceManaged(ordinal: 2),
+        XCTAssertTrue(optIn.isMacDesktopManaged(ordinal: 1))
+        XCTAssertTrue(optIn.isMacDesktopManaged(ordinal: 3))
+        XCTAssertFalse(optIn.isMacDesktopManaged(ordinal: 2),
                        "unconfigured ordinal is hands-off in opt-in mode")
-        XCTAssertFalse(optIn.isSpaceManaged(ordinal: 6))
-        XCTAssertTrue(optIn.isSpaceManaged(ordinal: nil),
+        XCTAssertFalse(optIn.isMacDesktopManaged(ordinal: 6))
+        XCTAssertTrue(optIn.isMacDesktopManaged(ordinal: nil),
                       "SkyLight-unavailable always managed")
     }
 
-    func testEffectiveWorkspaceListForSpaceOrdinal() {
+    func testEffectiveWorkspaceListForMacDesktopOrdinal() {
         var c = FacetConfig()
-        c.spaceWorkspaceConfigs = [1: [
+        c.macDesktopWorkspaceConfigs = [1: [
             1: WorkspaceConfig(name: "a"),
             2: WorkspaceConfig(name: "b"),
         ]]
 
-        // Configured ordinal → per-space list.
+        // Configured ordinal → per-mac-desktop list.
         XCTAssertEqual(
-            c.effectiveWorkspaceList(forSpaceOrdinal: 1).map(\.config.name),
+            c.effectiveWorkspaceList(forMacDesktopOrdinal: 1).map(\.config.name),
             ["a", "b"])
         // Unconfigured ordinal → defaultWorkspaceCount unnamed slots.
-        let unconfigured = c.effectiveWorkspaceList(forSpaceOrdinal: 2)
+        let unconfigured = c.effectiveWorkspaceList(forMacDesktopOrdinal: 2)
         XCTAssertEqual(unconfigured.count, FacetConfig.defaultWorkspaceCount)
         XCTAssertTrue(unconfigured.allSatisfy { $0.config.name.isEmpty })
         // nil ordinal → default slots.
-        let nilList = c.effectiveWorkspaceList(forSpaceOrdinal: nil)
+        let nilList = c.effectiveWorkspaceList(forMacDesktopOrdinal: nil)
         XCTAssertEqual(nilList.count, FacetConfig.defaultWorkspaceCount)
     }
 
