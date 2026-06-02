@@ -26,6 +26,12 @@ final class RealWindowDragMonitor {
     /// Commit a resolved drop (called on the main actor; the closure is
     /// responsible for hopping the backend call off-main).
     private let commit: (RealWindowDrop.Decision) -> Void
+    /// Live drag tick (armed drags only): the dragged window + the
+    /// current cursor in Quartz coords — drives the PR-3 prediction
+    /// overlay. Called frequently; the handler throttles.
+    private let onMove: (WindowID, CGPoint) -> Void
+    /// Drag gesture ended (mouse-up) — tear the overlay down.
+    private let onEnd: () -> Void
 
     private var monitor: Any?
     private var dragged: WindowID?
@@ -47,9 +53,13 @@ final class RealWindowDragMonitor {
     private let threshold: CGFloat = 6
 
     init(tiles: @escaping () -> [(id: WindowID, frame: CGRect)],
-         commit: @escaping (RealWindowDrop.Decision) -> Void) {
+         commit: @escaping (RealWindowDrop.Decision) -> Void,
+         onMove: @escaping (WindowID, CGPoint) -> Void = { _, _ in },
+         onEnd: @escaping () -> Void = {}) {
         self.tiles = tiles
         self.commit = commit
+        self.onMove = onMove
+        self.onEnd = onEnd
     }
 
     func start() {
@@ -81,13 +91,16 @@ final class RealWindowDragMonitor {
             dragged = RealWindowDrop.window(tiles(), at: liftQuartz)
             dragging = false
         case .leftMouseDragged:
-            guard dragged != nil, !dragging else { return }
+            guard let id = dragged else { return }
             let p = Self.quartzMouse()
-            if hypot(p.x - liftQuartz.x, p.y - liftQuartz.y) > threshold {
+            if !dragging,
+               hypot(p.x - liftQuartz.x, p.y - liftQuartz.y) > threshold {
                 dragging = true
             }
+            if dragging { onMove(id, p) }        // feed the prediction overlay
         case .leftMouseUp:
             defer { reset() }
+            onEnd()                              // tear the overlay down
             // A press without a drag is a click — leave it alone. A drag
             // onto empty space / the window's own slot resolves to nil;
             // facet's normal reflow then re-tiles it back into place.
@@ -116,33 +129,84 @@ final class RealWindowDragMonitor {
 }
 
 extension Controller {
-    /// Wire up the real-window DnD monitor: read the active workspace's
-    /// tile frames from `lastWorkspaces`, commit drops off-main via the
-    /// backend's swap / insert verbs.
+    /// Wire up the real-window DnD monitor: tile frames come from
+    /// `lastWorkspaces`, the drag tick drives the prediction overlay, and
+    /// drops commit off-main via the backend's swap / insert verbs.
     func installRealWindowDrag() {
         realWindowDrag = RealWindowDragMonitor(
-            tiles: { [weak self] in
-                guard let self,
-                      let ws = self.lastWorkspaces.first(where: { $0.isActive })
-                else { return [] }
-                return ws.windows.compactMap { w in
-                    guard !w.isFloating, let f = w.frame else { return nil }
-                    return (id: w.id, frame: f)
-                }
+            tiles: { [weak self] in self?.activeTiles() ?? [] },
+            commit: { [weak self] in self?.commitDrop($0) },
+            onMove: { [weak self] dragged, cursor in
+                self?.updateDropPrediction(dragged: dragged, cursor: cursor)
             },
-            commit: { [weak self] decision in
-                guard let self else { return }
-                let bk = self.backend
-                cliQueue.async {
-                    switch decision.zone {
-                    case .center:
-                        bk.swapWindows(decision.dragged, decision.target)
-                    case .edge(let edge):
-                        bk.insertWindow(decision.dragged,
-                                        beside: decision.target, edge: edge)
-                    }
-                }
-            })
+            onEnd: { [weak self] in self?.dndOverlay.hide() })
         realWindowDrag?.start()
+    }
+
+    /// The active workspace's non-floating tiled windows + their live
+    /// Quartz (top-left) frames — the hit-test / prediction reference set.
+    private func activeTiles() -> [(id: WindowID, frame: CGRect)] {
+        guard let ws = lastWorkspaces.first(where: { $0.isActive })
+        else { return [] }
+        return ws.windows.compactMap { w in
+            guard !w.isFloating, let f = w.frame else { return nil }
+            return (id: w.id, frame: f)
+        }
+    }
+
+    private func commitDrop(_ decision: RealWindowDrop.Decision) {
+        let bk = backend
+        cliQueue.async {
+            switch decision.zone {
+            case .center:
+                bk.swapWindows(decision.dragged, decision.target)
+            case .edge(let edge):
+                bk.insertWindow(decision.dragged, beside: decision.target,
+                                edge: edge)
+            }
+        }
+    }
+
+    /// Drag tick: resolve the drop under the cursor and (throttled) ask
+    /// the backend for the resulting layout, then paint the overlay. No
+    /// target under the cursor → hide it.
+    private func updateDropPrediction(dragged: WindowID, cursor: CGPoint) {
+        let tiles = activeTiles()
+        guard let decision = RealWindowDrop.drop(tiles, dragged: dragged,
+                                                 at: cursor) else {
+            dndOverlay.hide(); return
+        }
+        if dndPredictionInFlight { return }            // throttle to backend rate
+        dndPredictionInFlight = true
+        let bk = backend
+        cliQueue.async { [weak self] in
+            let prediction = bk.predictedDrop(dragged: decision.dragged,
+                                              target: decision.target,
+                                              zone: decision.zone)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.paintPrediction(decision, prediction)
+                    self?.dndPredictionInFlight = false
+                }
+            }
+        }
+    }
+
+    private func paintPrediction(_ decision: RealWindowDrop.Decision,
+                                 _ prediction: DropPrediction) {
+        // Spotlight the change: the windows the drop MOVES are lit (the
+        // dragged one + whatever the swap / insert reshapes), the rest are
+        // dimmed — so we hand the overlay the WHOLE predicted layout and
+        // mark which ids moved.
+        guard !prediction.moved.isEmpty else { dndOverlay.hide(); return }
+        var appkit: [WindowID: NSRect] = [:]
+        for (id, f) in prediction.frames {
+            appkit[id] = Self.cgFrameToAppKit(f)
+        }
+        let union = appkit.values.reduce(NSRect.null) { $0.union($1) }
+        guard !union.isNull, !union.isEmpty else { dndOverlay.hide(); return }
+        dndOverlay.show(screen: union.insetBy(dx: -8, dy: -8),
+                        frames: appkit, dragged: decision.dragged,
+                        affected: prediction.moved.subtracting([decision.dragged]))
     }
 }

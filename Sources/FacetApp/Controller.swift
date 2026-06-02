@@ -87,6 +87,11 @@ final class Controller: NSObject {
     /// another into a swap / insert. Installed once at start, lives the
     /// whole session. See `installRealWindowDrag` (RealWindowDrag.swift).
     var realWindowDrag: RealWindowDragMonitor?
+    /// Live prediction overlay shown during a real-window drag (PR-3).
+    let dndOverlay = DndPredictionOverlay()
+    /// One prediction round-trip at a time — throttles the per-move
+    /// `predictedDropFrames` requests to the backend's response rate.
+    var dndPredictionInFlight = false
 
     // MARK: - Grid overview
 

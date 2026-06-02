@@ -6,6 +6,20 @@
 
 import CoreGraphics
 
+/// The outcome of a real-window drop, for the prediction overlay (枠C
+/// PR-3): every tiled window's resulting frame, plus which of them the
+/// drop actually relocates — so the overlay can highlight only those and
+/// leave the untouched windows alone (a clean, screenshot-like look).
+public struct DropPrediction: Sendable, Equatable {
+    public let frames: [WindowID: CGRect]
+    public let moved: Set<WindowID>
+    public init(frames: [WindowID: CGRect], moved: Set<WindowID>) {
+        self.frames = frames
+        self.moved = moved
+    }
+    public static let none = DropPrediction(frames: [:], moved: [])
+}
+
 public enum RealWindowDrop {
 
     /// A resolved drop: swap `dragged` with `target`, or — when `zone`

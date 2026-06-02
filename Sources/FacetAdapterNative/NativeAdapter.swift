@@ -1717,6 +1717,42 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: activeDisplayRect())
     }
 
+    public func predictedDrop(dragged a: WindowID, target b: WindowID,
+                              zone: IntentZone) -> DropPrediction {
+        let rect = activeDisplayRect()
+        // Pre-drop computed layout (same math as the commit), then apply
+        // the drop to a COPY of the catalog (a value type) and recompute.
+        // Diffing the two gives the EXACT set of windows the drop moves —
+        // no live-position / sub-pixel noise.
+        let before = computedTileFrames(catalog, in: rect)
+        var copy = catalog
+        let ws = copy.activeIndex
+        let changed: Bool
+        switch zone {
+        case .center:
+            changed = copy.swapWindows(a, b, workspace: ws)
+        case .edge(let edge):
+            changed = copy.insertWindow(a, beside: b, edge: edge, workspace: ws)
+        }
+        guard changed else { return .none }
+        let after = computedTileFrames(copy, in: rect)
+        let moved = Set(after.keys.filter { after[$0] != before[$0] })
+        return DropPrediction(frames: after, moved: moved)
+    }
+
+    /// The active workspace's tiled-window frames as the commit would
+    /// place them — engine / tree geometry plus the same inner gap
+    /// `applyFrames` applies, so a predicted outline lands exactly on the
+    /// gapped on-screen window.
+    private func computedTileFrames(_ cat: WorkspaceCatalog,
+                                    in rect: CGRect) -> [WindowID: CGRect] {
+        let ws = cat.activeIndex
+        let raw = cat.mode(of: ws) == "bsp"
+            ? cat.tiledFrames(for: ws, in: rect)
+            : cat.engineFrames(for: ws, in: rect)
+        return applyInnerGap(raw, in: rect, gap: config.effectiveInnerGap)
+    }
+
     public func markFocusedWindow(_ name: String) -> Bool {
         guard let id = focusedWindow() else {
             Log.debug("native: mark \"\(name)\" — no focused window")

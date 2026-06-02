@@ -156,4 +156,34 @@ final class RealWindowDnDTests: XCTestCase {
         _ = c.setMode(workspace: 1, to: "bsp", in: rect)
         XCTAssertFalse(c.swapWindows(wid(1), wid(99), workspace: 1))
     }
+
+    // MARK: - Drop-prediction foundation (PR-3 overlay)
+    // The overlay highlights only the windows a drop MOVES — diffing the
+    // pre-drop computed layout against the post-drop one. These verify
+    // that diff picks the right set (the basis of `predictedDrop`).
+
+    func testSwapMovesExactlyTheSwappedPair() {
+        var c = seeded(3)
+        _ = c.setMode(workspace: 1, to: "tall")     // master=1, stack=[2,3]
+        let before = c.engineFrames(for: 1, in: rect)
+        var copy = c
+        XCTAssertTrue(copy.swapWindows(wid(1), wid(3), workspace: 1))
+        let after = copy.engineFrames(for: 1, in: rect)
+        let moved = Set(after.keys.filter { after[$0] != before[$0] })
+        // 1 (master ↔ stack) and 3 trade; 2 keeps its stack slot.
+        XCTAssertEqual(moved, [wid(1), wid(3)])
+    }
+
+    func testInsertReshapesTargetAndMoved() {
+        var c = seeded(2)
+        _ = c.setMode(workspace: 1, to: "bsp", in: rect)   // 1 | 2
+        let before = c.tiledFrames(for: 1, in: rect)
+        var copy = c
+        XCTAssertTrue(copy.insertWindow(wid(1), beside: wid(2),
+                                        edge: .bottom, workspace: 1))
+        let after = copy.tiledFrames(for: 1, in: rect)
+        let moved = Set(after.keys.filter { after[$0] != before[$0] })
+        // Both reshape: 2 (right half → top half), 1 (left half → bottom).
+        XCTAssertEqual(moved, [wid(1), wid(2)])
+    }
 }
