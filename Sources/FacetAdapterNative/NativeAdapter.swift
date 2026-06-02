@@ -1717,6 +1717,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: activeDisplayRect())
     }
 
+    public func resizeWindow(_ id: WindowID, to frame: CGRect) {
+        let rect = activeDisplayRect()
+        guard catalog.applyResize(id, to: frame,
+                                  workspace: catalog.activeIndex, in: rect) else {
+            Log.debug("native: resize noop id=\(id.serverID)")
+            return
+        }
+        // PR-1: a full reflow re-applies the new ratio to everyone. The
+        // dragged window snaps to its computed slot (≈ where it was
+        // dragged). PR-2's live drag will exclude the dragged window so
+        // the OS-native resize isn't fought tick-by-tick.
+        reflowActive(rect: rect)
+    }
+
     public func predictedDrop(dragged a: WindowID, target b: WindowID,
                               zone: IntentZone) -> DropPrediction {
         let rect = activeDisplayRect()
