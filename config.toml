@@ -16,23 +16,6 @@
 
 
 # -----------------------------------------------------------------
-# Startup view
-# -----------------------------------------------------------------
-# What facet shows when it launches. Comment out (prefix with `#`)
-# to start in agent-only mode — facet stays running but draws no
-# panel until the CLI asks (`facet --view=grid` etc.).
-#
-#   "tree"  — translucent always-on-top sidebar listing every
-#             workspace and its windows as a tree
-#   "grid"  — full-screen overview with DnD between cells
-#
-# Default for a fresh `curl` install: "tree" (the always-on-top
-# sidebar — facet's primary surface; the grid is a full-screen
-# overview you summon on demand with `facet --view=grid`).
-default-view = "tree"
-
-
-# -----------------------------------------------------------------
 # Color / typography theme
 # -----------------------------------------------------------------
 # Picks the palette + font for the tree panel, grid overlay, and
