@@ -211,6 +211,46 @@ public extension Palette {
         hoverFill: NSColor.black.withAlphaComponent(0.04),
         selFill: NSColor(hex: 0x3B82F6).withAlphaComponent(0.14),
         font: .system, menuAppearance: .aqua)
+
+    // --- Monochrome --------------------------------------------------
+    // Greyscale sets. The primary/secondary accents collapse to two
+    // shades (darkest = primary signal, a lighter grey = secondary)
+    // — deliberate for a monochrome look. The stark B&W pair uses the
+    // mono font; `monotone` softens to system font + mid-greys.
+
+    /// 白黒 — stark black-on-white. Pure-black primary, dark-grey
+    /// `accent2`; mono font for a paper-terminal feel.
+    static let monoLight = Palette(
+        bg: NSColor(hex: 0xFFFFFF), text: NSColor(hex: 0x111111),
+        dim: NSColor(hex: 0x8A8A8A), accent: NSColor(hex: 0x000000),
+        accent2: NSColor(hex: 0x555555),
+        divider: NSColor.black.withAlphaComponent(0.14),
+        hoverFill: NSColor.black.withAlphaComponent(0.05),
+        selFill: NSColor.black.withAlphaComponent(0.10),
+        font: .mono, menuAppearance: .aqua)
+
+    /// 黒白 — stark white-on-black (OLED). White primary, light-grey
+    /// `accent2`; mono font.
+    static let monoDark = Palette(
+        bg: NSColor(hex: 0x000000), text: NSColor(hex: 0xF5F5F5),
+        dim: NSColor(hex: 0x777777), accent: NSColor(hex: 0xFFFFFF),
+        accent2: NSColor(hex: 0xAAAAAA),
+        divider: NSColor.white.withAlphaComponent(0.14),
+        hoverFill: NSColor.white.withAlphaComponent(0.06),
+        selFill: NSColor.white.withAlphaComponent(0.16),
+        font: .mono, menuAppearance: .darkAqua)
+
+    /// モノトーン — soft graphite greyscale; no pure black/white.
+    /// Mid-grey accents + system font for a calmer, lower-contrast
+    /// monochrome than the stark mono-light / mono-dark pair.
+    static let monotone = Palette(
+        bg: NSColor(hex: 0x1E1E1E), text: NSColor(hex: 0xC8C8C8),
+        dim: NSColor(hex: 0x7A7A7A), accent: NSColor(hex: 0xB0B0B0),
+        accent2: NSColor(hex: 0x888888),
+        divider: NSColor.white.withAlphaComponent(0.10),
+        hoverFill: NSColor.white.withAlphaComponent(0.05),
+        selFill: NSColor(hex: 0xB0B0B0).withAlphaComponent(0.18),
+        font: .system, menuAppearance: .darkAqua)
 }
 
 /// Canonical theme names accepted by `--theme=`. Single source of
@@ -220,6 +260,8 @@ public let canonicalStyles = [
     "terminal", "cute", "system",
     "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
     "everforest", "solarized", "onedark", "monokai", "paper",
+    "mono-light", "mono-dark", "monotone",
+    "random",   // meta: picks a random concrete theme at resolve time
 ]
 
 public let defaultStyleName = "terminal"
@@ -241,6 +283,17 @@ public func paletteFor(_ raw: String) -> Palette {
     case "onedark":    return .onedark
     case "monokai":    return .monokai
     case "paper":      return .paper
+    case "mono-light": return .monoLight
+    case "mono-dark":  return .monoDark
+    case "monotone":   return .monotone
+    case "random":
+        // Pick a random concrete color theme each time this resolves
+        // (startup + every --reload). Excludes the "random" sentinel
+        // itself and "system" (the adaptive native look), per request.
+        let pool = canonicalStyles.filter {
+            $0 != "random" && $0 != "system"
+        }
+        return paletteFor(pool.randomElement() ?? "terminal")
     default:           return .terminal
     }
 }
