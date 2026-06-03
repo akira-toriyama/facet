@@ -142,8 +142,8 @@ public struct FacetConfig: Sendable {
         let known = [
             "terminal", "cute", "system",
             "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
-            "everforest", "solarized", "onedark", "monokai", "paper",
-            "mono-light", "mono-dark", "monotone",
+            "everforest", "solarized", "onedark", "monokai", "hacker",
+            "paper", "mono-light", "mono-dark", "monotone",
             "random",   // meta: paletteFor picks a concrete theme
         ]
         return known.contains(raw) ? raw : "terminal"
@@ -277,14 +277,15 @@ public struct FacetConfig: Sendable {
     /// duplicated here (same pattern as `effectiveTheme`).
     public var effectiveBorderEffect: String {
         let raw = (borderEffect ?? "off").lowercased()
-        let known = ["off", "neon", "cyber", "vapor", "kawaii", "rainbow"]
+        let known = ["off", "neon", "cyber", "vapor", "kawaii",
+                     "rainbow", "random"]
         return known.contains(raw) ? raw : "off"
     }
     /// Neon glow (bloom) on the border effect. Default on.
     public var effectiveBorderGlow: Bool { borderGlow ?? true }
-    /// Border line width, px. [0.5, 6] clamp, default 1.5.
+    /// Border line width, px. [0.5, 30] clamp, default 1.5.
     public var effectiveBorderWidth: CGFloat {
-        max(0.5, min(6, borderWidth ?? 1.5))
+        max(0.5, min(30, borderWidth ?? 1.5))
     }
     /// Seconds per full rainbow hue rotation (lower = faster). [1, 120]
     /// clamp, default 6.

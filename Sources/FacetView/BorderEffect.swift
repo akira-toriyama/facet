@@ -65,6 +65,11 @@ public func borderEffectFor(_ name: String) -> BorderEffect? {
             flash: [0xFF0000, 0xFF7F00, 0xFFFF00, 0x00FF00,
                     0x00FFFF, 0x0000FF, 0x8B00FF].map { NSColor(hex: $0) },
             cycles: true)
+    case "random":
+        // Pick a random concrete effect each time this resolves
+        // (startup + every --reload), like the theme `random`.
+        let pool = ["neon", "cyber", "vapor", "kawaii", "rainbow"]
+        return borderEffectFor(pool.randomElement() ?? "neon")
     default:   // "off" or unknown
         return nil
     }

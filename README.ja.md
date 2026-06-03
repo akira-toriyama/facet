@@ -48,7 +48,7 @@ swap (ワークスペースの枠自体は動かないので hotkey 番号は不
 キーは使わない。
 
 各 view は同じ backend と同じテーマ (terminal / nord / dracula /
-catppuccin / mono-light … 全16テーマ + `random`、ライブ切替) を共有。
+catppuccin / hacker / mono-light … 全17テーマ + `random`、ライブ切替) を共有。
 
 ## レイアウト
 
@@ -313,10 +313,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 よく触る key:
 
-- `theme` (トップレベル) — 全16テーマ: `terminal` (default) / `nord` /
+- `theme` (トップレベル) — 全17テーマ: `terminal` (default) / `nord` /
   `dracula` / `gruvbox` / `catppuccin` / `rosepine` / `everforest` /
-  `solarized` / `onedark` / `monokai` / `cute` / `paper` / `system` /
-  `mono-light` / `mono-dark` / `monotone`、加えて `random`
+  `solarized` / `onedark` / `monokai` / `hacker` / `cute` / `paper` /
+  `system` / `mono-light` / `mono-dark` / `monotone`、加えて `random`
   (起動/`--reload` ごとにランダム選択・`system` は除外)
 - `default-view` (トップレベル) — `tree` / `grid`
 - `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
@@ -340,8 +340,8 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   「視差効果を減らす」 ON なら設定に関わらず即時。
 - `[border]` テーブル — tree パネルのネオン枠 (`theme` と直交)。
   `effect` = `off` (既定) / `neon` / `cyber` / `vapor` / `kawaii` /
-  `rainbow`、 `glow` (既定 `true`) で bloom on/off、 `width` で線幅
-  (px・0.5–6 クランプ・既定 1.5)。 WS 切替でネオンが一瞬フラッシュ、
+  `rainbow` / `random`、 `glow` (既定 `true`) で bloom on/off、 `width`
+  で線幅 (px・0.5–30 クランプ・既定 1.5)。 WS 切替でネオンが一瞬フラッシュ、
   `rainbow` は静止時の色相も循環 (`cycle-seconds` = 1周の秒数・
   1–120 クランプ・既定 6・小さいほど速い)。 off は素のテーマ accent 枠。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
@@ -425,7 +425,7 @@ facet status                      # スナップショット: backend /
                                   # lastError / timestamp
 
 # Server 制御
-facet --theme=NAME                # 全16テーマ + random (terminal, …, mono-light; config.toml 参照)
+facet --theme=NAME                # 全17テーマ + random (terminal, …, hacker; config.toml 参照)
 facet --reload                    # config.toml 再読込 + 反映
                                   # (theme / preview-mode)
 facet --quit                      # server 終了

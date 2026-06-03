@@ -34,6 +34,7 @@
 #   "solarized"  — classic teal-base dark; blue + orange.
 #   "onedark"    — Atom One Dark; blue + yellow.
 #   "monokai"    — high-energy; lime + magenta.
+#   "hacker"     — black base, neon-green + red (green-on-black).
 #
 # Light:
 #   "cute"       — soft pastel pink, rounded font.
@@ -70,6 +71,7 @@ theme = "terminal"
 #   "vapor"   — synthwave pink → purple → cyan.
 #   "kawaii"  — soft pastels.
 #   "rainbow" — full spectrum (resting hue slowly cycles).
+#   "random"  — pick a random effect at each launch / `--reload`.
 #
 # The border flashes a quick neon burst on a workspace switch, then
 # settles back to the steady color.
@@ -77,8 +79,8 @@ theme = "terminal"
 effect = "off"
 # Neon bloom around the border. true = glow, false = flat stroke.
 glow = true
-# Border line width in points. 0.5–6 clamp, default 1.5.
-# width = 2
+# Border line width in points. 0.5–30 clamp, default 1.5.
+# width = 10
 # "rainbow" hue rotation: seconds per full cycle (lower = faster).
 # 1–120 clamp, default 6.
 # cycle-seconds = 3

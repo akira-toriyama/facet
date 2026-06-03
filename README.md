@@ -53,7 +53,7 @@ slots themselves don't move, so hotkey numbering is preserved). No
 modifier keys.
 
 All views share the same backend and the same theme
-(16 built-in themes — terminal, nord, dracula, catppuccin,
+(17 built-in themes — terminal, nord, dracula, hacker, catppuccin,
 mono-light, … plus `random` — live toggleable).
 
 ## Layouts
@@ -330,11 +330,11 @@ edit the file to make a change stick.
 
 Frequently-touched keys:
 
-- `theme` (top-level) — 16 themes: `terminal` (default) / `nord` /
+- `theme` (top-level) — 17 themes: `terminal` (default) / `nord` /
   `dracula` / `gruvbox` / `catppuccin` / `rosepine` / `everforest` /
-  `solarized` / `onedark` / `monokai` / `cute` / `paper` / `system` /
-  `mono-light` / `mono-dark` / `monotone`, plus `random` (picks one
-  at each launch / `--reload`, excluding `system`)
+  `solarized` / `onedark` / `monokai` / `hacker` / `cute` / `paper` /
+  `system` / `mono-light` / `mono-dark` / `monotone`, plus `random`
+  (picks one at each launch / `--reload`, excluding `system`)
 - `default-view` (top-level) — `tree` / `grid`
 - `[layout]` table — `inner-gap` (space between tiled windows) and
   `outer-gap` (distance from the screen edges), in points. `outer-gap`
@@ -359,8 +359,9 @@ Frequently-touched keys:
   "Reduce motion" forces instant transitions regardless.
 - `[border]` table — a neon border around the tree panel, layered on
   top of `theme`. `effect` = `off` (default) / `neon` / `cyber` /
-  `vapor` / `kawaii` / `rainbow`; `glow` (default `true`) toggles the
-  bloom; `width` sets the line width (px, clamp 0.5–6, default 1.5).
+  `vapor` / `kawaii` / `rainbow` / `random`; `glow` (default `true`)
+  toggles the bloom; `width` sets the line width (px, clamp 0.5–30,
+  default 1.5).
   The border flashes a neon burst on a workspace switch; `rainbow`
   also cycles its resting hue (`cycle-seconds`, seconds per rotation,
   clamp 1–120, default 6 — lower is faster). Off shows a plain
@@ -453,7 +454,7 @@ facet status                      # snapshot: backend, theme, workspaces,
                                   # stashed shelves, lastError, timestamp
 
 # Server controls
-facet --theme=NAME                # 16 themes + random (terminal, nord, …, mono-light; see config.toml)
+facet --theme=NAME                # 17 themes + random (terminal, nord, …, hacker; see config.toml)
 facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode)
 facet --quit                      # terminate the running server
