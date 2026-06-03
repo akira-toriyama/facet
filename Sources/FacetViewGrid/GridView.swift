@@ -531,10 +531,12 @@ public final class GridView: NSView {
             // Keyboard selection cursor — outline the currently
             // selected cell while NOT lifted (during a lift the
             // drop-target highlight already shows where the ghost
-            // will land). Bright text-color stroke distinguishes it
-            // from active-WS / drop-target accents.
+            // will land). Accent-colored to match the rail
+            // (RailView.swift:642/646): the active WS gets the primary
+            // accent, a browse target (selected but not active) gets
+            // the secondary accent.
             if drag == nil, kbSelectedWS == cell.wsIndex {
-                pal.text.withAlphaComponent(0.85).setStroke()
+                (cell.isActive ? pal.accent : pal.accent2).setStroke()
                 let kc = NSBezierPath(
                     roundedRect: cell.rect.insetBy(dx: 1.5, dy: 1.5),
                     xRadius: gridCellCornerRadius,
@@ -600,7 +602,11 @@ public final class GridView: NSView {
             NSBezierPath(roundedRect: hb.insetBy(dx: 0, dy: 1),
                          xRadius: 4, yRadius: 4).fill()
             if headerSel {
-                pal.text.withAlphaComponent(0.85).setStroke()
+                // Match the cell cursor + rail: accent for the active
+                // WS, accent2 for a browse target — not a plain text
+                // stroke (the WS-name slot is the open-time selection
+                // since grid opens at kbSelectedWindowIdx == -1).
+                (cell.isActive ? pal.accent : pal.accent2).setStroke()
                 let ho = NSBezierPath(
                     roundedRect: hb.insetBy(dx: 0.75, dy: 1.25),
                     xRadius: 4, yRadius: 4)
