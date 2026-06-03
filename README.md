@@ -336,6 +336,12 @@ Frequently-touched keys:
   `system` / `mono-light` / `mono-dark` / `monotone`, plus `random`
   (picks one at each launch / `--reload`, excluding `system`)
 - `default-view` (top-level) — `tree` / `grid`
+- `[tree]` table — `preview-mode` (`popover` / `mirror`), plus the
+  panel geometry seed `pos-x` / `pos-y` / `width` / `height` (screen
+  points, AppKit bottom-left origin; all four needed). Authoritative
+  each launch / `--reload`; drags / CLI geom are session-only, so set
+  it here to pin the panel. Same coords as `facet --view=tree
+  --pos-x/...`.
 - `[layout]` table — `inner-gap` (space between tiled windows) and
   `outer-gap` (distance from the screen edges), in points. `outer-gap`
   sets all four edges; `outer-gap-top` / `-bottom` / `-left` /

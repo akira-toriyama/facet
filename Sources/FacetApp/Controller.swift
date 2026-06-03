@@ -182,6 +182,20 @@ final class Controller: NSObject {
             self?.handlePanelKeyChange(isKey: isKey)
         }
         applyBorderFromConfig()
+        seedTreeGeometry()
+    }
+
+    /// Seed the tree panel's geometry from `[tree]` config (pos-x /
+    /// pos-y / width / height — all four required). Called at startup +
+    /// on hot-reload; when set it re-pins the panel (config is
+    /// authoritative). Runtime drags / CLI geom are session-only, so a
+    /// reload snaps back to the config geometry. No `[tree]` geometry →
+    /// no-op (the built-in default, or the current session position,
+    /// stands).
+    private func seedTreeGeometry() {
+        if let g = config.effectiveTreeGeometry {
+            panelHost.setExplicitFrame(g)
+        }
     }
 
     /// Push the config's `[border]` effect onto the panel. Called at
@@ -314,6 +328,7 @@ final class Controller: NSObject {
         config = fresh
         logConfigWarnings()
         applyBorderFromConfig()
+        seedTreeGeometry()
         let newTheme = config.effectiveTheme
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
@@ -1886,10 +1901,6 @@ extension Controller: TreeController {
 
     func movePanel(by delta: CGSize) {
         panelHost.movePanel(by: delta)
-    }
-
-    func persistPosition() {
-        panelHost.persistPosition()
     }
 
     // -- Refresh

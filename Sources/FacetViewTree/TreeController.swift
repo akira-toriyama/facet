@@ -22,13 +22,9 @@ public protocol TreeController: AnyObject, Sendable {
     func exitActive(restore: Bool)
 
     /// User dragged the panel by `delta`. Controller updates the
-    /// panel's frame in real time; persist happens on
-    /// `persistPosition` at mouseUp.
+    /// panel's frame in real time. Session-only — the position isn't
+    /// persisted (it seeds from `[tree]` config each launch).
     func movePanel(by delta: CGSize)
-
-    /// Write current panel frame to user defaults. Called at the end
-    /// of a drag (panel move or grip resize).
-    func persistPosition()
 
     /// A row that owns a window preview has changed (hover moved,
     /// selection shifted). Controller debounces these into a single

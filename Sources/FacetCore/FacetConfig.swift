@@ -49,6 +49,14 @@ public struct FacetConfig: Sendable {
     /// `"popover"` (default) keeps it next to the source row;
     /// `"mirror"` puts it at the window's own on-screen frame.
     public var treePreviewMode: String?     // "popover" | "mirror"
+    /// Tree-panel geometry seed (`[tree]` pos-x / pos-y / width /
+    /// height). AppKit bottom-left screen origin, points — same as the
+    /// CLI `--pos-x/...`. All four are needed to take effect; read
+    /// `effectiveTreeGeometry`.
+    public var treePosX: Int?
+    public var treePosY: Int?
+    public var treeWidth: Int?
+    public var treeHeight: Int?
 
     // [layout]
     /// Startup layout mode every workspace begins in (`float` / `bsp`
@@ -215,6 +223,26 @@ public struct FacetConfig: Sendable {
         return ["popover", "mirror"].contains(raw) ? raw : "popover"
     }
 
+    /// The tree-panel geometry seed as a CGRect (AppKit bottom-left
+    /// origin, points), or nil unless all four `[tree]` keys are set
+    /// and width/height are positive. Seeds the panel each launch + on
+    /// reload; runtime drags / CLI geom are session-only. (CGRect is
+    /// CoreGraphics — fine in the FacetCore layer.)
+    public var effectiveTreeGeometry: CGRect? {
+        guard let x = treePosX, let y = treePosY,
+              let w = treeWidth, w > 0, let h = treeHeight, h > 0
+        else { return nil }
+        return CGRect(x: CGFloat(x), y: CGFloat(y),
+                      width: CGFloat(w), height: CGFloat(h))
+    }
+    /// Some — but not all — tree-geometry keys set (so the seed was
+    /// ignored). Surfaced by `unknownValueWarnings`.
+    private var treeGeometryPartial: Bool {
+        let n = [treePosX, treePosY, treeWidth, treeHeight]
+            .lazy.filter { $0 != nil }.count
+        return n > 0 && n < 4
+    }
+
     /// Gap between adjacent tiled windows, px. [0, 1000] clamp,
     /// default 0 (= flush tiling, the pre-gap behaviour). Applied by
     /// `applyInnerGap` to every layout's frames; the screen-edge side
@@ -345,6 +373,10 @@ public struct FacetConfig: Sendable {
         clamp("border effect", borderEffect, effectiveBorderEffect)
         clamp("grid label-position", gridLabelPosition,
               effectiveGridLabelPosition)
+        if treeGeometryPartial {
+            out.append("config: [tree] geometry needs all of pos-x / "
+                + "pos-y / width / height — partial set ignored")
+        }
         // Startup view clamps to agent-only mode (nil), not a value.
         if let raw = defaultView, !raw.isEmpty, effectiveDefaultView == nil {
             out.append("config: unknown view \"\(raw)\" "
@@ -434,6 +466,10 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
         }
+        if case .int(let n)? = toml["tree"]?["pos-x"] { c.treePosX = n }
+        if case .int(let n)? = toml["tree"]?["pos-y"] { c.treePosY = n }
+        if case .int(let n)? = toml["tree"]?["width"] { c.treeWidth = n }
+        if case .int(let n)? = toml["tree"]?["height"] { c.treeHeight = n }
         // [layout]
         if case .string(let s)? = toml["layout"]?["default"] {
             c.defaultLayout = s

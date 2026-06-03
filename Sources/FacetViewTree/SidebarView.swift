@@ -1039,9 +1039,11 @@ public final class SidebarView: NSView {
             let cp = convert(ev.locationInWindow, from: nil)
             switch ev.type {
             case .leftMouseUp:
-                if mode == 1 {
-                    controller?.persistPosition()
-                } else if mode == 2 {
+                // mode 1 (panel move) needs nothing on mouseUp — the
+                // move applied live during the drag and geometry is
+                // session-only now (sticks via `[tree]` config, not
+                // UserDefaults).
+                if mode == 2 {
                     let tgt = wsBands.first { $0.value.contains(cp.y) }?.key
                     if let tgt, tgt != dragWS {
                         // M9-1: background move — file the window into
