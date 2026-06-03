@@ -253,18 +253,29 @@ public final class RailView: NSView {
             ? alongOrigin + (availAlong - content) / 2
             : alongOrigin - scrollOffset
         // The header+gap+thumb block is a fixed (thumbW × blockH) box;
-        // it tiles along the strip and centres across the thickness.
-        // The header is always a horizontal band, stacked in screen-Y
-        // above the thumb (or below on a `.top` rail).
+        // it tiles along the strip and HUGS the docked screen edge (so
+        // the strip sits at the edge and the hero can grow toward the
+        // centre). The header is always a horizontal band, stacked in
+        // screen-Y above the thumb (or below on a `.top` rail).
         let blockH = headerH + railLabelGap + thumbH
+        // Cross-axis span of one cell + where its outer (edge) corner and
+        // inner (hero-facing) edge sit, after hugging the screen edge.
+        let blockCross = horizontal ? blockH : thumbW
+        let blockOuter: CGFloat, innerEdge: CGFloat
+        switch edge {
+        case .bottom: blockOuter = strip.maxY - railEdgeGap - blockCross; innerEdge = blockOuter
+        case .top:    blockOuter = strip.minY + railEdgeGap;              innerEdge = blockOuter + blockCross
+        case .left:   blockOuter = strip.minX + railEdgeGap;              innerEdge = blockOuter + blockCross
+        case .right:  blockOuter = strip.maxX - railEdgeGap - blockCross; innerEdge = blockOuter
+        }
         for (i, ws) in workspaces.enumerated() {
             let slotStart = alongBase + CGFloat(i) * slot
             let blockX: CGFloat, blockY: CGFloat
             if horizontal {
                 blockX = slotStart + (slot - thumbW) / 2
-                blockY = strip.minY + (strip.height - blockH) / 2
+                blockY = blockOuter
             } else {
-                blockX = strip.minX + (strip.width - thumbW) / 2
+                blockX = blockOuter
                 blockY = slotStart + (slot - blockH) / 2
             }
             let headerY = headerOnTop ? blockY : blockY + thumbH + railLabelGap
@@ -281,18 +292,39 @@ public final class RailView: NSView {
                               isHero: false))
         }
 
-        // -- Hero: the SELECTED workspace (browse) — aspect-fit, centred
-        //    in the area the strip left free. --
-        if heroArea.width > 1, heroArea.height > 1,
+        // -- Hero: the SELECTED workspace (browse) — aspect-fit, biased
+        //    toward the SCREEN centre. The strip hugs the edge, so pull
+        //    the hero's strip-side boundary in to the cells' inner edge
+        //    (reclaiming the band slack), then centre the hero on the
+        //    screen, clamped so it never overlaps the strip. --
+        var heroBox = heroArea
+        switch edge {
+        case .bottom:
+            heroBox.size.height = max(0, (innerEdge - railHeroGap) - heroBox.minY)
+        case .top:
+            let top = innerEdge + railHeroGap
+            heroBox = CGRect(x: heroBox.minX, y: top,
+                             width: heroBox.width, height: max(0, heroBox.maxY - top))
+        case .left:
+            let left = innerEdge + railHeroGap
+            heroBox = CGRect(x: left, y: heroBox.minY,
+                             width: max(0, heroBox.maxX - left), height: heroBox.height)
+        case .right:
+            heroBox.size.width = max(0, (innerEdge - railHeroGap) - heroBox.minX)
+        }
+        if heroBox.width > 1, heroBox.height > 1,
            let act = workspaces.first(where: { $0.index == selectedWS })
             ?? workspaces.first(where: { $0.isActive })
             ?? workspaces.first {
-            var hCellW = heroArea.width
-            var hCellH = heroArea.height
+            var hCellW = heroBox.width
+            var hCellH = heroBox.height
             if hCellW / hCellH > aspect { hCellW = hCellH * aspect }
             else { hCellH = hCellW / aspect }
-            let hx = (heroArea.minX + (heroArea.width - hCellW) / 2).rounded()
-            let hy = (heroArea.minY + (heroArea.height - hCellH) / 2).rounded()
+            // Centre on the screen, clamped into the (strip-free) box.
+            let hx = min(max(bounds.midX - hCellW / 2, heroBox.minX),
+                         heroBox.maxX - hCellW).rounded()
+            let hy = min(max(bounds.midY - hCellH / 2, heroBox.minY),
+                         heroBox.maxY - hCellH).rounded()
             let hCellRect = NSRect(x: hx, y: hy, width: hCellW, height: hCellH)
             hero = Cell(wsIndex: act.index, rect: hCellRect,
                         headerRect: .zero, isActive: act.isActive,

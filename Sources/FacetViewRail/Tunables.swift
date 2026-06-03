@@ -25,6 +25,15 @@ let railCellGap: CGFloat = 16
 let railCellMinDim: CGFloat = 40
 /// Breathing room between a cell and its header.
 let railLabelGap: CGFloat = 6
+/// Gap from the very screen edge to the strip cells — the cells sit
+/// near the docked edge (rather than floating in the band's centre) so
+/// the hero preview can reclaim the slack toward the screen centre, but
+/// keep a little breathing room off the edge itself.
+let railEdgeGap: CGFloat = 24
+/// Gap between the hero preview and the strip — keeps the big preview
+/// from butting up against the workspace列 (separate from the smaller
+/// inter-cell `railCellGap`).
+let railHeroGap: CGFloat = 32
 
 /// Strip thickness — the all-workspaces band's cross-axis size (height
 /// for a top/bottom rail, width for left/right) as a fraction of that
