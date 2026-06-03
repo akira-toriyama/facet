@@ -202,6 +202,7 @@ final class Controller: NSObject {
     /// event task — don't.
     func start() {
         Log.debug("controller start")
+        logConfigWarnings()
         eventTask = Task { [weak self] in
             guard let self else { return }
             for await _ in self.backend.events {
@@ -290,6 +291,7 @@ final class Controller: NSObject {
         let oldTheme = config.effectiveTheme
         let oldPrev = config.effectiveTreePreviewMode
         config = fresh
+        logConfigWarnings()
         let newTheme = config.effectiveTheme
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
@@ -301,6 +303,16 @@ final class Controller: NSObject {
         // to surface in `facet status` without waiting for the
         // next backend event.
         writeStatus(lastWorkspaces)
+    }
+
+    /// Surface any named-enum config value that silently clamped to a
+    /// default (e.g. a layout name carried across a breaking rename:
+    /// `tall` → `master-left` now degrades to `float`). `Log.line` —
+    /// always on, so brew / plain `open Facet.app` users see it too,
+    /// not just `FACET_DEBUG` runs. Fired once per load (startup +
+    /// hot-reload), never from the per-tick `effective*` accessors.
+    private func logConfigWarnings() {
+        for warning in config.unknownValueWarnings() { Log.line(warning) }
     }
 
     // MARK: - CLI ↔ GUI IPC + theme

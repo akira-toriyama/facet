@@ -280,4 +280,71 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertNil(c.effectiveDefaultView,
                      "missing config → agent-only mode by default")
     }
+
+    // MARK: - unknownValueWarnings (silent-clamp surfacing)
+
+    func testNoWarningsForDefaultConfig() {
+        XCTAssertTrue(FacetConfig().unknownValueWarnings().isEmpty,
+                      "every key unset → nothing was clamped")
+    }
+
+    func testNoWarningsForValidValues() {
+        var c = FacetConfig()
+        c.theme = "cute"
+        c.defaultLayout = "bsp"
+        c.railEdge = "left"
+        c.treePreviewMode = "mirror"
+        c.animationCurve = "spring"
+        c.gridLabelPosition = "down"
+        c.defaultView = "grid"
+        XCTAssertTrue(c.unknownValueWarnings().isEmpty,
+                      "all recognised → no warnings")
+    }
+
+    func testValidValuesAreCaseInsensitive() {
+        var c = FacetConfig()
+        c.defaultLayout = "BSP"
+        c.theme = "Cute"
+        c.railEdge = "LEFT"
+        XCTAssertTrue(c.unknownValueWarnings().isEmpty,
+                      "a known name in any case is not a clamp")
+    }
+
+    func testUnknownLayoutWarns() {
+        var c = FacetConfig()
+        // `tall` was renamed to `master-left` (#139); an old config
+        // carrying it now silently clamps to `float`.
+        c.defaultLayout = "tall"
+        let w = c.unknownValueWarnings()
+        XCTAssertEqual(w.count, 1)
+        XCTAssertTrue(w[0].contains("layout"), "names the key")
+        XCTAssertTrue(w[0].contains("tall"), "echoes the written value")
+        XCTAssertTrue(w[0].contains("float"), "names the fallback")
+    }
+
+    func testUnknownViewWarnsAgentOnly() {
+        var c = FacetConfig()
+        c.defaultView = "panel"
+        let w = c.unknownValueWarnings()
+        XCTAssertEqual(w.count, 1)
+        XCTAssertTrue(w[0].contains("view"))
+        XCTAssertTrue(w[0].contains("agent-only"),
+                      "unknown view degrades to agent-only mode, not a value")
+    }
+
+    func testMultipleUnknownsEachWarnOnce() {
+        var c = FacetConfig()
+        c.defaultLayout = "tall"
+        c.theme = "neon"
+        c.railEdge = "diagonal"
+        XCTAssertEqual(c.unknownValueWarnings().count, 3,
+                       "one warning per clamped key")
+    }
+
+    func testEmptyStringIsNotAWarning() {
+        var c = FacetConfig()
+        c.defaultLayout = ""
+        XCTAssertTrue(c.unknownValueWarnings().isEmpty,
+                      "empty string is treated like unset, not a typo")
+    }
 }
