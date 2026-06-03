@@ -93,6 +93,16 @@ public struct FacetConfig: Sendable {
     /// `effectiveAnimationEventDriven`.
     public var animationEventDriven: Bool?
 
+    // [border]
+    /// Tree-panel border effect: off | neon | cyber | vapor | kawaii |
+    /// rainbow. Raw; read `effectiveBorderEffect`. Default off.
+    public var borderEffect: String?
+    /// Neon glow (bloom) on the border effect. Raw; read
+    /// `effectiveBorderGlow`. Default on.
+    public var borderGlow: Bool?
+    /// Border line width, px. Raw; read `effectiveBorderWidth`.
+    public var borderWidth: CGFloat?
+
     /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
     /// the mac desktop ordinal (Mission Control order, 1-based, user
     /// desktops only); inner is `facet WS index -> WorkspaceConfig`
@@ -257,6 +267,23 @@ public struct FacetConfig: Sendable {
     /// keeps its outer-gap inset unless the user opts in.
     public var effectiveSmartGaps: Bool { smartGaps ?? false }
 
+    /// Tree-panel border effect: off | neon | cyber | vapor | kawaii |
+    /// rainbow; unknown / unset → "off" (opt-in). Must stay in sync
+    /// with `borderEffectFor` in FacetView's BorderEffect.swift —
+    /// FacetCore can't import the view-side colors, so the name set is
+    /// duplicated here (same pattern as `effectiveTheme`).
+    public var effectiveBorderEffect: String {
+        let raw = (borderEffect ?? "off").lowercased()
+        let known = ["off", "neon", "cyber", "vapor", "kawaii", "rainbow"]
+        return known.contains(raw) ? raw : "off"
+    }
+    /// Neon glow (bloom) on the border effect. Default on.
+    public var effectiveBorderGlow: Bool { borderGlow ?? true }
+    /// Border line width, px. [0.5, 6] clamp, default 1.5.
+    public var effectiveBorderWidth: CGFloat {
+        max(0.5, min(6, borderWidth ?? 1.5))
+    }
+
     /// Named-enum config values that were written but didn't match any
     /// known name, so the matching `effective*` accessor silently
     /// clamped them to a default. Returns one human-readable warning
@@ -291,6 +318,7 @@ public struct FacetConfig: Sendable {
         clamp("rail edge", railEdge, effectiveRailEdge.rawValue)
         clamp("preview-mode", treePreviewMode, effectiveTreePreviewMode)
         clamp("animation curve", animationCurve, effectiveAnimationCurve)
+        clamp("border effect", borderEffect, effectiveBorderEffect)
         clamp("grid label-position", gridLabelPosition,
               effectiveGridLabelPosition)
         // Startup view clamps to agent-only mode (nil), not a value.
@@ -419,6 +447,16 @@ public struct FacetConfig: Sendable {
         }
         if case .bool(let b)? = toml["animation"]?["event-driven"] {
             c.animationEventDriven = b
+        }
+        // [border]
+        if case .string(let s)? = toml["border"]?["effect"] {
+            c.borderEffect = s
+        }
+        if case .bool(let b)? = toml["border"]?["glow"] {
+            c.borderGlow = b
+        }
+        if case .int(let n)? = toml["border"]?["width"] {
+            c.borderWidth = CGFloat(n)
         }
         // [desktop.N] per-mac-desktop workspace configs. The TOML
         // parser flattens `[desktop.1]` to the section name

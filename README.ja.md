@@ -338,6 +338,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   cycle (旧 top が抜け次が入る)・窓 open / close (既存タイル窓が新しいサイ
   ズへスライド、 新窓は タイル slot に snap)。 公開 AX のみ。 macOS
   「視差効果を減らす」 ON なら設定に関わらず即時。
+- `[border]` テーブル — tree パネルのネオン枠 (`theme` と直交)。
+  `effect` = `off` (既定) / `neon` / `cyber` / `vapor` / `kawaii` /
+  `rainbow`、 `glow` (既定 `true`) で bloom on/off、 `width` で線幅
+  (px・0.5–6 クランプ・既定 1.5)。 off は素のテーマ accent 枠。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
   `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で

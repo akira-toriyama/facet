@@ -39,6 +39,12 @@ final class PanelHost: NSObject {
     /// the panel size in `applySubviewLayout`, and the theme accent in
     /// `applyTheme`. Foundation for the neon border-flash effect.
     private let borderLayer = CALayer()
+    /// Active `[border]` effect (nil = off → plain theme-accent
+    /// border), whether its neon glow is on, and the resting width.
+    /// Set by `applyBorder(...)` from config.
+    private var borderFx: BorderEffect?
+    private var borderGlowOn = false
+    private var borderW: CGFloat = 1.5
 
     /// Notified when the panel becomes / resigns key. Controller wires
     /// kbNav on/off here so a plain click on the tree panel (without
@@ -59,7 +65,6 @@ final class PanelHost: NSObject {
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160
     private let minHeight: CGFloat = 140
-    private let borderWidth: CGFloat = 1.5
     private let cornerRadius: CGFloat = 12
 
     // MARK: - Init
@@ -130,7 +135,7 @@ final class PanelHost: NSObject {
         // panel's squircle. Frame is set in `applySubviewLayout`, color
         // in `applyTheme`. The border draws inside the layer bounds, so
         // it stays within `effect`'s masksToBounds clip.
-        borderLayer.borderWidth = borderWidth
+        borderLayer.borderWidth = borderW
         borderLayer.borderColor = pal.accent.cgColor
         borderLayer.cornerRadius = cornerRadius
         borderLayer.cornerCurve = .continuous
@@ -303,8 +308,40 @@ final class PanelHost: NSObject {
     /// `paletteFor(...)` changes `pal`.
     func applyTheme() {
         bgView.layer?.backgroundColor = (pal.bg ?? .clear).cgColor
-        borderLayer.borderColor = pal.accent.cgColor
+        applyBorderStyle()
         searchBar.applyTheme()
+    }
+
+    /// Apply the `[border]` config: pick the effect (nil = off → plain
+    /// theme-accent border), its glow, and the resting line width.
+    /// Called by the Controller at startup + on hot-reload.
+    func applyBorder(effectName: String, glow: Bool, width: CGFloat) {
+        borderFx = borderEffectFor(effectName)
+        borderGlowOn = glow && borderFx != nil
+        borderW = width
+        applyBorderStyle()
+    }
+
+    /// Paint the border layer's resting look. The steady color is the
+    /// active effect's, or the theme accent when off. The glow is a
+    /// layer shadow in that color; it bleeds inward only (the panel's
+    /// `masksToBounds` clips the outward bloom), reading as a neon
+    /// inner-glow.
+    private func applyBorderStyle() {
+        let color = borderFx?.steady ?? pal.accent
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        borderLayer.borderWidth = borderW
+        borderLayer.borderColor = color.cgColor
+        if borderGlowOn {
+            borderLayer.shadowColor = color.cgColor
+            borderLayer.shadowRadius = max(3, borderW * 3)
+            borderLayer.shadowOpacity = 0.85
+            borderLayer.shadowOffset = .zero
+        } else {
+            borderLayer.shadowOpacity = 0
+        }
+        CATransaction.commit()
     }
 
     // MARK: - Helpers
