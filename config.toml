@@ -71,8 +71,8 @@ theme = "terminal"
 #   "kawaii"  — soft pastels.
 #   "rainbow" — full spectrum (resting hue slowly cycles).
 #
-# (The workspace-switch flash burst lands in a follow-up; this
-# release paints the steady neon border + glow.)
+# The border flashes a quick neon burst on a workspace switch, then
+# settles back to the steady color.
 [border]
 effect = "off"
 # Neon bloom around the border. true = glow, false = flat stroke.

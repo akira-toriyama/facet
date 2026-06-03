@@ -825,6 +825,14 @@ final class Controller: NSObject {
         // render immediately without a backend round-trip.
         lastWorkspaces = wss
         prevActiveWSIndex = wss.first(where: { $0.isActive })?.index
+        // Neon border flash on a real workspace switch (no-op when
+        // `[border] effect` is off, or the tree panel is hidden — the
+        // border lives on it). `prevActive == nil` = the first apply
+        // (startup): skip so the steady border just appears.
+        if let prev = prevActive, prevActiveWSIndex != prev,
+           panelHost.isVisible {
+            panelHost.flashBorder()
+        }
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index

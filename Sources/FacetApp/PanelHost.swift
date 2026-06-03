@@ -45,6 +45,12 @@ final class PanelHost: NSObject {
     private var borderFx: BorderEffect?
     private var borderGlowOn = false
     private var borderW: CGFloat = 1.5
+    /// WS-switch flash-burst timer, the rainbow hue-cycle timer, and
+    /// its 0…1 phase. Both fire in `.common` mode (like the rail's
+    /// slide) so they keep ticking during key-mash / interaction.
+    private var flashTimer: Timer?
+    private var cycleTimer: Timer?
+    private var cyclePhase: CGFloat = 0
 
     /// Notified when the panel becomes / resigns key. Controller wires
     /// kbNav on/off here so a plain click on the tree panel (without
@@ -319,16 +325,63 @@ final class PanelHost: NSObject {
         borderFx = borderEffectFor(effectName)
         borderGlowOn = glow && borderFx != nil
         borderW = width
+        if borderFx?.cycles == true { startCycle() } else { stopCycle() }
         applyBorderStyle()
     }
 
-    /// Paint the border layer's resting look. The steady color is the
-    /// active effect's, or the theme accent when off. The glow is a
-    /// layer shadow in that color; it bleeds inward only (the panel's
+    /// Flash the border: a 5-blink burst through the effect's flash
+    /// palette (random, no consecutive repeat), then settle back to the
+    /// steady look. No-op when the effect is off. Driven by a workspace
+    /// switch (Controller.apply).
+    func flashBorder() {
+        guard let fx = borderFx, !fx.flash.isEmpty else { return }
+        flashTimer?.invalidate()
+        var idxs: [Int] = []
+        var last = -1
+        for _ in 0..<5 {
+            var i = Int.random(in: 0..<fx.flash.count)
+            if fx.flash.count > 1 { while i == last { i = Int.random(in: 0..<fx.flash.count) } }
+            idxs.append(i); last = i
+        }
+        let seq = idxs.map { fx.flash[$0] }
+        var step = 0
+        // Ignore the timer arg (capturing it in a @MainActor closure
+        // trips Swift 6 sendability); stop via the stored `flashTimer`,
+        // mirroring the rail's slide loop.
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if step < seq.count {
+                    self.setFlashColor(seq[step]); step += 1
+                } else {
+                    self.flashTimer?.invalidate()
+                    self.flashTimer = nil
+                    self.applyBorderStyle()        // settle to steady
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        flashTimer = timer
+    }
+
+    /// The resting border color: the cycling hue for rainbow, the
+    /// effect's fixed steady color otherwise, or the theme accent when
+    /// the effect is off.
+    private func currentSteadyColor() -> NSColor {
+        guard let fx = borderFx else { return pal.accent }
+        if fx.cycles {
+            return NSColor(hue: cyclePhase, saturation: 0.9,
+                           brightness: 1, alpha: 1)
+        }
+        return fx.steady
+    }
+
+    /// Paint the border layer's resting look. The glow is a layer
+    /// shadow in the steady color; it bleeds inward only (the panel's
     /// `masksToBounds` clips the outward bloom), reading as a neon
     /// inner-glow.
     private func applyBorderStyle() {
-        let color = borderFx?.steady ?? pal.accent
+        let color = currentSteadyColor()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         borderLayer.borderWidth = borderW
@@ -342,6 +395,46 @@ final class PanelHost: NSObject {
             borderLayer.shadowOpacity = 0
         }
         CATransaction.commit()
+    }
+
+    /// One flash blink: the palette color at a slightly fatter width +
+    /// stronger bloom for a neon pop. Restored by `applyBorderStyle` on
+    /// settle. Honors `glow`.
+    private func setFlashColor(_ c: NSColor) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        borderLayer.borderWidth = borderW + 1.5
+        borderLayer.borderColor = c.cgColor
+        if borderGlowOn {
+            borderLayer.shadowColor = c.cgColor
+            borderLayer.shadowRadius = max(5, borderW * 5)
+            borderLayer.shadowOpacity = 0.95
+            borderLayer.shadowOffset = .zero
+        }
+        CATransaction.commit()
+    }
+
+    /// Rainbow: rotate the resting hue ~once per 12 s. Paused during a
+    /// flash burst so the two don't fight; the flash settles back onto
+    /// the live cycle color.
+    private func startCycle() {
+        guard cycleTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tickCycle() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        cycleTimer = timer
+    }
+
+    private func stopCycle() {
+        cycleTimer?.invalidate(); cycleTimer = nil
+        cyclePhase = 0
+    }
+
+    private func tickCycle() {
+        cyclePhase += 1.0 / 360.0
+        if cyclePhase >= 1 { cyclePhase -= 1 }
+        if flashTimer == nil { applyBorderStyle() }   // don't fight a flash
     }
 
     // MARK: - Helpers
