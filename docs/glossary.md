@@ -271,30 +271,6 @@ orientation` での flip は廃止（辺を直接指定するため）。
 - **Don't call it:** tall, wide, centered（M9-2 で改名・旧称）, 縦/横
   分割, master_stack
 
-### anchor
-**非アクティブ [[facet workspace]] の window を画面から隠す手法**。AX
-`kAXPosition` で window を画面隅へ寄せ、最小可視の [[sliver]] だけ残す
-（macOS の clamp で完全な画面外には出せないため）。公開 AX のみ・SIP-on・
-**即時**（アニメ無し）。facet 唯一の hide 手法（`minimize` は genie アニメで
-WS 切替が遅く 2026-05-28 廃止）。parked 窓は `isOnscreen=true` を保つので、
-ユーザーの Cmd+H / Cmd+M による真の hide と区別できる。`sticky` / `scratchpad`
-はこの anchor park の再利用。
-- コード: `shouldParkAnchor` / `applyHide`（`FacetAdapterNative`）
-- 参照: memory `[[native-window-hide-methods]]`（全 hide 手法の検証記録・
-  完全消去は SIP-off 必須で本体 scope 外）
-- **Don't call it:** corner hide, HideCorner（rift の旧称）, off-screen hide,
-  minimize（別手法・廃止済）, 角配置, 隅寄せ
-
-### sliver
-**anchor park 後に画面隅に残る window の可視部分**。macOS の clamp invariant
-により最小 **1×41 logical pt**（右下隅）まで詰められるが、完全な 0px には
-できない（macOS が「title bar は必ず画面内に残して救出可能にする」救済仕様の
-ため）。完全消去（画面 + Mission Control から消す）は公開 / read-only-private
-API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
-- 参照: [[anchor]] / memory `[[native-window-hide-methods]]`
-- **Don't call it:** strip, remnant, leftover, edge（[[edge]] は rail の辺の
-  別概念）, 残り, 断片, はみ出し
-
 ### sticky window
 1 つの window を **現在の mac desktop 内・全 facet workspace のメンバー**
 にして出っぱなしにする（PiP / タイマー / チャット / 音楽）。実装は既存
