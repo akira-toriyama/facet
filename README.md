@@ -357,6 +357,11 @@ Frequently-touched keys:
   window open / close (existing tiled windows glide to their new sizes;
   the new window snaps to its tile slot). Pure public AX; macOS
   "Reduce motion" forces instant transitions regardless.
+- `[border]` table — a neon border around the tree panel, layered on
+  top of `theme`. `effect` = `off` (default) / `neon` / `cyber` /
+  `vapor` / `kawaii` / `rainbow`; `glow` (default `true`) toggles the
+  bloom; `width` sets the line width (px, clamp 0.5–6, default 1.5).
+  Off shows a plain theme-accent border.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or

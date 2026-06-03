@@ -181,6 +181,17 @@ final class Controller: NSObject {
         panelHost.onKeyChanged = { [weak self] isKey in
             self?.handlePanelKeyChange(isKey: isKey)
         }
+        applyBorderFromConfig()
+    }
+
+    /// Push the config's `[border]` effect onto the panel. Called at
+    /// startup + on hot-reload. "off" falls back to the theme-accent
+    /// border; a named effect paints its steady neon color + glow.
+    private func applyBorderFromConfig() {
+        panelHost.applyBorder(
+            effectName: config.effectiveBorderEffect,
+            glow: config.effectiveBorderGlow,
+            width: config.effectiveBorderWidth)
     }
 
     private func handlePanelKeyChange(isKey: Bool) {
@@ -292,6 +303,7 @@ final class Controller: NSObject {
         let oldPrev = config.effectiveTreePreviewMode
         config = fresh
         logConfigWarnings()
+        applyBorderFromConfig()
         let newTheme = config.effectiveTheme
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
