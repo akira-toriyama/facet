@@ -39,6 +39,10 @@ public struct FacetConfig: Sendable {
     public var gridLabelPosition: String?   // "up" | "down"
     public var thumbnailRefreshSeconds: Int?
 
+    // [rail]
+    public var railEdge: String?            // "top" | "bottom" | "left" | "right"
+    public var railCells: Int?              // strip cells shown at once
+
     // [tree]
     /// How the sidebar's hover-preview overlay is sized + placed.
     /// `"popover"` (default) keeps it next to the source row;
@@ -128,6 +132,19 @@ public struct FacetConfig: Sendable {
     /// "up" | "down". Any other input → "up". Case-insensitive.
     public var effectiveGridLabelPosition: String {
         (gridLabelPosition?.lowercased() == "down") ? "down" : "up"
+    }
+
+    /// Which edge the rail docks against. Unknown / unset → `.bottom`
+    /// (the original bottom bar). Case-insensitive. A CLI `--edge=`
+    /// overrides this at show time.
+    public var effectiveRailEdge: RailEdge {
+        RailEdge(rawValue: (railEdge ?? "bottom").lowercased()) ?? .bottom
+    }
+
+    /// How many strip cells the rail shows at once before it scrolls.
+    /// 1…20 clamp, default 7 (mirrors `effectiveGridCols`' clamp shape).
+    public var effectiveRailCells: Int {
+        max(1, min(20, railCells ?? 7))
     }
 
     /// Effective background-capture interval for grid thumbnails.
@@ -287,6 +304,9 @@ public struct FacetConfig: Sendable {
         if case .int(let n)? = toml["grid"]?["thumbnail-refresh-seconds"] {
             c.thumbnailRefreshSeconds = n
         }
+        // [rail]
+        if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
+        if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s

@@ -201,6 +201,17 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``--active`` only differs by taking key focus *immediately*
   (+ flipping activation policy so the local keyDown monitor can
   fire before the user has clicked).
+- **``--edge=top|bottom|left|right`` is a modifier too** (M9-3),
+  only meaningful with ``--view=rail`` (becomes ``view:rail+edge:NAME``
+  on the DNC); ``--edge`` without ``--view=rail`` is a loud
+  ``exit 2``. It picks which screen edge the rail's strip docks
+  against (`mac desktop`-independent); the strip axis drives which
+  arrows browse (top/bottom → ←/→, left/right → ↑/↓). Config seed
+  is ``[rail] edge`` (silent clamp→bottom); ``[rail] cells`` sets
+  the fixed strip count before it scrolls. The geometry is pure
+  (`railBands` / `railScrollToShow` in FacetCore, unit-tested);
+  the strip header stays a horizontal band on every edge (no text
+  rotation — a vertical stack of label/thumbnail cells).
 - **No bare-flag tree aliases**. ``--show`` / ``--hide`` /
   ``--toggle`` / ``--active`` standalone were dropped — every
   view op specifies NAME explicitly. Keeps the canonical form

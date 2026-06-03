@@ -80,8 +80,8 @@ public struct Window: Sendable {
     /// Whether this window occupies the master slot of its workspace
     /// — i.e. it is first in the workspace's tiling order
     /// (`order[0]`). Only meaningful for master-stack layouts
-    /// (tall / wide / centered); the right-click menu uses it to hide
-    /// "Promote to master" on the window that is already the master.
+    /// (`master-left` … `master-center`); the right-click menu uses it
+    /// to hide "Promote to master" on the window that is already master.
     /// `false` for floating windows and layouts without a master.
     public let isMaster: Bool
     /// User-assigned mark (vim-style label) for this window, or `nil`

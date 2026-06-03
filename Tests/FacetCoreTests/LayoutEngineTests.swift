@@ -11,16 +11,30 @@ final class LayoutEngineTests: XCTestCase {
     // MARK: - Registry
 
     func testRegistryResolvesCaseInsensitive() {
-        XCTAssertEqual(LayoutRegistry.engine(named: "tall")?.name, "tall")
-        XCTAssertEqual(LayoutRegistry.engine(named: "TALL")?.name, "tall")
-        XCTAssertEqual(LayoutRegistry.engine(named: "Wide")?.name, "wide")
+        XCTAssertEqual(LayoutRegistry.engine(named: "master-left")?.name,
+                       "master-left")
+        XCTAssertEqual(LayoutRegistry.engine(named: "MASTER-LEFT")?.name,
+                       "master-left")
+        XCTAssertEqual(LayoutRegistry.engine(named: "Master-Top")?.name,
+                       "master-top")
     }
 
     func testRegistryAdvertisesStatelessEngines() {
-        for name in ["tall", "wide", "centered", "grid", "spiral"] {
+        for name in ["master-left", "master-right", "master-top",
+                     "master-bottom", "master-center", "grid", "spiral"] {
             XCTAssertTrue(LayoutRegistry.names.contains(name),
                           "registry should advertise \(name)")
         }
+    }
+
+    func testMasterEnginesHaveMasterGridSpiralDoNot() {
+        for name in ["master-left", "master-right", "master-top",
+                     "master-bottom", "master-center"] {
+            XCTAssertEqual(LayoutRegistry.engine(named: name)?.hasMaster, true,
+                           "\(name) should report a master")
+        }
+        XCTAssertEqual(LayoutRegistry.engine(named: "grid")?.hasMaster, false)
+        XCTAssertEqual(LayoutRegistry.engine(named: "spiral")?.hasMaster, false)
     }
 
     func testRegistrySkipsStatefulAndUnknownModes() {
@@ -38,6 +52,16 @@ final class LayoutEngineTests: XCTestCase {
         // longer resolve as a stateless engine.
         XCTAssertNil(LayoutRegistry.engine(named: "monocle"))
         XCTAssertFalse(LayoutRegistry.names.contains("monocle"))
+    }
+
+    func testOldMasterNamesRetired() {
+        // M9-2 renamed tall/wide/centered to master-* with no aliases;
+        // the old names must no longer resolve (loud-reject at the CLI).
+        for old in ["tall", "wide", "centered"] {
+            XCTAssertNil(LayoutRegistry.engine(named: old),
+                         "\(old) was renamed in M9-2 and must not resolve")
+            XCTAssertFalse(LayoutRegistry.names.contains(old))
+        }
     }
 
     // MARK: - LayoutParams clamping

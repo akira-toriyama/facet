@@ -1,5 +1,5 @@
 // Layout / animation constants for the overview grid: solid
-// near-black backdrop, thin cell strokes, one compact label per
+// black backdrop, thin cell strokes, one compact label per
 // cell, no extra index badge.
 
 import CoreGraphics
@@ -30,7 +30,7 @@ let gridGhostLabelSize: CGFloat = 30    // centred label on an empty-WS swap gho
 
 // Public so FacetApp's Controller can configure the GridOverlay
 // fade timing without redefining the numbers.
-public let gridBackdropAlpha: CGFloat = 0.98   // overlay opacity (near-pure black)
+public let gridBackdropAlpha: CGFloat = 1.0    // overlay opacity (solid black)
 public let gridFadeIn: TimeInterval = 0.12     // overlay fade-in
 public let gridFadeOut: TimeInterval = 0.10    // overlay fade-out
 

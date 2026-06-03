@@ -11,7 +11,7 @@ final class BalanceParamsTests: XCTestCase {
 
     func testResetReturnsToDefaults() {
         var c = WorkspaceCatalog()
-        _ = c.setMode(workspace: 1, to: "tall")
+        _ = c.setMode(workspace: 1, to: "master-left")
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.2)
         _ = c.adjustMasterCount(workspace: 1, delta: 2)
         XCTAssertEqual(c.params(of: 1).masterRatio, 0.7, accuracy: 1e-9)
@@ -27,7 +27,7 @@ final class BalanceParamsTests: XCTestCase {
 
     func testResetIsNoOpAtBaseline() {
         var c = WorkspaceCatalog()
-        _ = c.setMode(workspace: 1, to: "tall")
+        _ = c.setMode(workspace: 1, to: "master-left")
         // Never nudged → already at defaults → no change → skip re-tile.
         XCTAssertFalse(c.resetParams(workspace: 1),
                        "reset at the baseline must report no change")

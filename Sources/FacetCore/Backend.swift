@@ -20,8 +20,8 @@ public enum WindowAction: Sendable, Equatable {
     case toggleStack, toggleOrientation            // traditional / bsp / stack
     case centerColumn, snapStrip                   // scrolling
     case cycleStackNext, cycleStackPrev            // stack (native adapter)
-    case growMaster, shrinkMaster                  // tall / wide / centered: ratio
-    case incMaster, decMaster                      // tall / wide / centered: master count
+    case growMaster, shrinkMaster                  // master-* engines: ratio
+    case incMaster, decMaster                      // master-* engines: master count
 }
 
 /// One entry in the window right-click menu.
@@ -212,7 +212,7 @@ public protocol WindowBackend: Sendable {
     /// Follow a real edge-drag resize of `id` to `frame` within the
     /// active workspace (real-window resize, 枠C 機能2). The window was
     /// resized natively by the user; facet only updates the controlling
-    /// split ratio (bsp) / master divider (tall/wide/centered) so the
+    /// split ratio (bsp) / master divider (master-*) so the
     /// opposite side tracks it, then re-tiles. No-op outside those modes,
     /// for an off-tree window, or when no divider-controlling edge moved.
     /// Not a CLI verb — DnD/resize-only. `frame` is backend (Quartz) coords.

@@ -129,10 +129,10 @@ struct WorkspaceCatalog {
     private(set) var layoutTrees: [Int: LayoutTree] = [:]
 
     /// Per-WS window order, shared by `"stack"` mode and the
-    /// stateless `LayoutEngine`s (tall / wide / centered / …). Index 0 is
+    /// stateless `LayoutEngine`s (master-* / grid / spiral). Index 0 is
     /// the master / visible-top: in stack it's the single window
     /// that fills the display (the rest parked at the anchor sliver);
-    /// in tall it's the primary master. A new window lands at index 0
+    /// in a master layout it's the primary master. A new window lands at index 0
     /// in stack (so you see what you just opened) but APPENDS in the
     /// stateless engines (so it joins the stack without seizing the
     /// master — see `attachToLayout`); `cycleStack` rotates the array
@@ -141,7 +141,7 @@ struct WorkspaceCatalog {
     private(set) var stackOrders: [Int: [WindowID]] = [:]
 
     /// Per-WS layout knobs (master ratio / master count) for the
-    /// stateless engines that read them (tall, wide, centered).
+    /// stateless engines that read them (the master-* engines).
     /// Runtime-only — never persisted to config (Theme B decision).
     /// Missing entry → `LayoutParams()` defaults. Kept across mode
     /// flips so a WS remembers its ratio when you toggle away and
@@ -615,8 +615,8 @@ struct WorkspaceCatalog {
             order.insert(id, at: 0)
             stackOrders[n1Based] = order
         } else if LayoutRegistry.engine(named: m) != nil {
-            // Stateless master-stack / tiling engines (tall / wide /
-            // centered / grid / spiral) share the same per-WS order. A
+            // Stateless master-stack / tiling engines (master-* / grid
+            // / spiral) share the same per-WS order. A
             // window joining — new adoption, un-float, or move-in —
             // APPENDS to the end so it joins the stack rather than
             // seizing the master slot (order[0]); opening or moving a
@@ -683,7 +683,7 @@ struct WorkspaceCatalog {
             layoutTrees.removeValue(forKey: n1Based)
         default:
             if LayoutRegistry.engine(named: normalised) != nil {
-                // Stateless engine (tall, wide, centered, …): seed the
+                // Stateless engine (master-*, grid, spiral): seed the
                 // shared per-WS order; discard any tree.
                 stackOrders[n1Based] = members
                 layoutTrees.removeValue(forKey: n1Based)
@@ -731,7 +731,7 @@ struct WorkspaceCatalog {
     /// Move `id` to the front (master slot / index 0) of the WS's
     /// shared order. No-op — returns `false` — when the WS has no
     /// maintained order, doesn't contain `id`, or `id` is already the
-    /// master. Used by `promoteToMaster` for tall / master-stack.
+    /// master. Used by `promoteToMaster` for the master-stack engines.
     @discardableResult
     mutating func promoteToMaster(_ id: WindowID,
                                          workspace n1Based: Int) -> Bool {
@@ -941,7 +941,7 @@ struct WorkspaceCatalog {
     /// Follow a real resize of `id` to `newFrame` (FOLLOW model — the
     /// window was resized natively, we only adjust the ratio so the
     /// neighbour tracks it). bsp → mutate the controlling `Split.ratio`;
-    /// tall / wide / centered → the master / stack divider (`masterRatio`)
+    /// master-* → the master / stack divider (`masterRatio`)
     /// only. No-op (false) for any other mode, an off-tree window, or a
     /// drag that doesn't move a divider-controlling edge. `rect` is the
     /// active display rect.
@@ -1006,9 +1006,12 @@ struct WorkspaceCatalog {
     /// The master/stack divider fraction implied by resizing `id` to
     /// `newFrame` in a stateless master layout — `nil` when the mode has
     /// no master divider or `id`'s divider-facing edge didn't move (the
-    /// caller's change-detection then no-ops). tall = master right edge /
-    /// stack left edge; wide = master bottom / stack top; centered =
-    /// (symmetric) the master's own width fraction.
+    /// caller's change-detection then no-ops). The divider is always the
+    /// master band's inner edge: master-left = master right edge / stack
+    /// left edge, master-right = the X mirror (master left / stack
+    /// right), master-top = master bottom / stack top, master-bottom =
+    /// the Y mirror, master-center = (symmetric) the master's own width
+    /// fraction.
     private func masterRatioFromResize(_ id: WindowID, to f: CGRect,
                                        mode m: String, workspace n1Based: Int,
                                        in rect: CGRect) -> CGFloat? {
@@ -1017,13 +1020,19 @@ struct WorkspaceCatalog {
         else { return nil }
         let isMaster = idx < params(of: n1Based).masterCount
         switch m {
-        case "tall":
+        case "master-left":
             return isMaster ? (f.maxX - rect.minX) / rect.width
                             : (f.minX - rect.minX) / rect.width
-        case "wide":
+        case "master-right":
+            return isMaster ? (rect.maxX - f.minX) / rect.width
+                            : (rect.maxX - f.maxX) / rect.width
+        case "master-top":
             return isMaster ? (f.maxY - rect.minY) / rect.height
                             : (f.minY - rect.minY) / rect.height
-        case "centered":
+        case "master-bottom":
+            return isMaster ? (rect.maxY - f.minY) / rect.height
+                            : (rect.maxY - f.maxY) / rect.height
+        case "master-center":
             return isMaster ? f.width / rect.width : nil   // sides: not v1
         default:
             return nil
@@ -1305,20 +1314,6 @@ struct WorkspaceCatalog {
         attachToLayout(id, workspace: activeIndex,
                        focused: focused, in: rect)
         return id
-    }
-
-    /// Swap a workspace between the `tall` and `wide` layouts — the two
-    /// orientations of the master-stack, now distinct engines rather
-    /// than an orientation knob. No-op for any other mode. Window order
-    /// and master knobs are untouched (only the engine changes), so the
-    /// caller just re-tiles. Returns whether the mode actually flipped.
-    @discardableResult
-    mutating func flipTallWide(workspace n1Based: Int) -> Bool {
-        switch mode(of: n1Based) {
-        case "tall": layoutModes[n1Based] = "wide"; return true
-        case "wide": layoutModes[n1Based] = "tall"; return true
-        default:     return false
-        }
     }
 
     /// Resolve the cached pid for a window, or nil if it's not in
@@ -1674,7 +1669,7 @@ struct WorkspaceCatalog {
             // Master = first in the WS's tiling order (order[0]) —
             // consumed by the right-click menu's master-aware
             // actions AND the tree's right-edge `master` chip. Only
-            // the master-stack engines (tall / wide / centered) have a
+            // the master-stack engines (master-*) have a
             // real master; bsp / stack / float keep their stateful
             // adapter paths (absent from the registry) and grid /
             // spiral tile co-equally (`hasMaster == false`), so all of
@@ -1746,8 +1741,8 @@ struct WorkspaceCatalog {
             return stackSet.contains(w.id)
                 ? activeRect : preParkFrame(for: w)
         default:
-            // Stateless layout engine (tall / wide / …): the frame the
-            // window will occupy once its WS is active. Empty map →
+            // Stateless layout engine (master-* / grid / spiral): the
+            // frame the window will occupy once its WS is active. Empty map →
             // float mode → fall back to the pre-park position.
             if !engineFrames.isEmpty {
                 return engineFrames[w.id] ?? preParkFrame(for: w)

@@ -7,6 +7,41 @@ import CoreGraphics
 /// visual numbers in `Tunables.swift`.
 final class GridMathTests: XCTestCase {
 
+    // MARK: - gridWrapIndex (M9-4 wrap nav + ragged snap)
+
+    /// The worked example from the M9-4 design: 7 WS, 3 cols →
+    /// Row0 [0 1 2] / Row1 [3 4 5] / Row2 [6 _ _].
+    func testGridWrapRaggedWorkedExample() {
+        let cols = 3, n = 7
+        // RIGHT from WS6 (r2c0): phantom → snaps, stays on the row's last
+        // real cell (no further right).
+        XCTAssertEqual(gridWrapIndex(index: 6, dx: 1, dy: 0, cols: cols, count: n), 6)
+        // DOWN from WS5 (r1c2): phantom in column 2 → wrap to top of the
+        // column = WS2.
+        XCTAssertEqual(gridWrapIndex(index: 5, dx: 0, dy: 1, cols: cols, count: n), 2)
+        // DOWN from WS2 (r0c2): valid → WS5.
+        XCTAssertEqual(gridWrapIndex(index: 2, dx: 0, dy: 1, cols: cols, count: n), 5)
+        // UP from WS6 (r2c0): valid → WS3.
+        XCTAssertEqual(gridWrapIndex(index: 6, dx: 0, dy: -1, cols: cols, count: n), 3)
+        // RIGHT from WS2 (r0c2): wraps to WS0.
+        XCTAssertEqual(gridWrapIndex(index: 2, dx: 1, dy: 0, cols: cols, count: n), 0)
+    }
+
+    func testGridWrapFullGrid() {
+        // 6 WS, 3 cols → two full rows; plain modular wrap.
+        XCTAssertEqual(gridWrapIndex(index: 2, dx: 1, dy: 0, cols: 3, count: 6), 0)  // RIGHT wraps
+        XCTAssertEqual(gridWrapIndex(index: 0, dx: -1, dy: 0, cols: 3, count: 6), 2) // LEFT wraps
+        XCTAssertEqual(gridWrapIndex(index: 1, dx: 0, dy: 1, cols: 3, count: 6), 4)  // DOWN
+        XCTAssertEqual(gridWrapIndex(index: 4, dx: 0, dy: -1, cols: 3, count: 6), 1) // UP
+        XCTAssertEqual(gridWrapIndex(index: 5, dx: 0, dy: 1, cols: 3, count: 6), 2)  // DOWN wraps to top
+    }
+
+    func testGridWrapSingleCellStays() {
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            XCTAssertEqual(gridWrapIndex(index: 0, dx: dx, dy: dy, cols: 4, count: 1), 0)
+        }
+    }
+
     // MARK: - gridRowCount
 
     func testRowCountFitsOneRowForCountEqualToCols() {

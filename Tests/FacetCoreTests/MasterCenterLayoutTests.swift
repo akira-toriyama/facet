@@ -2,13 +2,14 @@ import CoreGraphics
 import XCTest
 @testable import FacetCore
 
-/// Pure geometry tests for `centered`. 1600×1000, ratio 0.5 → side
-/// columns 400 wide, centered master 800 wide.
-final class CenteredLayoutTests: XCTestCase {
+/// Pure geometry tests for `master-center` (the old `centered`).
+/// 1600×1000, ratio 0.5 → side columns 400 wide, centered master 800
+/// wide.
+final class MasterCenterLayoutTests: XCTestCase {
 
     private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
     private let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
-    private let cm = CenteredLayout()
+    private let cm = MasterCenterLayout()
 
     func testEmptyOrderEmptyFrames() {
         XCTAssertTrue(cm.frames(order: [], focused: nil,
@@ -75,11 +76,11 @@ final class CenteredLayoutTests: XCTestCase {
         XCTAssertEqual(f[wid(2)], CGRect(x: 0, y: 500, width: 1600, height: 500))
     }
 
-    func testRegistryResolvesCentered() {
-        XCTAssertEqual(LayoutRegistry.engine(named: "centered")?.name,
-                       "centered")
-        XCTAssertEqual(LayoutRegistry.engine(named: "CENTERED")?.name,
-                       "centered")
-        XCTAssertTrue(LayoutRegistry.names.contains("centered"))
+    func testRegistryResolvesMasterCenter() {
+        XCTAssertEqual(LayoutRegistry.engine(named: "master-center")?.name,
+                       "master-center")
+        XCTAssertEqual(LayoutRegistry.engine(named: "MASTER-CENTER")?.name,
+                       "master-center")
+        XCTAssertTrue(LayoutRegistry.names.contains("master-center"))
     }
 }

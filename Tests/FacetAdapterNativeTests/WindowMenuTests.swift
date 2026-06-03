@@ -88,64 +88,56 @@ final class WindowMenuTests: XCTestCase {
                        ["Unfloat", "Sticky", "Close window"])
     }
 
-    // MARK: - Master-stack modes (tall / wide / centered)
+    // MARK: - Master-stack modes (master-left / -right / -top / -bottom / -center)
 
-    func testTallNonMasterShowsPromote() {
-        let items = menu("tall", isMaster: false)
-        XCTAssertEqual(labels(items),
-                       ["Promote to master",
-                        "Wider master", "Narrower master",
-                        "More masters", "Fewer masters",
-                        "Flip wide / tall",
-                        "Float", "Sticky", "Close window"])
+    /// Every master engine shows the same item set — M9-2 dropped the
+    /// old "Flip wide / tall" entry (edges are now picked directly via
+    /// `--layout=master-EDGE`). Parametric so master-right / -bottom are
+    /// covered too.
+    private let masterModes = ["master-left", "master-right", "master-top",
+                               "master-bottom", "master-center"]
+
+    func testMasterNonMasterShowsPromoteNoFlip() {
+        for mode in masterModes {
+            XCTAssertEqual(labels(menu(mode, isMaster: false)),
+                           ["Promote to master",
+                            "Wider master", "Narrower master",
+                            "More masters", "Fewer masters",
+                            "Float", "Sticky", "Close window"],
+                           "mode=\(mode)")
+        }
     }
 
-    func testTallMasterHidesPromote() {
+    func testMasterHidesPromote() {
         // The master window already holds the slot — no "Promote".
-        let items = menu("tall", isMaster: true)
-        XCTAssertFalse(labels(items).contains("Promote to master"))
-        XCTAssertEqual(labels(items),
-                       ["Wider master", "Narrower master",
-                        "More masters", "Fewer masters",
-                        "Flip wide / tall",
-                        "Float", "Sticky", "Close window"])
+        for mode in masterModes {
+            let items = menu(mode, isMaster: true)
+            XCTAssertFalse(labels(items).contains("Promote to master"),
+                           "mode=\(mode)")
+            XCTAssertEqual(labels(items),
+                           ["Wider master", "Narrower master",
+                            "More masters", "Fewer masters",
+                            "Float", "Sticky", "Close window"],
+                           "mode=\(mode)")
+        }
     }
 
-    func testWideMirrorsTall() {
-        // wide is tall's horizontal twin — same master items + flip.
-        let items = menu("wide", isMaster: false)
-        XCTAssertEqual(labels(items),
-                       ["Promote to master",
-                        "Wider master", "Narrower master",
-                        "More masters", "Fewer masters",
-                        "Flip wide / tall",
-                        "Float", "Sticky", "Close window"])
-    }
-
-    func testCenteredNonMasterShowsPromote() {
-        let items = menu("centered", isMaster: false)
-        XCTAssertEqual(labels(items),
-                       ["Promote to master",
-                        "Wider master", "Narrower master",
-                        "More masters", "Fewer masters",
-                        "Float", "Sticky", "Close window"])
-    }
-
-    func testCenteredMasterHidesPromote() {
-        let items = menu("centered", isMaster: true)
-        XCTAssertFalse(labels(items).contains("Promote to master"))
-    }
-
-    func testCenteredHasNoFlipItem() {
-        // "Flip wide / tall" is only for the tall/wide pair.
-        XCTAssertFalse(labels(menu("centered")).contains("Flip wide / tall"))
+    func testNoMasterModeHasFlipItem() {
+        // "Flip wide / tall" was removed in M9-2 for every mode.
+        for mode in masterModes {
+            XCTAssertFalse(labels(menu(mode)).contains("Flip wide / tall"),
+                           "mode=\(mode)")
+        }
     }
 
     func testMasterStackFloatingDropsTilingItems() {
         // A floating window in a master-stack WS gets neither promote
         // nor the master knobs — just Unfloat + Sticky + Close.
-        let items = menu("tall", floating: true, isMaster: false)
-        XCTAssertEqual(labels(items), ["Unfloat", "Sticky", "Close window"])
+        for mode in masterModes {
+            let items = menu(mode, floating: true, isMaster: false)
+            XCTAssertEqual(labels(items), ["Unfloat", "Sticky", "Close window"],
+                           "mode=\(mode)")
+        }
     }
 
     // MARK: - Sticky
@@ -154,7 +146,7 @@ final class WindowMenuTests: XCTestCase {
         // A sticky window is always floating; float-exit = sticky-exit,
         // so the menu collapses to a single "Unstick" (no "Unfloat",
         // no "Sticky") + Close. Layout items are gated out by floating.
-        for mode in ["float", "bsp", "stack", "tall", "centered"] {
+        for mode in ["float", "bsp", "stack", "master-left", "master-center"] {
             let items = menu(mode, floating: true, isSticky: true)
             XCTAssertEqual(labels(items), ["Unstick", "Close window"],
                            "mode=\(mode)")
@@ -164,7 +156,7 @@ final class WindowMenuTests: XCTestCase {
 
     func testNonStickyOffersStickyToggle() {
         // Every non-sticky window — tiled or floating — can be pinned.
-        for mode in ["float", "bsp", "stack", "tall", "centered"] {
+        for mode in ["float", "bsp", "stack", "master-left", "master-center"] {
             for floating in [false, true] {
                 let item = menu(mode, floating: floating)
                     .first { $0.label == "Sticky" }
@@ -177,7 +169,7 @@ final class WindowMenuTests: XCTestCase {
     // MARK: - Universal items
 
     func testCloseAlwaysLastAndCloseFlagged() {
-        for mode in ["float", "bsp", "stack", "tall", "wide", "centered"] {
+        for mode in ["float", "bsp", "stack", "master-left", "master-top", "master-center"] {
             for floating in [false, true] {
                 let items = menu(mode, floating: floating)
                 XCTAssertTrue(items.last?.isClose == true,
@@ -189,7 +181,7 @@ final class WindowMenuTests: XCTestCase {
     }
 
     func testFloatToggleLabelTracksFloatingFlag() {
-        for mode in ["float", "bsp", "stack", "tall"] {
+        for mode in ["float", "bsp", "stack", "master-left"] {
             XCTAssertTrue(menu(mode, floating: false)
                 .contains { $0.label == "Float" },
                 "mode=\(mode) non-floating → Float item")
