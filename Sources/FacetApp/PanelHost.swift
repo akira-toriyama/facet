@@ -34,6 +34,12 @@ final class PanelHost: NSObject {
     let searchBar: SearchBar
     private let view: SidebarView
 
+    /// Outer panel border. Drawn as a layer (never a view) so it can't
+    /// intercept clicks; sits above the chrome via `zPosition`, tracks
+    /// the panel size in `applySubviewLayout`, and the theme accent in
+    /// `applyTheme`. Foundation for the neon border-flash effect.
+    private let borderLayer = CALayer()
+
     /// Notified when the panel becomes / resigns key. Controller wires
     /// kbNav on/off here so a plain click on the tree panel (without
     /// --active) still enables keyboard navigation while the panel is
@@ -53,6 +59,8 @@ final class PanelHost: NSObject {
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160
     private let minHeight: CGFloat = 140
+    private let borderWidth: CGFloat = 1.5
+    private let cornerRadius: CGFloat = 12
 
     // MARK: - Init
 
@@ -115,6 +123,19 @@ final class PanelHost: NSObject {
         effect.addSubview(bgView)
         effect.addSubview(scroll)
         effect.addSubview(searchBar)
+
+        // Outer accent border, on top of the chrome. A layer (not a
+        // view) can't intercept clicks; `zPosition` keeps it above the
+        // subviews' layers and `cornerCurve = .continuous` matches the
+        // panel's squircle. Frame is set in `applySubviewLayout`, color
+        // in `applyTheme`. The border draws inside the layer bounds, so
+        // it stays within `effect`'s masksToBounds clip.
+        borderLayer.borderWidth = borderWidth
+        borderLayer.borderColor = pal.accent.cgColor
+        borderLayer.cornerRadius = cornerRadius
+        borderLayer.cornerCurve = .continuous
+        borderLayer.zPosition = 100
+        effect.layer?.addSublayer(borderLayer)
 
         // .resizable in the styleMask gives us OS-standard edge /
         // corner resize on a borderless + .nonactivatingPanel. The
@@ -268,6 +289,12 @@ final class PanelHost: NSObject {
                               width: f.width, height: f.height - sh)
         view.frame = NSRect(x: 0, y: 0, width: f.width,
                             height: max(contentH, f.height - sh))
+        // Border tracks the panel size. Disable the implicit layer
+        // animation so it doesn't lag a frame behind a live resize.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        borderLayer.frame = f
+        CATransaction.commit()
     }
 
     // MARK: - Theme
@@ -276,6 +303,7 @@ final class PanelHost: NSObject {
     /// `paletteFor(...)` changes `pal`.
     func applyTheme() {
         bgView.layer?.backgroundColor = (pal.bg ?? .clear).cgColor
+        borderLayer.borderColor = pal.accent.cgColor
         searchBar.applyTheme()
     }
 
