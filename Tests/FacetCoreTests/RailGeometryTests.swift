@@ -105,4 +105,29 @@ final class RailGeometryTests: XCTestCase {
     func testCarouselEmpty() {
         XCTAssertEqual(railCarouselOffsets(count: 0, selectedPos: 0), [])
     }
+
+    // MARK: - Responsive sizing (orientation- & display-size-aware)
+
+    func testScaledPadsFromShortEdge() {
+        // 1600×1000 → short edge 1000; each pad is its fraction of that.
+        let p = railScaledPads(screen: CGSize(width: 1600, height: 1000),
+                               edgeFloatFrac: 0.035, heroGapFrac: 0.05,
+                               outerFrac: 0.035)
+        XCTAssertEqual(p.edgeFloat, 35)
+        XCTAssertEqual(p.heroGap, 50)
+        XCTAssertEqual(p.outer, 35)
+    }
+
+    func testScaledPadsOrientationStable() {
+        // Rotating the display (swap w/h) keeps the short edge → same pads.
+        let land = railScaledPads(screen: CGSize(width: 1600, height: 1000),
+                                  edgeFloatFrac: 0.035, heroGapFrac: 0.05,
+                                  outerFrac: 0.035)
+        let port = railScaledPads(screen: CGSize(width: 1000, height: 1600),
+                                  edgeFloatFrac: 0.035, heroGapFrac: 0.05,
+                                  outerFrac: 0.035)
+        XCTAssertEqual(land.edgeFloat, port.edgeFloat)
+        XCTAssertEqual(land.heroGap, port.heroGap)
+        XCTAssertEqual(land.outer, port.outer)
+    }
 }

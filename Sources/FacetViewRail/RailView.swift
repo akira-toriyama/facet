@@ -41,12 +41,19 @@ public final class RailView: NSView {
     /// from the CLI `--edge=` / `[rail] edge` config; drives the strip
     /// orientation and which arrow keys browse it.
     public var edge: RailEdge = .bottom
-    /// How many strip cells fill the viewport (2-b carousel, `[rail]
-    /// cells`). Cells are this fixed size; the *selected* workspace is
-    /// pinned to the strip centre and the rest fan out circularly, so
-    /// extra workspaces rotate through (peeking at both ends) rather
-    /// than scrolling.
+    /// Upper bound on how many strip cells the viewport shows at once
+    /// (2-b carousel, `[rail] cells`). The actual count auto-fits the
+    /// strip's thumbnail size (`stripPercent`), capped here. The
+    /// *selected* workspace is pinned to the strip centre and the rest
+    /// fan out circularly, so extra workspaces rotate through (peeking
+    /// at both ends) rather than scrolling.
     public var cellsTarget: Int = 7
+    /// Maximum strip band size, as a percentage of the SHORT screen edge
+    /// (`[rail] strip`) — caps the thumbnail scale; the hero fills the
+    /// rest. Thumbnails grow to fill the run up to this cap (even, tight
+    /// gaps); bigger = larger thumbnails. Short-edge-based so the split
+    /// stays balanced in any orientation / on any display size.
+    public var stripPercent: Int = 30
 
     /// The strip band rect (drawing-space) — cells are clipped to it so a
     /// carousel cell rotating past the viewport edge "peeks" (the
@@ -156,6 +163,35 @@ public final class RailView: NSView {
     /// the source so the UI can't freeze on a silent backend failure.
     static let railDropAckTimeout: TimeInterval = 1.0
 
+    // MARK: - Carousel slide animation (2-b v2)
+
+    /// Current along-axis offset (points) added to the strip cells while
+    /// a rotation eases in; 0 when settled. The clip viewport stays put,
+    /// so cells slide under it (peeking at the ends).
+    private var slideOffset: CGFloat = 0
+    /// Offset the in-flight ease is decaying from (set on each rotate so
+    /// rapid presses retarget from the current position).
+    private var slideFrom: CGFloat = 0
+    private var slideStart: Date?
+    private var slideTimer: Timer?
+    /// Last carousel slot size (set by `layoutCells`) — one rotation
+    /// slides the strip by this much.
+    private var lastSlot: CGFloat = 0
+    /// Ease value (0→1) of the active slide; also drives the hero
+    /// crossfade (①): the old hero fades out over `1 − slideProgress`.
+    private var slideProgress: CGFloat = 0
+    /// Snapshot of the hero BEFORE a rotate, drawn over the new hero and
+    /// faded out as the slide eases in (browse crossfade, ①).
+    private var prevHeroImage: NSImage?
+    private var prevHeroRect: NSRect = .zero
+
+    // MARK: - Commit zoom animation (②: hero → full screen on switch)
+
+    /// Plays the "hero zoom to full screen" transition on a switch
+    /// commit; input is gated on `commitZoom.isActive` until it finishes
+    /// (then the backend switch + close fire). Shared with the grid.
+    private let commitZoom = CommitZoom(duration: railCommitZoomDuration)
+
     public override var isFlipped: Bool { true }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -203,60 +239,87 @@ public final class RailView: NSView {
         let aspect = useScreen.width / max(1, useScreen.height)
         let horizontal = edge.axis == .horizontal
 
-        // -- Strip band + hero area for the docked edge (pure split). --
-        let crossScreen = horizontal ? bounds.height : bounds.width
-        let thickness = (crossScreen * railStripSizeFrac).rounded()
+        // -- Strip / hero split (orientation- & display-size-aware).
+        //    `stripPercent`% of the SHORT screen edge CAPS the strip band
+        //    (and thus the thumbnail scale); the hero fills the rest.
+        //    Short-edge-based, so the split stays balanced in any
+        //    orientation / on any display size (never the old cross-axis
+        //    fraction, which over-thickened the strip in portrait). --
+        let shortEdge = min(useScreen.width, useScreen.height)
+        let (edgeFloat, heroGap, outer) = railScaledPads(
+            screen: useScreen.size,
+            edgeFloatFrac: railEdgeFloatFrac,
+            heroGapFrac: railHeroGapFrac,
+            outerFrac: railOuterFrac)
+        let n = workspaces.count
+        let alongFull = horizontal ? bounds.width : bounds.height
+        let availAlong = max(1, alongFull - outer * 2)
+        // Show every workspace, up to the `[rail] cells` cap; the rest
+        // rotate through the carousel.
+        let visible = max(1, min(cellsTarget, max(1, n)))
+
+        // Thumbnails are JUSTIFIED: they grow so `visible` cells fill the
+        // run with a single `railCellGap` between them — the strip fills
+        // the width/height with even, tight gaps instead of a few small
+        // cells spread far apart. `stripPercent` caps the thumb scale
+        // (`bandCap`); only when too few cells would push the thumb past
+        // that cap does it stop growing (then the group centres with end
+        // margins). The band then auto-fits the actual thumb.
+        let bandCap = max(railCellMinDim, (shortEdge * CGFloat(stripPercent) / 100) - edgeFloat)
+        let justRun = max(railCellMinDim,
+                          (availAlong - CGFloat(visible + 1) * railCellGap) / CGFloat(visible))
+        let thumbH: CGFloat, thumbW: CGFloat, headerH: CGFloat
+        let blockCross: CGFloat, cellRun: CGFloat
+        if horizontal {
+            // Cell run-extent = thumb width; cap the height at the band.
+            headerH = min(railHeaderMaxH,
+                          max(railHeaderMinH, (bandCap * railHeaderRatio).rounded()))
+            let maxThumbH = max(railCellMinDim, bandCap - headerH - railLabelGap)
+            let th = min(justRun / aspect, maxThumbH)
+            thumbH = th
+            thumbW = th * aspect
+            blockCross = headerH + railLabelGap + th
+            cellRun = thumbW
+        } else {
+            // Cell run-extent = the header + thumb stack (height); cap the
+            // thumb width at the band.
+            headerH = min(railHeaderMaxH,
+                          max(railHeaderMinH, (justRun * railHeaderRatio).rounded()))
+            let availH = max(railCellMinDim, justRun - headerH - railLabelGap)
+            let tw = min(availH * aspect, bandCap)
+            thumbW = tw
+            thumbH = tw / aspect
+            blockCross = tw
+            cellRun = headerH + railLabelGap + thumbH
+        }
+        let blockH = headerH + railLabelGap + thumbH
+
+        // Band auto-fits the cell block + its float off the docked edge
+        // (so ≤ `stripPercent`%); the hero fills the rest.
+        let thickness = (edgeFloat + blockCross).rounded()
+
+        // -- Carousel viewport (2-b): the SELECTED workspace pins to the
+        //    strip centre; the rest fan out circularly and rotate through,
+        //    peeking at both ends. Tight slot (one gap); the group is
+        //    CENTRED — when the thumbs fill the run it ≈ spans the screen,
+        //    otherwise it centres with end margins. --
+        let peek: CGFloat = n > visible ? railPeek : 0
+        let slot = max(railCellMinDim, cellRun + railCellGap)
+        lastSlot = slot   // one rotation slides the strip by one slot (v2)
+        let viewportAlong = min(availAlong, CGFloat(visible) * slot + 2 * peek)
+
         let (strip, heroArea) = railBands(in: bounds, edge: edge,
                                           thickness: thickness,
-                                          outerPad: railOuterPad,
-                                          heroGap: railCellGap)
-        // -- Carousel strip (2-b): the SELECTED workspace is pinned to
-        //    the strip centre; the rest fan out circularly around it.
-        //    `cellsTarget` fixed-size cells fill the viewport, so extra
-        //    workspaces rotate through (peeking at both ends) instead of
-        //    scrolling. The header is always a horizontal band — above the
-        //    thumb, or below on a top rail. --
-        let n = workspaces.count
-        let along = horizontal ? strip.width : strip.height
-        let availAlong = max(1, along - railOuterPad * 2)
-        // The carousel fits an ODD number of full cells symmetrically
-        // around the pinned centre, and never more than the clip holds —
-        // round an even `[rail] cells` down and cap to the fit, so the
-        // viewport-full cells always sit symmetric and on-screen (the
-        // cells just get a touch bigger, never clipped). An even count
-        // only ever sits a half-cell off-centre when there are FEWER
-        // workspaces than the viewport — the accepted "even + few" case.
-        let want = min(max(1, cellsTarget), max(1, Int(availAlong / railCellMinDim)))
-        let visible = max(1, want % 2 == 0 ? want - 1 : want)
-        // Only with MORE than a viewport-full do cells leave room for the
-        // both-ends peek (the "there's more to rotate to" cue; the very
-        // first overflow step may reveal one end before the other).
-        let peek: CGFloat = n > visible ? railPeek : 0
-        let slot = max(railCellMinDim, (availAlong - 2 * peek) / CGFloat(visible))
-        // Clip region = the cell viewport: full thickness, inset by the
-        // outer pad along the run so a rotating cell peeks at the ends.
+                                          outerPad: outer,
+                                          heroGap: heroGap)
+        // Clip region = the centred cell viewport (shown group + peek),
+        // full thickness; a cell rotating past its run edges clips to the
+        // peek.
         stripRect = horizontal
-            ? NSRect(x: strip.minX + railOuterPad, y: strip.minY,
-                     width: availAlong, height: strip.height)
-            : NSRect(x: strip.minX, y: strip.minY + railOuterPad,
-                     width: strip.width, height: availAlong)
-
-        // Header height + thumb box. The header+gap+thumb block always
-        // stacks vertically; it fits inside the cross thickness on a
-        // horizontal strip, inside the slot on a vertical one.
-        let crossBudget = max(1, thickness - railOuterPad)
-        let stackBudget = horizontal ? crossBudget : slot
-        let rawHeaderH = min(railHeaderMaxH,
-                             max(railHeaderMinH,
-                                 (stackBudget * railHeaderRatio).rounded()))
-        let headerH = min(rawHeaderH, max(8, stackBudget - railLabelGap - 8))
-        // Thumb box (boxW × boxH) and the largest landscape thumb in it.
-        let boxW = horizontal ? slot : crossBudget
-        let boxH = horizontal ? max(1, crossBudget - headerH - railLabelGap)
-                              : max(1, slot - headerH - railLabelGap)
-        let thumbH = min(boxH, boxW / aspect)
-        let thumbW = thumbH * aspect
-        let headerOnTop = edge != .top   // top rail flips the header below
+            ? NSRect(x: (strip.midX - viewportAlong / 2).rounded(), y: strip.minY,
+                     width: viewportAlong, height: strip.height)
+            : NSRect(x: strip.minX, y: (strip.midY - viewportAlong / 2).rounded(),
+                     width: strip.width, height: viewportAlong)
 
         // Carousel placement: the selected workspace's cell sits at the
         // strip's along-centre; each cell's slot offset comes from the
@@ -267,21 +330,17 @@ public final class RailView: NSView {
             ?? 0
         let offsets = railCarouselOffsets(count: n, selectedPos: selectedPos)
         let alongCentre = horizontal ? strip.midX : strip.midY
-        // The header+gap+thumb block is a fixed (thumbW × blockH) box; it
-        // HUGS the docked screen edge (so the strip sits at the edge and
-        // the hero can grow toward the centre). The header is always a
-        // horizontal band stacked in screen-Y above the thumb (or below
-        // on a `.top` rail).
-        let blockH = headerH + railLabelGap + thumbH
-        // Cross-axis span of one cell + where its outer (edge) corner and
-        // inner (hero-facing) edge sit, after hugging the screen edge.
-        let blockCross = horizontal ? blockH : thumbW
+        // The header+gap+thumb block (thumbW × blockH) floats just off the
+        // docked screen edge (by `edgeFloat`), so the strip sits near the
+        // edge and the hero grows toward the centre. `blockCross` is the
+        // block's cross-axis span (computed above with the thumb sizing);
+        // place its outer (edge) corner and inner (hero-facing) edge.
         let blockOuter: CGFloat, innerEdge: CGFloat
         switch edge {
-        case .bottom: blockOuter = strip.maxY - railEdgeGap - blockCross; innerEdge = blockOuter
-        case .top:    blockOuter = strip.minY + railEdgeGap;              innerEdge = blockOuter + blockCross
-        case .left:   blockOuter = strip.minX + railEdgeGap;              innerEdge = blockOuter + blockCross
-        case .right:  blockOuter = strip.maxX - railEdgeGap - blockCross; innerEdge = blockOuter
+        case .bottom: blockOuter = strip.maxY - edgeFloat - blockCross; innerEdge = blockOuter
+        case .top:    blockOuter = strip.minY + edgeFloat;              innerEdge = blockOuter + blockCross
+        case .left:   blockOuter = strip.minX + edgeFloat;              innerEdge = blockOuter + blockCross
+        case .right:  blockOuter = strip.maxX - edgeFloat - blockCross; innerEdge = blockOuter
         }
         for (i, ws) in workspaces.enumerated() {
             let slotStart = alongCentre + CGFloat(offsets[i]) * slot - slot / 2
@@ -293,8 +352,10 @@ public final class RailView: NSView {
                 blockX = blockOuter
                 blockY = slotStart + (slot - blockH) / 2
             }
-            let headerY = headerOnTop ? blockY : blockY + thumbH + railLabelGap
-            let thumbY  = headerOnTop ? blockY + headerH + railLabelGap : blockY
+            // Header band always sits above the thumb (every edge), so a
+            // top rail's name / layout label reads at the cell's top too.
+            let headerY = blockY
+            let thumbY  = blockY + headerH + railLabelGap
             let cellRect = NSRect(x: blockX.rounded(), y: thumbY.rounded(),
                                   width: thumbW, height: thumbH)
             let headerRect = NSRect(x: blockX.rounded(), y: headerY.rounded(),
@@ -315,17 +376,17 @@ public final class RailView: NSView {
         var heroBox = heroArea
         switch edge {
         case .bottom:
-            heroBox.size.height = max(0, (innerEdge - railHeroGap) - heroBox.minY)
+            heroBox.size.height = max(0, (innerEdge - heroGap) - heroBox.minY)
         case .top:
-            let top = innerEdge + railHeroGap
+            let top = innerEdge + heroGap
             heroBox = CGRect(x: heroBox.minX, y: top,
                              width: heroBox.width, height: max(0, heroBox.maxY - top))
         case .left:
-            let left = innerEdge + railHeroGap
+            let left = innerEdge + heroGap
             heroBox = CGRect(x: left, y: heroBox.minY,
                              width: max(0, heroBox.maxX - left), height: heroBox.height)
         case .right:
-            heroBox.size.width = max(0, (innerEdge - railHeroGap) - heroBox.minX)
+            heroBox.size.width = max(0, (innerEdge - heroGap) - heroBox.minX)
         }
         if heroBox.width > 1, heroBox.height > 1,
            let act = workspaces.first(where: { $0.index == selectedWS })
@@ -421,18 +482,104 @@ public final class RailView: NSView {
         NSColor.black.withAlphaComponent(railBackdropAlpha).setFill()
         bounds.fill()
 
+        // Commit zoom (②): the captured hero scales from its rect to fill
+        // the screen (ease-out); then the switch + close fire. Nothing
+        // else is drawn during it.
+        if commitZoom.draw(in: bounds) { return }
+
         if let h = hero { drawCell(h) }
+        // Hero crossfade (①): the previous hero fades out over the new one
+        // as the rotation eases in (`slideProgress` 0→1).
+        if let prev = prevHeroImage, slideProgress < 1 {
+            prev.draw(in: prevHeroRect, from: .zero,
+                      operation: .sourceOver, fraction: max(0, 1 - slideProgress))
+        }
         // Strip cells are clipped to the carousel viewport so a cell
         // rotating past the end "peeks" half-off the edge (the both-ends
         // "there's more" cue) instead of drawing over the hero. A drag
-        // ghost is a separate subview, unaffected by this clip.
-        if stripRect.isEmpty {
-            for c in cells { drawCell(c) }
+        // ghost is a separate subview, unaffected by this clip. While a
+        // rotation eases in (`slideOffset`), the cells are translated
+        // along the run UNDER the fixed viewport, so the strip slides
+        // (the hero, drawn above, already shows the new centre). (2-b v2)
+        NSGraphicsContext.saveGraphicsState()
+        if !stripRect.isEmpty { NSBezierPath(rect: stripRect).addClip() }
+        if slideOffset != 0 {
+            let horizontal = edge.axis == .horizontal
+            let t = NSAffineTransform()
+            t.translateX(by: horizontal ? slideOffset : 0,
+                         yBy: horizontal ? 0 : slideOffset)
+            t.concat()
+        }
+        for c in cells { drawCell(c) }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    // MARK: - Carousel slide animation (2-b v2)
+
+    /// Start (or retarget) the rotation slide. `dx` is the carousel step
+    /// (+1 next / −1 previous); the strip slides one `slot` per step. On a
+    /// rapid press the offset accumulates from its current value so the
+    /// motion follows the latest target without a jump. Honours Reduce
+    /// Motion (instant).
+    private func startSlide(step dx: Int, slot: CGFloat) {
+        guard dx != 0, slot > 0,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else { slideOffset = 0; stopSlide(); needsDisplay = true; return }
+        let cap = slot * railSlideMaxSlots
+        slideOffset = max(-cap, min(cap, slideOffset + CGFloat(dx) * slot))
+        slideFrom = slideOffset
+        slideProgress = 0
+        slideStart = Date()
+        if slideTimer == nil {
+            let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.tickSlide() }
+            }
+            RunLoop.main.add(timer, forMode: .common)   // fire during key-mash too
+            slideTimer = timer
+        }
+        needsDisplay = true
+    }
+
+    private func tickSlide() {
+        guard let start = slideStart else { stopSlide(); return }
+        let t = Date().timeIntervalSince(start) / railSlideDuration
+        if t >= 1 {
+            slideOffset = 0; slideProgress = 1
+            stopSlide()
         } else {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: stripRect).addClip()
-            for c in cells { drawCell(c) }
-            NSGraphicsContext.restoreGraphicsState()
+            let e = 1 - pow(1 - CGFloat(t), 3)   // ease-out cubic
+            slideOffset = slideFrom * (1 - e)
+            slideProgress = e
+        }
+        needsDisplay = true
+    }
+
+    private func stopSlide() {
+        slideTimer?.invalidate(); slideTimer = nil; slideStart = nil
+        slideProgress = 0
+        prevHeroImage = nil          // crossfade done (①)
+    }
+
+    /// Funnel for a switch-and-close commit. If the destination is the
+    /// centred hero, play the "hero zoom → full screen" transition (②)
+    /// then run `perform` (the actual switch + close); otherwise run it
+    /// immediately. Honours Reduce Motion.
+    private func commitSwitch(target ws: Int, perform: @escaping () -> Void) {
+        guard !commitZoom.isActive else { return }   // a zoom is already in flight
+        guard ws == selectedWS, let h = hero,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let img = snapshotRegion(h.rect)
+        else { perform(); return }
+        commitZoom.begin(image: img, from: h.rect,
+                         redraw: { [weak self] in self?.needsDisplay = true },
+                         perform: perform)
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil {                  // overlay closed
+            slideOffset = 0; stopSlide()
+            if commitZoom.isActive { commitZoom.finish() }   // don't drop the switch
         }
     }
 
@@ -572,8 +719,9 @@ public final class RailView: NSView {
     public override func mouseDown(with event: NSEvent) {
         // A keyboard lift owns the drag; ignore mouse presses until it
         // commits (Return) or cancels (Esc) so a stray click can't
-        // commit it at the keyboard-aimed target.
-        guard drag == nil else { return }
+        // commit it at the keyboard-aimed target. A commit zoom (②) also
+        // swallows input until it finishes.
+        guard !commitZoom.isActive, drag == nil else { return }
         let p = convert(event.locationInWindow, from: nil)
         // Strip hit-tests are gated by the same viewport clip as hover
         // (`stripRect`), so a press in the clipped outer-pad margin — bare
@@ -593,7 +741,10 @@ public final class RailView: NSView {
             if let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
                 pendingDown = (p, w, cell.wsIndex)
             } else {
-                onPick?(cell.wsIndex)          // empty cell area → switch+close
+                // empty cell area → switch+close (zoom if it's the centre)
+                commitSwitch(target: cell.wsIndex) { [weak self] in
+                    self?.onPick?(cell.wsIndex)
+                }
             }
             return
         }
@@ -658,12 +809,17 @@ public final class RailView: NSView {
         // drag to Return/Esc.
         guard pendingDown != nil || pendingHeaderDown != nil else { return }
         if drag == nil {
-            // No drag crossed threshold → resolve as a click.
+            // No drag crossed threshold → resolve as a click (zoom if the
+            // target is the centred hero, else switch immediately).
             if let pd = pendingDown {
                 // Window thumb → switch to its WS AND focus THAT window.
-                onPickWindow?(pd.ws, pd.hit.pid, pd.hit.id)
+                commitSwitch(target: pd.ws) { [weak self] in
+                    self?.onPickWindow?(pd.ws, pd.hit.pid, pd.hit.id)
+                }
             } else if let ph = pendingHeaderDown {
-                onPick?(ph.ws)                 // header → switch WS only
+                commitSwitch(target: ph.ws) { [weak self] in
+                    self?.onPick?(ph.ws)       // header → switch WS only
+                }
             }
             return
         }
@@ -731,10 +887,15 @@ public final class RailView: NSView {
     /// previous, supplied by the Controller for the edge's axis); it
     /// wraps circularly.
     public func kbMoveSelection(dx: Int) {
-        guard !workspaces.isEmpty else { return }
+        guard !commitZoom.isActive, !workspaces.isEmpty else { return }
         let cur = workspaces.firstIndex { $0.index == selectedWS } ?? 0
         let ni = (cur + dx + workspaces.count) % workspaces.count   // wrap
         guard workspaces[ni].index != selectedWS else { return }
+        // Browse crossfade (①): snapshot the current hero before it
+        // changes, to fade it out over the new one as the slide eases in.
+        if drag == nil, let h = hero {
+            prevHeroImage = snapshotRegion(h.rect); prevHeroRect = h.rect
+        }
         selectedWS = workspaces[ni].index
         if drag != nil {
             // Lifted: rotate the carousel under the ghost so the aimed
@@ -746,6 +907,7 @@ public final class RailView: NSView {
         } else {
             kbSelectedWindowIdx = -1       // browse → reset window cursor for the new WS
             layoutCells()                  // rotate the strip (+ hero re-preview)
+            startSlide(step: dx, slot: lastSlot)   // ease the rotation (v2)
         }
     }
 
@@ -763,7 +925,10 @@ public final class RailView: NSView {
 
     /// Space : lift whatever is selected — a window (move) or, on the
     /// whole-WS slot, the whole workspace (swap).
+    /// Space is a TOGGLE (matches tree): carrying → drop (= Return),
+    /// otherwise lift whatever is selected.
     public func kbSpaceLift() {
+        if drag != nil { kbCommit(); return }   // carrying → Space drops
         if kbSelectedWindowIdx == -1 { kbLiftWorkspace() } else { kbLiftWindow() }
     }
 
@@ -816,6 +981,7 @@ public final class RailView: NSView {
     /// Return : lifted → commit the move/swap (stay open); not lifted →
     /// switch to the selection (focus a Tab-selected window) + close.
     public func kbCommit() {
+        if commitZoom.isActive { return }   // a switch zoom (②) is already in flight
         // A commit is already waiting for the backend ack (the rail stays
         // open through it) — swallow a second Return so it can't fire a
         // duplicate move/swap before the landing gate clears `drag`.
@@ -835,16 +1001,22 @@ public final class RailView: NSView {
             return
         }
         guard let ws = selectedWS else { return }
+        // The selected WS is the centre, so this always plays the zoom (②).
         if let hit = kbSelectedWindow() {
-            onPickWindow?(ws, hit.pid, hit.id)   // Tab-selected window → switch + focus it
+            commitSwitch(target: ws) { [weak self] in
+                self?.onPickWindow?(ws, hit.pid, hit.id)   // window → switch + focus it
+            }
         } else {
-            onPick?(ws)                          // whole-WS → switch + close
+            commitSwitch(target: ws) { [weak self] in
+                self?.onPick?(ws)                          // whole-WS → switch + close
+            }
         }
     }
 
     /// Escape, in order: cancel an in-flight lift → clear a Tab window
     /// selection (stay open) → dismiss the rail.
     public func kbEscape() {
+        if commitZoom.isActive { return }   // mid switch zoom (②) — let it finish
         if let d = drag {
             cancelDrop(to: d.sourceRect)
         } else if kbSelectedWindowIdx != -1 {

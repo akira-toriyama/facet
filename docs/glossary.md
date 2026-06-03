@@ -208,6 +208,38 @@ rail の strip を寄せる **画面の辺**（`top` / `bottom` / `left` / `righ
 - コード: `RailEdge`（`FacetCore`）・`canonicalEdges`/`canonicalEdge`（`FacetApp`）
 - **Don't call it:** side, anchor, position, dock（辺以外の意味で）, 配置
 
+### strip
+[[rail view]] で [[facet workspace]] の window サムネミニ画面を [[edge]] に沿って
+1 列に並べた帯。サムネは行を埋めるよう **justify**（拡大）され、セル間は一定の
+gap になる。サイズ上限は `[rail] strip`（画面短辺に対する %・`stripPercent`）で、
+[[hero]] が残り領域を占める。同時表示数の上限は `[rail] cells`。`[rail] strip`
+という設定キー名そのものでもある（帯の概念とキー名が同名）。
+- コード: `RailView.layoutCells` の `stripRect` / `railBands`（strip/hero 分割）
+  / `railScaledPads`（短辺基準の余白）
+- 参照: [[hero]] / [[carousel]] / [[edge]] / [[rail view]]
+- **Don't call it:** bar, dock, filmstrip, tray, [[sliver]]（sliver は anchor
+  park 後の残骸＝別概念）, 帯, バー
+
+### hero
+[[rail view]] の中央に大きく表示する **下見中（strip 中央）の [[facet workspace]]
+プレビュー**。実画面の縦横比そのままに縮小したミニ画面で、[[strip]] が占めない
+残り領域を埋める（`[rail] strip`% の裏返し）。strip の回転（[[carousel]]）で中央
+WS が変わると hero が追従する。
+- コード: `RailView.hero` / `railBands`（hero 領域）
+- 参照: [[strip]] / [[carousel]] / [[rail view]]
+- **Don't call it:** preview, main, focus, big cell, spotlight, 主画面, プレビュー
+
+### carousel
+[[rail view]] の [[strip]] の並べ方（2-b）。**active（＝選択）を strip 中央に固定**
+し、残りを前後へ**循環**配置する。strip 軸の矢印で strip 自体が回転して中央＝
+選択が変わり（下見のみ・[[hero]] が追従）、Return / クリックで確定＆閉じる。
+`[rail] cells` 上限を超える WS は縮小せず回転で送り、両端に **peek**（次セルの
+見切れ）で「まだある」合図を出す。**scroll は無い**（M9-4 の scroll を置換）。
+- コード: `railCarouselOffsets`（`FacetCore`・純幾何・各 position の中央からの
+  符号付き slot offset・選択=0・循環）
+- 参照: [[strip]] / memory `[[facet-rail-carousel-decisions]]`
+- **Don't call it:** scroll, scrollbar, pager, filmstrip, slider, スクロール, ページャ
+
 ### AX target
 **現在 facet が操作対象とする window**。`Window.title` は backend だけで
 埋まるとは限らず、`AXTitles.resolve` が `kAXTitle` を short-TTL で解決する

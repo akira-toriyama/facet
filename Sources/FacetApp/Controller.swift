@@ -1643,7 +1643,8 @@ final class Controller: NSObject {
         rv.autoresizingMask = [.width, .height]
         rv.screenFrame = scr.frame
         rv.edge = edge                              // M9-3: docked edge
-        rv.cellsTarget = config.effectiveRailCells  // M9-4: fixed-N strip
+        rv.cellsTarget = config.effectiveRailCells  // upper bound on visible cells
+        rv.stripPercent = config.effectiveRailStrip // strip band size (% short edge)
         rv.workspaces = lastWorkspaces
         rv.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS

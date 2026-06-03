@@ -52,3 +52,8 @@ let gridReorderDuration: TimeInterval = 0.15
 // value as FacetViewTree's tunable — kept module-local in both
 // places to avoid a cross-module import for one constant.
 let dragThreshold: CGFloat = 5
+
+// Ease-out duration of the commit "cell zoom → full screen" transition
+// (Return on the selected cell; the backend switch fires as it ends).
+// Mirrors the rail's `railCommitZoomDuration`.
+let gridCommitZoomDuration: TimeInterval = 0.20
