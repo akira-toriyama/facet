@@ -598,6 +598,7 @@ public final class SidebarView: NSView {
         para.lineBreakMode = .byTruncatingTail
 
         let kbSelRow = kbNav ? kbSel.flatMap(kbIndex(of:)) : nil
+        var winOrdinal = 0   // window-row counter for the zebra stripe
         for (i, c) in cells.enumerated() {
             let row = c.row
             switch c.kind {
@@ -698,6 +699,16 @@ public final class SidebarView: NSView {
                 let sel = c.hot
                 let hov = (hoverIdx == i)
                 let pill = row.insetBy(dx: 6, dy: 2)
+                // Zebra stripe: nudge every other window row toward the
+                // text color — slightly lighter on dark themes, darker
+                // on light ones (theme-independent). A faint base layer
+                // under any selection / hover fill.
+                if winOrdinal % 2 == 1 {
+                    pal.text.withAlphaComponent(0.05).setFill()
+                    NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
+                        .fill()
+                }
+                winOrdinal += 1
                 if sel {
                     pal.selFill.setFill()
                     NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
