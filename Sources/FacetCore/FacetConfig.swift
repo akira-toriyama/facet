@@ -102,9 +102,15 @@ public struct FacetConfig: Sendable {
     public var borderGlow: Bool?
     /// Border line width, px. Raw; read `effectiveBorderWidth`.
     public var borderWidth: CGFloat?
-    /// Rainbow hue-cycle period — seconds per full rotation (lower =
-    /// faster). Raw; read `effectiveBorderCycleSeconds`.
+    /// Continuous border-animation period — seconds per cycle (lower =
+    /// faster). Drives the rainbow hue rotation AND the width breathing.
+    /// Raw; read `effectiveBorderCycleSeconds`.
     public var borderCycleSeconds: Int?
+    /// Width breathing: when BOTH are set (max > min), the border width
+    /// oscillates min↔max over `cycle-seconds` (any effect). Unset →
+    /// the fixed `width`. Raw; read `effectiveBorderMin/MaxWidth`.
+    public var borderMinWidth: Int?
+    public var borderMaxWidth: Int?
 
     /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
     /// the mac desktop ordinal (Mission Control order, 1-based, user
@@ -142,8 +148,8 @@ public struct FacetConfig: Sendable {
         let known = [
             "terminal", "cute", "system",
             "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
-            "everforest", "solarized", "onedark", "monokai", "paper",
-            "mono-light", "mono-dark", "monotone",
+            "everforest", "solarized", "onedark", "monokai", "hacker",
+            "paper", "mono-light", "mono-dark", "monotone",
             "random",   // meta: paletteFor picks a concrete theme
         ]
         return known.contains(raw) ? raw : "terminal"
@@ -277,19 +283,29 @@ public struct FacetConfig: Sendable {
     /// duplicated here (same pattern as `effectiveTheme`).
     public var effectiveBorderEffect: String {
         let raw = (borderEffect ?? "off").lowercased()
-        let known = ["off", "neon", "cyber", "vapor", "kawaii", "rainbow"]
+        let known = ["off", "neon", "cyber", "vapor", "kawaii",
+                     "rainbow", "random"]
         return known.contains(raw) ? raw : "off"
     }
     /// Neon glow (bloom) on the border effect. Default on.
     public var effectiveBorderGlow: Bool { borderGlow ?? true }
-    /// Border line width, px. [0.5, 6] clamp, default 1.5.
+    /// Border line width, px. [0.5, 30] clamp, default 1.5.
     public var effectiveBorderWidth: CGFloat {
-        max(0.5, min(6, borderWidth ?? 1.5))
+        max(0.5, min(30, borderWidth ?? 1.5))
     }
-    /// Seconds per full rainbow hue rotation (lower = faster). [1, 120]
-    /// clamp, default 6.
+    /// Seconds per continuous border-animation cycle — the rainbow hue
+    /// rotation and the width breath share this period (lower = faster).
+    /// [1, 120] clamp, default 6.
     public var effectiveBorderCycleSeconds: CGFloat {
         CGFloat(max(1, min(120, borderCycleSeconds ?? 6)))
+    }
+    /// Width-breathing bounds, px (each clamped 0.5–30), or `nil` when
+    /// unset. Breathing runs only when BOTH are set and max > min.
+    public var effectiveBorderMinWidth: CGFloat? {
+        borderMinWidth.map { max(0.5, min(30, CGFloat($0))) }
+    }
+    public var effectiveBorderMaxWidth: CGFloat? {
+        borderMaxWidth.map { max(0.5, min(30, CGFloat($0))) }
     }
 
     /// Named-enum config values that were written but didn't match any
@@ -468,6 +484,12 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["border"]?["cycle-seconds"] {
             c.borderCycleSeconds = n
+        }
+        if case .int(let n)? = toml["border"]?["min-width"] {
+            c.borderMinWidth = n
+        }
+        if case .int(let n)? = toml["border"]?["max-width"] {
+            c.borderMaxWidth = n
         }
         // [desktop.N] per-mac-desktop workspace configs. The TOML
         // parser flattens `[desktop.1]` to the section name

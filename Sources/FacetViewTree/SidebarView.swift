@@ -37,7 +37,7 @@ public final class SidebarView: NSView {
         let mode: String       // header: WS layout engine
         let isMaster: Bool     // window: shows a `master` status line
         let isFloating: Bool   // window: shows a `float` status line
-        let isSticky: Bool     // window: shows a bare 📌 badge
+        let isSticky: Bool     // window: shows a slanted "sticky" badge
         let mark: String?      // window: user mark → right-edge badge
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
@@ -598,6 +598,7 @@ public final class SidebarView: NSView {
         para.lineBreakMode = .byTruncatingTail
 
         let kbSelRow = kbNav ? kbSel.flatMap(kbIndex(of:)) : nil
+        var winOrdinal = 0   // window-row counter for the zebra stripe
         for (i, c) in cells.enumerated() {
             let row = c.row
             switch c.kind {
@@ -698,6 +699,16 @@ public final class SidebarView: NSView {
                 let sel = c.hot
                 let hov = (hoverIdx == i)
                 let pill = row.insetBy(dx: 6, dy: 2)
+                // Zebra stripe: nudge every other window row toward the
+                // text color — slightly lighter on dark themes, darker
+                // on light ones (theme-independent). A faint base layer
+                // under any selection / hover fill.
+                if winOrdinal % 2 == 1 {
+                    pal.text.withAlphaComponent(0.05).setFill()
+                    NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
+                        .fill()
+                }
+                winOrdinal += 1
                 if sel {
                     pal.selFill.setFill()
                     NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
@@ -713,12 +724,12 @@ public final class SidebarView: NSView {
                         .fill()
                 }
                 let iconX = rowPadX + 2
-                // Sticky renders as a bare 📌 (no pill) in the badge
-                // block below, so suppress the plain `float` label here
+                // Sticky renders as its own "sticky" badge in the block
+                // below, so suppress the plain `float` label here
                 // (sticky ⇒ floating; a master window can't be sticky).
                 // A settled scratchpad window is force-floating, but it
                 // shows its own `scratchpad:NAME` badge below instead of
-                // the plain `float` label (like sticky's bare 📌).
+                // the plain `float` label (like the sticky pill).
                 let labelText: String? =
                     c.isMaster ? "master" :
                     c.isSticky ? nil :
@@ -769,9 +780,9 @@ public final class SidebarView: NSView {
                             .paragraphStyle: para,
                         ])
                 }
-                // Third line: the mark pill (left), then the bare 📌
-                // sticky badge or the `scratchpad:NAME` shelf pill, then
-                // the master / float / hidden label.
+                // Third line: the mark pill (left), then the "sticky"
+                // badge or the `scratchpad:NAME` shelf pill, then the
+                // master / float / hidden label.
                 if hasLabel || hasMark || c.isSticky || c.isHidden
                     || hasScratch {
                     // Wider gap below the title before the mark / status.
@@ -814,20 +825,34 @@ public final class SidebarView: NSView {
                         lx += pillW + 6
                     }
                     if c.isSticky {
-                        // Sticky badge: a bare 📌 glyph, no pill outline.
-                        let pinFont = uiFont(windowFontSize, .regular)
-                        let pin = "📌"
+                        // Sticky badge: the word "sticky" — no pill, no
+                        // underline — SLANTED via `.obliqueness` in
+                        // accent2. obliqueness shears the glyphs, so it
+                        // slants on EVERY font (incl. the mono themes,
+                        // which have no true italic face). Text, not a 📌
+                        // glyph, to match the other status badges; baseline
+                        // matches the neighbouring pills (same 22pt slot).
+                        let stFont = uiFont(windowFontSize, .semibold)
+                        let txt = "sticky"
                         let pillH: CGFloat = 22
-                        let pinSize = (pin as NSString)
-                            .size(withAttributes: [.font: pinFont])
-                        (pin as NSString).draw(
+                        let stPara = NSMutableParagraphStyle()
+                        stPara.lineBreakMode = .byTruncatingTail
+                        let stAttrs: [NSAttributedString.Key: Any] = [
+                            .font: stFont,
+                            .foregroundColor: pal.accent2,
+                            .paragraphStyle: stPara,
+                            .obliqueness: 0.2,   // synthetic slant
+                        ]
+                        let stSize = (txt as NSString).size(withAttributes: stAttrs)
+                        // +4 so the shear's top-right overhang isn't clipped.
+                        let stW = ceil(stSize.width)
+                        (txt as NSString).draw(
                             in: NSRect(
                                 x: lx,
-                                y: labelY - 1 + (pillH - pinSize.height) / 2 - 1.0,
-                                width: ceil(pinSize.width) + 2,
-                                height: pinSize.height),
-                            withAttributes: [.font: pinFont])
-                        lx += ceil(pinSize.width) + 8
+                                y: labelY - 1 + (pillH - stSize.height) / 2 - 1.0,
+                                width: stW + 4, height: stSize.height),
+                            withAttributes: stAttrs)
+                        lx += stW + 8
                     }
                     if let sp = c.scratchpad {
                         // Scratchpad shelf badge: a dim outlined pill
@@ -835,7 +860,7 @@ public final class SidebarView: NSView {
                         // green) so the shelf handle reads as secondary,
                         // and labelled in full so it can't be mistaken
                         // for a user mark. Sticky ⊻ scratchpad, so the
-                        // 📌 above and this never both appear.
+                        // sticky badge above and this never both appear.
                         let spText = "scratchpad:\(sp)"
                         let spFont = uiFont(windowFontSize, .semibold)
                         let maxTextW: CGFloat = 130  // long → tail-truncate

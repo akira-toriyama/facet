@@ -205,13 +205,13 @@ enum FacetApp {
                                              Greppable line format.
 
         SERVER CONTROLS
-          facet --theme=NAME                 16 themes: terminal, nord,
+          facet --theme=NAME                 17 themes: terminal, nord,
                                              dracula, gruvbox, catppuccin,
                                              rosepine, everforest, solarized,
-                                             onedark, monokai, cute, paper,
-                                             system, mono-light, mono-dark,
-                                             monotone (+ "random"). session
-                                             only; edit config.toml to persist
+                                             onedark, monokai, hacker, cute,
+                                             paper, system, mono-light,
+                                             mono-dark, monotone (+ "random").
+                                             session only; edit config.toml
           facet --quit                       terminate the server
           facet --reload                     re-read config.toml + apply
                                              (theme / preview-mode).

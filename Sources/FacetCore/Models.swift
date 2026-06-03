@@ -95,7 +95,7 @@ public struct Window: Sendable {
     /// --toggle-sticky`). A sticky window is exempt from the WS-switch
     /// anchor park and is force-floating (it never joins a WS's
     /// tiling). Session-only, per-mac-desktop; orthogonal to `mark`.
-    /// Views surface it as a small 📌 badge.
+    /// Views surface it as a slanted "sticky" badge.
     public let isSticky: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
     /// `nil` when it isn't a scratchpad window. A scratchpad is a
