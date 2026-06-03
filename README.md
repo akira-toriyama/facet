@@ -361,7 +361,9 @@ Frequently-touched keys:
   top of `theme`. `effect` = `off` (default) / `neon` / `cyber` /
   `vapor` / `kawaii` / `rainbow`; `glow` (default `true`) toggles the
   bloom; `width` sets the line width (px, clamp 0.5–6, default 1.5).
-  Off shows a plain theme-accent border.
+  The border flashes a neon burst on a workspace switch; `rainbow`
+  also slowly cycles its resting hue. Off shows a plain theme-accent
+  border.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or
