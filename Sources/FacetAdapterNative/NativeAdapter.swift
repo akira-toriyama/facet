@@ -647,18 +647,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     ///      `AXWindow`+`AXStandardWindow` tiles; sheets / dialogs /
     ///      palettes and `AXWindow`+non-standard subrole (e.g.
     ///      `AXUnknown`) float; a non-window role (AXHelpTag / menu /
-    ///      popover) is ignored. A window whose role can't be resolved
-    ///      yet (the probe raced a still-creating window, or the
-    ///      per-call cap was hit) is DEFERRED — not tiled, not examined
-    ///      — so the next reconcile re-probes it. A real window resolves
-    ///      to `AXStandardWindow` within a poll or two and tiles then; a
-    ///      transient popup (VSCode autocomplete, Chrome dropdown)
-    ///      vanishes before it ever resolves and so never joins the
-    ///      layout. (This defer is what keeps `master-left` from breaking when
-    ///      an app spawns short-lived normal-level windows — the old
-    ///      lean-MANAGED default tiled them for a frame and reflowed.)
+    ///      popover) is ignored. A tile-eligible (normal/unknown-level)
+    ///      window whose role can't be resolved yet — the probe raced a
+    ///      still-creating window, the per-call cap was hit, OR it's a
+    ///      window-server-only phantom with no backing `AXUIElement`
+    ///      (System Settings' background helpers: `CGWindowList` reports
+    ///      them, the app's `kAXWindows` list omits them) — is DEFERRED,
+    ///      not tiled, not examined, BEFORE the exclude rules run (step
+    ///      1b). A real window resolves to `AXStandardWindow` within a
+    ///      poll or two and is classified then; a transient popup (VSCode
+    ///      autocomplete, Chrome dropdown) or a CGS-only phantom never
+    ///      resolves and so never joins the layout. (This defer is what
+    ///      keeps `master-left` from breaking when an app spawns
+    ///      short-lived normal-level windows — the old lean-MANAGED
+    ///      default tiled them for a frame and reflowed.)
     /// User `[[exclude]]` rules win over the heuristic (incl. the
-    /// `manage` force-tile escape hatch). Only unseen + unexamined
+    /// `manage` force-tile escape hatch), but only once the window has
+    /// resolved to a real AX element — so a float/ignore rule matching on
+    /// bundle-id alone can't resurrect a phantom the gate would defer. Only unseen + unexamined
     /// windows are classified. Tile-eligible windows are left out of
     /// all three returned sets so `reconcile` manages them normally;
     /// `deferred` ids are skipped this tick and re-probed next time.
@@ -695,6 +701,30 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     role = AXGeom.role(ax)
                     subrole = AXGeom.subrole(ax)
                 }
+            }
+
+            // 1b. Tile-eligible level but no AX role yet → DEFER, ahead
+            //    of the exclude rules. The window is either still
+            //    creating (probe raced), the per-call probe cap was hit,
+            //    OR it's a window-server-only PHANTOM with no backing
+            //    `AXUIElement` — e.g. System Settings' background helper
+            //    windows, which `CGWindowListCopyWindowInfo` reports but
+            //    the app's `kAXWindows` list omits (verified: AX reports
+            //    1 window, CGWindowList 7). Deferring BEFORE the rules is
+            //    what stops such a phantom being float-/ignore-TRACKED on
+            //    bundle-id alone (the `com.apple.systempreferences` float
+            //    rule used to match every phantom and, via the
+            //    `kAXWindowCreated` fast-add, adopt one as a lingering
+            //    `hidden` row). A real window resolves its AX role within
+            //    a poll or two and is classified then; a phantom never
+            //    resolves and so is never adopted. Raised-level windows
+            //    skipped the probe deliberately (step 1) and fall through
+            //    to the rules + level verdict below unchanged.
+            if normalOrUnknownLevel, role == nil {
+                deferred.insert(w.id)
+                Log.debug("native: gate=defer(unresolved) "
+                    + "wsid=\(w.id.serverID) app=\(w.appName)")
+                continue
             }
 
             // 2. User `[[exclude]]` rules win over the heuristic.
@@ -755,23 +785,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     + "wsid=\(w.id.serverID) app=\(w.appName)")
                 continue
             }
-            if role == nil {
-                // AX role unresolved this tick — the probe raced a
-                // still-creating window (the common case) or the
-                // per-call probe cap was hit. DON'T tile and DON'T mark
-                // examined: defer so the next reconcile re-probes. A
-                // real window resolves to AXStandardWindow within a poll
-                // or two and tiles then; a transient popup (VSCode
-                // autocomplete, Chrome dropdown) vanishes before it ever
-                // resolves, so it never joins the layout. Replaces the
-                // old lean-MANAGED default that let those transients
-                // tile for a frame and break `master-left`.
-                deferred.insert(w.id)
-                Log.debug("native: gate=defer(unresolved) "
-                    + "wsid=\(w.id.serverID) app=\(w.appName)")
-                continue
-            }
-            // A definite non-window role (AXHelpTag / menu / popover …).
+            // role is guaranteed non-nil here: a tile-eligible window
+            // with an unresolved AX role was already DEFERRED at step 1b
+            // (above the exclude rules), and a raised-level window was
+            // ignored by the level verdict (step 3). So a definite
+            // non-window role remains (AXHelpTag / menu / popover …).
             ignore.insert(w.id)
             Log.debug("native: gate=ignore(role=\(role ?? "-")) "
                 + "wsid=\(w.id.serverID) app=\(w.appName)")
