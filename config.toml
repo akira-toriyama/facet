@@ -39,9 +39,18 @@
 #   "cute"       — soft pastel pink, rounded font.
 #   "paper"      — clean daytime white; blue + amber, system font.
 #
+# Monochrome:
+#   "mono-light" — stark black-on-white (白黒), mono font.
+#   "mono-dark"  — stark white-on-black / OLED (黒白), mono font.
+#   "monotone"   — soft graphite greyscale (モノトーン), system font.
+#
 # Adaptive:
 #   "system"     — native vibrancy + dynamic colors, follows macOS
 #                  light/dark. System font.
+#
+# Special:
+#   "random"     — pick a random theme at each launch / `--reload`
+#                  (excludes "system").
 #
 # Unknown names clamp to "terminal". CLI override (session only):
 # `facet --theme=nord`.
