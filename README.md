@@ -53,7 +53,8 @@ slots themselves don't move, so hotkey numbering is preserved). No
 modifier keys.
 
 All views share the same backend and the same theme
-(terminal / cute / system, live toggleable).
+(13 built-in themes — terminal, nord, dracula, catppuccin, …,
+live toggleable).
 
 ## Layouts
 
@@ -329,7 +330,9 @@ edit the file to make a change stick.
 
 Frequently-touched keys:
 
-- `theme` (top-level) — `terminal` (default) / `cute` / `system`
+- `theme` (top-level) — 13 themes: `terminal` (default) / `nord` /
+  `dracula` / `gruvbox` / `catppuccin` / `rosepine` / `everforest` /
+  `solarized` / `onedark` / `monokai` / `cute` / `paper` / `system`
 - `default-view` (top-level) — `tree` / `grid`
 - `[layout]` table — `inner-gap` (space between tiled windows) and
   `outer-gap` (distance from the screen edges), in points. `outer-gap`
@@ -440,7 +443,7 @@ facet status                      # snapshot: backend, theme, workspaces,
                                   # stashed shelves, lastError, timestamp
 
 # Server controls
-facet --theme=NAME                # terminal | cute | system
+facet --theme=NAME                # 13 themes (terminal, nord, dracula, …; see config.toml)
 facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode)
 facet --quit                      # terminate the running server

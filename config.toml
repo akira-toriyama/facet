@@ -19,15 +19,32 @@
 # Color / typography theme
 # -----------------------------------------------------------------
 # Picks the palette + font for the tree panel, grid overlay, and
-# popup menus.
+# popup menus. Each theme pairs a primary accent (active workspace,
+# keyboard-nav outline) with a complementary secondary accent
+# (status badges).
 #
-#   "terminal" — dark near-black bg, Tokyo-Night-ish accents, mono
-#                font. The original look.
-#   "cute"     — soft pastel pink, rounded font.
-#   "system"   — native vibrancy + dynamic system colors. Adapts
-#                to macOS dark/light mode.
+# Dark, monospace (editor-style):
+#   "terminal"   — near-black, Tokyo-Night green/purple. The original.
+#   "nord"       — cool polar-night blue-grey; frost-cyan + sand.
+#   "dracula"    — vivid dark; purple + green.
+#   "gruvbox"    — retro warm dark; orange + aqua.
+#   "catppuccin" — soft pastel dark (Mocha); mauve + green.
+#   "rosepine"   — muted aubergine; iris + rose.
+#   "everforest" — soft forest dark; green + orange.
+#   "solarized"  — classic teal-base dark; blue + orange.
+#   "onedark"    — Atom One Dark; blue + yellow.
+#   "monokai"    — high-energy; lime + magenta.
 #
-# CLI override (session only): `facet --theme=cute`
+# Light:
+#   "cute"       — soft pastel pink, rounded font.
+#   "paper"      — clean daytime white; blue + amber, system font.
+#
+# Adaptive:
+#   "system"     — native vibrancy + dynamic colors, follows macOS
+#                  light/dark. System font.
+#
+# Unknown names clamp to "terminal". CLI override (session only):
+# `facet --theme=nord`.
 theme = "terminal"
 
 
@@ -149,7 +166,7 @@ preview-mode = "popover"
 # Unknown / unset clamps to "float" (a typo can't break tiling). To
 # tile by default, set this to "bsp"; per-workspace tweaks are still
 # done live via the CLI.
-default = "float"
+default = "grid"
 
 # Spacing for tiled windows, in points. Everything here defaults to 0
 # — windows tile flush, edge-to-edge (facet's behaviour before gaps
