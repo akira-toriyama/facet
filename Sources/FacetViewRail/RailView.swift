@@ -925,7 +925,10 @@ public final class RailView: NSView {
 
     /// Space : lift whatever is selected — a window (move) or, on the
     /// whole-WS slot, the whole workspace (swap).
+    /// Space is a TOGGLE (matches tree): carrying → drop (= Return),
+    /// otherwise lift whatever is selected.
     public func kbSpaceLift() {
+        if drag != nil { kbCommit(); return }   // carrying → Space drops
         if kbSelectedWindowIdx == -1 { kbLiftWorkspace() } else { kbLiftWindow() }
     }
 

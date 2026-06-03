@@ -1220,8 +1220,11 @@ public final class GridView: NSView {
     /// move, or (header slot, `kbSelectedWindowIdx == -1`) the whole
     /// workspace for a swap. Theme A: no Shift; the selected target
     /// decides. Tab moves between the header and the windows.
+    /// Space is a TOGGLE (matches tree): carrying → drop (= Return),
+    /// otherwise lift whatever is selected.
     public func kbSpaceLift() {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
+        if drag != nil { kbCommit(); return }        // carrying → Space drops
         if kbSelectedWindowIdx == -1 { kbLiftWorkspace() } else { kbLift() }
     }
 
