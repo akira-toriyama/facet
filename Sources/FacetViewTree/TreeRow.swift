@@ -22,7 +22,7 @@ struct TreeRow {
 }
 
 /// Keyboard selection by *logical identity*, not array position —
-/// the selection survives the 2 s refresh / rift events that
+/// the selection survives the 2 s refresh / backend events that
 /// rebuild `rows` from scratch. A window stays selected by its
 /// `WindowID`; an empty workspace by its index.
 enum TreeKbSel: Equatable {

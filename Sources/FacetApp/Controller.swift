@@ -1,5 +1,5 @@
 // Top-level orchestrator. Wires:
-//   - a ``WindowBackend`` (rift or native, selected at startup)
+//   - a ``WindowBackend`` (``FacetAdapterNative``, sole backend since v2.0.0)
 //   - the tree view (``SidebarView``) + its panel chrome
 //     (``PanelHost``)
 //   - the grid view + its overlay lifecycle
@@ -210,8 +210,8 @@ final class Controller: NSObject {
         }
         // Adapter error stream → lastError slot in facet status.
         // De-dupe against the *Controller's current* lastError so:
-        //  - a long stream of identical "rift dead" messages still
-        //    collapses (they all match the live slot, skip).
+        //  - a long stream of identical recurring-fault messages
+        //    still collapses (they all match the live slot, skip).
         //  - but if another path (e.g. dispatch setError) has
         //    overwritten the slot in the meantime, a subsequent
         //    identical adapter message gets through and restores
@@ -633,8 +633,8 @@ final class Controller: NSObject {
                 + "(\(rangeHint(count: count)))")
             return
         }
-        // CLI `--workspace=N`: no explicit window pick, so let the
-        // backend auto-focus the last-touched window of the
+        // CLI `workspace --focus=N`: no explicit window pick, so let
+        // the backend auto-focus the last-touched window of the
         // destination (or activate Finder if empty). See memory
         // [[facet-ws-switch-focus-management]].
         backend.switchWorkspace(toIndex: n - 1, autoFocus: true)
@@ -695,8 +695,8 @@ final class Controller: NSObject {
     }
 
     /// `facet workspace --retile`: ask the backend to re-apply the active
-    /// workspace's layout. Backends without tiling (rift) treat
-    /// this as a no-op.
+    /// workspace's layout. A backend that delegates tiling to the OS
+    /// would treat this as a no-op.
     private func dispatchRetile() {
         backend.retileActiveWorkspace()
         scheduleReconcile(after: 0.05)
@@ -960,7 +960,7 @@ final class Controller: NSObject {
 
     /// Human-readable range hint for out-of-range error messages.
     /// `(1..15)` for the normal case; `no workspaces available` when
-    /// the backend returned an empty list (= rift not activated,
+    /// the backend returned an empty list (= backend not yet ready,
     /// startup race, etc.) — much clearer than the cryptic `(1..0)`.
     private func rangeHint(count: Int) -> String {
         count > 0 ? "1..\(count)" : "no workspaces available"

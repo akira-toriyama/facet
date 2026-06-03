@@ -257,7 +257,7 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 |---|---|
 | 矢印 | セルカーソル移動 |
 | `Tab` / `⇧Tab` | 同一セル内の header + windows をカーソル循環 |
-| `Space` | 選択を持ち上げて DnD — window (移動) か header スロット (セル丸ごと swap)。 矢印で照準、 `Return` で確定 |
+| `Space` | 選択を持ち上げて DnD — window (移動) か header スロット (セル丸ごと swap)。 矢印で照準、 `Return`/`Space` で確定 |
 | `Return` | 持ち上げ中なら確定 / 通常時は切替 |
 | `Esc` | 持ち上げをキャンセル / オーバービューを閉じる |
 
@@ -265,6 +265,19 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 権限必要) で描画。 バックグラウンド refresh でキャッシュを温めるので、
 オーバービュー初回表示でアイコンフォールバックではなく実スクリーン
 ショットが出る。
+
+### Rail スイッチャーのキーボード操作
+
+rail は表示中キーフォーカスを取る。 矢印は strip 軸に沿って browse —
+上下辺ドック時は `←`/`→`、 左右辺ドック時は `↑`/`↓`。
+
+| キー | アクション |
+|---|---|
+| 矢印 | strip を回転 — 前/次 workspace を中央へ (持ち上げ中は行き先を照準) |
+| `Tab` / `⇧Tab` | 中央 workspace の header + windows を選択循環 |
+| `Space` | 選択を持ち上げて DnD — window (移動) か header スロット (WS 丸ごと swap)。 持ち上げ中の `Space` は drop |
+| `Return` | 持ち上げ確定 / 中央 workspace へ切替 |
+| `Esc` | 持ち上げキャンセル → rail を閉じる |
 
 ## インストール
 

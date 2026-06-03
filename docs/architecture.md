@@ -12,7 +12,7 @@ stub seam.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  FacetViewTree   FacetViewGrid   FacetViewRail  (future)│  view
+│  FacetViewTree   FacetViewGrid   FacetViewRail          │  view
 │           \                  /                          │
 │            └──── FacetView ──┘  (shared primitives)     │
 └──────────────────────┬──────────────────────────────────┘
@@ -58,7 +58,7 @@ is preserved for unit-test stubs (`StubBackend` in `BackendTests`).
 | **M2** | tree + grid views + CLI working (originally via rift adapter, retired at ε) | tree + grid panels render against live backend |
 | **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
 | **M5** | Native adapter Phase α–ε. All five phases shipped (α/β/γ.1/γ.2/γ.3/δ/ε); v2.0.0 retired rift, native is the only backend | see below |
-| **M6–M11** | **Polish → window mgmt → WS ops → tag/scrollable → macOS 26.** M6 brushup done; **M7 is a numbering gap**; **M8 window management is code-complete (2026-06-02)** — themes A–D incl. rail (#109), marks / sticky / scratchpad, real-window DnD + resize, cheap tiling verbs; M9 (WS ops + view unification), M10 (tag model + scrolling columns), M11 (macOS 26 mac-desktop WS, v3.0.0) are the forward roadmap | `facet-future-roadmap` memory is canonical + "Themes A–D" below |
+| **M6–M11** | **Polish → window mgmt → WS ops → macOS 26 (tag / scrollable).** M6 brushup done; **M7 is a numbering gap**; **M8 window management is code-complete (2026-06-02)** — themes A–D incl. rail (#109), marks / sticky / scratchpad, real-window DnD + resize, cheap tiling verbs; **M9 (WS ops + view unification) shipped (#139 / #140 / #142)**; **M10 is a numbering gap (abolished 2026-06-02)**; **M11 (macOS 26 era, v3.0.0)** folds in the tag model (M11-3) + scrolling columns (M11-4) | `facet-future-roadmap` memory is canonical + "Themes A–D" below |
 
 ## Native adapter phases
 
@@ -86,9 +86,10 @@ after a grill round (Phase γ/δ/ε pattern; see the Status column). M8
 also shipped the stocked slots — window marks (#118/#119), sticky
 (#128/#129), scratchpad (#135), real-window DnD (#122–124) + resize
 (#125/#127), cheap tiling verbs (#115/#117). The forward roadmap is
-**M9** (WS ops + view unification), **M10** (tag model + scrolling
-columns), **M11** (macOS 26 mac-desktop WS, v3.0.0). M7 is a numbering
-gap. Canonical: `facet-future-roadmap` memory.
+**M9** (WS ops + view unification, shipped #139 / #140 / #142) then
+**M11** (macOS 26 era, v3.0.0) — which folds in the tag model (M11-3)
++ scrolling columns (M11-4). **M7 and M10 are numbering gaps.**
+Canonical: `facet-future-roadmap` memory.
 
 | Theme | Goal | Status |
 |---|---|---|
@@ -352,7 +353,7 @@ two vocabularies don't drift apart:
 |---|---|
 | **Clean Architecture — Domain** (Entity + Repository protocol) | `FacetCore` (`Workspace`, `Window`, `WindowID`, `WindowAction`, `WindowBackend` protocol) |
 | **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterNative` (`NativeAdapter`, `WorkspaceCatalog`, `LayoutTree`) + `FacetAccessibility` (AX helpers) |
-| **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid` (AppKit-bound) |
+| **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid`, `FacetViewRail` (AppKit-bound) |
 | **Clean Architecture — Application** (DI + Coordinator) | `FacetApp` (`Controller` + `Main`) |
 | **Clean Architecture — Use Case (Interactor)** | *NOT a separate layer* — see below |
 | **DDD — Entity** | `Workspace`, `Window` |

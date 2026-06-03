@@ -1,16 +1,16 @@
 // FacetCore — backend-neutral state models.
 //
 // These are the types every `WindowBackend` translates *into*. Views
-// only ever see these — they never touch rift / AX / CGS types
+// only ever see these — they never touch AX / CGS / adapter types
 // directly. See docs/architecture.md for layer rules.
 
 import CoreGraphics
 
 /// Stable handle for a window across backend queries.
 ///
-/// Backed by the macOS window-server id (CGS), which rift reports as
-/// `window_server_id` and the native adapter will obtain via
-/// `_AXUIElementGetWindow`. Equality and hashing are by `serverID`
+/// Backed by the macOS window-server id (CGS), which the native
+/// adapter obtains via `_AXUIElementGetWindow`. Equality and hashing
+/// are by `serverID`
 /// alone — the same window across two `workspaces()` calls compares
 /// equal.
 public struct WindowID: Hashable, Sendable {
@@ -143,7 +143,7 @@ public struct Workspace: Sendable {
     public let index: Int
     public let name: String
     public let isActive: Bool
-    /// Backend-defined string (e.g. rift's "master_stack", "bsp", …).
+    /// Backend-defined string (e.g. "bsp", "stack", "master-left", …).
     /// Views treat this as opaque; the backend's `layoutModes` lists
     /// the valid values and `windowMenu` knows how to act on them.
     public let layoutMode: String

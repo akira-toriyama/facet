@@ -272,13 +272,27 @@ stay compact. Requires Accessibility (same grant as clicks).
 |---|---|
 | Arrows | move the cell cursor |
 | `Tab` / `⇧Tab` | cycle the cursor through the header + windows of the current cell |
-| `Space` | lift the selection for keyboard DnD — a window (move) or the header slot (whole-cell swap); arrows re-aim, `Return` commits |
+| `Space` | lift the selection for keyboard DnD — a window (move) or the header slot (whole-cell swap); arrows re-aim, `Return`/`Space` commits |
 | `Return` | commit a lift / switch when not lifted |
 | `Esc` | cancel a lift / dismiss the overlay |
 
 Cells paint with **ScreenCaptureKit thumbnails** (macOS 14+,
 Screen Recording grant); a background refresh keeps them warm
 so the overlay opens with real screenshots, not icon fallbacks.
+
+### Rail switcher keyboard
+
+The rail takes key focus while it's up. Arrows browse along the
+strip axis — `←`/`→` when docked top/bottom, `↑`/`↓` when docked
+left/right.
+
+| Key | Action |
+|---|---|
+| Arrows | rotate the strip — bring the prev/next workspace to the centre (or re-aim the target while carrying a lift) |
+| `Tab` / `⇧Tab` | cycle the selection through the centred workspace's header + windows |
+| `Space` | lift the selection for keyboard DnD — a window (move) or the header slot (whole-workspace swap); while carrying, `Space` drops |
+| `Return` | commit a lift, or switch to the centred workspace |
+| `Esc` | cancel a lift, then dismiss the rail |
 
 ## Install
 

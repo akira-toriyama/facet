@@ -1,17 +1,26 @@
-// Full-screen workspace rail — a Mission-Control-style overview.
+// Full-screen workspace rail — a Mission-Control-style switcher.
 //
 //   • a solid black BACKDROP hides the desktop behind it
-//   • a HERO cell in the centre shows the active workspace large
-//   • a ROW of every workspace along the BOTTOM, each a small
-//     window-thumbnail mini-screen (active one highlighted)
+//   • a HERO cell shows the active (centred) workspace large
+//   • a STRIP of workspace thumbnails docked against one screen
+//     EDGE (--edge=top|bottom|left|right, config [rail] edge): an
+//     active-centred CAROUSEL of a capped subset ([rail] cells),
+//     the rest rotating through with a both-ends peek
 //
-//   click a bottom cell → switch to that workspace
+//   browse arrows ROTATE the strip (centre = the selection)
+//   Return / click a cell → switch to centre + dismiss
 //   click the backdrop / Esc → dismiss
 //
+// Strip/hero split scales off the short screen edge ([rail] strip)
+// so it stays balanced in any orientation. Geometry is pure
+// (`railBands` / `railCarouselOffsets`, FacetCore). Design memory:
+// `facet-rail-carousel-decisions`.
+//
 // Controller-free, like `GridView`: orchestration plugs in through
-// the callback closures. Each cell renders its workspace's windows as
-// scaled mini-thumbnails (ScreenCaptureKit captures, app-icon
-// fallback) — the same look as the grid overview.
+// the callback closures. Each cell renders its workspace's windows
+// as scaled ScreenCaptureKit mini-thumbnails — captures only, no
+// app-icon fallback (unlike the grid); a not-yet-captured window
+// shows just the subtle fill until its image lands.
 //
 // Flipped (y-down) to match the view layer's drawing convention and
 // so window mini-rects (backend frames are CG y-down) map without a

@@ -387,7 +387,7 @@ API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
 - **両モードとも hide = [[anchor]]**（窓を mac desktop に composited のまま残す＝hover/hero preview 温存）。
   別 mac desktop への退避や order-out は窓を非 composited にして preview を殺すため **不採用**
   （memory `[[native-window-hide-methods]]` の hide×hero 実測）。
-- layout は grouping で互換 filter（tall/wide/centered/grid/spiral/float = 両対応 / bsp・stack = workspace のみ・
+- layout は grouping で互換 filter（master-left/master-right/master-top/master-bottom/master-center/grid/spiral/float = 両対応 / bsp・stack = workspace のみ・
   非互換は起動時 `exit 2`）。M11-3 で導入予定・`by` はオープン enum（将来の編成パラダイムを 1 値で拡張）。
   memory `[[facet-tag-model-decisions]]`。
 - **Don't call it:** mode, layout mode, grouping policy, 編成モード, グルーピング

@@ -1,5 +1,5 @@
 // `WindowBackend` conformance using only AX + public macOS APIs
-// (no `rift-cli`, no private-API injection). This file is the
+// (no external CLI, no private-API injection). This file is the
 // seam between facet and the OS for the native backend.
 //
 // Phase progression (memory: facet-architecture-decisions):
@@ -10,8 +10,10 @@
 //   γ (shipped) — tiling layout engines (BSP + stack, AX-role
 //                 auto-float). Frozen 2026-05-26, memory:
 //                 facet-phase-gamma-decisions.
-//   δ (pending) — display reconfigure handling, geometry persistence
-//   ε (pending) — `FacetAdapterRift` deprecation
+//   δ (shipped) — display reconfigure handling, geometry persistence
+//                 (memory: facet-phase-delta-decisions)
+//   ε (shipped) — `FacetAdapterRift` retired (v2.0.0); native is
+//                 the sole backend
 //
 // State lives in `WorkspaceCatalog` (pure value type, AX-free,
 // unit-testable). This file owns only the effects: CGWindowList
@@ -144,8 +146,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
         // AX permission is the foundation of every native-backend
         // operation (focus, title resolution, window enumeration).
-        // Same surface as RiftAdapter so the user sees the same
-        // hint regardless of which backend is active.
+        // Routed through the shared `AXPermission` helper so the
+        // hint reads identically wherever it surfaces.
         if let msg = AXPermission.errorMessageIfMissing() {
             DispatchQueue.main.async { [errorContinuation] in
                 errorContinuation.yield(msg)
@@ -955,9 +957,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func focusedWindow() -> WindowID? {
-        // Frontmost-app → AX focused-window → CGWindowID is the
-        // same dance the rift adapter would need; lives in
-        // `AX.frontmostFocusedCGID` so the adapters share it.
+        // Frontmost-app → AX focused-window → CGWindowID; lives in
+        // the shared `AX.frontmostFocusedCGID` helper.
         guard let cgID = AX.frontmostFocusedCGID() else { return nil }
         return WindowID(serverID: Int(cgID))
     }

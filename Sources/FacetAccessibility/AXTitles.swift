@@ -1,5 +1,5 @@
 // Resolve window titles via Accessibility for the many apps that
-// give rift an empty `title` (Chrome, Code, several Electron apps).
+// give an empty `title` (Chrome, Code, several Electron apps).
 // One AX pass per *app* (not per window) — we batch the lookup by
 // pid so an app with 12 windows costs us one AX round-trip, not 12.
 // Short TTL cache to keep the cost off the refresh hot path.

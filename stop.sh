@@ -5,8 +5,6 @@
 # nothing is running (no-op + "(none running)").
 #
 #   ./stop.sh
-#
-# rift itself is left alone (it's the WM, not a facet instance).
 
 set -e
 cd "$(dirname "$0")"

@@ -82,8 +82,9 @@ public struct FacetConfig: Sendable {
     /// Slide duration in ms. Raw; read `effectiveAnimationDuration`.
     /// When unset, each curve uses its own natural default.
     public var animationDurationMs: Int?
-    /// Easing curve: none / cubic / spring / silky / snappy / random.
-    /// Raw; read `effectiveAnimationCurve`.
+    /// Easing curve: cubic / spring / silky / snappy / random.
+    /// Raw; read `effectiveAnimationCurve`. (Off is
+    /// `animationsEnabled = false`, not a curve value.)
     public var animationCurve: String?
     /// Sub-toggle: animate event-driven retiles too (window open /
     /// close reflow). Defaults to ON when `animationsEnabled` is

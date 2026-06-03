@@ -43,7 +43,7 @@ public protocol TreeController: AnyObject, Sendable {
     /// strategy: bounded short retry for same-workspace clicks,
     /// persistent assertion until the backend confirms for
     /// cross-workspace clicks (`postSwitch == true`). View doesn't
-    /// know about AX or rift's post-switch default-focus race.
+    /// know about AX or the backend's post-switch default-focus race.
     func focusWindow(_ window: Window, postSwitch: Bool)
 
     /// Switch to `window`'s workspace if needed, focus it, then run

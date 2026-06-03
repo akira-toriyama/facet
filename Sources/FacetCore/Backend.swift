@@ -1,9 +1,9 @@
 // FacetCore — backend protocol surface.
 //
-// `WindowBackend` is the only seam between adapters (rift today,
-// native later) and the rest of the app. Views and the controller
-// hold it as a protocol, never as a concrete type — see
-// docs/architecture.md.
+// `WindowBackend` is the only seam between a backend adapter
+// (`FacetAdapterNative` today; a port future adapters can implement)
+// and the rest of the app. Views and the controller hold it as a
+// protocol, never as a concrete type — see docs/architecture.md.
 
 import CoreGraphics
 
@@ -75,17 +75,17 @@ public enum InsertEdge: Sendable, Equatable {
     case left, right, top, bottom
 }
 
-/// The only surface the rest of the app knows about. rift / native
-/// each implement it; the UI, AX focus glue, themes and DnD are all
-/// WM-agnostic.
+/// The only surface the rest of the app knows about. The backend
+/// adapter (`FacetAdapterNative`) implements it; the UI, AX focus
+/// glue, themes and DnD are all backend-agnostic.
 public protocol WindowBackend: Sendable {
     /// Short identifier shown in `facet status` and debug logs
-    /// (e.g. `"rift"`, `"native"`). Lower-case, no spaces.
+    /// (e.g. `"native"`). Lower-case, no spaces.
     var name: String { get }
 
     /// Backend-defined layout-mode names that may appear on
-    /// `Workspace.layoutMode` (e.g. rift returns
-    /// `["master_stack", "traditional", "bsp", "stack", "scrolling"]`).
+    /// `Workspace.layoutMode` (e.g. the native adapter returns
+    /// `["bsp", "stack", "master-left", …, "grid", "spiral", "float"]`).
     var layoutModes: [String] { get }
 
     func workspaces() -> [Workspace]
@@ -169,7 +169,8 @@ public protocol WindowBackend: Sendable {
     /// hatch: when the on-screen state has drifted from what the
     /// backend thinks (external resize / unexpected move), the
     /// user runs `facet workspace --retile` to force a fresh tile pass.
-    /// Backends that delegate layout (rift) silently no-op.
+    /// A backend that delegates tiling to the OS would silently
+    /// no-op; the native adapter performs a real tile pass.
     func retileActiveWorkspace()
 
     /// Reset the active workspace's master knobs to their even
@@ -297,8 +298,8 @@ public protocol WindowBackend: Sendable {
     var events: AsyncStream<BackendEvent> { get }
 
     /// Stream of human-readable operational errors the adapter
-    /// surfaced (e.g. `rift-cli` returned non-zero, AX permission
-    /// failure). The Controller subscribes and routes each
+    /// surfaced (e.g. an AX call failed, or Accessibility permission
+    /// is missing). The Controller subscribes and routes each
     /// message into `facet status`'s lastError slot.
     ///
     /// Single-subscriber, same lifetime as `events`. Adapters
