@@ -184,6 +184,12 @@ public final class GridView: NSView {
     public var kbSelectedWS: Int?
     public var kbSelectedWindowIdx: Int = 0
 
+    /// Plays the "selected cell zoom → full screen" transition on a
+    /// Return commit; input is gated on `commitZoom.isActive` until it
+    /// finishes (then the backend switch + close fire). Shared with the
+    /// rail (`CommitZoom` in FacetView).
+    private let commitZoom = CommitZoom(duration: gridCommitZoomDuration)
+
     public override var isFlipped: Bool { true }
     public override var isOpaque: Bool { false }
 
@@ -450,6 +456,9 @@ public final class GridView: NSView {
     // MARK: - Draw
 
     public override func draw(_ dirty: NSRect) {
+        // Commit zoom (②): the captured cell scales out to fill the
+        // screen; then the switch + close fire. Nothing else draws then.
+        if commitZoom.draw(in: bounds) { return }
         // Palette: very faint cell fills + strokes so window thumbs
         // do the visual work, accent reserved for active / drop-target.
         let activeColor = pal.accent
@@ -772,6 +781,7 @@ public final class GridView: NSView {
     // MARK: - Mouse
 
     public override func mouseDown(with e: NSEvent) {
+        guard !commitZoom.isActive else { return }   // ② zoom in flight
         let p = convert(e.locationInWindow, from: nil)
         // Header band → workspace drag (swap) or click (switch).
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
@@ -852,6 +862,7 @@ public final class GridView: NSView {
     }
 
     public override func mouseUp(with e: NSEvent) {
+        guard !commitZoom.isActive else { return }   // ② zoom in flight
         defer { pendingDown = nil; pendingHeaderDown = nil; NSCursor.arrow.set() }
         // Resolve as click when the gesture never crossed threshold.
         if drag == nil {
@@ -1123,6 +1134,7 @@ public final class GridView: NSView {
     /// cursor resets to the header slot. While lifted, also re-aims the
     /// drag target + repositions the ghost.
     public func kbMoveSelection(dx: Int, dy: Int) {
+        guard !commitZoom.isActive else { return }   // ② zoom in flight
         let cols = effectiveCols
         guard let sel = kbSelectedWS,
               let cur = cells.firstIndex(where: { $0.wsIndex == sel })
@@ -1147,6 +1159,7 @@ public final class GridView: NSView {
     /// ends. An empty cell has only the header slot. No effect while
     /// a lift is in flight.
     public func kbCycleWindow(forward: Bool) {
+        guard !commitZoom.isActive else { return }   // ② zoom in flight
         guard drag == nil,
               let sel = kbSelectedWS,
               let cell = cells.first(where: { $0.wsIndex == sel })
@@ -1208,12 +1221,14 @@ public final class GridView: NSView {
     /// workspace for a swap. Theme A: no Shift; the selected target
     /// decides. Tab moves between the header and the windows.
     public func kbSpaceLift() {
+        guard !commitZoom.isActive else { return }   // ② zoom in flight
         if kbSelectedWindowIdx == -1 { kbLiftWorkspace() } else { kbLift() }
     }
 
     /// Lift the keyboard-selected window into the drag state,
     /// identically to a mouse-initiated drag.
     public func kbLift() {
+        guard !commitZoom.isActive else { return }   // ② zoom in flight
         guard drag == nil, let s = kbSelectedWindow() else { return }
         let at = NSPoint(x: s.cell.rect.midX, y: s.cell.rect.midY)
         drag = Drag(
@@ -1257,6 +1272,7 @@ public final class GridView: NSView {
     /// Return: commit-drop while lifted, or click-equivalent when
     /// not lifted (switch + focus selected cell's focused window).
     public func kbCommit() {
+        if commitZoom.isActive { return }   // a switch zoom (②) is in flight
         if let d = drag {
             if let dst = d.dropTargetWS,
                let dstCell = cells.first(where: { $0.wsIndex == dst })
@@ -1278,11 +1294,38 @@ public final class GridView: NSView {
             return
         }
         guard let sel = kbSelectedWS else { return }
+        // Return on the selected cell → zoom that cell out to full screen
+        // (②), then switch + close. A direct mouse click stays instant.
         if let s = kbSelectedWindow() {
-            onPick?(.window(workspaceIndex: sel,
-                            pid: s.hit.pid, windowID: s.hit.id))
+            commitSwitch(target: sel) { [weak self] in
+                self?.onPick?(.window(workspaceIndex: sel,
+                                      pid: s.hit.pid, windowID: s.hit.id))
+            }
         } else {
-            onPick?(.workspace(workspaceIndex: sel))
+            commitSwitch(target: sel) { [weak self] in
+                self?.onPick?(.workspace(workspaceIndex: sel))
+            }
+        }
+    }
+
+    /// Play the commit "cell zoom → full screen" transition (②) for the
+    /// `target` workspace's cell, then run `perform` (the switch + close);
+    /// if the cell can't be captured or Reduce Motion is on, run it now.
+    private func commitSwitch(target ws: Int, perform: @escaping () -> Void) {
+        guard !commitZoom.isActive else { return }
+        guard let cell = cells.first(where: { $0.wsIndex == ws }),
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let img = snapshotRegion(cell.rect)
+        else { perform(); return }
+        commitZoom.begin(image: img, from: cell.rect,
+                         redraw: { [weak self] in self?.needsDisplay = true },
+                         perform: perform)
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil, commitZoom.isActive {
+            commitZoom.finish()   // closed mid-zoom → don't drop the switch
         }
     }
 
