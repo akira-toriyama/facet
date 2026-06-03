@@ -32,7 +32,7 @@ public struct WorkspaceConfig: Sendable, Equatable {
 public struct FacetConfig: Sendable {
     // Top-level
     public var defaultView: String?         // "tree" | "grid"
-    public var theme: String?               // "terminal" | "cute" | "system"
+    public var theme: String?               // see effectiveTheme (13 themes)
 
     // [grid]
     public var gridCols: Int?
@@ -120,10 +120,18 @@ public struct FacetConfig: Sendable {
     }
 
     /// Falls back to `"terminal"` for unset or unrecognised values.
+    /// This list must stay in sync with `canonicalStyles` /
+    /// `paletteFor` in FacetView's Palette.swift — FacetCore is the
+    /// pure-logic layer and can't import the view-side palette, so the
+    /// set of valid names is duplicated here by necessity.
     public var effectiveTheme: String {
         let raw = (theme ?? "terminal").lowercased()
-        return ["terminal", "cute", "system"].contains(raw)
-            ? raw : "terminal"
+        let known = [
+            "terminal", "cute", "system",
+            "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
+            "everforest", "solarized", "onedark", "monokai", "paper",
+        ]
+        return known.contains(raw) ? raw : "terminal"
     }
 
     /// 1-12 clamp. Default 4.

@@ -47,8 +47,8 @@ DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**:
 swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾
 キーは使わない。
 
-各 view は同じ backend と同じテーマ (terminal / cute / system、
-ライブ切替) を共有。
+各 view は同じ backend と同じテーマ (terminal / nord / dracula /
+catppuccin … 全13テーマ、ライブ切替) を共有。
 
 ## レイアウト
 
@@ -313,7 +313,9 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 よく触る key:
 
-- `theme` (トップレベル) — `terminal` (default) / `cute` / `system`
+- `theme` (トップレベル) — 全13テーマ: `terminal` (default) / `nord` /
+  `dracula` / `gruvbox` / `catppuccin` / `rosepine` / `everforest` /
+  `solarized` / `onedark` / `monokai` / `cute` / `paper` / `system`
 - `default-view` (トップレベル) — `tree` / `grid`
 - `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
   `outer-gap` (画面端からの距離)、 単位 pt。 `outer-gap` は4辺一括、
@@ -415,7 +417,7 @@ facet status                      # スナップショット: backend /
                                   # lastError / timestamp
 
 # Server 制御
-facet --theme=NAME                # terminal | cute | system
+facet --theme=NAME                # 全13テーマ (terminal, nord, dracula, …; config.toml 参照)
 facet --reload                    # config.toml 再読込 + 反映
                                   # (theme / preview-mode)
 facet --quit                      # server 終了
