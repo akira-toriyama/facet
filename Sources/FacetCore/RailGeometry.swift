@@ -82,20 +82,24 @@ public func railBands(in bounds: CGRect, edge: RailEdge,
     }
 }
 
-/// The scroll offset (in strip-along points) that keeps the cell at
-/// `index` fully inside an `avail`-long viewport showing fixed-size
-/// `slot`-long cells, given the current `offset`. Returns a value
-/// clamped to `0…max(0, count*slot - avail)`. Used by the rail when the
-/// browse cursor moves so the selected workspace scrolls into view (and
-/// stays put when it's already visible). Pure / testable.
-public func railScrollToShow(index: Int, count: Int, slot: CGFloat,
-                             avail: CGFloat, offset: CGFloat) -> CGFloat {
-    let maxOffset = max(0, CGFloat(count) * slot - avail)
-    guard maxOffset > 0, slot > 0 else { return 0 }
-    let near = CGFloat(index) * slot
-    let far = near + slot
-    var o = offset
-    if near < o { o = near }
-    else if far > o + avail { o = far - avail }
-    return max(0, min(maxOffset, o))
+/// Signed slot offsets for the active-centred carousel rail (2-b). For
+/// a strip of `count` workspaces with the selected one at array position
+/// `selectedPos`, returns — for every position `0..<count` — its offset
+/// from the centre in slot units: `0` = centre (the selected workspace),
+/// negative = before it, positive = after, wrapping circularly so the
+/// selected sits at slot `floor(count/2)` and the rest fan out around it
+/// (even counts bias the selected one slot right). The view multiplies
+/// each offset by the slot size and pins the centre at the strip's
+/// along-centre; cells far from the centre fall outside the viewport and
+/// clip to a peek. Pure / testable.
+///
+/// Example (count 5, selected = ws5 at pos 4) → ws3 −2, ws4 −1, ws5 0,
+/// ws1 +1, ws2 +2 ⇒ displayed `[ws3][ws4][ws5][ws1][ws2]`.
+public func railCarouselOffsets(count: Int, selectedPos: Int) -> [Int] {
+    guard count > 0 else { return [] }
+    let p0 = ((selectedPos % count) + count) % count
+    let centerSlot = count / 2
+    return (0..<count).map { p in
+        ((p - p0 + centerSlot + count) % count) - centerSlot
+    }
 }

@@ -34,6 +34,10 @@ let railEdgeGap: CGFloat = 24
 /// from butting up against the workspace列 (separate from the smaller
 /// inter-cell `railCellGap`).
 let railHeroGap: CGFloat = 32
+/// Peek depth (points): when the carousel holds more workspaces than the
+/// viewport shows, each end reveals this much of the next cell — the
+/// both-ends "there's more to rotate to" cue (2-b).
+let railPeek: CGFloat = 18
 
 /// Strip thickness — the all-workspaces band's cross-axis size (height
 /// for a top/bottom rail, width for left/right) as a fraction of that

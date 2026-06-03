@@ -28,11 +28,13 @@ Win11 タスクビュー型）。Grid と同じく一時的に画面へ重ねて
 
 ### overflow（WS が増えた時）
 
-> ⚠️ **M9-3 / M9-4 でこの当初方針（no-scroll・shrink→wrap）を覆した。**
-> 実装は **固定サイズ cell + スクロール**: `[rail] cells` 個を 1 列に出し、
-> 超過分は縮小せず strip をスクロール（見切れ peek で「まだある」合図）、
-> browse は端で wrap（循環）。理由＝多 WS でも cell が潰れず認識性を保つ方が
-> dogfood で勝った。下の当初案は歴史的記録。
+> ⚠️ **方針は 2 回変わった。現行は 2-b の active 中央カルーセル。**
+> ① 当初＝no-scroll・shrink→wrap（下記・不採用）。② M9-3/M9-4＝固定サイズ
+> cell + スクロール（見切れ peek）。③ **2-b（現行）＝active を strip 中央に
+> 固定し strip が回転するカルーセル**（`[rail] cells` 個・超過は縮小せず回転・
+> 両端 peek・browse 矢印=回転/Return=切替+閉じ）。M9-4 の scroll 機構は 2-b で
+> 置換（`railScrollToShow`→`railCarouselOffsets`）。設計は memory
+> `[[facet-rail-carousel-decisions]]` が canonical。下の当初案①は歴史的記録。
 
 当初案（不採用）: scroll は採用しない（要素が隠れ「一眺」に反する）。
 **折り返し（wrap）**で全 WS 可視を維持:

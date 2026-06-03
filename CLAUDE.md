@@ -208,10 +208,18 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   against (`mac desktop`-independent); the strip axis drives which
   arrows browse (top/bottom → ←/→, left/right → ↑/↓). Config seed
   is ``[rail] edge`` (silent clamp→bottom); ``[rail] cells`` sets
-  the fixed strip count before it scrolls. The geometry is pure
-  (`railBands` / `railScrollToShow` in FacetCore, unit-tested);
-  the strip header stays a horizontal band on every edge (no text
-  rotation — a vertical stack of label/thumbnail cells).
+  the carousel's viewport-full count. The strip header stays a
+  horizontal band on every edge (no text rotation — a vertical stack
+  of label/thumbnail cells).
+- **The rail is an active-centred CAROUSEL** (2-b): the active
+  workspace is pinned to the strip centre, the rest fan out
+  circularly, and the browse arrows ROTATE the strip (centre = the
+  selection; Return / click switches to centre + closes). More than
+  ``[rail] cells`` workspaces rotate through with a both-ends peek —
+  there is **no scroll**. Geometry is pure (`railBands` /
+  `railCarouselOffsets` in FacetCore, unit-tested). This replaced the
+  M9-4 fit-or-scroll model; don't reintroduce `scrollOffset` /
+  `railScrollToShow`. Design: memory `[[facet-rail-carousel-decisions]]`.
 - **No bare-flag tree aliases**. ``--show`` / ``--hide`` /
   ``--toggle`` / ``--active`` standalone were dropped — every
   view op specifies NAME explicitly. Keeps the canonical form

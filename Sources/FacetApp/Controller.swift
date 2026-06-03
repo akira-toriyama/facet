@@ -810,8 +810,17 @@ final class Controller: NSObject {
         // grid), so keep it live with every reconcile — the active-WS
         // highlight + window counts track switches and add/close.
         if let rv = railView {
+            let oldActive = rv.activeIndex
+            let newActive = wss.first(where: { $0.isActive })?.index
             rv.workspaces = wss
-            rv.activeIndex = wss.first(where: { $0.isActive })?.index
+            rv.activeIndex = newActive
+            // 2-b carousel: an EXTERNAL switch (CLI / another view) while
+            // the rail is open re-centres the strip on the new active —
+            // but only when the user isn't mid-browse (selected == the
+            // old active), so a manual rotation isn't yanked back.
+            if rv.selectedWS == oldActive, let na = newActive {
+                rv.selectedWS = na
+            }
             rv.layoutCells()      // refresh open rail on backend events
         }
         if firstRealApply, #available(macOS 14.0, *) {

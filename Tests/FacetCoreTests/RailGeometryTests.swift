@@ -61,24 +61,48 @@ final class RailGeometryTests: XCTestCase {
         XCTAssertEqual(s.minY, 0)
     }
 
-    // MARK: - Scroll
+    // MARK: - Carousel offsets (2-b)
 
-    func testScrollKeepsSelectedVisible() {
-        // 10 cells of slot 100 in a 700-long viewport → maxOffset 300.
-        XCTAssertEqual(railScrollToShow(index: 0, count: 10, slot: 100,
-                                        avail: 700, offset: 0), 0)
-        XCTAssertEqual(railScrollToShow(index: 9, count: 10, slot: 100,
-                                        avail: 700, offset: 0), 300)
-        XCTAssertEqual(railScrollToShow(index: 8, count: 10, slot: 100,
-                                        avail: 700, offset: 0), 200)
-        // Already visible → offset unchanged.
-        XCTAssertEqual(railScrollToShow(index: 2, count: 10, slot: 100,
-                                        avail: 700, offset: 100), 100)
+    /// The worked example: 5 WS, ws5 (pos 4) selected → ws3 −2 … ws2 +2,
+    /// i.e. displayed `[ws3][ws4][ws5][ws1][ws2]`.
+    func testCarouselWorkedExample() {
+        let off = railCarouselOffsets(count: 5, selectedPos: 4)
+        // off[p] is position p's slot offset from centre.
+        XCTAssertEqual(off[2], -2)   // ws3
+        XCTAssertEqual(off[3], -1)   // ws4
+        XCTAssertEqual(off[4], 0)    // ws5 (selected, centre)
+        XCTAssertEqual(off[0], 1)    // ws1 (wraps to the right)
+        XCTAssertEqual(off[1], 2)    // ws2
     }
 
-    func testScrollZeroWhenEverythingFits() {
-        // 5 cells, 700 viewport → all fit, no scroll regardless of index.
-        XCTAssertEqual(railScrollToShow(index: 4, count: 5, slot: 100,
-                                        avail: 700, offset: 0), 0)
+    func testCarouselSelectedAlwaysAtZero() {
+        for count in 1...9 {
+            for sel in 0..<count {
+                let off = railCarouselOffsets(count: count, selectedPos: sel)
+                XCTAssertEqual(off[sel], 0, "selected must be centre (count \(count), sel \(sel))")
+                // Offsets are a contiguous run around 0 (a permutation of
+                // a centred range), so each value is unique.
+                XCTAssertEqual(Set(off).count, count, "offsets must be distinct")
+            }
+        }
+    }
+
+    func testCarouselEvenBiasesRight() {
+        // count 4, selected pos 0 → 2 cells left of centre, 1 right
+        // (floor(4/2)=2 ⇒ selected sits one slot right of dead-centre).
+        let off = railCarouselOffsets(count: 4, selectedPos: 0)
+        XCTAssertEqual(off[0], 0)
+        XCTAssertEqual(off.filter { $0 < 0 }.count, 2)
+        XCTAssertEqual(off.filter { $0 > 0 }.count, 1)
+    }
+
+    func testCarouselWrapsBothSides() {
+        // count 5, selected centre pos 2 → symmetric −2…+2.
+        XCTAssertEqual(railCarouselOffsets(count: 5, selectedPos: 2).sorted(),
+                       [-2, -1, 0, 1, 2])
+    }
+
+    func testCarouselEmpty() {
+        XCTAssertEqual(railCarouselOffsets(count: 0, selectedPos: 0), [])
     }
 }
