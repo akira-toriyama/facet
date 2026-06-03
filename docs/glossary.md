@@ -208,6 +208,38 @@ rail の strip を寄せる **画面の辺**（`top` / `bottom` / `left` / `righ
 - コード: `RailEdge`（`FacetCore`）・`canonicalEdges`/`canonicalEdge`（`FacetApp`）
 - **Don't call it:** side, anchor, position, dock（辺以外の意味で）, 配置
 
+### strip
+[[rail view]] で [[facet workspace]] の window サムネミニ画面を [[edge]] に沿って
+1 列に並べた帯。サムネは行を埋めるよう **justify**（拡大）され、セル間は一定の
+gap になる。サイズ上限は `[rail] strip`（画面短辺に対する %・`stripPercent`）で、
+[[hero]] が残り領域を占める。同時表示数の上限は `[rail] cells`。`[rail] strip`
+という設定キー名そのものでもある（帯の概念とキー名が同名）。
+- コード: `RailView.layoutCells` の `stripRect` / `railBands`（strip/hero 分割）
+  / `railScaledPads`（短辺基準の余白）
+- 参照: [[hero]] / [[carousel]] / [[edge]] / [[rail view]]
+- **Don't call it:** bar, dock, filmstrip, tray, [[sliver]]（sliver は anchor
+  park 後の残骸＝別概念）, 帯, バー
+
+### hero
+[[rail view]] の中央に大きく表示する **下見中（strip 中央）の [[facet workspace]]
+プレビュー**。実画面の縦横比そのままに縮小したミニ画面で、[[strip]] が占めない
+残り領域を埋める（`[rail] strip`% の裏返し）。strip の回転（[[carousel]]）で中央
+WS が変わると hero が追従する。
+- コード: `RailView.hero` / `railBands`（hero 領域）
+- 参照: [[strip]] / [[carousel]] / [[rail view]]
+- **Don't call it:** preview, main, focus, big cell, spotlight, 主画面, プレビュー
+
+### carousel
+[[rail view]] の [[strip]] の並べ方（2-b）。**active（＝選択）を strip 中央に固定**
+し、残りを前後へ**循環**配置する。strip 軸の矢印で strip 自体が回転して中央＝
+選択が変わり（下見のみ・[[hero]] が追従）、Return / クリックで確定＆閉じる。
+`[rail] cells` 上限を超える WS は縮小せず回転で送り、両端に **peek**（次セルの
+見切れ）で「まだある」合図を出す。**scroll は無い**（M9-4 の scroll を置換）。
+- コード: `railCarouselOffsets`（`FacetCore`・純幾何・各 position の中央からの
+  符号付き slot offset・選択=0・循環）
+- 参照: [[strip]] / memory `[[facet-rail-carousel-decisions]]`
+- **Don't call it:** scroll, scrollbar, pager, filmstrip, slider, スクロール, ページャ
+
 ### AX target
 **現在 facet が操作対象とする window**。`Window.title` は backend だけで
 埋まるとは限らず、`AXTitles.resolve` が `kAXTitle` を short-TTL で解決する
@@ -238,6 +270,30 @@ orientation` での flip は廃止（辺を直接指定するため）。
   小バッジ表示は `m-EDGE` に省略（`layoutBadgeLabel`）。
 - **Don't call it:** tall, wide, centered（M9-2 で改名・旧称）, 縦/横
   分割, master_stack
+
+### anchor
+**非アクティブ [[facet workspace]] の window を画面から隠す手法**。AX
+`kAXPosition` で window を画面隅へ寄せ、最小可視の [[sliver]] だけ残す
+（macOS の clamp で完全な画面外には出せないため）。公開 AX のみ・SIP-on・
+**即時**（アニメ無し）。facet 唯一の hide 手法（`minimize` は genie アニメで
+WS 切替が遅く 2026-05-28 廃止）。parked 窓は `isOnscreen=true` を保つので、
+ユーザーの Cmd+H / Cmd+M による真の hide と区別できる。`sticky` / `scratchpad`
+はこの anchor park の再利用。
+- コード: `shouldParkAnchor` / `applyHide`（`FacetAdapterNative`）
+- 参照: memory `[[native-window-hide-methods]]`（全 hide 手法の検証記録・
+  完全消去は SIP-off 必須で本体 scope 外）
+- **Don't call it:** corner hide, HideCorner（rift の旧称）, off-screen hide,
+  minimize（別手法・廃止済）, 角配置, 隅寄せ
+
+### sliver
+**anchor park 後に画面隅に残る window の可視部分**。macOS の clamp invariant
+により最小 **1×41 logical pt**（右下隅）まで詰められるが、完全な 0px には
+できない（macOS が「title bar は必ず画面内に残して救出可能にする」救済仕様の
+ため）。完全消去（画面 + Mission Control から消す）は公開 / read-only-private
+API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
+- 参照: [[anchor]] / memory `[[native-window-hide-methods]]`
+- **Don't call it:** strip, remnant, leftover, edge（[[edge]] は rail の辺の
+  別概念）, 残り, 断片, はみ出し
 
 ### sticky window
 1 つの window を **現在の mac desktop 内・全 facet workspace のメンバー**
