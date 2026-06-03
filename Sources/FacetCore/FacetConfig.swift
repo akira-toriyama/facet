@@ -255,6 +255,50 @@ public struct FacetConfig: Sendable {
     /// keeps its outer-gap inset unless the user opts in.
     public var effectiveSmartGaps: Bool { smartGaps ?? false }
 
+    /// Named-enum config values that were written but didn't match any
+    /// known name, so the matching `effective*` accessor silently
+    /// clamped them to a default. Returns one human-readable warning
+    /// per clamp (empty when every written value was valid).
+    ///
+    /// The clamp itself is deliberate — a typo'd layout / theme / edge
+    /// must never break the panel (see each `effective*`). But the
+    /// fallback is otherwise invisible: a config carried across a
+    /// breaking rename (e.g. `tall` → `master-left`) silently degrades
+    /// to `float` with no signal. This surfaces that, without changing
+    /// behaviour.
+    ///
+    /// Detection is "raw written, non-empty, and differs from the
+    /// effective value", so it carries **no copy** of any key's
+    /// known-set — it can't drift from the accessors and never fires
+    /// for an unset key. Numeric range-clamps (gaps, cell counts) are
+    /// bounds, not typos, so they're intentionally excluded.
+    ///
+    /// Call once per load (the server logs each via `Log.line` at
+    /// startup + hot-reload) — never from an `effective*` accessor,
+    /// which runs every refresh tick.
+    public func unknownValueWarnings() -> [String] {
+        var out: [String] = []
+        func clamp(_ key: String, _ raw: String?, _ effective: String) {
+            guard let raw, !raw.isEmpty,
+                  raw.lowercased() != effective.lowercased() else { return }
+            out.append("config: unknown \(key) \"\(raw)\" "
+                + "— using default \"\(effective)\"")
+        }
+        clamp("theme", theme, effectiveTheme)
+        clamp("layout", defaultLayout, effectiveDefaultLayout)
+        clamp("rail edge", railEdge, effectiveRailEdge.rawValue)
+        clamp("preview-mode", treePreviewMode, effectiveTreePreviewMode)
+        clamp("animation curve", animationCurve, effectiveAnimationCurve)
+        clamp("grid label-position", gridLabelPosition,
+              effectiveGridLabelPosition)
+        // Startup view clamps to agent-only mode (nil), not a value.
+        if let raw = defaultView, !raw.isEmpty, effectiveDefaultView == nil {
+            out.append("config: unknown view \"\(raw)\" "
+                + "— starting in agent-only mode (no panel shown)")
+        }
+        return out
+    }
+
     /// Facet workspace defaults for a mac desktop without a
     /// `[desktop.N]` section. 5 is the memory-confirmed (`facet-workspace-model`
     /// N2) "control above zero, easy to expand" starting point.
