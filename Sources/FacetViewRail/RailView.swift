@@ -163,6 +163,21 @@ public final class RailView: NSView {
     /// the source so the UI can't freeze on a silent backend failure.
     static let railDropAckTimeout: TimeInterval = 1.0
 
+    // MARK: - Carousel slide animation (2-b v2)
+
+    /// Current along-axis offset (points) added to the strip cells while
+    /// a rotation eases in; 0 when settled. The clip viewport stays put,
+    /// so cells slide under it (peeking at the ends).
+    private var slideOffset: CGFloat = 0
+    /// Offset the in-flight ease is decaying from (set on each rotate so
+    /// rapid presses retarget from the current position).
+    private var slideFrom: CGFloat = 0
+    private var slideStart: Date?
+    private var slideTimer: Timer?
+    /// Last carousel slot size (set by `layoutCells`) — one rotation
+    /// slides the strip by this much.
+    private var lastSlot: CGFloat = 0
+
     public override var isFlipped: Bool { true }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -276,6 +291,7 @@ public final class RailView: NSView {
         //    otherwise it centres with end margins. --
         let peek: CGFloat = n > visible ? railPeek : 0
         let slot = max(railCellMinDim, cellRun + railCellGap)
+        lastSlot = slot   // one rotation slides the strip by one slot (v2)
         let viewportAlong = min(availAlong, CGFloat(visible) * slot + 2 * peek)
 
         let (strip, heroArea) = railBands(in: bounds, edge: edge,
@@ -456,15 +472,68 @@ public final class RailView: NSView {
         // Strip cells are clipped to the carousel viewport so a cell
         // rotating past the end "peeks" half-off the edge (the both-ends
         // "there's more" cue) instead of drawing over the hero. A drag
-        // ghost is a separate subview, unaffected by this clip.
-        if stripRect.isEmpty {
-            for c in cells { drawCell(c) }
-        } else {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(rect: stripRect).addClip()
-            for c in cells { drawCell(c) }
-            NSGraphicsContext.restoreGraphicsState()
+        // ghost is a separate subview, unaffected by this clip. While a
+        // rotation eases in (`slideOffset`), the cells are translated
+        // along the run UNDER the fixed viewport, so the strip slides
+        // (the hero, drawn above, already shows the new centre). (2-b v2)
+        NSGraphicsContext.saveGraphicsState()
+        if !stripRect.isEmpty { NSBezierPath(rect: stripRect).addClip() }
+        if slideOffset != 0 {
+            let horizontal = edge.axis == .horizontal
+            let t = NSAffineTransform()
+            t.translateX(by: horizontal ? slideOffset : 0,
+                         yBy: horizontal ? 0 : slideOffset)
+            t.concat()
         }
+        for c in cells { drawCell(c) }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    // MARK: - Carousel slide animation (2-b v2)
+
+    /// Start (or retarget) the rotation slide. `dx` is the carousel step
+    /// (+1 next / −1 previous); the strip slides one `slot` per step. On a
+    /// rapid press the offset accumulates from its current value so the
+    /// motion follows the latest target without a jump. Honours Reduce
+    /// Motion (instant).
+    private func startSlide(step dx: Int, slot: CGFloat) {
+        guard dx != 0, slot > 0,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else { slideOffset = 0; stopSlide(); needsDisplay = true; return }
+        let cap = slot * railSlideMaxSlots
+        slideOffset = max(-cap, min(cap, slideOffset + CGFloat(dx) * slot))
+        slideFrom = slideOffset
+        slideStart = Date()
+        if slideTimer == nil {
+            let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.tickSlide() }
+            }
+            RunLoop.main.add(timer, forMode: .common)   // fire during key-mash too
+            slideTimer = timer
+        }
+        needsDisplay = true
+    }
+
+    private func tickSlide() {
+        guard let start = slideStart else { stopSlide(); return }
+        let t = Date().timeIntervalSince(start) / railSlideDuration
+        if t >= 1 {
+            slideOffset = 0
+            stopSlide()
+        } else {
+            let e = 1 - pow(1 - CGFloat(t), 3)   // ease-out cubic
+            slideOffset = slideFrom * (1 - e)
+        }
+        needsDisplay = true
+    }
+
+    private func stopSlide() {
+        slideTimer?.invalidate(); slideTimer = nil; slideStart = nil
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { slideOffset = 0; stopSlide() }   // overlay closed
     }
 
     private func drawCell(_ c: Cell) {
@@ -777,6 +846,7 @@ public final class RailView: NSView {
         } else {
             kbSelectedWindowIdx = -1       // browse → reset window cursor for the new WS
             layoutCells()                  // rotate the strip (+ hero re-preview)
+            startSlide(step: dx, slot: lastSlot)   // ease the rotation (v2)
         }
     }
 

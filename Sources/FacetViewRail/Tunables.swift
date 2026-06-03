@@ -28,6 +28,16 @@ let railLabelGap: CGFloat = 6
 /// both-ends "there's more to rotate to" cue (2-b).
 let railPeek: CGFloat = 18
 
+// -- Carousel rotation animation (2-b v2) --
+// An arrow rotates the strip by one slot; instead of an instant
+// re-layout the strip SLIDES into place. Rapid presses retarget mid-
+// flight (the offset accumulates, then eases to 0).
+/// Ease-out duration of one rotation slide.
+let railSlideDuration: TimeInterval = 0.17
+/// Cap the accumulated slide on rapid presses so a key-mash doesn't
+/// fling the strip many slots before it eases back.
+let railSlideMaxSlots: CGFloat = 3
+
 // -- Responsive layout (orientation- & display-size-aware) --
 // The strip / hero proportions and the gaps are derived from the
 // SHORT screen edge (so they stay balanced in landscape OR portrait,
