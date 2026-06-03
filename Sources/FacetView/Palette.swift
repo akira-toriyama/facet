@@ -252,13 +252,14 @@ public extension Palette {
         selFill: NSColor(hex: 0xB0B0B0).withAlphaComponent(0.18),
         font: .system, menuAppearance: .darkAqua)
 
-    /// Black base with a neon-green primary + red secondary — a
-    /// green-on-black hacker-terminal look. Green = active WS / kbNav,
-    /// red = status chips. mono font.
+    /// Black base with a neon-green primary + amber secondary — a
+    /// green-on-black hacker-terminal look (amber over red: far more
+    /// legible on black, and a classic green/amber terminal pairing).
+    /// Green = active WS / kbNav, amber = status chips. mono font.
     static let hacker = Palette(
         bg: NSColor(hex: 0x0A0F0A), text: NSColor(hex: 0xCFE0CF),
         dim: NSColor(hex: 0x5F715F), accent: NSColor(hex: 0x33FF66),
-        accent2: NSColor(hex: 0xFF4D4D),
+        accent2: NSColor(hex: 0xFFC857),
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x33FF66).withAlphaComponent(0.18),
