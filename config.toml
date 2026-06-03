@@ -81,9 +81,15 @@ effect = "off"
 glow = true
 # Border line width in points. 0.5–30 clamp, default 1.5.
 # width = 10
-# "rainbow" hue rotation: seconds per full cycle (lower = faster).
+# Continuous-animation period: seconds per cycle (lower = faster).
+# Drives the "rainbow" hue rotation AND the width breath below.
 # 1–120 clamp, default 6.
 # cycle-seconds = 3
+# Width breathing: when BOTH are set (max > min) the border width
+# oscillates min↔max over cycle-seconds, for ANY effect (overrides
+# the fixed `width`). Each 0.5–30. Leave unset for a constant width.
+# min-width = 5
+# max-width = 15
 
 
 # -----------------------------------------------------------------

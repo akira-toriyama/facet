@@ -362,10 +362,12 @@ Frequently-touched keys:
   `vapor` / `kawaii` / `rainbow` / `random`; `glow` (default `true`)
   toggles the bloom; `width` sets the line width (px, clamp 0.5–30,
   default 1.5).
-  The border flashes a neon burst on a workspace switch; `rainbow`
-  also cycles its resting hue (`cycle-seconds`, seconds per rotation,
-  clamp 1–120, default 6 — lower is faster). Off shows a plain
-  theme-accent border.
+  The border flashes a neon burst on a workspace switch. `cycle-seconds`
+  (clamp 1–120, default 6 — lower is faster) is the period of the
+  continuous animation: `rainbow`'s hue rotation, and — when
+  `min-width`/`max-width` are both set (max > min, each 0.5–30) — a
+  width breath that oscillates the border between them (any effect,
+  overriding the fixed `width`). Off shows a plain theme-accent border.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or

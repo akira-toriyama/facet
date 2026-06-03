@@ -51,9 +51,13 @@ final class PanelHost: NSObject {
     private var flashTimer: Timer?
     private var cycleTimer: Timer?
     private var cyclePhase: CGFloat = 0
-    /// Rainbow cycle period — seconds per full hue rotation (from
-    /// `[border] cycle-seconds`). Lower = faster.
+    /// Continuous-animation period — seconds per cycle (from `[border]
+    /// cycle-seconds`); drives the rainbow hue AND the width breath.
     private var borderCycleSeconds: CGFloat = 6
+    /// Width-breathing bounds (from `[border] min-width`/`max-width`).
+    /// `nil` / max ≤ min → no breathing (fixed `borderW`).
+    private var borderMinW: CGFloat?
+    private var borderMaxW: CGFloat?
 
     /// Notified when the panel becomes / resigns key. Controller wires
     /// kbNav on/off here so a plain click on the tree panel (without
@@ -325,13 +329,37 @@ final class PanelHost: NSObject {
     /// theme-accent border), its glow, and the resting line width.
     /// Called by the Controller at startup + on hot-reload.
     func applyBorder(effectName: String, glow: Bool, width: CGFloat,
-                     cycleSeconds: CGFloat) {
+                     cycleSeconds: CGFloat,
+                     minWidth: CGFloat?, maxWidth: CGFloat?) {
         borderFx = borderEffectFor(effectName)
         borderGlowOn = glow && borderFx != nil
         borderW = width
         borderCycleSeconds = max(1, cycleSeconds)
-        if borderFx?.cycles == true { startCycle() } else { stopCycle() }
+        borderMinW = minWidth
+        borderMaxW = maxWidth
+        // Run the continuous loop when the effect cycles its hue
+        // (rainbow) OR the width breathes — both ride `cycle-seconds`.
+        let animate = borderFx != nil
+            && ((borderFx?.cycles ?? false) || breathing)
+        if animate { startCycle() } else { stopCycle() }
         applyBorderStyle()
+    }
+
+    /// Width oscillates min↔max? Needs an active effect + both bounds
+    /// set with max > min.
+    private var breathing: Bool {
+        guard borderFx != nil, let lo = borderMinW, let hi = borderMaxW
+        else { return false }
+        return hi > lo
+    }
+
+    /// The current border width: breathing min↔max over `cycle-seconds`
+    /// (smooth, via a raised cosine) when enabled, else the fixed width.
+    private func currentWidth() -> CGFloat {
+        guard breathing, let lo = borderMinW, let hi = borderMaxW
+        else { return borderW }
+        let pulse = (1 - CGFloat(cos(2 * Double.pi * Double(cyclePhase)))) / 2
+        return lo + (hi - lo) * pulse
     }
 
     /// Flash the border: a 5-blink burst through the effect's flash
@@ -387,13 +415,14 @@ final class PanelHost: NSObject {
     /// inner-glow.
     private func applyBorderStyle() {
         let color = currentSteadyColor()
+        let w = currentWidth()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        borderLayer.borderWidth = borderW
+        borderLayer.borderWidth = w
         borderLayer.borderColor = color.cgColor
         if borderGlowOn {
             borderLayer.shadowColor = color.cgColor
-            borderLayer.shadowRadius = max(3, borderW * 3)
+            borderLayer.shadowRadius = max(3, w * 3)
             borderLayer.shadowOpacity = 0.85
             borderLayer.shadowOffset = .zero
         } else {
@@ -406,13 +435,14 @@ final class PanelHost: NSObject {
     /// stronger bloom for a neon pop. Restored by `applyBorderStyle` on
     /// settle. Honors `glow`.
     private func setFlashColor(_ c: NSColor) {
+        let w = currentWidth()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        borderLayer.borderWidth = borderW + 1.5
+        borderLayer.borderWidth = w + 1.5
         borderLayer.borderColor = c.cgColor
         if borderGlowOn {
             borderLayer.shadowColor = c.cgColor
-            borderLayer.shadowRadius = max(5, borderW * 5)
+            borderLayer.shadowRadius = max(5, w * 5)
             borderLayer.shadowOpacity = 0.95
             borderLayer.shadowOffset = .zero
         }
