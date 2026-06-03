@@ -101,7 +101,9 @@ edge = "bottom"
 # active comes to centre (browse with the arrow keys, click to switch).
 # Cells stay this fixed size — with more than `cells` workspaces they
 # rotate through, peeking at both ends, rather than shrinking. Clamped
-# 1..20; built-in fallback is 7.
+# 1..20; built-in fallback is 7. An ODD value keeps the active workspace
+# dead-centre with equal neighbours on each side; an even value is
+# rounded down by one so the carousel stays symmetric.
 cells = 7
 
 

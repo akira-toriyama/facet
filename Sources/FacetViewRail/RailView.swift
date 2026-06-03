@@ -219,9 +219,18 @@ public final class RailView: NSView {
         let n = workspaces.count
         let along = horizontal ? strip.width : strip.height
         let availAlong = max(1, along - railOuterPad * 2)
-        let visible = max(1, cellsTarget)
-        // Only when there are MORE than a viewport-full do cells leave
-        // room for the both-ends peek (the "there's more to rotate to" cue).
+        // The carousel fits an ODD number of full cells symmetrically
+        // around the pinned centre, and never more than the clip holds —
+        // round an even `[rail] cells` down and cap to the fit, so the
+        // viewport-full cells always sit symmetric and on-screen (the
+        // cells just get a touch bigger, never clipped). An even count
+        // only ever sits a half-cell off-centre when there are FEWER
+        // workspaces than the viewport — the accepted "even + few" case.
+        let want = min(max(1, cellsTarget), max(1, Int(availAlong / railCellMinDim)))
+        let visible = max(1, want % 2 == 0 ? want - 1 : want)
+        // Only with MORE than a viewport-full do cells leave room for the
+        // both-ends peek (the "there's more to rotate to" cue; the very
+        // first overflow step may reveal one end before the other).
         let peek: CGFloat = n > visible ? railPeek : 0
         let slot = max(railCellMinDim, (availAlong - 2 * peek) / CGFloat(visible))
         // Clip region = the cell viewport: full thickness, inset by the
@@ -387,8 +396,9 @@ public final class RailView: NSView {
 
     private func stripCellAt(_ p: NSPoint) -> Cell? {
         // Only cells whose visible (clipped-to-strip) area is under the
-        // pointer count — a fully-scrolled-off cell never matches even
-        // though it still exists in `cells` (kept for peek + hit order).
+        // pointer count — a cell rotated past the viewport edge never
+        // matches even though it still exists in `cells` (every workspace
+        // is kept, for peek + hit order).
         guard stripRect.isEmpty || stripRect.contains(p) else { return nil }
         return cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }
     }
@@ -562,8 +572,12 @@ public final class RailView: NSView {
         // commit it at the keyboard-aimed target.
         guard drag == nil else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // Strip hit-tests are gated by the same viewport clip as hover
+        // (`stripRect`), so a press in the clipped outer-pad margin — bare
+        // backdrop to the eye — never acts on a rotated-off cell.
+        let inStrip = stripRect.isEmpty || stripRect.contains(p)
         // Header press → workspace drag (swap) or click (switch).
-        if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+        if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
             pendingHeaderDown = (p, cell.wsIndex); return
         }
         // Window-thumb press → window drag (move) or click (switch).
@@ -572,7 +586,7 @@ public final class RailView: NSView {
         if let w = heroWinAt(p), let h = hero {
             pendingDown = (p, w, h.wsIndex); return
         }
-        if let cell = cells.first(where: { $0.rect.contains(p) }) {
+        if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }) {
             if let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
                 pendingDown = (p, w, cell.wsIndex)
             } else {
@@ -623,10 +637,11 @@ public final class RailView: NSView {
         }
         guard var d = drag else { return }
         d.current = p
-        // Drop targets are BOTTOM cells only (not the hero — it's the
-        // active WS, already its own bottom cell). A cell == source is
-        // not a target (no self-move).
-        let over = cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }?.wsIndex
+        // Drop targets are strip cells only (not the hero — it's the
+        // active WS, already its own strip cell), and only within the
+        // viewport clip (a rotated-off cell in the margin isn't a target).
+        // A cell == source is not a target (no self-move).
+        let over = stripCellAt(p)?.wsIndex
         d.dropTargetWS = (over == d.sourceWS) ? nil : over
         drag = d
         positionDragGhost(at: p)
@@ -798,6 +813,10 @@ public final class RailView: NSView {
     /// Return : lifted → commit the move/swap (stay open); not lifted →
     /// switch to the selection (focus a Tab-selected window) + close.
     public func kbCommit() {
+        // A commit is already waiting for the backend ack (the rail stays
+        // open through it) — swallow a second Return so it can't fire a
+        // duplicate move/swap before the landing gate clears `drag`.
+        if lastDrop != nil || lastSwap != nil { return }
         if let d = drag {
             if let dst = d.dropTargetWS,
                let dstCell = cells.first(where: { $0.wsIndex == dst }) {
