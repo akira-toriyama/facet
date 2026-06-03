@@ -61,7 +61,18 @@ enum FacetApp {
     /// ``Controller.dispatchView/Hide/Toggle`` switches.
     static let canonicalViews = ["tree", "grid", "rail"]
 
-    // MARK: - Help
+    // MARK: - Help / version
+
+    /// Print the marketing version (`CFBundleShortVersionString`, stamped
+    /// from the git tag by package.sh) and exit. A binary run outside the
+    /// .app bundle (e.g. a raw `.build/...` dev build) has no Info.plist,
+    /// so it reports a development build instead of a stale number.
+    static func printVersion() -> Never {
+        let v = Bundle.main
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        print("facet \(v ?? "(development build)")")
+        exit(0)
+    }
 
     static func printHelp() -> Never {
         let help = """
@@ -214,6 +225,7 @@ enum FacetApp {
                                              / upgrade — Homebrew sandbox
                                              can't set up the cert itself)
 
+          facet --version                    print the version + exit
           facet --help                       this help
 
         EXIT CODES
@@ -1013,8 +1025,9 @@ enum FacetApp {
     static func main() {
         let argv = Array(CommandLine.arguments.dropFirst())
 
-        // Help short-circuits everything else.
+        // Help / version short-circuit everything else.
         if argv.contains("--help") { printHelp() }
+        if argv.contains("--version") { printVersion() }
 
         // Set debug mode first so any subsequent code path (incl.
         // the validators that fire from client mode) can use
