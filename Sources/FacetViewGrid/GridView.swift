@@ -182,7 +182,12 @@ public final class GridView: NSView {
     // MARK: - Keyboard nav (Phase 1f-3)
 
     public var kbSelectedWS: Int?
-    public var kbSelectedWindowIdx: Int = 0
+    /// Window cursor within `kbSelectedWS`: `-1` = the WS-name/header
+    /// slot (no window ring), `0…n-1` = a window. Opens at `-1` so the
+    /// grid shows NO pre-selected window — matching the rail (which
+    /// opens with a WS browse cursor only) and the grid's own
+    /// arrow-browse, which also lands on `-1`. Tab picks a window.
+    public var kbSelectedWindowIdx: Int = -1
 
     /// Plays the "selected cell zoom → full screen" transition on a
     /// Return commit; input is gated on `commitZoom.isActive` until it
