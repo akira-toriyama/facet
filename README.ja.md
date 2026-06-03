@@ -342,7 +342,8 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `effect` = `off` (既定) / `neon` / `cyber` / `vapor` / `kawaii` /
   `rainbow`、 `glow` (既定 `true`) で bloom on/off、 `width` で線幅
   (px・0.5–6 クランプ・既定 1.5)。 WS 切替でネオンが一瞬フラッシュ、
-  `rainbow` は静止時の色相もゆっくり循環。 off は素のテーマ accent 枠。
+  `rainbow` は静止時の色相も循環 (`cycle-seconds` = 1周の秒数・
+  1–120 クランプ・既定 6・小さいほど速い)。 off は素のテーマ accent 枠。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
   `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で
