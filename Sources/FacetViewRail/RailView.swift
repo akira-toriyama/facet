@@ -69,6 +69,11 @@ public final class RailView: NSView {
     /// both-ends "there's more" cue).
     private var stripRect: NSRect = .zero
 
+    /// Shared neon border, drawn around the OUTER screen edge in `draw`
+    /// when an effect is active (same BorderFX + screen frame as the
+    /// grid; matches the tree panel's border).
+    private let borderFX = BorderFX()
+
     // MARK: - Callbacks
 
     /// Click a workspace cell (empty area / header) or commit a
@@ -521,6 +526,48 @@ public final class RailView: NSView {
         }
         for c in cells { drawCell(c) }
         NSGraphicsContext.restoreGraphicsState()
+
+        // Neon border framing the OUTER screen edge (shared BorderFX),
+        // drawn unclipped over everything — same as the grid overview.
+        // Only when an effect is active.
+        if borderFX.active { drawOuterBorder() }
+    }
+
+    // MARK: - Border (shared BorderFX — frames the outer screen edge)
+
+    /// Apply the `[border]` config (Controller, on show / reload). The
+    /// rail frames the outer screen edge only while an effect is active.
+    public func applyBorder(effectName: String, glow: Bool, width: CGFloat,
+                            cycleSeconds: CGFloat,
+                            minWidth: CGFloat?, maxWidth: CGFloat?) {
+        borderFX.onRepaint = { [weak self] in self?.needsDisplay = true }
+        borderFX.configure(effectName: effectName, glow: glow, width: width,
+                           cycleSeconds: cycleSeconds,
+                           minWidth: minWidth, maxWidth: maxWidth)
+    }
+    /// WS-switch / show flash (no-op when off).
+    public func flashBorder() { borderFX.flash() }
+    /// Stop the border timer when the overlay closes.
+    public func stopBorder() { borderFX.stop() }
+
+    /// Stroke the outer screen-edge frame in the current BorderFX color
+    /// / width — square corners, matching the grid overview. Glow is
+    /// faked with a wide, faint halo under the crisp stroke (a CALayer
+    /// shadow isn't available in `draw`).
+    private func drawOuterBorder() {
+        let w = borderFX.width
+        let c = borderFX.color
+        let r = bounds.insetBy(dx: w / 2, dy: w / 2)
+        if borderFX.glowEnabled {
+            c.withAlphaComponent(0.35).setStroke()
+            let halo = NSBezierPath(rect: r)
+            halo.lineWidth = w * 3
+            halo.stroke()
+        }
+        c.setStroke()
+        let path = NSBezierPath(rect: r)
+        path.lineWidth = w
+        path.stroke()
     }
 
     // MARK: - Carousel slide animation (2-b v2)

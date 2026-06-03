@@ -210,6 +210,51 @@ public final class GridView: NSView {
         max(1, min(config.cols, workspaces.count))
     }
 
+    // MARK: - Border (shared BorderFX — a screen-edge neon frame)
+
+    private let borderFX = BorderFX()
+    private let borderLayer = CALayer()
+    private var borderInstalled = false
+
+    /// Apply the `[border]` config (Controller, on show / reload). The
+    /// grid shows a screen-edge neon frame only while an effect is
+    /// active — no border when off.
+    public func applyBorder(effectName: String, glow: Bool, width: CGFloat,
+                            cycleSeconds: CGFloat,
+                            minWidth: CGFloat?, maxWidth: CGFloat?) {
+        installBorderIfNeeded()
+        borderFX.configure(effectName: effectName, glow: glow, width: width,
+                           cycleSeconds: cycleSeconds,
+                           minWidth: minWidth, maxWidth: maxWidth)
+    }
+    /// WS-switch flash (no-op when off).
+    public func flashBorder() { borderFX.flash() }
+    /// Stop the border timer when the overlay closes.
+    public func stopBorder() { borderFX.stop() }
+
+    private func installBorderIfNeeded() {
+        guard !borderInstalled else { return }
+        borderInstalled = true
+        wantsLayer = true
+        borderLayer.zPosition = 1000          // above the cells
+        borderLayer.cornerRadius = 0          // square screen frame
+        layer?.addSublayer(borderLayer)
+        updateBorderFrame()
+        borderFX.onRepaint = { [weak self] in
+            guard let self else { return }
+            self.borderLayer.isHidden = !self.borderFX.active
+            if self.borderFX.active { self.borderFX.apply(to: self.borderLayer) }
+        }
+    }
+
+    private func updateBorderFrame() {
+        guard borderInstalled else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        borderLayer.frame = bounds
+        CATransaction.commit()
+    }
+
     public func layoutCells() {
         // Drop-in-flight gate (runs *before* layoutSuppressed
         // check because a landed drop needs to release suppression
@@ -456,7 +501,9 @@ public final class GridView: NSView {
         reorderTimer = nil
     }
 
-    public override func layout() { super.layout(); layoutCells() }
+    public override func layout() {
+        super.layout(); layoutCells(); updateBorderFrame()
+    }
 
     // MARK: - Draw
 

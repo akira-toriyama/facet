@@ -338,7 +338,8 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   cycle (旧 top が抜け次が入る)・窓 open / close (既存タイル窓が新しいサイ
   ズへスライド、 新窓は タイル slot に snap)。 公開 AX のみ。 macOS
   「視差効果を減らす」 ON なら設定に関わらず即時。
-- `[border]` テーブル — tree パネルのネオン枠 (`theme` と直交)。
+- `[border]` テーブル — 全 view のネオン枠 (tree パネル / grid・rail は
+  画面縁の枠・`theme` と直交)。
   `effect` = `off` (既定) / `neon` / `cyber` / `vapor` / `kawaii` /
   `rainbow` / `random`、 `glow` (既定 `true`) で bloom on/off、 `width`
   で線幅 (px・0.5–30 クランプ・既定 1.5)。 WS 切替でネオンが一瞬フラッシュ、
