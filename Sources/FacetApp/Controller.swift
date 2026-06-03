@@ -188,13 +188,18 @@ final class Controller: NSObject {
     /// startup + on hot-reload. "off" falls back to the theme-accent
     /// border; a named effect paints its steady neon color + glow.
     private func applyBorderFromConfig() {
-        panelHost.applyBorder(
-            effectName: config.effectiveBorderEffect,
-            glow: config.effectiveBorderGlow,
-            width: config.effectiveBorderWidth,
-            cycleSeconds: config.effectiveBorderCycleSeconds,
-            minWidth: config.effectiveBorderMinWidth,
-            maxWidth: config.effectiveBorderMaxWidth)
+        let e = config.effectiveBorderEffect
+        let g = config.effectiveBorderGlow
+        let w = config.effectiveBorderWidth
+        let cs = config.effectiveBorderCycleSeconds
+        let mn = config.effectiveBorderMinWidth
+        let mx = config.effectiveBorderMaxWidth
+        panelHost.applyBorder(effectName: e, glow: g, width: w,
+                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+        // The grid border (when the overlay is up) — reconfigure on a
+        // hot-reload too.
+        gridView?.applyBorder(effectName: e, glow: g, width: w,
+                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
     }
 
     private func handlePanelKeyChange(isKey: Bool) {
@@ -829,12 +834,13 @@ final class Controller: NSObject {
         lastWorkspaces = wss
         prevActiveWSIndex = wss.first(where: { $0.isActive })?.index
         // Neon border flash on a real workspace switch (no-op when
-        // `[border] effect` is off, or the tree panel is hidden — the
-        // border lives on it). `prevActive == nil` = the first apply
-        // (startup): skip so the steady border just appears.
-        if let prev = prevActive, prevActiveWSIndex != prev,
-           panelHost.isVisible {
-            panelHost.flashBorder()
+        // `[border] effect` is off). Fires on whichever view is up — the
+        // tree panel, or the grid overlay (`gridView != nil` iff open).
+        // `prevActive == nil` = the first apply (startup): skip so the
+        // steady border just appears.
+        if let prev = prevActive, prevActiveWSIndex != prev {
+            if panelHost.isVisible { panelHost.flashBorder() }
+            gridView?.flashBorder()
         }
         if let g = gridView {
             g.workspaces = wss
@@ -1427,6 +1433,9 @@ final class Controller: NSObject {
         gridOverlay = overlay
         gridView = gv
         gridBackdrop = host
+        // Screen-edge neon border for the overview + an entrance flash.
+        applyBorderFromConfig()
+        gv.flashBorder()
 
         // Kick off captures for every window in every workspace.
         // Each capture is async + independent — cells paint with
@@ -1607,6 +1616,7 @@ final class Controller: NSObject {
             NSEvent.removeMonitor(m); gridKbMonitor = nil
         }
         gridView?.clearThumbnails()
+        gridView?.stopBorder()        // no orphaned border timer
         let restoreTree = !treeWasHidden
         if immediate {
             overlay.orderOut(nil)

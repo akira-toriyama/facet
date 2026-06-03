@@ -107,6 +107,10 @@ public final class BorderFX {
         onRepaint?()
     }
 
+    /// Stop the animation timer. Call when the owning view is torn down
+    /// (the transient grid / rail overlays) so no orphaned timer ticks.
+    public func stop() { stopTimer() }
+
     /// Paint the current style onto a CALayer (tree / grid). The glow is
     /// a layer shadow in the current color; whether it blooms inward or
     /// outward depends on the parent layer's `masksToBounds`.
