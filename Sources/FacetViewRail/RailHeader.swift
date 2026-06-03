@@ -19,15 +19,21 @@ extension RailView {
         // WS name like the grid's header-slot focus.
         let kbWholeWS = drag == nil && kbSelectedWindowIdx == -1
             && selectedWS == cell.wsIndex
+        // The browse target (carousel centre) when it ISN'T the live
+        // active WS: paint it in the SECONDARY accent so "previewing"
+        // reads apart from the PRIMARY-accent active WS (2-b — mid-browse
+        // they're different cells; at rest selected == active = primary).
+        let browseTarget = kbWholeWS && !cell.isActive
+        let pickColor = browseTarget ? pal.accent2 : pal.accent
         let hot = cell.isActive || hover || kbWholeWS
 
-        // Band fill — accent-strong when this WS is the keyboard
+        // Band fill — pick-colour-strong when this WS is the keyboard
         // whole-WS (swap) pick, faint otherwise (brighter on hover).
         let band = NSBezierPath(roundedRect: hb.insetBy(dx: 0, dy: 1),
                                 xRadius: 4, yRadius: 4)
         if kbWholeWS {
-            pal.accent.withAlphaComponent(0.30).setFill(); band.fill()
-            pal.accent.setStroke(); band.lineWidth = 1.5; band.stroke()
+            pickColor.withAlphaComponent(0.30).setFill(); band.fill()
+            pickColor.setStroke(); band.lineWidth = 1.5; band.stroke()
         } else {
             (cell.isActive
                 ? pal.accent.withAlphaComponent(hover ? 0.20 : 0.12)
@@ -38,7 +44,7 @@ extension RailView {
         // Grip (left).
         drawRailGrip(in: NSRect(x: hb.minX + 4, y: hb.minY,
                                 width: railHeaderGripW, height: hb.height),
-                     color: hot ? pal.accent : pal.text,
+                     color: browseTarget ? pal.accent2 : (hot ? pal.accent : pal.text),
                      alpha: hot ? 0.85 : 0.5)
 
         // Name (+ mode), left-aligned, vertically centred.
@@ -50,7 +56,8 @@ extension RailView {
         let nameFont = min(railHeaderNameMaxFont,
                            max(railHeaderNameMinFont,
                                (hb.height * railHeaderNameFrac).rounded()))
-        let nameColor = cell.isActive ? pal.accent : pal.text
+        let nameColor = browseTarget ? pal.accent2
+            : (cell.isActive ? pal.accent : pal.text)
         let name = railLabel(cell.name, cell.wsIndex)
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {

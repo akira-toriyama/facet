@@ -477,14 +477,17 @@ public final class RailView: NSView {
             pal.text.withAlphaComponent(0.06).setFill(); path.fill()
             pal.text.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
         } else if c.isHero {
-            // Always prominent: accent when it's also the live active
-            // WS, bright neutral when browsing a different WS.
-            (c.isActive ? pal.accent : pal.text.withAlphaComponent(0.85)).setStroke()
+            // Always prominent: PRIMARY accent when the hero is the live
+            // active WS, SECONDARY accent when browsing a different WS
+            // (matches the browse-target strip cell — 2-b carousel).
+            (c.isActive ? pal.accent : pal.accent2).setStroke()
             path.lineWidth = 2.5
         } else if c.isActive {
-            pal.accent.setStroke(); path.lineWidth = 2
+            pal.accent.setStroke(); path.lineWidth = 2          // PRIMARY = active WS
         } else if drag == nil && selectedWS == c.wsIndex {
-            pal.text.withAlphaComponent(0.85).setStroke(); path.lineWidth = 2
+            // Browse target (≠ active) — SECONDARY accent border so it
+            // reads apart from the primary-accent active WS (2-b carousel).
+            pal.accent2.setStroke(); path.lineWidth = 2
         } else if hoverWS == c.wsIndex {
             pal.text.withAlphaComponent(0.7).setStroke(); path.lineWidth = 1.5
         } else {
