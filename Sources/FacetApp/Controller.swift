@@ -191,7 +191,8 @@ final class Controller: NSObject {
         panelHost.applyBorder(
             effectName: config.effectiveBorderEffect,
             glow: config.effectiveBorderGlow,
-            width: config.effectiveBorderWidth)
+            width: config.effectiveBorderWidth,
+            cycleSeconds: config.effectiveBorderCycleSeconds)
     }
 
     private func handlePanelKeyChange(isKey: Bool) {

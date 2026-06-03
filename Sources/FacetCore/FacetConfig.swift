@@ -102,6 +102,9 @@ public struct FacetConfig: Sendable {
     public var borderGlow: Bool?
     /// Border line width, px. Raw; read `effectiveBorderWidth`.
     public var borderWidth: CGFloat?
+    /// Rainbow hue-cycle period — seconds per full rotation (lower =
+    /// faster). Raw; read `effectiveBorderCycleSeconds`.
+    public var borderCycleSeconds: Int?
 
     /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
     /// the mac desktop ordinal (Mission Control order, 1-based, user
@@ -283,6 +286,11 @@ public struct FacetConfig: Sendable {
     public var effectiveBorderWidth: CGFloat {
         max(0.5, min(6, borderWidth ?? 1.5))
     }
+    /// Seconds per full rainbow hue rotation (lower = faster). [1, 120]
+    /// clamp, default 6.
+    public var effectiveBorderCycleSeconds: CGFloat {
+        CGFloat(max(1, min(120, borderCycleSeconds ?? 6)))
+    }
 
     /// Named-enum config values that were written but didn't match any
     /// known name, so the matching `effective*` accessor silently
@@ -457,6 +465,9 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["border"]?["width"] {
             c.borderWidth = CGFloat(n)
+        }
+        if case .int(let n)? = toml["border"]?["cycle-seconds"] {
+            c.borderCycleSeconds = n
         }
         // [desktop.N] per-mac-desktop workspace configs. The TOML
         // parser flattens `[desktop.1]` to the section name

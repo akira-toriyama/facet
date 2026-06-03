@@ -51,6 +51,9 @@ final class PanelHost: NSObject {
     private var flashTimer: Timer?
     private var cycleTimer: Timer?
     private var cyclePhase: CGFloat = 0
+    /// Rainbow cycle period — seconds per full hue rotation (from
+    /// `[border] cycle-seconds`). Lower = faster.
+    private var borderCycleSeconds: CGFloat = 6
 
     /// Notified when the panel becomes / resigns key. Controller wires
     /// kbNav on/off here so a plain click on the tree panel (without
@@ -321,10 +324,12 @@ final class PanelHost: NSObject {
     /// Apply the `[border]` config: pick the effect (nil = off → plain
     /// theme-accent border), its glow, and the resting line width.
     /// Called by the Controller at startup + on hot-reload.
-    func applyBorder(effectName: String, glow: Bool, width: CGFloat) {
+    func applyBorder(effectName: String, glow: Bool, width: CGFloat,
+                     cycleSeconds: CGFloat) {
         borderFx = borderEffectFor(effectName)
         borderGlowOn = glow && borderFx != nil
         borderW = width
+        borderCycleSeconds = max(1, cycleSeconds)
         if borderFx?.cycles == true { startCycle() } else { stopCycle() }
         applyBorderStyle()
     }
@@ -432,7 +437,9 @@ final class PanelHost: NSObject {
     }
 
     private func tickCycle() {
-        cyclePhase += 1.0 / 360.0
+        // Advance one 1/30 s tick's worth of a full rotation, so the
+        // hue completes 0→1 in `borderCycleSeconds` seconds.
+        cyclePhase += (1.0 / 30.0) / borderCycleSeconds
         if cyclePhase >= 1 { cyclePhase -= 1 }
         if flashTimer == nil { applyBorderStyle() }   // don't fight a flash
     }

@@ -79,6 +79,9 @@ effect = "off"
 glow = true
 # Border line width in points. 0.5–6 clamp, default 1.5.
 # width = 2
+# "rainbow" hue rotation: seconds per full cycle (lower = faster).
+# 1–120 clamp, default 6.
+# cycle-seconds = 3
 
 
 # -----------------------------------------------------------------
