@@ -30,15 +30,17 @@ via [`config.toml`](config.toml), plus the on-demand rail overview:
   window thumb to move it, drag a cell's header to swap whole cells.
   The grid is summoned on demand (`facet --view=grid`) and dismissed
   with Esc / backdrop click.
-- **Rail** — a full-screen Mission-Control-style workspace overview:
-  every workspace rendered as a window-thumbnail mini-screen in a strip
-  along one screen edge, with the active one shown large in the centre;
-  browse along the strip (←/→ on a top/bottom rail, ↑/↓ on a left/right
-  one), click to switch, drag a window between workspaces or a header
-  to swap. Dock the strip with `--edge=top|bottom|left|right` (default
-  bottom); past `[rail] cells` workspaces the strip scrolls (with a
-  half-cell peek) instead of shrinking, and browsing wraps at the ends.
-  Summoned with `facet --view=rail`, dismissed with Esc.
+- **Rail** — a full-screen Mission-Control-style workspace switcher: an
+  active-centred **carousel** of window-thumbnail mini-screens in a
+  strip along one screen edge, with the browsed workspace shown large in
+  the centre. The active workspace is pinned to the strip centre and the
+  rest fan out around it; the browse arrow keys (←/→ on a top/bottom
+  rail, ↑/↓ on a left/right one) **rotate the strip** to bring another
+  workspace to the centre, Return or a click switches to the centred one,
+  Esc dismisses. Drag a window between workspaces or a header to swap.
+  Dock the strip with `--edge=top|bottom|left|right` (default bottom);
+  past `[rail] cells` workspaces it rotates (peeking at both ends)
+  instead of shrinking. Summoned with `facet --view=rail`.
 
 Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a

@@ -31,13 +31,14 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   swap。 必要時に `facet --view=grid` で呼び出し、 Esc / 背景クリック
   で閉じる。
 - **Rail** — フルスクリーンの Mission Control 風ワークスペース
-  オーバービュー。 各ワークスペースを画面のいずれかの辺に window
-  サムネイルのミニ画面の strip として並べ、 active を中央に大きく表示。
-  strip 軸で browse（上下辺＝←/→、 左右辺＝↑/↓）、 クリックで切替、
-  window を ws 間ドラッグ / header ドラッグで swap。 `--edge=top|bottom|
-  left|right` で辺を選ぶ（既定 bottom）。 `[rail] cells` を超えると縮小せず
-  スクロール（見切れ peek 付き）、 browse は端で循環。
-  `facet --view=rail` で呼び出し、 Esc で閉じる。
+  **スイッチャー**。 window サムネのミニ画面を画面のいずれかの辺に strip
+  として並べた **active 中央カルーセル**で、 下見中の WS を中央に大きく表示。
+  active を strip 中央に固定し前後を循環配置。 browse の矢印（上下辺＝←/→、
+  左右辺＝↑/↓）で **strip が回転**して別 WS を中央へ、 Return / クリックで
+  中央の WS に切替＋閉じ、 Esc で閉じる。 window を ws 間ドラッグ / header
+  ドラッグで swap。 `--edge=top|bottom|left|right` で辺を選ぶ（既定 bottom）。
+  `[rail] cells` を超えると縮小せず回転（両端 peek 付き）。
+  `facet --view=rail` で呼び出す。
 
 DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**: window を
 掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を

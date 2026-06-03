@@ -41,22 +41,17 @@ public final class RailView: NSView {
     /// from the CLI `--edge=` / `[rail] edge` config; drives the strip
     /// orientation and which arrow keys browse it.
     public var edge: RailEdge = .bottom
-    /// How many strip cells are shown at once before the strip scrolls
-    /// (M9-4, `[rail] cells`). Cells stay this fixed size as workspaces
-    /// pile up; overflow scrolls instead of shrinking.
+    /// How many strip cells fill the viewport (2-b carousel, `[rail]
+    /// cells`). Cells are this fixed size; the *selected* workspace is
+    /// pinned to the strip centre and the rest fan out circularly, so
+    /// extra workspaces rotate through (peeking at both ends) rather
+    /// than scrolling.
     public var cellsTarget: Int = 7
 
-    /// Scroll position along the strip (points). 0 when every workspace
-    /// fits; grows as the browse cursor / wheel scrolls past the
-    /// viewport. Clamped to `maxScrollOffset` on every relayout.
-    var scrollOffset: CGFloat = 0
-    /// Maximum scroll, recomputed each relayout (`0` when all fit).
-    private var maxScrollOffset: CGFloat = 0
-    /// The strip band rect (drawing-space) — cells are clipped to it so
-    /// a partially-scrolled cell "peeks" at the viewport edge.
+    /// The strip band rect (drawing-space) — cells are clipped to it so a
+    /// carousel cell rotating past the viewport edge "peeks" (the
+    /// both-ends "there's more" cue).
     private var stripRect: NSRect = .zero
-    /// Strip running-axis length per cell slot (fixed-size cells).
-    private var slotAlong: CGFloat = 0
 
     // MARK: - Callbacks
 
@@ -166,7 +161,11 @@ public final class RailView: NSView {
 
     // MARK: - Layout
 
-    public func layoutCells() {
+    /// Rebuild the carousel cells + hero. `force` rebuilds even while a
+    /// drag freezes the layout — used by the keyboard-lift rotation,
+    /// where the strip must spin under the (hidden) lifted ghost; a mouse
+    /// drag never forces, so its cells stay put under the cursor.
+    public func layoutCells(force: Bool = false) {
         // Drag landing gate (runs before suppression so a landed
         // move/swap releases it + rebuilds). While a drop is in flight
         // we keep the old cells so the source thumb doesn't shift under
@@ -194,7 +193,7 @@ public final class RailView: NSView {
                 clearDrag()
             } else { return }
         }
-        if layoutSuppressed { return }
+        if layoutSuppressed && !force { return }
 
         cells.removeAll(); hero = nil
         guard !workspaces.isEmpty, bounds.width > 1, bounds.height > 1 else {
@@ -211,19 +210,36 @@ public final class RailView: NSView {
                                           thickness: thickness,
                                           outerPad: railOuterPad,
                                           heroGap: railCellGap)
-        stripRect = strip
-
-        // -- Strip cells: every workspace as a fixed-size mini-screen +
-        //    header, stacked along the cross axis (header band always a
-        //    horizontal band — above the thumb, or below on a top rail).
-        //    `cellsTarget` slots fit along the strip; extra workspaces
-        //    SCROLL rather than shrink (M9-4). --
+        // -- Carousel strip (2-b): the SELECTED workspace is pinned to
+        //    the strip centre; the rest fan out circularly around it.
+        //    `cellsTarget` fixed-size cells fill the viewport, so extra
+        //    workspaces rotate through (peeking at both ends) instead of
+        //    scrolling. The header is always a horizontal band — above the
+        //    thumb, or below on a top rail. --
         let n = workspaces.count
         let along = horizontal ? strip.width : strip.height
         let availAlong = max(1, along - railOuterPad * 2)
-        let visible = max(1, cellsTarget)
-        let slot = max(railCellMinDim, availAlong / CGFloat(visible))
-        slotAlong = slot
+        // The carousel fits an ODD number of full cells symmetrically
+        // around the pinned centre, and never more than the clip holds —
+        // round an even `[rail] cells` down and cap to the fit, so the
+        // viewport-full cells always sit symmetric and on-screen (the
+        // cells just get a touch bigger, never clipped). An even count
+        // only ever sits a half-cell off-centre when there are FEWER
+        // workspaces than the viewport — the accepted "even + few" case.
+        let want = min(max(1, cellsTarget), max(1, Int(availAlong / railCellMinDim)))
+        let visible = max(1, want % 2 == 0 ? want - 1 : want)
+        // Only with MORE than a viewport-full do cells leave room for the
+        // both-ends peek (the "there's more to rotate to" cue; the very
+        // first overflow step may reveal one end before the other).
+        let peek: CGFloat = n > visible ? railPeek : 0
+        let slot = max(railCellMinDim, (availAlong - 2 * peek) / CGFloat(visible))
+        // Clip region = the cell viewport: full thickness, inset by the
+        // outer pad along the run so a rotating cell peeks at the ends.
+        stripRect = horizontal
+            ? NSRect(x: strip.minX + railOuterPad, y: strip.minY,
+                     width: availAlong, height: strip.height)
+            : NSRect(x: strip.minX, y: strip.minY + railOuterPad,
+                     width: strip.width, height: availAlong)
 
         // Header height + thumb box. The header+gap+thumb block always
         // stacks vertically; it fits inside the cross thickness on a
@@ -242,21 +258,20 @@ public final class RailView: NSView {
         let thumbW = thumbH * aspect
         let headerOnTop = edge != .top   // top rail flips the header below
 
-        // Scroll: fit-or-scroll. n ≤ visible → centre, no scroll.
-        let content = CGFloat(n) * slot
-        maxScrollOffset = max(0, content - availAlong)
-        let centred = maxScrollOffset <= 0
-        if centred { scrollOffset = 0 }
-        else { scrollOffset = max(0, min(maxScrollOffset, scrollOffset)) }
-        let alongOrigin = (horizontal ? strip.minX : strip.minY) + railOuterPad
-        let alongBase = centred
-            ? alongOrigin + (availAlong - content) / 2
-            : alongOrigin - scrollOffset
-        // The header+gap+thumb block is a fixed (thumbW × blockH) box;
-        // it tiles along the strip and HUGS the docked screen edge (so
-        // the strip sits at the edge and the hero can grow toward the
-        // centre). The header is always a horizontal band, stacked in
-        // screen-Y above the thumb (or below on a `.top` rail).
+        // Carousel placement: the selected workspace's cell sits at the
+        // strip's along-centre; each cell's slot offset comes from the
+        // pure `railCarouselOffsets` (selected = 0, the rest fan out
+        // circularly). Cells past the viewport clip to the peek.
+        let selectedPos = workspaces.firstIndex(where: { $0.index == selectedWS })
+            ?? workspaces.firstIndex(where: { $0.isActive })
+            ?? 0
+        let offsets = railCarouselOffsets(count: n, selectedPos: selectedPos)
+        let alongCentre = horizontal ? strip.midX : strip.midY
+        // The header+gap+thumb block is a fixed (thumbW × blockH) box; it
+        // HUGS the docked screen edge (so the strip sits at the edge and
+        // the hero can grow toward the centre). The header is always a
+        // horizontal band stacked in screen-Y above the thumb (or below
+        // on a `.top` rail).
         let blockH = headerH + railLabelGap + thumbH
         // Cross-axis span of one cell + where its outer (edge) corner and
         // inner (hero-facing) edge sit, after hugging the screen edge.
@@ -269,7 +284,7 @@ public final class RailView: NSView {
         case .right:  blockOuter = strip.maxX - railEdgeGap - blockCross; innerEdge = blockOuter
         }
         for (i, ws) in workspaces.enumerated() {
-            let slotStart = alongBase + CGFloat(i) * slot
+            let slotStart = alongCentre + CGFloat(offsets[i]) * slot - slot / 2
             let blockX: CGFloat, blockY: CGFloat
             if horizontal {
                 blockX = slotStart + (slot - thumbW) / 2
@@ -381,8 +396,9 @@ public final class RailView: NSView {
 
     private func stripCellAt(_ p: NSPoint) -> Cell? {
         // Only cells whose visible (clipped-to-strip) area is under the
-        // pointer count — a fully-scrolled-off cell never matches even
-        // though it still exists in `cells` (kept for peek + hit order).
+        // pointer count — a cell rotated past the viewport edge never
+        // matches even though it still exists in `cells` (every workspace
+        // is kept, for peek + hit order).
         guard stripRect.isEmpty || stripRect.contains(p) else { return nil }
         return cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }
     }
@@ -406,10 +422,10 @@ public final class RailView: NSView {
         bounds.fill()
 
         if let h = hero { drawCell(h) }
-        // Strip cells are clipped to the strip band so an overflow-
-        // scrolled cell "peeks" half-off the viewport edge (the "there's
-        // more" cue) instead of drawing over the hero. A drag ghost is a
-        // separate subview, unaffected by this clip.
+        // Strip cells are clipped to the carousel viewport so a cell
+        // rotating past the end "peeks" half-off the edge (the both-ends
+        // "there's more" cue) instead of drawing over the hero. A drag
+        // ghost is a separate subview, unaffected by this clip.
         if stripRect.isEmpty {
             for c in cells { drawCell(c) }
         } else {
@@ -418,21 +434,6 @@ public final class RailView: NSView {
             for c in cells { drawCell(c) }
             NSGraphicsContext.restoreGraphicsState()
         }
-    }
-
-    public override func scrollWheel(with event: NSEvent) {
-        // Wheel / two-finger scroll moves the strip along its axis when
-        // there's overflow; a no-op otherwise (everything already fits).
-        // Ignored mid-drag: `layoutCells` is frozen then, so the offset
-        // would silently accumulate and jump the strip on drop.
-        guard drag == nil, maxScrollOffset > 0 else { return }
-        let d = edge.axis == .horizontal ? (event.scrollingDeltaX != 0
-                    ? event.scrollingDeltaX : event.scrollingDeltaY)
-                                         : event.scrollingDeltaY
-        let next = max(0, min(maxScrollOffset, scrollOffset - d))
-        guard next != scrollOffset else { return }
-        scrollOffset = next
-        layoutCells()
     }
 
     private func drawCell(_ c: Cell) {
@@ -476,14 +477,17 @@ public final class RailView: NSView {
             pal.text.withAlphaComponent(0.06).setFill(); path.fill()
             pal.text.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
         } else if c.isHero {
-            // Always prominent: accent when it's also the live active
-            // WS, bright neutral when browsing a different WS.
-            (c.isActive ? pal.accent : pal.text.withAlphaComponent(0.85)).setStroke()
+            // Always prominent: PRIMARY accent when the hero is the live
+            // active WS, SECONDARY accent when browsing a different WS
+            // (matches the browse-target strip cell — 2-b carousel).
+            (c.isActive ? pal.accent : pal.accent2).setStroke()
             path.lineWidth = 2.5
         } else if c.isActive {
-            pal.accent.setStroke(); path.lineWidth = 2
+            pal.accent.setStroke(); path.lineWidth = 2          // PRIMARY = active WS
         } else if drag == nil && selectedWS == c.wsIndex {
-            pal.text.withAlphaComponent(0.85).setStroke(); path.lineWidth = 2
+            // Browse target (≠ active) — SECONDARY accent border so it
+            // reads apart from the primary-accent active WS (2-b carousel).
+            pal.accent2.setStroke(); path.lineWidth = 2
         } else if hoverWS == c.wsIndex {
             pal.text.withAlphaComponent(0.7).setStroke(); path.lineWidth = 1.5
         } else {
@@ -571,8 +575,12 @@ public final class RailView: NSView {
         // commit it at the keyboard-aimed target.
         guard drag == nil else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // Strip hit-tests are gated by the same viewport clip as hover
+        // (`stripRect`), so a press in the clipped outer-pad margin — bare
+        // backdrop to the eye — never acts on a rotated-off cell.
+        let inStrip = stripRect.isEmpty || stripRect.contains(p)
         // Header press → workspace drag (swap) or click (switch).
-        if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+        if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
             pendingHeaderDown = (p, cell.wsIndex); return
         }
         // Window-thumb press → window drag (move) or click (switch).
@@ -581,7 +589,7 @@ public final class RailView: NSView {
         if let w = heroWinAt(p), let h = hero {
             pendingDown = (p, w, h.wsIndex); return
         }
-        if let cell = cells.first(where: { $0.rect.contains(p) }) {
+        if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }) {
             if let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
                 pendingDown = (p, w, cell.wsIndex)
             } else {
@@ -632,10 +640,11 @@ public final class RailView: NSView {
         }
         guard var d = drag else { return }
         d.current = p
-        // Drop targets are BOTTOM cells only (not the hero — it's the
-        // active WS, already its own bottom cell). A cell == source is
-        // not a target (no self-move).
-        let over = cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }?.wsIndex
+        // Drop targets are strip cells only (not the hero — it's the
+        // active WS, already its own strip cell), and only within the
+        // viewport clip (a rotated-off cell in the margin isn't a target).
+        // A cell == source is not a target (no self-move).
+        let over = stripCellAt(p)?.wsIndex
         d.dropTargetWS = (over == d.sourceWS) ? nil : over
         drag = d
         positionDragGhost(at: p)
@@ -715,69 +724,29 @@ public final class RailView: NSView {
         return ordered[max(0, min(ordered.count - 1, kbSelectedWindowIdx))]
     }
 
-    /// Browse-axis arrow : not lifted → move the WS browse cursor (hero
-    /// previews it); lifted → re-aim the drop target along the strip
-    /// (dual role, mirrors the grid). `dx` is +1 / −1 along the strip,
-    /// supplied by the Controller for whichever axis the edge runs. The
-    /// cursor WRAPS (last→first, first→last) — M9-4.
+    /// Browse-axis arrow (2-b carousel): ROTATE the strip one workspace
+    /// so the next/previous one comes to the centre — the new centre is
+    /// the browse target (hero previews it). Lifted → the centred cell is
+    /// the drop target instead. `dx` is +1 / −1 along the strip (next /
+    /// previous, supplied by the Controller for the edge's axis); it
+    /// wraps circularly.
     public func kbMoveSelection(dx: Int) {
-        guard !cells.isEmpty else { return }
-        let cur = cells.firstIndex { $0.wsIndex == selectedWS } ?? 0
-        let ni = (cur + dx + cells.count) % cells.count   // wrap
-        guard cells[ni].wsIndex != selectedWS else { return }
-        selectedWS = cells[ni].wsIndex
-        let before = scrollOffset
-        keepSelectedWSVisible()
+        guard !workspaces.isEmpty else { return }
+        let cur = workspaces.firstIndex { $0.index == selectedWS } ?? 0
+        let ni = (cur + dx + workspaces.count) % workspaces.count   // wrap
+        guard workspaces[ni].index != selectedWS else { return }
+        selectedWS = workspaces[ni].index
         if drag != nil {
-            // Lifted: `layoutCells` is frozen (layoutSuppressed) so the
-            // source cell can't shift under the cursor, but the aim must
-            // still scroll the strip when the target is past the
-            // viewport. Translate the existing (frozen) cells by the
-            // scroll delta so the aimed cell comes into view and the
-            // ghost lands on its real, scrolled rect — no rebuild, and
-            // no post-commit jump (the eventual relayout matches).
-            shiftStripCells(by: -(scrollOffset - before))
+            // Lifted: rotate the carousel under the ghost so the aimed
+            // workspace comes to centre = the drop target. Force past the
+            // drag freeze — the lifted window is hidden, so re-laying is
+            // safe (the freeze only guards a mouse drag's cell positions).
+            layoutCells(force: true)
             syncRailDragToSelection()      // lifted → arrows AIM the destination
         } else {
             kbSelectedWindowIdx = -1       // browse → reset window cursor for the new WS
-            layoutCells()                  // rebuild hero (+ selection cursor)
+            layoutCells()                  // rotate the strip (+ hero re-preview)
         }
-    }
-
-    /// Translate the strip cells along the strip axis by `delta` points
-    /// without a full relayout — the scroll-follow path used while a
-    /// drag freezes `layoutCells`. Pure rect translation (content is
-    /// untouched, honouring the drag freeze invariant).
-    private func shiftStripCells(by delta: CGFloat) {
-        guard delta != 0 else { return }
-        let dx = edge.axis == .horizontal ? delta : 0
-        let dy = edge.axis == .horizontal ? 0 : delta
-        func moved(_ r: NSRect) -> NSRect { r.offsetBy(dx: dx, dy: dy) }
-        cells = cells.map { c in
-            Cell(wsIndex: c.wsIndex, rect: moved(c.rect),
-                 headerRect: moved(c.headerRect), isActive: c.isActive,
-                 name: c.name, mode: c.mode, count: c.count,
-                 wins: c.wins.map {
-                     WinHit(id: $0.id, pid: $0.pid, isFocused: $0.isFocused,
-                            rect: moved($0.rect), mark: $0.mark)
-                 },
-                 isHero: c.isHero)
-        }
-        needsDisplay = true
-    }
-
-    /// Scroll the strip so the browse-selected workspace is fully in
-    /// view (no-op when everything already fits). Pure offset maths in
-    /// `railScrollToShow`; the relayout that follows applies it.
-    private func keepSelectedWSVisible() {
-        guard maxScrollOffset > 0, slotAlong > 0,
-              let idx = cells.firstIndex(where: { $0.wsIndex == selectedWS })
-        else { return }
-        let along = (edge.axis == .horizontal ? stripRect.width : stripRect.height)
-            - railOuterPad * 2
-        scrollOffset = railScrollToShow(index: idx, count: cells.count,
-                                        slot: slotAlong, avail: max(1, along),
-                                        offset: scrollOffset)
     }
 
     /// Tab / Shift-Tab : cycle the SELECTED WS's bottom-cell windows +
@@ -847,6 +816,10 @@ public final class RailView: NSView {
     /// Return : lifted → commit the move/swap (stay open); not lifted →
     /// switch to the selection (focus a Tab-selected window) + close.
     public func kbCommit() {
+        // A commit is already waiting for the backend ack (the rail stays
+        // open through it) — swallow a second Return so it can't fire a
+        // duplicate move/swap before the landing gate clears `drag`.
+        if lastDrop != nil || lastSwap != nil { return }
         if let d = drag {
             if let dst = d.dropTargetWS,
                let dstCell = cells.first(where: { $0.wsIndex == dst }) {
