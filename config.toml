@@ -59,13 +59,14 @@ theme = "terminal"
 
 
 # -----------------------------------------------------------------
-# Tree-panel border effect
+# Neon border effect
 # -----------------------------------------------------------------
-# A neon border around the tree panel, layered on top of whatever
+# A neon border on every view — the tree panel, and a screen-edge
+# frame on the grid overview + the rail — layered on top of whatever
 # `theme` is active (independent knob). Off by default.
 #
-#   "off"     — no effect; the panel shows a plain theme-accent
-#               border (the default).
+#   "off"     — no effect; the tree shows a plain theme-accent border,
+#               the grid / rail show none (the default).
 #   "neon"    — Tokyo-Night blue, electric-neon flashes.
 #   "cyber"   — teal / aqua matrix.
 #   "vapor"   — synthwave pink → purple → cyan.

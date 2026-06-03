@@ -196,9 +196,11 @@ final class Controller: NSObject {
         let mx = config.effectiveBorderMaxWidth
         panelHost.applyBorder(effectName: e, glow: g, width: w,
                               cycleSeconds: cs, minWidth: mn, maxWidth: mx)
-        // The grid border (when the overlay is up) — reconfigure on a
-        // hot-reload too.
+        // The grid + rail borders (when their overlay is up) —
+        // reconfigure on a hot-reload too.
         gridView?.applyBorder(effectName: e, glow: g, width: w,
+                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+        railView?.applyBorder(effectName: e, glow: g, width: w,
                               cycleSeconds: cs, minWidth: mn, maxWidth: mx)
     }
 
@@ -835,12 +837,13 @@ final class Controller: NSObject {
         prevActiveWSIndex = wss.first(where: { $0.isActive })?.index
         // Neon border flash on a real workspace switch (no-op when
         // `[border] effect` is off). Fires on whichever view is up — the
-        // tree panel, or the grid overlay (`gridView != nil` iff open).
-        // `prevActive == nil` = the first apply (startup): skip so the
-        // steady border just appears.
+        // tree panel, the grid overlay, or the rail (`gridView` /
+        // `railView` != nil iff open). `prevActive == nil` = the first
+        // apply (startup): skip so the steady border just appears.
         if let prev = prevActive, prevActiveWSIndex != prev {
             if panelHost.isVisible { panelHost.flashBorder() }
             gridView?.flashBorder()
+            railView?.flashBorder()
         }
         if let g = gridView {
             g.workspaces = wss
@@ -1795,6 +1798,9 @@ final class Controller: NSObject {
 
         railOverlay = overlay
         railView = rv
+        // Neon border framing the strip band + an entrance flash.
+        applyBorderFromConfig()
+        rv.flashBorder()
 
         // Request every window in every workspace from the shared
         // `winPreview`, which the Controller's thumbnail timer keeps
@@ -1825,6 +1831,7 @@ final class Controller: NSObject {
         }
         railView?.clearDrag()        // explicit cancel if a drag is mid-flight
         railView?.clearThumbnails()
+        railView?.stopBorder()       // no orphaned border timer
         // Flip `isRailVisible` synchronously so a quick hide→show within
         // the fade window builds a fresh overlay instead of no-op'ing.
         let restoreTree = !treeWasHidden
