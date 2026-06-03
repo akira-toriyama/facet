@@ -321,6 +321,78 @@ mac desktop 切替時の flicker を隠す **CLI-triggered な skeleton 表示**
 - コード: `Controller.showLoading` → `SidebarView` の skeleton
 - **Don't call it:** placeholder, loader, spinner, ローディング表示
 
+### anchor
+**非アクティブ [[facet workspace]] の window を画面から隠す手法**。AX
+`kAXPosition` で window を画面隅へ寄せ、最小可視の [[sliver]] だけ残す
+（macOS の clamp で完全な画面外には出せないため）。公開 AX のみ・SIP-on・
+**即時**（アニメ無し）。facet 唯一の hide 手法（`minimize` は genie アニメで
+WS 切替が遅く 2026-05-28 廃止）。parked 窓は `isOnscreen=true` を保つので、
+ユーザーの Cmd+H / Cmd+M による真の hide と区別できる。`sticky` / `scratchpad`
+はこの anchor park の再利用。
+- コード: `shouldParkAnchor` / `applyHide`（`FacetAdapterNative`）
+- 参照: memory `[[native-window-hide-methods]]`（全 hide 手法の検証記録・
+  完全消去は SIP-off 必須で本体 scope 外）
+- **Don't call it:** corner hide, HideCorner（rift の旧称）, off-screen hide,
+  minimize（別手法・廃止済）, 角配置, 隅寄せ
+
+### sliver
+**anchor park 後に画面隅に残る window の可視部分**。macOS の clamp invariant
+により最小 **1×41 logical pt**（右下隅）まで詰められるが、完全な 0px には
+できない（macOS が「title bar は必ず画面内に残して救出可能にする」救済仕様の
+ため）。完全消去（画面 + Mission Control から消す）は公開 / read-only-private
+API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
+- 参照: [[anchor]] / memory `[[native-window-hide-methods]]`
+- **Don't call it:** strip, remnant, leftover, edge（[[edge]] は rail の辺の
+  別概念）, 残り, 断片, はみ出し
+
+### grouping
+**1 つの [[mac desktop]] 内で window をどう束ねるかを決めるモード**。`config.toml`
+`[grouping] by = "workspace" | "tag"` で **起動時に択一**（静的・再起動で変更・動的変更不可）。
+- **by=workspace**: 1 mac desktop : N [[facet workspace]]（**1:n**）。1 window = 1 workspace。
+  facet workspace 切替で非表示 WS の窓を [[anchor]] park。＝現状モデル（[[per-mac-desktop workspaces]]）。
+- **by=tag**: 1 mac desktop : 1 [[tag world]]（**1:1**）。1 window = N [[tag]]（多重所属）。
+  [[lens]] で表示タグ集合を選び、外れた窓を [[anchor]] park。
+- **両モードとも hide = [[anchor]]**（窓を mac desktop に composited のまま残す＝hover/hero preview 温存）。
+  別 mac desktop への退避や order-out は窓を非 composited にして preview を殺すため **不採用**
+  （memory `[[native-window-hide-methods]]` の hide×hero 実測）。
+- layout は grouping で互換 filter（tall/wide/centered/grid/spiral/float = 両対応 / bsp・stack = workspace のみ・
+  非互換は起動時 `exit 2`）。M11-3 で導入予定・`by` はオープン enum（将来の編成パラダイムを 1 値で拡張）。
+  memory `[[facet-tag-model-decisions]]`。
+- **Don't call it:** mode, layout mode, grouping policy, 編成モード, グルーピング
+
+### tag
+**window に付く可視性ラベル**（[[grouping]] `by=tag` 時のみ）。1 window = タグの集合（bitmask /
+OptionSet 的・多重所属）。可視性述語 = `window.tags ∩ [[lens]] ≠ ∅`（dwm `tags & viewmask` 直写し）。
+`config.toml` の `[[tag]]` で宣言（記載順がタグ順＝primary タグ）・`[[assign]]` で window→tag を **静的割当**
+（起動時固定・runtime 再タグ不可）。**M11-3 未実装・予約語**（[[lens]] と同じく場所取り）。
+memory `[[facet-tag-model-decisions]]`。
+- **Don't call it:** label, category, workspace（tag は多重所属、workspace は 1 窓 1 個）, group, ラベル, カテゴリ
+
+### tag world
+**[[grouping]] `by=tag` 時、1 つの [[mac desktop]] が持つ「タグ付き window の集合」**
+（mac desktop : tag world = **1:1**・per-mac-desktop で独立した世界）。by=workspace の「N [[facet workspace]]」
+層を置き換える単位＝by=tag は 1 desktop に 1 tag world。中で [[lens]] を [[anchor]] park で切替
+（intra-desktop・mac desktop 切替ではない＝preview 温存）。**M11-3 未実装**。
+- **Don't call it:** workspace, tagspace, tag group, タグ空間, tagset（tagset は [[lens]] 寄り）
+
+### grouping の概念関係（by=workspace / by=tag）
+[[grouping]] は同じ [[mac desktop]] 上の window を **workspace 束ね**（1:n）か **tag 束ね**（1:1 tag world）
+かに切り替える、facet の編成軸。[[facet view]]（tree/grid/rail）は **どちらの束ね方とも直交**（描画 surface）。
+hide は両モードとも [[anchor]]（窓を mac desktop に composited のまま残し preview を温存。別 desktop 退避 /
+order-out は preview を殺すので不採用）。
+
+```mermaid
+flowchart TB
+  MD["mac desktop<br/>(native Space・read-only)"]
+  MD -->|"by=workspace (1:n)"| WS["N × facet workspace<br/>1窓 = 1 workspace"]
+  MD -->|"by=tag (1:1)"| TW["1 × tag world<br/>1窓 = N tag・lens で表示集合を選択"]
+  WS -->|"workspace 切替"| HW["hide = anchor<br/>(窓は composited のまま → preview ◯)"]
+  TW -->|"lens 切替"| HT["hide = anchor<br/>(同上・intra-desktop)"]
+  VIEW["facet view: tree / grid / rail<br/>(UI surface・grouping と直交)"]
+  VIEW -. renders .-> WS
+  VIEW -. renders .-> TW
+```
+
 ---
 
 ## CLI / IPC
