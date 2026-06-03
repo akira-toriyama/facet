@@ -1,6 +1,6 @@
 // Full-screen workspace rail — a Mission-Control-style overview.
 //
-//   • a near-black BACKDROP hides the desktop behind it
+//   • a solid black BACKDROP hides the desktop behind it
 //   • a HERO cell in the centre shows the active workspace large
 //   • a ROW of every workspace along the BOTTOM, each a small
 //     window-thumbnail mini-screen (active one highlighted)

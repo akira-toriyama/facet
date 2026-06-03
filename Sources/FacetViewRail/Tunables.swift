@@ -4,15 +4,16 @@
 // a Mission-Control-style two-tier: a HERO cell in the centre showing
 // the active workspace large, and a ROW of every workspace along the
 // bottom — each a small mini-screen with a grid-style header (name +
-// layout mode + grip). A near-black backdrop hides the desktop.
+// layout mode + grip). A solid black backdrop hides the desktop.
 
 import CoreGraphics
 import Foundation
 
-/// Backdrop opacity — near-opaque so the desktop is hidden (matches
-/// the grid's takeover feel) while a hair of translucency keeps the
-/// fade reading as "overlay opening," not "screen blanked."
-let railBackdropAlpha: CGFloat = 0.97
+/// Backdrop opacity — solid black so the desktop is fully hidden
+/// (matches the grid's takeover feel). Was 0.97 (a hair of translucency
+/// for an "overlay opening" read); set opaque per request so neither
+/// overview bleeds the desktop through.
+let railBackdropAlpha: CGFloat = 1.0
 
 /// Outer padding: screen edge → content.
 let railOuterPad: CGFloat = 40
