@@ -37,6 +37,9 @@ let railSlideDuration: TimeInterval = 0.17
 /// Cap the accumulated slide on rapid presses so a key-mash doesn't
 /// fling the strip many slots before it eases back.
 let railSlideMaxSlots: CGFloat = 3
+/// Ease-out duration of the commit "hero zoom → full screen" transition
+/// (Return / click switches; the backend switch fires as it finishes).
+let railCommitZoomDuration: TimeInterval = 0.20
 
 // -- Responsive layout (orientation- & display-size-aware) --
 // The strip / hero proportions and the gaps are derived from the

@@ -177,6 +177,25 @@ public final class RailView: NSView {
     /// Last carousel slot size (set by `layoutCells`) — one rotation
     /// slides the strip by this much.
     private var lastSlot: CGFloat = 0
+    /// Ease value (0→1) of the active slide; also drives the hero
+    /// crossfade (①): the old hero fades out over `1 − slideProgress`.
+    private var slideProgress: CGFloat = 0
+    /// Snapshot of the hero BEFORE a rotate, drawn over the new hero and
+    /// faded out as the slide eases in (browse crossfade, ①).
+    private var prevHeroImage: NSImage?
+    private var prevHeroRect: NSRect = .zero
+
+    // MARK: - Commit zoom animation (②: hero → full screen on switch)
+
+    /// While true, the rail is playing the commit "hero zoom to full
+    /// screen" transition; input is ignored until it finishes (then the
+    /// backend switch + close fire).
+    private var committing = false
+    private var commitImage: NSImage?
+    private var commitFrom: NSRect = .zero
+    private var commitStart: Date?
+    private var commitTimer: Timer?
+    private var commitPerform: (() -> Void)?
 
     public override var isFlipped: Bool { true }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -468,7 +487,30 @@ public final class RailView: NSView {
         NSColor.black.withAlphaComponent(railBackdropAlpha).setFill()
         bounds.fill()
 
+        // Commit zoom (②): the captured hero scales from its rect to fill
+        // the screen (ease-out); then the switch + close fire. Nothing
+        // else is drawn during it.
+        if committing, let img = commitImage {
+            let t = commitStart.map {
+                min(1, CGFloat(Date().timeIntervalSince($0) / railCommitZoomDuration))
+            } ?? 0
+            let e = 1 - pow(1 - t, 3)
+            let r = NSRect(
+                x: commitFrom.minX + (bounds.minX - commitFrom.minX) * e,
+                y: commitFrom.minY + (bounds.minY - commitFrom.minY) * e,
+                width: commitFrom.width + (bounds.width - commitFrom.width) * e,
+                height: commitFrom.height + (bounds.height - commitFrom.height) * e)
+            img.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1)
+            return
+        }
+
         if let h = hero { drawCell(h) }
+        // Hero crossfade (①): the previous hero fades out over the new one
+        // as the rotation eases in (`slideProgress` 0→1).
+        if let prev = prevHeroImage, slideProgress < 1 {
+            prev.draw(in: prevHeroRect, from: .zero,
+                      operation: .sourceOver, fraction: max(0, 1 - slideProgress))
+        }
         // Strip cells are clipped to the carousel viewport so a cell
         // rotating past the end "peeks" half-off the edge (the both-ends
         // "there's more" cue) instead of drawing over the hero. A drag
@@ -503,6 +545,7 @@ public final class RailView: NSView {
         let cap = slot * railSlideMaxSlots
         slideOffset = max(-cap, min(cap, slideOffset + CGFloat(dx) * slot))
         slideFrom = slideOffset
+        slideProgress = 0
         slideStart = Date()
         if slideTimer == nil {
             let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
@@ -518,22 +561,80 @@ public final class RailView: NSView {
         guard let start = slideStart else { stopSlide(); return }
         let t = Date().timeIntervalSince(start) / railSlideDuration
         if t >= 1 {
-            slideOffset = 0
+            slideOffset = 0; slideProgress = 1
             stopSlide()
         } else {
             let e = 1 - pow(1 - CGFloat(t), 3)   // ease-out cubic
             slideOffset = slideFrom * (1 - e)
+            slideProgress = e
         }
         needsDisplay = true
     }
 
     private func stopSlide() {
         slideTimer?.invalidate(); slideTimer = nil; slideStart = nil
+        slideProgress = 0
+        prevHeroImage = nil          // crossfade done (①)
+    }
+
+    /// Capture a region of the current rendering as an image (for the
+    /// hero crossfade ① and the commit zoom ②).
+    private func snapshotRegion(_ rect: NSRect) -> NSImage? {
+        guard rect.width > 1, rect.height > 1,
+              let rep = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
+        cacheDisplay(in: rect, to: rep)
+        let img = NSImage(size: rect.size)
+        img.addRepresentation(rep)
+        return img
+    }
+
+    /// Funnel for a switch-and-close commit. If the destination is the
+    /// centred hero, play the "hero zoom → full screen" transition (②)
+    /// then run `perform` (the actual switch + close); otherwise run it
+    /// immediately. Honours Reduce Motion.
+    private func commitSwitch(target ws: Int, perform: @escaping () -> Void) {
+        guard !committing else { return }     // a zoom is already in flight
+        guard ws == selectedWS, let h = hero,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let img = snapshotRegion(h.rect)
+        else { perform(); return }
+        committing = true
+        commitImage = img
+        commitFrom = h.rect
+        commitPerform = perform
+        commitStart = Date()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tickCommit() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        commitTimer = timer
+        needsDisplay = true
+    }
+
+    private func tickCommit() {
+        guard committing, let start = commitStart else { finishCommit(); return }
+        if Date().timeIntervalSince(start) / railCommitZoomDuration >= 1 {
+            finishCommit()
+        } else {
+            needsDisplay = true
+        }
+    }
+
+    private func finishCommit() {
+        commitTimer?.invalidate(); commitTimer = nil; commitStart = nil
+        committing = false
+        let perform = commitPerform
+        commitPerform = nil; commitImage = nil
+        needsDisplay = true
+        perform?()       // switch + close now (backend lands as the overlay clears)
     }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { slideOffset = 0; stopSlide() }   // overlay closed
+        if window == nil {                  // overlay closed
+            slideOffset = 0; stopSlide()
+            if committing { finishCommit() }   // don't drop the pending switch
+        }
     }
 
     private func drawCell(_ c: Cell) {
@@ -672,8 +773,9 @@ public final class RailView: NSView {
     public override func mouseDown(with event: NSEvent) {
         // A keyboard lift owns the drag; ignore mouse presses until it
         // commits (Return) or cancels (Esc) so a stray click can't
-        // commit it at the keyboard-aimed target.
-        guard drag == nil else { return }
+        // commit it at the keyboard-aimed target. A commit zoom (②) also
+        // swallows input until it finishes.
+        guard !committing, drag == nil else { return }
         let p = convert(event.locationInWindow, from: nil)
         // Strip hit-tests are gated by the same viewport clip as hover
         // (`stripRect`), so a press in the clipped outer-pad margin — bare
@@ -693,7 +795,10 @@ public final class RailView: NSView {
             if let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
                 pendingDown = (p, w, cell.wsIndex)
             } else {
-                onPick?(cell.wsIndex)          // empty cell area → switch+close
+                // empty cell area → switch+close (zoom if it's the centre)
+                commitSwitch(target: cell.wsIndex) { [weak self] in
+                    self?.onPick?(cell.wsIndex)
+                }
             }
             return
         }
@@ -758,12 +863,17 @@ public final class RailView: NSView {
         // drag to Return/Esc.
         guard pendingDown != nil || pendingHeaderDown != nil else { return }
         if drag == nil {
-            // No drag crossed threshold → resolve as a click.
+            // No drag crossed threshold → resolve as a click (zoom if the
+            // target is the centred hero, else switch immediately).
             if let pd = pendingDown {
                 // Window thumb → switch to its WS AND focus THAT window.
-                onPickWindow?(pd.ws, pd.hit.pid, pd.hit.id)
+                commitSwitch(target: pd.ws) { [weak self] in
+                    self?.onPickWindow?(pd.ws, pd.hit.pid, pd.hit.id)
+                }
             } else if let ph = pendingHeaderDown {
-                onPick?(ph.ws)                 // header → switch WS only
+                commitSwitch(target: ph.ws) { [weak self] in
+                    self?.onPick?(ph.ws)       // header → switch WS only
+                }
             }
             return
         }
@@ -831,10 +941,15 @@ public final class RailView: NSView {
     /// previous, supplied by the Controller for the edge's axis); it
     /// wraps circularly.
     public func kbMoveSelection(dx: Int) {
-        guard !workspaces.isEmpty else { return }
+        guard !committing, !workspaces.isEmpty else { return }
         let cur = workspaces.firstIndex { $0.index == selectedWS } ?? 0
         let ni = (cur + dx + workspaces.count) % workspaces.count   // wrap
         guard workspaces[ni].index != selectedWS else { return }
+        // Browse crossfade (①): snapshot the current hero before it
+        // changes, to fade it out over the new one as the slide eases in.
+        if drag == nil, let h = hero {
+            prevHeroImage = snapshotRegion(h.rect); prevHeroRect = h.rect
+        }
         selectedWS = workspaces[ni].index
         if drag != nil {
             // Lifted: rotate the carousel under the ghost so the aimed
@@ -917,6 +1032,7 @@ public final class RailView: NSView {
     /// Return : lifted → commit the move/swap (stay open); not lifted →
     /// switch to the selection (focus a Tab-selected window) + close.
     public func kbCommit() {
+        if committing { return }   // a switch zoom (②) is already in flight
         // A commit is already waiting for the backend ack (the rail stays
         // open through it) — swallow a second Return so it can't fire a
         // duplicate move/swap before the landing gate clears `drag`.
@@ -936,16 +1052,22 @@ public final class RailView: NSView {
             return
         }
         guard let ws = selectedWS else { return }
+        // The selected WS is the centre, so this always plays the zoom (②).
         if let hit = kbSelectedWindow() {
-            onPickWindow?(ws, hit.pid, hit.id)   // Tab-selected window → switch + focus it
+            commitSwitch(target: ws) { [weak self] in
+                self?.onPickWindow?(ws, hit.pid, hit.id)   // window → switch + focus it
+            }
         } else {
-            onPick?(ws)                          // whole-WS → switch + close
+            commitSwitch(target: ws) { [weak self] in
+                self?.onPick?(ws)                          // whole-WS → switch + close
+            }
         }
     }
 
     /// Escape, in order: cancel an in-flight lift → clear a Tab window
     /// selection (stay open) → dismiss the rail.
     public func kbEscape() {
+        if committing { return }   // mid switch zoom (②) — let it finish
         if let d = drag {
             cancelDrop(to: d.sourceRect)
         } else if kbSelectedWindowIdx != -1 {
