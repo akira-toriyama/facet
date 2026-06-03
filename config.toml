@@ -40,9 +40,9 @@
 #   "paper"      — clean daytime white; blue + amber, system font.
 #
 # Monochrome:
-#   "mono-light" — stark black-on-white (白黒), mono font.
-#   "mono-dark"  — stark white-on-black / OLED (黒白), mono font.
-#   "monotone"   — soft graphite greyscale (モノトーン), system font.
+#   "mono-light" — stark black-on-white, mono font.
+#   "mono-dark"  — stark white-on-black / OLED, mono font.
+#   "monotone"   — soft graphite greyscale, system font.
 #
 # Adaptive:
 #   "system"     — native vibrancy + dynamic colors, follows macOS
