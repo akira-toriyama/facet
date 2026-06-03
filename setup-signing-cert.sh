@@ -19,6 +19,19 @@
 set -e
 cd "$(dirname "$0")"
 
+DRY_RUN=0; SILENT=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    --silent)  SILENT=1 ;;
+    -h|--help) echo "usage: $0 [--dry-run] [--silent]"; exit 0 ;;
+    *) echo "setup-signing-cert: unknown option \"$arg\" (try --dry-run / --silent)" >&2; exit 2 ;;
+  esac
+done
+# Tee stdout+stderr to a log by default (CLAUDE.md: state-changing
+# scripts log by default; --silent opts out).
+if (( ! SILENT )); then exec > >(tee "/tmp/setup-signing-cert.log") 2>&1; fi
+
 CN="facet Local Signing"
 KEYCHAIN="$HOME/Library/Keychains/login.keychain-db"
 
@@ -33,13 +46,28 @@ hashes=("${(@f)$(security find-certificate -a -c "$CN" -Z "$KEYCHAIN" \
 hashes=("${(@)hashes:#}")            # drop empty entries
 if (( ${#hashes} >= 1 )); then
   if (( ${#hashes} > 1 )); then
-    echo "found ${#hashes} duplicate \"$CN\" certs — collapsing to one"
-    for h in "${hashes[@]:1}"; do
-      security delete-certificate -Z "$h" "$KEYCHAIN" >/dev/null 2>&1 || true
-    done
+    if (( DRY_RUN )); then
+      echo "[dry-run] found ${#hashes} duplicate \"$CN\" certs — would collapse to one"
+    else
+      echo "found ${#hashes} duplicate \"$CN\" certs — collapsing to one"
+      for h in "${hashes[@]:1}"; do
+        security delete-certificate -Z "$h" "$KEYCHAIN" >/dev/null 2>&1 || true
+      done
+    fi
+  fi
+  if (( DRY_RUN )); then
+    echo "[dry-run] identity already present: $CN — would refresh .signing-id; no keychain change"
+    exit 0
   fi
   echo "identity already present: $CN"
   echo -n "$CN" > .signing-id
+  exit 0
+fi
+
+if (( DRY_RUN )); then
+  echo "[dry-run] no \"$CN\" identity found — would create a self-signed"
+  echo "[dry-run] codesigning cert and import it into $KEYCHAIN, then"
+  echo "[dry-run] write .signing-id"
   exit 0
 fi
 

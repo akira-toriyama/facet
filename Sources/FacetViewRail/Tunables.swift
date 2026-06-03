@@ -1,10 +1,12 @@
 // Layout / typography constants for the workspace rail.
 //
-// The rail is a full-screen overview (like the grid) but laid out as
-// a Mission-Control-style two-tier: a HERO cell in the centre showing
-// the active workspace large, and a ROW of every workspace along the
-// bottom — each a small mini-screen with a grid-style header (name +
-// layout mode + grip). A solid black backdrop hides the desktop.
+// The rail is a full-screen switcher (like the grid) laid out as a
+// Mission-Control-style two-tier: a HERO cell showing the active
+// (centred) workspace large, and an edge-docked STRIP that is an
+// active-centred carousel of a capped subset of workspaces, each a
+// small mini-screen with a grid-style header (name + layout mode +
+// grip). A solid black backdrop hides the desktop. Strip/hero split
+// and edge are configurable ([rail] strip / cells / edge).
 
 import CoreGraphics
 import Foundation

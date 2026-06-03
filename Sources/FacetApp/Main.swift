@@ -6,7 +6,7 @@
 //      observer (``Controller.installCLIControl``) routes it.
 //
 //   2. **Server mode** — no CLI flags. Wake the AppKit run loop,
-//      load config, build the rift adapter + Controller, and
+//      load config, build the native adapter + Controller, and
 //      apply ``default-view`` from config (omitted → agent-only,
 //      no panel until the CLI asks).
 //
@@ -94,7 +94,8 @@ enum FacetApp {
           comes first — so MS is just a safety cap. Fire it just
           BEFORE a mac-desktop switch (bind it ahead of your switch
           hotkey) so the panel shows a placeholder during the switch
-          instead of the previous mac desktop's tree. grid ignores it.
+          instead of the previous mac desktop's tree. Only valid with
+          --view=tree; grid / rail exit 2.
           Example:
             facet --view=tree --loading=2000
 
@@ -217,6 +218,7 @@ enum FacetApp {
 
         EXIT CODES
           0   success (DNC posted, server started, or status printed)
+          1   `--resign` codesign failed (see stderr)
           2   unknown flag / view / theme name (stderr lists expected
               values)
           3   no server running for the requested client-mode action
@@ -363,9 +365,8 @@ enum FacetApp {
         postControl("set-layout:" + name)
     }
 
-    /// Post ``retile``. Re-apply the active WS's layout — only
-    /// meaningful for backends with their own layout engine
-    /// (NativeAdapter); rift no-ops.
+    /// Post ``retile``. Re-apply the active WS's layout via the
+    /// native adapter's layout engine.
     static func postRetile() -> Never {
         postControl("retile")
     }
@@ -1096,10 +1097,6 @@ enum FacetApp {
             // over a transient one.
             case a.hasPrefix("--view="):
                 viewArg = canonicalView(String(a.dropFirst("--view=".count)))
-            case a == "--view":
-                if i + 1 < argv.count {
-                    viewArg = canonicalView(argv[i + 1]); i += 1
-                }
             case a.hasPrefix("--hide="):
                 hideArg = canonicalView(String(a.dropFirst("--hide=".count)))
             case a.hasPrefix("--toggle="):
@@ -1108,10 +1105,6 @@ enum FacetApp {
                 edgeArg = canonicalEdge(String(a.dropFirst("--edge=".count)))
             case a.hasPrefix("--theme="):
                 styleArg = canonicalStyle(String(a.dropFirst("--theme=".count)))
-            case a == "--theme":
-                if i + 1 < argv.count {
-                    styleArg = canonicalStyle(argv[i + 1]); i += 1
-                }
             case a.hasPrefix("--pos-x="):
                 posX = parseGeomInt(a, "--pos-x=")
             case a.hasPrefix("--pos-y="):
@@ -1156,9 +1149,11 @@ enum FacetApp {
             exit(2)
         }
 
-        // ``--loading`` is a modifier on ``--view=tree`` (grid
-        // ignores it, same as ``--active``).
-        if loadingArg != nil && viewArg == nil {
+        // ``--loading`` is a modifier on ``--view=tree`` only — the
+        // skeleton lives in ``SidebarView``; grid / rail can't paint
+        // it, so a stray ``--loading`` on another view exits 2 rather
+        // than silently doing nothing.
+        if loadingArg != nil && viewArg != "tree" {
             let msg = "facet: --loading requires --view=tree — "
                 + "see `facet --help`\n"
             FileHandle.standardError.write(Data(msg.utf8))

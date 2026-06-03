@@ -76,7 +76,7 @@ public final class SidebarView: NSView {
 
     // Optimistic selection: on click we move the highlight
     // immediately and hold briefly; the next real query reconciles
-    // (reverts if rift's focus actually failed).
+    // (reverts if the backend's focus actually failed).
     private var lastWorkspaces: [Workspace] = []
     // Mac desktop ordinal (Mission Control order) for the
     // top handle band's "Desktop N" label. nil = SkyLight
@@ -158,7 +158,7 @@ public final class SidebarView: NSView {
     func setOptimistic(windowID: WindowID, workspaceIndex: Int) {
         optWindowID = windowID; optActiveWS = workspaceIndex
         // Hold past the focus-assert window so the highlight doesn't
-        // flicker to rift's transient default focus before our
+        // flicker to the backend's transient default focus before our
         // re-assert wins.
         optUntil = Date().addingTimeInterval(0.85)
         update(lastWorkspaces)            // rebuild now with the override

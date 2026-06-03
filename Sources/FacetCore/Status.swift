@@ -54,7 +54,7 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
 /// Everything `facet status` shows in one shot. Encoded as JSON
 /// so the file is also greppable / inspectable by other tools.
 public struct StatusSnapshot: Codable, Sendable, Equatable {
-    public let backend: String           // e.g. "rift", "native"
+    public let backend: String           // e.g. "native"
     public let theme: String             // e.g. "terminal", "cute"
     public let defaultView: String?      // "tree" / "grid" / nil = agent
     public let workspaces: [WorkspaceStatusEntry]

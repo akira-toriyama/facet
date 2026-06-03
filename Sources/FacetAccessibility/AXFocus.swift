@@ -4,9 +4,10 @@
 // the last-focused window, which is the wrong one half the time.
 //
 // Lives in FacetAccessibility (lifted out of FacetAdapterRift at
-// M5 when the native adapter became the second consumer). Both
-// FacetAdapterRift and FacetAdapterNative call into the same
-// primitive now.
+// M5 when the native adapter became the second consumer).
+// FacetAdapterNative is the only adapter consumer since v2.0.0
+// retired rift; the FacetApp Controller / Main also call
+// `AX.focus` / `AX.ensureTrusted` directly.
 
 import AppKit
 import ApplicationServices
