@@ -38,9 +38,13 @@ via [`config.toml`](config.toml), plus the on-demand rail overview:
   rail, ↑/↓ on a left/right one) **rotate the strip** to bring another
   workspace to the centre, Return or a click switches to the centred one,
   Esc dismisses. Drag a window between workspaces or a header to swap.
-  Dock the strip with `--edge=top|bottom|left|right` (default bottom);
-  past `[rail] cells` workspaces it rotates (peeking at both ends)
-  instead of shrinking. Summoned with `facet --view=rail`.
+  Dock the strip with `--edge=top|bottom|left|right` (default bottom).
+  The thumbnails are justified to fill the strip with even gaps; `[rail]
+  strip` caps their size (a percentage of the short screen edge — the
+  hero fills the rest), so the split stays balanced in any orientation or
+  on any display size. `[rail] cells` caps how many show at once; past
+  that, workspaces rotate through (peeking at both ends). Summoned with
+  `facet --view=rail`.
 
 Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a

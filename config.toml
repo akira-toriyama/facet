@@ -95,15 +95,23 @@ thumbnail-refresh-seconds = 4
 # open. Unknown / unset → "bottom".
 edge = "bottom"
 
-# How many workspace cells fill the strip viewport. The rail is an
-# active-centred CAROUSEL: the active workspace sits at the strip centre
-# and the rest fan out around it; switching rotates the strip so the new
-# active comes to centre (browse with the arrow keys, click to switch).
-# Cells stay this fixed size — with more than `cells` workspaces they
-# rotate through, peeking at both ends, rather than shrinking. Clamped
-# 1..20; built-in fallback is 7. An ODD value keeps the active workspace
-# dead-centre with equal neighbours on each side; an even value is
-# rounded down by one so the carousel stays symmetric.
+# Maximum strip band size, as a percentage of the SHORT screen edge —
+# the cap on the workspace-thumbnail scale; the hero preview fills the
+# rest. The thumbnails GROW to fill the strip (so the cells span the
+# full width / height with even, tight gaps) up to this cap; a higher
+# value allows bigger thumbnails (and, for very few workspaces, a taller
+# strip + a smaller hero). Short-edge-based, so the strip/hero split
+# stays balanced whichever way the display is turned and on any display
+# size. Clamped 8..50; built-in fallback is 30.
+strip = 30
+
+# Upper bound on how many workspace cells the strip viewport shows at
+# once. The rail is an active-centred CAROUSEL: the active workspace sits
+# at the strip centre and the rest fan out around it; switching rotates
+# the strip so the new active comes to centre (browse with the arrow
+# keys, click to switch). The strip shows every workspace up to this cap,
+# justified to fill the run; with more workspaces than this they rotate
+# through, peeking at both ends. Clamped 1..20; built-in fallback is 7.
 cells = 7
 
 

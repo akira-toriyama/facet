@@ -207,10 +207,24 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``exit 2``. It picks which screen edge the rail's strip docks
   against (`mac desktop`-independent); the strip axis drives which
   arrows browse (top/bottom → ←/→, left/right → ↑/↓). Config seed
-  is ``[rail] edge`` (silent clamp→bottom); ``[rail] cells`` sets
-  the carousel's viewport-full count. The strip header stays a
+  is ``[rail] edge`` (silent clamp→bottom). The strip header stays a
   horizontal band on every edge (no text rotation — a vertical stack
   of label/thumbnail cells).
+- **Strip/hero split is `[rail] strip` (% of the SHORT screen
+  edge)**, a CAP on the thumbnail scale; the hero fills the rest.
+  Short-edge-based (NOT the cross axis) so it stays balanced in any
+  orientation / on any display size — the cross-axis fraction over-
+  thickened the strip in portrait (cross = the long edge). The
+  thumbnails are **justified**: they grow so the shown cells fill the
+  run with one ``railCellGap`` between them (even, tight gaps, ≈ full
+  width), capped by ``strip``; only when too few cells would exceed the
+  cap does the group stop growing + centre with end margins. The band
+  then **auto-fits** the actual thumb (so ≤ ``strip``%). ``[rail]
+  cells`` is the **upper bound** on cells shown (``visible =
+  min(cells, n)``); the rest rotate. No odd-forcing — the active is
+  pinned to centre via offset 0 regardless of parity. Pure helper
+  `railScaledPads` (short-edge-scaled gaps) lives in FacetCore. Memory:
+  [[facet-rail-carousel-decisions]].
 - **The rail is an active-centred CAROUSEL** (2-b): the active
   workspace is pinned to the strip centre, the rest fan out
   circularly, and the browse arrows ROTATE the strip (centre = the

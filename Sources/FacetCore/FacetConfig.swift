@@ -41,7 +41,8 @@ public struct FacetConfig: Sendable {
 
     // [rail]
     public var railEdge: String?            // "top" | "bottom" | "left" | "right"
-    public var railCells: Int?              // strip cells shown at once
+    public var railCells: Int?              // max strip cells shown at once
+    public var railStrip: Int?              // strip band size, % of short screen edge
 
     // [tree]
     /// How the sidebar's hover-preview overlay is sized + placed.
@@ -141,10 +142,24 @@ public struct FacetConfig: Sendable {
         RailEdge(rawValue: (railEdge ?? "bottom").lowercased()) ?? .bottom
     }
 
-    /// How many strip cells the rail shows at once before it scrolls.
-    /// 1…20 clamp, default 7 (mirrors `effectiveGridCols`' clamp shape).
+    /// Upper bound on how many strip cells the carousel shows at once.
+    /// The actual count auto-fits the strip's thumbnail size (a bigger
+    /// `[rail] strip` shows fewer, larger cells), capped here. 1…20
+    /// clamp, default 7 (mirrors `effectiveGridCols`' clamp shape).
     public var effectiveRailCells: Int {
         max(1, min(20, railCells ?? 7))
+    }
+
+    /// Maximum strip band size, as a percentage of the SHORT screen edge
+    /// — the cap on the thumbnail scale; the hero fills the rest. The
+    /// strip's thumbnails grow to fill the run (so the cells span the
+    /// width / height with even, tight gaps) up to this cap; a higher
+    /// value allows bigger thumbnails (and, for very few workspaces, a
+    /// taller strip + smaller hero). Short-edge-based so the split stays
+    /// balanced in any orientation / on any display size. 8…50 clamp,
+    /// default 30.
+    public var effectiveRailStrip: Int {
+        max(8, min(50, railStrip ?? 30))
     }
 
     /// Effective background-capture interval for grid thumbnails.
@@ -307,6 +322,7 @@ public struct FacetConfig: Sendable {
         // [rail]
         if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
         if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
+        if case .int(let n)? = toml["rail"]?["strip"] { c.railStrip = n }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s

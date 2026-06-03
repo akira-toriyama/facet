@@ -15,8 +15,6 @@ import Foundation
 /// overview bleeds the desktop through.
 let railBackdropAlpha: CGFloat = 1.0
 
-/// Outer padding: screen edge → content.
-let railOuterPad: CGFloat = 40
 /// Gap between adjacent strip cells, along the strip's running axis.
 let railCellGap: CGFloat = 16
 /// Sanity floor for a strip cell's short dimension — cells are
@@ -25,24 +23,27 @@ let railCellGap: CGFloat = 16
 let railCellMinDim: CGFloat = 40
 /// Breathing room between a cell and its header.
 let railLabelGap: CGFloat = 6
-/// Gap from the very screen edge to the strip cells — the cells sit
-/// near the docked edge (rather than floating in the band's centre) so
-/// the hero preview can reclaim the slack toward the screen centre, but
-/// keep a little breathing room off the edge itself.
-let railEdgeGap: CGFloat = 24
-/// Gap between the hero preview and the strip — keeps the big preview
-/// from butting up against the workspace列 (separate from the smaller
-/// inter-cell `railCellGap`).
-let railHeroGap: CGFloat = 32
 /// Peek depth (points): when the carousel holds more workspaces than the
 /// viewport shows, each end reveals this much of the next cell — the
 /// both-ends "there's more to rotate to" cue (2-b).
 let railPeek: CGFloat = 18
 
-/// Strip thickness — the all-workspaces band's cross-axis size (height
-/// for a top/bottom rail, width for left/right) as a fraction of that
-/// screen dimension. The hero fills the rest.
-let railStripSizeFrac: CGFloat = 0.30
+// -- Responsive layout (orientation- & display-size-aware) --
+// The strip / hero proportions and the gaps are derived from the
+// SHORT screen edge (so they stay balanced in landscape OR portrait,
+// on a laptop OR a big external display). The strip band size itself is
+// the user-facing `[rail] strip` percent; these gaps feed the pure
+// `railScaledPads` in FacetCore.
+//
+/// Strip's float off the docked screen edge (fraction of short edge) —
+/// keeps the cells from butting against the very edge.
+let railEdgeFloatFrac: CGFloat = 0.035
+/// Gap between the strip cells and the hero (fraction of short edge) —
+/// separates the big preview from the workspace列.
+let railHeroGapFrac: CGFloat = 0.05
+/// Hero inset from the three outer screen edges + the carousel
+/// viewport's run-axis inset (fraction of short edge).
+let railOuterFrac: CGFloat = 0.035
 
 /// Rounded mini-screen corner.
 let railCellRadius: CGFloat = 8

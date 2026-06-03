@@ -37,8 +37,10 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   左右辺＝↑/↓）で **strip が回転**して別 WS を中央へ、 Return / クリックで
   中央の WS に切替＋閉じ、 Esc で閉じる。 window を ws 間ドラッグ / header
   ドラッグで swap。 `--edge=top|bottom|left|right` で辺を選ぶ（既定 bottom）。
-  `[rail] cells` を超えると縮小せず回転（両端 peek 付き）。
-  `facet --view=rail` で呼び出す。
+  サムネは strip を埋めるよう justify され（均等な隙間）、 そのサイズ上限を
+  `[rail] strip`（画面短辺に対する % — hero が残りを占める）が決める。 画面の
+  向き・サイズが変わっても比は保たれる。 `[rail] cells` は同時表示数の上限で、
+  超えた WS は回転（両端 peek 付き）。 `facet --view=rail` で呼び出す。
 
 DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**: window を
 掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を

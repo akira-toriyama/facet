@@ -103,3 +103,23 @@ public func railCarouselOffsets(count: Int, selectedPos: Int) -> [Int] {
         ((p - p0 + centerSlot + count) % count) - centerSlot
     }
 }
+
+// MARK: - Responsive sizing (orientation- & display-size-aware)
+
+/// The rail's spacing scaled to the display, so the strip's float off
+/// the docked edge, its gap to the hero and the hero's outer inset stay
+/// proportional in any orientation or on any display size. Each is a
+/// fraction of the **short** screen edge — orientation-stable, since the
+/// short edge stays the short edge whichever way the display is turned
+/// (the old rail used fixed points, which read cramped on large screens
+/// and let the strip dominate a portrait display). Pure / testable.
+public func railScaledPads(screen: CGSize,
+                           edgeFloatFrac: CGFloat,
+                           heroGapFrac: CGFloat,
+                           outerFrac: CGFloat)
+    -> (edgeFloat: CGFloat, heroGap: CGFloat, outer: CGFloat) {
+    let s = min(screen.width, screen.height)
+    return ((s * edgeFloatFrac).rounded(),
+            (s * heroGapFrac).rounded(),
+            (s * outerFrac).rounded())
+}
