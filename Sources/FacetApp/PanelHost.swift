@@ -58,7 +58,6 @@ final class PanelHost: NSObject {
 
     // MARK: - Tunables
 
-    private static let defaultsKey = "panelGeom"   // "x,y,w,h" (h<=0 = auto)
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 34           // band when searching
     private let minWidth: CGFloat = 160
@@ -70,17 +69,15 @@ final class PanelHost: NSObject {
     init(view: SidebarView) {
         self.view = view
 
+        // Built-in default: top-left of the main screen, auto height.
+        // The Controller seeds `[tree]` config geometry over this (via
+        // setExplicitFrame) right after init; drags / resizes / CLI geom
+        // are session-only — config.toml is the single place a panel
+        // position / size persists (no UserDefaults store).
         let scr = NSScreen.main?.frame ?? NSRect(x: 0, y: 0,
                                                  width: 1440, height: 900)
         anchorTL = NSPoint(x: scr.minX + screenMargin,
                            y: scr.maxY - screenMargin)
-        if let s = UserDefaults.standard
-            .string(forKey: Self.defaultsKey) {
-            let p = s.split(separator: ",").compactMap { Double($0) }
-            if p.count >= 2 { anchorTL = NSPoint(x: p[0], y: p[1]) }
-            if p.count >= 3, p[2] >= minWidth { userWidth = CGFloat(p[2]) }
-            if p.count >= 4, p[3] > 0 { userHeight = CGFloat(p[3]) }
-        }
 
         scroll = NSScrollView()
         scroll.drawsBackground = false
@@ -212,23 +209,17 @@ final class PanelHost: NSObject {
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
     }
 
-    /// Place the panel at an exact AppKit-screen rect (= bottom-left
-    /// origin, x/y/w/h all in screen points). Used by CLI geometry
-    /// flags so screenshot / automation scripts can pin the panel
-    /// deterministically.
+    /// Pin the panel to an exact AppKit-screen rect (= bottom-left
+    /// origin, x/y/w/h in screen points). Session-only — used by both
+    /// the `[tree]` config geometry seed (Controller, at startup +
+    /// reload) and the CLI `--pos-x/--pos-y/--width/--height` flags. Not
+    /// persisted; config.toml is the only place geometry sticks.
     func setExplicitFrame(_ frame: NSRect) {
         userWidth = frame.width
         userHeight = frame.height
         anchorTL = NSPoint(x: frame.minX, y: frame.maxY)
         layout(contentHeight: view.contentHeight,
                searching: view.searching)
-        persistPosition()
-    }
-
-    func persistPosition() {
-        UserDefaults.standard.set(
-            "\(anchorTL.x),\(anchorTL.y),\(userWidth),\(userHeight ?? -1)",
-            forKey: Self.defaultsKey)
     }
 
     /// Phase δ: respond to a display reconfiguration. When the
@@ -253,11 +244,11 @@ final class PanelHost: NSObject {
            let dest = DisplayGeometry.nearestDisplay(
             to: panelRect, in: displays)
         {
-            // Snap anchor to dest centre, preserving size.
+            // Snap anchor to dest centre, preserving size (session-only;
+            // a restart re-seeds from `[tree]` config).
             let newX = dest.midX - userWidth / 2
             let newTopY = dest.midY + h / 2
             anchorTL = NSPoint(x: newX, y: newTopY)
-            persistPosition()
         }
         layout(contentHeight: view.contentHeight,
                searching: view.searching)
@@ -362,9 +353,8 @@ extension PanelHost: NSWindowDelegate {
         }
     }
 
-    nonisolated func windowDidEndLiveResize(_ notification: Notification) {
-        MainActor.assumeIsolated { persistPosition() }
-    }
+    // A live resize updates the in-memory geometry (windowDidResize)
+    // but is NOT persisted — geometry sticks only via `[tree]` config.
 
     nonisolated func windowDidBecomeKey(_ notification: Notification) {
         MainActor.assumeIsolated { onKeyChanged?(true) }

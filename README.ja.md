@@ -319,6 +319,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `system` / `mono-light` / `mono-dark` / `monotone`、加えて `random`
   (起動/`--reload` ごとにランダム選択・`system` は除外)
 - `default-view` (トップレベル) — `tree` / `grid`
+- `[tree]` テーブル — `preview-mode` (`popover` / `mirror`) と、パネル
+  geometry シード `pos-x` / `pos-y` / `width` / `height` (画面 pt・AppKit
+  左下原点・4つ全て必須)。毎起動 / `--reload` で権威 (ドラッグ・CLI geom
+  は session 限り) なので、位置/サイズを固定するならここに書く。座標は
+  `facet --view=tree --pos-x/...` と同じ。
 - `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
   `outer-gap` (画面端からの距離)、 単位 pt。 `outer-gap` は4辺一括、
   `outer-gap-top` / `-bottom` / `-left` / `-right` で辺ごとに上書き。
