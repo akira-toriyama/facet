@@ -91,6 +91,11 @@ public protocol WindowBackend: Sendable {
     func workspaces() -> [Workspace]
     func focusedWindow() -> WindowID?
 
+    /// Briefly vibrate `id` in place as a focus cue (④) — position-only,
+    /// the layout is untouched so neighbours never move. Has a default
+    /// no-op so non-animating backends (test stubs) needn't implement it.
+    func animateShake(_ id: WindowID)
+
     /// Switch the active workspace.
     /// - Parameters:
     ///   - index: 0-based workspace index (CLI / catalog use 1-based;
@@ -322,6 +327,9 @@ public extension WindowBackend {
     func switchWorkspace(named name: String, autoFocus: Bool) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
+
+    /// Default no-op focus shake (④) — only the native adapter animates.
+    func animateShake(_ id: WindowID) {}
     func renameWorkspace(at position: Int?, to name: String) {}
     func moveActiveWorkspace(to position: Int) {}
     func balanceActiveWorkspace() {}

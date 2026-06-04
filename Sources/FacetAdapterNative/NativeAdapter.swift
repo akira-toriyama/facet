@@ -1003,6 +1003,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the stored type available on macOS 13. nil = Timer fallback.
     private var displayLink: AnyObject?
     private lazy var slideTicker = SlideTicker(self)
+
+    /// Focus-shake clock (④). Self-contained — kept off the slide state
+    /// machine (no park bookkeeping) so a cosmetic vibration can't
+    /// disturb a WS-switch / retile. Touched on main only.
+    private var shakeTimer: Timer?
+    private var shakeStart: Date?
+    private var shakeAx: AXUIElement?
+    private var shakeBase: CGPoint = .zero
+    /// Shake feel — px amplitude + seconds (tune to taste).
+    private let shakeAmp: CGFloat = 8
+    private let shakeDur: TimeInterval = 0.16
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
     /// derive from the index delta. `switchWorkspaceRelative` sets it so
     /// next/prev always slide the intuitive way even when they wrap
@@ -1142,6 +1153,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `settle` runs once on completion (or interrupt via
     /// finishSlideIfRunning).
     private func startSlideDriver(_ settle: @escaping () -> Void) {
+        stopShake(settleToBase: false)   // a slide supersedes a focus shake
         let preset = resolveAnimPreset()
         slideCurve = preset.curve
         slideStart = Date()
@@ -1159,6 +1171,48 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             RunLoop.main.add(timer, forMode: .common)
             slideTimer = timer
         }
+    }
+
+    // MARK: - Focus shake (④)
+
+    /// Briefly vibrate `id` in place as a focus cue. Position-only — the
+    /// layout tree is never consulted, so neighbours can't move/resize;
+    /// the window returns to its exact origin. No-op under Reduce Motion,
+    /// while a WS-switch / retile slide is running (don't fight it), or if
+    /// the window / its position can't be resolved.
+    public func animateShake(_ id: WindowID) {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
+        if slideStart != nil { return }
+        guard let ax = axWin(id: id), let base = AXGeom.position(ax) else { return }
+        stopShake(settleToBase: true)        // settle any prior shake first
+        shakeAx = ax
+        shakeBase = base
+        shakeStart = Date()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
+            [weak self] _ in self?.shakeTick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        shakeTimer = timer
+    }
+
+    private func shakeTick() {
+        guard let begin = shakeStart, let ax = shakeAx else {
+            stopShake(settleToBase: false); return
+        }
+        let raw = -begin.timeIntervalSinceNow / shakeDur
+        guard raw < 1.0 else {
+            AXGeom.setPosition(ax, shakeBase)   // land exactly at base
+            stopShake(settleToBase: false)
+            return
+        }
+        let dx = WindowShake.offset(at: raw, amplitude: shakeAmp)
+        AXGeom.setPosition(ax, CGPoint(x: shakeBase.x + dx, y: shakeBase.y))
+    }
+
+    private func stopShake(settleToBase: Bool) {
+        if settleToBase, let ax = shakeAx { AXGeom.setPosition(ax, shakeBase) }
+        shakeTimer?.invalidate(); shakeTimer = nil
+        shakeStart = nil; shakeAx = nil
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
