@@ -213,7 +213,8 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | ワークスペース header クリック (tree) | そのワークスペースに切替 |
 | window 行を別ワークスペースにドラッグ (tree) | その window を裏で移動 — 切替なし・focus 不動 |
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
-| 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 — 位置は永続 |
+| 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 (session 限り — 固定は `[tree]` geometry を config に書く) |
+| パネルヘッダをダブルクリック (tree) | 位置・サイズを `[tree]` config geometry (未設定なら既定) にリセット |
 | 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
 | window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
@@ -320,10 +321,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   (起動/`--reload` ごとにランダム選択・`system` は除外)
 - `default-view` (トップレベル) — `tree` / `grid`
 - `[tree]` テーブル — `preview-mode` (`popover` / `mirror`) と、パネル
-  geometry シード `pos-x` / `pos-y` / `width` / `height` (画面 pt・AppKit
-  左下原点・4つ全て必須)。毎起動 / `--reload` で権威 (ドラッグ・CLI geom
-  は session 限り) なので、位置/サイズを固定するならここに書く。座標は
-  `facet --view=tree --pos-x/...` と同じ。
+  geometry シード `pos-x` / `pos-y` / `width` / `height` (画面 pt・**左上
+  原点**: 0,0 = メイン画面の左上・y は下方向・4つ全て必須)。毎起動 /
+  `--reload` で権威 (ドラッグ・CLI geom は session 限り) なので、位置/
+  サイズを固定するならここに書く。座標は `facet --view=tree --pos-x/...`
+  と同じ。
 - `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
   `outer-gap` (画面端からの距離)、 単位 pt。 `outer-gap` は4辺一括、
   `outer-gap-top` / `-bottom` / `-left` / `-right` で辺ごとに上書き。

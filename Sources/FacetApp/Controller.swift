@@ -1903,6 +1903,16 @@ extension Controller: TreeController {
         panelHost.movePanel(by: delta)
     }
 
+    /// Header double-click: reset the panel to its `[tree]` config
+    /// geometry, or the built-in default when none is configured.
+    func resetPanelGeometry() {
+        if let g = config.effectiveTreeGeometry {
+            panelHost.setExplicitFrame(g)
+        } else {
+            panelHost.resetGeometryToDefault()
+        }
+    }
+
     // -- Refresh
 
     func scheduleReconcile(after delay: TimeInterval) {

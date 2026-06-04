@@ -209,15 +209,35 @@ final class PanelHost: NSObject {
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
     }
 
-    /// Pin the panel to an exact AppKit-screen rect (= bottom-left
-    /// origin, x/y/w/h in screen points). Session-only — used by both
-    /// the `[tree]` config geometry seed (Controller, at startup +
-    /// reload) and the CLI `--pos-x/--pos-y/--width/--height` flags. Not
-    /// persisted; config.toml is the only place geometry sticks.
+    /// Pin the panel to an exact rect in **TOP-LEFT origin** — `x`
+    /// right from the main screen's left edge, `y` DOWN from its top
+    /// (0,0 = top-left corner), `w`/`h` in screen points. Session-only —
+    /// used by both the `[tree]` config geometry seed (Controller, at
+    /// startup + reload) and the CLI `--pos-x/--pos-y/--width/--height`
+    /// flags. Not persisted; config.toml is the only place geometry
+    /// sticks.
     func setExplicitFrame(_ frame: NSRect) {
+        guard let scr = NSScreen.main?.frame else { return }
         userWidth = frame.width
         userHeight = frame.height
-        anchorTL = NSPoint(x: frame.minX, y: frame.maxY)
+        // Convert top-left input → the AppKit (bottom-left-screen)
+        // top-left anchor the panel stores: x offset from the screen
+        // left, y measured down from the screen top.
+        anchorTL = NSPoint(x: scr.minX + frame.minX,
+                           y: scr.maxY - frame.minY)
+        layout(contentHeight: view.contentHeight,
+               searching: view.searching)
+    }
+
+    /// Reset to the built-in default geometry: top-left of the main
+    /// screen (with margin), default width, auto height. Used by the
+    /// header double-click when no `[tree]` config geometry is set.
+    func resetGeometryToDefault() {
+        guard let scr = NSScreen.main?.frame else { return }
+        userWidth = sidebarWidth
+        userHeight = nil                     // auto = content height
+        anchorTL = NSPoint(x: scr.minX + screenMargin,
+                           y: scr.maxY - screenMargin)
         layout(contentHeight: view.contentHeight,
                searching: view.searching)
     }

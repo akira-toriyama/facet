@@ -26,6 +26,11 @@ public protocol TreeController: AnyObject, Sendable {
     /// persisted (it seeds from `[tree]` config each launch).
     func movePanel(by delta: CGSize)
 
+    /// Double-click on the panel's top handle band — reset the panel to
+    /// its `[tree]` config geometry, or the built-in default when none
+    /// is configured.
+    func resetPanelGeometry()
+
     /// A row that owns a window preview has changed (hover moved,
     /// selection shifted). Controller debounces these into a single
     /// preview-overlay reconcile.

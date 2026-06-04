@@ -50,9 +50,9 @@ public struct FacetConfig: Sendable {
     /// `"mirror"` puts it at the window's own on-screen frame.
     public var treePreviewMode: String?     // "popover" | "mirror"
     /// Tree-panel geometry seed (`[tree]` pos-x / pos-y / width /
-    /// height). AppKit bottom-left screen origin, points — same as the
-    /// CLI `--pos-x/...`. All four are needed to take effect; read
-    /// `effectiveTreeGeometry`.
+    /// height). TOP-LEFT screen origin (0,0 = top-left, y down), points
+    /// — same as the CLI `--pos-x/...`. All four are needed to take
+    /// effect; read `effectiveTreeGeometry`.
     public var treePosX: Int?
     public var treePosY: Int?
     public var treeWidth: Int?
@@ -223,9 +223,9 @@ public struct FacetConfig: Sendable {
         return ["popover", "mirror"].contains(raw) ? raw : "popover"
     }
 
-    /// The tree-panel geometry seed as a CGRect (AppKit bottom-left
-    /// origin, points), or nil unless all four `[tree]` keys are set
-    /// and width/height are positive. Seeds the panel each launch + on
+    /// The tree-panel geometry seed as a CGRect (TOP-LEFT origin: x,y
+    /// measured from the screen's top-left, points), or nil unless all
+    /// four `[tree]` keys are set and width/height are positive. Seeds the panel each launch + on
     /// reload; runtime drags / CLI geom are session-only. (CGRect is
     /// CoreGraphics — fine in the FacetCore layer.)
     public var effectiveTreeGeometry: CGRect? {

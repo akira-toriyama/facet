@@ -112,12 +112,13 @@ enum FacetApp {
 
           GEOMETRY MODIFIERS (--view=tree only; grid ignores)
             --pos-x=N --pos-y=N --width=N --height=N
-              Place the tree panel at exact screen coords (AppKit
-              bottom-left origin) with explicit size. All four are
-              required together (none / all). Use case: screenshot
-              automation, deterministic UI tests.
-              Example:
-                facet --view=tree --pos-x=100 --pos-y=200 \\
+              Place the tree panel at exact screen coords with explicit
+              size. TOP-LEFT origin: (0,0) = top-left of the main
+              screen, x right, y DOWN. All four are required together
+              (none / all). Use case: screenshot automation,
+              deterministic UI tests. (Persist via `[tree]` config.)
+              Example (8 px in from the top-left):
+                facet --view=tree --pos-x=8 --pos-y=8 \\
                        --width=400 --height=600
 
           NAME is required for every view op (no implicit "tree").
