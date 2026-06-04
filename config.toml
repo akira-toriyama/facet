@@ -36,8 +36,14 @@
 #   "monokai"    — high-energy; lime + magenta.
 #   "hacker"     — black base, neon-green + amber (green-on-black).
 #
+# Neon (vivid electric; signature hue on a hue-tinted near-black):
+#   "neon"       — electric cyan on blue-black; magenta accent, mono.
+#   "cyber"      — aqua/teal on teal-black; hot-pink accent, mono.
+#   "vapor"      — synthwave pink on purple-black; cyan accent, mono.
+#
 # Light:
 #   "cute"       — soft pastel pink, rounded font.
+#   "kawaii"     — candy lavender; purple + mint, rounded font.
 #   "paper"      — clean daytime white; blue + amber, system font.
 #
 # Monochrome:
