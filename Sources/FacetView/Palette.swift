@@ -383,3 +383,21 @@ public func paletteFor(_ raw: String) -> Palette {
     default:           return .terminal
     }
 }
+
+/// The `rainbow` theme animated to hue `phase` (0…1) — `accent` rotates
+/// through the spectrum and `accent2` trails half a turn behind, while
+/// `bg` / `text` stay put so the UI remains usable. Drives the
+/// rainbow-theme cycle (⑪) when `[border] cycle-seconds` is set.
+@MainActor
+public func rainbowPalette(at phase: CGFloat) -> Palette {
+    let base = Palette.rainbow
+    let h = phase - floor(phase)
+    let accent = NSColor(hue: h, saturation: 0.95, brightness: 1, alpha: 1)
+    let accent2 = NSColor(hue: (h + 0.5).truncatingRemainder(dividingBy: 1),
+                          saturation: 0.95, brightness: 1, alpha: 1)
+    return Palette(bg: base.bg, text: base.text, dim: base.dim,
+                   accent: accent, accent2: accent2,
+                   divider: base.divider, hoverFill: base.hoverFill,
+                   selFill: accent.withAlphaComponent(0.22),
+                   font: base.font, menuAppearance: base.menuAppearance)
+}

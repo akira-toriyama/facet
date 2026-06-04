@@ -42,6 +42,8 @@
 #   "vapor"      — synthwave pink on purple-black; cyan accent, mono.
 #   "rainbow"    — loud max-saturation (readability secondary): white on
 #                  violet-black, vivid rose + electric-cyan, rounded.
+#                  Set [border] cycle-seconds to ANIMATE it — the accents
+#                  then rotate through the spectrum over that period.
 #
 # Light:
 #   "cute"       — soft pastel pink, rounded font.
@@ -94,7 +96,9 @@ glow = true
 # Drives the "rainbow" hue rotation AND the width breath below.
 # SETTING this key also makes a non-rainbow effect (neon / cyber /
 # vapor / kawaii) continuously CYCLE its border through its own palette
-# over this period (omit the key → that effect stays a steady color).
+# over this period (omit the key → that effect stays a steady color),
+# AND animates the `--theme = "rainbow"` palette (its accents rotate
+# through the spectrum over this period).
 # 1–120 clamp, default 6.
 # cycle-seconds = 3
 # Width breathing: when BOTH are set (max > min) the border width
