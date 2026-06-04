@@ -167,6 +167,25 @@ cells = 7
 
 
 # -----------------------------------------------------------------
+# Focus shake
+# -----------------------------------------------------------------
+# A brief horizontal vibration of the newly-focused window whenever
+# focus changes — a quick "you're here now" cue. Purely cosmetic and
+# position-only: neighbouring tiles never move or resize, and the window
+# settles back on its exact spot. Honours the system Reduce Motion
+# setting (off when that's on).
+[shake]
+
+# Vibration size in pixels. 0 turns the shake OFF entirely. Clamped
+# 0..40; built-in fallback is 8.
+amplitude = 8
+
+# Vibration duration in milliseconds (a quick buzz that decays to rest).
+# Clamped 60..600; built-in fallback is 160.
+duration-ms = 160
+
+
+# -----------------------------------------------------------------
 # Tree-view (sidebar) options
 # -----------------------------------------------------------------
 [tree]

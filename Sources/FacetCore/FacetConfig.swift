@@ -44,6 +44,10 @@ public struct FacetConfig: Sendable {
     public var railCells: Int?              // max strip cells shown at once
     public var railStrip: Int?              // strip band size, % of short screen edge
 
+    // [shake] — the focus-change window vibration (④)
+    public var shakeAmplitude: Int?         // px; 0 = off. Read `effectiveShakeAmplitude`
+    public var shakeDurationMs: Int?        // ms; read `effectiveShakeDurationMs`
+
     // [tree]
     /// How the sidebar's hover-preview overlay is sized + placed.
     /// `"popover"` (default) keeps it next to the source row;
@@ -199,6 +203,18 @@ public struct FacetConfig: Sendable {
     /// default 30.
     public var effectiveRailStrip: Int {
         max(8, min(50, railStrip ?? 30))
+    }
+
+    /// Focus-shake (④) amplitude in px. 0 disables the shake entirely.
+    /// 0…40 clamp, default 8.
+    public var effectiveShakeAmplitude: CGFloat {
+        CGFloat(max(0, min(40, shakeAmplitude ?? 8)))
+    }
+
+    /// Focus-shake (④) duration in milliseconds. 60…600 clamp, default
+    /// 160. Returned as a Double so callers can divide to seconds.
+    public var effectiveShakeDurationMs: Double {
+        Double(max(60, min(600, shakeDurationMs ?? 160)))
     }
 
     /// Effective background-capture interval for grid thumbnails.
@@ -463,6 +479,9 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
         if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
         if case .int(let n)? = toml["rail"]?["strip"] { c.railStrip = n }
+        // [shake]
+        if case .int(let n)? = toml["shake"]?["amplitude"] { c.shakeAmplitude = n }
+        if case .int(let n)? = toml["shake"]?["duration-ms"] { c.shakeDurationMs = n }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
