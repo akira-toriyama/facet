@@ -32,3 +32,7 @@ let headerGripW: CGFloat = 9
 // Pointer distance (px) required before a mouseDown becomes a drag.
 // Below this, the gesture stays a click.
 let dragThreshold: CGFloat = 5
+
+// Opacity of the lifted DnD snapshot card (⑨) — translucent so the
+// drop-target band shows through (dnd-kit style). 0…1.
+let dragGhostAlpha: CGFloat = 0.82

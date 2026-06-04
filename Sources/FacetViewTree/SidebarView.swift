@@ -1239,17 +1239,22 @@ public final class SidebarView: NSView {
         dragCard.setFrameSize(r.size)
         dragCard.layer?.borderColor = pal.accent.withAlphaComponent(0.9).cgColor
         dragCard.layer?.backgroundColor = (pal.bg ?? NSColor(white: 0.10, alpha: 1)).cgColor
+        // Semi-transparent (dnd-kit style) so the drop-target band shows
+        // through the lifted card — the drop is easier to predict (⑨).
+        dragCard.alphaValue = dragGhostAlpha
         chip.isHidden = true
         dragCard.isHidden = false
         return true
     }
 
     /// Move whichever drag ghost (card or chip) is visible to follow `cp`.
+    /// Anchored just below-right of the cursor (not centred on it) so the
+    /// cursor + the drop-target band it points at stay visible.
     private func moveDragGhost(to cp: NSPoint) {
         let ghost: NSView = dragCard.isHidden ? chip : dragCard
         ghost.setFrameOrigin(NSPoint(
-            x: min(max(cp.x + 12, 4), bounds.width - ghost.frame.width - 4),
-            y: cp.y - ghost.frame.height / 2))
+            x: min(max(cp.x + 14, 4), bounds.width - ghost.frame.width - 4),
+            y: max(4, cp.y - 12)))
     }
 
     private func hideDragGhosts() {
