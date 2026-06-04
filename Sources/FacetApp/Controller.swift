@@ -947,35 +947,37 @@ final class Controller: NSObject {
         }
     }
 
-    /// Fire the shake + border for a fast-path-resolved focus id. Only
-    /// acts on a genuine change to a MANAGED window (consistent with the
-    /// reconcile path); a just-opened / excluded / facet-own window
-    /// falls back to the reconcile. Returns true once it fires so the
-    /// poll stops. Idempotent via `lastShakenFocus`.
+    /// Fire the shake + border for a fast-path-resolved focus id on a
+    /// genuine focus change. The ⑤ BORDER follows ANY focused window
+    /// (managed or not) with a fresh CG frame, so it works on windows
+    /// facet can't tile (Chrome / Calendar lazy-AX). The ④ SHAKE stays
+    /// managed-only — it repositions the window via AX, which a
+    /// lazy-/no-AX window won't allow anyway. Returns true once it fires
+    /// so the poll stops. Idempotent via `lastShakenFocus`.
     @discardableResult
     private func onFastFocus(_ id: WindowID?, attempt: Int) -> Bool {
-        let fw = id.flatMap { wid in
-            lastWorkspaces.flatMap { $0.windows }.first { $0.id == wid }
-        }
-        if let id, id != lastShakenFocus, let fw {
-            lastShakenFocus = id
-            if let t0 = lastFocusEventAt {
-                Log.debug(String(format: "focus→react(fast) %.0fms attempt=%d",
-                                 (ProcessInfo.processInfo.systemUptime - t0) * 1000, attempt))
-                lastFocusEventAt = nil
+        guard let id, id != lastShakenFocus else {
+            if attempt >= focusPollMax, let id {
+                Log.debug("focus fast: id=\(id.serverID) unchanged (no fire)")
             }
+            return false
+        }
+        lastShakenFocus = id
+        if let t0 = lastFocusEventAt {
+            Log.debug(String(format: "focus→react(fast) %.0fms attempt=%d",
+                             (ProcessInfo.processInfo.systemUptime - t0) * 1000, attempt))
+            lastFocusEventAt = nil
+        }
+        // ⑤ border: any focused window, fresh CG frame (AX-free).
+        if config.effectiveActiveWindowBorder, let frame = backend.windowFrame(id) {
+            activeWindowBorder.show(around: Self.cgFrameToAppKit(frame),
+                                    for: id, flash: true)
+        }
+        // ④ shake: managed windows only.
+        if lastWorkspaces.flatMap({ $0.windows }).contains(where: { $0.id == id }) {
             backend.animateShake(id)
-            if config.effectiveActiveWindowBorder, let f = fw.frame {
-                activeWindowBorder.show(around: Self.cgFrameToAppKit(f),
-                                        for: id, flash: true)
-            }
-            return true
         }
-        if attempt >= focusPollMax {     // exhausted — why did the fast path miss?
-            Log.debug("focus fast-miss id=\(id?.serverID ?? -1) "
-                + "last=\(lastShakenFocus?.serverID ?? -1) inWS=\(fw != nil)")
-        }
-        return false
+        return true
     }
 
     private func requestRefresh(focus: Bool = false) {
@@ -1105,20 +1107,30 @@ final class Controller: NSObject {
             backend.animateShake(f)
         }
         lastShakenFocus = newFocus
-        // ⑤ Active-window ring, coordinated with the ④ shake: same
-        // settled focus signal, same flash-on-change. Place it around the
-        // focused window's current frame (re-frames only when it moved).
-        // Hidden while a window is mid-drag (refresh is suppressed then,
-        // so this won't even run; `liveDragTick` hides the ring) and when
-        // nothing managed is focused (e.g. the facet panel is key) — the
-        // focused window is always in the active WS, the only WS that
-        // reports a live `frame`.
+        // ⑤ Active-window ring — steady-state maintenance (the fast-path
+        // moves it on focus change; this follows the tracked window's
+        // frame as it moves + handles hide). The ring follows ANY focused
+        // window, managed or not: a managed window uses the live snapshot
+        // frame; an unmanaged one the fast-path ringed (Chrome / Calendar
+        // lazy-AX) keeps following its fresh CG frame so it isn't dropped
+        // just for being absent from the managed snapshot. Hidden mid-drag
+        // (and when the tracked window has closed → `windowFrame` nil).
         if config.effectiveActiveWindowBorder {
-            if realWindowDrag?.inProgress != true,
-               let fw = wss.flatMap({ $0.windows }).first(where: { $0.isFocused }),
-               let cg = fw.frame {
+            if realWindowDrag?.inProgress == true {
+                activeWindowBorder.hide()
+            } else if let fw = wss.flatMap({ $0.windows }).first(where: { $0.isFocused }),
+                      let cg = fw.frame {
+                // Managed focused window: the snapshot frame is live + cheap.
                 activeWindowBorder.show(around: Self.cgFrameToAppKit(cg),
-                                        for: fw.id, flash: focusChanged)
+                                        for: fw.id,
+                                        flash: fw.id != activeWindowBorder.tracked)
+            } else if let tracked = activeWindowBorder.tracked,
+                      let frame = backend.windowFrame(tracked) {
+                // Focus is on an UNMANAGED window the fast-path ringed
+                // (e.g. Chrome) — keep following its fresh frame, don't
+                // hide just because it isn't in the managed snapshot.
+                activeWindowBorder.show(around: Self.cgFrameToAppKit(frame),
+                                        for: tracked, flash: false)
             } else {
                 activeWindowBorder.hide()
             }
