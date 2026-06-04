@@ -76,7 +76,13 @@ final class Controller: NSObject {
     /// Pauses refresh/apply while the user is mid-grip-drag, so a
     /// layout pass can't stomp the panel height the next mouseDragged
     /// is about to read (memory: grid-branch-grip-intermittent).
-    private var refreshPending = false
+    /// Earliest-deadline coalescing for `requestRefresh`: the uptime at
+    /// which the pending refresh is scheduled to fire (nil = none), plus
+    /// a generation token so a newly-scheduled earlier fire invalidates
+    /// the older later one. Lets a focus event pull a slow pending
+    /// refresh sooner instead of being swallowed by it.
+    private var pendingRefreshAt: TimeInterval?
+    private var refreshGen = 0
 
     // MARK: - Preview (hover overlay + grid thumbnails)
 
@@ -165,6 +171,16 @@ final class Controller: NSObject {
     /// Debounce window for event-driven refreshes — coalesces a
     /// burst of events into a single backend query.
     private let refreshDebounce: TimeInterval = 0.05
+    /// Shorter debounce for focus-change events: they drive the ④ shake
+    /// + ⑤ active-window border, felt directly by the user, so the
+    /// reaction shouldn't be a beat late. Kept > 0 (≈ one frame) so the
+    /// off-main AX focus query inside the reconcile reads the SETTLED
+    /// state — an event-time query races the not-yet-committed focus and
+    /// returns nil / stale (memory `facet-focus-detection-ax-timing`).
+    /// The reconcile's enumerate + dispatch add further settle margin.
+    /// Tunable; raise toward `refreshDebounce` if a slow app ever shows
+    /// a one-frame stale flicker.
+    private let focusRefreshDebounce: TimeInterval = 0.016
 
     // MARK: - Init
 
@@ -268,8 +284,10 @@ final class Controller: NSObject {
         logConfigWarnings()
         eventTask = Task { [weak self] in
             guard let self else { return }
-            for await _ in self.backend.events {
-                await MainActor.run { self.requestRefresh() }
+            for await ev in self.backend.events {
+                let focus: Bool
+                if case .focusChanged = ev { focus = true } else { focus = false }
+                await MainActor.run { self.requestRefresh(focus: focus) }
             }
         }
         // Adapter error stream → lastError slot in facet status.
@@ -854,14 +872,23 @@ final class Controller: NSObject {
 
     // MARK: - Refresh / apply
 
-    private func requestRefresh() {
-        if refreshPending { return }
-        refreshPending = true
+    private func requestRefresh(focus: Bool = false) {
+        let delay = focus ? focusRefreshDebounce : refreshDebounce
+        let fireAt = ProcessInfo.processInfo.systemUptime + delay
+        // Coalesce, but always honour the EARLIEST requested deadline: a
+        // focus event arriving behind an already-pending slow refresh
+        // pulls the fire sooner instead of waiting it out. A slow event
+        // arriving behind a pending fast refresh is covered (return).
+        if let p = pendingRefreshAt, p <= fireAt { return }
+        pendingRefreshAt = fireAt
+        refreshGen &+= 1
+        let gen = refreshGen
         DispatchQueue.main.asyncAfter(
-            deadline: .now() + refreshDebounce
+            deadline: .now() + delay
         ) { [weak self] in
-            self?.refreshPending = false
-            self?.refresh()
+            guard let self, self.refreshGen == gen else { return }
+            self.pendingRefreshAt = nil
+            self.refresh()
         }
     }
 

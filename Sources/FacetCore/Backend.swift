@@ -52,6 +52,12 @@ public struct WindowMenuItem: Sendable {
 /// layer runs at.
 public enum BackendEvent: Sendable {
     case refreshNeeded
+    /// A window focus change specifically (vs any other reconcile
+    /// trigger). The Controller fast-paths these with a much shorter
+    /// debounce because they drive the directly-felt ④ shake + ⑤
+    /// active-window border. Still goes through the same settled
+    /// reconcile snapshot — just sooner.
+    case focusChanged
 }
 
 /// Relative workspace target for `switchWorkspaceRelative`.

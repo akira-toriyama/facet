@@ -191,7 +191,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     eventContinuation.yield(.refreshNeeded)
                 }
             }
-            eventContinuation.yield(.refreshNeeded)
+            // Focus changes get their own event so the Controller can
+            // fast-path the reconcile (shorter debounce) — they drive the
+            // directly-felt ④ shake + ⑤ active-window border.
+            if case .focusChanged = event {
+                eventContinuation.yield(.focusChanged)
+            } else {
+                eventContinuation.yield(.refreshNeeded)
+            }
         }
         self.eventObserver = observer
         DispatchQueue.main.async {
