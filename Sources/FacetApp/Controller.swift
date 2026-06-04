@@ -58,6 +58,9 @@ final class Controller: NSObject {
     /// the only reliable signal that windows were parked / unparked).
     private var prevActiveWSIndex: Int?
     private var userHidden = false
+    /// The window the focus shake (④) last fired for — so it fires once
+    /// per genuine focus change (snapshot diff), not on every reconcile.
+    private var lastShakenFocus: WindowID?
 
     /// Last surfaced operational error (e.g. out-of-range workspace
     /// switch, no-focused-window window move). Held in-memory and
@@ -876,6 +879,18 @@ final class Controller: NSObject {
             gridView?.flashBorder()
             railView?.flashBorder()
         }
+        // Focus shake (④): vibrate the newly-focused window when the
+        // focused window changes. Driven off the reconcile snapshot (its
+        // `isFocused` is the reliable, settled focus — an immediate
+        // event-time query of the frontmost app's focused window races
+        // the AX state and returns nil / a stale id). Skip the first
+        // snapshot (startup); the adapter no-ops during a slide, under
+        // Reduce Motion, and when `[shake] amplitude = 0`.
+        let newFocus = wss.flatMap { $0.windows }.first(where: { $0.isFocused })?.id
+        if !firstRealApply, let f = newFocus, f != lastShakenFocus {
+            backend.animateShake(f)
+        }
+        lastShakenFocus = newFocus
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index

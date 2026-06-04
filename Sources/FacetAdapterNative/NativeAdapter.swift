@@ -191,19 +191,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     eventContinuation.yield(.refreshNeeded)
                 }
             }
-            if case .focusChanged = event, let self {
-                // ④ Fire the focus shake AT EVENT TIME so it's immediate
-                // and reliable — far snappier than waiting for the
-                // debounced reconcile to re-derive focus from a fresh
-                // snapshot (which read as "slow / not 100%"). Re-query the
-                // live focused id; skip the first observation (nil prior =
-                // startup) so it doesn't shake on launch.
-                let id = self.focusedWindow()
-                if let f = id, let prev = self.lastShakenFocus, f != prev {
-                    self.animateShake(f)
-                }
-                self.lastShakenFocus = id
-            }
             eventContinuation.yield(.refreshNeeded)
         }
         self.eventObserver = observer
@@ -1031,9 +1018,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Shake feel — px amplitude + seconds, from `[shake]` config.
     private var shakeAmp: CGFloat { config.effectiveShakeAmplitude }
     private var shakeDur: TimeInterval { config.effectiveShakeDurationMs / 1000 }
-    /// The window the focus shake last fired for — so it fires once per
-    /// genuine focus change (event-driven), not on every re-query.
-    private var lastShakenFocus: WindowID?
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
     /// derive from the index delta. `switchWorkspaceRelative` sets it so
     /// next/prev always slide the intuitive way even when they wrap

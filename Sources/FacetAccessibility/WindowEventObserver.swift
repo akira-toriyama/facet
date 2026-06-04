@@ -59,11 +59,6 @@ public final class WindowEventObserver: @unchecked Sendable {
         /// window, and the reconcile re-reads every window's `isOnscreen`
         /// regardless. See memory `facet-hide-reclaim-decisions`.
         case visibilityChanged
-        /// The frontmost focused window changed (`kAXFocusedWindowChanged`).
-        /// Its own case (not `.other`) so the adapter can react *at event
-        /// time* — fire the focus shake (④) immediately, instead of waiting
-        /// for the debounced reconcile to re-derive focus from a snapshot.
-        case focusChanged
         case other
     }
 
@@ -237,11 +232,6 @@ private func axObserverCallback(
         // need to resolve which one here (app-level events carry the
         // app element, not a window, anyway).
         event = .visibilityChanged
-    } else if note == kAXFocusedWindowChangedNotification as String {
-        // Focus moved — adapter shakes the newly-focused window (④). It
-        // re-queries the live focused id itself, so no need to resolve
-        // the element here.
-        event = .focusChanged
     }
     MainActor.assumeIsolated { obs.fire(event, notification: note) }
 }
