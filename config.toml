@@ -186,15 +186,16 @@ cells = 7
 preview-mode = "popover"
 
 # Tree-panel geometry — where the sidebar opens and its size, in
-# screen points with an AppKit BOTTOM-LEFT origin (same as the CLI
-# `facet --view=tree --pos-x/--pos-y/--width/--height`). All FOUR are
-# needed to take effect; a partial set is ignored (logged). Leave all
-# unset for the built-in default (top-left of the main screen, auto
-# height). This config value is authoritative each launch / `--reload`
-# — dragging or resizing the panel, or a CLI geom flag, only lasts the
-# session, so set it here to make a position / size stick.
-# pos-x  = 100
-# pos-y  = 200
+# screen points with a TOP-LEFT origin: (0,0) is the top-left corner
+# of the main screen, x grows right, y grows DOWN. Same coords as the
+# CLI `facet --view=tree --pos-x/--pos-y/--width/--height`. All FOUR
+# are needed to take effect; a partial set is ignored (logged). Leave
+# all unset for the built-in default (top-left, auto height). This
+# config value is authoritative each launch / `--reload` — dragging or
+# resizing the panel, or a CLI geom flag, only lasts the session, so
+# set it here to make a position / size stick.
+# pos-x  = 8        # 8 px in from the left
+# pos-y  = 8        # 8 px down from the top
 # width  = 400
 # height = 600
 
