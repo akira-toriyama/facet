@@ -162,7 +162,7 @@ public struct FacetConfig: Sendable {
             "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
             "everforest", "solarized", "onedark", "monokai", "hacker",
             "paper", "mono-light", "mono-dark", "monotone",
-            "neon", "cyber", "vapor", "kawaii",
+            "neon", "cyber", "vapor", "kawaii", "rainbow",
             "random",   // meta: paletteFor picks a concrete theme
         ]
         return known.contains(raw) ? raw : "terminal"

@@ -316,6 +316,20 @@ public extension Palette {
         hoverFill: NSColor(hex: 0xB661E8, 0.10),
         selFill: NSColor(hex: 0xB661E8, 0.18),
         font: .rounded, menuAppearance: .aqua)
+
+    /// Rainbow — a deliberately loud, maximum-saturation set; readability
+    /// is explicitly secondary (per request). White on a near-black violet
+    /// so the vivid rose primary + electric-cyan secondary blaze. Rounded
+    /// for a playful feel. (Pair with `[border] effect = "rainbow"` for the
+    /// actually-cycling hue; this palette itself is static.)
+    static let rainbow = Palette(
+        bg: NSColor(hex: 0x0D0B14), text: NSColor(hex: 0xFFFFFF),
+        dim: NSColor(hex: 0x8C84B0), accent: NSColor(hex: 0xFF2D95),
+        accent2: NSColor(hex: 0x2BE0FF),
+        divider: NSColor.white.withAlphaComponent(0.14),
+        hoverFill: NSColor.white.withAlphaComponent(0.07),
+        selFill: NSColor(hex: 0xFF2D95).withAlphaComponent(0.22),
+        font: .rounded, menuAppearance: .darkAqua)
 }
 
 /// Canonical theme names accepted by `--theme=`. Single source of
@@ -326,7 +340,7 @@ public let canonicalStyles = [
     "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
     "everforest", "solarized", "onedark", "monokai", "hacker", "paper",
     "mono-light", "mono-dark", "monotone",
-    "neon", "cyber", "vapor", "kawaii",
+    "neon", "cyber", "vapor", "kawaii", "rainbow",
     "random",   // meta: picks a random concrete theme at resolve time
 ]
 
@@ -353,6 +367,7 @@ public func paletteFor(_ raw: String) -> Palette {
     case "cyber":      return .cyber
     case "vapor":      return .vapor
     case "kawaii":     return .kawaii
+    case "rainbow":    return .rainbow
     case "paper":      return .paper
     case "mono-light": return .monoLight
     case "mono-dark":  return .monoDark
