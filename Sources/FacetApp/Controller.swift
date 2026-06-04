@@ -97,6 +97,10 @@ final class Controller: NSObject {
     var realWindowDrag: RealWindowDragMonitor?
     /// Live prediction overlay shown during a real-window drag (PR-3).
     let dndOverlay = DndPredictionOverlay()
+    /// ⑤ Ring around the focused third-party window (`[border]
+    /// active-window`). Fed the focused window's settled frame each
+    /// reconcile; hidden while a window is in motion.
+    let activeWindowBorder = ActiveWindowBorderOverlay()
     /// One prediction round-trip at a time — throttles the per-move
     /// `predictedDropFrames` requests to the backend's response rate.
     var dndPredictionInFlight = false
@@ -233,6 +237,13 @@ final class Controller: NSObject {
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         railView?.applyBorder(effectName: e, glow: g, width: w,
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
+        // ⑤ The active-window ring wears the same `[border]` style.
+        activeWindowBorder.configure(effectName: e, glow: g, width: w,
+                                     cycleSeconds: cs, cycleColors: cc,
+                                     minWidth: mn, maxWidth: mx)
+        // A hot-reload that turns the feature off clears any live ring;
+        // `apply()` re-places it on the next reconcile when re-enabled.
+        if !config.effectiveActiveWindowBorder { activeWindowBorder.hide() }
     }
 
     private func handlePanelKeyChange(isKey: Bool) {
@@ -934,10 +945,30 @@ final class Controller: NSObject {
         // snapshot (startup); the adapter no-ops during a slide, under
         // Reduce Motion, and when `[shake] amplitude = 0`.
         let newFocus = wss.flatMap { $0.windows }.first(where: { $0.isFocused })?.id
-        if !firstRealApply, let f = newFocus, f != lastShakenFocus {
+        let focusChanged = !firstRealApply && newFocus != nil
+            && newFocus != lastShakenFocus
+        if focusChanged, let f = newFocus {
             backend.animateShake(f)
         }
         lastShakenFocus = newFocus
+        // ⑤ Active-window ring, coordinated with the ④ shake: same
+        // settled focus signal, same flash-on-change. Place it around the
+        // focused window's current frame (re-frames only when it moved).
+        // Hidden while a window is mid-drag (refresh is suppressed then,
+        // so this won't even run; `liveDragTick` hides the ring) and when
+        // nothing managed is focused (e.g. the facet panel is key) — the
+        // focused window is always in the active WS, the only WS that
+        // reports a live `frame`.
+        if config.effectiveActiveWindowBorder {
+            if realWindowDrag?.inProgress != true,
+               let fw = wss.flatMap({ $0.windows }).first(where: { $0.isFocused }),
+               let cg = fw.frame {
+                activeWindowBorder.show(around: Self.cgFrameToAppKit(cg),
+                                        for: fw.id, flash: focusChanged)
+            } else {
+                activeWindowBorder.hide()
+            }
+        }
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index
