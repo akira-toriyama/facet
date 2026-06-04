@@ -99,7 +99,7 @@ public protocol WindowBackend: Sendable {
     func workspaces() -> [Workspace]
     func focusedWindow() -> WindowID?
 
-    /// SPIKE: window-server-fresh focused window for the focus fast-path.
+    /// Window-server-fresh focused window for the focus fast-path.
     /// Default = `focusedWindow()` (the AX/NSWorkspace path); the native
     /// adapter overrides it with a private-SkyLight front-signal read
     /// that commits more promptly than `NSWorkspace.frontmostApplication`.
@@ -108,7 +108,10 @@ public protocol WindowBackend: Sendable {
     /// Briefly vibrate `id` in place as a focus cue (④) — position-only,
     /// the layout is untouched so neighbours never move. Has a default
     /// no-op so non-animating backends (test stubs) needn't implement it.
-    func animateShake(_ id: WindowID)
+    /// `amplitude` (px) + `durationMs` are passed in from the caller's
+    /// live config so `[shake]` edits hot-reload (the adapter's own
+    /// config is frozen at init).
+    func animateShake(_ id: WindowID, amplitude: CGFloat, durationMs: Double)
 
     /// Switch the active workspace.
     /// - Parameters:
@@ -343,7 +346,7 @@ public extension WindowBackend {
     func removeWorkspace(at position: Int?) {}
 
     /// Default no-op focus shake (④) — only the native adapter animates.
-    func animateShake(_ id: WindowID) {}
+    func animateShake(_ id: WindowID, amplitude: CGFloat, durationMs: Double) {}
     func renameWorkspace(at position: Int?, to name: String) {}
     func moveActiveWorkspace(to position: Int) {}
     func balanceActiveWorkspace() {}

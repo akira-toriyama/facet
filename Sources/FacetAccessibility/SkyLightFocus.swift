@@ -1,11 +1,11 @@
-// SPIKE (spike/focus-skylight-frontsignal): window-server-fresh focus
-// resolution for the ④ shake + ⑤ active-window border fast-path.
+// Window-server-fresh focus resolution for the ④ shake + ⑤
+// active-window border fast-path.
 //
-// The main-thread `AX.frontmostFocusedCGID()` path (NSWorkspace
-// .frontmostApplication + AX) is fast median but its front-app signal
-// occasionally lags >150ms, so the fast-path poll misses and drops to
-// the slow reconcile ("たまに遅い"). JankyBorders avoids this by reading
-// the front process from the window server, which commits promptly.
+// The `AX.frontmostFocusedCGID()` path (NSWorkspace.frontmostApplication
+// + AX) is fast on median but its front-app signal occasionally lags
+// >150ms, so the fast-path poll misses and drops to the slow reconcile.
+// JankyBorders avoids this by reading the front process from the window
+// server, which commits promptly.
 //
 // This resolver does the same with READ-only private SkyLight (same
 // tier facet already uses for MacDesktops): `_SLPSGetFrontProcess` →

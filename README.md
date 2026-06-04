@@ -376,6 +376,10 @@ Frequently-touched keys:
   `min-width`/`max-width` are both set (max > min, each 0.5–30) — a
   width breath that oscillates the border between them (any effect,
   overriding the fixed `width`). Off shows a plain theme-accent border.
+  `active-window = true` (default `false`) also rings the **focused
+  window** of any app — managed or not — with this same style, moving +
+  flashing as focus changes and hiding while a window is dragged /
+  resized.
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or

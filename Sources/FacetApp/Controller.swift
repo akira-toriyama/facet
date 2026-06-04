@@ -89,10 +89,6 @@ final class Controller: NSObject {
     /// when it finishes — so a burst can't build a multi-second backlog.
     private var reconcileInFlight = false
     private var reconcileDirty = false
-    /// Uptime of the most recent focus-change event, for FACET_DEBUG
-    /// end-to-end focus→reaction latency telemetry (logged at the ④/⑤
-    /// fire in apply()).
-    private var lastFocusEventAt: TimeInterval?
     /// Focus fast-path adaptive poll. ONE poll runs at a time
     /// (`focusPollActive`); it re-reads `focusedWindow()` each tick so it
     /// naturally tracks the latest focus, and runs its full schedule
@@ -301,8 +297,8 @@ final class Controller: NSObject {
     /// event task — don't.
     func start() {
         Log.debug("controller start")
-        Log.line("focus fast-path SPIKE: SkyLight front-signal available="
-            + "\(SkyLightFocus.available)")
+        Log.debug("focus fast-path: SkyLight front-signal "
+            + (SkyLightFocus.available ? "available" : "unavailable (AX fallback)"))
         logConfigWarnings()
         eventTask = Task { [weak self] in
             guard let self else { return }
@@ -310,10 +306,7 @@ final class Controller: NSObject {
                 let focus: Bool
                 if case .focusChanged = ev { focus = true } else { focus = false }
                 await MainActor.run {
-                    if focus {
-                        self.lastFocusEventAt = ProcessInfo.processInfo.systemUptime
-                        self.scheduleFocusFastPath()
-                    }
+                    if focus { self.scheduleFocusFastPath() }
                     self.requestRefresh(focus: focus)
                 }
             }
@@ -929,12 +922,12 @@ final class Controller: NSObject {
     }
 
     private func pollFocusFast(attempt: Int) {
-        // SPIKE: window-server-fresh front signal (private SkyLight) in
-        // place of the AX/NSWorkspace `focusedWindow()`, to kill the
-        // residual "たまに遅い" where NSWorkspace.frontmostApplication
-        // lags >150ms. Still on MAIN (CGWindowList read is cheap).
+        // Resolve via the window-server-fresh front signal (SkyLight, with
+        // an AX fallback) on MAIN — a background read of
+        // `NSWorkspace.frontmostApplication` returns a stale value that
+        // never updates. The CGWindowList read is cheap on main.
         let id = backend.frontWindowFast()
-        if onFastFocus(id, attempt: attempt) {
+        if onFastFocus(id) {
             focusPollActive = false                 // fired → done
             return
         }
@@ -955,19 +948,9 @@ final class Controller: NSObject {
     /// lazy-/no-AX window won't allow anyway. Returns true once it fires
     /// so the poll stops. Idempotent via `lastShakenFocus`.
     @discardableResult
-    private func onFastFocus(_ id: WindowID?, attempt: Int) -> Bool {
-        guard let id, id != lastShakenFocus else {
-            if attempt >= focusPollMax, let id {
-                Log.debug("focus fast: id=\(id.serverID) unchanged (no fire)")
-            }
-            return false
-        }
+    private func onFastFocus(_ id: WindowID?) -> Bool {
+        guard let id, id != lastShakenFocus else { return false }
         lastShakenFocus = id
-        if let t0 = lastFocusEventAt {
-            Log.debug(String(format: "focus→react(fast) %.0fms attempt=%d",
-                             (ProcessInfo.processInfo.systemUptime - t0) * 1000, attempt))
-            lastFocusEventAt = nil
-        }
         // ⑤ border: any focused window, fresh CG frame (AX-free).
         if config.effectiveActiveWindowBorder, let frame = backend.windowFrame(id) {
             activeWindowBorder.show(around: Self.cgFrameToAppKit(frame),
@@ -975,7 +958,8 @@ final class Controller: NSObject {
         }
         // ④ shake: managed windows only.
         if lastWorkspaces.flatMap({ $0.windows }).contains(where: { $0.id == id }) {
-            backend.animateShake(id)
+            backend.animateShake(id, amplitude: config.effectiveShakeAmplitude,
+                                 durationMs: config.effectiveShakeDurationMs)
         }
         return true
     }
@@ -1096,15 +1080,8 @@ final class Controller: NSObject {
         let focusChanged = !firstRealApply && newFocus != nil
             && newFocus != lastShakenFocus
         if focusChanged, let f = newFocus {
-            // FACET_DEBUG: end-to-end focus event → reaction latency. If
-            // this is large vs `enumerate` (see reconcile-timing log) the
-            // beat is the AX `focusedWindow()` round-trip to the app.
-            if let t0 = lastFocusEventAt {
-                Log.debug(String(format: "focus→react(reconcile) %.0fms (fast-path missed)",
-                                 (ProcessInfo.processInfo.systemUptime - t0) * 1000))
-                lastFocusEventAt = nil
-            }
-            backend.animateShake(f)
+            backend.animateShake(f, amplitude: config.effectiveShakeAmplitude,
+                                 durationMs: config.effectiveShakeDurationMs)
         }
         lastShakenFocus = newFocus
         // ⑤ Active-window ring — steady-state maintenance (the fast-path

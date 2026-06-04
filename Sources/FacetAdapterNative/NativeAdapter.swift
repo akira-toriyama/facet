@@ -340,19 +340,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
             forMacDesktopOrdinal: activeMacDesktopOrdinal))
-        // Latency telemetry (FACET_DEBUG): the AX `focusedWindow()`
-        // query asks the front app's AX server (kAXFocusedWindow, 0.25s
-        // timeout) and is the suspected dominant focus-reaction latency
-        // for slow-AX apps (Chrome/Electron). Time it vs the AX-free
-        // CGWindowList enumerate to confirm where the beat goes.
-        let _tEnum0 = ProcessInfo.processInfo.systemUptime
         let live = enumerateCGWindows()
-        let _tEnum1 = ProcessInfo.processInfo.systemUptime
         let focused = focusedWindow()
-        let _tFoc1 = ProcessInfo.processInfo.systemUptime
-        Log.debug(String(format:
-            "native: reconcile timing enumerate=%.0fms focusedWindow(AX)=%.0fms",
-            (_tEnum1 - _tEnum0) * 1000, (_tFoc1 - _tEnum1) * 1000))
         let rect = activeDisplayRect()
         // Phase γ.3 + F: classify first-sight windows — auto-float
         // (sheets / dialogs / palettes + config float rules) and
@@ -999,9 +988,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return WindowID(serverID: Int(cgID))
     }
 
-    /// SPIKE: window-server-fresh focused window via private SkyLight
+    /// Window-server-fresh focused window via private SkyLight
     /// (`SkyLightFocus`), falling back to the AX path when the symbols
-    /// aren't available. Used only by the focus fast-path.
+    /// aren't available. Used by the focus fast-path — it commits more
+    /// promptly than `NSWorkspace.frontmostApplication`.
     public func frontWindowFast() -> WindowID? {
         if let cgID = SkyLightFocus.frontmostFocusedCGID() {
             return WindowID(serverID: Int(cgID))
@@ -1043,9 +1033,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// on-main shake clock. Cleared when the shake settles.
     private var shakeID: WindowID?
     private var shakeBase: CGPoint = .zero
-    /// Shake feel — px amplitude + seconds, from `[shake]` config.
-    private var shakeAmp: CGFloat { config.effectiveShakeAmplitude }
-    private var shakeDur: TimeInterval { config.effectiveShakeDurationMs / 1000 }
+    /// Shake feel — px amplitude + seconds, captured at the start of each
+    /// shake from the caller's live config (so `[shake]` edits hot-reload;
+    /// the adapter's own `config` is a frozen `let`).
+    private var shakeAmp: CGFloat = 0
+    private var shakeDur: TimeInterval = 0.2
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
     /// derive from the index delta. `switchWorkspaceRelative` sets it so
     /// next/prev always slide the intuitive way even when they wrap
@@ -1212,12 +1204,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the window returns to its exact origin. No-op under Reduce Motion,
     /// while a WS-switch / retile slide is running (don't fight it), or if
     /// the window / its position can't be resolved.
-    public func animateShake(_ id: WindowID) {
-        if shakeAmp <= 0 { return }   // `[shake] amplitude = 0` disables it
+    public func animateShake(_ id: WindowID, amplitude: CGFloat, durationMs: Double) {
+        if amplitude <= 0 { return }  // `[shake] amplitude = 0` disables it
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
         if slideStart != nil { return }
         guard let ax = axWin(id: id), let base = AXGeom.position(ax) else { return }
         stopShake(settleToBase: true)        // settle any prior shake first
+        shakeAmp = amplitude
+        shakeDur = max(0.01, durationMs / 1000)
         shakeAx = ax
         shakeID = id
         shakeBase = base
