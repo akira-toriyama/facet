@@ -48,7 +48,7 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.effectiveTheme, "terminal")
         c.theme = "Cute"
         XCTAssertEqual(c.effectiveTheme, "cute")
-        c.theme = "neon"
+        c.theme = "nonsuch-theme"
         XCTAssertEqual(c.effectiveTheme, "terminal",
                        "unknown theme name → default")
     }
@@ -334,8 +334,8 @@ final class FacetConfigTests: XCTestCase {
 
     func testMultipleUnknownsEachWarnOnce() {
         var c = FacetConfig()
-        c.defaultLayout = "tall"
-        c.theme = "neon"
+        c.defaultLayout = "nonsuch-layout"
+        c.theme = "nonsuch-theme"
         c.railEdge = "diagonal"
         XCTAssertEqual(c.unknownValueWarnings().count, 3,
                        "one warning per clamped key")
