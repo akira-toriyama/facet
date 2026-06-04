@@ -72,19 +72,6 @@ public final class BorderFX {
         (fx?.cycles ?? false) || (cycleColors && fx != nil) || breathing
     }
 
-    /// Smoothly loop through `colors` by `phase` (0…1), blending
-    /// consecutive entries — the continuous-cycle color for a non-rainbow
-    /// effect (cycling through its own flash palette).
-    private func paletteColor(_ colors: [NSColor], at phase: CGFloat) -> NSColor {
-        let n = colors.count
-        guard n > 1 else { return colors.first ?? pal.accent }
-        let p = phase - floor(phase)               // wrap to 0…1
-        let scaled = p * CGFloat(n)
-        let i = Int(scaled) % n
-        let t = scaled - floor(scaled)
-        return colors[i].blended(withFraction: t, of: colors[(i + 1) % n]) ?? colors[i]
-    }
-
     /// Current border color: the flash blink, the rotating rainbow hue,
     /// the effect's fixed steady color, or `pal.accent` when off.
     public var color: NSColor {
@@ -95,7 +82,7 @@ public final class BorderFX {
                            brightness: 1, alpha: 1)
         }
         if cycleColors, !fx.flash.isEmpty {
-            return paletteColor(fx.flash, at: cyclePhase)
+            return blendThrough(fx.flash, at: cyclePhase)
         }
         return fx.steady
     }

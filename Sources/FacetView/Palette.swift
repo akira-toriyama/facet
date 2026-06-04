@@ -384,17 +384,39 @@ public func paletteFor(_ raw: String) -> Palette {
     }
 }
 
-/// The `rainbow` theme animated to hue `phase` (0…1) — `accent` rotates
-/// through the spectrum and `accent2` trails half a turn behind, while
-/// `bg` / `text` stay put so the UI remains usable. Drives the
-/// rainbow-theme cycle (⑪) when `[border] cycle-seconds` is set.
+/// Smoothly loop through `colors` by `phase` (0…1), blending consecutive
+/// entries. Shared by the border cycle (⑧) and the theme cycle (⑪).
+public func blendThrough(_ colors: [NSColor], at phase: CGFloat) -> NSColor {
+    let n = colors.count
+    guard n > 1 else { return colors.first ?? .white }
+    let p = phase - floor(phase)
+    let scaled = p * CGFloat(n)
+    let i = Int(scaled) % n
+    let t = scaled - floor(scaled)
+    return colors[i].blended(withFraction: t, of: colors[(i + 1) % n]) ?? colors[i]
+}
+
+/// An animatable theme cycled to `phase` (0…1), or nil if `theme` isn't
+/// one (⑪). `rainbow` rotates `accent` through the full spectrum;
+/// `neon` / `cyber` / `vapor` / `kawaii` cycle it through the matching
+/// border effect's own flash palette (keeping their identity). `accent2`
+/// trails half a turn; `bg` / `text` stay put so the UI stays usable.
 @MainActor
-public func rainbowPalette(at phase: CGFloat) -> Palette {
-    let base = Palette.rainbow
+public func animatedPalette(theme: String, at phase: CGFloat) -> Palette? {
+    let key = theme.lowercased()
+    let base = paletteFor(key)
     let h = phase - floor(phase)
-    let accent = NSColor(hue: h, saturation: 0.95, brightness: 1, alpha: 1)
-    let accent2 = NSColor(hue: (h + 0.5).truncatingRemainder(dividingBy: 1),
-                          saturation: 0.95, brightness: 1, alpha: 1)
+    let h2 = (h + 0.5).truncatingRemainder(dividingBy: 1)
+    let accent: NSColor, accent2: NSColor
+    if key == "rainbow" {
+        accent  = NSColor(hue: h,  saturation: 0.95, brightness: 1, alpha: 1)
+        accent2 = NSColor(hue: h2, saturation: 0.95, brightness: 1, alpha: 1)
+    } else if let fx = borderEffectFor(key), !fx.flash.isEmpty {
+        accent  = blendThrough(fx.flash, at: h)
+        accent2 = blendThrough(fx.flash, at: h2)
+    } else {
+        return nil
+    }
     return Palette(bg: base.bg, text: base.text, dim: base.dim,
                    accent: accent, accent2: accent2,
                    divider: base.divider, hoverFill: base.hoverFill,

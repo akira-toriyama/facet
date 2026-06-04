@@ -97,8 +97,9 @@ glow = true
 # SETTING this key also makes a non-rainbow effect (neon / cyber /
 # vapor / kawaii) continuously CYCLE its border through its own palette
 # over this period (omit the key → that effect stays a steady color),
-# AND animates the `--theme = "rainbow"` palette (its accents rotate
-# through the spectrum over this period).
+# AND animates the matching THEMES: `--theme = "rainbow"` rotates its
+# accents through the full spectrum, and neon / cyber / vapor / kawaii
+# cycle theirs through that effect's own palette — over this period.
 # 1–120 clamp, default 6.
 # cycle-seconds = 3
 # Width breathing: when BOTH are set (max > min) the border width

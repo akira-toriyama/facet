@@ -59,10 +59,10 @@ final class Controller: NSObject {
     private var prevActiveWSIndex: Int?
     private var userHidden = false
     /// Active theme name (config seed or runtime `--theme=`) — drives the
-    /// rainbow animator (⑪).
+    /// theme color animator (⑪).
     private var currentThemeName = "terminal"
-    private var rainbowTimer: Timer?
-    private var rainbowPhase: CGFloat = 0
+    private var themeFXTimer: Timer?
+    private var themeFXPhase: CGFloat = 0
     /// The window the focus shake (④) last fired for — so it fires once
     /// per genuine focus change (snapshot diff), not on every reconcile.
     private var lastShakenFocus: WindowID?
@@ -195,7 +195,7 @@ final class Controller: NSObject {
         }
         applyBorderFromConfig()
         currentThemeName = config.effectiveTheme
-        updateRainbowAnimator()
+        updateThemeAnimator()
         seedTreeGeometry()
     }
 
@@ -803,32 +803,38 @@ final class Controller: NSObject {
         pal = paletteFor(key)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
-        updateRainbowAnimator()
+        updateThemeAnimator()
     }
 
-    // MARK: - Rainbow theme animator (⑪)
+    // MARK: - Theme color animator (⑪)
 
-    /// Run the rainbow-theme color cycle when `--theme=rainbow` AND
-    /// `[border] cycle-seconds` is set; the palette's accents rotate
-    /// through the spectrum over that period. Off otherwise (the static
-    /// rainbow palette).
-    private func updateRainbowAnimator() {
-        let on = currentThemeName == "rainbow" && config.borderCycleSeconds != nil
-        if on, rainbowTimer == nil {
+    /// Themes whose accents can cycle when `[border] cycle-seconds` is set
+    /// — `rainbow` (full spectrum) + the neon family (their own palettes).
+    private static let animatableThemes: Set<String> =
+        ["rainbow", "neon", "cyber", "vapor", "kawaii"]
+
+    /// Run the theme color cycle when the active theme is animatable AND
+    /// `[border] cycle-seconds` is set; the palette's accents rotate over
+    /// that period. Off otherwise (the static palette).
+    private func updateThemeAnimator() {
+        let on = Self.animatableThemes.contains(currentThemeName)
+            && config.borderCycleSeconds != nil
+        if on, themeFXTimer == nil {
             let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.tickRainbow() }
+                MainActor.assumeIsolated { self?.tickThemeFX() }
             }
             RunLoop.main.add(t, forMode: .common)
-            rainbowTimer = t
+            themeFXTimer = t
         } else if !on {
-            rainbowTimer?.invalidate(); rainbowTimer = nil
+            themeFXTimer?.invalidate(); themeFXTimer = nil
         }
     }
 
-    private func tickRainbow() {
-        rainbowPhase += (1.0 / 30.0) / config.effectiveBorderCycleSeconds
-        if rainbowPhase >= 1 { rainbowPhase -= 1 }
-        pal = rainbowPalette(at: rainbowPhase)
+    private func tickThemeFX() {
+        themeFXPhase += (1.0 / 30.0) / config.effectiveBorderCycleSeconds
+        if themeFXPhase >= 1 { themeFXPhase -= 1 }
+        guard let p = animatedPalette(theme: currentThemeName, at: themeFXPhase) else { return }
+        pal = p
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
         gridView?.needsDisplay = true
