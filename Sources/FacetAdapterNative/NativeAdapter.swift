@@ -1023,6 +1023,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var shakeTimer: Timer?
     private var shakeStart: Date?
     private var shakeAx: AXUIElement?
+    /// The window being shaken — `applyFrames` skips it so a reconcile
+    /// (off-main) can't write it back to base mid-bounce and fight the
+    /// on-main shake clock. Cleared when the shake settles.
+    private var shakeID: WindowID?
     private var shakeBase: CGPoint = .zero
     /// Shake feel — px amplitude + seconds, from `[shake]` config.
     private var shakeAmp: CGFloat { config.effectiveShakeAmplitude }
@@ -1203,6 +1207,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard let ax = axWin(id: id), let base = AXGeom.position(ax) else { return }
         stopShake(settleToBase: true)        // settle any prior shake first
         shakeAx = ax
+        shakeID = id
         shakeBase = base
         shakeStart = Date()
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
@@ -1229,7 +1234,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private func stopShake(settleToBase: Bool) {
         if settleToBase, let ax = shakeAx { AXGeom.setPosition(ax, shakeBase) }
         shakeTimer?.invalidate(); shakeTimer = nil
-        shakeStart = nil; shakeAx = nil
+        shakeStart = nil; shakeAx = nil; shakeID = nil
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
@@ -2149,7 +2154,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         for (id, frame) in frames {
             // Live resize follow: the dragged window is being resized
             // natively by the user — skip it so we don't fight the OS.
-            if skip.contains(id) { continue }
+            // Focus shake (④): the shaken window is being driven by the
+            // on-main shake clock — skip it so this (possibly off-main)
+            // reconcile can't write it back to base mid-bounce and fight
+            // the shake; it settles to base when the shake ends anyway.
+            if skip.contains(id) || id == shakeID { continue }
             guard let pid = catalog.pid(for: id) else { continue }
             guard let ax = AXGeom.window(
                 for: CGWindowID(id.serverID),
