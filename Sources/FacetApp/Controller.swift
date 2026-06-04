@@ -1449,6 +1449,10 @@ final class Controller: NSObject {
             matching: .keyDown
         ) { [weak self] e in
             guard let gv = self?.gridView else { return e }
+            // A context menu ('m') is up: let its own monitor handle keys
+            // (Esc closes JUST the menu, ↑↓/Enter navigate it) — don't run
+            // grid nav or let Esc close the whole overlay (③).
+            if PopupMenu.shared.isOpen { return e }
             let shift = e.modifierFlags.contains(.shift)
             switch e.keyCode {
             case 53:  gv.kbEscape();                       return nil
@@ -1823,6 +1827,10 @@ final class Controller: NSObject {
             matching: .keyDown
         ) { [weak self] e in
             guard let rv = self?.railView else { return e }
+            // A context menu ('m') is up: let its own monitor handle keys
+            // (Esc closes JUST the menu) — don't run rail nav or close the
+            // whole overlay (③).
+            if PopupMenu.shared.isOpen { return e }
             let shift = e.modifierFlags.contains(.shift)
             let horizontal = rv.edge.axis == .horizontal
             switch e.keyCode {
