@@ -540,6 +540,18 @@ final class Controller: NSObject {
                 case "window-dec-master":
                     self.dispatchWindowAction(.decMaster)
 
+                case let s where s.hasPrefix("window-focus-dir:"):
+                    if let d = CardinalDirection(rawValue:
+                        String(s.dropFirst("window-focus-dir:".count))) {
+                        self.dispatchWindowAction(.focusDir(d))
+                    }
+
+                case let s where s.hasPrefix("window-move-dir:"):
+                    if let d = CardinalDirection(rawValue:
+                        String(s.dropFirst("window-move-dir:".count))) {
+                        self.dispatchWindowAction(.moveDir(d))
+                    }
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }

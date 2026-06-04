@@ -2242,6 +2242,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         eventContinuation.yield(.refreshNeeded)
     }
 
+    /// The tiled neighbour of the focused window in `direction`, or nil
+    /// at an edge / when there's nothing to step to (stack = one visible
+    /// window, float = its own rects). Pure geometry (`nearestWindow`)
+    /// over the active WS's tiled frames (②).
+    private func directionalNeighbor(_ direction: CardinalDirection,
+                                     rect: CGRect) -> WindowID? {
+        guard let id = focusedWindow() else { return nil }
+        let frames = targetFrames(for: catalog.activeIndex, in: rect)
+        guard let here = frames[id] else { return nil }
+        let others = frames.compactMap { kv -> (id: WindowID, frame: CGRect)? in
+            kv.key == id ? nil : (id: kv.key, frame: kv.value)
+        }
+        return nearestWindow(to: here, among: others, direction: direction)
+    }
+
     public func perform(_ action: WindowAction) {
         // BSP: toggleFloat, toggleOrientation. Stack:
         // cycleStackNext, cycleStackPrev. Everything else
@@ -2363,6 +2378,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 workspace: catalog.activeIndex, delta: delta) {
                 reflowActive(rect: rect)
             }
+        case .focusDir(let dir):
+            // ② Directional focus: pick the tiled neighbour on that side
+            // and assert focus (no layout change). Edge / stack (single
+            // visible) → nearestWindow returns nil → no-op.
+            guard let target = directionalNeighbor(dir, rect: rect),
+                  let win = enumerateCGWindows().first(where: { $0.id == target })
+            else { return }
+            Focus.assert(win, backend: self)
+        case .moveDir(let dir):
+            // ② Directional move: swap the focused window with the tiled
+            // neighbour on that side (yabai --swap). Edge → no-op.
+            guard let id = focusedWindow(),
+                  let target = directionalNeighbor(dir, rect: rect) else { return }
+            swapWindows(id, target)
         // out-of-scope / future cases — no-op, but listed explicitly
         // so the compiler enforces a handling decision on every
         // future enum addition.
