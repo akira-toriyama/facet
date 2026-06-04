@@ -76,7 +76,29 @@ final class Controller: NSObject {
     /// Pauses refresh/apply while the user is mid-grip-drag, so a
     /// layout pass can't stomp the panel height the next mouseDragged
     /// is about to read (memory: grid-branch-grip-intermittent).
-    private var refreshPending = false
+    /// Earliest-deadline coalescing for `requestRefresh`: the uptime at
+    /// which the pending refresh is scheduled to fire (nil = none), plus
+    /// a generation token so a newly-scheduled earlier fire invalidates
+    /// the older later one. Lets a focus event pull a slow pending
+    /// refresh sooner instead of being swallowed by it.
+    private var pendingRefreshAt: TimeInterval?
+    private var refreshGen = 0
+    /// Reconcile pile-up guard: at most one `refresh()` reconcile runs on
+    /// the cliQueue at a time. `reconcileDirty` records that more events
+    /// arrived while it was in flight, triggering exactly one follow-up
+    /// when it finishes — so a burst can't build a multi-second backlog.
+    private var reconcileInFlight = false
+    private var reconcileDirty = false
+    /// Focus fast-path adaptive poll. ONE poll runs at a time
+    /// (`focusPollActive`); it re-reads `focusedWindow()` each tick so it
+    /// naturally tracks the latest focus, and runs its full schedule
+    /// instead of being cancelled by the burst of `kAXFocusedWindowChanged`
+    /// events a single click fires (the cancel-on-every-event bug that
+    /// stranded the poll at attempt 0). `focusPollStep` × `focusPollMax`
+    /// ≈ the give-up cap before the reconcile is the backstop.
+    private var focusPollActive = false
+    private let focusPollStep: TimeInterval = 0.010
+    private let focusPollMax = 15
 
     // MARK: - Preview (hover overlay + grid thumbnails)
 
@@ -97,6 +119,10 @@ final class Controller: NSObject {
     var realWindowDrag: RealWindowDragMonitor?
     /// Live prediction overlay shown during a real-window drag (PR-3).
     let dndOverlay = DndPredictionOverlay()
+    /// ⑤ Ring around the focused third-party window (`[border]
+    /// active-window`). Fed the focused window's settled frame each
+    /// reconcile; hidden while a window is in motion.
+    let activeWindowBorder = ActiveWindowBorderOverlay()
     /// One prediction round-trip at a time — throttles the per-move
     /// `predictedDropFrames` requests to the backend's response rate.
     var dndPredictionInFlight = false
@@ -161,6 +187,16 @@ final class Controller: NSObject {
     /// Debounce window for event-driven refreshes — coalesces a
     /// burst of events into a single backend query.
     private let refreshDebounce: TimeInterval = 0.05
+    /// Shorter debounce for focus-change events: they drive the ④ shake
+    /// + ⑤ active-window border, felt directly by the user, so the
+    /// reaction shouldn't be a beat late. Kept > 0 (≈ one frame) so the
+    /// off-main AX focus query inside the reconcile reads the SETTLED
+    /// state — an event-time query races the not-yet-committed focus and
+    /// returns nil / stale (memory `facet-focus-detection-ax-timing`).
+    /// The reconcile's enumerate + dispatch add further settle margin.
+    /// Tunable; raise toward `refreshDebounce` if a slow app ever shows
+    /// a one-frame stale flicker.
+    private let focusRefreshDebounce: TimeInterval = 0.016
 
     // MARK: - Init
 
@@ -233,6 +269,13 @@ final class Controller: NSObject {
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         railView?.applyBorder(effectName: e, glow: g, width: w,
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
+        // ⑤ The active-window ring wears the same `[border]` style.
+        activeWindowBorder.configure(effectName: e, glow: g, width: w,
+                                     cycleSeconds: cs, cycleColors: cc,
+                                     minWidth: mn, maxWidth: mx)
+        // A hot-reload that turns the feature off clears any live ring;
+        // `apply()` re-places it on the next reconcile when re-enabled.
+        if !config.effectiveActiveWindowBorder { activeWindowBorder.hide() }
     }
 
     private func handlePanelKeyChange(isKey: Bool) {
@@ -254,11 +297,18 @@ final class Controller: NSObject {
     /// event task — don't.
     func start() {
         Log.debug("controller start")
+        Log.debug("focus fast-path: SkyLight front-signal "
+            + (SkyLightFocus.available ? "available" : "unavailable (AX fallback)"))
         logConfigWarnings()
         eventTask = Task { [weak self] in
             guard let self else { return }
-            for await _ in self.backend.events {
-                await MainActor.run { self.requestRefresh() }
+            for await ev in self.backend.events {
+                let focus: Bool
+                if case .focusChanged = ev { focus = true } else { focus = false }
+                await MainActor.run {
+                    if focus { self.scheduleFocusFastPath() }
+                    self.requestRefresh(focus: focus)
+                }
             }
         }
         // Adapter error stream → lastError slot in facet status.
@@ -843,14 +893,94 @@ final class Controller: NSObject {
 
     // MARK: - Refresh / apply
 
-    private func requestRefresh() {
-        if refreshPending { return }
-        refreshPending = true
+    /// Focus fast-path (STEP 2): fire the ④ shake + ⑤ active-window
+    /// border WITHOUT waiting for the heavy reconcile. Measurement showed
+    /// the AX focus query is cheap (~1ms) but the reaction was a beat
+    /// late (~100ms median) because it rode the serial `cliQueue` behind
+    /// the full reconcile (enumerate + classify + engine + preview +
+    /// titles) — JankyBorders is instant precisely because it never runs
+    /// that pipeline on the focus hot path. So we resolve the focused
+    /// window on a dedicated high-priority queue and fire on main,
+    /// bypassing the jam. The reconcile still runs (debounced) for the
+    /// authoritative model; `lastShakenFocus` coordinates so neither
+    /// path double-fires.
+    ///
+    /// Adaptive poll: a fixed probe schedule misses (~40% measured) when
+    /// `NSWorkspace.frontmostApplication` hasn't settled yet — and a miss
+    /// drops to the slow reconcile (hundreds of ms). Instead poll every
+    /// `focusPollStep` until the focused window settles to a NEW managed
+    /// window (fires) or `focusPollMax` attempts elapse (give up; the
+    /// reconcile is the backstop). A fast-settling app fires at ~10-20ms;
+    /// a slow one at whenever it settles, never worse than the cap. An
+    /// event-time read races the not-yet-committed focus and returns
+    /// stale (memory `facet-focus-detection-ax-timing`) — a stale read
+    /// just equals `lastShakenFocus`, so it keeps polling; never WRONG.
+    private func scheduleFocusFastPath() {
+        if focusPollActive { return }    // the running poll tracks the new focus
+        focusPollActive = true
+        pollFocusFast(attempt: 0)
+    }
+
+    private func pollFocusFast(attempt: Int) {
+        // Resolve via the window-server-fresh front signal (SkyLight, with
+        // an AX fallback) on MAIN — a background read of
+        // `NSWorkspace.frontmostApplication` returns a stale value that
+        // never updates. The CGWindowList read is cheap on main.
+        let id = backend.frontWindowFast()
+        if onFastFocus(id) {
+            focusPollActive = false                 // fired → done
+            return
+        }
+        if attempt < focusPollMax {
+            DispatchQueue.main.asyncAfter(deadline: .now() + focusPollStep) { [weak self] in
+                self?.pollFocusFast(attempt: attempt + 1)
+            }
+        } else {
+            focusPollActive = false                 // gave up; reconcile backstops
+        }
+    }
+
+    /// Fire the shake + border for a fast-path-resolved focus id on a
+    /// genuine focus change. The ⑤ BORDER follows ANY focused window
+    /// (managed or not) with a fresh CG frame, so it works on windows
+    /// facet can't tile (Chrome / Calendar lazy-AX). The ④ SHAKE stays
+    /// managed-only — it repositions the window via AX, which a
+    /// lazy-/no-AX window won't allow anyway. Returns true once it fires
+    /// so the poll stops. Idempotent via `lastShakenFocus`.
+    @discardableResult
+    private func onFastFocus(_ id: WindowID?) -> Bool {
+        guard let id, id != lastShakenFocus else { return false }
+        lastShakenFocus = id
+        // ⑤ border: any focused window, fresh CG frame (AX-free).
+        if config.effectiveActiveWindowBorder, let frame = backend.windowFrame(id) {
+            activeWindowBorder.show(around: Self.cgFrameToAppKit(frame),
+                                    for: id, flash: true)
+        }
+        // ④ shake: managed windows only.
+        if lastWorkspaces.flatMap({ $0.windows }).contains(where: { $0.id == id }) {
+            backend.animateShake(id, amplitude: config.effectiveShakeAmplitude,
+                                 durationMs: config.effectiveShakeDurationMs)
+        }
+        return true
+    }
+
+    private func requestRefresh(focus: Bool = false) {
+        let delay = focus ? focusRefreshDebounce : refreshDebounce
+        let fireAt = ProcessInfo.processInfo.systemUptime + delay
+        // Coalesce, but always honour the EARLIEST requested deadline: a
+        // focus event arriving behind an already-pending slow refresh
+        // pulls the fire sooner instead of waiting it out. A slow event
+        // arriving behind a pending fast refresh is covered (return).
+        if let p = pendingRefreshAt, p <= fireAt { return }
+        pendingRefreshAt = fireAt
+        refreshGen &+= 1
+        let gen = refreshGen
         DispatchQueue.main.asyncAfter(
-            deadline: .now() + refreshDebounce
+            deadline: .now() + delay
         ) { [weak self] in
-            self?.refreshPending = false
-            self?.refresh()
+            guard let self, self.refreshGen == gen else { return }
+            self.pendingRefreshAt = nil
+            self.refresh()
         }
     }
 
@@ -863,6 +993,16 @@ final class Controller: NSObject {
             Log.debug("refresh skipped (real-window drag in progress)")
             return
         }
+        // Collapse the reconcile pile-up: each backend event dispatched a
+        // fresh cliQueue reconcile, but each reconcile is heavy (enumerate
+        // + classify + engine + preview + titles), so under a burst they
+        // queued faster than they drained — measured a 16s backlog, which
+        // left `lastWorkspaces` (and thus the ⑤ border + tree) seconds
+        // stale. Run at most ONE reconcile at a time; coalesce everything
+        // that arrives while it's in flight into a single follow-up.
+        if reconcileInFlight { reconcileDirty = true; return }
+        reconcileInFlight = true
+        reconcileDirty = false
         Log.debug("refresh dispatch")
         let bk = backend
         cliQueue.async {
@@ -872,7 +1012,10 @@ final class Controller: NSObject {
             Log.debug("refresh fetched wss=\(wss.count) titles=\(titles.count)")
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
-                    self?.apply(wss, titles)
+                    guard let self else { return }
+                    self.apply(wss, titles)
+                    self.reconcileInFlight = false
+                    if self.reconcileDirty { self.refresh() }   // one more pass
                 }
             }
         }
@@ -934,10 +1077,41 @@ final class Controller: NSObject {
         // snapshot (startup); the adapter no-ops during a slide, under
         // Reduce Motion, and when `[shake] amplitude = 0`.
         let newFocus = wss.flatMap { $0.windows }.first(where: { $0.isFocused })?.id
-        if !firstRealApply, let f = newFocus, f != lastShakenFocus {
-            backend.animateShake(f)
+        let focusChanged = !firstRealApply && newFocus != nil
+            && newFocus != lastShakenFocus
+        if focusChanged, let f = newFocus {
+            backend.animateShake(f, amplitude: config.effectiveShakeAmplitude,
+                                 durationMs: config.effectiveShakeDurationMs)
         }
         lastShakenFocus = newFocus
+        // ⑤ Active-window ring — steady-state maintenance (the fast-path
+        // moves it on focus change; this follows the tracked window's
+        // frame as it moves + handles hide). The ring follows ANY focused
+        // window, managed or not: a managed window uses the live snapshot
+        // frame; an unmanaged one the fast-path ringed (Chrome / Calendar
+        // lazy-AX) keeps following its fresh CG frame so it isn't dropped
+        // just for being absent from the managed snapshot. Hidden mid-drag
+        // (and when the tracked window has closed → `windowFrame` nil).
+        if config.effectiveActiveWindowBorder {
+            if realWindowDrag?.inProgress == true {
+                activeWindowBorder.hide()
+            } else if let fw = wss.flatMap({ $0.windows }).first(where: { $0.isFocused }),
+                      let cg = fw.frame {
+                // Managed focused window: the snapshot frame is live + cheap.
+                activeWindowBorder.show(around: Self.cgFrameToAppKit(cg),
+                                        for: fw.id,
+                                        flash: fw.id != activeWindowBorder.tracked)
+            } else if let tracked = activeWindowBorder.tracked,
+                      let frame = backend.windowFrame(tracked) {
+                // Focus is on an UNMANAGED window the fast-path ringed
+                // (e.g. Chrome) — keep following its fresh frame, don't
+                // hide just because it isn't in the managed snapshot.
+                activeWindowBorder.show(around: Self.cgFrameToAppKit(frame),
+                                        for: tracked, flash: false)
+            } else {
+                activeWindowBorder.hide()
+            }
+        }
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index

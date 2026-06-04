@@ -126,6 +126,24 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?[2]?.name, "Web")
     }
 
+    // MARK: - [border] active-window (⑤)
+
+    func testActiveWindowBorderDefaultsOff() {
+        XCTAssertFalse(FacetConfig().effectiveActiveWindowBorder,
+                       "unset → off")
+    }
+
+    func testActiveWindowBorderParsedFromTOML() {
+        let c = FacetConfig.from(toml: parseTOMLSubset("""
+            [border]
+            effect = "neon"
+            active-window = true
+            """))
+        XCTAssertTrue(c.effectiveActiveWindowBorder)
+        XCTAssertEqual(c.effectiveBorderEffect, "neon",
+                       "active-window reuses the [border] effect")
+    }
+
     // MARK: - [[exclude]] rules
 
     func testExclusionRulesParsedFromTOML() {

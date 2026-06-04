@@ -355,6 +355,9 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   を両方指定 (max > min・各 0.5–30) した時の幅ブリージング (どの effect
   でも幅が min↔max で脈動・固定 `width` を上書き) を駆動。 off は素の
   テーマ accent 枠。
+  `active-window = true` (既定 `false`) で、 任意アプリの **フォーカス窓**
+  (管理対象か否かを問わず) を同じスタイルで囲む。 フォーカス変化で枠が移動
+  + フラッシュし、 ドラッグ / リサイズ中は隠れる。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
   `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で

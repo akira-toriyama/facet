@@ -94,7 +94,7 @@ theme = "terminal"
 # The border flashes a quick neon burst on a workspace switch, then
 # settles back to the steady color.
 [border]
-effect = "off"
+effect = "rainbow"
 # Neon bloom around the border. true = glow, false = flat stroke.
 glow = true
 # Border line width in points. 0.5–30 clamp, default 1.5.
@@ -110,8 +110,13 @@ glow = true
 # Width breathing: when BOTH are set (max > min) the border width
 # oscillates min↔max over cycle-seconds, for ANY effect (overrides
 # the fixed `width`). Each 0.5–30. Leave unset for a constant width.
-# min-width = 5
-# max-width = 15
+min-width = 5
+max-width = 15
+# Ring the FOCUSED window (any third-party app, not just facet's panel)
+# with this same border style — effect / glow / width / cycle all reuse
+# the keys above. The ring moves + flashes when focus changes, and hides
+# while a window is being dragged or resized. Default false.
+# active-window = true
 
 
 # -----------------------------------------------------------------
