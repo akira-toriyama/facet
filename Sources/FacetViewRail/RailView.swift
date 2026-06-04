@@ -792,27 +792,35 @@ public final class RailView: NSView {
         hero?.wins.reversed().first { $0.rect.contains(p) }
     }
 
-    /// Mouse-wheel / two-finger scroll over the strip rotates the
-    /// carousel: scroll DOWN → next workspace, UP → previous (same on
-    /// every edge — the gesture isn't tied to the strip's axis). Delta is
-    /// accumulated so one notch / swipe ≈ one step, and momentum (inertia)
-    /// is ignored so a flick doesn't over-spin. Mirrors the browse arrows
+    /// Mouse-wheel / two-finger scroll rotates the carousel: scroll DOWN
+    /// → next workspace, UP → previous (same on every edge — the gesture
+    /// isn't tied to the strip's axis). Mirrors the browse arrows
     /// (`kbMoveSelection`), so the eased rotation + hero re-preview are
     /// shared. A keyboard lift owns the carousel, so scrolling is inert
-    /// while lifted.
-    public override func scrollWheel(with event: NSEvent) {
+    /// while lifted. Driven by the Controller's `.scrollWheel` local
+    /// monitor (NOT an NSView override) — the rail is a nonactivating
+    /// panel, so, like the browse keys, scroll events are caught at the
+    /// app's event monitor rather than the view responder chain.
+    public func scrollRotate(_ event: NSEvent) {
         guard drag == nil, workspaces.count > 1,
               event.momentumPhase == [] else { return }
-        if event.phase.contains(.began) { scrollAccum = 0 }
-        // Normalise so natural-scroll users get the same physical
-        // direction (positive = up, negative = down).
         var dy = event.scrollingDeltaY
-        if event.isDirectionInvertedFromDevice { dy = -dy }
-        scrollAccum += dy
-        while abs(scrollAccum) >= railScrollStep {
-            let dx = scrollAccum < 0 ? 1 : -1   // down → next, up → previous
-            scrollAccum += CGFloat(dx) * railScrollStep
-            kbMoveSelection(dx: dx)
+        if dy == 0 { return }
+        // The natural-scroll preference already lives in the sign, so
+        // honour it as-is (no inversion) — down → next.
+        if event.hasPreciseScrollingDeltas {
+            // Trackpad / Magic Mouse: accumulate points, one step per
+            // `railScrollStep`; reset at each gesture start.
+            if event.phase.contains(.began) { scrollAccum = 0 }
+            scrollAccum += dy
+            while abs(scrollAccum) >= railScrollStep {
+                let dx = scrollAccum < 0 ? 1 : -1   // down → next, up → prev
+                scrollAccum += CGFloat(dx) * railScrollStep
+                kbMoveSelection(dx: dx)
+            }
+        } else {
+            // Classic notched wheel: one detent → one step.
+            kbMoveSelection(dx: dy < 0 ? 1 : -1)
         }
     }
 

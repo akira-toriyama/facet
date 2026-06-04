@@ -128,6 +128,10 @@ final class Controller: NSObject {
     private var railView: RailView?
     /// Local key monitor for the rail's Escape-to-dismiss while it's up.
     private var railKbMonitor: Any?
+    /// Local scroll-wheel monitor (⑦) — rotates the carousel while the
+    /// rail is up. A monitor (not an NSView override) so it fires for the
+    /// nonactivating panel, exactly like `railKbMonitor`.
+    private var railScrollMonitor: Any?
     var isRailVisible: Bool { railOverlay != nil }
 
     // MARK: - Active mode (kb-nav)
@@ -1811,6 +1815,18 @@ final class Controller: NSObject {
             }
         }
 
+        // Scroll-wheel browse (⑦): a monitor (not a view override) so it
+        // fires for the nonactivating panel — scroll DOWN = next, UP =
+        // previous, on every edge. Consumed so it never leaks to the app
+        // behind the overlay.
+        railScrollMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: .scrollWheel
+        ) { [weak self] e in
+            guard let rv = self?.railView else { return e }
+            rv.scrollRotate(e)
+            return nil
+        }
+
         railOverlay = overlay
         railView = rv
         // Neon border framing the strip band + an entrance flash.
@@ -1843,6 +1859,9 @@ final class Controller: NSObject {
         guard let overlay = railOverlay else { return }
         if let m = railKbMonitor {
             NSEvent.removeMonitor(m); railKbMonitor = nil
+        }
+        if let m = railScrollMonitor {
+            NSEvent.removeMonitor(m); railScrollMonitor = nil
         }
         railView?.clearDrag()        // explicit cancel if a drag is mid-flight
         railView?.clearThumbnails()
