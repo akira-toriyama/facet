@@ -264,6 +264,72 @@ public extension Palette {
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x33FF66).withAlphaComponent(0.18),
         font: .mono, menuAppearance: .darkAqua)
+
+    // --- Neon family -------------------------------------------------
+    // Vivid electric themes. The signature hue is the bright `accent`
+    // (active WS / kbNav); `bg` is near-black tinted with the theme hue
+    // so the accent pops, and `text` is a desaturated light tint (never
+    // the raw neon) to stay readable. `neon`/`cyber`/`vapor` pair a
+    // cool primary with the opposite neon (cyan↔magenta) for chips;
+    // `kawaii` is the light-pastel exception (candy lavender, distinct
+    // from `cute`'s pink). These names also exist as `[border] effect`s
+    // — `--theme=` (palette) and `[border] effect` are orthogonal axes,
+    // so the shared token is intentional, not a clash.
+
+    /// Neon — electric cyan on blue-black; hot-magenta secondary.
+    static let neon = Palette(
+        bg: NSColor(hex: 0x0A0A14), text: NSColor(hex: 0xC0CAF5),
+        dim: NSColor(hex: 0x6B7394), accent: NSColor(hex: 0x00E5FF),
+        accent2: NSColor(hex: 0xFF2EC4),
+        divider: NSColor.white.withAlphaComponent(0.10),
+        hoverFill: NSColor.white.withAlphaComponent(0.05),
+        selFill: NSColor(hex: 0x00E5FF).withAlphaComponent(0.18),
+        font: .mono, menuAppearance: .darkAqua)
+
+    /// Cyber — aqua/teal on teal-black; hot-pink secondary (teal × pink).
+    static let cyber = Palette(
+        bg: NSColor(hex: 0x001410), text: NSColor(hex: 0xC8F0E4),
+        dim: NSColor(hex: 0x5F8076), accent: NSColor(hex: 0x00FFD0),
+        accent2: NSColor(hex: 0xFF3DCE),
+        divider: NSColor.white.withAlphaComponent(0.10),
+        hoverFill: NSColor.white.withAlphaComponent(0.05),
+        selFill: NSColor(hex: 0x00FFD0).withAlphaComponent(0.18),
+        font: .mono, menuAppearance: .darkAqua)
+
+    /// Vapor — synthwave pink on purple-black; electric-cyan secondary.
+    static let vapor = Palette(
+        bg: NSColor(hex: 0x1A0E26), text: NSColor(hex: 0xEAD9F5),
+        dim: NSColor(hex: 0x8A6FA6), accent: NSColor(hex: 0xFF6AD5),
+        accent2: NSColor(hex: 0x05D9E8),
+        divider: NSColor.white.withAlphaComponent(0.10),
+        hoverFill: NSColor.white.withAlphaComponent(0.05),
+        selFill: NSColor(hex: 0xFF6AD5).withAlphaComponent(0.18),
+        font: .mono, menuAppearance: .darkAqua)
+
+    /// Kawaii — candy lavender light (the light-pastel exception);
+    /// purple primary + mint secondary, distinct from `cute`'s pink.
+    static let kawaii = Palette(
+        bg: NSColor(hex: 0xFAF0FF), text: NSColor(hex: 0x5E5470),
+        dim: NSColor(hex: 0xA99BC0), accent: NSColor(hex: 0xB661E8),
+        accent2: NSColor(hex: 0x7DD9C0),
+        divider: NSColor(hex: 0xB661E8, 0.20),
+        hoverFill: NSColor(hex: 0xB661E8, 0.10),
+        selFill: NSColor(hex: 0xB661E8, 0.18),
+        font: .rounded, menuAppearance: .aqua)
+
+    /// Rainbow — a deliberately loud, maximum-saturation set; readability
+    /// is explicitly secondary (per request). White on a near-black violet
+    /// so the vivid rose primary + electric-cyan secondary blaze. Rounded
+    /// for a playful feel. (Pair with `[border] effect = "rainbow"` for the
+    /// actually-cycling hue; this palette itself is static.)
+    static let rainbow = Palette(
+        bg: NSColor(hex: 0x0D0B14), text: NSColor(hex: 0xFFFFFF),
+        dim: NSColor(hex: 0x8C84B0), accent: NSColor(hex: 0xFF2D95),
+        accent2: NSColor(hex: 0x2BE0FF),
+        divider: NSColor.white.withAlphaComponent(0.14),
+        hoverFill: NSColor.white.withAlphaComponent(0.07),
+        selFill: NSColor(hex: 0xFF2D95).withAlphaComponent(0.22),
+        font: .rounded, menuAppearance: .darkAqua)
 }
 
 /// Canonical theme names accepted by `--theme=`. Single source of
@@ -274,6 +340,7 @@ public let canonicalStyles = [
     "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
     "everforest", "solarized", "onedark", "monokai", "hacker", "paper",
     "mono-light", "mono-dark", "monotone",
+    "neon", "cyber", "vapor", "kawaii", "rainbow",
     "random",   // meta: picks a random concrete theme at resolve time
 ]
 
@@ -296,6 +363,11 @@ public func paletteFor(_ raw: String) -> Palette {
     case "onedark":    return .onedark
     case "monokai":    return .monokai
     case "hacker":     return .hacker
+    case "neon":       return .neon
+    case "cyber":      return .cyber
+    case "vapor":      return .vapor
+    case "kawaii":     return .kawaii
+    case "rainbow":    return .rainbow
     case "paper":      return .paper
     case "mono-light": return .monoLight
     case "mono-dark":  return .monoDark
@@ -310,4 +382,44 @@ public func paletteFor(_ raw: String) -> Palette {
         return paletteFor(pool.randomElement() ?? "terminal")
     default:           return .terminal
     }
+}
+
+/// Smoothly loop through `colors` by `phase` (0…1), blending consecutive
+/// entries. Shared by the border cycle (⑧) and the theme cycle (⑪).
+public func blendThrough(_ colors: [NSColor], at phase: CGFloat) -> NSColor {
+    let n = colors.count
+    guard n > 1 else { return colors.first ?? .white }
+    let p = phase - floor(phase)
+    let scaled = p * CGFloat(n)
+    let i = Int(scaled) % n
+    let t = scaled - floor(scaled)
+    return colors[i].blended(withFraction: t, of: colors[(i + 1) % n]) ?? colors[i]
+}
+
+/// An animatable theme cycled to `phase` (0…1), or nil if `theme` isn't
+/// one (⑪). `rainbow` rotates `accent` through the full spectrum;
+/// `neon` / `cyber` / `vapor` / `kawaii` cycle it through the matching
+/// border effect's own flash palette (keeping their identity). `accent2`
+/// trails half a turn; `bg` / `text` stay put so the UI stays usable.
+@MainActor
+public func animatedPalette(theme: String, at phase: CGFloat) -> Palette? {
+    let key = theme.lowercased()
+    let base = paletteFor(key)
+    let h = phase - floor(phase)
+    let h2 = (h + 0.5).truncatingRemainder(dividingBy: 1)
+    let accent: NSColor, accent2: NSColor
+    if key == "rainbow" {
+        accent  = NSColor(hue: h,  saturation: 0.95, brightness: 1, alpha: 1)
+        accent2 = NSColor(hue: h2, saturation: 0.95, brightness: 1, alpha: 1)
+    } else if let fx = borderEffectFor(key), !fx.flash.isEmpty {
+        accent  = blendThrough(fx.flash, at: h)
+        accent2 = blendThrough(fx.flash, at: h2)
+    } else {
+        return nil
+    }
+    return Palette(bg: base.bg, text: base.text, dim: base.dim,
+                   accent: accent, accent2: accent2,
+                   divider: base.divider, hoverFill: base.hoverFill,
+                   selFill: accent.withAlphaComponent(0.22),
+                   font: base.font, menuAppearance: base.menuAppearance)
 }

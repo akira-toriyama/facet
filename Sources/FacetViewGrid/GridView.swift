@@ -37,6 +37,13 @@ public final class GridView: NSView {
     /// switch workspace, optionally focus the picked window, then
     /// dismiss.
     public var onPick: ((GridPick) -> Void)?
+    /// Backend for the shared context menu (③ — header layout picker +
+    /// window-ops menu). Set by the Controller; held as the protocol.
+    public var backend: (any WindowBackend)?
+    /// Runs the non-close window-ops a context-menu pick chose (③).
+    /// Controller wires it to its `runWindowOps`.
+    public var onRunWindowOps: ((_ ops: [WindowAction],
+                                 _ window: Window, _ ws: Int) -> Void)?
     /// Drop-commit callback (window-move). Controller owns the
     /// backend round-trip and the subsequent re-query.
     public var onDrop: ((_ src: Int, _ dst: Int,
@@ -220,11 +227,11 @@ public final class GridView: NSView {
     /// grid shows a screen-edge neon frame only while an effect is
     /// active — no border when off.
     public func applyBorder(effectName: String, glow: Bool, width: CGFloat,
-                            cycleSeconds: CGFloat,
+                            cycleSeconds: CGFloat, cycleColors: Bool,
                             minWidth: CGFloat?, maxWidth: CGFloat?) {
         installBorderIfNeeded()
         borderFX.configure(effectName: effectName, glow: glow, width: width,
-                           cycleSeconds: cycleSeconds,
+                           cycleSeconds: cycleSeconds, cycleColors: cycleColors,
                            minWidth: minWidth, maxWidth: maxWidth)
     }
     /// WS-switch flash (no-op when off).
@@ -837,6 +844,48 @@ public final class GridView: NSView {
     }
 
     // MARK: - Mouse
+
+    // Right-click: WS header → layout-engine picker; window thumb →
+    // window-ops menu (③ — the SAME shared menu the tree shows).
+    public override func rightMouseDown(with e: NSEvent) {
+        guard let backend, let win = window else { return }
+        let p = convert(e.locationInWindow, from: nil)
+        let scr = win.convertPoint(toScreen: e.locationInWindow)
+        if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            ViewContextMenu.showLayout(at: scr, backend: backend,
+                                       workspaceIndex: cell.wsIndex,
+                                       workspaces: workspaces)
+            return
+        }
+        if let cell = cells.first(where: { $0.rect.contains(p) }),
+           let wh = cell.windows.first(where: { $0.rect.contains(p) }) {
+            ViewContextMenu.showWindow(
+                at: scr, backend: backend, workspaceIndex: cell.wsIndex,
+                workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: ""
+            ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
+        }
+    }
+
+    /// Keyboard 'm' (③): open the context menu for the kb-selected slot
+    /// — the WS header (layout picker) or a window thumb (window ops),
+    /// anchored to that cell. No-op without a selection / backend.
+    public func kbContextMenu() {
+        guard let backend, let win = window, let ws = kbSelectedWS,
+              let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+        func screenPt(_ r: NSRect) -> NSPoint {
+            win.convertPoint(toScreen: convert(NSPoint(x: r.minX + 12, y: r.minY), to: nil))
+        }
+        if kbSelectedWindowIdx == -1 {
+            ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
+                                       workspaceIndex: ws, workspaces: workspaces)
+        } else if kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < cell.windows.count {
+            let wh = cell.windows[kbSelectedWindowIdx]
+            ViewContextMenu.showWindow(
+                at: screenPt(wh.rect), backend: backend, workspaceIndex: ws,
+                workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: ""
+            ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
+        }
+    }
 
     public override func mouseDown(with e: NSEvent) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight

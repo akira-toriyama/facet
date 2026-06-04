@@ -123,6 +123,38 @@ public final class SidebarView: NSView {
         addSubview(f)
         return f
     }()
+    /// Richer drag ghost (⑨): a snapshot "card" of the lifted row(s) —
+    /// the dragged WS's header + its windows, or a single window row.
+    /// Shown in a borderless FLOATING WINDOW (`dragCardWindow`) so it can
+    /// extend BEYOND the narrow tree panel — a subview would be clipped to
+    /// the panel. `dragCard` is the window's (padded) content; the pad
+    /// gives the lean (tilt) room so it doesn't clip at the window edge.
+    /// Falls back to the in-panel text chip if the snapshot fails.
+    private lazy var dragCard: NSImageView = {
+        let v = NSImageView()
+        v.wantsLayer = true
+        v.imageScaling = .scaleNone
+        v.layer?.masksToBounds = false       // don't clip the tilt
+        v.layer?.borderWidth = 2
+        return v
+    }()
+    private let dragCardPad: CGFloat = 26     // room for the tilt's corners
+    private lazy var dragCardWindow: NSWindow = {
+        let w = NSWindow(contentRect: .zero, styleMask: .borderless,
+                         backing: .buffered, defer: true)
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.hasShadow = true
+        w.ignoresMouseEvents = true           // never blocks the drag tracking
+        w.level = .popUpMenu
+        w.collectionBehavior = [.transient, .ignoresCycle]
+        let container = NSView()
+        container.wantsLayer = true
+        container.addSubview(dragCard)
+        w.contentView = container
+        return w
+    }()
+    private var cardShown = false
     private var prevApp: NSRunningApplication?   // re-activate post-drag
 
     public override var isFlipped: Bool { true }
@@ -1100,7 +1132,11 @@ public final class SidebarView: NSView {
                                 dragLabel = c.title.isEmpty
                                     ? c.app : "\(c.app)  \(c.title)"
                             }
-                            showChip(dragLabel ?? "")
+                            // ⑨ richer ghost: lift the window's row as a
+                            // snapshot card; fall back to the text chip.
+                            if !showDragCard(rect: dragRect(forWindow: wid)) {
+                                showChip(dragLabel ?? "")
+                            }
                             lastDropWS = nil
                             prevApp = NSWorkspace.shared.frontmostApplication
                             NSApp.activate(ignoringOtherApps: true)
@@ -1111,7 +1147,11 @@ public final class SidebarView: NSView {
                             mode = 3
                             dragWS = ws
                             draggingWS = ws
-                            showChip(swapChipLabel(for: ws))
+                            // ⑨ richer ghost: lift the whole WS section
+                            // (header + windows) as a snapshot card.
+                            if !showDragCard(rect: dragRect(forWS: ws)) {
+                                showChip(swapChipLabel(for: ws))
+                            }
                             lastDropWS = nil
                         }
                     }
@@ -1126,12 +1166,10 @@ public final class SidebarView: NSView {
                     } else {
                         NSCursor.arrow.set()
                     }
-                    // Move just the chip layer (cheap → keeps up
-                    // at speed).
-                    chip.setFrameOrigin(NSPoint(
-                        x: min(max(cp.x + 12, 4),
-                               bounds.width - chip.frame.width - 4),
-                        y: cp.y - chip.frame.height / 2))
+                    // Move just the ghost (cheap → keeps up at speed) +
+                    // lean it toward the drag direction (⑨).
+                    moveDragGhost(to: cp)
+                    tiltDragGhost(deltaX: ev.deltaX)
                     // Full redraw only when the drop band changes.
                     if dropWS != lastDropWS {
                         lastDropWS = dropWS
@@ -1145,7 +1183,7 @@ public final class SidebarView: NSView {
 
         draggingWid = nil; draggingWS = nil; dropWS = nil; dragLabel = nil
         lastDropWS = nil
-        chip.isHidden = true
+        hideDragGhosts()
         NSCursor.arrow.set()
         // Restore the previously-frontmost app. A tree drag activates
         // facet only so the drag cursor shows (see mouseDown top); the
@@ -1168,6 +1206,110 @@ public final class SidebarView: NSView {
         chip.frame = NSRect(x: chip.frame.minX, y: chip.frame.minY,
                             width: w, height: 22)
         chip.isHidden = false
+    }
+
+    // MARK: - Drag card (⑨ — snapshot the lifted rows)
+
+    /// Snapshot `rect` of this view into an image (the lifted rows,
+    /// rendered exactly as drawn). nil for an empty / off-bounds rect.
+    private func snapshotImage(of rect: NSRect) -> NSImage? {
+        guard rect.width > 1, rect.height > 1,
+              let rep = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
+        cacheDisplay(in: rect, to: rep)
+        let img = NSImage(size: rect.size)
+        img.addRepresentation(rep)
+        return img
+    }
+
+    /// Union rect of a workspace's header + window rows.
+    private func dragRect(forWS ws: Int) -> NSRect? {
+        var r: NSRect?
+        for row in rows {
+            let hit: Bool
+            switch row.kind {
+            case .header(let w):       hit = (w == ws)
+            case .window(let w, _, _, _): hit = (w == ws)
+            default:                   hit = false
+            }
+            if hit { r = r.map { $0.union(row.rect) } ?? row.rect }
+        }
+        return r
+    }
+
+    /// A single window row's rect.
+    private func dragRect(forWindow id: WindowID) -> NSRect? {
+        rows.first {
+            if case .window(_, _, let wid, _) = $0.kind { return wid == id }
+            return false
+        }?.rect
+    }
+
+    /// Show the snapshot card for `rect` (capped to ~60% panel height so a
+    /// tall WS shows its top) in the floating window. Returns false → the
+    /// caller falls back to the in-panel chip.
+    @discardableResult
+    private func showDragCard(rect: NSRect?) -> Bool {
+        guard var r = rect?.intersection(bounds), r.width > 1, r.height > 1
+        else { return false }
+        let maxH = max(40, bounds.height * 0.6)
+        if r.height > maxH { r.size.height = maxH }   // top portion only
+        guard let img = snapshotImage(of: r) else { return false }
+        dragCard.image = img
+        dragCard.frame = NSRect(x: dragCardPad, y: dragCardPad,
+                                width: r.width, height: r.height)
+        dragCard.layer?.borderColor = pal.accent.withAlphaComponent(0.9).cgColor
+        dragCard.layer?.backgroundColor = (pal.bg ?? NSColor(white: 0.10, alpha: 1)).cgColor
+        dragCardWindow.setContentSize(NSSize(width: r.width + dragCardPad * 2,
+                                             height: r.height + dragCardPad * 2))
+        // Semi-transparent (dnd-kit style) so the drop-target band shows
+        // through the lifted card — the drop is easier to predict (⑨).
+        dragCardWindow.alphaValue = dragGhostAlpha
+        positionDragCardWindow()
+        dragCardWindow.orderFront(nil)
+        chip.isHidden = true
+        cardShown = true
+        return true
+    }
+
+    /// Place the card window just below-right of the live cursor (screen
+    /// coords); the card itself is inset by `dragCardPad`.
+    private func positionDragCardWindow() {
+        let m = NSEvent.mouseLocation               // screen, y-up
+        dragCardWindow.setFrameTopLeftPoint(
+            NSPoint(x: m.x + 14 - dragCardPad, y: m.y - 12 + dragCardPad))
+    }
+
+    /// Move the visible drag ghost to follow the cursor — the floating
+    /// card window (screen coords) or, as fallback, the in-panel chip.
+    private func moveDragGhost(to cp: NSPoint) {
+        if cardShown { positionDragCardWindow(); return }
+        chip.setFrameOrigin(NSPoint(
+            x: min(max(cp.x + 14, 4), bounds.width - chip.frame.width - 4),
+            y: max(4, cp.y - 12)))
+    }
+
+    /// Lean the lifted card toward the drag direction (⑨) — like a card
+    /// dangling from the cursor. Driven by each move's horizontal delta;
+    /// eases toward 0 when the motion is vertical / stops.
+    private var dragTilt: CGFloat = 0
+    private func tiltDragGhost(deltaX: CGFloat) {
+        let target = max(-dragTiltMax, min(dragTiltMax, deltaX * dragTiltPerPx))
+        dragTilt += (target - dragTilt) * 0.4          // smooth
+        let layer = cardShown ? dragCard.layer : chip.layer
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer?.transform = CATransform3DMakeRotation(dragTilt, 0, 0, 1)
+        CATransaction.commit()
+    }
+
+    private func hideDragGhosts() {
+        chip.isHidden = true
+        dragCardWindow.orderOut(nil)
+        dragCard.image = nil
+        cardShown = false
+        // Reset the lean.
+        dragTilt = 0
+        dragCard.layer?.transform = CATransform3DIdentity
+        chip.layer?.transform = CATransform3DIdentity
     }
 
     // MARK: - Workspace-content swap (header drag / kb header lift)
@@ -1507,20 +1649,12 @@ public final class SidebarView: NSView {
         }
     }
 
+    // The header (layout) + window (ops) menus are shared with grid /
+    // rail via `ViewContextMenu` (FacetView) so all three views show the
+    // identical themed popup (③).
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int) {
-        let modes = backend.layoutModes
-        let cur = (lastWorkspaces.first { $0.index == ws })?.layoutMode
-        let idx = modes.firstIndex(of: cur ?? "")
-        let bk = backend
-        PopupMenu.shared.show(at: scr,
-                              header: "WS\(ws + 1) layout",
-                              items: modes,
-                              checkedIndex: idx) { i in
-            let mode = modes[i]
-            cliQueue.async {
-                bk.setLayoutMode(workspaceIndex: ws, mode: mode)
-            }
-        }
+        ViewContextMenu.showLayout(at: scr, backend: backend,
+                                   workspaceIndex: ws, workspaces: lastWorkspaces)
     }
 
     private func showWindowMenu(at scr: NSPoint,
@@ -1528,34 +1662,11 @@ public final class SidebarView: NSView {
                                 pid: Int,
                                 windowID id: WindowID,
                                 title: String) {
-        let wsModel = lastWorkspaces.first { $0.index == ws }
-        let mode = wsModel?.layoutMode ?? ""
-        let win = wsModel?.windows.first { $0.id == id }
-        let floating = win?.isFloating ?? false
-        let isMaster = win?.isMaster ?? false
-        let isSticky = win?.isSticky ?? false
-        // Non-floating tiled members — what stack cycling rotates over.
-        let windowCount = wsModel?.windows.filter { !$0.isFloating }.count ?? 0
-        let menu = backend.windowMenu(mode: mode, floating: floating,
-                                      isMaster: isMaster,
-                                      windowCount: windowCount,
-                                      isSticky: isSticky)
-        let bk = backend
-        let ctrl = controller
-        PopupMenu.shared.show(at: scr,
-                              header: "Window",
-                              items: menu.map(\.label),
-                              checkedIndex: nil) { i in
-            let item = menu[i]
-            if item.isClose {
-                cliQueue.async { bk.closeWindow(id) }
-            } else {
-                let window = Window(id: id, pid: pid, appName: "",
-                                    title: title, isFocused: false,
-                                    isFloating: floating, frame: nil)
-                ctrl?.runWindowOps(item.ops, on: window,
-                                   workspaceIndex: ws)
-            }
+        ViewContextMenu.showWindow(
+            at: scr, backend: backend, workspaceIndex: ws,
+            workspaces: lastWorkspaces, pid: pid, windowID: id, title: title
+        ) { [weak self] ops, window, ws in
+            self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)
         }
     }
 }

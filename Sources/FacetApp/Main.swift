@@ -32,6 +32,7 @@
 //               --toggle-sticky / --toggle-orientation /
 //               --cycle-stack=next|prev / --grow-master / --shrink-master
 //               / --inc-master / --dec-master
+//               / --focus=up|down|left|right / --move=up|down|left|right
 //   Scratchpad: facet scratchpad --stash=NAME / --toggle=NAME
 //               / --release=NAME
 //
@@ -167,6 +168,12 @@ enum FacetApp {
           facet window --toggle-sticky       pin it across every workspace
                                              (PiP / timer / chat); flip off
                                              to drop it as a tiled window
+          facet window --focus=DIR           move focus to the tiled
+                                             neighbour up|down|left|right
+                                             (no-op at an edge)
+          facet window --move=DIR            swap the focused window with
+                                             that neighbour (up|down|
+                                             left|right)
           facet window --toggle-orientation  bsp: rotate the focused
                                              window's parent split
           facet window --cycle-stack=next    rotate stack to next member
@@ -206,11 +213,12 @@ enum FacetApp {
                                              Greppable line format.
 
         SERVER CONTROLS
-          facet --theme=NAME                 17 themes: terminal, nord,
+          facet --theme=NAME                 22 themes: terminal, nord,
                                              dracula, gruvbox, catppuccin,
                                              rosepine, everforest, solarized,
-                                             onedark, monokai, hacker, cute,
-                                             paper, system, mono-light,
+                                             onedark, monokai, hacker, neon,
+                                             cyber, vapor, rainbow, cute,
+                                             kawaii, paper, system, mono-light,
                                              mono-dark, monotone (+ "random").
                                              session only; edit config.toml
           facet --quit                       terminate the server
@@ -427,6 +435,31 @@ enum FacetApp {
         postControl("window-dec-master")
     }
 
+    /// Post ``window-focus-dir:DIR`` / ``window-move-dir:DIR`` (②).
+    /// Direction already canonical by parse time (`canonicalDirection`).
+    static func postWindowFocusDir(_ dir: String) -> Never {
+        postControl("window-focus-dir:" + dir)
+    }
+
+    static func postWindowMoveDir(_ dir: String) -> Never {
+        postControl("window-move-dir:" + dir)
+    }
+
+    /// Validate + canonicalise a direction (up|down|left|right). Loud
+    /// reject on typo (``exit(2)``) — same pattern as `canonicalLayoutMode`.
+    static let canonicalDirections = ["up", "down", "left", "right"]
+
+    static func canonicalDirection(_ name: String) -> String {
+        switch canonicalize(name, allowed: canonicalDirections) {
+        case .success(let n): return n
+        case .failure(.unknownValue(let v, let expected)):
+            die("unknown direction \"\(v)\" — expected one of: "
+                + expected.joined(separator: ", "))
+        case .failure:
+            die("unknown direction \"\(name)\"")
+        }
+    }
+
     /// Validate + canonicalise a layout-mode name. Loud reject on
     /// typo (`exit(2)`) — same pattern as `canonicalView` /
     /// `canonicalStyle`.
@@ -618,6 +651,8 @@ enum FacetApp {
         var shrinkMaster = false
         var incMaster = false
         var decMaster = false
+        var focusDirArg: String?
+        var moveDirArg: String?
         var i = 0
         while i < args.count {
             defer { i += 1 }
@@ -649,6 +684,12 @@ enum FacetApp {
                 incMaster = true
             case a == "--dec-master":
                 decMaster = true
+            case a.hasPrefix("--focus="):
+                focusDirArg = canonicalDirection(
+                    String(a.dropFirst("--focus=".count)))
+            case a.hasPrefix("--move="):
+                moveDirArg = canonicalDirection(
+                    String(a.dropFirst("--move=".count)))
             default:
                 die("unknown `window` flag \"\(a)\" — "
                     + "see `facet --help`")
@@ -670,6 +711,8 @@ enum FacetApp {
             + (shrinkMaster ? 1 : 0)
             + (incMaster ? 1 : 0)
             + (decMaster ? 1 : 0)
+            + (focusDirArg != nil ? 1 : 0)
+            + (moveDirArg != nil ? 1 : 0)
         guard count > 0 else {
             die("facet window: no action specified — "
                 + "see `facet --help`")
@@ -699,6 +742,8 @@ enum FacetApp {
         if shrinkMaster { postWindowShrinkMaster() }
         if incMaster { postWindowIncMaster() }
         if decMaster { postWindowDecMaster() }
+        if let d = focusDirArg { postWindowFocusDir(d) }
+        if let d = moveDirArg { postWindowMoveDir(d) }
         // Unreachable — `count == 1` guarantees one branch fired.
         die("facet window: dispatch fell through (bug)")
     }

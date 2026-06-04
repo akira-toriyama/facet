@@ -36,8 +36,18 @@
 #   "monokai"    — high-energy; lime + magenta.
 #   "hacker"     — black base, neon-green + amber (green-on-black).
 #
+# Neon (vivid electric; signature hue on a hue-tinted near-black):
+#   "neon"       — electric cyan on blue-black; magenta accent, mono.
+#   "cyber"      — aqua/teal on teal-black; hot-pink accent, mono.
+#   "vapor"      — synthwave pink on purple-black; cyan accent, mono.
+#   "rainbow"    — loud max-saturation (readability secondary): white on
+#                  violet-black, vivid rose + electric-cyan, rounded.
+#                  Set `theme-cycle-seconds` (below) to ANIMATE it — the
+#                  accents then rotate through the spectrum.
+#
 # Light:
 #   "cute"       — soft pastel pink, rounded font.
+#   "kawaii"     — candy lavender; purple + mint, rounded font.
 #   "paper"      — clean daytime white; blue + amber, system font.
 #
 # Monochrome:
@@ -56,6 +66,13 @@
 # Unknown names clamp to "terminal". CLI override (session only):
 # `facet --theme=nord`.
 theme = "terminal"
+
+# ANIMATE the theme: an animatable theme (rainbow / neon / cyber / vapor
+# / kawaii) cycles its accents over this many seconds — rainbow rotates
+# the full spectrum, the neon family cycle their own palette. Independent
+# of the border's cycle-seconds below. Omit → static palette.
+# 1–120 clamp, default 6.
+# theme-cycle-seconds = 3
 
 
 # -----------------------------------------------------------------
@@ -84,6 +101,10 @@ glow = true
 # width = 10
 # Continuous-animation period: seconds per cycle (lower = faster).
 # Drives the "rainbow" hue rotation AND the width breath below.
+# SETTING this key also makes a non-rainbow effect (neon / cyber /
+# vapor / kawaii) continuously CYCLE its border through its own palette
+# over this period (omit the key → that effect stays a steady color).
+# Border-only — to animate the THEME, use `theme-cycle-seconds` above.
 # 1–120 clamp, default 6.
 # cycle-seconds = 3
 # Width breathing: when BOTH are set (max > min) the border width
@@ -158,6 +179,25 @@ strip = 30
 # justified to fill the run; with more workspaces than this they rotate
 # through, peeking at both ends. Clamped 1..20; built-in fallback is 7.
 cells = 7
+
+
+# -----------------------------------------------------------------
+# Focus shake
+# -----------------------------------------------------------------
+# A brief horizontal vibration of the newly-focused window whenever
+# focus changes — a quick "you're here now" cue. Purely cosmetic and
+# position-only: neighbouring tiles never move or resize, and the window
+# settles back on its exact spot. Honours the system Reduce Motion
+# setting (off when that's on).
+[shake]
+
+# Vibration size in pixels. 0 turns the shake OFF entirely. Clamped
+# 0..40; built-in fallback is 8.
+amplitude = 8
+
+# Vibration duration in milliseconds (a quick buzz that decays to rest).
+# Clamped 60..600; built-in fallback is 160.
+duration-ms = 160
 
 
 # -----------------------------------------------------------------

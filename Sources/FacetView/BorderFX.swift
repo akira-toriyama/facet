@@ -22,6 +22,10 @@ public final class BorderFX {
     private var cycleSeconds: CGFloat = 6
     private var minW: CGFloat?
     private var maxW: CGFloat?
+    /// Continuously loop a non-rainbow effect's color through its own
+    /// flash palette (over `cycleSeconds`). On when `[border]
+    /// cycle-seconds` is explicitly set; rainbow cycles regardless.
+    private var cycleColors = false
 
     // Live animation state.
     private var cyclePhase: CGFloat = 0          // 0…1 hue / breath phase
@@ -39,12 +43,13 @@ public final class BorderFX {
     /// Push the `[border]` config. `effectName == "off"` (or unknown)
     /// leaves `active == false`.
     public func configure(effectName: String, glow: Bool, width: CGFloat,
-                          cycleSeconds cs: CGFloat,
+                          cycleSeconds cs: CGFloat, cycleColors cc: Bool,
                           minWidth: CGFloat?, maxWidth: CGFloat?) {
         fx = borderEffectFor(effectName)
         glowOn = glow && fx != nil
         baseW = width
         cycleSeconds = max(1, cs)
+        cycleColors = cc
         minW = minWidth
         maxW = maxWidth
         updateTimer()
@@ -64,7 +69,7 @@ public final class BorderFX {
         return hi > lo
     }
     private var cyclingOrBreathing: Bool {
-        (fx?.cycles ?? false) || breathing
+        (fx?.cycles ?? false) || (cycleColors && fx != nil) || breathing
     }
 
     /// Current border color: the flash blink, the rotating rainbow hue,
@@ -75,6 +80,9 @@ public final class BorderFX {
         if fx.cycles {
             return NSColor(hue: cyclePhase, saturation: 0.9,
                            brightness: 1, alpha: 1)
+        }
+        if cycleColors, !fx.flash.isEmpty {
+            return blendThrough(fx.flash, at: cyclePhase)
         }
         return fx.steady
     }

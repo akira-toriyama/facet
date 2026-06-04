@@ -94,6 +94,11 @@ public final class RailView: NSView {
     /// workspaces' contents (indices stay put).
     public var onSwap: ((_ srcWS: Int, _ dstWS: Int,
                          _ srcIDs: [WindowID], _ dstIDs: [WindowID]) -> Void)?
+    /// Backend for the shared context menu (③). Set by the Controller.
+    public var backend: (any WindowBackend)?
+    /// Runs the non-close window-ops a context-menu pick chose (③).
+    public var onRunWindowOps: ((_ ops: [WindowAction],
+                                 _ window: Window, _ ws: Int) -> Void)?
 
     // MARK: - Captured thumbnails
 
@@ -191,6 +196,9 @@ public final class RailView: NSView {
     /// Last carousel slot size (set by `layoutCells`) — one rotation
     /// slides the strip by this much.
     private var lastSlot: CGFloat = 0
+    /// Accumulated scroll-wheel delta; one carousel step per
+    /// `railScrollStep` points so a wheel notch / swipe ≈ one rotation.
+    private var scrollAccum: CGFloat = 0
     /// Ease value (0→1) of the active slide; also drives the hero
     /// crossfade (①): the old hero fades out over `1 − slideProgress`.
     private var slideProgress: CGFloat = 0
@@ -356,8 +364,11 @@ public final class RailView: NSView {
         case .left:   blockOuter = strip.minX + edgeFloat;              innerEdge = blockOuter + blockCross
         case .right:  blockOuter = strip.maxX - edgeFloat - blockCross; innerEdge = blockOuter
         }
-        for (i, ws) in workspaces.enumerated() {
-            let slotStart = alongCentre + CGFloat(offsets[i]) * slot - slot / 2
+        // Place one strip cell at a signed carousel `offset` (0 = the
+        // centred selected WS). Shared by the per-workspace cells and the
+        // even-count wrap-peek ghost below.
+        func placeCell(_ ws: Workspace, offset: Int) {
+            let slotStart = alongCentre + CGFloat(offset) * slot - slot / 2
             let blockX: CGFloat, blockY: CGFloat
             if horizontal {
                 blockX = slotStart + (slot - thumbW) / 2
@@ -380,6 +391,20 @@ public final class RailView: NSView {
                               count: ws.windows.count,
                               wins: scaledWins(ws, cellRect, useScreen),
                               isHero: false))
+        }
+        for (i, ws) in workspaces.enumerated() { placeCell(ws, offset: offsets[i]) }
+        // Both-ends peek symmetry (⑥): for an EVEN workspace count the
+        // carousel offsets span [-n/2, +(n/2−1)] — one more cell on the
+        // negative side — so when every workspace is shown the strip's
+        // left end peeks but the right has a bare slot. The carousel
+        // wraps, so the far-left workspace (offset −n/2) is also the
+        // wrap-around at +n/2; draw it there too as a peek ghost so the
+        // ends mirror (the active stays centred). Only when all fit
+        // (n == visible) — with overflow the natural ±cells already peek
+        // symmetrically and a +n/2 ghost would be off-viewport anyway.
+        if n % 2 == 0, n > 1, n == visible,
+           let li = offsets.firstIndex(of: -(n / 2)) {
+            placeCell(workspaces[li], offset: n / 2)
         }
 
         // -- Hero: the SELECTED workspace (browse) — aspect-fit, biased
@@ -538,11 +563,11 @@ public final class RailView: NSView {
     /// Apply the `[border]` config (Controller, on show / reload). The
     /// rail frames the outer screen edge only while an effect is active.
     public func applyBorder(effectName: String, glow: Bool, width: CGFloat,
-                            cycleSeconds: CGFloat,
+                            cycleSeconds: CGFloat, cycleColors: Bool,
                             minWidth: CGFloat?, maxWidth: CGFloat?) {
         borderFX.onRepaint = { [weak self] in self?.needsDisplay = true }
         borderFX.configure(effectName: effectName, glow: glow, width: width,
-                           cycleSeconds: cycleSeconds,
+                           cycleSeconds: cycleSeconds, cycleColors: cycleColors,
                            minWidth: minWidth, maxWidth: maxWidth)
     }
     /// WS-switch / show flash (no-op when off).
@@ -772,6 +797,38 @@ public final class RailView: NSView {
         hero?.wins.reversed().first { $0.rect.contains(p) }
     }
 
+    /// Mouse-wheel / two-finger scroll rotates the carousel: scroll DOWN
+    /// → next workspace, UP → previous (same on every edge — the gesture
+    /// isn't tied to the strip's axis). Mirrors the browse arrows
+    /// (`kbMoveSelection`), so the eased rotation + hero re-preview are
+    /// shared. A keyboard lift owns the carousel, so scrolling is inert
+    /// while lifted. Driven by the Controller's `.scrollWheel` local
+    /// monitor (NOT an NSView override) — the rail is a nonactivating
+    /// panel, so, like the browse keys, scroll events are caught at the
+    /// app's event monitor rather than the view responder chain.
+    public func scrollRotate(_ event: NSEvent) {
+        guard drag == nil, workspaces.count > 1,
+              event.momentumPhase == [] else { return }
+        var dy = event.scrollingDeltaY
+        if dy == 0 { return }
+        // The natural-scroll preference already lives in the sign, so
+        // honour it as-is (no inversion) — down → next.
+        if event.hasPreciseScrollingDeltas {
+            // Trackpad / Magic Mouse: accumulate points, one step per
+            // `railScrollStep`; reset at each gesture start.
+            if event.phase.contains(.began) { scrollAccum = 0 }
+            scrollAccum += dy
+            while abs(scrollAccum) >= railScrollStep {
+                let dx = scrollAccum < 0 ? 1 : -1   // down → next, up → prev
+                scrollAccum += CGFloat(dx) * railScrollStep
+                kbMoveSelection(dx: dx)
+            }
+        } else {
+            // Classic notched wheel: one detent → one step.
+            kbMoveSelection(dx: dy < 0 ? 1 : -1)
+        }
+    }
+
     public override func mouseDown(with event: NSEvent) {
         // A keyboard lift owns the drag; ignore mouse presses until it
         // commits (Return) or cancels (Esc) so a stray click can't
@@ -808,6 +865,55 @@ public final class RailView: NSView {
         // empty area does nothing. Only the true backdrop dismisses.
         if let h = hero, h.rect.contains(p) { return }
         onDismiss?()
+    }
+
+    // Right-click: WS header → layout picker; window thumb (hero or
+    // strip) → window-ops menu (③ — the SAME shared menu the tree shows).
+    public override func rightMouseDown(with event: NSEvent) {
+        guard let backend, let win = window, drag == nil else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        let scr = win.convertPoint(toScreen: event.locationInWindow)
+        let inStrip = stripRect.isEmpty || stripRect.contains(p)
+        if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            ViewContextMenu.showLayout(at: scr, backend: backend,
+                                       workspaceIndex: cell.wsIndex,
+                                       workspaces: workspaces)
+            return
+        }
+        if let w = heroWinAt(p), let h = hero {
+            railWinMenu(scr, backend: backend, ws: h.wsIndex, w: w); return
+        }
+        if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }),
+           let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
+            railWinMenu(scr, backend: backend, ws: cell.wsIndex, w: w)
+        }
+    }
+
+    /// Keyboard 'm' (③): context menu for the centred WS — the header
+    /// (layout picker) when no hero window is cursored, else that window.
+    public func kbContextMenu() {
+        guard let backend, let win = window, let ws = selectedWS else { return }
+        if kbSelectedWindowIdx == -1 {
+            guard let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+            let scr = win.convertPoint(toScreen:
+                convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
+            ViewContextMenu.showLayout(at: scr, backend: backend,
+                                       workspaceIndex: ws, workspaces: workspaces)
+        } else if let h = hero, kbSelectedWindowIdx >= 0,
+                  kbSelectedWindowIdx < h.wins.count {
+            let w = h.wins[kbSelectedWindowIdx]
+            let scr = win.convertPoint(toScreen:
+                convert(NSPoint(x: w.rect.minX + 12, y: w.rect.minY), to: nil))
+            railWinMenu(scr, backend: backend, ws: ws, w: w)
+        }
+    }
+
+    private func railWinMenu(_ scr: NSPoint, backend: any WindowBackend,
+                             ws: Int, w: WinHit) {
+        ViewContextMenu.showWindow(
+            at: scr, backend: backend, workspaceIndex: ws,
+            workspaces: workspaces, pid: w.pid, windowID: w.id, title: ""
+        ) { [weak self] ops, win, ws in self?.onRunWindowOps?(ops, win, ws) }
     }
 
     public override func mouseDragged(with event: NSEvent) {

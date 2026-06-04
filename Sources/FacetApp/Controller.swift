@@ -58,6 +58,14 @@ final class Controller: NSObject {
     /// the only reliable signal that windows were parked / unparked).
     private var prevActiveWSIndex: Int?
     private var userHidden = false
+    /// Active theme name (config seed or runtime `--theme=`) — drives the
+    /// theme color animator (⑪).
+    private var currentThemeName = "terminal"
+    private var themeFXTimer: Timer?
+    private var themeFXPhase: CGFloat = 0
+    /// The window the focus shake (④) last fired for — so it fires once
+    /// per genuine focus change (snapshot diff), not on every reconcile.
+    private var lastShakenFocus: WindowID?
 
     /// Last surfaced operational error (e.g. out-of-range workspace
     /// switch, no-focused-window window move). Held in-memory and
@@ -128,6 +136,10 @@ final class Controller: NSObject {
     private var railView: RailView?
     /// Local key monitor for the rail's Escape-to-dismiss while it's up.
     private var railKbMonitor: Any?
+    /// Local scroll-wheel monitor (⑦) — rotates the carousel while the
+    /// rail is up. A monitor (not an NSView override) so it fires for the
+    /// nonactivating panel, exactly like `railKbMonitor`.
+    private var railScrollMonitor: Any?
     var isRailVisible: Bool { railOverlay != nil }
 
     // MARK: - Active mode (kb-nav)
@@ -182,6 +194,8 @@ final class Controller: NSObject {
             self?.handlePanelKeyChange(isKey: isKey)
         }
         applyBorderFromConfig()
+        currentThemeName = config.effectiveTheme
+        updateThemeAnimator()
         seedTreeGeometry()
     }
 
@@ -206,16 +220,19 @@ final class Controller: NSObject {
         let g = config.effectiveBorderGlow
         let w = config.effectiveBorderWidth
         let cs = config.effectiveBorderCycleSeconds
+        // Explicitly setting `[border] cycle-seconds` also opts a
+        // non-rainbow effect into a continuous color cycle (⑧).
+        let cc = config.borderCycleSeconds != nil
         let mn = config.effectiveBorderMinWidth
         let mx = config.effectiveBorderMaxWidth
         panelHost.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         // The grid + rail borders (when their overlay is up) —
         // reconfigure on a hot-reload too.
         gridView?.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         railView?.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
     }
 
     private func handlePanelKeyChange(isKey: Bool) {
@@ -533,6 +550,18 @@ final class Controller: NSObject {
                 case "window-dec-master":
                     self.dispatchWindowAction(.decMaster)
 
+                case let s where s.hasPrefix("window-focus-dir:"):
+                    if let d = Direction(rawValue:
+                        String(s.dropFirst("window-focus-dir:".count))) {
+                        self.dispatchWindowAction(.focusDir(d))
+                    }
+
+                case let s where s.hasPrefix("window-move-dir:"):
+                    if let d = Direction(rawValue:
+                        String(s.dropFirst("window-move-dir:".count))) {
+                        self.dispatchWindowAction(.moveDir(d))
+                    }
+
                 default:
                     Log.debug("dnc unknown cmd=\(cmd) — ignored")
                 }
@@ -770,9 +799,46 @@ final class Controller: NSObject {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         Log.debug("applyStyle name=\(key)")
+        currentThemeName = key
         pal = paletteFor(key)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
+        updateThemeAnimator()
+    }
+
+    // MARK: - Theme color animator (⑪)
+
+    /// Themes whose accents can cycle when `[border] cycle-seconds` is set
+    /// — `rainbow` (full spectrum) + the neon family (their own palettes).
+    private static let animatableThemes: Set<String> =
+        ["rainbow", "neon", "cyber", "vapor", "kawaii"]
+
+    /// Run the theme color cycle when the active theme is animatable AND
+    /// `theme-cycle-seconds` is set (independent of the border cycle); the
+    /// palette's accents rotate over that period. Off otherwise.
+    private func updateThemeAnimator() {
+        let on = Self.animatableThemes.contains(currentThemeName)
+            && config.themeCycleSeconds != nil
+        if on, themeFXTimer == nil {
+            let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.tickThemeFX() }
+            }
+            RunLoop.main.add(t, forMode: .common)
+            themeFXTimer = t
+        } else if !on {
+            themeFXTimer?.invalidate(); themeFXTimer = nil
+        }
+    }
+
+    private func tickThemeFX() {
+        themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
+        if themeFXPhase >= 1 { themeFXPhase -= 1 }
+        guard let p = animatedPalette(theme: currentThemeName, at: themeFXPhase) else { return }
+        pal = p
+        panelHost.applyTheme()
+        sidebarView.needsDisplay = true
+        gridView?.needsDisplay = true
+        railView?.needsDisplay = true
     }
 
     // MARK: - Refresh / apply
@@ -860,6 +926,18 @@ final class Controller: NSObject {
             gridView?.flashBorder()
             railView?.flashBorder()
         }
+        // Focus shake (④): vibrate the newly-focused window when the
+        // focused window changes. Driven off the reconcile snapshot (its
+        // `isFocused` is the reliable, settled focus — an immediate
+        // event-time query of the frontmost app's focused window races
+        // the AX state and returns nil / a stale id). Skip the first
+        // snapshot (startup); the adapter no-ops during a slide, under
+        // Reduce Motion, and when `[shake] amplitude = 0`.
+        let newFocus = wss.flatMap { $0.windows }.first(where: { $0.isFocused })?.id
+        if !firstRealApply, let f = newFocus, f != lastShakenFocus {
+            backend.animateShake(f)
+        }
+        lastShakenFocus = newFocus
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index
@@ -1331,6 +1409,11 @@ final class Controller: NSObject {
             cols: config.effectiveGridCols,
             labelPosition: config.effectiveGridLabelPosition)
         gv.onDismiss = { [weak self] in self?.hideGrid() }
+        // ③ Context menu: header layout picker + window-ops menu.
+        gv.backend = backend
+        gv.onRunWindowOps = { [weak self] ops, window, ws in
+            self?.runWindowOps(ops, on: window, workspaceIndex: ws)
+        }
         gv.onDrop = { [weak self, bk = backend] src, dst, _, id in
             guard src != dst else { return }
             cliQueue.async {
@@ -1428,6 +1511,10 @@ final class Controller: NSObject {
             matching: .keyDown
         ) { [weak self] e in
             guard let gv = self?.gridView else { return e }
+            // A context menu ('m') is up: let its own monitor handle keys
+            // (Esc closes JUST the menu, ↑↓/Enter navigate it) — don't run
+            // grid nav or let Esc close the whole overlay (③).
+            if PopupMenu.shared.isOpen { return e }
             let shift = e.modifierFlags.contains(.shift)
             switch e.keyCode {
             case 53:  gv.kbEscape();                       return nil
@@ -1444,6 +1531,7 @@ final class Controller: NSObject {
             case 124: gv.kbMoveSelection(dx:  1, dy: 0);   return nil
             case 126: gv.kbMoveSelection(dx: 0, dy: -1);   return nil
             case 125: gv.kbMoveSelection(dx: 0, dy:  1);   return nil
+            case 46:  gv.kbContextMenu();                  return nil  // 'm' (③)
             default:  return e
             }
         }
@@ -1711,6 +1799,11 @@ final class Controller: NSObject {
         rv.workspaces = lastWorkspaces
         rv.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS
+        // ③ Context menu: header layout picker + window-ops menu.
+        rv.backend = backend
+        rv.onRunWindowOps = { [weak self] ops, window, ws in
+            self?.runWindowOps(ops, on: window, workspaceIndex: ws)
+        }
         rv.onPick = { [weak self] ws in
             guard let self else { return }
             // Commit-on-click (grid-like): dispatch the switch off-main
@@ -1796,6 +1889,10 @@ final class Controller: NSObject {
             matching: .keyDown
         ) { [weak self] e in
             guard let rv = self?.railView else { return e }
+            // A context menu ('m') is up: let its own monitor handle keys
+            // (Esc closes JUST the menu) — don't run rail nav or close the
+            // whole overlay (③).
+            if PopupMenu.shared.isOpen { return e }
             let shift = e.modifierFlags.contains(.shift)
             let horizontal = rv.edge.axis == .horizontal
             switch e.keyCode {
@@ -1807,8 +1904,21 @@ final class Controller: NSObject {
             case 124 where horizontal: rv.kbMoveSelection(dx:  1); return nil  // → next
             case 126 where !horizontal: rv.kbMoveSelection(dx: -1); return nil  // ↑ prev
             case 125 where !horizontal: rv.kbMoveSelection(dx:  1); return nil  // ↓ next
+            case 46:     rv.kbContextMenu();                return nil  // 'm' (③)
             default:     return e
             }
+        }
+
+        // Scroll-wheel browse (⑦): a monitor (not a view override) so it
+        // fires for the nonactivating panel — scroll DOWN = next, UP =
+        // previous, on every edge. Consumed so it never leaks to the app
+        // behind the overlay.
+        railScrollMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: .scrollWheel
+        ) { [weak self] e in
+            guard let rv = self?.railView else { return e }
+            rv.scrollRotate(e)
+            return nil
         }
 
         railOverlay = overlay
@@ -1843,6 +1953,9 @@ final class Controller: NSObject {
         guard let overlay = railOverlay else { return }
         if let m = railKbMonitor {
             NSEvent.removeMonitor(m); railKbMonitor = nil
+        }
+        if let m = railScrollMonitor {
+            NSEvent.removeMonitor(m); railScrollMonitor = nil
         }
         railView?.clearDrag()        // explicit cancel if a drag is mid-flight
         railView?.clearThumbnails()

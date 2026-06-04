@@ -1003,6 +1003,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the stored type available on macOS 13. nil = Timer fallback.
     private var displayLink: AnyObject?
     private lazy var slideTicker = SlideTicker(self)
+
+    /// Focus-shake clock (④). Self-contained — kept off the slide state
+    /// machine (no park bookkeeping) so a cosmetic vibration can't
+    /// disturb a WS-switch / retile. Touched on main only.
+    private var shakeTimer: Timer?
+    private var shakeStart: Date?
+    private var shakeAx: AXUIElement?
+    /// The window being shaken — `applyFrames` skips it so a reconcile
+    /// (off-main) can't write it back to base mid-bounce and fight the
+    /// on-main shake clock. Cleared when the shake settles.
+    private var shakeID: WindowID?
+    private var shakeBase: CGPoint = .zero
+    /// Shake feel — px amplitude + seconds, from `[shake]` config.
+    private var shakeAmp: CGFloat { config.effectiveShakeAmplitude }
+    private var shakeDur: TimeInterval { config.effectiveShakeDurationMs / 1000 }
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
     /// derive from the index delta. `switchWorkspaceRelative` sets it so
     /// next/prev always slide the intuitive way even when they wrap
@@ -1142,6 +1157,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `settle` runs once on completion (or interrupt via
     /// finishSlideIfRunning).
     private func startSlideDriver(_ settle: @escaping () -> Void) {
+        stopShake(settleToBase: false)   // a slide supersedes a focus shake
         let preset = resolveAnimPreset()
         slideCurve = preset.curve
         slideStart = Date()
@@ -1159,6 +1175,50 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             RunLoop.main.add(timer, forMode: .common)
             slideTimer = timer
         }
+    }
+
+    // MARK: - Focus shake (④)
+
+    /// Briefly vibrate `id` in place as a focus cue. Position-only — the
+    /// layout tree is never consulted, so neighbours can't move/resize;
+    /// the window returns to its exact origin. No-op under Reduce Motion,
+    /// while a WS-switch / retile slide is running (don't fight it), or if
+    /// the window / its position can't be resolved.
+    public func animateShake(_ id: WindowID) {
+        if shakeAmp <= 0 { return }   // `[shake] amplitude = 0` disables it
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
+        if slideStart != nil { return }
+        guard let ax = axWin(id: id), let base = AXGeom.position(ax) else { return }
+        stopShake(settleToBase: true)        // settle any prior shake first
+        shakeAx = ax
+        shakeID = id
+        shakeBase = base
+        shakeStart = Date()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
+            [weak self] _ in self?.shakeTick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        shakeTimer = timer
+    }
+
+    private func shakeTick() {
+        guard let begin = shakeStart, let ax = shakeAx else {
+            stopShake(settleToBase: false); return
+        }
+        let raw = -begin.timeIntervalSinceNow / shakeDur
+        guard raw < 1.0 else {
+            AXGeom.setPosition(ax, shakeBase)   // land exactly at base
+            stopShake(settleToBase: false)
+            return
+        }
+        let dx = WindowShake.offset(at: raw, amplitude: shakeAmp)
+        AXGeom.setPosition(ax, CGPoint(x: shakeBase.x + dx, y: shakeBase.y))
+    }
+
+    private func stopShake(settleToBase: Bool) {
+        if settleToBase, let ax = shakeAx { AXGeom.setPosition(ax, shakeBase) }
+        shakeTimer?.invalidate(); shakeTimer = nil
+        shakeStart = nil; shakeAx = nil; shakeID = nil
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
@@ -2078,7 +2138,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         for (id, frame) in frames {
             // Live resize follow: the dragged window is being resized
             // natively by the user — skip it so we don't fight the OS.
-            if skip.contains(id) { continue }
+            // Focus shake (④): the shaken window is being driven by the
+            // on-main shake clock — skip it so this (possibly off-main)
+            // reconcile can't write it back to base mid-bounce and fight
+            // the shake; it settles to base when the shake ends anyway.
+            if skip.contains(id) || id == shakeID { continue }
             guard let pid = catalog.pid(for: id) else { continue }
             guard let ax = AXGeom.window(
                 for: CGWindowID(id.serverID),
@@ -2186,6 +2250,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
         applyLayout(workspace: catalog.activeIndex, rect: rect)
         eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// The tiled neighbour of the focused window in `direction`, or nil
+    /// at an edge / when there's nothing to step to (stack = one visible
+    /// window, float = its own rects). Pure geometry (`nearestWindow`)
+    /// over the active WS's tiled frames (②).
+    private func directionalNeighbor(_ direction: Direction,
+                                     rect: CGRect) -> WindowID? {
+        guard let id = focusedWindow() else { return nil }
+        let frames = targetFrames(for: catalog.activeIndex, in: rect)
+        guard let here = frames[id] else { return nil }
+        let others = frames.compactMap { kv -> (id: WindowID, frame: CGRect)? in
+            kv.key == id ? nil : (id: kv.key, frame: kv.value)
+        }
+        return nearestWindow(to: here, among: others, direction: direction)
     }
 
     public func perform(_ action: WindowAction) {
@@ -2309,6 +2388,20 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 workspace: catalog.activeIndex, delta: delta) {
                 reflowActive(rect: rect)
             }
+        case .focusDir(let dir):
+            // ② Directional focus: pick the tiled neighbour on that side
+            // and assert focus (no layout change). Edge / stack (single
+            // visible) → nearestWindow returns nil → no-op.
+            guard let target = directionalNeighbor(dir, rect: rect),
+                  let win = enumerateCGWindows().first(where: { $0.id == target })
+            else { return }
+            Focus.assert(win, backend: self)
+        case .moveDir(let dir):
+            // ② Directional move: swap the focused window with the tiled
+            // neighbour on that side (yabai --swap). Edge → no-op.
+            guard let id = focusedWindow(),
+                  let target = directionalNeighbor(dir, rect: rect) else { return }
+            swapWindows(id, target)
         // out-of-scope / future cases — no-op, but listed explicitly
         // so the compiler enforces a handling decision on every
         // future enum addition.

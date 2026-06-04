@@ -33,6 +33,11 @@ public struct FacetConfig: Sendable {
     // Top-level
     public var defaultView: String?         // "tree" | "grid"
     public var theme: String?               // see effectiveTheme (13 themes)
+    /// Theme color-cycle period (⑪) — animatable themes (rainbow / neon /
+    /// cyber / vapor / kawaii) rotate their accents over this many
+    /// seconds. Set → animate; unset → static. Independent of the border
+    /// cycle. Raw; read `effectiveThemeCycleSeconds`.
+    public var themeCycleSeconds: Int?
 
     // [grid]
     public var gridCols: Int?
@@ -43,6 +48,10 @@ public struct FacetConfig: Sendable {
     public var railEdge: String?            // "top" | "bottom" | "left" | "right"
     public var railCells: Int?              // max strip cells shown at once
     public var railStrip: Int?              // strip band size, % of short screen edge
+
+    // [shake] — the focus-change window vibration (④)
+    public var shakeAmplitude: Int?         // px; 0 = off. Read `effectiveShakeAmplitude`
+    public var shakeDurationMs: Int?        // ms; read `effectiveShakeDurationMs`
 
     // [tree]
     /// How the sidebar's hover-preview overlay is sized + placed.
@@ -158,6 +167,7 @@ public struct FacetConfig: Sendable {
             "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
             "everforest", "solarized", "onedark", "monokai", "hacker",
             "paper", "mono-light", "mono-dark", "monotone",
+            "neon", "cyber", "vapor", "kawaii", "rainbow",
             "random",   // meta: paletteFor picks a concrete theme
         ]
         return known.contains(raw) ? raw : "terminal"
@@ -198,6 +208,18 @@ public struct FacetConfig: Sendable {
     /// default 30.
     public var effectiveRailStrip: Int {
         max(8, min(50, railStrip ?? 30))
+    }
+
+    /// Focus-shake (④) amplitude in px. 0 disables the shake entirely.
+    /// 0…40 clamp, default 8.
+    public var effectiveShakeAmplitude: CGFloat {
+        CGFloat(max(0, min(40, shakeAmplitude ?? 8)))
+    }
+
+    /// Focus-shake (④) duration in milliseconds. 60…600 clamp, default
+    /// 160. Returned as a Double so callers can divide to seconds.
+    public var effectiveShakeDurationMs: Double {
+        Double(max(60, min(600, shakeDurationMs ?? 160)))
     }
 
     /// Effective background-capture interval for grid thumbnails.
@@ -327,6 +349,12 @@ public struct FacetConfig: Sendable {
     public var effectiveBorderCycleSeconds: CGFloat {
         CGFloat(max(1, min(120, borderCycleSeconds ?? 6)))
     }
+
+    /// Theme color-cycle period (⑪), seconds. [1, 120] clamp, default 6.
+    /// Independent of `effectiveBorderCycleSeconds`.
+    public var effectiveThemeCycleSeconds: CGFloat {
+        CGFloat(max(1, min(120, themeCycleSeconds ?? 6)))
+    }
     /// Width-breathing bounds, px (each clamped 0.5–30), or `nil` when
     /// unset. Breathing runs only when BOTH are set and max > min.
     public var effectiveBorderMinWidth: CGFloat? {
@@ -450,6 +478,9 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml[""]?["theme"] {
             c.theme = s
         }
+        if case .int(let n)? = toml[""]?["theme-cycle-seconds"] {
+            c.themeCycleSeconds = n
+        }
         // [grid]
         if case .int(let n)? = toml["grid"]?["cols"] { c.gridCols = n }
         if case .string(let s)? = toml["grid"]?["label-position"] {
@@ -462,6 +493,9 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
         if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
         if case .int(let n)? = toml["rail"]?["strip"] { c.railStrip = n }
+        // [shake]
+        if case .int(let n)? = toml["shake"]?["amplitude"] { c.shakeAmplitude = n }
+        if case .int(let n)? = toml["shake"]?["duration-ms"] { c.shakeDurationMs = n }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
