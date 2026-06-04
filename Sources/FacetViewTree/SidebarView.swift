@@ -124,21 +124,37 @@ public final class SidebarView: NSView {
         return f
     }()
     /// Richer drag ghost (⑨): a snapshot "card" of the lifted row(s) —
-    /// the dragged WS's header + its windows, or a single window row —
-    /// shown instead of the plain text chip (lifts the section as-is).
-    /// Falls back to the chip if the snapshot can't be built.
+    /// the dragged WS's header + its windows, or a single window row.
+    /// Shown in a borderless FLOATING WINDOW (`dragCardWindow`) so it can
+    /// extend BEYOND the narrow tree panel — a subview would be clipped to
+    /// the panel. `dragCard` is the window's (padded) content; the pad
+    /// gives the lean (tilt) room so it doesn't clip at the window edge.
+    /// Falls back to the in-panel text chip if the snapshot fails.
     private lazy var dragCard: NSImageView = {
         let v = NSImageView()
         v.wantsLayer = true
         v.imageScaling = .scaleNone
-        v.layer?.cornerRadius = 8
-        v.layer?.masksToBounds = true
+        v.layer?.masksToBounds = false       // don't clip the tilt
         v.layer?.borderWidth = 2
-        v.layer?.zPosition = 1001
-        v.isHidden = true
-        addSubview(v)
         return v
     }()
+    private let dragCardPad: CGFloat = 26     // room for the tilt's corners
+    private lazy var dragCardWindow: NSWindow = {
+        let w = NSWindow(contentRect: .zero, styleMask: .borderless,
+                         backing: .buffered, defer: true)
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.hasShadow = true
+        w.ignoresMouseEvents = true           // never blocks the drag tracking
+        w.level = .popUpMenu
+        w.collectionBehavior = [.transient, .ignoresCycle]
+        let container = NSView()
+        container.wantsLayer = true
+        container.addSubview(dragCard)
+        w.contentView = container
+        return w
+    }()
+    private var cardShown = false
     private var prevApp: NSRunningApplication?   // re-activate post-drag
 
     public override var isFlipped: Bool { true }
@@ -1229,7 +1245,8 @@ public final class SidebarView: NSView {
     }
 
     /// Show the snapshot card for `rect` (capped to ~60% panel height so a
-    /// tall WS shows its top). Returns false → caller falls back to chip.
+    /// tall WS shows its top) in the floating window. Returns false → the
+    /// caller falls back to the in-panel chip.
     @discardableResult
     private func showDragCard(rect: NSRect?) -> Bool {
         guard var r = rect?.intersection(bounds), r.width > 1, r.height > 1
@@ -1238,24 +1255,36 @@ public final class SidebarView: NSView {
         if r.height > maxH { r.size.height = maxH }   // top portion only
         guard let img = snapshotImage(of: r) else { return false }
         dragCard.image = img
-        dragCard.setFrameSize(r.size)
+        dragCard.frame = NSRect(x: dragCardPad, y: dragCardPad,
+                                width: r.width, height: r.height)
         dragCard.layer?.borderColor = pal.accent.withAlphaComponent(0.9).cgColor
         dragCard.layer?.backgroundColor = (pal.bg ?? NSColor(white: 0.10, alpha: 1)).cgColor
+        dragCardWindow.setContentSize(NSSize(width: r.width + dragCardPad * 2,
+                                             height: r.height + dragCardPad * 2))
         // Semi-transparent (dnd-kit style) so the drop-target band shows
         // through the lifted card — the drop is easier to predict (⑨).
-        dragCard.alphaValue = dragGhostAlpha
+        dragCardWindow.alphaValue = dragGhostAlpha
+        positionDragCardWindow()
+        dragCardWindow.orderFront(nil)
         chip.isHidden = true
-        dragCard.isHidden = false
+        cardShown = true
         return true
     }
 
-    /// Move whichever drag ghost (card or chip) is visible to follow `cp`.
-    /// Anchored just below-right of the cursor (not centred on it) so the
-    /// cursor + the drop-target band it points at stay visible.
+    /// Place the card window just below-right of the live cursor (screen
+    /// coords); the card itself is inset by `dragCardPad`.
+    private func positionDragCardWindow() {
+        let m = NSEvent.mouseLocation               // screen, y-up
+        dragCardWindow.setFrameTopLeftPoint(
+            NSPoint(x: m.x + 14 - dragCardPad, y: m.y - 12 + dragCardPad))
+    }
+
+    /// Move the visible drag ghost to follow the cursor — the floating
+    /// card window (screen coords) or, as fallback, the in-panel chip.
     private func moveDragGhost(to cp: NSPoint) {
-        let ghost: NSView = dragCard.isHidden ? chip : dragCard
-        ghost.setFrameOrigin(NSPoint(
-            x: min(max(cp.x + 14, 4), bounds.width - ghost.frame.width - 4),
+        if cardShown { positionDragCardWindow(); return }
+        chip.setFrameOrigin(NSPoint(
+            x: min(max(cp.x + 14, 4), bounds.width - chip.frame.width - 4),
             y: max(4, cp.y - 12)))
     }
 
@@ -1266,16 +1295,17 @@ public final class SidebarView: NSView {
     private func tiltDragGhost(deltaX: CGFloat) {
         let target = max(-dragTiltMax, min(dragTiltMax, deltaX * dragTiltPerPx))
         dragTilt += (target - dragTilt) * 0.4          // smooth
-        let ghost: NSView = dragCard.isHidden ? chip : dragCard
+        let layer = cardShown ? dragCard.layer : chip.layer
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        ghost.layer?.transform = CATransform3DMakeRotation(dragTilt, 0, 0, 1)
+        layer?.transform = CATransform3DMakeRotation(dragTilt, 0, 0, 1)
         CATransaction.commit()
     }
 
     private func hideDragGhosts() {
         chip.isHidden = true
-        dragCard.isHidden = true
+        dragCardWindow.orderOut(nil)
         dragCard.image = nil
+        cardShown = false
         // Reset the lean.
         dragTilt = 0
         dragCard.layer?.transform = CATransform3DIdentity
