@@ -229,6 +229,19 @@ final class PanelHost: NSObject {
                searching: view.searching)
     }
 
+    /// Reset to the built-in default geometry: top-left of the main
+    /// screen (with margin), default width, auto height. Used by the
+    /// header double-click when no `[tree]` config geometry is set.
+    func resetGeometryToDefault() {
+        guard let scr = NSScreen.main?.frame else { return }
+        userWidth = sidebarWidth
+        userHeight = nil                     // auto = content height
+        anchorTL = NSPoint(x: scr.minX + screenMargin,
+                           y: scr.maxY - screenMargin)
+        layout(contentHeight: view.contentHeight,
+               searching: view.searching)
+    }
+
     /// Phase δ: respond to a display reconfiguration. When the
     /// persisted anchor / size no longer overlaps any visible
     /// display (external monitor unplugged, resolution change

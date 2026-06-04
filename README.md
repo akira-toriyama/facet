@@ -227,7 +227,8 @@ and change **how many** windows share it (`--inc-master` /
 | Click a workspace header (tree) | switch to that workspace |
 | Drag a window row onto another workspace (tree) | move that window in the background — no switch, focus stays put |
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
-| Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel — position persists |
+| Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel (session-only — set `[tree]` geometry in config to pin it) |
+| Double-click the panel header (tree) | reset position + size to the `[tree]` config geometry (or the built-in default) |
 | Right-click (tree) | context menu — window actions / workspace layout picker |
 | Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |

@@ -1030,6 +1030,15 @@ public final class SidebarView: NSView {
         let row = rows.first(where: { $0.rect.contains(start) })
         draggingWid = nil; dropWS = nil; dragLabel = nil
 
+        // Double-click the top handle band ("Desktop N") → reset the
+        // panel to its `[tree]` config geometry (or the built-in default
+        // when none is set). The single click on a handle is a no-op
+        // (handleClick), so the first click of the pair is harmless.
+        if e.clickCount == 2, case .handle? = row?.kind {
+            controller?.resetPanelGeometry()
+            return
+        }
+
         var mode = 0          // 0 undecided · 1 panel-move · 2 window-drag
         var dragWS = 0
         var dragWindowID = WindowID(serverID: 0)
