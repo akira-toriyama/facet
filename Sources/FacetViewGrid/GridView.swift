@@ -227,11 +227,11 @@ public final class GridView: NSView {
     /// grid shows a screen-edge neon frame only while an effect is
     /// active — no border when off.
     public func applyBorder(effectName: String, glow: Bool, width: CGFloat,
-                            cycleSeconds: CGFloat,
+                            cycleSeconds: CGFloat, cycleColors: Bool,
                             minWidth: CGFloat?, maxWidth: CGFloat?) {
         installBorderIfNeeded()
         borderFX.configure(effectName: effectName, glow: glow, width: width,
-                           cycleSeconds: cycleSeconds,
+                           cycleSeconds: cycleSeconds, cycleColors: cycleColors,
                            minWidth: minWidth, maxWidth: maxWidth)
     }
     /// WS-switch flash (no-op when off).

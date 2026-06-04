@@ -213,16 +213,19 @@ final class Controller: NSObject {
         let g = config.effectiveBorderGlow
         let w = config.effectiveBorderWidth
         let cs = config.effectiveBorderCycleSeconds
+        // Explicitly setting `[border] cycle-seconds` also opts a
+        // non-rainbow effect into a continuous color cycle (⑧).
+        let cc = config.borderCycleSeconds != nil
         let mn = config.effectiveBorderMinWidth
         let mx = config.effectiveBorderMaxWidth
         panelHost.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         // The grid + rail borders (when their overlay is up) —
         // reconfigure on a hot-reload too.
         gridView?.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         railView?.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, minWidth: mn, maxWidth: mx)
+                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
     }
 
     private func handlePanelKeyChange(isKey: Bool) {

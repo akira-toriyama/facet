@@ -563,11 +563,11 @@ public final class RailView: NSView {
     /// Apply the `[border]` config (Controller, on show / reload). The
     /// rail frames the outer screen edge only while an effect is active.
     public func applyBorder(effectName: String, glow: Bool, width: CGFloat,
-                            cycleSeconds: CGFloat,
+                            cycleSeconds: CGFloat, cycleColors: Bool,
                             minWidth: CGFloat?, maxWidth: CGFloat?) {
         borderFX.onRepaint = { [weak self] in self?.needsDisplay = true }
         borderFX.configure(effectName: effectName, glow: glow, width: width,
-                           cycleSeconds: cycleSeconds,
+                           cycleSeconds: cycleSeconds, cycleColors: cycleColors,
                            minWidth: minWidth, maxWidth: maxWidth)
     }
     /// WS-switch / show flash (no-op when off).

@@ -330,10 +330,10 @@ final class PanelHost: NSObject {
     /// shows the effect color when on, or `pal.accent` when off. Called
     /// by the Controller at startup + on hot-reload.
     func applyBorder(effectName: String, glow: Bool, width: CGFloat,
-                     cycleSeconds: CGFloat,
+                     cycleSeconds: CGFloat, cycleColors: Bool,
                      minWidth: CGFloat?, maxWidth: CGFloat?) {
         borderFX.configure(effectName: effectName, glow: glow, width: width,
-                           cycleSeconds: cycleSeconds,
+                           cycleSeconds: cycleSeconds, cycleColors: cycleColors,
                            minWidth: minWidth, maxWidth: maxWidth)
     }
 
