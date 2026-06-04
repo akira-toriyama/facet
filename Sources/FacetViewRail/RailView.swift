@@ -191,6 +191,9 @@ public final class RailView: NSView {
     /// Last carousel slot size (set by `layoutCells`) — one rotation
     /// slides the strip by this much.
     private var lastSlot: CGFloat = 0
+    /// Accumulated scroll-wheel delta; one carousel step per
+    /// `railScrollStep` points so a wheel notch / swipe ≈ one rotation.
+    private var scrollAccum: CGFloat = 0
     /// Ease value (0→1) of the active slide; also drives the hero
     /// crossfade (①): the old hero fades out over `1 − slideProgress`.
     private var slideProgress: CGFloat = 0
@@ -770,6 +773,30 @@ public final class RailView: NSView {
 
     private func heroWinAt(_ p: NSPoint) -> WinHit? {
         hero?.wins.reversed().first { $0.rect.contains(p) }
+    }
+
+    /// Mouse-wheel / two-finger scroll over the strip rotates the
+    /// carousel: scroll DOWN → next workspace, UP → previous (same on
+    /// every edge — the gesture isn't tied to the strip's axis). Delta is
+    /// accumulated so one notch / swipe ≈ one step, and momentum (inertia)
+    /// is ignored so a flick doesn't over-spin. Mirrors the browse arrows
+    /// (`kbMoveSelection`), so the eased rotation + hero re-preview are
+    /// shared. A keyboard lift owns the carousel, so scrolling is inert
+    /// while lifted.
+    public override func scrollWheel(with event: NSEvent) {
+        guard drag == nil, workspaces.count > 1,
+              event.momentumPhase == [] else { return }
+        if event.phase.contains(.began) { scrollAccum = 0 }
+        // Normalise so natural-scroll users get the same physical
+        // direction (positive = up, negative = down).
+        var dy = event.scrollingDeltaY
+        if event.isDirectionInvertedFromDevice { dy = -dy }
+        scrollAccum += dy
+        while abs(scrollAccum) >= railScrollStep {
+            let dx = scrollAccum < 0 ? 1 : -1   // down → next, up → previous
+            scrollAccum += CGFloat(dx) * railScrollStep
+            kbMoveSelection(dx: dx)
+        }
     }
 
     public override func mouseDown(with event: NSEvent) {

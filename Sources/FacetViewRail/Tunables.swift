@@ -85,6 +85,10 @@ let railHeaderTwoLineMinH: CGFloat = 26
 // the grid / tree tunables; kept module-local.
 let railDragThreshold: CGFloat = 5
 
+// Scroll-wheel delta (points) accumulated per carousel step (⑦). Lower
+// = more sensitive (fewer points to advance one workspace). Tune to taste.
+let railScrollStep: CGFloat = 30
+
 // -- Drag "lift" feedback (copy of the grid's values): the ghost is
 //    installed already at lifted size + a soft shadow fades in. --
 let railLiftScale: CGFloat = 1.06
