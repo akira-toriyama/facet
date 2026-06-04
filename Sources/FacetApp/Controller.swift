@@ -83,6 +83,20 @@ final class Controller: NSObject {
     /// refresh sooner instead of being swallowed by it.
     private var pendingRefreshAt: TimeInterval?
     private var refreshGen = 0
+    /// Uptime of the most recent focus-change event, for FACET_DEBUG
+    /// end-to-end focus→reaction latency telemetry (logged at the ④/⑤
+    /// fire in apply()).
+    private var lastFocusEventAt: TimeInterval?
+    /// Focus fast-path adaptive poll. ONE poll runs at a time
+    /// (`focusPollActive`); it re-reads `focusedWindow()` each tick so it
+    /// naturally tracks the latest focus, and runs its full schedule
+    /// instead of being cancelled by the burst of `kAXFocusedWindowChanged`
+    /// events a single click fires (the cancel-on-every-event bug that
+    /// stranded the poll at attempt 0). `focusPollStep` × `focusPollMax`
+    /// ≈ the give-up cap before the reconcile is the backstop.
+    private var focusPollActive = false
+    private let focusPollStep: TimeInterval = 0.010
+    private let focusPollMax = 15
 
     // MARK: - Preview (hover overlay + grid thumbnails)
 
@@ -287,7 +301,13 @@ final class Controller: NSObject {
             for await ev in self.backend.events {
                 let focus: Bool
                 if case .focusChanged = ev { focus = true } else { focus = false }
-                await MainActor.run { self.requestRefresh(focus: focus) }
+                await MainActor.run {
+                    if focus {
+                        self.lastFocusEventAt = ProcessInfo.processInfo.systemUptime
+                        self.scheduleFocusFastPath()
+                    }
+                    self.requestRefresh(focus: focus)
+                }
             }
         }
         // Adapter error stream → lastError slot in facet status.
@@ -872,6 +892,85 @@ final class Controller: NSObject {
 
     // MARK: - Refresh / apply
 
+    /// Focus fast-path (STEP 2): fire the ④ shake + ⑤ active-window
+    /// border WITHOUT waiting for the heavy reconcile. Measurement showed
+    /// the AX focus query is cheap (~1ms) but the reaction was a beat
+    /// late (~100ms median) because it rode the serial `cliQueue` behind
+    /// the full reconcile (enumerate + classify + engine + preview +
+    /// titles) — JankyBorders is instant precisely because it never runs
+    /// that pipeline on the focus hot path. So we resolve the focused
+    /// window on a dedicated high-priority queue and fire on main,
+    /// bypassing the jam. The reconcile still runs (debounced) for the
+    /// authoritative model; `lastShakenFocus` coordinates so neither
+    /// path double-fires.
+    ///
+    /// Adaptive poll: a fixed probe schedule misses (~40% measured) when
+    /// `NSWorkspace.frontmostApplication` hasn't settled yet — and a miss
+    /// drops to the slow reconcile (hundreds of ms). Instead poll every
+    /// `focusPollStep` until the focused window settles to a NEW managed
+    /// window (fires) or `focusPollMax` attempts elapse (give up; the
+    /// reconcile is the backstop). A fast-settling app fires at ~10-20ms;
+    /// a slow one at whenever it settles, never worse than the cap. An
+    /// event-time read races the not-yet-committed focus and returns
+    /// stale (memory `facet-focus-detection-ax-timing`) — a stale read
+    /// just equals `lastShakenFocus`, so it keeps polling; never WRONG.
+    private func scheduleFocusFastPath() {
+        if focusPollActive { return }    // the running poll tracks the new focus
+        focusPollActive = true
+        pollFocusFast(attempt: 0)
+    }
+
+    private func pollFocusFast(attempt: Int) {
+        // Resolve on MAIN: `NSWorkspace.frontmostApplication` is
+        // main-thread-affine — a background read (the old `focusFastQueue`
+        // path) returns a stale value that never updates, which the
+        // diagnostics pinned as the miss cause (`id==last` for the whole
+        // poll). The AX query is ~1ms so the main-thread cost is trivial.
+        let id = backend.focusedWindow()
+        if onFastFocus(id, attempt: attempt) {
+            focusPollActive = false                 // fired → done
+            return
+        }
+        if attempt < focusPollMax {
+            DispatchQueue.main.asyncAfter(deadline: .now() + focusPollStep) { [weak self] in
+                self?.pollFocusFast(attempt: attempt + 1)
+            }
+        } else {
+            focusPollActive = false                 // gave up; reconcile backstops
+        }
+    }
+
+    /// Fire the shake + border for a fast-path-resolved focus id. Only
+    /// acts on a genuine change to a MANAGED window (consistent with the
+    /// reconcile path); a just-opened / excluded / facet-own window
+    /// falls back to the reconcile. Returns true once it fires so the
+    /// poll stops. Idempotent via `lastShakenFocus`.
+    @discardableResult
+    private func onFastFocus(_ id: WindowID?, attempt: Int) -> Bool {
+        let fw = id.flatMap { wid in
+            lastWorkspaces.flatMap { $0.windows }.first { $0.id == wid }
+        }
+        if let id, id != lastShakenFocus, let fw {
+            lastShakenFocus = id
+            if let t0 = lastFocusEventAt {
+                Log.debug(String(format: "focus→react(fast) %.0fms attempt=%d",
+                                 (ProcessInfo.processInfo.systemUptime - t0) * 1000, attempt))
+                lastFocusEventAt = nil
+            }
+            backend.animateShake(id)
+            if config.effectiveActiveWindowBorder, let f = fw.frame {
+                activeWindowBorder.show(around: Self.cgFrameToAppKit(f),
+                                        for: id, flash: true)
+            }
+            return true
+        }
+        if attempt >= focusPollMax {     // exhausted — why did the fast path miss?
+            Log.debug("focus fast-miss id=\(id?.serverID ?? -1) "
+                + "last=\(lastShakenFocus?.serverID ?? -1) inWS=\(fw != nil)")
+        }
+        return false
+    }
+
     private func requestRefresh(focus: Bool = false) {
         let delay = focus ? focusRefreshDebounce : refreshDebounce
         let fireAt = ProcessInfo.processInfo.systemUptime + delay
@@ -975,6 +1074,14 @@ final class Controller: NSObject {
         let focusChanged = !firstRealApply && newFocus != nil
             && newFocus != lastShakenFocus
         if focusChanged, let f = newFocus {
+            // FACET_DEBUG: end-to-end focus event → reaction latency. If
+            // this is large vs `enumerate` (see reconcile-timing log) the
+            // beat is the AX `focusedWindow()` round-trip to the app.
+            if let t0 = lastFocusEventAt {
+                Log.debug(String(format: "focus→react(reconcile) %.0fms (fast-path missed)",
+                                 (ProcessInfo.processInfo.systemUptime - t0) * 1000))
+                lastFocusEventAt = nil
+            }
             backend.animateShake(f)
         }
         lastShakenFocus = newFocus

@@ -340,8 +340,19 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
             forMacDesktopOrdinal: activeMacDesktopOrdinal))
+        // Latency telemetry (FACET_DEBUG): the AX `focusedWindow()`
+        // query asks the front app's AX server (kAXFocusedWindow, 0.25s
+        // timeout) and is the suspected dominant focus-reaction latency
+        // for slow-AX apps (Chrome/Electron). Time it vs the AX-free
+        // CGWindowList enumerate to confirm where the beat goes.
+        let _tEnum0 = ProcessInfo.processInfo.systemUptime
         let live = enumerateCGWindows()
+        let _tEnum1 = ProcessInfo.processInfo.systemUptime
         let focused = focusedWindow()
+        let _tFoc1 = ProcessInfo.processInfo.systemUptime
+        Log.debug(String(format:
+            "native: reconcile timing enumerate=%.0fms focusedWindow(AX)=%.0fms",
+            (_tEnum1 - _tEnum0) * 1000, (_tFoc1 - _tEnum1) * 1000))
         let rect = activeDisplayRect()
         // Phase γ.3 + F: classify first-sight windows — auto-float
         // (sheets / dialogs / palettes + config float rules) and
