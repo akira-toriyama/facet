@@ -1,19 +1,19 @@
-// Pure geometry for directional window focus / move (② — yabai-style
-// north/east/south/west). Given the focused window's frame and its
-// siblings' frames, pick the nearest neighbour on a given side. No
-// AppKit / AX here — the adapter supplies the frames and does the
-// focus / swap; this stays pure so it's unit-testable without a display.
+// Pure geometry for directional window focus / move (② — up/down/left/
+// right). Given the focused window's frame and its siblings' frames,
+// pick the nearest neighbour on a given side. No AppKit / AX here — the
+// adapter supplies the frames and does the focus / swap; this stays pure
+// so it's unit-testable without a display.
 //
-// Frames are AX-style screen coords (y increases DOWNWARD), so "north"
-// = a smaller y. If a future backend ever feeds y-up frames, this one
+// Frames are AX-style screen coords (y increases DOWNWARD), so "up" =
+// a smaller y. If a future backend ever feeds y-up frames, this one
 // mapping (in `nearestWindow`) is where the flip would live.
 
 import CoreGraphics
 
-/// One of the four cardinal directions a focus / move steps toward.
-/// Raw values match the CLI tokens (`window --focus=north` …).
-public enum CardinalDirection: String, Sendable, Equatable, CaseIterable {
-    case north, east, south, west
+/// One of the four directions a focus / move steps toward. Raw values
+/// match the CLI tokens (`window --focus=up` …).
+public enum Direction: String, Sendable, Equatable, CaseIterable {
+    case up, down, left, right
 }
 
 /// The sibling nearest to `focused` in `direction`, or `nil` when none
@@ -25,7 +25,7 @@ public enum CardinalDirection: String, Sendable, Equatable, CaseIterable {
 public func nearestWindow(
     to focused: CGRect,
     among others: [(id: WindowID, frame: CGRect)],
-    direction: CardinalDirection
+    direction: Direction
 ) -> WindowID? {
     let fx = focused.midX, fy = focused.midY
     var best: (id: WindowID, score: CGFloat)?
@@ -35,10 +35,10 @@ public func nearestWindow(
         let along: CGFloat
         let perp: CGFloat
         switch direction {
-        case .north: along = -dy; perp = abs(dx)   // up = smaller y
-        case .south: along =  dy; perp = abs(dx)
-        case .west:  along = -dx; perp = abs(dy)
-        case .east:  along =  dx; perp = abs(dy)
+        case .up:    along = -dy; perp = abs(dx)   // up = smaller y
+        case .down:  along =  dy; perp = abs(dx)
+        case .left:  along = -dx; perp = abs(dy)
+        case .right: along =  dx; perp = abs(dy)
         }
         guard along > 0.5 else { continue }        // not on this side
         let score = along + perp * 2               // closer + aligned wins

@@ -22,8 +22,8 @@ public enum WindowAction: Sendable, Equatable {
     case cycleStackNext, cycleStackPrev            // stack (native adapter)
     case growMaster, shrinkMaster                  // master-* engines: ratio
     case incMaster, decMaster                      // master-* engines: master count
-    case focusDir(CardinalDirection)               // ② directional focus
-    case moveDir(CardinalDirection)                // ② directional move (swap)
+    case focusDir(Direction)               // ② directional focus
+    case moveDir(Direction)                // ② directional move (swap)
 }
 
 /// One entry in the window right-click menu.

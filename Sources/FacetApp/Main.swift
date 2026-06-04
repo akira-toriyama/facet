@@ -32,7 +32,7 @@
 //               --toggle-sticky / --toggle-orientation /
 //               --cycle-stack=next|prev / --grow-master / --shrink-master
 //               / --inc-master / --dec-master
-//               / --focus=north|east|south|west / --move=north|east|south|west
+//               / --focus=up|down|left|right / --move=up|down|left|right
 //   Scratchpad: facet scratchpad --stash=NAME / --toggle=NAME
 //               / --release=NAME
 //
@@ -169,11 +169,11 @@ enum FacetApp {
                                              (PiP / timer / chat); flip off
                                              to drop it as a tiled window
           facet window --focus=DIR           move focus to the tiled
-                                             neighbour north|east|south|
-                                             west (no-op at an edge)
+                                             neighbour up|down|left|right
+                                             (no-op at an edge)
           facet window --move=DIR            swap the focused window with
-                                             that neighbour (north|east|
-                                             south|west)
+                                             that neighbour (up|down|
+                                             left|right)
           facet window --toggle-orientation  bsp: rotate the focused
                                              window's parent split
           facet window --cycle-stack=next    rotate stack to next member
@@ -445,9 +445,9 @@ enum FacetApp {
         postControl("window-move-dir:" + dir)
     }
 
-    /// Validate + canonicalise a direction (north|east|south|west). Loud
+    /// Validate + canonicalise a direction (up|down|left|right). Loud
     /// reject on typo (``exit(2)``) — same pattern as `canonicalLayoutMode`.
-    static let canonicalDirections = ["north", "east", "south", "west"]
+    static let canonicalDirections = ["up", "down", "left", "right"]
 
     static func canonicalDirection(_ name: String) -> String {
         switch canonicalize(name, allowed: canonicalDirections) {

@@ -3,8 +3,8 @@ import XCTest
 @testable import FacetCore
 
 /// Pure tests for directional focus/move neighbour-finding (②). Frames
-/// are AX-style (y DOWN: north = smaller y). A simple 2×2 grid of
-/// 100×100 cells on a 200×200 screen keeps the geometry obvious:
+/// are AX-style (y DOWN: up = smaller y). A simple 2×2 grid of 100×100
+/// cells on a 200×200 screen keeps the geometry obvious:
 ///   id 1 = top-left, 2 = top-right, 3 = bottom-left, 4 = bottom-right.
 final class DirectionalGeometryTests: XCTestCase {
 
@@ -18,49 +18,49 @@ final class DirectionalGeometryTests: XCTestCase {
         pairs.map { (id: wid($0.0), frame: $0.1) }
     }
 
-    func testCardinalNeighboursFromTopLeft() {
+    func testNeighboursFromTopLeft() {
         let rest = others([(2, tr), (3, bl), (4, br)])
-        // east of TL = TR(2); south of TL = BL(3).
-        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .east), wid(2))
-        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .south), wid(3))
-        // north / west of TL = nothing → edge no-op.
-        XCTAssertNil(nearestWindow(to: tl, among: rest, direction: .north))
-        XCTAssertNil(nearestWindow(to: tl, among: rest, direction: .west))
+        // right of TL = TR(2); down from TL = BL(3).
+        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .right), wid(2))
+        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .down), wid(3))
+        // up / left of TL = nothing → edge no-op.
+        XCTAssertNil(nearestWindow(to: tl, among: rest, direction: .up))
+        XCTAssertNil(nearestWindow(to: tl, among: rest, direction: .left))
     }
 
-    func testCardinalNeighboursFromBottomRight() {
+    func testNeighboursFromBottomRight() {
         let rest = others([(1, tl), (2, tr), (3, bl)])
-        // north of BR = TR(2); west of BR = BL(3).
-        XCTAssertEqual(nearestWindow(to: br, among: rest, direction: .north), wid(2))
-        XCTAssertEqual(nearestWindow(to: br, among: rest, direction: .west), wid(3))
-        XCTAssertNil(nearestWindow(to: br, among: rest, direction: .south))
-        XCTAssertNil(nearestWindow(to: br, among: rest, direction: .east))
+        // up from BR = TR(2); left of BR = BL(3).
+        XCTAssertEqual(nearestWindow(to: br, among: rest, direction: .up), wid(2))
+        XCTAssertEqual(nearestWindow(to: br, among: rest, direction: .left), wid(3))
+        XCTAssertNil(nearestWindow(to: br, among: rest, direction: .down))
+        XCTAssertNil(nearestWindow(to: br, among: rest, direction: .right))
     }
 
     func testAlignedBeatsDiagonal() {
-        // Going east from TL with BOTH the aligned TR and the diagonal BR
-        // present: the squarely-aligned TR wins (perp penalty).
+        // Going right from TL with BOTH the aligned TR and the diagonal
+        // BR present: the squarely-aligned TR wins (perp penalty).
         let rest = others([(2, tr), (4, br)])
-        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .east), wid(2))
+        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .right), wid(2))
     }
 
     func testNearerOfTwoInLineWins() {
-        // Two windows due east; the closer one wins.
+        // Two windows due right; the closer one wins.
         let near = CGRect(x: 100, y: 0, width: 100, height: 100)
         let far  = CGRect(x: 400, y: 0, width: 100, height: 100)
         let rest = others([(2, far), (3, near)])
-        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .east), wid(3))
+        XCTAssertEqual(nearestWindow(to: tl, among: rest, direction: .right), wid(3))
     }
 
-    func testEmptyAndSelfOnly() {
-        XCTAssertNil(nearestWindow(to: tl, among: [], direction: .east))
+    func testEmpty() {
+        XCTAssertNil(nearestWindow(to: tl, among: [], direction: .right))
     }
 
     func testDirectionRawValuesMatchCLI() {
-        XCTAssertEqual(CardinalDirection(rawValue: "north"), .north)
-        XCTAssertEqual(CardinalDirection(rawValue: "east"), .east)
-        XCTAssertEqual(CardinalDirection(rawValue: "south"), .south)
-        XCTAssertEqual(CardinalDirection(rawValue: "west"), .west)
-        XCTAssertNil(CardinalDirection(rawValue: "up"))
+        XCTAssertEqual(Direction(rawValue: "up"), .up)
+        XCTAssertEqual(Direction(rawValue: "down"), .down)
+        XCTAssertEqual(Direction(rawValue: "left"), .left)
+        XCTAssertEqual(Direction(rawValue: "right"), .right)
+        XCTAssertNil(Direction(rawValue: "north"))
     }
 }

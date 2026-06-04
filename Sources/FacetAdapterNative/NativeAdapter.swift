@@ -2246,7 +2246,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// at an edge / when there's nothing to step to (stack = one visible
     /// window, float = its own rects). Pure geometry (`nearestWindow`)
     /// over the active WS's tiled frames (②).
-    private func directionalNeighbor(_ direction: CardinalDirection,
+    private func directionalNeighbor(_ direction: Direction,
                                      rect: CGRect) -> WindowID? {
         guard let id = focusedWindow() else { return nil }
         let frames = targetFrames(for: catalog.activeIndex, in: rect)
