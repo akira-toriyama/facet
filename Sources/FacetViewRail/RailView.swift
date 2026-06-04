@@ -94,6 +94,11 @@ public final class RailView: NSView {
     /// workspaces' contents (indices stay put).
     public var onSwap: ((_ srcWS: Int, _ dstWS: Int,
                          _ srcIDs: [WindowID], _ dstIDs: [WindowID]) -> Void)?
+    /// Backend for the shared context menu (③). Set by the Controller.
+    public var backend: (any WindowBackend)?
+    /// Runs the non-close window-ops a context-menu pick chose (③).
+    public var onRunWindowOps: ((_ ops: [WindowAction],
+                                 _ window: Window, _ ws: Int) -> Void)?
 
     // MARK: - Captured thumbnails
 
@@ -860,6 +865,55 @@ public final class RailView: NSView {
         // empty area does nothing. Only the true backdrop dismisses.
         if let h = hero, h.rect.contains(p) { return }
         onDismiss?()
+    }
+
+    // Right-click: WS header → layout picker; window thumb (hero or
+    // strip) → window-ops menu (③ — the SAME shared menu the tree shows).
+    public override func rightMouseDown(with event: NSEvent) {
+        guard let backend, let win = window, drag == nil else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        let scr = win.convertPoint(toScreen: event.locationInWindow)
+        let inStrip = stripRect.isEmpty || stripRect.contains(p)
+        if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            ViewContextMenu.showLayout(at: scr, backend: backend,
+                                       workspaceIndex: cell.wsIndex,
+                                       workspaces: workspaces)
+            return
+        }
+        if let w = heroWinAt(p), let h = hero {
+            railWinMenu(scr, backend: backend, ws: h.wsIndex, w: w); return
+        }
+        if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }),
+           let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
+            railWinMenu(scr, backend: backend, ws: cell.wsIndex, w: w)
+        }
+    }
+
+    /// Keyboard 'm' (③): context menu for the centred WS — the header
+    /// (layout picker) when no hero window is cursored, else that window.
+    public func kbContextMenu() {
+        guard let backend, let win = window, let ws = selectedWS else { return }
+        if kbSelectedWindowIdx == -1 {
+            guard let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+            let scr = win.convertPoint(toScreen:
+                convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
+            ViewContextMenu.showLayout(at: scr, backend: backend,
+                                       workspaceIndex: ws, workspaces: workspaces)
+        } else if let h = hero, kbSelectedWindowIdx >= 0,
+                  kbSelectedWindowIdx < h.wins.count {
+            let w = h.wins[kbSelectedWindowIdx]
+            let scr = win.convertPoint(toScreen:
+                convert(NSPoint(x: w.rect.minX + 12, y: w.rect.minY), to: nil))
+            railWinMenu(scr, backend: backend, ws: ws, w: w)
+        }
+    }
+
+    private func railWinMenu(_ scr: NSPoint, backend: any WindowBackend,
+                             ws: Int, w: WinHit) {
+        ViewContextMenu.showWindow(
+            at: scr, backend: backend, workspaceIndex: ws,
+            workspaces: workspaces, pid: w.pid, windowID: w.id, title: ""
+        ) { [weak self] ops, win, ws in self?.onRunWindowOps?(ops, win, ws) }
     }
 
     public override func mouseDragged(with event: NSEvent) {

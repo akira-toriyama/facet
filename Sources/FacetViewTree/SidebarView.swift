@@ -1507,20 +1507,12 @@ public final class SidebarView: NSView {
         }
     }
 
+    // The header (layout) + window (ops) menus are shared with grid /
+    // rail via `ViewContextMenu` (FacetView) so all three views show the
+    // identical themed popup (③).
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int) {
-        let modes = backend.layoutModes
-        let cur = (lastWorkspaces.first { $0.index == ws })?.layoutMode
-        let idx = modes.firstIndex(of: cur ?? "")
-        let bk = backend
-        PopupMenu.shared.show(at: scr,
-                              header: "WS\(ws + 1) layout",
-                              items: modes,
-                              checkedIndex: idx) { i in
-            let mode = modes[i]
-            cliQueue.async {
-                bk.setLayoutMode(workspaceIndex: ws, mode: mode)
-            }
-        }
+        ViewContextMenu.showLayout(at: scr, backend: backend,
+                                   workspaceIndex: ws, workspaces: lastWorkspaces)
     }
 
     private func showWindowMenu(at scr: NSPoint,
@@ -1528,34 +1520,11 @@ public final class SidebarView: NSView {
                                 pid: Int,
                                 windowID id: WindowID,
                                 title: String) {
-        let wsModel = lastWorkspaces.first { $0.index == ws }
-        let mode = wsModel?.layoutMode ?? ""
-        let win = wsModel?.windows.first { $0.id == id }
-        let floating = win?.isFloating ?? false
-        let isMaster = win?.isMaster ?? false
-        let isSticky = win?.isSticky ?? false
-        // Non-floating tiled members — what stack cycling rotates over.
-        let windowCount = wsModel?.windows.filter { !$0.isFloating }.count ?? 0
-        let menu = backend.windowMenu(mode: mode, floating: floating,
-                                      isMaster: isMaster,
-                                      windowCount: windowCount,
-                                      isSticky: isSticky)
-        let bk = backend
-        let ctrl = controller
-        PopupMenu.shared.show(at: scr,
-                              header: "Window",
-                              items: menu.map(\.label),
-                              checkedIndex: nil) { i in
-            let item = menu[i]
-            if item.isClose {
-                cliQueue.async { bk.closeWindow(id) }
-            } else {
-                let window = Window(id: id, pid: pid, appName: "",
-                                    title: title, isFocused: false,
-                                    isFloating: floating, frame: nil)
-                ctrl?.runWindowOps(item.ops, on: window,
-                                   workspaceIndex: ws)
-            }
+        ViewContextMenu.showWindow(
+            at: scr, backend: backend, workspaceIndex: ws,
+            workspaces: lastWorkspaces, pid: pid, windowID: id, title: title
+        ) { [weak self] ops, window, ws in
+            self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)
         }
     }
 }

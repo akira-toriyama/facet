@@ -1347,6 +1347,11 @@ final class Controller: NSObject {
             cols: config.effectiveGridCols,
             labelPosition: config.effectiveGridLabelPosition)
         gv.onDismiss = { [weak self] in self?.hideGrid() }
+        // ③ Context menu: header layout picker + window-ops menu.
+        gv.backend = backend
+        gv.onRunWindowOps = { [weak self] ops, window, ws in
+            self?.runWindowOps(ops, on: window, workspaceIndex: ws)
+        }
         gv.onDrop = { [weak self, bk = backend] src, dst, _, id in
             guard src != dst else { return }
             cliQueue.async {
@@ -1460,6 +1465,7 @@ final class Controller: NSObject {
             case 124: gv.kbMoveSelection(dx:  1, dy: 0);   return nil
             case 126: gv.kbMoveSelection(dx: 0, dy: -1);   return nil
             case 125: gv.kbMoveSelection(dx: 0, dy:  1);   return nil
+            case 46:  gv.kbContextMenu();                  return nil  // 'm' (③)
             default:  return e
             }
         }
@@ -1727,6 +1733,11 @@ final class Controller: NSObject {
         rv.workspaces = lastWorkspaces
         rv.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS
+        // ③ Context menu: header layout picker + window-ops menu.
+        rv.backend = backend
+        rv.onRunWindowOps = { [weak self] ops, window, ws in
+            self?.runWindowOps(ops, on: window, workspaceIndex: ws)
+        }
         rv.onPick = { [weak self] ws in
             guard let self else { return }
             // Commit-on-click (grid-like): dispatch the switch off-main
@@ -1823,6 +1834,7 @@ final class Controller: NSObject {
             case 124 where horizontal: rv.kbMoveSelection(dx:  1); return nil  // → next
             case 126 where !horizontal: rv.kbMoveSelection(dx: -1); return nil  // ↑ prev
             case 125 where !horizontal: rv.kbMoveSelection(dx:  1); return nil  // ↓ next
+            case 46:     rv.kbContextMenu();                return nil  // 'm' (③)
             default:     return e
             }
         }
