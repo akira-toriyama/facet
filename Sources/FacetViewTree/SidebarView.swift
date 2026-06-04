@@ -123,6 +123,22 @@ public final class SidebarView: NSView {
         addSubview(f)
         return f
     }()
+    /// Richer drag ghost (⑨): a snapshot "card" of the lifted row(s) —
+    /// the dragged WS's header + its windows, or a single window row —
+    /// shown instead of the plain text chip (lifts the section as-is).
+    /// Falls back to the chip if the snapshot can't be built.
+    private lazy var dragCard: NSImageView = {
+        let v = NSImageView()
+        v.wantsLayer = true
+        v.imageScaling = .scaleNone
+        v.layer?.cornerRadius = 8
+        v.layer?.masksToBounds = true
+        v.layer?.borderWidth = 2
+        v.layer?.zPosition = 1001
+        v.isHidden = true
+        addSubview(v)
+        return v
+    }()
     private var prevApp: NSRunningApplication?   // re-activate post-drag
 
     public override var isFlipped: Bool { true }
@@ -1100,7 +1116,11 @@ public final class SidebarView: NSView {
                                 dragLabel = c.title.isEmpty
                                     ? c.app : "\(c.app)  \(c.title)"
                             }
-                            showChip(dragLabel ?? "")
+                            // ⑨ richer ghost: lift the window's row as a
+                            // snapshot card; fall back to the text chip.
+                            if !showDragCard(rect: dragRect(forWindow: wid)) {
+                                showChip(dragLabel ?? "")
+                            }
                             lastDropWS = nil
                             prevApp = NSWorkspace.shared.frontmostApplication
                             NSApp.activate(ignoringOtherApps: true)
@@ -1111,7 +1131,11 @@ public final class SidebarView: NSView {
                             mode = 3
                             dragWS = ws
                             draggingWS = ws
-                            showChip(swapChipLabel(for: ws))
+                            // ⑨ richer ghost: lift the whole WS section
+                            // (header + windows) as a snapshot card.
+                            if !showDragCard(rect: dragRect(forWS: ws)) {
+                                showChip(swapChipLabel(for: ws))
+                            }
                             lastDropWS = nil
                         }
                     }
@@ -1126,12 +1150,8 @@ public final class SidebarView: NSView {
                     } else {
                         NSCursor.arrow.set()
                     }
-                    // Move just the chip layer (cheap → keeps up
-                    // at speed).
-                    chip.setFrameOrigin(NSPoint(
-                        x: min(max(cp.x + 12, 4),
-                               bounds.width - chip.frame.width - 4),
-                        y: cp.y - chip.frame.height / 2))
+                    // Move just the ghost (cheap → keeps up at speed).
+                    moveDragGhost(to: cp)
                     // Full redraw only when the drop band changes.
                     if dropWS != lastDropWS {
                         lastDropWS = dropWS
@@ -1145,7 +1165,7 @@ public final class SidebarView: NSView {
 
         draggingWid = nil; draggingWS = nil; dropWS = nil; dragLabel = nil
         lastDropWS = nil
-        chip.isHidden = true
+        hideDragGhosts()
         NSCursor.arrow.set()
         // Restore the previously-frontmost app. A tree drag activates
         // facet only so the drag cursor shows (see mouseDown top); the
@@ -1168,6 +1188,74 @@ public final class SidebarView: NSView {
         chip.frame = NSRect(x: chip.frame.minX, y: chip.frame.minY,
                             width: w, height: 22)
         chip.isHidden = false
+    }
+
+    // MARK: - Drag card (⑨ — snapshot the lifted rows)
+
+    /// Snapshot `rect` of this view into an image (the lifted rows,
+    /// rendered exactly as drawn). nil for an empty / off-bounds rect.
+    private func snapshotImage(of rect: NSRect) -> NSImage? {
+        guard rect.width > 1, rect.height > 1,
+              let rep = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
+        cacheDisplay(in: rect, to: rep)
+        let img = NSImage(size: rect.size)
+        img.addRepresentation(rep)
+        return img
+    }
+
+    /// Union rect of a workspace's header + window rows.
+    private func dragRect(forWS ws: Int) -> NSRect? {
+        var r: NSRect?
+        for row in rows {
+            let hit: Bool
+            switch row.kind {
+            case .header(let w):       hit = (w == ws)
+            case .window(let w, _, _, _): hit = (w == ws)
+            default:                   hit = false
+            }
+            if hit { r = r.map { $0.union(row.rect) } ?? row.rect }
+        }
+        return r
+    }
+
+    /// A single window row's rect.
+    private func dragRect(forWindow id: WindowID) -> NSRect? {
+        rows.first {
+            if case .window(_, _, let wid, _) = $0.kind { return wid == id }
+            return false
+        }?.rect
+    }
+
+    /// Show the snapshot card for `rect` (capped to ~60% panel height so a
+    /// tall WS shows its top). Returns false → caller falls back to chip.
+    @discardableResult
+    private func showDragCard(rect: NSRect?) -> Bool {
+        guard var r = rect?.intersection(bounds), r.width > 1, r.height > 1
+        else { return false }
+        let maxH = max(40, bounds.height * 0.6)
+        if r.height > maxH { r.size.height = maxH }   // top portion only
+        guard let img = snapshotImage(of: r) else { return false }
+        dragCard.image = img
+        dragCard.setFrameSize(r.size)
+        dragCard.layer?.borderColor = pal.accent.withAlphaComponent(0.9).cgColor
+        dragCard.layer?.backgroundColor = (pal.bg ?? NSColor(white: 0.10, alpha: 1)).cgColor
+        chip.isHidden = true
+        dragCard.isHidden = false
+        return true
+    }
+
+    /// Move whichever drag ghost (card or chip) is visible to follow `cp`.
+    private func moveDragGhost(to cp: NSPoint) {
+        let ghost: NSView = dragCard.isHidden ? chip : dragCard
+        ghost.setFrameOrigin(NSPoint(
+            x: min(max(cp.x + 12, 4), bounds.width - ghost.frame.width - 4),
+            y: cp.y - ghost.frame.height / 2))
+    }
+
+    private func hideDragGhosts() {
+        chip.isHidden = true
+        dragCard.isHidden = true
+        dragCard.image = nil
     }
 
     // MARK: - Workspace-content swap (header drag / kb header lift)
