@@ -42,8 +42,8 @@
 #   "vapor"      — synthwave pink on purple-black; cyan accent, mono.
 #   "rainbow"    — loud max-saturation (readability secondary): white on
 #                  violet-black, vivid rose + electric-cyan, rounded.
-#                  Set [border] cycle-seconds to ANIMATE it — the accents
-#                  then rotate through the spectrum over that period.
+#                  Set `theme-cycle-seconds` (below) to ANIMATE it — the
+#                  accents then rotate through the spectrum.
 #
 # Light:
 #   "cute"       — soft pastel pink, rounded font.
@@ -66,6 +66,13 @@
 # Unknown names clamp to "terminal". CLI override (session only):
 # `facet --theme=nord`.
 theme = "terminal"
+
+# ANIMATE the theme: an animatable theme (rainbow / neon / cyber / vapor
+# / kawaii) cycles its accents over this many seconds — rainbow rotates
+# the full spectrum, the neon family cycle their own palette. Independent
+# of the border's cycle-seconds below. Omit → static palette.
+# 1–120 clamp, default 6.
+# theme-cycle-seconds = 3
 
 
 # -----------------------------------------------------------------
@@ -96,10 +103,8 @@ glow = true
 # Drives the "rainbow" hue rotation AND the width breath below.
 # SETTING this key also makes a non-rainbow effect (neon / cyber /
 # vapor / kawaii) continuously CYCLE its border through its own palette
-# over this period (omit the key → that effect stays a steady color),
-# AND animates the matching THEMES: `--theme = "rainbow"` rotates its
-# accents through the full spectrum, and neon / cyber / vapor / kawaii
-# cycle theirs through that effect's own palette — over this period.
+# over this period (omit the key → that effect stays a steady color).
+# Border-only — to animate the THEME, use `theme-cycle-seconds` above.
 # 1–120 clamp, default 6.
 # cycle-seconds = 3
 # Width breathing: when BOTH are set (max > min) the border width

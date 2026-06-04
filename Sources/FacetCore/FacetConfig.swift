@@ -33,6 +33,11 @@ public struct FacetConfig: Sendable {
     // Top-level
     public var defaultView: String?         // "tree" | "grid"
     public var theme: String?               // see effectiveTheme (13 themes)
+    /// Theme color-cycle period (⑪) — animatable themes (rainbow / neon /
+    /// cyber / vapor / kawaii) rotate their accents over this many
+    /// seconds. Set → animate; unset → static. Independent of the border
+    /// cycle. Raw; read `effectiveThemeCycleSeconds`.
+    public var themeCycleSeconds: Int?
 
     // [grid]
     public var gridCols: Int?
@@ -344,6 +349,12 @@ public struct FacetConfig: Sendable {
     public var effectiveBorderCycleSeconds: CGFloat {
         CGFloat(max(1, min(120, borderCycleSeconds ?? 6)))
     }
+
+    /// Theme color-cycle period (⑪), seconds. [1, 120] clamp, default 6.
+    /// Independent of `effectiveBorderCycleSeconds`.
+    public var effectiveThemeCycleSeconds: CGFloat {
+        CGFloat(max(1, min(120, themeCycleSeconds ?? 6)))
+    }
     /// Width-breathing bounds, px (each clamped 0.5–30), or `nil` when
     /// unset. Breathing runs only when BOTH are set and max > min.
     public var effectiveBorderMinWidth: CGFloat? {
@@ -466,6 +477,9 @@ public struct FacetConfig: Sendable {
         }
         if case .string(let s)? = toml[""]?["theme"] {
             c.theme = s
+        }
+        if case .int(let n)? = toml[""]?["theme-cycle-seconds"] {
+            c.themeCycleSeconds = n
         }
         // [grid]
         if case .int(let n)? = toml["grid"]?["cols"] { c.gridCols = n }

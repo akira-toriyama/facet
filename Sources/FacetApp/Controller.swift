@@ -814,11 +814,11 @@ final class Controller: NSObject {
         ["rainbow", "neon", "cyber", "vapor", "kawaii"]
 
     /// Run the theme color cycle when the active theme is animatable AND
-    /// `[border] cycle-seconds` is set; the palette's accents rotate over
-    /// that period. Off otherwise (the static palette).
+    /// `theme-cycle-seconds` is set (independent of the border cycle); the
+    /// palette's accents rotate over that period. Off otherwise.
     private func updateThemeAnimator() {
         let on = Self.animatableThemes.contains(currentThemeName)
-            && config.borderCycleSeconds != nil
+            && config.themeCycleSeconds != nil
         if on, themeFXTimer == nil {
             let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tickThemeFX() }
@@ -831,7 +831,7 @@ final class Controller: NSObject {
     }
 
     private func tickThemeFX() {
-        themeFXPhase += (1.0 / 30.0) / config.effectiveBorderCycleSeconds
+        themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
         if themeFXPhase >= 1 { themeFXPhase -= 1 }
         guard let p = animatedPalette(theme: currentThemeName, at: themeFXPhase) else { return }
         pal = p
