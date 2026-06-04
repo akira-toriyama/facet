@@ -359,8 +359,11 @@ public final class RailView: NSView {
         case .left:   blockOuter = strip.minX + edgeFloat;              innerEdge = blockOuter + blockCross
         case .right:  blockOuter = strip.maxX - edgeFloat - blockCross; innerEdge = blockOuter
         }
-        for (i, ws) in workspaces.enumerated() {
-            let slotStart = alongCentre + CGFloat(offsets[i]) * slot - slot / 2
+        // Place one strip cell at a signed carousel `offset` (0 = the
+        // centred selected WS). Shared by the per-workspace cells and the
+        // even-count wrap-peek ghost below.
+        func placeCell(_ ws: Workspace, offset: Int) {
+            let slotStart = alongCentre + CGFloat(offset) * slot - slot / 2
             let blockX: CGFloat, blockY: CGFloat
             if horizontal {
                 blockX = slotStart + (slot - thumbW) / 2
@@ -383,6 +386,20 @@ public final class RailView: NSView {
                               count: ws.windows.count,
                               wins: scaledWins(ws, cellRect, useScreen),
                               isHero: false))
+        }
+        for (i, ws) in workspaces.enumerated() { placeCell(ws, offset: offsets[i]) }
+        // Both-ends peek symmetry (⑥): for an EVEN workspace count the
+        // carousel offsets span [-n/2, +(n/2−1)] — one more cell on the
+        // negative side — so when every workspace is shown the strip's
+        // left end peeks but the right has a bare slot. The carousel
+        // wraps, so the far-left workspace (offset −n/2) is also the
+        // wrap-around at +n/2; draw it there too as a peek ghost so the
+        // ends mirror (the active stays centred). Only when all fit
+        // (n == visible) — with overflow the natural ±cells already peek
+        // symmetrically and a +n/2 ghost would be off-viewport anyway.
+        if n % 2 == 0, n > 1, n == visible,
+           let li = offsets.firstIndex(of: -(n / 2)) {
+            placeCell(workspaces[li], offset: n / 2)
         }
 
         // -- Hero: the SELECTED workspace (browse) — aspect-fit, biased
