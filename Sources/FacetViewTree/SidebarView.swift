@@ -1150,8 +1150,10 @@ public final class SidebarView: NSView {
                     } else {
                         NSCursor.arrow.set()
                     }
-                    // Move just the ghost (cheap → keeps up at speed).
+                    // Move just the ghost (cheap → keeps up at speed) +
+                    // lean it toward the drag direction (⑨).
                     moveDragGhost(to: cp)
+                    tiltDragGhost(deltaX: ev.deltaX)
                     // Full redraw only when the drop band changes.
                     if dropWS != lastDropWS {
                         lastDropWS = dropWS
@@ -1257,10 +1259,27 @@ public final class SidebarView: NSView {
             y: max(4, cp.y - 12)))
     }
 
+    /// Lean the lifted card toward the drag direction (⑨) — like a card
+    /// dangling from the cursor. Driven by each move's horizontal delta;
+    /// eases toward 0 when the motion is vertical / stops.
+    private var dragTilt: CGFloat = 0
+    private func tiltDragGhost(deltaX: CGFloat) {
+        let target = max(-dragTiltMax, min(dragTiltMax, deltaX * dragTiltPerPx))
+        dragTilt += (target - dragTilt) * 0.4          // smooth
+        let ghost: NSView = dragCard.isHidden ? chip : dragCard
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        ghost.layer?.transform = CATransform3DMakeRotation(dragTilt, 0, 0, 1)
+        CATransaction.commit()
+    }
+
     private func hideDragGhosts() {
         chip.isHidden = true
         dragCard.isHidden = true
         dragCard.image = nil
+        // Reset the lean.
+        dragTilt = 0
+        dragCard.layer?.transform = CATransform3DIdentity
+        chip.layer?.transform = CATransform3DIdentity
     }
 
     // MARK: - Workspace-content swap (header drag / kb header lift)
