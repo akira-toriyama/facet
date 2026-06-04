@@ -999,6 +999,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return WindowID(serverID: Int(cgID))
     }
 
+    /// SPIKE: window-server-fresh focused window via private SkyLight
+    /// (`SkyLightFocus`), falling back to the AX path when the symbols
+    /// aren't available. Used only by the focus fast-path.
+    public func frontWindowFast() -> WindowID? {
+        if let cgID = SkyLightFocus.frontmostFocusedCGID() {
+            return WindowID(serverID: Int(cgID))
+        }
+        return focusedWindow()
+    }
+
     // MARK: - 枠 E: workspace-switch slide animation (Phase 1)
 
     /// In-flight slide clock + its settle. Touched on main only.

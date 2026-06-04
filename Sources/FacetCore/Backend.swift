@@ -99,6 +99,12 @@ public protocol WindowBackend: Sendable {
     func workspaces() -> [Workspace]
     func focusedWindow() -> WindowID?
 
+    /// SPIKE: window-server-fresh focused window for the focus fast-path.
+    /// Default = `focusedWindow()` (the AX/NSWorkspace path); the native
+    /// adapter overrides it with a private-SkyLight front-signal read
+    /// that commits more promptly than `NSWorkspace.frontmostApplication`.
+    func frontWindowFast() -> WindowID?
+
     /// Briefly vibrate `id` in place as a focus cue (④) — position-only,
     /// the layout is untouched so neighbours never move. Has a default
     /// no-op so non-animating backends (test stubs) needn't implement it.
@@ -349,6 +355,7 @@ public extension WindowBackend {
     func resizeWindow(_ id: WindowID, to frame: CGRect, reflowDragged: Bool) {}
     func revealWindow(_ id: WindowID) {}
     func windowFrame(_ id: WindowID) -> CGRect? { nil }
+    func frontWindowFast() -> WindowID? { focusedWindow() }
     func predictedDrop(dragged: WindowID, target: WindowID,
                        zone: IntentZone) -> DropPrediction { .none }
     func markFocusedWindow(_ name: String) -> Bool { false }

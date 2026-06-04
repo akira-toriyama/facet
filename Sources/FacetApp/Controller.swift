@@ -295,6 +295,8 @@ final class Controller: NSObject {
     /// event task — don't.
     func start() {
         Log.debug("controller start")
+        Log.line("focus fast-path SPIKE: SkyLight front-signal available="
+            + "\(SkyLightFocus.available)")
         logConfigWarnings()
         eventTask = Task { [weak self] in
             guard let self else { return }
@@ -921,12 +923,11 @@ final class Controller: NSObject {
     }
 
     private func pollFocusFast(attempt: Int) {
-        // Resolve on MAIN: `NSWorkspace.frontmostApplication` is
-        // main-thread-affine — a background read (the old `focusFastQueue`
-        // path) returns a stale value that never updates, which the
-        // diagnostics pinned as the miss cause (`id==last` for the whole
-        // poll). The AX query is ~1ms so the main-thread cost is trivial.
-        let id = backend.focusedWindow()
+        // SPIKE: window-server-fresh front signal (private SkyLight) in
+        // place of the AX/NSWorkspace `focusedWindow()`, to kill the
+        // residual "たまに遅い" where NSWorkspace.frontmostApplication
+        // lags >150ms. Still on MAIN (CGWindowList read is cheap).
+        let id = backend.frontWindowFast()
         if onFastFocus(id, attempt: attempt) {
             focusPollActive = false                 // fired → done
             return
