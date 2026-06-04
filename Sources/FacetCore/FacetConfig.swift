@@ -49,10 +49,6 @@ public struct FacetConfig: Sendable {
     public var railCells: Int?              // max strip cells shown at once
     public var railStrip: Int?              // strip band size, % of short screen edge
 
-    // [shake] — the focus-change window vibration (④)
-    public var shakeAmplitude: Int?         // px; 0 = off. Read `effectiveShakeAmplitude`
-    public var shakeDurationMs: Int?        // ms; read `effectiveShakeDurationMs`
-
     // [tree]
     /// How the sidebar's hover-preview overlay is sized + placed.
     /// `"popover"` (default) keeps it next to the source row;
@@ -128,11 +124,6 @@ public struct FacetConfig: Sendable {
     /// the fixed `width`. Raw; read `effectiveBorderMin/MaxWidth`.
     public var borderMinWidth: Int?
     public var borderMaxWidth: Int?
-    /// Draw the `[border]` style as a ring around the focused third-party
-    /// window (⑤), in addition to the facet panel. Reuses every other
-    /// `[border]` key (effect / glow / width / cycle). Raw; read
-    /// `effectiveActiveWindowBorder`. Default off.
-    public var activeWindowBorder: Bool?
 
     /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
     /// the mac desktop ordinal (Mission Control order, 1-based, user
@@ -213,18 +204,6 @@ public struct FacetConfig: Sendable {
     /// default 30.
     public var effectiveRailStrip: Int {
         max(8, min(50, railStrip ?? 30))
-    }
-
-    /// Focus-shake (④) amplitude in px. 0 disables the shake entirely.
-    /// 0…40 clamp, default 8.
-    public var effectiveShakeAmplitude: CGFloat {
-        CGFloat(max(0, min(40, shakeAmplitude ?? 8)))
-    }
-
-    /// Focus-shake (④) duration in milliseconds. 60…600 clamp, default
-    /// 160. Returned as a Double so callers can divide to seconds.
-    public var effectiveShakeDurationMs: Double {
-        Double(max(60, min(600, shakeDurationMs ?? 160)))
     }
 
     /// Effective background-capture interval for grid thumbnails.
@@ -368,8 +347,6 @@ public struct FacetConfig: Sendable {
     public var effectiveBorderMaxWidth: CGFloat? {
         borderMaxWidth.map { max(0.5, min(30, CGFloat($0))) }
     }
-    /// Whether to ring the focused third-party window (⑤). Default off.
-    public var effectiveActiveWindowBorder: Bool { activeWindowBorder ?? false }
 
     /// Named-enum config values that were written but didn't match any
     /// known name, so the matching `effective*` accessor silently
@@ -500,9 +477,6 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
         if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
         if case .int(let n)? = toml["rail"]?["strip"] { c.railStrip = n }
-        // [shake]
-        if case .int(let n)? = toml["shake"]?["amplitude"] { c.shakeAmplitude = n }
-        if case .int(let n)? = toml["shake"]?["duration-ms"] { c.shakeDurationMs = n }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
@@ -567,9 +541,6 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml["border"]?["max-width"] {
             c.borderMaxWidth = n
-        }
-        if case .bool(let b)? = toml["border"]?["active-window"] {
-            c.activeWindowBorder = b
         }
         // [desktop.N] per-mac-desktop workspace configs. The TOML
         // parser flattens `[desktop.1]` to the section name

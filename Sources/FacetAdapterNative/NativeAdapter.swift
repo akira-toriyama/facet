@@ -191,14 +191,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                     eventContinuation.yield(.refreshNeeded)
                 }
             }
-            // Focus changes get their own event so the Controller can
-            // fast-path the reconcile (shorter debounce) — they drive the
-            // directly-felt ④ shake + ⑤ active-window border.
-            if case .focusChanged = event {
-                eventContinuation.yield(.focusChanged)
-            } else {
-                eventContinuation.yield(.refreshNeeded)
-            }
+            eventContinuation.yield(.refreshNeeded)
         }
         self.eventObserver = observer
         DispatchQueue.main.async {
@@ -988,17 +981,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         return WindowID(serverID: Int(cgID))
     }
 
-    /// Window-server-fresh focused window via private SkyLight
-    /// (`SkyLightFocus`), falling back to the AX path when the symbols
-    /// aren't available. Used by the focus fast-path — it commits more
-    /// promptly than `NSWorkspace.frontmostApplication`.
-    public func frontWindowFast() -> WindowID? {
-        if let cgID = SkyLightFocus.frontmostFocusedCGID() {
-            return WindowID(serverID: Int(cgID))
-        }
-        return focusedWindow()
-    }
-
     // MARK: - 枠 E: workspace-switch slide animation (Phase 1)
 
     /// In-flight slide clock + its settle. Touched on main only.
@@ -1022,22 +1004,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private var displayLink: AnyObject?
     private lazy var slideTicker = SlideTicker(self)
 
-    /// Focus-shake clock (④). Self-contained — kept off the slide state
-    /// machine (no park bookkeeping) so a cosmetic vibration can't
-    /// disturb a WS-switch / retile. Touched on main only.
-    private var shakeTimer: Timer?
-    private var shakeStart: Date?
-    private var shakeAx: AXUIElement?
-    /// The window being shaken — `applyFrames` skips it so a reconcile
-    /// (off-main) can't write it back to base mid-bounce and fight the
-    /// on-main shake clock. Cleared when the shake settles.
-    private var shakeID: WindowID?
-    private var shakeBase: CGPoint = .zero
-    /// Shake feel — px amplitude + seconds, captured at the start of each
-    /// shake from the caller's live config (so `[shake]` edits hot-reload;
-    /// the adapter's own `config` is a frozen `let`).
-    private var shakeAmp: CGFloat = 0
-    private var shakeDur: TimeInterval = 0.2
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
     /// derive from the index delta. `switchWorkspaceRelative` sets it so
     /// next/prev always slide the intuitive way even when they wrap
@@ -1177,7 +1143,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `settle` runs once on completion (or interrupt via
     /// finishSlideIfRunning).
     private func startSlideDriver(_ settle: @escaping () -> Void) {
-        stopShake(settleToBase: false)   // a slide supersedes a focus shake
         let preset = resolveAnimPreset()
         slideCurve = preset.curve
         slideStart = Date()
@@ -1195,52 +1160,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             RunLoop.main.add(timer, forMode: .common)
             slideTimer = timer
         }
-    }
-
-    // MARK: - Focus shake (④)
-
-    /// Briefly vibrate `id` in place as a focus cue. Position-only — the
-    /// layout tree is never consulted, so neighbours can't move/resize;
-    /// the window returns to its exact origin. No-op under Reduce Motion,
-    /// while a WS-switch / retile slide is running (don't fight it), or if
-    /// the window / its position can't be resolved.
-    public func animateShake(_ id: WindowID, amplitude: CGFloat, durationMs: Double) {
-        if amplitude <= 0 { return }  // `[shake] amplitude = 0` disables it
-        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
-        if slideStart != nil { return }
-        guard let ax = axWin(id: id), let base = AXGeom.position(ax) else { return }
-        stopShake(settleToBase: true)        // settle any prior shake first
-        shakeAmp = amplitude
-        shakeDur = max(0.01, durationMs / 1000)
-        shakeAx = ax
-        shakeID = id
-        shakeBase = base
-        shakeStart = Date()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) {
-            [weak self] _ in self?.shakeTick()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        shakeTimer = timer
-    }
-
-    private func shakeTick() {
-        guard let begin = shakeStart, let ax = shakeAx else {
-            stopShake(settleToBase: false); return
-        }
-        let raw = -begin.timeIntervalSinceNow / shakeDur
-        guard raw < 1.0 else {
-            AXGeom.setPosition(ax, shakeBase)   // land exactly at base
-            stopShake(settleToBase: false)
-            return
-        }
-        let dx = WindowShake.offset(at: raw, amplitude: shakeAmp)
-        AXGeom.setPosition(ax, CGPoint(x: shakeBase.x + dx, y: shakeBase.y))
-    }
-
-    private func stopShake(settleToBase: Bool) {
-        if settleToBase, let ax = shakeAx { AXGeom.setPosition(ax, shakeBase) }
-        shakeTimer?.invalidate(); shakeTimer = nil
-        shakeStart = nil; shakeAx = nil; shakeID = nil
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
@@ -2160,11 +2079,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         for (id, frame) in frames {
             // Live resize follow: the dragged window is being resized
             // natively by the user — skip it so we don't fight the OS.
-            // Focus shake (④): the shaken window is being driven by the
-            // on-main shake clock — skip it so this (possibly off-main)
-            // reconcile can't write it back to base mid-bounce and fight
-            // the shake; it settles to base when the shake ends anyway.
-            if skip.contains(id) || id == shakeID { continue }
+            if skip.contains(id) { continue }
             guard let pid = catalog.pid(for: id) else { continue }
             guard let ax = AXGeom.window(
                 for: CGWindowID(id.serverID),
