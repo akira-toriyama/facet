@@ -83,6 +83,12 @@ final class Controller: NSObject {
     /// refresh sooner instead of being swallowed by it.
     private var pendingRefreshAt: TimeInterval?
     private var refreshGen = 0
+    /// Reconcile pile-up guard: at most one `refresh()` reconcile runs on
+    /// the cliQueue at a time. `reconcileDirty` records that more events
+    /// arrived while it was in flight, triggering exactly one follow-up
+    /// when it finishes — so a burst can't build a multi-second backlog.
+    private var reconcileInFlight = false
+    private var reconcileDirty = false
     /// Uptime of the most recent focus-change event, for FACET_DEBUG
     /// end-to-end focus→reaction latency telemetry (logged at the ④/⑤
     /// fire in apply()).
@@ -1001,6 +1007,16 @@ final class Controller: NSObject {
             Log.debug("refresh skipped (real-window drag in progress)")
             return
         }
+        // Collapse the reconcile pile-up: each backend event dispatched a
+        // fresh cliQueue reconcile, but each reconcile is heavy (enumerate
+        // + classify + engine + preview + titles), so under a burst they
+        // queued faster than they drained — measured a 16s backlog, which
+        // left `lastWorkspaces` (and thus the ⑤ border + tree) seconds
+        // stale. Run at most ONE reconcile at a time; coalesce everything
+        // that arrives while it's in flight into a single follow-up.
+        if reconcileInFlight { reconcileDirty = true; return }
+        reconcileInFlight = true
+        reconcileDirty = false
         Log.debug("refresh dispatch")
         let bk = backend
         cliQueue.async {
@@ -1010,7 +1026,10 @@ final class Controller: NSObject {
             Log.debug("refresh fetched wss=\(wss.count) titles=\(titles.count)")
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated {
-                    self?.apply(wss, titles)
+                    guard let self else { return }
+                    self.apply(wss, titles)
+                    self.reconcileInFlight = false
+                    if self.reconcileDirty { self.refresh() }   // one more pass
                 }
             }
         }
