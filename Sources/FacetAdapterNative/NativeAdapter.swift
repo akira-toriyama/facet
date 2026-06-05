@@ -678,9 +678,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         var ignore: Set<WindowID> = []
         var deferred: Set<WindowID> = []
         var probed = 0
+        // Only on-screen windows are classified. Off-screen windows
+        // (other mac desktops, Cmd+H'd, minimized) are never adopted by
+        // `reconcile` anyway — its snapshot skips them at the
+        // `!isOnscreen` gate before they reach `windowMap`. Probing them
+        // here is pure waste: the AX role of an off-screen window doesn't
+        // resolve, so each one burns a `maxAutoFloatProbes` slot only to
+        // `defer(unresolved)` every cycle. With many mac desktops that
+        // backlog (100+ off-screen windows) starves the *active* desktop's
+        // freshly-opened windows out of the 16-probe budget — a new
+        // Calendar never gets a slot and stays unmanaged until a restart
+        // frees the budget (memory probe-budget-starvation-bug). Gating on
+        // `isOnscreen` ties the probe budget to the active desktop's window
+        // count (bounded by one screen), independent of how many mac
+        // desktops exist; each off-screen window is still classified once
+        // its desktop becomes active and the window reads on-screen.
         for w in live
         where catalog.windowMap[w.id] == nil
             && !catalog.examinedIDs.contains(w.id)
+            && w.isOnscreen
         {
             // 1. Cheap level gate (SkyLight read, no AX). nil = SkyLight
             //    down → unknown; defer to the AX gate rather than
@@ -793,6 +809,25 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             ignore.insert(w.id)
             Log.debug("native: gate=ignore(role=\(role ?? "-")) "
                 + "wsid=\(w.id.serverID) app=\(w.appName)")
+        }
+        // Per-cycle classify summary (FACET_DEBUG). The on/off-screen
+        // candidate split is the canary for the probe-budget starvation
+        // the `isOnscreen` gate fixes: `cand.offscreen` must stay at
+        // probed=0 (skipped) so the 16-slot budget always reaches the
+        // active desktop's on-screen windows. Guarded so the O(n) tallies
+        // cost nothing when debug is off. Memory:
+        // probe-budget-starvation-bug.
+        if debugMode {
+            let cand = live.filter {
+                catalog.windowMap[$0.id] == nil
+                    && !catalog.examinedIDs.contains($0.id)
+            }
+            Log.debug("native: classify live=\(live.count) "
+                + "cand=\(cand.count) "
+                + "onscreen=\(cand.filter { $0.isOnscreen }.count) "
+                + "offscreen=\(cand.filter { !$0.isOnscreen }.count) "
+                + "probed=\(probed) deferred=\(deferred.count) "
+                + "float=\(autoFloat.count) ignore=\(ignore.count)")
         }
         return (autoFloat, ignore, deferred)
     }

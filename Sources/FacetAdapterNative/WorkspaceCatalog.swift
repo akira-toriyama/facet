@@ -524,10 +524,13 @@ struct WorkspaceCatalog {
 
     /// Bulk-mark every id in `live` as pre-existing (don't
     /// auto-add later on an `isOnscreen` flip). Called from the
-    /// adapter at startup (with the first enumeration) and on
-    /// every `activeSpaceDidChange` (with the post-switch
-    /// enumeration) — so windows revealed by a mac-desktop transition
-    /// stay out of `activeIndex`. Idempotent.
+    /// adapter **once at startup** (the `didBootstrap` guard), with
+    /// the first enumeration's off-screen windows — so pre-existing
+    /// windows on other mac desktops can't slide into `activeIndex`
+    /// when a later flip reads them on-screen. NOT re-run on
+    /// mac-desktop switch: `classifyNewWindows` skips off-screen
+    /// windows outright, and the destination desktop's own catalog
+    /// adopts its windows once they read on-screen. Idempotent.
     mutating func markPreExisting(_ ids: some Sequence<WindowID>) {
         examinedIDs.formUnion(ids)
     }
