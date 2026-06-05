@@ -74,20 +74,3 @@ public struct WindowSlide: Sendable {
     /// issues a per-frame setSize (heavier than setPosition) when so.
     public var resizes: Bool { from.size != to.size }
 }
-
-/// A focus "shake" cue (④): a brief horizontal vibration that decays to
-/// zero, so the window ends exactly where it started — position-only,
-/// the layout tree is never touched, so neighbours don't move. Pure: the
-/// adapter owns the clock + the AX writes; this only maps a normalized
-/// progress `t ∈ [0, 1]` to a signed x-offset.
-public enum WindowShake {
-    /// Decaying sine. `amplitude` px at the start, easing (quadratic) to
-    /// 0 at `t == 1`; `cycles` full swings across the run (2.5 ≈ a quick
-    /// buzz that settles). Clamps `t`.
-    public static func offset(at t: Double, amplitude: CGFloat,
-                              cycles: Double = 2.5) -> CGFloat {
-        let c = min(1, max(0, t))
-        let decay = (1 - c) * (1 - c)            // amplitude → 0 by t=1
-        return amplitude * CGFloat(decay * sin(c * cycles * 2 * .pi))
-    }
-}

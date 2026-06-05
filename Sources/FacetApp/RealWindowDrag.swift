@@ -207,11 +207,6 @@ extension Controller {
     /// doesn't shimmer.
     private func liveDragTick(dragged: WindowID, cursor: CGPoint,
                               grabFrame: CGRect) {
-        // ⑤ Drop the active-window ring while a window is in motion
-        // (move or resize) — refresh is suppressed during a drag, so
-        // `apply()` won't track it; re-placed by the post-drop reconcile.
-        // Idempotent (guards on `tracked`), so cheap to call each tick.
-        activeWindowBorder.hide()
         if liveResizeInFlight { return }
         if Date().timeIntervalSince(liveResizeLastAt) < ResizeTuning.throttle {
             return

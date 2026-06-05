@@ -94,7 +94,7 @@ theme = "terminal"
 # The border flashes a quick neon burst on a workspace switch, then
 # settles back to the steady color.
 [border]
-effect = "rainbow"
+effect = "off"
 # Neon bloom around the border. true = glow, false = flat stroke.
 glow = true
 # Border line width in points. 0.5–30 clamp, default 1.5.
@@ -110,13 +110,8 @@ glow = true
 # Width breathing: when BOTH are set (max > min) the border width
 # oscillates min↔max over cycle-seconds, for ANY effect (overrides
 # the fixed `width`). Each 0.5–30. Leave unset for a constant width.
-min-width = 5
-max-width = 15
-# Ring the FOCUSED window (any third-party app, not just facet's panel)
-# with this same border style — effect / glow / width / cycle all reuse
-# the keys above. The ring moves + flashes when focus changes, and hides
-# while a window is being dragged or resized. Default false.
-# active-window = true
+# min-width = 5
+# max-width = 15
 
 
 # -----------------------------------------------------------------
@@ -184,25 +179,6 @@ strip = 30
 # justified to fill the run; with more workspaces than this they rotate
 # through, peeking at both ends. Clamped 1..20; built-in fallback is 7.
 cells = 7
-
-
-# -----------------------------------------------------------------
-# Focus shake
-# -----------------------------------------------------------------
-# A brief horizontal vibration of the newly-focused window whenever
-# focus changes — a quick "you're here now" cue. Purely cosmetic and
-# position-only: neighbouring tiles never move or resize, and the window
-# settles back on its exact spot. Honours the system Reduce Motion
-# setting (off when that's on).
-[shake]
-
-# Vibration size in pixels. 0 turns the shake OFF entirely. Clamped
-# 0..40; built-in fallback is 8.
-amplitude = 8
-
-# Vibration duration in milliseconds (a quick buzz that decays to rest).
-# Clamped 60..600; built-in fallback is 160.
-duration-ms = 160
 
 
 # -----------------------------------------------------------------
