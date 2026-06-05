@@ -74,8 +74,17 @@ final class PanelHost: NSObject {
         // setExplicitFrame) right after init; drags / resizes / CLI geom
         // are session-only — config.toml is the single place a panel
         // position / size persists (no UserDefaults store).
-        let scr = NSScreen.main?.frame ?? NSRect(x: 0, y: 0,
-                                                 width: 1440, height: 900)
+        //
+        // `NSScreen.main` is the screen with the *key window*, which is
+        // nil for this accessory app before the run loop starts (and
+        // until a panel takes key). So every screen-dependent geometry
+        // call here falls back to `NSScreen.screens.first` (the primary
+        // display), not `.main`. Without that fallback the init-time
+        // `[tree]` config seed no-ops and the panel ignores its
+        // pos/size on launch (only a header double-click — which runs
+        // post-run-loop when `.main` is valid — would honour it).
+        let scr = (NSScreen.main ?? NSScreen.screens.first)?.frame
+            ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         anchorTL = NSPoint(x: scr.minX + screenMargin,
                            y: scr.maxY - screenMargin)
 
@@ -217,7 +226,8 @@ final class PanelHost: NSObject {
     /// flags. Not persisted; config.toml is the only place geometry
     /// sticks.
     func setExplicitFrame(_ frame: NSRect) {
-        guard let scr = NSScreen.main?.frame else { return }
+        guard let scr = (NSScreen.main ?? NSScreen.screens.first)?.frame
+        else { return }
         userWidth = frame.width
         userHeight = frame.height
         // Convert top-left input → the AppKit (bottom-left-screen)
@@ -233,7 +243,8 @@ final class PanelHost: NSObject {
     /// screen (with margin), default width, auto height. Used by the
     /// header double-click when no `[tree]` config geometry is set.
     func resetGeometryToDefault() {
-        guard let scr = NSScreen.main?.frame else { return }
+        guard let scr = (NSScreen.main ?? NSScreen.screens.first)?.frame
+        else { return }
         userWidth = sidebarWidth
         userHeight = nil                     // auto = content height
         anchorTL = NSPoint(x: scr.minX + screenMargin,
@@ -280,7 +291,8 @@ final class PanelHost: NSObject {
     /// `windowDidResize` callback, not by re-running layout per
     /// drag event.)
     func layout(contentHeight contentH: CGFloat, searching: Bool) {
-        guard let scr = NSScreen.main?.frame else { return }
+        guard let scr = (NSScreen.main ?? NSScreen.screens.first)?.frame
+        else { return }
         let maxH = scr.height - 2 * screenMargin
         let h = min(userHeight ?? contentH, maxH)
         let w = userWidth
