@@ -304,6 +304,39 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   user just gets the default for that one key. The `effective*`
   accessors on `FacetConfig` are where the clamping lives; always
   read through them, never the raw Optional fields.
+- **Section-scoped > bare top-level when adding TOML / CLI surface**.
+  New TOML knobs go under a named ``[section]`` — even if the same
+  key (``color``, ``size``, …) repeats across sections — over a
+  bare top-level key that other sections implicitly inherit. Each
+  section then reads as a self-contained unit (grep ``[section]``
+  shows every knob that affects it). Same rule for new CLI options:
+  scope under the verb / subcommand they affect over a global
+  top-level flag. *want / better*, not *must* — relocating an
+  existing bare key into sections is an acceptable breaking change
+  when the readability win is clear, but don't refactor for the
+  rule alone. Example — preferred:
+
+  ```toml
+  [foo]
+  color = "red"
+  length = "short"
+
+  [bar]
+  color = "red"
+  size = "xl"
+  ```
+
+  Avoid:
+
+  ```toml
+  color = "red"
+
+  [foo]
+  length = "short"
+
+  [bar]
+  size = "xl"
+  ```
 
 ### Workflow
 
