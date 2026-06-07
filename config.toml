@@ -382,6 +382,13 @@ app = "com.google.Chrome"
 subrole = "AXUnknown"
 action = "ignore"
 
+# macOS Accessibility-permission warning dialog (the "… wants to control
+# this computer" prompt — e.g. Halo.app's first-run request). A transient
+# system window; drop it so it never flickers into the tree.
+[[exclude]]
+app = "universalAccessAuthWarn"
+action = "ignore"
+
 # More examples — uncomment / adapt as needed:
 #
 # [[exclude]]                       # force-tile a window an app
