@@ -59,6 +59,13 @@ public protocol LayoutEngine: Sendable {
     /// site. The adapter also reuses this as the single predicate
     /// behind the master-ratio / -count knobs (`hasMasterKnob`).
     var hasMaster: Bool { get }
+
+    /// Which `Grouping`s this engine works under (M11-3). Stateless
+    /// engines recompute purely from the member set every snapshot, so
+    /// they're membership-agnostic and support both `workspace` and
+    /// `tag`. A future engine that only makes sense under one grouping
+    /// (e.g. a tag-only paradigm) overrides this.
+    var supportedGroupings: Set<Grouping> { get }
 }
 
 extension LayoutEngine {
@@ -66,6 +73,10 @@ extension LayoutEngine {
     /// stack engines (`master-left` … `master-center`) inherit this;
     /// grid / spiral override to `false`.
     public var hasMaster: Bool { true }
+
+    /// Default: a stateless engine supports both groupings (it carves
+    /// whatever member set it's handed). No current engine overrides.
+    public var supportedGroupings: Set<Grouping> { [.workspace, .tag] }
 }
 
 // MARK: - Master-stack layouts (5 edges)
