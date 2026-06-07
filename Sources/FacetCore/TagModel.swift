@@ -53,7 +53,9 @@ public struct TagModel: Sendable, Equatable {
     }
 
     /// The first tag (declaration order) — the startup lens default
-    /// and the single bit for it. `nil` when no tags are defined.
+    /// and the single bit for it. `nil` when no tags are defined. The
+    /// first tag is bit 0, so its mask is `1 << 0 == 1` (must stay in
+    /// sync with `bit(for:)`'s `UInt64(1) << UInt64(i)`).
     public var firstBit: UInt64? {
         names.isEmpty ? nil : 1
     }

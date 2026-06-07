@@ -1648,10 +1648,20 @@ struct WorkspaceCatalog {
             let wins = (byTag[tagName] ?? []).map { w -> Window in
                 let mask = windowMap[w.id]?.tags ?? 0
                 let floating = floatingWindows.contains(w.id)
-                let visible = (mask & lens) != 0 && !floating
-                let frame: CGRect? = visible
-                    ? (unionFrames[w.id] ?? preParkFrame(for: w))
-                    : preParkFrame(for: w)
+                let inLens = (mask & lens) != 0
+                // A floating window in the lens is on-screen at its OWN
+                // position (it isn't tiled) — show its live frame, like
+                // workspace mode does for active-WS floats. A tiled window
+                // in the lens gets its union slot. Anything out of the lens
+                // is parked → its pre-park position.
+                let frame: CGRect?
+                if floating {
+                    frame = inLens ? w.frame : preParkFrame(for: w)
+                } else if inLens {
+                    frame = unionFrames[w.id] ?? preParkFrame(for: w)
+                } else {
+                    frame = preParkFrame(for: w)
+                }
                 return Window(id: w.id, pid: w.pid, appName: w.appName,
                               title: w.title,
                               isFocused: w.id == focused,

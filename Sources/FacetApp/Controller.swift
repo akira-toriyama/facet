@@ -705,9 +705,19 @@ final class Controller: NSObject {
         if arg == "all" {
             backend.setLens(.all)
         } else if arg.hasPrefix("only:") {
-            backend.setLens(.only(String(arg.dropFirst("only:".count))))
+            let name = String(arg.dropFirst("only:".count))
+            guard !name.isEmpty else {
+                Log.debug("dispatchLensTarget empty only: name — ignored")
+                return
+            }
+            backend.setLens(.only(name))
         } else if arg.hasPrefix("toggle:") {
-            backend.setLens(.toggle(String(arg.dropFirst("toggle:".count))))
+            let name = String(arg.dropFirst("toggle:".count))
+            guard !name.isEmpty else {
+                Log.debug("dispatchLensTarget empty toggle: name — ignored")
+                return
+            }
+            backend.setLens(.toggle(name))
         } else {
             Log.debug("dispatchLensTarget unknown=\(arg) — ignored")
             return

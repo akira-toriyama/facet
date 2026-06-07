@@ -322,6 +322,21 @@ enum FacetApp {
         exit(3)
     }
 
+    /// Fail Fast (M11-3, design Q7): reject a subject that doesn't match
+    /// the configured grouping mode. `lens` is tag-mode-only; the
+    /// `workspace` switch / layout / management verbs are
+    /// workspace-mode-only (tag mode has no workspaces — running them
+    /// would scramble the catalog's park state). Reads the same config
+    /// the server seeded from; a mismatch exits 2 (usage) rather than
+    /// silently no-opping server-side.
+    static func requireGrouping(_ want: Grouping, subject: String) {
+        let have = FacetConfig.load().effectiveGrouping
+        guard have == want else {
+            die("facet \(subject) requires [grouping] by=\"\(want.rawValue)\""
+                + " — current config is \(have.rawValue) mode")
+        }
+    }
+
     // MARK: - Client mode posting
 
     /// Post a raw control string to the running instance, then
@@ -636,6 +651,7 @@ enum FacetApp {
             die("facet workspace: pick one action per invocation — "
                 + "see `facet --help`")
         }
+        requireGrouping(.workspace, subject: "workspace")
         requireServerAlive()
         if let f = focusArg  { postWorkspaceFocus(f) }
         if let l = layoutArg { postSetLayout(l) }
@@ -693,6 +709,7 @@ enum FacetApp {
         if let n = toggleArg, n.isEmpty {
             die("facet lens --toggle=NAME: expected a non-empty tag name")
         }
+        requireGrouping(.tag, subject: "lens")
         requireServerAlive()
         if let n = onlyArg   { postLens("only:" + n) }
         if let n = toggleArg { postLens("toggle:" + n) }
