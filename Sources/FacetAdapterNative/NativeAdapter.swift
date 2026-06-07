@@ -1844,9 +1844,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             // dragged window AND its same-subtree mates — the OS is still
             // drawing the native resize, and those mates sit off the divider
             // anchored to the dragged window's (excluded) frame, so re-tiling
-            // them to their computed slots would open a gap. Instant (no
-            // animation) so the opposite side tracks the drag.
-            applyLayout(workspace: catalog.activeIndex, rect: rect, skip: frozen)
+            // them to their computed slots would open a gap. `cached: true`
+            // = the fast path (cached AX elements, no per-tick lookup) so the
+            // opposite side tracks the drag instead of lagging a beat behind.
+            applyLayout(workspace: catalog.activeIndex, rect: rect,
+                        skip: frozen, cached: true)
         } else {
             Log.debug("native: resize noop id=\(id.serverID)")
         }
@@ -2072,18 +2074,47 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// through AX. Floating windows are skipped (they're not in
     /// the tree). No-op when the WS has no tree.
     private func applyTile(workspace n1Based: Int, rect: CGRect,
-                           skip: Set<WindowID> = []) {
+                           skip: Set<WindowID> = [], cached: Bool = false) {
         applyFrames(catalog.tiledFrames(for: n1Based, in: rect),
-                    label: "tile WS \(n1Based)", rect: rect, skip: skip)
+                    label: "tile WS \(n1Based)", rect: rect, skip: skip,
+                    cached: cached)
     }
 
     /// Apply a stateless `LayoutEngine`'s frames for `n1Based`. The
     /// engine path: catalog computes pure geometry, this pushes it
     /// through AX exactly like `applyTile`.
     private func applyEngine(workspace n1Based: Int, rect: CGRect,
-                             skip: Set<WindowID> = []) {
+                             skip: Set<WindowID> = [], cached: Bool = false) {
         applyFrames(catalog.engineFrames(for: n1Based, in: rect),
-                    label: "engine WS \(n1Based)", rect: rect, skip: skip)
+                    label: "engine WS \(n1Based)", rect: rect, skip: skip,
+                    cached: cached)
+    }
+
+    // Live-resize-follow fast path state. During a master/bsp divider
+    // drag, the neighbour write happens every tick — re-resolving the AX
+    // element each time (`AXGeom.window`) measured ~14ms/tick (the bulk of
+    // the "ワンテンポ遅れ"). Cache the element for the drag; cleared at
+    // gesture end (`endLiveResize`). Touched only on the cliQueue
+    // live-resize path, so no lock.
+    private var followAXCache: [WindowID: AXUIElement] = [:]
+
+    /// The drag's cached AX element for `id`, resolved + memoised on first
+    /// use (the lookup that was the per-tick bottleneck).
+    private func cachedFollowAX(_ id: WindowID) -> AXUIElement? {
+        if let ax = followAXCache[id] { return ax }
+        guard let pid = catalog.pid(for: id),
+              let ax = AXGeom.window(for: CGWindowID(id.serverID),
+                                     pid: pid_t(pid)) else { return nil }
+        followAXCache[id] = ax
+        return ax
+    }
+
+    /// Drop the per-drag live-follow cache. Called once at gesture end
+    /// (the `WindowBackend.endLiveResize` hook) for ANY outcome — resize
+    /// settle, move, or an unread final frame — so a stale element never
+    /// crosses into the next drag. Runs on the gesture's cliQueue.
+    public func endLiveResize() {
+        followAXCache.removeAll(keepingCapacity: true)
     }
 
     /// Shared AX writer: set each window's position + size from a
@@ -2091,7 +2122,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the stateless-engine path.
     private func applyFrames(_ frames: [WindowID: CGRect],
                              label: String, rect: CGRect,
-                             skip: Set<WindowID> = []) {
+                             skip: Set<WindowID> = [],
+                             cached: Bool = false) {
         // Inner gap: pull abutting windows apart. The screen-edge
         // side of an outermost window stays flush — that distance is
         // the outer gap, already inset into `rect`. No-op when 0.
@@ -2110,6 +2142,36 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // on 0.5pt (Retina) boundaries so genuine targets compare
         // well within 1pt.
         let eps: CGFloat = 1.0
+
+        if cached {
+            // Live-resize-follow fast path. The per-tick AX-element lookup
+            // (AXGeom.window) measured ~14ms/tick — the bulk of the
+            // neighbour's "ワンテンポ遅れ" — so cache the element for the
+            // drag (cachedFollowAX). No frame-match skip here: the upstream
+            // 4pt dead-zone (RealWindowDrag) already drops no-op ticks, so
+            // every cached tick is a real move; just write the current
+            // target to the cached element. (An in-process last-applied
+            // skip was tried but could desync from the window's real frame
+            // and wrongly skip a needed write; the dead-zone makes it
+            // unnecessary.) Writes stay SERIAL: the followers are usually
+            // the same app, where AX writes serialise on that app's main
+            // thread anyway, so concurrentPerform only adds overhead
+            // (measured slower). The residual write time is the public-AX
+            // ceiling — the app's own AX speed, which facet can't reduce.
+            var applied = 0
+            for (id, frame) in frames {
+                if skip.contains(id) { continue }
+                guard let ax = cachedFollowAX(id) else { continue }
+                let r = frame.roundedToPhysicalPixels(scale: scale)
+                AXGeom.setPosition(ax, r.origin)
+                AXGeom.setSize(ax, r.size)
+                applied += 1
+            }
+            Log.debug("native: \(label) live applied=\(applied) "
+                + "skip=\(skip.count)")
+            return
+        }
+
         var applied = 0
         for (id, frame) in frames {
             // Live resize follow: the dragged window is being resized
@@ -2401,14 +2463,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// (refresh / switch / move / setMode / retile / perform)
     /// funnels through here.
     private func applyLayout(workspace n1Based: Int, rect: CGRect,
-                             skip: Set<WindowID> = []) {
+                             skip: Set<WindowID> = [], cached: Bool = false) {
         let mode = catalog.mode(of: n1Based)
         switch mode {
-        case "bsp":   applyTile(workspace: n1Based, rect: rect, skip: skip)
+        case "bsp":   applyTile(workspace: n1Based, rect: rect, skip: skip,
+                                cached: cached)
         case "stack": applyStack(workspace: n1Based, rect: rect)
         default:
             if LayoutRegistry.engine(named: mode) != nil {
-                applyEngine(workspace: n1Based, rect: rect, skip: skip)
+                applyEngine(workspace: n1Based, rect: rect, skip: skip,
+                            cached: cached)
             }
         }
     }
