@@ -153,7 +153,6 @@ final class RealWindowDragMonitor {
 /// from a title-bar move. A plain (non-isolated) namespace so the off-main
 /// `cliQueue` tick can read it without crossing the `@MainActor` boundary.
 private enum ResizeTuning {
-    static let throttle: TimeInterval = 1.0 / 30.0   // ~30fps neighbour writes
     static let deadZone: CGFloat = 4                 // per-tick jitter floor
     static let classify: CGFloat = 4                 // size Δ ⇒ resize, not move
     /// Min origin travel before mouse-up commits a swap / insert — a
@@ -207,11 +206,11 @@ extension Controller {
     /// doesn't shimmer.
     private func liveDragTick(dragged: WindowID, cursor: CGPoint,
                               grabFrame: CGRect) {
+        // No fixed fps throttle: the in-flight gate self-regulates the
+        // cadence to the apply rate. With the cached follow path (the
+        // per-tick AX-element lookup removed) the neighbour tracks the drag
+        // instead of lagging a beat behind the old 30fps cap.
         if liveResizeInFlight { return }
-        if Date().timeIntervalSince(liveResizeLastAt) < ResizeTuning.throttle {
-            return
-        }
-        liveResizeLastAt = Date()
         liveResizeInFlight = true
         let bk = backend
         let lastFrame = liveResizeLastFrame
@@ -314,6 +313,11 @@ extension Controller {
                         + "target=\(decision.target.serverID)")
                 }
             }
+            // Drop the adapter's per-drag live-follow cache for ANY
+            // outcome (resize settle, move, or an unread frame) — on the
+            // cliQueue, before hopping to main — so nothing leaks into the
+            // next gesture.
+            bk.endLiveResize()
             DispatchQueue.main.async {
                 MainActor.assumeIsolated { self?.endLiveDrag() }
             }

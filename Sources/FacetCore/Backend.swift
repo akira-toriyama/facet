@@ -227,6 +227,12 @@ public protocol WindowBackend: Sendable {
     /// snapping it onto its freshly-computed tile slot.
     func resizeWindow(_ id: WindowID, to frame: CGRect, reflowDragged: Bool)
 
+    /// Called once when a real-window resize gesture fully ends (any
+    /// outcome — resize settle, move, or unread frame). Lets the adapter
+    /// drop any per-drag state (e.g. the live-follow AX-element cache) so
+    /// nothing leaks into the next gesture. Runs on the gesture's cliQueue.
+    func endLiveResize()
+
     /// The window's current on-screen frame in backend (Quartz, top-left)
     /// coords, read live from the OS — or `nil` when it isn't a managed /
     /// resolvable window. Used by the real-window resize gesture (枠C 機能2)
@@ -334,6 +340,7 @@ public extension WindowBackend {
     func insertWindow(_ moved: WindowID, beside target: WindowID,
                       edge: InsertEdge) {}
     func resizeWindow(_ id: WindowID, to frame: CGRect, reflowDragged: Bool) {}
+    func endLiveResize() {}
     func revealWindow(_ id: WindowID) {}
     func windowFrame(_ id: WindowID) -> CGRect? { nil }
     func predictedDrop(dragged: WindowID, target: WindowID,

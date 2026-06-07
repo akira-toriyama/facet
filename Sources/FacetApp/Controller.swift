@@ -103,12 +103,12 @@ final class Controller: NSObject {
     /// latches once a tick classifies the drag as a resize, so the move
     /// drop-overlay stays hidden for the rest of the gesture;
     /// `liveResizeLastFrame` feeds the per-tick dead-zone; the in-flight
-    /// flag + timestamp throttle the neighbour AX writes to ~30fps. See
-    /// `liveDragTick` / `resolveLiveDragEnd` (RealWindowDrag.swift).
+    /// flag gates one neighbour-write at a time (self-regulating the
+    /// cadence to the apply rate). See `liveDragTick` /
+    /// `resolveLiveDragEnd` (RealWindowDrag.swift).
     var liveGestureIsResize = false
     var liveResizeLastFrame: CGRect?
     var liveResizeInFlight = false
-    var liveResizeLastAt = Date.distantPast
     /// Was the PREVIOUS tick classified as a resize? A drag is only
     /// latched to resize once TWO consecutive ticks see the size changed,
     /// so a single-frame OS size blip during a title-bar move (display
