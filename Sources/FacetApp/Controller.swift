@@ -415,6 +415,10 @@ final class Controller: NSObject {
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
+                case let s where s.hasPrefix("lens:"):
+                    self.dispatchLensTarget(
+                        String(s.dropFirst("lens:".count)))
+
                 case "workspace-add":
                     self.backend.addWorkspace()
                     self.scheduleReconcile(after: 0.05)
@@ -691,6 +695,24 @@ final class Controller: NSObject {
             scheduleReconcile(after: 0.05)
         default:       dispatchWorkspace(Int(arg) ?? 0)
         }
+    }
+
+    /// Route a `lens:` payload (M11-3 tag mode). The payload is
+    /// `only:NAME` / `toggle:NAME` / `all`. The backend resolves the
+    /// tag name and surfaces an unknown-tag error itself, so this just
+    /// dispatches and schedules a repaint.
+    private func dispatchLensTarget(_ arg: String) {
+        if arg == "all" {
+            backend.setLens(.all)
+        } else if arg.hasPrefix("only:") {
+            backend.setLens(.only(String(arg.dropFirst("only:".count))))
+        } else if arg.hasPrefix("toggle:") {
+            backend.setLens(.toggle(String(arg.dropFirst("toggle:".count))))
+        } else {
+            Log.debug("dispatchLensTarget unknown=\(arg) — ignored")
+            return
+        }
+        scheduleReconcile(after: 0.05)
     }
 
     private func dispatchWorkspaceRelative(_ target: RelativeWorkspace) {

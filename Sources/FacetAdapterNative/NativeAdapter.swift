@@ -1530,6 +1530,67 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Focus.assert(pick, backend: self)
     }
 
+    // MARK: - Lens (M11-3 tag mode)
+
+    /// Change the lens. Mirrors `switchWorkspace`: resolve the spec to
+    /// a tag mask, mutate the catalog (which returns the union-delta
+    /// park/restore plan), park the windows leaving the lens, restore +
+    /// re-tile the ones entering, then auto-focus. No-op outside tag
+    /// mode (the catalog's `setLens` returns nil) or on an unknown tag
+    /// name (surfaced as an operational error).
+    public func setLens(_ spec: LensSpec) {
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
+              catalog.grouping == .tag else { return }
+        cancelSlideForRetarget()
+        let resolved: UInt64?
+        switch spec {
+        case .only(let name):   resolved = catalog.lensOnly(name)
+        case .toggle(let name): resolved = catalog.lensToggled(name)
+        case .all:              resolved = catalog.lensAll
+        }
+        guard let mask = resolved else {
+            let name: String
+            switch spec {
+            case .only(let n), .toggle(let n): name = n
+            case .all:                         name = ""
+            }
+            errorContinuation.yield("lens \"\(name)\": no such tag")
+            return
+        }
+        guard let plan = catalog.setLens(mask) else { return }   // unchanged
+        Log.debug("native: setLens \(plan.oldLens) -> \(plan.newLens)")
+        let rect = activeDisplayRect()
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+        // applyLayout auto-routes to the tag-union branch (grouping ==
+        // .tag), tiling the new visible union into `rect`.
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
+        applyLensAutoFocus(newLens: plan.newLens)
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Auto-focus after a lens change. Keep the current focus when its
+    /// window stays visible (its tags still intersect the lens, or it's
+    /// floating / sticky — never parked) so a `--toggle` that only adds
+    /// a tag doesn't yank focus; otherwise focus the first window of the
+    /// new visible union, or defocus to Finder when the union is empty.
+    private func applyLensAutoFocus(newLens: UInt64) {
+        if let cur = focusedWindow(), let slot = catalog.windowMap[cur] {
+            let staysVisible = (slot.tags & newLens) != 0
+                || catalog.floatingWindows.contains(cur)
+                || catalog.everywhereWindows.contains(cur)
+            if staysVisible { return }
+        }
+        guard let pickID = catalog.visibleNonFloatingMembers().first,
+              let pick = enumerateCGWindows().first(where: { $0.id == pickID })
+        else {
+            activateFinder()
+            return
+        }
+        Log.debug("native: lens autoFocus pick=\(pick.id.serverID) "
+            + "app=\(pick.appName)")
+        Focus.assert(pick, backend: self)
+    }
+
     /// 2-b defocus: when the destination WS is empty, push the
     /// frontmost-app crown to Finder. Public API only — facet
     /// stays inside the macOS sandbox ([[facet-buddha-palm-principle]]).
