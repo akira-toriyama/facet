@@ -355,6 +355,16 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   を両方指定 (max > min・各 0.5–30) した時の幅ブリージング (どの effect
   でも幅が min↔max で脈動・固定 `width` を上書き) を駆動。 off は素の
   テーマ accent 枠。
+- `[window]` テーブル — `raise-on-open` は、 開いたばかりの **floating**
+  窓 (sheet / dialog / palette、 `[[exclude]]` で float した窓、 facet が
+  自動 float する窓) を最初に検知した瞬間どう前面に出すか。 こうした窓は
+  アプリが置いた位置に生まれ、 タイル配置の *下* に隠れることがある。
+  継続的な固定ではなく窓が開いた時 1 回だけのナッジ (既存の float 窓は
+  desktop 切替では触らない): `raise` (デフォルト) は focus を奪わず自アプリ
+  内の window 重なりの最前面へ持ち上げる; `activate` は新規 float の度に所有
+  アプリを最前面化する (毎回 focus を奪う ―― `raise` で他アプリ窓の下から
+  出し切れない時に選ぶ); `off` はアプリが置いた位置のまま。 floating 窓のみ
+  が対象・起動時読み込み (変更は再起動)。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
   `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で
