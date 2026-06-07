@@ -39,12 +39,20 @@ import FacetCore
 /// the adapter performs on the window, so caching it here avoids
 /// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
 struct WindowSlot: Equatable, Sendable {
-    /// 1-based workspace index.
+    /// 1-based workspace index. Always set (workspace-mode authority;
+    /// in tag mode it's bookkeeping only — visibility comes from
+    /// `tags`).
     let workspace: Int
     let pid: Int
-    init(workspace: Int, pid: Int) {
+    /// Tag bitmask (M11-3 `[grouping] by = "tag"`). Frozen at window
+    /// appearance. `0` in workspace mode (unused) and for a window not
+    /// yet tag-assigned. Every `WindowSlot` re-creation must carry this
+    /// forward or a tag-mode window silently loses its tags.
+    let tags: UInt64
+    init(workspace: Int, pid: Int, tags: UInt64 = 0) {
         self.workspace = workspace
         self.pid = pid
+        self.tags = tags
     }
 }
 
@@ -104,6 +112,23 @@ struct WorkspaceCatalog {
     /// so a window the user moved stays where they put it; new
     /// windows land in `activeIndex` on the next reconcile.
     private(set) var windowMap: [WindowID: WindowSlot] = [:]
+
+    // MARK: - Tag grouping state (M11-3, `by = "tag"`)
+
+    /// Grouping paradigm. `.workspace` (default) keys visibility off
+    /// `WindowSlot.workspace == activeIndex`; `.tag` keys it off
+    /// `WindowSlot.tags & lens != 0`. Set once at `seedTags`, immutable
+    /// for the session (config-static; change needs a restart).
+    private(set) var grouping: Grouping = .workspace
+    /// Tag vocabulary (declaration order = bit positions). Empty in
+    /// workspace mode.
+    private(set) var tagModel = TagModel([])
+    /// `[[assign]]` rules — match a new window, give it tags. Applied
+    /// once at appearance (`tagsForNewWindow`); never re-run.
+    private(set) var assignRules = AssignRules([])
+    /// Current lens = the visible tag mask (tag mode). Seeded to the
+    /// first tag's bit; mutated by `setLens`. `0` in workspace mode.
+    private(set) var lens: UInt64 = 0
 
     /// Windows currently parked at the bottom-right anchor sliver.
     /// `markAnchorParked` populates; `consumeAnchorRestore` clears.
@@ -323,7 +348,8 @@ struct WorkspaceCatalog {
                                    trusted: Set<WindowID> = [],
                                    ignore: Set<WindowID> = [],
                                    deferred: Set<WindowID> = [],
-                                   requireConfirm: Bool = false)
+                                   requireConfirm: Bool = false,
+                                   tags: [WindowID: UInt64] = [:])
         -> ReconcileResult
     {
         let liveByID = Dictionary(uniqueKeysWithValues:
@@ -361,7 +387,8 @@ struct WorkspaceCatalog {
             if let existing = windowMap[id] {
                 if existing.pid != w.pid {
                     windowMap[id] = WindowSlot(
-                        workspace: existing.workspace, pid: w.pid)
+                        workspace: existing.workspace, pid: w.pid,
+                        tags: existing.tags)
                 }
                 continue
             }
@@ -437,7 +464,7 @@ struct WorkspaceCatalog {
             }
             pendingAddCandidates.remove(id)
             windowMap[id] = WindowSlot(
-                workspace: activeIndex, pid: w.pid)
+                workspace: activeIndex, pid: w.pid, tags: tags[id] ?? 0)
             examinedIDs.insert(id)
             added += 1
             addedIDs.append(id)
@@ -1212,7 +1239,8 @@ struct WorkspaceCatalog {
               let slot = windowMap[id] else { return }
         everywhereWindows.remove(id)
         floatingWindows.remove(id)
-        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
+        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid,
+                                   tags: slot.tags)
         attachToLayout(id, workspace: activeIndex,
                        focused: focused, in: rect)
     }
@@ -1281,7 +1309,8 @@ struct WorkspaceCatalog {
     mutating func summonScratchpad(_ name: String) -> WindowID? {
         guard let id = scratchpads[name], let slot = windowMap[id]
         else { return nil }
-        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
+        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid,
+                                   tags: slot.tags)
         stashedWindows.remove(id)      // now settled / visible
         floatingWindows.insert(id)     // settle = floating overlay
         return id
@@ -1313,7 +1342,8 @@ struct WorkspaceCatalog {
               let slot = windowMap[id] else { return nil }
         stashedWindows.remove(id)
         floatingWindows.remove(id)
-        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid)
+        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid,
+                                   tags: slot.tags)
         attachToLayout(id, workspace: activeIndex,
                        focused: focused, in: rect)
         return id
@@ -1389,7 +1419,8 @@ struct WorkspaceCatalog {
         let neighbour = n1Based > 1 ? n1Based - 1 : 2      // old numbering
         // Evacuate windows P -> neighbour (old numbering).
         for (id, slot) in windowMap where slot.workspace == n1Based {
-            windowMap[id] = WindowSlot(workspace: neighbour, pid: slot.pid)
+            windowMap[id] = WindowSlot(workspace: neighbour, pid: slot.pid,
+                                       tags: slot.tags)
             clearLeaveFocus(of: id)
         }
         // Active / recent follow the evacuated windows.
@@ -1453,7 +1484,7 @@ struct WorkspaceCatalog {
         lastFocusedOnLeave = remap(lastFocusedOnLeave)
         for (id, slot) in windowMap where map[slot.workspace] != nil {
             windowMap[id] = WindowSlot(workspace: map[slot.workspace]!,
-                                       pid: slot.pid)
+                                       pid: slot.pid, tags: slot.tags)
         }
         activeIndex = map[activeIndex]
             ?? min(activeIndex, max(1, workspaceNames.count))
@@ -1534,6 +1565,94 @@ struct WorkspaceCatalog {
         }
     }
 
+    // MARK: - Tag mode (M11-3, `by = "tag"`)
+
+    /// Seed the tag grouping state once at startup (mirrors `seed` for
+    /// workspace names). Idempotent-ish: only meaningful before any
+    /// window is assigned. `lens` is normally `model.firstBit`.
+    mutating func seedTags(grouping: Grouping, model: TagModel,
+                           rules: AssignRules, lens: UInt64) {
+        self.grouping = grouping
+        self.tagModel = model
+        self.assignRules = rules
+        self.lens = lens
+    }
+
+    /// Tag bitmask for a newly-appeared window (tag mode). The UNION of
+    /// every matching `[[assign]]` rule; an unmatched window inherits
+    /// the current lens's PRIMARY tag (its lowest set bit) so it lands
+    /// in exactly one visible place — never zero tags (would be lost)
+    /// and never the whole lens union (a broad `--all` lens shouldn't
+    /// freeze every tag onto a new window). Frozen here — no re-tag.
+    func tagsForNewWindow(_ probe: WindowProbe) -> UInt64 {
+        let assigned = assignRules.mask(for: probe, in: tagModel)
+        if assigned != 0 { return assigned }
+        if lens != 0 { return UInt64(1) << UInt64(lens.trailingZeroBitCount) }
+        return tagModel.firstBit ?? 0
+    }
+
+    /// Non-floating, non-hidden windows visible under the current lens
+    /// — the union to tile in tag mode. One global member set (no
+    /// per-workspace split), same stable serverID order as the
+    /// workspace-mode `nonFloatingMembers`.
+    func visibleNonFloatingMembers() -> [WindowID] {
+        windowMap
+            .filter { ($0.value.tags & lens) != 0
+                && !floatingWindows.contains($0.key)
+                && !hiddenMembers.contains($0.key) }
+            .map(\.key)
+            .sorted { $0.serverID < $1.serverID }
+    }
+
+    // Lens-command resolvers (pure: name → new mask). `nil` = unknown
+    // tag name (caller surfaces lastError, makes no change).
+    func lensOnly(_ name: String) -> UInt64? { tagModel.bit(for: name) }
+    func lensToggled(_ name: String) -> UInt64? {
+        guard let b = tagModel.bit(for: name) else { return nil }
+        return lens ^ b
+    }
+    var lensAll: UInt64 { tagModel.allMask }
+
+    /// The park/restore delta of a lens change (tag-mode analog of
+    /// `SwitchPlan`).
+    struct LensPlan: Equatable, Sendable {
+        let oldLens: UInt64
+        let newLens: UInt64
+        /// Windows that left the visible union (were shown, now hidden).
+        let toPark: [WindowRef]
+        /// Windows that entered the visible union (were hidden, now
+        /// shown).
+        let toRestore: [WindowRef]
+    }
+
+    /// Set the lens to `newLens` (tag mode). Returns the union-delta
+    /// park/restore plan, or nil when not in tag mode or the lens is
+    /// unchanged. Sticky (`everywhere`) and stashed-scratchpad windows
+    /// are excluded from both lists, exactly like `setActive`.
+    @discardableResult
+    mutating func setLens(_ newLens: UInt64) -> LensPlan? {
+        guard grouping == .tag, newLens != lens else { return nil }
+        let old = lens
+        lens = newLens
+        func shows(_ mask: UInt64, _ tags: UInt64) -> Bool {
+            (tags & mask) != 0
+        }
+        let toPark = windowMap
+            .filter { shows(old, $0.value.tags)
+                && !shows(newLens, $0.value.tags)
+                && !everywhereWindows.contains($0.key)
+                && !stashedWindows.contains($0.key) }
+            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
+        let toRestore = windowMap
+            .filter { shows(newLens, $0.value.tags)
+                && !shows(old, $0.value.tags)
+                && !everywhereWindows.contains($0.key)
+                && !stashedWindows.contains($0.key) }
+            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
+        return LensPlan(oldLens: old, newLens: newLens,
+                        toPark: toPark, toRestore: toRestore)
+    }
+
     // MARK: - Move window
 
     enum MoveOutcome: Equatable, Sendable {
@@ -1568,7 +1687,8 @@ struct WorkspaceCatalog {
               current.workspace != n1Based,
               !everywhereWindows.contains(id),
               !stashedWindows.contains(id) else { return .rejected }
-        windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid)
+        windowMap[id] = WindowSlot(workspace: n1Based, pid: current.pid,
+                                   tags: current.tags)
         // Detach from source's layout container (if any), then
         // attach to dest's. Both helpers are no-ops when the
         // window isn't in the relevant container / mode, so the
