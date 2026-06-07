@@ -1572,6 +1572,13 @@ struct WorkspaceCatalog {
     /// window is assigned. `lens` is normally `model.firstBit`.
     mutating func seedTags(grouping: Grouping, model: TagModel,
                            rules: AssignRules, lens: UInt64) {
+        // Seed once. `grouping` starts `.workspace` (the default); the
+        // first seed flips it to `.tag`. A later refresh calling this
+        // again would otherwise reset `lens` to the seed value on every
+        // poll, clobbering the user's `setLens` changes.
+        guard self.grouping == .workspace, grouping != .workspace else {
+            return
+        }
         self.grouping = grouping
         self.tagModel = model
         self.assignRules = rules
@@ -1602,6 +1609,63 @@ struct WorkspaceCatalog {
                 && !hiddenMembers.contains($0.key) }
             .map(\.key)
             .sorted { $0.serverID < $1.serverID }
+    }
+
+    /// Tiled frames for the visible lens-union, computed by the global
+    /// default engine (tag mode has one layout over the union, not a
+    /// per-workspace tree). Empty when the default mode isn't a
+    /// stateless engine — `float` (windows keep position) and the
+    /// workspace-only `bsp`/`stack` (forbidden in tag mode by config
+    /// validation, but be defensive) all fall through to empty.
+    func tagUnionFrames(in rect: CGRect) -> [WindowID: CGRect] {
+        guard let engine = LayoutRegistry.engine(named: defaultMode)
+        else { return [:] }
+        return engine.frames(order: visibleNonFloatingMembers(),
+                             focused: nil, params: LayoutParams(), in: rect)
+    }
+
+    /// Tag-mode snapshot: one `Workspace` per tag (header = tag name,
+    /// `isActive` = tag is in the current lens), each tracked window
+    /// listed under its PRIMARY tag once (full-tag-world overview,
+    /// independent of the lens). The tiled set is the lens union (one
+    /// global layout); a window not in the lens shows at its parked
+    /// position. Secondary-tag badges + multi-active styling are the
+    /// view's job (M11-3 PR3).
+    private func tagSnapshot(live: [Window], focused: WindowID?,
+                             activeRect: CGRect) -> [Workspace] {
+        let tracked = live.filter {
+            windowMap[$0.id] != nil && !stashedWindows.contains($0.id)
+        }
+        let unionFrames = tagUnionFrames(in: activeRect)
+        let fallbackTag = tagModel.names.first ?? ""
+        let byTag = Dictionary(grouping: tracked) { w -> String in
+            let mask = windowMap[w.id]?.tags ?? 0
+            return tagModel.primaryName(of: mask) ?? fallbackTag
+        }
+        return tagModel.names.enumerated().map { (i, tagName) in
+            let bit = UInt64(1) << UInt64(i)
+            let isActive = (bit & lens) != 0
+            let wins = (byTag[tagName] ?? []).map { w -> Window in
+                let mask = windowMap[w.id]?.tags ?? 0
+                let floating = floatingWindows.contains(w.id)
+                let visible = (mask & lens) != 0 && !floating
+                let frame: CGRect? = visible
+                    ? (unionFrames[w.id] ?? preParkFrame(for: w))
+                    : preParkFrame(for: w)
+                return Window(id: w.id, pid: w.pid, appName: w.appName,
+                              title: w.title,
+                              isFocused: w.id == focused,
+                              isFloating: floating,
+                              frame: frame,
+                              isOnscreen: w.isOnscreen,
+                              isMaster: false,
+                              mark: mark(forWindow: w.id),
+                              isSticky: everywhereWindows.contains(w.id),
+                              scratchpad: scratchpad(forWindow: w.id))
+            }
+            return Workspace(index: i, name: tagName, isActive: isActive,
+                             layoutMode: defaultMode, windows: wins)
+        }
     }
 
     // Lens-command resolvers (pure: name → new mask). `nil` = unknown
@@ -1756,6 +1820,10 @@ struct WorkspaceCatalog {
                          activeRect: CGRect)
         -> [Workspace]
     {
+        if grouping == .tag {
+            return tagSnapshot(live: live, focused: focused,
+                               activeRect: activeRect)
+        }
         // Group raw live windows by WS first so per-WS layout
         // queries (tiledFrames / stackOrders) only run once.
         // `windowMap` is the authority on which windows facet

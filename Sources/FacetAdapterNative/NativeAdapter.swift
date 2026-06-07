@@ -333,13 +333,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
             forMacDesktopOrdinal: activeMacDesktopOrdinal))
+        // Tag mode (M11-3): seed the tag vocabulary + assign rules +
+        // initial lens (first tag) once. `seedTags` is idempotent — it
+        // only takes on the first call, so a later refresh won't reset
+        // the user's lens.
+        if config.effectiveGrouping == .tag {
+            let model = config.effectiveTagModel
+            catalog.seedTags(grouping: .tag, model: model,
+                             rules: config.effectiveAssignRules,
+                             lens: model.firstBit ?? 0)
+        }
         let live = enumerateCGWindows()
         let focused = focusedWindow()
         let rect = activeDisplayRect()
         // Phase γ.3 + F: classify first-sight windows — auto-float
         // (sheets / dialogs / palettes + config float rules) and
         // ignore (config `action="ignore"` → kept fully unmanaged).
-        let (autoFloat, ignore, deferred) = classifyNewWindows(live: live)
+        let (autoFloat, ignore, deferred, tagMasks) =
+            classifyNewWindows(live: live)
         // Drop expired trusted-new hints, then hand the survivors to
         // reconcile so a genuinely-new window joins on first on-screen
         // sight (skips the two-tick gate). Non-trusted windows — incl.
@@ -357,7 +368,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                                        trusted: trusted,
                                        ignore: ignore,
                                        deferred: deferred,
-                                       requireConfirm: true)
+                                       requireConfirm: true,
+                                       tags: tagMasks)
         // Latency telemetry + consume: any trusted id now in the
         // catalog was fast-added — log create→add dt and forget the
         // hint so it can't act again.
@@ -478,6 +490,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             }
         } else {
             applyLayout(workspace: catalog.activeIndex, rect: rect)
+        }
+        // Tag mode (M11-3): applyLayout above tiled the visible lens
+        // union; park the managed windows whose tags DON'T intersect
+        // the lens so they don't float over it. `parkAnchor` is guarded
+        // (`shouldParkAnchor`) so re-running every refresh is a no-op
+        // for already-parked windows. Sticky / stashed / hidden / float
+        // windows are exempt. The restore half (un-park on lens entry)
+        // rides the lens-switch plan in PR2b step2.
+        if catalog.grouping == .tag {
+            for (id, slot) in catalog.windowMap
+            where (slot.tags & catalog.lens) == 0
+                && !catalog.floatingWindows.contains(id)
+                && !catalog.hiddenMembers.contains(id)
+                && !catalog.stashedWindows.contains(id)
+                && catalog.shouldParkAnchor(id) {
+                parkAnchor(WindowRef(id: id, pid: slot.pid))
+            }
         }
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
@@ -670,10 +699,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `deferred` ids are skipped this tick and re-probed next time.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>,
-            deferred: Set<WindowID>)
+            deferred: Set<WindowID>, tags: [WindowID: UInt64])
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
+        // Tag mode (M11-3): compute each new window's tag bitmask from
+        // the probe here (this is the only place AX role/subrole are
+        // resolved, which `[[assign]]` rules may key on). The catalog
+        // applies the mask when the window joins `windowMap`.
+        let tagMode = config.effectiveGrouping == .tag
+        var tagMasks: [WindowID: UInt64] = [:]
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
         var deferred: Set<WindowID> = []
@@ -747,6 +782,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
                                     role: role, subrole: subrole,
                                     size: w.frame?.size)
+            if tagMode { tagMasks[w.id] = catalog.tagsForNewWindow(probe) }
             switch rules.action(for: probe) {
             case .manage:
                 Log.debug("native: rule=manage wsid=\(w.id.serverID) "
@@ -829,7 +865,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "probed=\(probed) deferred=\(deferred.count) "
                 + "float=\(autoFloat.count) ignore=\(ignore.count)")
         }
-        return (autoFloat, ignore, deferred)
+        return (autoFloat, ignore, deferred, tagMasks)
     }
 
     /// Display rect to anchor tile / stack math against.
@@ -2464,6 +2500,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// funnels through here.
     private func applyLayout(workspace n1Based: Int, rect: CGRect,
                              skip: Set<WindowID> = [], cached: Bool = false) {
+        // Tag mode (M11-3): there's no per-workspace tree — tile the
+        // visible lens union with the one global engine. `n1Based` is
+        // ignored (every applyLayout call routes here in tag mode).
+        if catalog.grouping == .tag {
+            applyFrames(catalog.tagUnionFrames(in: rect),
+                        label: "tag-union", rect: rect, skip: skip,
+                        cached: cached)
+            return
+        }
         let mode = catalog.mode(of: n1Based)
         switch mode {
         case "bsp":   applyTile(workspace: n1Based, rect: rect, skip: skip,

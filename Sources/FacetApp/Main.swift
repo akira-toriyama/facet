@@ -1271,6 +1271,19 @@ enum FacetApp {
         // Server mode. Reached only when no client flag matched.
 
         let cfg = FacetConfig.load()
+        // Fail Fast (M11-3): refuse to start on an incoherent config
+        // — `[grouping] by = "tag"` with no `[[tag]]`, or with a
+        // workspace-only default layout (`bsp`/`stack`), or an
+        // `[[assign]]` referencing an undefined tag, or a `by` typo.
+        // Loud `exit 2` (usage error) rather than silently running the
+        // default grouping. No-op in the (default) workspace mode.
+        let configErrors = cfg.fatalConfigErrors()
+        if !configErrors.isEmpty {
+            for e in configErrors {
+                FileHandle.standardError.write(Data("facet: \(e)\n".utf8))
+            }
+            exit(2)
+        }
         // config.toml is the single source of truth for theme.
         // Runtime `--theme=...` overrides this for the current
         // session only (no UserDefaults persist); to make a theme
