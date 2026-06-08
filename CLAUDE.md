@@ -12,8 +12,9 @@ All UI / config / code terminology follows
 The 4 core concepts are kept strictly apart: **mac desktop** (= macOS
 native Space; code `MacDesktops` / `[desktop.N]`), **facet workspace**
 (facet's window grouping; `WorkspaceCatalog`), **facet view** (UI:
-`tree`/`grid`/`rail`), **lens** (tag display set; M11-3, not yet in
-code). Apple's own SLS / `NSWorkspace` API names stay verbatim.
+`tree`/`grid`/`rail`), **lens** (tag display set; M11-3, shipped in
+#176 — `facet lens`, `WorkspaceCatalog.lensOnly`). Apple's own SLS /
+`NSWorkspace` API names stay verbatim.
 Adding or renaming a term lands in the same PR as the code change.
 
 ## What this is
