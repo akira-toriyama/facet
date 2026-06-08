@@ -428,6 +428,48 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
+# [grouping] — how windows are grouped: by facet workspace (default)
+# or by dwm-style tags (M11-3). `by=tag` replaces the per-mac-desktop
+# workspace list with one "tag world" per mac desktop: a window can
+# carry multiple tags, and `facet lens` picks which tag set is shown
+# (windows outside the lens are anchor-parked, same as a hidden
+# workspace). Default: workspace. Unknown value clamps to workspace.
+# -----------------------------------------------------------------
+# [grouping]
+# by = "tag"
+
+# -----------------------------------------------------------------
+# [[tag]] — the tag vocabulary for `by=tag` mode (ignored in
+# workspace mode). One table per tag; declaration order is the tag
+# order (a window's first matching tag is its "primary"). Tables with
+# no non-empty name, or a duplicate name, are dropped.
+# -----------------------------------------------------------------
+# [[tag]]
+# name = "web"
+# [[tag]]
+# name = "code"
+# [[tag]]
+# name = "chat"
+
+# -----------------------------------------------------------------
+# [[assign]] — statically map windows to tags at startup (`by=tag`
+# only; runtime re-tagging isn't supported). Match keys mirror
+# [[exclude]] (app / title / role / subrole substring-regex,
+# max_width / max_height). Tags come from `tag = "x"` and/or
+# `tags = ["x", "y"]` (unioned). A table with no match key or no tag
+# is dropped; an unknown tag name (not declared in [[tag]]) is a
+# startup error.
+# -----------------------------------------------------------------
+# [[assign]]
+# app = "com.google.Chrome"
+# tag = "web"
+#
+# [[assign]]
+# app = "com.apple.dt.Xcode"
+# tags = ["code"]
+
+
+# -----------------------------------------------------------------
 # Workspace behavior (no keys — informational only)
 # -----------------------------------------------------------------
 # How hiding works (fixed behaviour):

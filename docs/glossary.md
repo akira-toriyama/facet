@@ -117,7 +117,7 @@ Core と Adapter の間の **唯一の seam**（hexagonal port）。Controller /
 | **mac desktop** | macOS の native Space（OS の仮想デスクトップ。Mission Control の "Desktop N"） | `MacDesktops`, `activeMacDesktopID`, `[desktop.N]` |
 | **facet workspace** | facet 独自の window グループ抽象（1 mac desktop に N 個） | `WorkspaceCatalog`, `workspaces()` |
 | **facet view** | ユーザー向け UI surface の種類（`tree` / `grid` / `rail`） | `--view=NAME`, `FacetView*`, `canonicalViews` |
-| **lens** | tag モードで「今見えているタグ集合」（M11-3・未実装） | 予約語（現状コードに実体なし） |
+| **lens** | tag モードで「今見えているタグ集合」（M11-3・#176 で実装済） | `facet lens`, `WorkspaceCatalog.lensOnly` / `lensToggled` |
 
 **mac desktop ↔ facet workspace は最重要の混同ポイント**。OS のデスクトップ
 （mac desktop）と facet の抽象（facet workspace）は別物で、1 mac desktop が
@@ -170,9 +170,9 @@ macOS の **native Space**（OS が提供する仮想デスクトップ。Missio
 ### lens
 tag モードで **「今見えているタグ集合」**（dwm の tagset 相当）。`facet view`
 が "どう見せるか" なのに対し lens は "どのタグ集合を見るか"＝直交する別軸。
-**M11-3 (tag モデル) で実装予定で、現状コードに実体は無い**（用語の場所取りと
-してここに先行登録）。memory `[[facet-tag-model-decisions]]`。
-- 想定 CLI: `facet lens --only=NAME / --toggle=NAME / --all`（未実装）
+**M11-3 (tag モデル) で #176 にて実装済**（`WorkspaceCatalog.lensOnly` /
+`lensToggled`）。memory `[[facet-tag-model-decisions]]`。
+- CLI: `facet lens --only=NAME / --toggle=NAME / --all`
 - **Don't call it:** view（facet view は UI surface の別概念）, tagset, filter,
   タグビュー
 
@@ -389,7 +389,7 @@ API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
   別 mac desktop への退避や order-out は窓を非 composited にして preview を殺すため **不採用**
   （memory `[[native-window-hide-methods]]` の hide×hero 実測）。
 - layout は grouping で互換 filter（master-left/master-right/master-top/master-bottom/master-center/grid/spiral/float = 両対応 / bsp・stack = workspace のみ・
-  非互換は起動時 `exit 2`）。M11-3 で導入予定・`by` はオープン enum（将来の編成パラダイムを 1 値で拡張）。
+  非互換は起動時 `exit 2`）。M11-3 (#176) で実装済・`by` はオープン enum（将来の編成パラダイムを 1 値で拡張）。
   memory `[[facet-tag-model-decisions]]`。
 - **Don't call it:** mode, layout mode, grouping policy, 編成モード, グルーピング
 
@@ -397,7 +397,7 @@ API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
 **window に付く可視性ラベル**（[[grouping]] `by=tag` 時のみ）。1 window = タグの集合（bitmask /
 OptionSet 的・多重所属）。可視性述語 = `window.tags ∩ [[lens]] ≠ ∅`（dwm `tags & viewmask` 直写し）。
 `config.toml` の `[[tag]]` で宣言（記載順がタグ順＝primary タグ）・`[[assign]]` で window→tag を **静的割当**
-（起動時固定・runtime 再タグ不可）。**M11-3 未実装・予約語**（[[lens]] と同じく場所取り）。
+（起動時固定・runtime 再タグ不可）。**M11-3 (#176) で実装済**。
 memory `[[facet-tag-model-decisions]]`。
 - **Don't call it:** label, category, workspace（tag は多重所属、workspace は 1 窓 1 個）, group, ラベル, カテゴリ
 
@@ -405,7 +405,7 @@ memory `[[facet-tag-model-decisions]]`。
 **[[grouping]] `by=tag` 時、1 つの [[mac desktop]] が持つ「タグ付き window の集合」**
 （mac desktop : tag world = **1:1**・per-mac-desktop で独立した世界）。by=workspace の「N [[facet workspace]]」
 層を置き換える単位＝by=tag は 1 desktop に 1 tag world。中で [[lens]] を [[anchor]] park で切替
-（intra-desktop・mac desktop 切替ではない＝preview 温存）。**M11-3 未実装**。
+（intra-desktop・mac desktop 切替ではない＝preview 温存）。**M11-3 (#176) で実装済**。
 - **Don't call it:** workspace, tagspace, tag group, タグ空間, tagset（tagset は [[lens]] 寄り）
 
 ### grouping の概念関係（by=workspace / by=tag）

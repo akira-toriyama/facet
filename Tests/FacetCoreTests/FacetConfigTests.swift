@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import CoreGraphics
 @testable import FacetCore
 
 final class FacetConfigTests: XCTestCase {
@@ -374,5 +375,109 @@ final class FacetConfigTests: XCTestCase {
     func testRaiseOnOpenUnknownClampsToRaise() {
         XCTAssertEqual(raiseMode("bogus"), .raise)
         XCTAssertEqual(raiseMode(""), .raise)
+    }
+
+    // MARK: - effectiveRailStrip
+
+    func testEffectiveRailStripClamps() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveRailStrip, 30, "default")
+        c.railStrip = 20
+        XCTAssertEqual(c.effectiveRailStrip, 20)
+        c.railStrip = 1
+        XCTAssertEqual(c.effectiveRailStrip, 8, "floor 8")
+        c.railStrip = 999
+        XCTAssertEqual(c.effectiveRailStrip, 50, "ceiling 50")
+    }
+
+    // MARK: - effectiveTreeGeometry
+
+    func testEffectiveTreeGeometryNeedsAllFour() {
+        var c = FacetConfig()
+        XCTAssertNil(c.effectiveTreeGeometry, "all unset → nil")
+        c.treePosX = 10; c.treePosY = 20; c.treeWidth = 300; c.treeHeight = 400
+        XCTAssertEqual(c.effectiveTreeGeometry,
+                       CGRect(x: 10, y: 20, width: 300, height: 400))
+        c.treeHeight = nil
+        XCTAssertNil(c.effectiveTreeGeometry, "one missing → nil")
+    }
+
+    func testEffectiveTreeGeometryRejectsNonPositiveSize() {
+        var c = FacetConfig()
+        c.treePosX = 0; c.treePosY = 0; c.treeWidth = 0; c.treeHeight = 400
+        XCTAssertNil(c.effectiveTreeGeometry, "width 0 → nil")
+        c.treeWidth = 300; c.treeHeight = 0
+        XCTAssertNil(c.effectiveTreeGeometry, "height 0 → nil")
+    }
+
+    func testTreeGeometryPartialWarns() {
+        var c = FacetConfig()
+        c.treePosX = 10   // only 1 of 4
+        XCTAssertTrue(c.unknownValueWarnings().contains {
+            $0.contains("[tree] geometry needs all of")
+        }, "partial geometry warns")
+        c.treePosY = 20; c.treeWidth = 300; c.treeHeight = 400
+        XCTAssertFalse(c.unknownValueWarnings().contains {
+            $0.contains("[tree] geometry needs all of")
+        }, "all four → no warning")
+    }
+
+    // MARK: - allow-list accessors (border effect / tree preview mode)
+
+    func testEffectiveBorderEffectAllowList() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveBorderEffect, "off", "default")
+        c.borderEffect = "NEON"
+        XCTAssertEqual(c.effectiveBorderEffect, "neon", "case-insensitive")
+        c.borderEffect = "sparkle"
+        XCTAssertEqual(c.effectiveBorderEffect, "off", "unknown → off")
+    }
+
+    func testEffectiveTreePreviewModeAllowList() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveTreePreviewMode, "popover", "default")
+        c.treePreviewMode = "Mirror"
+        XCTAssertEqual(c.effectiveTreePreviewMode, "mirror", "case-insensitive")
+        c.treePreviewMode = "fullscreen"
+        XCTAssertEqual(c.effectiveTreePreviewMode, "popover", "unknown → popover")
+    }
+
+    // MARK: - border / cycle numeric clamps
+
+    func testEffectiveBorderWidthClamps() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveBorderWidth, 1.5, accuracy: 0.0001, "default")
+        c.borderWidth = 4
+        XCTAssertEqual(c.effectiveBorderWidth, 4, accuracy: 0.0001)
+        c.borderWidth = 0.1
+        XCTAssertEqual(c.effectiveBorderWidth, 0.5, accuracy: 0.0001, "floor")
+        c.borderWidth = 99
+        XCTAssertEqual(c.effectiveBorderWidth, 30, accuracy: 0.0001, "ceiling")
+    }
+
+    func testBorderAndThemeCycleClampIndependently() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveBorderCycleSeconds, 6, accuracy: 0.0001,
+                       "border default")
+        XCTAssertEqual(c.effectiveThemeCycleSeconds, 6, accuracy: 0.0001,
+                       "theme default")
+        c.borderCycleSeconds = 200   // over ceiling
+        c.themeCycleSeconds = 0      // under floor
+        XCTAssertEqual(c.effectiveBorderCycleSeconds, 120, accuracy: 0.0001,
+                       "border ceiling")
+        XCTAssertEqual(c.effectiveThemeCycleSeconds, 1, accuracy: 0.0001,
+                       "theme floor — independent of the border cycle")
+    }
+
+    func testEffectiveBorderBreathWidthsOptionalClamp() {
+        var c = FacetConfig()
+        XCTAssertNil(c.effectiveBorderMinWidth, "unset → nil")
+        XCTAssertNil(c.effectiveBorderMaxWidth, "unset → nil")
+        c.borderMinWidth = 0    // below floor
+        c.borderMaxWidth = 99   // above ceiling
+        // Exact (0.5 / 30 are representable); CGFloat(...) keeps the
+        // Optional comparison unambiguous — no `accuracy:` on Optionals.
+        XCTAssertEqual(c.effectiveBorderMinWidth, CGFloat(0.5))
+        XCTAssertEqual(c.effectiveBorderMaxWidth, CGFloat(30))
     }
 }

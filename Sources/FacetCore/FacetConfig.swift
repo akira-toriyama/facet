@@ -32,7 +32,7 @@ public struct WorkspaceConfig: Sendable, Equatable {
 public struct FacetConfig: Sendable {
     // Top-level
     public var defaultView: String?         // "tree" | "grid"
-    public var theme: String?               // see effectiveTheme (13 themes)
+    public var theme: String?               // see effectiveTheme (22 + random)
     /// Theme color-cycle period (⑪) — animatable themes (rainbow / neon /
     /// cyber / vapor / kawaii) rotate their accents over this many
     /// seconds. Set → animate; unset → static. Independent of the border
