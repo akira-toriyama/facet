@@ -23,19 +23,7 @@ public final class DndPredictionOverlay {
     private let view = PredictionView()
 
     public init() {
-        panel = NSPanel(contentRect: .zero,
-                        styleMask: [.borderless, .nonactivatingPanel],
-                        backing: .buffered, defer: false)
-        panel.isFloatingPanel = true
-        panel.level = .statusBar
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = false
-        panel.ignoresMouseEvents = true          // click-through
-        panel.hidesOnDeactivate = false
-        panel.becomesKeyOnlyIfNeeded = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
-                                    .fullScreenAuxiliary]
+        panel = .clickThroughOverlay(hasShadow: false)
         panel.contentView = view
     }
 

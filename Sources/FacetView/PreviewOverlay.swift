@@ -18,19 +18,7 @@ public final class PreviewOverlay {
     public private(set) var shownWindow: WindowID?
 
     public init() {
-        panel = NSPanel(contentRect: .zero,
-                        styleMask: [.borderless, .nonactivatingPanel],
-                        backing: .buffered, defer: false)
-        panel.isFloatingPanel = true
-        panel.level = .statusBar
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.ignoresMouseEvents = true       // click-through
-        panel.hidesOnDeactivate = false
-        panel.becomesKeyOnlyIfNeeded = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .stationary,
-                                    .fullScreenAuxiliary]
+        panel = .clickThroughOverlay(hasShadow: true)
         iv.imageScaling = .scaleProportionallyUpOrDown
         iv.wantsLayer = true
         iv.layer?.cornerRadius = 8
