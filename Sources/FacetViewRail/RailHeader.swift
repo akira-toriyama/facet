@@ -1,8 +1,9 @@
 // Grid-style workspace header for the rail's bottom cells: a grip
 // glyph + the WS name + layout mode on a faint rounded band. The grip
 // + fill read as grabbable (header drag = swap in Phase R3, click =
-// switch). Module-local copies of the grid's `drawGridGrip` /
-// `drawHeaderLine` / `gridLabel` — the rail can't import FacetViewGrid.
+// switch). The text-line / label drawing is shared (FacetView
+// `drawTextLine`, FacetCore `workspaceShortLabel`) so the rail matches
+// the grid without importing FacetViewGrid.
 
 import AppKit
 import FacetCore
@@ -42,8 +43,9 @@ extension RailView {
         }
 
         // Grip (left).
-        drawRailGrip(in: NSRect(x: hb.minX + 4, y: hb.minY,
+        drawGripDots(in: NSRect(x: hb.minX + 4, y: hb.minY,
                                 width: railHeaderGripW, height: hb.height),
+                     tallExtent: 18,
                      color: browseTarget ? pal.accent2 : (hot ? pal.accent : pal.text),
                      alpha: hot ? 0.85 : 0.5)
 
@@ -62,7 +64,7 @@ extension RailView {
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {
             let nameH = nameFont * 1.3
-            drawHeaderLine(name, font: nameFont, weight: .semibold,
+            drawTextLine(name, font: nameFont, weight: .semibold,
                            color: nameColor, para: lp,
                            in: NSRect(x: nameX,
                                       y: hb.minY + (hb.height - nameH) / 2,
@@ -76,7 +78,7 @@ extension RailView {
             let modeH = (modeFont * 1.3).rounded()
             let gap: CGFloat = 2
             let startY = hb.minY + (hb.height - (nameH + gap + modeH)) / 2
-            drawHeaderLine(name, font: nameFont, weight: .semibold,
+            drawTextLine(name, font: nameFont, weight: .semibold,
                            color: nameColor, para: lp,
                            in: NSRect(x: nameX, y: startY,
                                       width: nameW, height: nameH))
@@ -89,44 +91,9 @@ extension RailView {
         }
     }
 
-    func drawHeaderLine(_ s: String, font: CGFloat, weight: NSFont.Weight,
-                        color: NSColor, para: NSParagraphStyle, in rect: NSRect) {
-        (s as NSString).draw(in: rect, withAttributes: [
-            .font: uiFont(font, weight),
-            .foregroundColor: color,
-            .paragraphStyle: para,
-        ])
-    }
-
-    /// A 2-column dot grid — the drag-handle affordance at the header's
-    /// left. Matches the tree's canonical grip (`dotR` 1.15, two
-    /// columns) so the same texture reads across tree / grid / rail
-    /// (M9-5 #4). Height-aware (10 rows tall / 3 rows compact) so it
-    /// stays legible in the rail's tiny cells.
-    func drawRailGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
-        let dotR: CGFloat = 1.15
-        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
-        let ys: [CGFloat] = r.height >= 28
-            ? stride(from: -18.0, through: 18.0, by: 4.0).map { r.midY + $0 }
-            : [r.midY - 4, r.midY, r.midY + 4]
-        color.withAlphaComponent(alpha).setFill()
-        for x in xs {
-            for y in ys {
-                NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
-                                            width: dotR * 2,
-                                            height: dotR * 2)).fill()
-            }
-        }
-    }
-
-    /// Short WS caption — strips a leading "workspace " prefix; empty →
-    /// "WS<n>". (Module-local copy of the grid's `gridLabel`.)
+    /// Short WS caption — delegates to the shared `workspaceShortLabel`
+    /// (FacetCore). Thin module-local name for the rail's call sites.
     func railLabel(_ name: String, _ idx: Int) -> String {
-        if name.isEmpty { return "WS\(idx + 1)" }
-        let lower = name.lowercased()
-        if lower.hasPrefix("workspace "), name.count > "workspace ".count {
-            return String(name.dropFirst("workspace ".count))
-        }
-        return name
+        workspaceShortLabel(name: name, idx: idx)
     }
 }

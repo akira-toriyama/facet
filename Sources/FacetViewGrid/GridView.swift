@@ -59,18 +59,6 @@ public final class GridView: NSView {
 
     // MARK: - Per-cell snapshot
 
-    /// One per-window hit target inside a cell (scaled logical
-    /// frame). Click-on-thumb switches + focuses *that* window;
-    /// click-on-empty-cell only switches workspace.
-    struct WindowHit: Sendable {
-        let pid: Int
-        let id: WindowID
-        let isFocused: Bool
-        let rect: NSRect
-        let mark: String?      // user mark (M9-5 #3 corner badge)
-        let tags: [String]     // secondary tag names (M11-3 PR3b dots)
-    }
-
     /// One layout-pass snapshot per workspace cell. Holds everything
     /// `draw` and hit-testing need to agree on (no recomputation
     /// drift between paint and click).
@@ -84,7 +72,7 @@ public final class GridView: NSView {
         let isActive: Bool
         let label: String
         let mode: String          // layout engine (bsp / stack), shown in header
-        let windows: [WindowHit]
+        let windows: [MiniWindowHit]
     }
     private var cells: [Cell] = []
 
@@ -113,7 +101,7 @@ public final class GridView: NSView {
         var current: NSPoint            // cursor in view coords
         var dropTargetWS: Int?          // cell != sourceWS under cursor
     }
-    private var pendingDown: (point: NSPoint, hit: WindowHit, ws: Int)?
+    private var pendingDown: (point: NSPoint, hit: MiniWindowHit, ws: Int)?
     // Header band pressed: a workspace drag-or-switch candidate
     // (Theme A). Promoted to a `.workspace` swap drag past threshold,
     // else resolved as a WS switch on mouseUp.
@@ -386,7 +374,7 @@ public final class GridView: NSView {
                                   height: cellSize.height)
             // Pre-compute window thumb rects in cell-local view
             // coords so hit-testing and drawing agree byte-for-byte.
-            var hits: [WindowHit] = []
+            var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
                 for win in ws.windows {
                     guard let f = win.frame else { continue }
@@ -395,7 +383,7 @@ public final class GridView: NSView {
                         screenFrame: useScreen,
                         cellRect: cellRect)
                     guard wr.width >= 2, wr.height >= 2 else { continue }
-                    hits.append(WindowHit(
+                    hits.append(MiniWindowHit(
                         pid: win.pid,
                         id: win.id,
                         isFocused: win.isFocused,
@@ -669,9 +657,10 @@ public final class GridView: NSView {
                 ho.lineWidth = 1.5
                 ho.stroke()
             }
-            drawGridGrip(
+            drawGripDots(
                 in: NSRect(x: hb.minX + 4, y: hb.minY,
                            width: gridHeaderGripW, height: hb.height),
+                tallExtent: 18,
                 color: headerHot ? activeColor : labelColor,
                 alpha: headerHot ? 0.85 : 0.5)
             // WS name (line 1) + layout mode (line 2, accent), stacked
@@ -689,7 +678,7 @@ public final class GridView: NSView {
             let nameColor = cell.isActive ? activeColor : labelColor
             if cell.mode.isEmpty {
                 let nameH = nameFont * 1.3
-                drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
+                drawTextLine(cell.label, font: nameFont, weight: .semibold,
                                color: nameColor, para: lp,
                                in: NSRect(x: nameX,
                                           y: hb.minY + (hb.height - nameH) / 2,
@@ -712,7 +701,7 @@ public final class GridView: NSView {
                 let nameH = nameFont * 1.25
                 let gap: CGFloat = 3
                 let startY = hb.minY + (hb.height - (nameH + gap + modeH)) / 2
-                drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
+                drawTextLine(cell.label, font: nameFont, weight: .semibold,
                                color: nameColor, para: lp,
                                in: NSRect(x: nameX, y: startY,
                                           width: nameW, height: nameH))
@@ -739,45 +728,11 @@ public final class GridView: NSView {
         }
     }
 
-    /// One left-aligned text line of the workspace header.
-    private func drawHeaderLine(_ s: String, font: CGFloat,
-                                weight: NSFont.Weight, color: NSColor,
-                                para: NSParagraphStyle, in rect: NSRect) {
-        (s as NSString).draw(in: rect, withAttributes: [
-            .font: uiFont(font, weight),
-            .foregroundColor: color,
-            .paragraphStyle: para,
-        ])
-    }
-
-    /// A 2-column dot grid — the "drag handle" affordance at the left
-    /// of each workspace header band (header drag = WS-swap). Matches
-    /// the tree's canonical grip (`dotR` 1.15, two columns) so the same
-    /// texture renders across tree / grid / rail (M9-5 #4). Two-state
-    /// height awareness: 10 rows in a tall rect (the 2-line header) and
-    /// 3 rows in compact rects.
-    private func drawGridGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
-        let dotR: CGFloat = 1.15
-        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
-        let ys: [CGFloat] = r.height >= 28
-            ? stride(from: -18.0, through: 18.0, by: 4.0)
-                .map { r.midY + $0 }
-            : [r.midY - 4, r.midY, r.midY + 4]
-        color.withAlphaComponent(alpha).setFill()
-        for x in xs {
-            for y in ys {
-                NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
-                                            width: dotR * 2,
-                                            height: dotR * 2)).fill()
-            }
-        }
-    }
-
     /// Shared window-thumb painter — same look whether drawn
     /// statically inside the cell clip or as an in-flight FLIP
     /// tween outside it. Falls back to app icon when no
     /// ScreenCaptureKit thumbnail is cached yet.
-    private func drawWindowThumb(_ w: WindowHit, at r: NSRect,
+    private func drawWindowThumb(_ w: MiniWindowHit, at r: NSRect,
                                  fill: NSColor, stroke: NSColor) {
         let wp = NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3)
         fill.setFill(); wp.fill()
@@ -1016,7 +971,7 @@ public final class GridView: NSView {
 
     // MARK: - Drag ghost
 
-    private func installDragGhost(for hit: WindowHit) {
+    private func installDragGhost(for hit: MiniWindowHit) {
         // Ghost installed already at "lifted" size so cursor-follow
         // can start on frame 1 with no pause. Only animation is the
         // shadow softly fading in. Going instant on size + animated
@@ -1284,28 +1239,8 @@ public final class GridView: NSView {
         needsDisplay = true
     }
 
-    /// Windows in visual reading order — top-to-bottom, left-to-right
-    /// (flipped coords: smaller y = top). Tab walks the grid the way
-    /// the eye does, not the backend's creation order.
-    private func readingOrder(_ wins: [WindowHit]) -> [WindowHit] {
-        guard wins.count > 1 else { return wins }
-        let band = max(1, (wins.map { $0.rect.height }.max() ?? 1) * 0.5)
-        // Cluster into rows (y within `band` = same row, so a sub-pixel
-        // y difference between side-by-side windows can't split them),
-        // then order each row left → right, rows top → bottom.
-        let byY = wins.sorted { $0.rect.midY < $1.rect.midY }
-        var rows: [[WindowHit]] = []
-        for w in byY {
-            if let rowY = rows.last?.first?.rect.midY, w.rect.midY - rowY <= band {
-                rows[rows.count - 1].append(w)
-            } else {
-                rows.append([w])
-            }
-        }
-        return rows.flatMap { $0.sorted { $0.rect.midX < $1.rect.midX } }
-    }
 
-    private func kbSelectedWindow() -> (cell: Cell, hit: WindowHit)? {
+    private func kbSelectedWindow() -> (cell: Cell, hit: MiniWindowHit)? {
         guard let sel = kbSelectedWS,
               kbSelectedWindowIdx >= 0,
               let cell = cells.first(where: { $0.wsIndex == sel }),

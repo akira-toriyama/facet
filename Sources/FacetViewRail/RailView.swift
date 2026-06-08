@@ -107,15 +107,6 @@ public final class RailView: NSView {
 
     // MARK: - Layout snapshot
 
-    /// One window mini-thumbnail inside a cell (view coords).
-    struct WinHit {
-        let id: WindowID
-        let pid: Int
-        let isFocused: Bool
-        let rect: NSRect
-        let mark: String?      // user mark (M9-5 #3 corner badge)
-        let tags: [String]     // secondary tag names (M11-3 PR3b dots)
-    }
     /// One workspace mini-screen — used for both the bottom row and
     /// the centre hero. Recomputed on every relayout so paint and
     /// hit-testing can't drift.
@@ -127,7 +118,7 @@ public final class RailView: NSView {
         let name: String
         let mode: String
         let count: Int
-        let wins: [WinHit]
+        let wins: [MiniWindowHit]
         let isHero: Bool
     }
     private(set) var cells: [Cell] = []     // bottom row (all workspaces)
@@ -170,7 +161,7 @@ public final class RailView: NSView {
 
     // mouseDown candidates (resolved to a drag past threshold, else a
     // click on mouseUp).
-    var pendingDown: (point: NSPoint, hit: WinHit, ws: Int)?
+    var pendingDown: (point: NSPoint, hit: MiniWindowHit, ws: Int)?
     var pendingHeaderDown: (point: NSPoint, ws: Int)?
     var drag: Drag?
     var dragGhost: NSView?
@@ -477,18 +468,18 @@ public final class RailView: NSView {
     /// `gridScaledWindowRect`; kept module-local to avoid a
     /// cross-view-module import for one pure helper.)
     private func scaledWins(_ ws: Workspace, _ cell: NSRect,
-                            _ screen: CGRect) -> [WinHit] {
+                            _ screen: CGRect) -> [MiniWindowHit] {
         guard screen.width > 0, screen.height > 0 else { return [] }
         let sx = cell.width / screen.width
         let sy = cell.height / screen.height
-        var out: [WinHit] = []
+        var out: [MiniWindowHit] = []
         for win in ws.windows {
             guard let f = win.frame else { continue }
             let r = NSRect(x: cell.minX + (f.minX - screen.minX) * sx,
                            y: cell.minY + (f.minY - screen.minY) * sy,
                            width: f.width * sx, height: f.height * sy)
             guard r.width >= 2, r.height >= 2 else { continue }
-            out.append(WinHit(id: win.id, pid: win.pid,
+            out.append(MiniWindowHit(pid: win.pid, id: win.id,
                               isFocused: win.isFocused, rect: r,
                               mark: win.mark,
                               tags: Array(win.tags.dropFirst())))
@@ -744,7 +735,7 @@ public final class RailView: NSView {
         }
     }
 
-    private func drawThumb(_ w: WinHit, fill: NSColor, stroke: NSColor) {
+    private func drawThumb(_ w: MiniWindowHit, fill: NSColor, stroke: NSColor) {
         let p = NSBezierPath(roundedRect: w.rect, xRadius: 3, yRadius: 3)
         fill.setFill(); p.fill()
         // Real capture only — the Controller's thumbnail timer keeps
@@ -796,7 +787,7 @@ public final class RailView: NSView {
 
     // MARK: - Mouse (click switch / drag move / drag swap / dismiss)
 
-    private func heroWinAt(_ p: NSPoint) -> WinHit? {
+    private func heroWinAt(_ p: NSPoint) -> MiniWindowHit? {
         hero?.wins.reversed().first { $0.rect.contains(p) }
     }
 
@@ -912,7 +903,7 @@ public final class RailView: NSView {
     }
 
     private func railWinMenu(_ scr: NSPoint, backend: any WindowBackend,
-                             ws: Int, w: WinHit) {
+                             ws: Int, w: MiniWindowHit) {
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
             workspaces: workspaces, pid: w.pid, windowID: w.id, title: ""
@@ -1012,33 +1003,12 @@ public final class RailView: NSView {
     ///    0..n-1 = a specific hero window (Space lifts it for a move)
     public var kbSelectedWindowIdx: Int = -1
 
-    /// Windows in visual reading order — top-to-bottom, left-to-right
-    /// (flipped coords: smaller y = top). So Tab walks the grid the way
-    /// the eye does (left-top → right-top → left-bottom → …), not the
-    /// backend's creation order.
-    private func readingOrder(_ wins: [WinHit]) -> [WinHit] {
-        guard wins.count > 1 else { return wins }
-        let band = max(1, (wins.map { $0.rect.height }.max() ?? 1) * 0.5)
-        // Cluster into rows (y within `band` = same row, so a sub-pixel
-        // y difference between side-by-side windows can't split them),
-        // then order each row left → right, rows top → bottom.
-        let byY = wins.sorted { $0.rect.midY < $1.rect.midY }
-        var rows: [[WinHit]] = []
-        for w in byY {
-            if let rowY = rows.last?.first?.rect.midY, w.rect.midY - rowY <= band {
-                rows[rows.count - 1].append(w)
-            } else {
-                rows.append([w])
-            }
-        }
-        return rows.flatMap { $0.sorted { $0.rect.midX < $1.rect.midX } }
-    }
 
     /// The keyboard-selected window: the kbSelectedWindowIdx-th window
     /// (in reading order) of the SELECTED WS, taken from the HERO (it
     /// shows the full window list large). The ring is drawn in BOTH
     /// tiers — the hero and the matching bottom cell — by window id.
-    private func kbSelectedWindow() -> WinHit? {
+    private func kbSelectedWindow() -> MiniWindowHit? {
         guard kbSelectedWindowIdx >= 0, let h = hero, !h.wins.isEmpty
         else { return nil }
         let ordered = readingOrder(h.wins)

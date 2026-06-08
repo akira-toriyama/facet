@@ -17,7 +17,7 @@ extension RailView {
     /// Thumb-sized accent ghost for a window drag — installed already
     /// at lifted size so cursor-follow starts on frame 1; only the
     /// shadow fades in.
-    func installDragGhost(for hit: WinHit) {
+    func installDragGhost(for hit: MiniWindowHit) {
         let lifted = NSRect(
             x: hit.rect.midX - (hit.rect.width  * railLiftScale) / 2,
             y: hit.rect.midY - (hit.rect.height * railLiftScale) / 2,
