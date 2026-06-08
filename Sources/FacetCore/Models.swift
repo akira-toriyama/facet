@@ -108,6 +108,13 @@ public struct Window: Sendable {
     /// orthogonal to `mark`, mutually exclusive with `isSticky`.
     /// Views surface it as a small `scratchpad:NAME` badge.
     public let scratchpad: String?
+    /// Tag names this window belongs to, in declaration order
+    /// (`[grouping] by = "tag"` mode; empty in workspace mode). The
+    /// window is listed once under its PRIMARY tag (the first / lowest
+    /// entry here); views surface the OTHER entries as small
+    /// secondary-tag badges. Session-only, per-mac-desktop. See memory
+    /// `facet-tag-model-decisions` (M11-3 PR3).
+    public let tags: [String]
 
     public init(id: WindowID,
                 pid: Int,
@@ -121,7 +128,8 @@ public struct Window: Sendable {
                 bundleId: String? = nil,
                 mark: String? = nil,
                 isSticky: Bool = false,
-                scratchpad: String? = nil) {
+                scratchpad: String? = nil,
+                tags: [String] = []) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -135,6 +143,7 @@ public struct Window: Sendable {
         self.mark = mark
         self.isSticky = isSticky
         self.scratchpad = scratchpad
+        self.tags = tags
     }
 }
 

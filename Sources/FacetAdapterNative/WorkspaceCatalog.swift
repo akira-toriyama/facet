@@ -1671,7 +1671,8 @@ struct WorkspaceCatalog {
                               isMaster: false,
                               mark: mark(forWindow: w.id),
                               isSticky: everywhereWindows.contains(w.id),
-                              scratchpad: scratchpad(forWindow: w.id))
+                              scratchpad: scratchpad(forWindow: w.id),
+                              tags: tagModel.names(in: mask))
             }
             return Workspace(index: i, name: tagName, isActive: isActive,
                              layoutMode: defaultMode, windows: wins)
