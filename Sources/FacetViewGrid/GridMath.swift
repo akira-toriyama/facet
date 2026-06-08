@@ -3,6 +3,7 @@
 // known-good outputs (GridMathTests).
 
 import CoreGraphics
+import FacetCore
 
 /// Rows needed to fit `wsCount` workspaces into a grid of `cols`
 /// columns. Min 1 row even when there are no workspaces (keeps
@@ -87,16 +88,10 @@ public func gridWrapIndex(index: Int, dx: Int, dy: Int,
     return i
 }
 
-/// Short label for a workspace cell. Strips a leading "workspace "
-/// prefix (case-insensitive) so a user named workspace
-/// "WORKSPACE Q" displays as "Q" — matches the Mission Control
-/// convention of single-letter cell captions. Empty name → "WS<n>".
+/// Short label for a workspace cell — delegates to the shared
+/// `workspaceShortLabel` (FacetCore) so grid / rail / tree captions
+/// stay identical. Kept as a thin module-local name for the existing
+/// call sites + `GridMathTests`.
 public func gridLabel(name: String, idx: Int) -> String {
-    if name.isEmpty { return "WS\(idx + 1)" }
-    let lower = name.lowercased()
-    if lower.hasPrefix("workspace "),
-       name.count > "workspace ".count {
-        return String(name.dropFirst("workspace ".count))
-    }
-    return name
+    workspaceShortLabel(name: name, idx: idx)
 }

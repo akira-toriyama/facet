@@ -119,14 +119,9 @@ extension RailView {
         }
     }
 
-    /// Short WS caption — strips a leading "workspace " prefix; empty →
-    /// "WS<n>". (Module-local copy of the grid's `gridLabel`.)
+    /// Short WS caption — delegates to the shared `workspaceShortLabel`
+    /// (FacetCore). Thin module-local name for the rail's call sites.
     func railLabel(_ name: String, _ idx: Int) -> String {
-        if name.isEmpty { return "WS\(idx + 1)" }
-        let lower = name.lowercased()
-        if lower.hasPrefix("workspace "), name.count > "workspace ".count {
-            return String(name.dropFirst("workspace ".count))
-        }
-        return name
+        workspaceShortLabel(name: name, idx: idx)
     }
 }
