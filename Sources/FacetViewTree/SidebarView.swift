@@ -255,6 +255,44 @@ public final class SidebarView: NSView {
         let w = max(bounds.width, sidebarWidth)
         var y: CGFloat = 6        // small top inset
 
+        // Append one window row (TreeRow + Cell) and advance `y`. Shared
+        // by the search (flat cross-WS) and normal (per-WS) passes — the
+        // row-height ladder + the 13 Cell fields were an identical block
+        // in both. Nested so it captures `eff` / `hot` / `w` / `y`.
+        func appendWindowRow(_ win: Window, wsIndex: Int) {
+            let wt = eff(win)
+            let hasLabel = win.isMaster || win.isFloating
+            let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
+            // Third line under the title holds the mark pill (left) and
+            // the master / float / hidden / scratchpad / tags badges —
+            // present when any of those conditions holds.
+            let hasThird = hasLabel || (win.mark != nil)
+                || !win.isOnscreen || (win.scratchpad != nil)
+                || !win.tags.dropFirst().isEmpty
+            var rh: CGFloat = baseRH           // compact single line
+            if !wt.isEmpty || hasThird {
+                rh = 34                        // top 8 + app 18 + bot 8
+                if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
+                if hasThird { rh += 24 }       // gap 2 + badge 22
+            }
+            let wr = NSRect(x: 0, y: y, width: w, height: rh)
+            rows.append(TreeRow(rect: wr, kind: .window(
+                workspaceIndex: wsIndex, pid: win.pid,
+                windowID: win.id, title: wt)))
+            cells.append(Cell(row: wr, kind: 2, hot: hot(win),
+                              firstHeader: false, pid: win.pid,
+                              app: win.appName, title: wt,
+                              text: "", mode: "",
+                              isMaster: win.isMaster,
+                              isFloating: win.isFloating,
+                              isSticky: win.isSticky,
+                              mark: win.mark,
+                              isHidden: !win.isOnscreen,
+                              scratchpad: win.scratchpad,
+                              tags: Array(win.tags.dropFirst())))
+            y += rh
+        }
+
         // Top drag-handle band: grab to move the panel (mouseDown
         // routes a `.handle` drag to panel-move, mode 1) and shows the
         // mac desktop ("Desktop N") when SkyLight resolves the
@@ -276,36 +314,7 @@ public final class SidebarView: NSView {
                     let wt = eff(win)
                     guard fuzzyMatch(query, win.appName + " " + wt)
                     else { continue }
-                    let hasLabel = win.isMaster || win.isFloating
-                    let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
-                    // Third line under the title holds the mark pill
-                    // (left) and the master / float label — present when
-                    // either exists.
-                    let hasThird = hasLabel || (win.mark != nil)
-                        || !win.isOnscreen || (win.scratchpad != nil)
-                        || !win.tags.dropFirst().isEmpty
-                    var rh: CGFloat = baseRH           // compact single line
-                    if !wt.isEmpty || hasThird {
-                        rh = 34                        // top 8 + app 18 + bot 8
-                        if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                        if hasThird { rh += 24 }       // gap 2 + badge 22
-                    }
-                    let wr = NSRect(x: 0, y: y, width: w, height: rh)
-                    rows.append(TreeRow(rect: wr, kind: .window(
-                        workspaceIndex: ws.index, pid: win.pid,
-                        windowID: win.id, title: wt)))
-                    cells.append(Cell(row: wr, kind: 2, hot: hot(win),
-                                      firstHeader: false, pid: win.pid,
-                                      app: win.appName, title: wt,
-                                      text: "", mode: "",
-                                      isMaster: win.isMaster,
-                                      isFloating: win.isFloating,
-                                      isSticky: win.isSticky,
-                                      mark: win.mark,
-                                      isHidden: !win.isOnscreen,
-                                      scratchpad: win.scratchpad,
-                                      tags: Array(win.tags.dropFirst())))
-                    y += rh
+                    appendWindowRow(win, wsIndex: ws.index)
                 }
             }
             contentHeight = y + 6
@@ -328,40 +337,7 @@ public final class SidebarView: NSView {
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
-                    let wt = eff(win)
-                    let hasLabel = win.isMaster || win.isFloating
-                    let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
-                    // A 3rd line (master / float) adds 14 pt so the
-                    // label has its own row instead of crowding the
-                    // title baseline.
-                    // Third line under the title holds the mark pill
-                    // (left) and the master / float label — present when
-                    // either exists.
-                    let hasThird = hasLabel || (win.mark != nil)
-                        || !win.isOnscreen || (win.scratchpad != nil)
-                        || !win.tags.dropFirst().isEmpty
-                    var rh: CGFloat = baseRH           // compact single line
-                    if !wt.isEmpty || hasThird {
-                        rh = 34                        // top 8 + app 18 + bot 8
-                        if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                        if hasThird { rh += 24 }       // gap 2 + badge 22
-                    }
-                    let wr = NSRect(x: 0, y: y, width: w, height: rh)
-                    rows.append(TreeRow(rect: wr, kind: .window(
-                        workspaceIndex: ws.index, pid: win.pid,
-                        windowID: win.id, title: wt)))
-                    cells.append(Cell(row: wr, kind: 2, hot: hot(win),
-                                      firstHeader: false, pid: win.pid,
-                                      app: win.appName, title: wt,
-                                      text: "", mode: "",
-                                      isMaster: win.isMaster,
-                                      isFloating: win.isFloating,
-                                      isSticky: win.isSticky,
-                                      mark: win.mark,
-                                      isHidden: !win.isOnscreen,
-                                      scratchpad: win.scratchpad,
-                                      tags: Array(win.tags.dropFirst())))
-                    y += rh
+                    appendWindowRow(win, wsIndex: ws.index)
                 }
                 wsBands[ws.index] = start...(y + 3)
                 y += 3

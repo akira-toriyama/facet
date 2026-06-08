@@ -970,6 +970,19 @@ public final class GridView: NSView {
 
     // MARK: - Drag ghost
 
+    /// Fade the lifted ghost's drop shadow in over `gridLiftDuration`
+    /// (shared by the window + workspace ghosts). Mirrors the rail's
+    /// `liftShadow`.
+    private func gridLiftShadow(_ g: NSView) {
+        let fade = CABasicAnimation(keyPath: "shadowOpacity")
+        fade.fromValue = 0
+        fade.toValue = gridLiftShadowOpacity
+        fade.duration = gridLiftDuration
+        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        g.layer?.shadowOpacity = gridLiftShadowOpacity
+        g.layer?.add(fade, forKey: "shadow-lift")
+    }
+
     private func installDragGhost(for hit: MiniWindowHit) {
         // Ghost installed already at "lifted" size so cursor-follow
         // can start on frame 1 with no pause. Only animation is the
@@ -1023,13 +1036,7 @@ public final class GridView: NSView {
         addSubview(g)
         dragGhost = g
 
-        let fade = CABasicAnimation(keyPath: "shadowOpacity")
-        fade.fromValue = 0
-        fade.toValue = gridLiftShadowOpacity
-        fade.duration = gridLiftDuration
-        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        g.layer?.shadowOpacity = gridLiftShadowOpacity
-        g.layer?.add(fade, forKey: "shadow-lift")
+        gridLiftShadow(g)
     }
 
     /// Cell-sized ghost for a workspace drag. Reproduces the source
@@ -1093,13 +1100,7 @@ public final class GridView: NSView {
         addSubview(g)
         dragGhost = g
 
-        let fade = CABasicAnimation(keyPath: "shadowOpacity")
-        fade.fromValue = 0
-        fade.toValue = gridLiftShadowOpacity
-        fade.duration = gridLiftDuration
-        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        g.layer?.shadowOpacity = gridLiftShadowOpacity
-        g.layer?.add(fade, forKey: "shadow-lift")
+        gridLiftShadow(g)
     }
 
     private func positionDragGhost(at p: NSPoint) {
