@@ -376,6 +376,18 @@ Frequently-touched keys:
   `min-width`/`max-width` are both set (max > min, each 0.5–30) — a
   width breath that oscillates the border between them (any effect,
   overriding the fixed `width`). Off shows a plain theme-accent border.
+- `[window]` table — `raise-on-open` controls how a freshly-opened
+  **floating** window (a sheet / dialog / palette, an
+  `[[exclude]]`-floated window, or any window facet auto-floats) is
+  surfaced on first sight, since it can be born *under* the tiled
+  layout. A one-shot nudge on the window's open, not a continuous pin
+  (a pre-existing float isn't touched on a desktop switch): `raise`
+  (default) lifts it to the front of its own app's window stack without
+  stealing focus; `activate` brings the owning app frontmost on
+  every fresh float (this *does* steal focus each time — pick it when
+  `raise` can't surface floats that open under a different app); `off`
+  leaves it where the app placed it. Only floating windows are touched;
+  read at launch (restart to change).
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or

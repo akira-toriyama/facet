@@ -140,6 +140,11 @@ public struct FacetConfig: Sendable {
     /// it's filled by `load`, not `from(toml:)`.
     public var exclusionRules: [ExclusionRule]?
 
+    /// `[window] raise-on-open` — how a freshly-opened floating window
+    /// (sheet / dialog / palette / `[[exclude]]` `action="float"`) is
+    /// surfaced on first sight. Raw; read `effectiveRaiseOnOpen`.
+    public var raiseOnOpen: String?
+
     public init() {}
 
     // MARK: - Effective accessors (defaults + clamping)
@@ -385,6 +390,8 @@ public struct FacetConfig: Sendable {
         clamp("border effect", borderEffect, effectiveBorderEffect)
         clamp("grid label-position", gridLabelPosition,
               effectiveGridLabelPosition)
+        clamp("[window] raise-on-open", raiseOnOpen,
+              effectiveRaiseOnOpen.rawValue)
         if treeGeometryPartial {
             out.append("config: [tree] geometry needs all of pos-x / "
                 + "pos-y / width / height — partial set ignored")
@@ -464,6 +471,10 @@ public struct FacetConfig: Sendable {
         }
         if case .int(let n)? = toml[""]?["theme-cycle-seconds"] {
             c.themeCycleSeconds = n
+        }
+        // [window]
+        if case .string(let s)? = toml["window"]?["raise-on-open"] {
+            c.raiseOnOpen = s
         }
         // [grid]
         if case .int(let n)? = toml["grid"]?["cols"] { c.gridCols = n }
@@ -574,6 +585,15 @@ public struct FacetConfig: Sendable {
     /// Always read through this, never the raw Optional.
     public var effectiveExclusionRules: ExclusionRules {
         ExclusionRules(exclusionRules ?? [])
+    }
+
+    /// Effective `[window] raise-on-open`. Unknown / unset →
+    /// `.raise` (the default: surface freshly-opened floating windows
+    /// without stealing focus). A typo clamps to the default, like
+    /// every other TOML key.
+    public var effectiveRaiseOnOpen: RaiseOnOpen {
+        RaiseOnOpen(rawValue: (raiseOnOpen ?? "raise").lowercased())
+            ?? .raise
     }
 
     /// Build `[ExclusionRule]` from the raw TOML text's `[[exclude]]`
