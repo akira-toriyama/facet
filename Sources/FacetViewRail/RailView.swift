@@ -114,6 +114,7 @@ public final class RailView: NSView {
         let isFocused: Bool
         let rect: NSRect
         let mark: String?      // user mark (M9-5 #3 corner badge)
+        let tags: [String]     // secondary tag names (M11-3 PR3b dots)
     }
     /// One workspace mini-screen — used for both the bottom row and
     /// the centre hero. Recomputed on every relayout so paint and
@@ -489,7 +490,8 @@ public final class RailView: NSView {
             guard r.width >= 2, r.height >= 2 else { continue }
             out.append(WinHit(id: win.id, pid: win.pid,
                               isFocused: win.isFocused, rect: r,
-                              mark: win.mark))
+                              mark: win.mark,
+                              tags: Array(win.tags.dropFirst())))
         }
         return out
     }
@@ -758,6 +760,7 @@ public final class RailView: NSView {
         }
         stroke.setStroke(); p.lineWidth = 0.5; p.stroke()
         if let mark = w.mark { drawMiniMarkBadge(mark, in: w.rect) }
+        drawMiniTagDots(w.tags.count, in: w.rect)
     }
 
     // MARK: - Hover
