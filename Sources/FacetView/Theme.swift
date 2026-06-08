@@ -39,6 +39,19 @@ public func layoutBadgeLabel(_ mode: String) -> String {
     return "m-" + String(mode.dropFirst("master-".count))
 }
 
+/// Draw one text line into `rect` with the theme font (`uiFont`).
+/// Shared by the grid + rail workspace-header captions, which both
+/// drew an identical single attributed line.
+@MainActor
+public func drawTextLine(_ s: String, font: CGFloat, weight: NSFont.Weight,
+                         color: NSColor, para: NSParagraphStyle, in rect: NSRect) {
+    (s as NSString).draw(in: rect, withAttributes: [
+        .font: uiFont(font, weight),
+        .foregroundColor: color,
+        .paragraphStyle: para,
+    ])
+}
+
 /// Draw a tiny window-mark badge in the top-left corner of a mini
 /// thumbnail `rect`: an accent pill with the mark text when it fits,
 /// else just an accent dot — so a marked window stays signalled even in

@@ -689,7 +689,7 @@ public final class GridView: NSView {
             let nameColor = cell.isActive ? activeColor : labelColor
             if cell.mode.isEmpty {
                 let nameH = nameFont * 1.3
-                drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
+                drawTextLine(cell.label, font: nameFont, weight: .semibold,
                                color: nameColor, para: lp,
                                in: NSRect(x: nameX,
                                           y: hb.minY + (hb.height - nameH) / 2,
@@ -712,7 +712,7 @@ public final class GridView: NSView {
                 let nameH = nameFont * 1.25
                 let gap: CGFloat = 3
                 let startY = hb.minY + (hb.height - (nameH + gap + modeH)) / 2
-                drawHeaderLine(cell.label, font: nameFont, weight: .semibold,
+                drawTextLine(cell.label, font: nameFont, weight: .semibold,
                                color: nameColor, para: lp,
                                in: NSRect(x: nameX, y: startY,
                                           width: nameW, height: nameH))
@@ -737,17 +737,6 @@ public final class GridView: NSView {
                 }
             }
         }
-    }
-
-    /// One left-aligned text line of the workspace header.
-    private func drawHeaderLine(_ s: String, font: CGFloat,
-                                weight: NSFont.Weight, color: NSColor,
-                                para: NSParagraphStyle, in rect: NSRect) {
-        (s as NSString).draw(in: rect, withAttributes: [
-            .font: uiFont(font, weight),
-            .foregroundColor: color,
-            .paragraphStyle: para,
-        ])
     }
 
     /// A 2-column dot grid — the "drag handle" affordance at the left

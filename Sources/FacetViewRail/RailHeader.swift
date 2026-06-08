@@ -1,8 +1,9 @@
 // Grid-style workspace header for the rail's bottom cells: a grip
 // glyph + the WS name + layout mode on a faint rounded band. The grip
 // + fill read as grabbable (header drag = swap in Phase R3, click =
-// switch). Module-local copies of the grid's `drawGridGrip` /
-// `drawHeaderLine` / `gridLabel` — the rail can't import FacetViewGrid.
+// switch). The text-line / label drawing is shared (FacetView
+// `drawTextLine`, FacetCore `workspaceShortLabel`) so the rail matches
+// the grid without importing FacetViewGrid.
 
 import AppKit
 import FacetCore
@@ -62,7 +63,7 @@ extension RailView {
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {
             let nameH = nameFont * 1.3
-            drawHeaderLine(name, font: nameFont, weight: .semibold,
+            drawTextLine(name, font: nameFont, weight: .semibold,
                            color: nameColor, para: lp,
                            in: NSRect(x: nameX,
                                       y: hb.minY + (hb.height - nameH) / 2,
@@ -76,7 +77,7 @@ extension RailView {
             let modeH = (modeFont * 1.3).rounded()
             let gap: CGFloat = 2
             let startY = hb.minY + (hb.height - (nameH + gap + modeH)) / 2
-            drawHeaderLine(name, font: nameFont, weight: .semibold,
+            drawTextLine(name, font: nameFont, weight: .semibold,
                            color: nameColor, para: lp,
                            in: NSRect(x: nameX, y: startY,
                                       width: nameW, height: nameH))
@@ -87,15 +88,6 @@ extension RailView {
                                  .foregroundColor: modeColor,
                                  .paragraphStyle: lp])
         }
-    }
-
-    func drawHeaderLine(_ s: String, font: CGFloat, weight: NSFont.Weight,
-                        color: NSColor, para: NSParagraphStyle, in rect: NSRect) {
-        (s as NSString).draw(in: rect, withAttributes: [
-            .font: uiFont(font, weight),
-            .foregroundColor: color,
-            .paragraphStyle: para,
-        ])
     }
 
     /// A 2-column dot grid — the drag-handle affordance at the header's
