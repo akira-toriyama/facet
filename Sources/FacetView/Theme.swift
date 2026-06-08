@@ -52,6 +52,33 @@ public func drawTextLine(_ s: String, font: CGFloat, weight: NSFont.Weight,
     ])
 }
 
+/// A 2-column dot grid — the universal "drag handle" affordance at the
+/// left of a workspace header (header drag = WS-swap). Height-aware: in
+/// a tall rect (≥ 28pt, the 2-line header) it stretches to a vertical
+/// strip spanning ±`tallExtent` around the midline; in shorter rects it
+/// falls back to the compact 3-row form. `tallExtent` is the only knob
+/// the views differ on — grid / rail use 18 (wider cells), the tree 14
+/// (the narrow sidebar would crowd the WS-name column). One texture
+/// across tree / grid / rail (M9-5 #4).
+@MainActor
+public func drawGripDots(in r: NSRect, tallExtent: CGFloat,
+                         color: NSColor, alpha: CGFloat) {
+    let dotR: CGFloat = 1.15
+    let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
+    let ys: [CGFloat] = r.height >= 28
+        ? stride(from: -tallExtent, through: tallExtent, by: 4.0)
+            .map { r.midY + $0 }
+        : [r.midY - 4, r.midY, r.midY + 4]
+    color.withAlphaComponent(alpha).setFill()
+    for x in xs {
+        for y in ys {
+            NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
+                                        width: dotR * 2,
+                                        height: dotR * 2)).fill()
+        }
+    }
+}
+
 /// Draw a tiny window-mark badge in the top-left corner of a mini
 /// thumbnail `rect`: an accent pill with the mark text when it fits,
 /// else just an accent dot — so a marked window stays signalled even in

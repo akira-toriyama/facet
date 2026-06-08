@@ -669,9 +669,10 @@ public final class GridView: NSView {
                 ho.lineWidth = 1.5
                 ho.stroke()
             }
-            drawGridGrip(
+            drawGripDots(
                 in: NSRect(x: hb.minX + 4, y: hb.minY,
                            width: gridHeaderGripW, height: hb.height),
+                tallExtent: 18,
                 color: headerHot ? activeColor : labelColor,
                 alpha: headerHot ? 0.85 : 0.5)
             // WS name (line 1) + layout mode (line 2, accent), stacked
@@ -735,29 +736,6 @@ public final class GridView: NSView {
                                     fill: w.isFocused ? winFocused : winFill,
                                     stroke: winStroke)
                 }
-            }
-        }
-    }
-
-    /// A 2-column dot grid — the "drag handle" affordance at the left
-    /// of each workspace header band (header drag = WS-swap). Matches
-    /// the tree's canonical grip (`dotR` 1.15, two columns) so the same
-    /// texture renders across tree / grid / rail (M9-5 #4). Two-state
-    /// height awareness: 10 rows in a tall rect (the 2-line header) and
-    /// 3 rows in compact rects.
-    private func drawGridGrip(in r: NSRect, color: NSColor, alpha: CGFloat) {
-        let dotR: CGFloat = 1.15
-        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
-        let ys: [CGFloat] = r.height >= 28
-            ? stride(from: -18.0, through: 18.0, by: 4.0)
-                .map { r.midY + $0 }
-            : [r.midY - 4, r.midY, r.midY + 4]
-        color.withAlphaComponent(alpha).setFill()
-        for x in xs {
-            for y in ys {
-                NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
-                                            width: dotR * 2,
-                                            height: dotR * 2)).fill()
             }
         }
     }

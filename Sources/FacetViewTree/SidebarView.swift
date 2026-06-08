@@ -587,21 +587,11 @@ public final class SidebarView: NSView {
     /// because the sidebar is narrow — a wider strip would crowd the
     /// WS name column.
     private func drawGrip(in r: NSRect, hot: Bool) {
-        let dotR: CGFloat = 1.15
-        let xs = [r.minX + dotR + 1, r.minX + dotR + 5]
-        let ys: [CGFloat] = r.height >= 28
-            ? stride(from: -14.0, through: 14.0, by: 4.0)
-                .map { r.midY + $0 }
-            : [r.midY - 4, r.midY, r.midY + 4]
-        (hot ? pal.accent : pal.dim)
-            .withAlphaComponent(hot ? 0.85 : 0.45).setFill()
-        for x in xs {
-            for y in ys {
-                NSBezierPath(ovalIn: NSRect(x: x - dotR, y: y - dotR,
-                                            width: dotR * 2,
-                                            height: dotR * 2)).fill()
-            }
-        }
+        // The sidebar is narrow, so the tree uses a shorter tall strip
+        // (±14 vs the grid / rail's ±18) — see `drawGripDots`.
+        drawGripDots(in: r, tallExtent: 14,
+                     color: hot ? pal.accent : pal.dim,
+                     alpha: hot ? 0.85 : 0.45)
     }
 
     public override func draw(_ dirty: NSRect) {
