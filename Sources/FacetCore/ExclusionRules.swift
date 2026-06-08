@@ -9,10 +9,10 @@
 // (keep tracking, still shown in the tree) or ignore them entirely
 // (fully unmanaged, like yabai's `manage=off`).
 //
-// This file is the *matcher*: pure, backend-neutral, unit-testable.
-// The adapter supplies a `WindowProbe` (the AX role/subrole come from
-// its on-demand probe; bundleId/title/size from the window model) and
-// gets back the action for the first matching rule.
+// The matching itself lives in `WindowMatcher` (shared with
+// `[[assign]]`, M11-3); this file is the exclusion *policy* on top of
+// it (the action + first-match-wins rule set). Pure, backend-neutral,
+// unit-testable.
 
 import CoreGraphics
 import Foundation
@@ -33,105 +33,47 @@ public enum ExclusionAction: String, Sendable, Equatable {
     case manage
 }
 
-/// The window facts a rule is matched against. `role`/`subrole` are
-/// optional because the adapter only probes AX for them within a
-/// budget — when absent, role/subrole-keyed rules simply don't match.
-public struct WindowProbe: Sendable, Equatable {
-    public let bundleId: String?
-    public let title: String
-    public let role: String?
-    public let subrole: String?
-    public let size: CGSize?
-
-    public init(bundleId: String?, title: String,
-                role: String? = nil, subrole: String? = nil,
-                size: CGSize? = nil) {
-        self.bundleId = bundleId
-        self.title = title
-        self.role = role
-        self.subrole = subrole
-        self.size = size
-    }
-}
-
-/// One `[[exclude]]` table. Keys within a rule are ANDed; an
-/// unspecified key is not a constraint. A rule with no constraints
-/// matches nothing (guards against a blank `[[exclude]]` silently
-/// dropping every window).
+/// One `[[exclude]]` table: a `WindowMatcher` plus the action to take
+/// on a window it matches. Keys within the matcher are ANDed; a rule
+/// with no constraints matches nothing (guards against a blank
+/// `[[exclude]]` silently dropping every window).
 public struct ExclusionRule: Sendable, Equatable {
-    /// Regex matched against the window's bundle id (search, not
-    /// anchored — write `^…$` to anchor).
-    public let app: String?
-    /// Regex matched against the window title. Empty title (unnamed
-    /// window) is matched by `^$`.
-    public let title: String?
-    /// Exact AX role (e.g. `AXWindow`).
-    public let role: String?
-    /// Exact AX subrole (e.g. `AXDialog`).
-    public let subrole: String?
-    /// Match windows whose width is ≤ this (catches small popups).
-    public let maxWidth: Double?
-    /// Match windows whose height is ≤ this.
-    public let maxHeight: Double?
+    public let matcher: WindowMatcher
     public let action: ExclusionAction
 
+    public init(matcher: WindowMatcher,
+                action: ExclusionAction = .float) {
+        self.matcher = matcher
+        self.action = action
+    }
+
+    /// Convenience init with the match keys flat — preserves the
+    /// original call sites (config parser, tests) unchanged.
     public init(app: String? = nil, title: String? = nil,
                 role: String? = nil, subrole: String? = nil,
                 maxWidth: Double? = nil, maxHeight: Double? = nil,
                 action: ExclusionAction = .float) {
-        self.app = app
-        self.title = title
-        self.role = role
-        self.subrole = subrole
-        self.maxWidth = maxWidth
-        self.maxHeight = maxHeight
-        self.action = action
+        self.init(matcher: WindowMatcher(app: app, title: title,
+                                         role: role, subrole: subrole,
+                                         maxWidth: maxWidth,
+                                         maxHeight: maxHeight),
+                  action: action)
     }
 
-    /// True iff every specified key matches `p`. A rule with no keys
-    /// never matches.
-    public func matches(_ p: WindowProbe) -> Bool {
-        var constrained = false
-        if let app {
-            constrained = true
-            if !Self.regexMatches(app, p.bundleId ?? "") { return false }
-        }
-        if let title {
-            constrained = true
-            if !Self.regexMatches(title, p.title) { return false }
-        }
-        if let role {
-            constrained = true
-            if role != (p.role ?? "") { return false }
-        }
-        if let subrole {
-            constrained = true
-            if subrole != (p.subrole ?? "") { return false }
-        }
-        if let maxWidth {
-            constrained = true
-            guard let s = p.size, Double(s.width) <= maxWidth else {
-                return false
-            }
-        }
-        if let maxHeight {
-            constrained = true
-            guard let s = p.size, Double(s.height) <= maxHeight else {
-                return false
-            }
-        }
-        return constrained
-    }
+    // Source-compatible accessors onto the matcher's fields.
+    public var app: String? { matcher.app }
+    public var title: String? { matcher.title }
+    public var role: String? { matcher.role }
+    public var subrole: String? { matcher.subrole }
+    public var maxWidth: Double? { matcher.maxWidth }
+    public var maxHeight: Double? { matcher.maxHeight }
+
+    /// True iff the matcher's constraints all hold for `p`.
+    public func matches(_ p: WindowProbe) -> Bool { matcher.matches(p) }
 
     /// Whether this rule references AX role/subrole — lets the
     /// adapter skip the AX probe when no rule needs it.
-    public var needsAXRole: Bool { role != nil || subrole != nil }
-
-    /// Invalid patterns can't match (no crash) — consistent with the
-    /// TOML parser's "a typo only loses that one thing" stance.
-    static func regexMatches(_ pattern: String, _ subject: String) -> Bool {
-        subject.range(of: pattern, options: .regularExpression) != nil
-    }
+    public var needsAXRole: Bool { matcher.needsAXRole }
 }
 
 /// Ordered rule set. First matching rule wins (file order = priority).

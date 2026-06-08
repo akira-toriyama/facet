@@ -35,6 +35,8 @@
 //               / --focus=up|down|left|right / --move=up|down|left|right
 //   Scratchpad: facet scratchpad --stash=NAME / --toggle=NAME
 //               / --release=NAME
+//   Lens      : facet lens --only=NAME / --toggle=NAME / --all
+//               (tag mode only — [grouping] by="tag")
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
@@ -155,6 +157,14 @@ enum FacetApp {
           facet workspace --rename=NAME      rename the active workspace
           facet workspace --move=N           move the active workspace to
                                              position N (reorder)
+
+        LENS                                 (tag mode: which tags show)
+          facet lens --only=NAME             show exactly tag NAME
+          facet lens --toggle=NAME           add / remove tag NAME from
+                                             the shown union
+          facet lens --all                   show every tag
+                                             (requires [grouping] by="tag";
+                                             no-op under by="workspace")
 
         WINDOW                               (focused window)
           facet window --move-to=N           move it to workspace N
@@ -312,6 +322,21 @@ enum FacetApp {
         exit(3)
     }
 
+    /// Fail Fast (M11-3, design Q7): reject a subject that doesn't match
+    /// the configured grouping mode. `lens` is tag-mode-only; the
+    /// `workspace` switch / layout / management verbs are
+    /// workspace-mode-only (tag mode has no workspaces — running them
+    /// would scramble the catalog's park state). Reads the same config
+    /// the server seeded from; a mismatch exits 2 (usage) rather than
+    /// silently no-opping server-side.
+    static func requireGrouping(_ want: Grouping, subject: String) {
+        let have = FacetConfig.load().effectiveGrouping
+        guard have == want else {
+            die("facet \(subject) requires [grouping] by=\"\(want.rawValue)\""
+                + " — current config is \(have.rawValue) mode")
+        }
+    }
+
     // MARK: - Client mode posting
 
     /// Post a raw control string to the running instance, then
@@ -368,6 +393,13 @@ enum FacetApp {
     /// state. Absolute is idempotent (no-op if already there).
     static func postWorkspaceFocus(_ target: String) -> Never {
         postControl("workspace:" + target)
+    }
+
+    /// Post ``lens:TARGET`` (M11-3 tag mode) where TARGET is
+    /// `only:NAME` / `toggle:NAME` / `all`. The server resolves the tag
+    /// name and surfaces an unknown-tag error.
+    static func postLens(_ target: String) -> Never {
+        postControl("lens:" + target)
     }
 
     /// Post ``window-move:N`` (1-indexed). Moves the focused
@@ -619,6 +651,7 @@ enum FacetApp {
             die("facet workspace: pick one action per invocation — "
                 + "see `facet --help`")
         }
+        requireGrouping(.workspace, subject: "workspace")
         requireServerAlive()
         if let f = focusArg  { postWorkspaceFocus(f) }
         if let l = layoutArg { postSetLayout(l) }
@@ -631,6 +664,57 @@ enum FacetApp {
         if let n = renameArg { postControl("workspace-rename:" + n) }
         if let m = moveArg   { postControl("workspace-move:\(m)") }
         die("facet workspace: dispatch fell through (bug)")
+    }
+
+    /// Sub-command parser for ``facet lens <flag>`` (M11-3 tag mode).
+    /// Subject-verb mirror of ``facet workspace``: one action per
+    /// invocation, loud reject on zero / multiple / unknown. Verbs:
+    ///   --only=NAME    show exactly tag NAME
+    ///   --toggle=NAME  flip tag NAME in/out of the current lens union
+    ///   --all          show every tag
+    /// Tag-mode only — under `by = "workspace"` the server no-ops.
+    static func runLensCommand(_ args: [String]) -> Never {
+        var onlyArg: String?
+        var toggleArg: String?
+        var allFlag = false
+        var i = 0
+        while i < args.count {
+            defer { i += 1 }
+            let a = args[i]
+            switch true {
+            case a.hasPrefix("--only="):
+                onlyArg = String(a.dropFirst("--only=".count))
+            case a.hasPrefix("--toggle="):
+                toggleArg = String(a.dropFirst("--toggle=".count))
+            case a == "--all":
+                allFlag = true
+            default:
+                die("unknown `lens` flag \"\(a)\" — see `facet --help`")
+            }
+        }
+        let count = [onlyArg != nil, toggleArg != nil, allFlag]
+            .filter { $0 }.count
+        guard count > 0 else {
+            die("facet lens: no action specified — see `facet --help`")
+        }
+        guard count == 1 else {
+            die("facet lens: pick one action per invocation — "
+                + "see `facet --help`")
+        }
+        // Reject an empty NAME (a shell var that expanded to nothing)
+        // loudly rather than posting a no-such-tag the server ignores.
+        if let n = onlyArg, n.isEmpty {
+            die("facet lens --only=NAME: expected a non-empty tag name")
+        }
+        if let n = toggleArg, n.isEmpty {
+            die("facet lens --toggle=NAME: expected a non-empty tag name")
+        }
+        requireGrouping(.tag, subject: "lens")
+        requireServerAlive()
+        if let n = onlyArg   { postLens("only:" + n) }
+        if let n = toggleArg { postLens("toggle:" + n) }
+        if allFlag           { postLens("all") }
+        die("facet lens: dispatch fell through (bug)")
     }
 
     /// Sub-command parser for ``facet window <flag>``. Subcommand
@@ -1131,6 +1215,12 @@ enum FacetApp {
         if argv.first == "scratchpad" {
             runScratchpadCommand(Array(argv.dropFirst()))
         }
+        // `facet lens <flag>` — tag-mode visibility (only / toggle /
+        // all). A new subject: the lens selects which tags are shown,
+        // the tag-mode analog of `workspace --focus`.
+        if argv.first == "lens" {
+            runLensCommand(Array(argv.dropFirst()))
+        }
         // Read-only query sub-command. Plain noun (no `--`)
         // because it returns data rather than triggering a verb.
         if argv == ["status"] {
@@ -1271,6 +1361,19 @@ enum FacetApp {
         // Server mode. Reached only when no client flag matched.
 
         let cfg = FacetConfig.load()
+        // Fail Fast (M11-3): refuse to start on an incoherent config
+        // — `[grouping] by = "tag"` with no `[[tag]]`, or with a
+        // workspace-only default layout (`bsp`/`stack`), or an
+        // `[[assign]]` referencing an undefined tag, or a `by` typo.
+        // Loud `exit 2` (usage error) rather than silently running the
+        // default grouping. No-op in the (default) workspace mode.
+        let configErrors = cfg.fatalConfigErrors()
+        if !configErrors.isEmpty {
+            for e in configErrors {
+                FileHandle.standardError.write(Data("facet: \(e)\n".utf8))
+            }
+            exit(2)
+        }
         // config.toml is the single source of truth for theme.
         // Runtime `--theme=...` overrides this for the current
         // session only (no UserDefaults persist); to make a theme

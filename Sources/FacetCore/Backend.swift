@@ -77,6 +77,16 @@ public enum InsertEdge: Sendable, Equatable {
     case left, right, top, bottom
 }
 
+/// A lens command (M11-3 tag mode). The lens is the set of tags
+/// currently shown; these change it. `only` shows exactly one tag,
+/// `toggle` flips one tag in/out of the current union, `all` shows
+/// every tag. Tag-mode only — a no-op under `by = "workspace"`.
+public enum LensSpec: Sendable, Equatable {
+    case only(String)
+    case toggle(String)
+    case all
+}
+
 /// The only surface the rest of the app knows about. The backend
 /// adapter (`FacetAdapterNative`) implements it; the UI, AX focus
 /// glue, themes and DnD are all backend-agnostic.
@@ -120,6 +130,13 @@ public protocol WindowBackend: Sendable {
     /// handle even as position-based indices shift under add / remove /
     /// move (memory: facet-cli-dynamic-runtime-model).
     func switchWorkspace(named name: String, autoFocus: Bool)
+
+    /// Change the lens (M11-3 tag mode): which set of tags is shown.
+    /// Windows whose tags leave the lens are parked; windows that enter
+    /// are restored + re-tiled into the visible union. No-op under
+    /// `by = "workspace"` or when the named tag is unknown (the backend
+    /// surfaces the latter as an operational error).
+    func setLens(_ spec: LensSpec)
 
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
@@ -328,6 +345,7 @@ public extension WindowBackend {
     // workspace set (and the unit-test stub) need not implement
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
+    func setLens(_ spec: LensSpec) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 

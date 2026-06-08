@@ -333,6 +333,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
             forMacDesktopOrdinal: activeMacDesktopOrdinal))
+        // Tag mode (M11-3): seed the tag vocabulary + assign rules +
+        // initial lens (first tag) once. `seedTags` is idempotent — it
+        // only takes on the first call, so a later refresh won't reset
+        // the user's lens.
+        if config.effectiveGrouping == .tag {
+            let model = config.effectiveTagModel
+            catalog.seedTags(grouping: .tag, model: model,
+                             rules: config.effectiveAssignRules,
+                             lens: model.firstBit ?? 0)
+        }
         let live = enumerateCGWindows()
         // raise-on-open bookkeeping: flag genuinely-new windows by their
         // FIRST appearance in this `.optionAll` enumeration (see
@@ -353,7 +363,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Phase γ.3 + F: classify first-sight windows — auto-float
         // (sheets / dialogs / palettes + config float rules) and
         // ignore (config `action="ignore"` → kept fully unmanaged).
-        let (autoFloat, ignore, deferred, probedAX) =
+        let (autoFloat, ignore, deferred, tagMasks, probedAX) =
             classifyNewWindows(live: live)
         // Drop expired trusted-new hints, then hand the survivors to
         // reconcile so a genuinely-new window joins on first on-screen
@@ -372,7 +382,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                                        trusted: trusted,
                                        ignore: ignore,
                                        deferred: deferred,
-                                       requireConfirm: true)
+                                       requireConfirm: true,
+                                       tags: tagMasks)
         // Latency telemetry + consume: any trusted id now in the
         // catalog was fast-added — log create→add dt and forget the
         // hint so it can't act again.
@@ -493,6 +504,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             }
         } else {
             applyLayout(workspace: catalog.activeIndex, rect: rect)
+        }
+        // Tag mode (M11-3): applyLayout above tiled the visible lens
+        // union; park the managed windows whose tags DON'T intersect
+        // the lens so they don't float over it. `parkAnchor` is guarded
+        // (`shouldParkAnchor`) so re-running every refresh is a no-op
+        // for already-parked windows. Sticky / stashed / hidden / float
+        // windows are exempt. The restore half (un-park on lens entry)
+        // rides the lens-switch plan in PR2b step2.
+        if catalog.grouping == .tag {
+            for (id, slot) in catalog.windowMap
+            where (slot.tags & catalog.lens) == 0
+                && !catalog.floatingWindows.contains(id)
+                && !catalog.hiddenMembers.contains(id)
+                && !catalog.stashedWindows.contains(id)
+                && catalog.shouldParkAnchor(id) {
+                parkAnchor(WindowRef(id: id, pid: slot.pid))
+            }
         }
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
@@ -749,10 +777,17 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `deferred` ids are skipped this tick and re-probed next time.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>,
-            deferred: Set<WindowID>, probedAX: [WindowID: AXUIElement])
+            deferred: Set<WindowID>, tags: [WindowID: UInt64],
+            probedAX: [WindowID: AXUIElement])
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
+        // Tag mode (M11-3): compute each new window's tag bitmask from
+        // the probe here (this is the only place AX role/subrole are
+        // resolved, which `[[assign]]` rules may key on). The catalog
+        // applies the mask when the window joins `windowMap`.
+        let tagMode = config.effectiveGrouping == .tag
+        var tagMasks: [WindowID: UInt64] = [:]
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
         var deferred: Set<WindowID> = []
@@ -834,6 +869,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
                                     role: role, subrole: subrole,
                                     size: w.frame?.size)
+            if tagMode { tagMasks[w.id] = catalog.tagsForNewWindow(probe) }
             switch rules.action(for: probe) {
             case .manage:
                 Log.debug("native: rule=manage wsid=\(w.id.serverID) "
@@ -916,7 +952,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "probed=\(probed) deferred=\(deferred.count) "
                 + "float=\(autoFloat.count) ignore=\(ignore.count)")
         }
-        return (autoFloat, ignore, deferred, probedAX)
+        return (autoFloat, ignore, deferred, tagMasks, probedAX)
     }
 
     /// Display rect to anchor tile / stack math against.
@@ -1578,6 +1614,67 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         }
         Log.debug("native: autoFocus WS=\(newActiveWS) "
             + "pick=\(pick.id.serverID) app=\(pick.appName)")
+        Focus.assert(pick, backend: self)
+    }
+
+    // MARK: - Lens (M11-3 tag mode)
+
+    /// Change the lens. Mirrors `switchWorkspace`: resolve the spec to
+    /// a tag mask, mutate the catalog (which returns the union-delta
+    /// park/restore plan), park the windows leaving the lens, restore +
+    /// re-tile the ones entering, then auto-focus. No-op outside tag
+    /// mode (the catalog's `setLens` returns nil) or on an unknown tag
+    /// name (surfaced as an operational error).
+    public func setLens(_ spec: LensSpec) {
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
+              catalog.grouping == .tag else { return }
+        cancelSlideForRetarget()
+        let resolved: UInt64?
+        switch spec {
+        case .only(let name):   resolved = catalog.lensOnly(name)
+        case .toggle(let name): resolved = catalog.lensToggled(name)
+        case .all:              resolved = catalog.lensAll
+        }
+        guard let mask = resolved else {
+            let name: String
+            switch spec {
+            case .only(let n), .toggle(let n): name = n
+            case .all:                         name = ""
+            }
+            errorContinuation.yield("lens \"\(name)\": no such tag")
+            return
+        }
+        guard let plan = catalog.setLens(mask) else { return }   // unchanged
+        Log.debug("native: setLens \(plan.oldLens) -> \(plan.newLens)")
+        let rect = activeDisplayRect()
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+        // applyLayout auto-routes to the tag-union branch (grouping ==
+        // .tag), tiling the new visible union into `rect`.
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
+        applyLensAutoFocus(newLens: plan.newLens)
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Auto-focus after a lens change. Keep the current focus when its
+    /// window stays visible (its tags still intersect the lens, or it's
+    /// floating / sticky — never parked) so a `--toggle` that only adds
+    /// a tag doesn't yank focus; otherwise focus the first window of the
+    /// new visible union, or defocus to Finder when the union is empty.
+    private func applyLensAutoFocus(newLens: UInt64) {
+        if let cur = focusedWindow(), let slot = catalog.windowMap[cur] {
+            let staysVisible = (slot.tags & newLens) != 0
+                || catalog.floatingWindows.contains(cur)
+                || catalog.everywhereWindows.contains(cur)
+            if staysVisible { return }
+        }
+        guard let pickID = catalog.visibleNonFloatingMembers().first,
+              let pick = enumerateCGWindows().first(where: { $0.id == pickID })
+        else {
+            activateFinder()
+            return
+        }
+        Log.debug("native: lens autoFocus pick=\(pick.id.serverID) "
+            + "app=\(pick.appName)")
         Focus.assert(pick, backend: self)
     }
 
@@ -2551,6 +2648,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// funnels through here.
     private func applyLayout(workspace n1Based: Int, rect: CGRect,
                              skip: Set<WindowID> = [], cached: Bool = false) {
+        // Tag mode (M11-3): there's no per-workspace tree — tile the
+        // visible lens union with the one global engine. `n1Based` is
+        // ignored (every applyLayout call routes here in tag mode).
+        if catalog.grouping == .tag {
+            applyFrames(catalog.tagUnionFrames(in: rect),
+                        label: "tag-union", rect: rect, skip: skip,
+                        cached: cached)
+            return
+        }
         let mode = catalog.mode(of: n1Based)
         switch mode {
         case "bsp":   applyTile(workspace: n1Based, rect: rect, skip: skip,

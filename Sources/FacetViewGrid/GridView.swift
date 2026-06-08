@@ -68,6 +68,7 @@ public final class GridView: NSView {
         let isFocused: Bool
         let rect: NSRect
         let mark: String?      // user mark (M9-5 #3 corner badge)
+        let tags: [String]     // secondary tag names (M11-3 PR3b dots)
     }
 
     /// One layout-pass snapshot per workspace cell. Holds everything
@@ -399,7 +400,8 @@ public final class GridView: NSView {
                         id: win.id,
                         isFocused: win.isFocused,
                         rect: wr,
-                        mark: win.mark))
+                        mark: win.mark,
+                        tags: Array(win.tags.dropFirst())))
                 }
             }
             // Header band rect (matches the label draw position) —
@@ -413,7 +415,7 @@ public final class GridView: NSView {
                 wsIndex: ws.index,
                 rect: cellRect,
                 headerRect: headerRect,
-                isActive: ws.index == activeIndex,
+                isActive: ws.isActive,
                 label: gridLabel(name: ws.name, idx: ws.index),
                 mode: ws.layoutMode,
                 windows: hits))
@@ -807,6 +809,8 @@ public final class GridView: NSView {
         wp.stroke()
         // Mark badge — same corner pill / dot as the rail (M9-5 #3).
         if let mark = w.mark { drawMiniMarkBadge(mark, in: r) }
+        // Secondary-tag dots (M11-3 PR3b) — bottom-left, accent2.
+        drawMiniTagDots(w.tags.count, in: r)
     }
 
     // MARK: - Hover (header highlight)

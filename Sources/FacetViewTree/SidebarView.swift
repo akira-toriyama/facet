@@ -41,6 +41,7 @@ public final class SidebarView: NSView {
         let mark: String?      // window: user mark → right-edge badge
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
+        let tags: [String]       // window: secondary tag names → `#tag` chips
     }
     private var cells: [Cell] = []
     private var hoverIdx: Int?            // row under the pointer
@@ -211,7 +212,14 @@ public final class SidebarView: NSView {
         if let macDesktop { macDesktopOrdinal = macDesktop }
         activeWS = workspaces.first(where: { $0.isActive })?.index   // always REAL
         let opt = optimisticHeld()
-        let effActive = opt ? optActiveWS : activeWS
+        // Multi-active: in tag mode the lens can hold several tags at once,
+        // so every workspace the snapshot marks active is highlighted (read
+        // `ws.isActive`, not a single index). The optimistic overlay
+        // (kbNav / `--active` mid-switch) is workspace-mode only — a single
+        // transient target.
+        func headerActive(_ ws: Workspace) -> Bool {
+            opt ? (ws.index == optActiveWS) : ws.isActive
+        }
         func hot(_ win: Window) -> Bool {
             opt ? (win.id == optWindowID) : win.isFocused
         }
@@ -226,7 +234,7 @@ public final class SidebarView: NSView {
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
             + workspaces.map { ws in
-                "\(ws.index)\(ws.index == effActive ? "*" : "")\(ws.layoutMode)|"
+                "\(ws.index)\(headerActive(ws) ? "*" : "")\(ws.layoutMode)|"
                 + ws.windows.map {
                     "\($0.id.serverID)\(hot($0) ? "f" : "")\($0.isOnscreen ? "" : "h"):\(eff($0))"
                 }.joined(separator: ",")
@@ -258,7 +266,7 @@ public final class SidebarView: NSView {
                           text: macDesktopOrdinal.map { "Desktop \($0)" } ?? "",
                           mode: "", isMaster: false, isFloating: false,
                           isSticky: false, mark: nil, isHidden: false,
-                          scratchpad: nil))
+                          scratchpad: nil, tags: []))
         y += handleRowH
 
         if searching {
@@ -275,6 +283,7 @@ public final class SidebarView: NSView {
                     // either exists.
                     let hasThird = hasLabel || (win.mark != nil)
                         || !win.isOnscreen || (win.scratchpad != nil)
+                        || !win.tags.dropFirst().isEmpty
                     var rh: CGFloat = baseRH           // compact single line
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
@@ -294,7 +303,8 @@ public final class SidebarView: NSView {
                                       isSticky: win.isSticky,
                                       mark: win.mark,
                                       isHidden: !win.isOnscreen,
-                                      scratchpad: win.scratchpad))
+                                      scratchpad: win.scratchpad,
+                                      tags: Array(win.tags.dropFirst())))
                     y += rh
                 }
             }
@@ -308,13 +318,13 @@ public final class SidebarView: NSView {
                 rows.append(TreeRow(rect: hr,
                                     kind: .header(workspaceIndex: ws.index)))
                 let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
-                cells.append(Cell(row: hr, kind: 1, hot: ws.index == effActive,
+                cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                                   firstHeader: firstHeader, pid: 0, app: "",
                                   title: "", text: t.uppercased(),
                                   mode: ws.layoutMode,
                                   isMaster: false, isFloating: false,
                                   isSticky: false, mark: nil, isHidden: false,
-                                  scratchpad: nil))
+                                  scratchpad: nil, tags: []))
                 firstHeader = false
                 y += hh
                 for win in ws.windows {
@@ -329,6 +339,7 @@ public final class SidebarView: NSView {
                     // either exists.
                     let hasThird = hasLabel || (win.mark != nil)
                         || !win.isOnscreen || (win.scratchpad != nil)
+                        || !win.tags.dropFirst().isEmpty
                     var rh: CGFloat = baseRH           // compact single line
                     if !wt.isEmpty || hasThird {
                         rh = 34                        // top 8 + app 18 + bot 8
@@ -348,7 +359,8 @@ public final class SidebarView: NSView {
                                       isSticky: win.isSticky,
                                       mark: win.mark,
                                       isHidden: !win.isOnscreen,
-                                      scratchpad: win.scratchpad))
+                                      scratchpad: win.scratchpad,
+                                      tags: Array(win.tags.dropFirst())))
                     y += rh
                 }
                 wsBands[ws.index] = start...(y + 3)
@@ -771,13 +783,14 @@ public final class SidebarView: NSView {
                 let hasTitle = !c.title.isEmpty
                 let hasMark = c.mark != nil
                 let hasScratch = c.scratchpad != nil
+                let hasTags = !c.tags.isEmpty
                 let tx = iconX + iconSize + 8
                 let tw = max(bounds.width - tx - rowPadX, 0)
                 // Vertical rhythm (matches the row-height calc): top pad
                 // 8, app, +4 gap, title, +6 gap, third (mark / status)
                 // line. App centres only on a bare single-line row.
                 let appY = (hasTitle || hasLabel || hasMark
-                            || c.isSticky || hasScratch)
+                            || c.isSticky || hasScratch || hasTags)
                     ? row.minY + 8 : row.midY - 9
                 let titleY = row.minY + 28        // tucked up under the app
                 // Icon centres on the whole row so it stays vertically
@@ -816,7 +829,7 @@ public final class SidebarView: NSView {
                 // badge or the `scratchpad:NAME` shelf pill, then the
                 // master / float / hidden label.
                 if hasLabel || hasMark || c.isSticky || c.isHidden
-                    || hasScratch {
+                    || hasScratch || hasTags {
                     // Wider gap below the title before the mark / status.
                     let labelY = hasTitle ? row.minY + 51 : row.minY + 32
                     var lx = tx
@@ -854,6 +867,45 @@ public final class SidebarView: NSView {
                                        y: labelY - 1 + (pillH - textH) / 2 - 1.0,
                                        width: pillW, height: textH),
                             withAttributes: pillAttrs)
+                        lx += pillW + 6
+                    }
+                    // Secondary-tag chips (#tag): the OTHER tags this window
+                    // belongs to (it's already listed once under its primary
+                    // tag's header). A faint filled chip — distinct from the
+                    // outlined status pills — in `dim`, prefixed `#` so it
+                    // can't be mistaken for a mark / scratchpad. Stops before
+                    // a chip would overrun the row's right edge.
+                    for tag in c.tags {
+                        let chipText = "#\(tag)"
+                        let chipFont = uiFont(windowFontSize - 1, .medium)
+                        let maxTextW: CGFloat = 90
+                        let textW = min(maxTextW, ceil((chipText as NSString)
+                            .size(withAttributes: [.font: chipFont]).width))
+                        let padX: CGFloat = 6
+                        let pillH: CGFloat = 22
+                        let pillW = textW + padX * 2
+                        if lx + pillW > tx + tw { break }   // no room → stop
+                        let chip = NSBezierPath(
+                            roundedRect: NSRect(x: lx, y: labelY - 1,
+                                                width: pillW, height: pillH),
+                            xRadius: 5, yRadius: 5)
+                        pal.dim.withAlphaComponent(0.15).setFill()
+                        chip.fill()
+                        let chipPara = NSMutableParagraphStyle()
+                        chipPara.alignment = .center
+                        chipPara.lineBreakMode = .byTruncatingTail
+                        let chipAttrs: [NSAttributedString.Key: Any] = [
+                            .font: chipFont,
+                            .foregroundColor: pal.dim,
+                            .paragraphStyle: chipPara,
+                        ]
+                        let chipH = (chipText as NSString)
+                            .size(withAttributes: chipAttrs).height
+                        (chipText as NSString).draw(
+                            in: NSRect(x: lx,
+                                       y: labelY - 1 + (pillH - chipH) / 2 - 1.0,
+                                       width: pillW, height: chipH),
+                            withAttributes: chipAttrs)
                         lx += pillW + 6
                     }
                     if c.isSticky {
