@@ -35,15 +35,11 @@ public struct Palette {
     public let hoverFill: NSColor
     public let selFill: NSColor
     public let font: FontKind
-    /// Right-click menu appearance — keeps the AppKit-rendered menu
-    /// matching the panel's theme even when the system appearance
-    /// differs.
-    public let menuAppearance: NSAppearance.Name?
 
     public init(bg: NSColor?, text: NSColor, dim: NSColor,
                 accent: NSColor, accent2: NSColor, divider: NSColor,
                 hoverFill: NSColor, selFill: NSColor,
-                font: FontKind, menuAppearance: NSAppearance.Name?) {
+                font: FontKind) {
         self.bg = bg
         self.text = text
         self.dim = dim
@@ -53,7 +49,6 @@ public struct Palette {
         self.hoverFill = hoverFill
         self.selFill = selFill
         self.font = font
-        self.menuAppearance = menuAppearance
     }
 }
 
@@ -74,7 +69,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x9ECE6A).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Soft pastel, rounded. `accent2` is a peach that sits warmly
     /// next to the pink primary without competing.
@@ -85,7 +80,7 @@ public extension Palette {
         divider: NSColor(hex: 0xF2789F, 0.22),
         hoverFill: NSColor(hex: 0xF2789F, 0.10),
         selFill: NSColor(hex: 0xF2789F, 0.20),
-        font: .rounded, menuAppearance: .aqua)
+        font: .rounded)
 
     /// Native vibrancy + dynamic system colors. `accent2` is
     /// `.systemPurple` — a stable system hue that contrasts with
@@ -98,7 +93,7 @@ public extension Palette {
         divider: NSColor.labelColor.withAlphaComponent(0.22),
         hoverFill: NSColor.secondaryLabelColor.withAlphaComponent(0.12),
         selFill: NSColor.controlAccentColor.withAlphaComponent(0.22),
-        font: .system, menuAppearance: nil)
+        font: .system)
 
     // --- Added themes ----------------------------------------------
     // Dark, monospace editor palettes. Each follows the `terminal`
@@ -116,7 +111,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x88C0D0).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Dracula — vivid dark. Purple primary, green `accent2`.
     static let dracula = Palette(
@@ -126,7 +121,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xBD93F9).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Gruvbox — retro warm dark. Orange primary, aqua `accent2`.
     static let gruvbox = Palette(
@@ -136,7 +131,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xFE8019).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Catppuccin Mocha — soft pastel dark. Mauve primary, green
     /// `accent2`.
@@ -147,7 +142,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xCBA6F7).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Rosé Pine — muted aubergine dark. Iris primary, rose `accent2`.
     static let rosepine = Palette(
@@ -157,7 +152,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xC4A7E7).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Everforest — soft forest dark. Green primary, orange `accent2`.
     static let everforest = Palette(
@@ -167,7 +162,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xA7C080).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Solarized Dark — classic teal-base. Blue primary, orange
     /// `accent2` (its complement).
@@ -178,7 +173,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x268BD2).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// One Dark — Atom's signature dark. Blue primary, yellow `accent2`.
     static let onedark = Palette(
@@ -188,7 +183,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x61AFEF).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Monokai — high-energy dark. Lime primary, magenta `accent2`.
     static let monokai = Palette(
@@ -198,7 +193,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xA6E22E).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Paper — clean daytime light (not cute). Blue primary with an
     /// amber complement (the Zenn primary+補色 example); neutral
@@ -210,7 +205,7 @@ public extension Palette {
         divider: NSColor.black.withAlphaComponent(0.10),
         hoverFill: NSColor.black.withAlphaComponent(0.04),
         selFill: NSColor(hex: 0x3B82F6).withAlphaComponent(0.14),
-        font: .system, menuAppearance: .aqua)
+        font: .system)
 
     // --- Monochrome --------------------------------------------------
     // Greyscale sets. The primary/secondary accents collapse to two
@@ -227,7 +222,7 @@ public extension Palette {
         divider: NSColor.black.withAlphaComponent(0.14),
         hoverFill: NSColor.black.withAlphaComponent(0.05),
         selFill: NSColor.black.withAlphaComponent(0.10),
-        font: .mono, menuAppearance: .aqua)
+        font: .mono)
 
     /// 黒白 — stark white-on-black (OLED). White primary, light-grey
     /// `accent2`; mono font.
@@ -238,7 +233,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.14),
         hoverFill: NSColor.white.withAlphaComponent(0.06),
         selFill: NSColor.white.withAlphaComponent(0.16),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// モノトーン — soft graphite greyscale; no pure black/white.
     /// Mid-grey accents + system font for a calmer, lower-contrast
@@ -250,7 +245,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xB0B0B0).withAlphaComponent(0.18),
-        font: .system, menuAppearance: .darkAqua)
+        font: .system)
 
     /// Black base with a neon-green primary + amber secondary — a
     /// green-on-black hacker-terminal look (amber over red: far more
@@ -263,7 +258,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x33FF66).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     // --- Neon family -------------------------------------------------
     // Vivid electric themes. The signature hue is the bright `accent`
@@ -284,7 +279,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x00E5FF).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Cyber — aqua/teal on teal-black; hot-pink secondary (teal × pink).
     static let cyber = Palette(
@@ -294,7 +289,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0x00FFD0).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Vapor — synthwave pink on purple-black; electric-cyan secondary.
     static let vapor = Palette(
@@ -304,7 +299,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.10),
         hoverFill: NSColor.white.withAlphaComponent(0.05),
         selFill: NSColor(hex: 0xFF6AD5).withAlphaComponent(0.18),
-        font: .mono, menuAppearance: .darkAqua)
+        font: .mono)
 
     /// Kawaii — candy lavender light (the light-pastel exception);
     /// purple primary + mint secondary, distinct from `cute`'s pink.
@@ -315,7 +310,7 @@ public extension Palette {
         divider: NSColor(hex: 0xB661E8, 0.20),
         hoverFill: NSColor(hex: 0xB661E8, 0.10),
         selFill: NSColor(hex: 0xB661E8, 0.18),
-        font: .rounded, menuAppearance: .aqua)
+        font: .rounded)
 
     /// Rainbow — a deliberately loud, maximum-saturation set; readability
     /// is explicitly secondary (per request). White on a near-black violet
@@ -329,7 +324,7 @@ public extension Palette {
         divider: NSColor.white.withAlphaComponent(0.14),
         hoverFill: NSColor.white.withAlphaComponent(0.07),
         selFill: NSColor(hex: 0xFF2D95).withAlphaComponent(0.22),
-        font: .rounded, menuAppearance: .darkAqua)
+        font: .rounded)
 }
 
 /// Canonical theme names accepted by `--theme=`. Single source of
@@ -343,8 +338,6 @@ public let canonicalStyles = [
     "neon", "cyber", "vapor", "kawaii", "rainbow",
     "random",   // meta: picks a random concrete theme at resolve time
 ]
-
-public let defaultStyleName = "terminal"
 
 /// Map a raw `--theme=…` value to a `Palette`. Case-insensitive;
 /// unknown names fall through to `terminal` (the default).
@@ -421,5 +414,5 @@ public func animatedPalette(theme: String, at phase: CGFloat) -> Palette? {
                    accent: accent, accent2: accent2,
                    divider: base.divider, hoverFill: base.hoverFill,
                    selFill: accent.withAlphaComponent(0.22),
-                   font: base.font, menuAppearance: base.menuAppearance)
+                   font: base.font)
 }

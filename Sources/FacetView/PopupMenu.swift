@@ -8,7 +8,6 @@
 // detach themselves cleanly.
 
 import AppKit
-import FacetView
 
 public final class PopupMenuView: NSView {
     public var header = ""

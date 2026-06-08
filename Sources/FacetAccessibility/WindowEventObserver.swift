@@ -130,6 +130,10 @@ public final class WindowEventObserver: @unchecked Sendable {
         launchToken = nil
         terminateToken = nil
         for pid in observers.keys { detach(pid: pid) }
+        // Cancel any in-flight move-coalesce timer so it can't fire
+        // onChange after teardown (mirrors DisplayChangeObserver.stop()).
+        moveDebounceTimer?.invalidate()
+        moveDebounceTimer = nil
     }
 
     /// Public so the C-style AX callback can route in. Do not call

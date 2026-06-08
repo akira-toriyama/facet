@@ -323,6 +323,33 @@ enabled = false
 
 
 # -----------------------------------------------------------------
+# Window behaviour  [window]
+# -----------------------------------------------------------------
+[window]
+# raise-on-open — how a freshly-opened FLOATING window (a sheet /
+# dialog / palette, an [[exclude]]-floated window, or any other window
+# facet auto-floats) is surfaced on first sight. Such a window is born
+# wherever its app put it, which can be *under* the tiled layout. This
+# is a ONE-SHOT nudge fired once when the window actually OPENS — NOT a
+# continuous pin (a pre-existing float is left alone on a desktop
+# switch). Read once at launch; edit then restart facet to change.
+#   raise    — (default) lift it to the front of its own app's window
+#              stack WITHOUT taking keyboard focus (facet never steals
+#              focus). Enough for the common case (a dialog the active
+#              app opens).
+#   activate — bring the owning app frontmost on EVERY fresh float;
+#              this DOES steal focus, each time. Pick it when `raise`
+#              (z-order within one app) isn't enough — e.g. floats that
+#              open under a *different* app — accepting that it fronts
+#              the app for any fresh float, not only buried ones.
+#   off      — do nothing; leave it where the app placed it.
+# Unknown values fall back to raise. Only floating windows are touched
+# (tiled windows already get a slot); raised-level overlays / wallpaper
+# are never raised.
+# raise-on-open = "raise"
+
+
+# -----------------------------------------------------------------
 # Window override rules  [[exclude]]
 # -----------------------------------------------------------------
 # facet uses an ALLOWLIST (yabai / AeroSpace style): a window is only

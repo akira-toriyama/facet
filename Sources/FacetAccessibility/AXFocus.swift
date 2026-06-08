@@ -113,6 +113,32 @@ public enum AX {
         return true
     }
 
+    /// Bring a window to the front of its app's z-order *without*
+    /// taking keyboard focus or activating the owning app —
+    /// `kAXRaiseAction` only. Used to surface a freshly-opened
+    /// floating window (sheet / dialog / palette / `[[exclude]]`
+    /// `action="float"`) on first sight so it isn't born buried,
+    /// while keeping facet's never-steal-focus contract. Contrast
+    /// `focus(_:)`, which also sets `kAXMain` *and* activates the app
+    /// (steals focus). This is the "raise" half of `[window]
+    /// raise-on-open`; the "activate" escalation is `activateApp`.
+    public static func raise(_ ax: AXUIElement) {
+        // Bound the round-trip like `focus` so a busy app can't stall
+        // the classify pass (which feeds the per-cycle probe budget).
+        AXUIElementSetMessagingTimeout(ax, 0.25)
+        AXUIElementPerformAction(ax, kAXRaiseAction as CFString)
+    }
+
+    /// Bring an app frontmost (this *does* steal focus). Backs
+    /// `[window] raise-on-open = "activate"`, which fronts the owning
+    /// app for every fresh float (chosen when a bare `raise` —
+    /// `kAXRaiseAction`, z-order within the owning app only — can't
+    /// surface a float that opens under a *different* app). Fired once
+    /// per fresh float, not a continuous pin.
+    public static func activateApp(pid: Int) {
+        activate(pid: pid)
+    }
+
     /// CGWindowID of the currently focused window across the
     /// system, resolved via NSWorkspace's frontmost app + that
     /// app's `kAXFocusedWindowAttribute`. `nil` when:

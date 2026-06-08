@@ -344,12 +344,26 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                              lens: model.firstBit ?? 0)
         }
         let live = enumerateCGWindows()
+        // raise-on-open bookkeeping: flag genuinely-new windows by their
+        // FIRST appearance in this `.optionAll` enumeration (see
+        // `seenWindowIDs`). Done before classify so the verdict for a new
+        // float can be paired with "is it actually new" at commit time.
+        // Skipped entirely when the feature is off.
+        let raiseMode = config.effectiveRaiseOnOpen
+        if raiseMode != .off {
+            let liveIDs = Set(live.map(\.id))
+            if didBootstrap {
+                freshlyOpenedIDs.formUnion(liveIDs.subtracting(seenWindowIDs))
+            }
+            seenWindowIDs.formUnion(liveIDs)
+            freshlyOpenedIDs.formIntersection(liveIDs)   // drop closed-before-commit
+        }
         let focused = focusedWindow()
         let rect = activeDisplayRect()
         // Phase γ.3 + F: classify first-sight windows — auto-float
         // (sheets / dialogs / palettes + config float rules) and
         // ignore (config `action="ignore"` → kept fully unmanaged).
-        let (autoFloat, ignore, deferred, tagMasks) =
+        let (autoFloat, ignore, deferred, tagMasks, probedAX) =
             classifyNewWindows(live: live)
         // Drop expired trusted-new hints, then hand the survivors to
         // reconcile so a genuinely-new window joins on first on-screen
@@ -535,6 +549,53 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             catalog.markPreExisting(
                 live.lazy.filter { !$0.isOnscreen }.map(\.id))
         }
+        // raise-on-open: surface a genuinely freshly-opened floating
+        // window once. Gate = `freshlyOpenedIDs` (first appeared in the
+        // enumeration this session) ∩ this cycle's float commits
+        // (`addedIDs ∩ autoFloat`). NOT `addedIDs` alone: a PRE-EXISTING
+        // float merely adopted on a first mac-desktop visit or at startup
+        // also joins `addedIDs`, but was enumerated long before (so it's
+        // not in `freshlyOpenedIDs`) and is left untouched — no raise on a
+        // bare desktop switch. Unlike the `kAXWindowCreated` hint, this
+        // catches a freshly-LAUNCHED app's first float (no observer race,
+        // no TTL). A window commits once, and is dropped from the pending
+        // set on commit, so this fires exactly once per real open —
+        // immediately for a trusted (kAXWindowCreated) / already-adopting
+        // window, or +1 poll (~2 s) for a non-trusted new window the
+        // two-tick confirm gate holds (it surfaces then, not on the very
+        // first sight). Runs LAST in the pass — after `redirectedFocus` —
+        // so a same-cycle
+        // close→focus-redirect can't re-bury the new float. `probedAX`
+        // holds its AX element from this cycle's classify probe (no extra
+        // round-trip); `liveByID` is the map built above.
+        if raiseMode != .off {
+            var activated: Set<Int> = []
+            for id in result.addedIDs
+            where autoFloat.contains(id) && freshlyOpenedIDs.contains(id) {
+                guard let ax = probedAX[id] else { continue }
+                let w = liveByID[id]
+                switch raiseMode {
+                case .raise:
+                    AX.raise(ax)
+                    Log.debug("native: raise-on-open(raise) "
+                        + "wsid=\(id.serverID) app=\(w?.appName ?? "-")")
+                case .activate:
+                    if let pid = w?.pid, activated.insert(pid).inserted {
+                        AX.activateApp(pid: pid)
+                        Log.debug("native: raise-on-open(activate) "
+                            + "pid=\(pid) app=\(w?.appName ?? "-")")
+                    }
+                case .off:
+                    break
+                }
+            }
+            // Drop ids we're done with so the pending set stays small:
+            // committed windows (raised if float, else just tracked) and
+            // `ignore` verdicts (raised-level overlays / config ignore —
+            // they never commit, so they'd otherwise linger until close).
+            freshlyOpenedIDs.subtract(result.addedIDs)
+            freshlyOpenedIDs.subtract(ignore)
+        }
     }
 
     /// Park the active mac desktop's catalog and swap in the destination
@@ -573,6 +634,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// enough to cover the AX-event + reconcile settling, short
     /// enough not to hijack the user's next deliberate action.
     private let closeFocusWindow: TimeInterval = 0.6
+
+    /// raise-on-open: window ids ever seen in the `.optionAll`
+    /// enumeration this session. A pre-existing window on another mac
+    /// desktop is already enumerated (off-screen) before you switch to
+    /// it, so it is NOT new; a window whose id first appears here just
+    /// came into existence — a signal independent of the
+    /// `kAXWindowCreated` observer (which races app launches and has a
+    /// 2 s hint TTL). Seeded at bootstrap so startup windows don't count
+    /// as freshly opened. Cumulative on purpose: NOT pruned to the live
+    /// set, so a one-poll enumeration flicker can't re-flag a window as
+    /// new. Only maintained when raise-on-open is enabled.
+    private var seenWindowIDs: Set<WindowID> = []
+    /// raise-on-open: genuinely-new window ids awaiting their first
+    /// catalog commit. A float here is raised once when it joins
+    /// `windowMap`; an id is dropped on commit (raised, or — if it tiled
+    /// — simply handled) or when it closes before committing.
+    private var freshlyOpenedIDs: Set<WindowID> = []
 
     /// CGWindowIDs of windows that fired `kAXWindowCreated`, mapped
     /// to the create timestamp. A genuinely-new window can't be a
@@ -699,7 +777,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// `deferred` ids are skipped this tick and re-probed next time.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>,
-            deferred: Set<WindowID>, tags: [WindowID: UInt64])
+            deferred: Set<WindowID>, tags: [WindowID: UInt64],
+            probedAX: [WindowID: AXUIElement])
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
@@ -713,6 +792,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         var ignore: Set<WindowID> = []
         var deferred: Set<WindowID> = []
         var probed = 0
+        // AX element of each window we resolved this pass, RETURNED so a
+        // float can be surfaced (`[window] raise-on-open`) at its
+        // reconcile commit point without a second AX round-trip. Only
+        // normal/unknown level windows are probed, so raised-level floats
+        // (overlays / wallpaper) have no entry here and are never raised —
+        // exactly the scope we want.
+        var probedAX: [WindowID: AXUIElement] = [:]
         // Only on-screen windows are classified. Off-screen windows
         // (other mac desktops, Cmd+H'd, minimized) are never adopted by
         // `reconcile` anyway — its snapshot skips them at the
@@ -751,6 +837,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 if let ax {
                     role = AXGeom.role(ax)
                     subrole = AXGeom.subrole(ax)
+                    probedAX[w.id] = ax
                 }
             }
 
@@ -865,7 +952,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "probed=\(probed) deferred=\(deferred.count) "
                 + "float=\(autoFloat.count) ignore=\(ignore.count)")
         }
-        return (autoFloat, ignore, deferred, tagMasks)
+        return (autoFloat, ignore, deferred, tagMasks, probedAX)
     }
 
     /// Display rect to anchor tile / stack math against.
