@@ -37,9 +37,11 @@ public enum AXGeom {
         var ref: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
                 win, kAXPositionAttribute as CFString, &ref
-              ) == .success else { return nil }
+              ) == .success,
+              let v = ref, CFGetTypeID(v) == AXValueGetTypeID()
+        else { return nil }
         var pt = CGPoint.zero
-        AXValueGetValue(ref as! AXValue, .cgPoint, &pt)
+        guard AXValueGetValue(v as! AXValue, .cgPoint, &pt) else { return nil }
         return pt
     }
 
@@ -57,9 +59,11 @@ public enum AXGeom {
         var ref: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
                 win, kAXSizeAttribute as CFString, &ref
-              ) == .success else { return nil }
+              ) == .success,
+              let v = ref, CFGetTypeID(v) == AXValueGetTypeID()
+        else { return nil }
         var sz = CGSize.zero
-        AXValueGetValue(ref as! AXValue, .cgSize, &sz)
+        guard AXValueGetValue(v as! AXValue, .cgSize, &sz) else { return nil }
         return sz
     }
 
