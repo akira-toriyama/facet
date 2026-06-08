@@ -114,7 +114,6 @@ public final class GridView: NSView {
     private var hoverWS: Int?
     private var drag: Drag?
     private var dragGhost: NSView?
-    private var isDragging: Bool { drag != nil }
 
     /// While dragging we suppress `layoutCells` callers from outside
     /// (refresh events) so the cell the user is dragging *out of*

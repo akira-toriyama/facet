@@ -1539,8 +1539,6 @@ public final class SidebarView: NSView {
 
     // MARK: - Keyboard DnD (lift / aim / commit)
 
-    public var kbIsLifting: Bool { kbLifted != nil }
-
     private func liftSourceWS() -> Int? {
         switch kbLifted {
         case .win(let id): return wsOf(windowID: id)
