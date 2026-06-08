@@ -49,7 +49,6 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .executable(name: "facet", targets: ["FacetApp"]),
-        .executable(name: "native-spike", targets: ["NativeSpike"]),
         .library(name: "FacetCore", targets: ["FacetCore"]),
     ],
     targets: [
@@ -72,11 +71,6 @@ let package = Package(
                 "FacetViewGrid",
                 "FacetViewRail",
             ]),
-        // Native-adapter feasibility spike (M5 Phase α). Throwaway:
-        // probes CGWindowList enumeration, AX off-screen park /
-        // restore (the virtual-workspace hide mechanism), AX focus,
-        // and CGS/SLS space queries via dlsym. No facet deps.
-        .executableTarget(name: "NativeSpike"),
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
         .testTarget(name: "FacetAdapterNativeTests",
                     dependencies: ["FacetAdapterNative", "FacetCore"]),
