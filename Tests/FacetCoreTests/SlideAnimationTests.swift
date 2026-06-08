@@ -35,6 +35,80 @@ final class SlideAnimationTests: XCTestCase {
         }
     }
 
+    // MARK: SlideCurve.easeOutQuint
+
+    func testEaseOutQuintEndpointsAndClamp() {
+        XCTAssertEqual(SlideCurve.easeOutQuint(0), 0, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.easeOutQuint(1), 1, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.easeOutQuint(-1), 0, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.easeOutQuint(2), 1, accuracy: 0.0001)
+    }
+
+    func testEaseOutQuintMonotonic() {
+        var prev = SlideCurve.easeOutQuint(0)
+        for i in 1...20 {
+            let v = SlideCurve.easeOutQuint(Double(i) / 20)
+            XCTAssertGreaterThanOrEqual(v, prev)
+            prev = v
+        }
+    }
+
+    func testEaseOutQuintSnappierThanCubic() {
+        // "キレ": quint settles faster, so it sits above cubic mid-tween.
+        for i in 1...19 {
+            let t = Double(i) / 20
+            XCTAssertGreaterThan(SlideCurve.easeOutQuint(t),
+                                 SlideCurve.easeOutCubic(t))
+        }
+    }
+
+    // MARK: SlideCurve.easeInOutCubic
+
+    func testEaseInOutCubicEndpointsAndClamp() {
+        XCTAssertEqual(SlideCurve.easeInOutCubic(0), 0, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.easeInOutCubic(1), 1, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.easeInOutCubic(-1), 0, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.easeInOutCubic(2), 1, accuracy: 0.0001)
+    }
+
+    func testEaseInOutCubicSymmetricMidpoint() {
+        // Eased at both ends → passes exactly through the centre.
+        XCTAssertEqual(SlideCurve.easeInOutCubic(0.5), 0.5, accuracy: 0.0001)
+    }
+
+    func testEaseInOutCubicEasesInThenOut() {
+        // First half below the diagonal (slow start), second half above.
+        XCTAssertLessThan(SlideCurve.easeInOutCubic(0.25), 0.25)
+        XCTAssertGreaterThan(SlideCurve.easeInOutCubic(0.75), 0.75)
+    }
+
+    func testEaseInOutCubicMonotonic() {
+        var prev = SlideCurve.easeInOutCubic(0)
+        for i in 1...20 {
+            let v = SlideCurve.easeInOutCubic(Double(i) / 20)
+            XCTAssertGreaterThanOrEqual(v, prev)
+            prev = v
+        }
+    }
+
+    // MARK: SlideCurve.spring
+
+    func testSpringEndpointsAndClamp() {
+        XCTAssertEqual(SlideCurve.spring(0), 0, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.spring(1), 1, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.spring(-1), 0, accuracy: 0.0001)
+        XCTAssertEqual(SlideCurve.spring(2), 1, accuracy: 0.0001)
+    }
+
+    func testSpringOvershootsAboveOne() {
+        // Underdamped: the response rises past 1 before settling — the
+        // "弾む高級感" bounce. Scan the whole tween for the peak.
+        var peak = 0.0
+        for i in 0...100 { peak = max(peak, SlideCurve.spring(Double(i) / 100)) }
+        XCTAssertGreaterThan(peak, 1.0,
+                             "underdamped spring should overshoot above 1")
+    }
+
     // MARK: WindowSlide.frame
 
     func testWindowSlideTranslationKeepsSize() {

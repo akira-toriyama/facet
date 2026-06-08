@@ -124,15 +124,22 @@ public enum AXGeom {
     /// are treated as floating — unknown roles fall through to
     /// regular tiling.
     public static func isFloatingByRole(_ win: AXUIElement) -> Bool {
-        if let r = role(win),
+        isFloating(role: role(win), subrole: subrole(win))
+    }
+
+    /// Pure role / subrole → floating decision — the testable core of
+    /// `isFloatingByRole`, split out so the rule can be unit-tested
+    /// without a live `AXUIElement`. Sheet / drawer are *roles*;
+    /// SystemDialog / SystemFloatingWindow / FloatingWindow / Dialog
+    /// are *sub*roles (`AXSystemDialog` etc.), not top-level roles.
+    /// Conservative: anything else — including `nil` — is not floating.
+    public static func isFloating(role: String?, subrole: String?) -> Bool {
+        if let r = role,
            r == kAXSheetRole as String
            || r == kAXDrawerRole as String {
             return true
         }
-        // SystemDialog / SystemFloatingWindow are *sub*roles
-        // (`AXSystemDialog` / `AXSystemFloatingWindow`), not
-        // top-level roles — they live in the subrole check.
-        if let sub = subrole(win),
+        if let sub = subrole,
            sub == kAXFloatingWindowSubrole as String
            || sub == kAXSystemDialogSubrole as String
            || sub == kAXSystemFloatingWindowSubrole as String

@@ -347,4 +347,32 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertTrue(c.unknownValueWarnings().isEmpty,
                       "empty string is treated like unset, not a typo")
     }
+
+    // MARK: - effectiveRaiseOnOpen ([window] raise-on-open)
+
+    private func raiseMode(_ raw: String?) -> RaiseOnOpen {
+        var c = FacetConfig()
+        c.raiseOnOpen = raw
+        return c.effectiveRaiseOnOpen
+    }
+
+    func testRaiseOnOpenDefaultsToRaise() {
+        XCTAssertEqual(raiseMode(nil), .raise)
+    }
+
+    func testRaiseOnOpenParsesEachCase() {
+        XCTAssertEqual(raiseMode("raise"), .raise)
+        XCTAssertEqual(raiseMode("activate"), .activate)
+        XCTAssertEqual(raiseMode("off"), .off)
+    }
+
+    func testRaiseOnOpenIsCaseInsensitive() {
+        XCTAssertEqual(raiseMode("ACTIVATE"), .activate)
+        XCTAssertEqual(raiseMode("Off"), .off)
+    }
+
+    func testRaiseOnOpenUnknownClampsToRaise() {
+        XCTAssertEqual(raiseMode("bogus"), .raise)
+        XCTAssertEqual(raiseMode(""), .raise)
+    }
 }

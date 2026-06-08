@@ -33,4 +33,39 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(ws.windows.first?.frame?.width, 800)
         XCTAssertNil(ws.windows.last?.frame)
     }
+
+    // MARK: - Sequence<Window>.predictedFocus
+
+    /// Minimal Window for focus-pick tests — only `serverID` +
+    /// `isFocused` matter to `predictedFocus`.
+    private func win(_ serverID: Int, focused: Bool) -> Window {
+        Window(id: WindowID(serverID: serverID), pid: 100,
+               appName: "App", title: "w\(serverID)",
+               isFocused: focused, isFloating: false, frame: nil)
+    }
+
+    func testPredictedFocusEmptyIsNil() {
+        XCTAssertNil([Window]().predictedFocus())
+    }
+
+    func testPredictedFocusPrefersTheFocusedWindow() {
+        // The focused window wins even when it isn't the oldest.
+        let wins = [win(1, focused: false),
+                    win(5, focused: true),
+                    win(2, focused: false)]
+        XCTAssertEqual(wins.predictedFocus()?.id.serverID, 5)
+    }
+
+    func testPredictedFocusFallsBackToOldestServerID() {
+        // No focus → the lowest serverID (longest-resident window).
+        let wins = [win(7, focused: false),
+                    win(3, focused: false),
+                    win(9, focused: false)]
+        XCTAssertEqual(wins.predictedFocus()?.id.serverID, 3)
+    }
+
+    func testPredictedFocusFocusedBeatsOlderUnfocused() {
+        let wins = [win(2, focused: false), win(8, focused: true)]
+        XCTAssertEqual(wins.predictedFocus()?.id.serverID, 8)
+    }
 }
