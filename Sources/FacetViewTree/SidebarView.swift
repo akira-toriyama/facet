@@ -1252,17 +1252,6 @@ public final class SidebarView: NSView {
 
     // MARK: - Drag card (⑨ — snapshot the lifted rows)
 
-    /// Snapshot `rect` of this view into an image (the lifted rows,
-    /// rendered exactly as drawn). nil for an empty / off-bounds rect.
-    private func snapshotImage(of rect: NSRect) -> NSImage? {
-        guard rect.width > 1, rect.height > 1,
-              let rep = bitmapImageRepForCachingDisplay(in: rect) else { return nil }
-        cacheDisplay(in: rect, to: rep)
-        let img = NSImage(size: rect.size)
-        img.addRepresentation(rep)
-        return img
-    }
-
     /// Union rect of a workspace's header + window rows.
     private func dragRect(forWS ws: Int) -> NSRect? {
         var r: NSRect?
@@ -1295,7 +1284,7 @@ public final class SidebarView: NSView {
         else { return false }
         let maxH = max(40, bounds.height * 0.6)
         if r.height > maxH { r.size.height = maxH }   // top portion only
-        guard let img = snapshotImage(of: r) else { return false }
+        guard let img = snapshotRegion(r) else { return false }
         dragCard.image = img
         dragCard.frame = NSRect(x: dragCardPad, y: dragCardPad,
                                 width: r.width, height: r.height)
