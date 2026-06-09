@@ -1,0 +1,15 @@
+name: taplo
+
+# Thin caller — delegates TOML lint to the shared reusable workflow.
+# Logic lives in akira-toriyama/.github/.github/workflows/taplo.yml.
+
+on:
+  pull_request:
+    paths: ['**/*.toml']
+  push:
+    paths: ['**/*.toml']
+  workflow_dispatch:
+
+jobs:
+  taplo:
+    uses: akira-toriyama/.github/.github/workflows/taplo.yml@main
