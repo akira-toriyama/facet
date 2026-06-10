@@ -172,10 +172,12 @@ public struct FacetConfig: Sendable {
     }
 
     /// Falls back to `"terminal"` for unset or unrecognised values.
-    /// This list must stay in sync with `canonicalStyles` /
-    /// `paletteFor` in FacetView's Palette.swift — FacetCore is the
-    /// pure-logic layer and can't import the view-side palette, so the
-    /// set of valid names is duplicated here by necessity.
+    /// This list must stay in sync with sill's `canonicalThemeNames` /
+    /// `paletteFor` (the pure `Palette` module) — FacetCore deliberately
+    /// doesn't link sill here, so the set of valid names is duplicated by
+    /// necessity. (A future dedup via `import Palette` is layer-legal —
+    /// sill's `Palette` module is AppKit-free — but is deferred so this
+    /// migration stays focused on the View layer.)
     public var effectiveTheme: String {
         let raw = (theme ?? "terminal").lowercased()
         let known = [
@@ -183,7 +185,7 @@ public struct FacetConfig: Sendable {
             "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
             "everforest", "solarized", "onedark", "monokai", "hacker",
             "paper", "mono-light", "mono-dark", "monotone",
-            "neon", "cyber", "vapor", "kawaii", "rainbow",
+            "neon", "cyber", "vapor", "kawaii", "rainbow", "chomp",
             "random",   // meta: paletteFor picks a concrete theme
         ]
         return known.contains(raw) ? raw : "terminal"
@@ -331,14 +333,15 @@ public struct FacetConfig: Sendable {
     public var effectiveSmartGaps: Bool { smartGaps ?? false }
 
     /// Tree-panel border effect: off | neon | cyber | vapor | kawaii |
-    /// rainbow; unknown / unset → "off" (opt-in). Must stay in sync
-    /// with `borderEffectFor` in FacetView's BorderEffect.swift —
-    /// FacetCore can't import the view-side colors, so the name set is
-    /// duplicated here (same pattern as `effectiveTheme`).
+    /// rainbow | chomp; unknown / unset → "off" (opt-in). Must stay in
+    /// sync with sill's `canonicalEffectNames` / `borderEffectFor` (the
+    /// `Effects` module) — FacetCore can't link Effects here (it pulls in
+    /// AppKit), so the name set is duplicated (same pattern as
+    /// `effectiveTheme`).
     public var effectiveBorderEffect: String {
         let raw = (borderEffect ?? "off").lowercased()
         let known = ["off", "neon", "cyber", "vapor", "kawaii",
-                     "rainbow", "random"]
+                     "rainbow", "chomp", "random"]
         return known.contains(raw) ? raw : "off"
     }
     /// Neon glow (bloom) on the border effect. Default on.

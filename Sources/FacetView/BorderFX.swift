@@ -8,15 +8,22 @@
 //
 // One instance per view. The border is independent of `theme`; an
 // effect layers on top of any palette. See FacetConfig's `[border]`
-// keys and BorderEffect.swift for the effect palettes.
+// keys and sill's `Effects` module (`EffectSpec`) for the palettes.
 
 import AppKit
+import Effects
+import PaletteKit
 
 @MainActor
 public final class BorderFX {
 
     // Config (from `[border]`).
-    private var fx: BorderEffect?
+    private var fx: EffectSpec?
+    /// `fx` resolved to NSColors once at `configure` time — the shared
+    /// `EffectSpec` is pure `UInt32` hex, but the render paths want
+    /// `NSColor`s, so materialize the steady + flash colors here.
+    private var steadyColor: NSColor = .clear
+    private var flashColors: [NSColor] = []
     private var glowOn = false
     private var baseW: CGFloat = 1.5
     private var cycleSeconds: CGFloat = 6
@@ -46,6 +53,8 @@ public final class BorderFX {
                           cycleSeconds cs: CGFloat, cycleColors cc: Bool,
                           minWidth: CGFloat?, maxWidth: CGFloat?) {
         fx = borderEffectFor(effectName)
+        steadyColor = fx.map { NSColor(hex: $0.steady) } ?? .clear
+        flashColors = fx?.flash.map { NSColor(hex: $0) } ?? []
         glowOn = glow && fx != nil
         baseW = width
         cycleSeconds = max(1, cs)
@@ -81,10 +90,10 @@ public final class BorderFX {
             return NSColor(hue: cyclePhase, saturation: 0.9,
                            brightness: 1, alpha: 1)
         }
-        if cycleColors, !fx.flash.isEmpty {
-            return blendThrough(fx.flash, at: cyclePhase)
+        if cycleColors, !flashColors.isEmpty {
+            return blendThrough(flashColors, at: cyclePhase)
         }
-        return fx.steady
+        return steadyColor
     }
 
     /// Current line width: breathing min↔max (raised cosine) or the
@@ -101,15 +110,15 @@ public final class BorderFX {
     /// Start a WS-switch flash: a 5-blink burst through the effect's
     /// palette (random, no consecutive repeat), then settle. No-op off.
     public func flash() {
-        guard let fx, !fx.flash.isEmpty else { return }
+        guard fx != nil, !flashColors.isEmpty else { return }
         var idxs: [Int] = []
         var last = -1
         for _ in 0..<5 {
-            var i = Int.random(in: 0..<fx.flash.count)
-            if fx.flash.count > 1 { while i == last { i = Int.random(in: 0..<fx.flash.count) } }
+            var i = Int.random(in: 0..<flashColors.count)
+            if flashColors.count > 1 { while i == last { i = Int.random(in: 0..<flashColors.count) } }
             idxs.append(i); last = i
         }
-        flashSeq = idxs.map { fx.flash[$0] }
+        flashSeq = idxs.map { flashColors[$0] }
         flashStep = 0
         updateTimer()
         onRepaint?()

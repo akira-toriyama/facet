@@ -1,7 +1,9 @@
 # SwiftPM
 .build/
 .swiftpm/
-Package.resolved
+# Package.resolved IS tracked (not ignored): facet is an executable with an
+# external dependency (sill), so the lockfile is committed for reproducible
+# CI builds + Dependabot version tracking.
 *.xcodeproj/
 *.xcworkspace/
 

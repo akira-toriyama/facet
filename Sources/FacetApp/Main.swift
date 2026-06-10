@@ -980,7 +980,7 @@ enum FacetApp {
 
     /// Validate + canonicalise a theme name.
     static func canonicalStyle(_ name: String) -> String {
-        switch canonicalize(name, allowed: canonicalStyles) {
+        switch canonicalize(name, allowed: canonicalThemeNames) {
         case .success(let n): return n
         case .failure(.unknownValue(let v, let expected)):
             die("unknown theme \"\(v)\" — expected one of: "
@@ -1378,7 +1378,7 @@ enum FacetApp {
         // Runtime `--theme=...` overrides this for the current
         // session only (no UserDefaults persist); to make a theme
         // stick, edit config.toml.
-        pal = paletteFor(cfg.effectiveTheme)
+        pal = resolve(paletteFor(cfg.effectiveTheme))
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)

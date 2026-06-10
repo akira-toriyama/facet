@@ -829,7 +829,7 @@ final class Controller: NSObject {
         guard !key.isEmpty else { return }
         Log.debug("applyStyle name=\(key)")
         currentThemeName = key
-        pal = paletteFor(key)
+        pal = resolve(paletteFor(key))
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
         updateThemeAnimator()
@@ -862,8 +862,19 @@ final class Controller: NSObject {
     private func tickThemeFX() {
         themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
         if themeFXPhase >= 1 { themeFXPhase -= 1 }
-        guard let p = animatedPalette(theme: currentThemeName, at: themeFXPhase) else { return }
-        pal = p
+        // sill's `animatedPalette` returns only the live accent / accent2 /
+        // selFill (an `AnimatedFrame`); fold them onto the steady resolved
+        // base so bg / text / dim / dividers hold and the UI stays usable.
+        guard let f = animatedPalette(theme: currentThemeName, at: themeFXPhase)
+        else { return }
+        let base = resolve(paletteFor(currentThemeName))
+        pal = ResolvedPalette(
+            bg: base.bg, text: base.text, dim: base.dim,
+            accent: f.accent, accent2: f.accent2,
+            divider: base.divider, hoverFill: base.hoverFill,
+            selFill: f.selFill, error: base.error, font: base.font,
+            bgAlpha: base.bgAlpha, vibrancyMaterial: base.vibrancyMaterial,
+            forceDarkAqua: base.forceDarkAqua)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
         gridView?.needsDisplay = true

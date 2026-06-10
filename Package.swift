@@ -51,12 +51,26 @@ let package = Package(
         .executable(name: "facet", targets: ["FacetApp"]),
         .library(name: "FacetCore", targets: ["FacetCore"]),
     ],
+    dependencies: [
+        // Shared theming foundation (plan atelier). Pinned to a SemVer
+        // tag for release/CI reproducibility; `.upToNextMinor` keeps it
+        // on 0.1.x (a pre-1.0 minor can break, so don't auto-jump to
+        // 0.2.0). For local, atomic sill↔facet editing, temporarily swap
+        // this line for `.package(path: "../sill")`.
+        .package(url: "https://github.com/akira-toriyama/sill.git",
+                 .upToNextMinor(from: "0.1.0")),
+    ],
     targets: [
         .target(name: "FacetCore"),
         .target(name: "FacetAccessibility", dependencies: ["FacetCore"]),
         .target(name: "FacetAdapterNative",
                 dependencies: ["FacetCore", "FacetAccessibility"]),
-        .target(name: "FacetView", dependencies: ["FacetCore"]),
+        .target(name: "FacetView", dependencies: [
+            "FacetCore",
+            .product(name: "Palette", package: "sill"),
+            .product(name: "PaletteKit", package: "sill"),
+            .product(name: "Effects", package: "sill"),
+        ]),
         .target(name: "FacetViewTree", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
