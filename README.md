@@ -53,8 +53,8 @@ slots themselves don't move, so hotkey numbering is preserved). No
 modifier keys.
 
 All views share the same backend and the same theme
-(17 built-in themes — terminal, nord, dracula, hacker, catppuccin,
-mono-light, … plus `random` — live toggleable).
+(13 built-in themes — terminal, chomp, rainbow, dracula, github-dark,
+catppuccin-mocha, … plus `random` — live toggleable).
 
 ## Layouts
 
@@ -326,15 +326,15 @@ for each option.
 facet reads `~/.config/facet/config.toml` (single source of truth)
 and never writes to it. See [config.toml](config.toml) at the repo
 root for every option + inline docs. Runtime CLI overrides
-(`facet --theme=cute` etc.) apply for the current session only;
+(`facet --theme=dracula` etc.) apply for the current session only;
 edit the file to make a change stick.
 
 Frequently-touched keys:
 
-- `theme` (top-level) — 17 themes: `terminal` (default) / `nord` /
-  `dracula` / `gruvbox` / `catppuccin` / `rosepine` / `everforest` /
-  `solarized` / `onedark` / `monokai` / `hacker` / `cute` / `paper` /
-  `system` / `mono-light` / `mono-dark` / `monotone`, plus `random`
+- `theme` (top-level) — 13 themes: `terminal` (default) / `chomp` /
+  `rainbow` / `cobalt2` / `shades-of-purple` / `tokyo-hack` /
+  `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
+  `github-light` / `catppuccin-latte` / `system`, plus `random`
   (picks one at each launch / `--reload`, excluding `system`)
 - `default-view` (top-level) — `tree` / `grid`
 - `[tree]` table — `preview-mode` (`popover` / `mirror`), plus the
@@ -476,7 +476,7 @@ facet status                      # snapshot: backend, theme, workspaces,
                                   # stashed shelves, lastError, timestamp
 
 # Server controls
-facet --theme=NAME                # 17 themes + random (terminal, nord, …, hacker; see config.toml)
+facet --theme=NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)
 facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode)
 facet --quit                      # terminate the running server

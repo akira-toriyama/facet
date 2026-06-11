@@ -34,7 +34,7 @@ public final class PreviewOverlay {
     public func show(_ img: NSImage, at screenFrame: NSRect, for id: WindowID) {
         shownWindow = id
         iv.image = img
-        iv.layer?.borderColor = pal.accent.cgColor
+        iv.layer?.borderColor = pal.primary.cgColor
         panel.setFrame(screenFrame, display: true)
         panel.orderFront(nil)                 // not makeKey: never steals focus
     }

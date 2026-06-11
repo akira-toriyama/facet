@@ -55,7 +55,7 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
 /// so the file is also greppable / inspectable by other tools.
 public struct StatusSnapshot: Codable, Sendable, Equatable {
     public let backend: String           // e.g. "native"
-    public let theme: String             // e.g. "terminal", "cute"
+    public let theme: String             // e.g. "terminal", "dracula"
     public let defaultView: String?      // "tree" / "grid" / nil = agent
     public let workspaces: [WorkspaceStatusEntry]
     /// Names of currently *stashed* scratchpad shelves — hidden,

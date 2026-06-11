@@ -54,14 +54,24 @@ let package = Package(
     dependencies: [
         // Shared theming foundation (plan atelier). Pinned to a SemVer
         // tag for release/CI reproducibility; `.upToNextMinor` keeps it
-        // on 0.1.x (a pre-1.0 minor can break, so don't auto-jump to
-        // 0.2.0). For local, atomic sill↔facet editing, temporarily swap
-        // this line for `.package(path: "../sill")`.
-        .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "0.1.0")),
+        // on a single pre-1.0 minor (a pre-1.0 minor can break, so don't
+        // auto-jump). For local, atomic sill↔facet editing, temporarily
+        // swap this line for `.package(path: "../sill")`.
+        //
+        // ⚠️ MIGRATION IN PROGRESS (Phase V): using the path dep against
+        // local sill `feat/phase-v-catalog`. Restore the url+SemVer pin
+        // (sill 0.3.0) before merge — a path dep breaks CI/brew.
+        .package(path: "../sill"),
+        // .package(url: "https://github.com/akira-toriyama/sill.git",
+        //          .upToNextMinor(from: "0.1.0")),
     ],
     targets: [
-        .target(name: "FacetCore"),
+        // FacetCore links sill's PURE `Palette` module (AppKit-free, so it
+        // doesn't break FacetCore's no-AppKit rule) for `canonical(_:)` —
+        // the single source of truth for valid `--theme=` names.
+        .target(name: "FacetCore", dependencies: [
+            .product(name: "Palette", package: "sill"),
+        ]),
         .target(name: "FacetAccessibility", dependencies: ["FacetCore"]),
         .target(name: "FacetAdapterNative",
                 dependencies: ["FacetCore", "FacetAccessibility"]),

@@ -98,15 +98,21 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 
 ### View-layer contracts — keep them intact
 
-- **`pal` is a `@MainActor` module-level var in
-  [Sources/FacetView/Theme.swift](Sources/FacetView/Theme.swift)**.
-  Every view file references `pal.text`, `pal.dim`, etc. in dozens
-  of places. Don't rename it to `Theme.current` or similar; it
-  would touch ~hundreds of view-side lines for zero behavior gain.
-- **`Palette` presets (`.terminal` / `.cute` / `.system`) are
-  `@MainActor`** because `NSColor` is not `Sendable` under Swift 6
-  strict concurrency. Don't try to make them ordinary top-level
-  `let`s.
+- **`pal` is a `@MainActor` module-level var** — defined in sill's
+  PaletteKit (`ResolvedPalette`) and re-exported through
+  [Sources/FacetView/Palette.swift](Sources/FacetView/Palette.swift).
+  Every view file references `pal.foreground`, `pal.muted`,
+  `pal.primary`, etc. in dozens of places. Don't rename the `pal`
+  var to `Theme.current` or similar; it would touch ~hundreds of
+  view-side lines for zero behavior gain. (The Tailwind-style field
+  names — `foreground` / `muted` / `primary` / … — come from sill's
+  Phase-V `ThemeSpec`; the `pal` var name itself stays.)
+- **Theme presets live in sill, not facet.** `ThemeSpec` presets
+  (`.terminal` / `.dracula` / `.system`, …) are pure `Sendable`
+  values (UInt32 hex). The `@MainActor` constraint is on the
+  *resolved* side (`ResolvedPalette` / `resolve(_:)`) because
+  `NSColor` isn't `Sendable` under Swift 6 — don't resolve a
+  palette to `NSColor` off the main actor.
 - **Window titles are AX-resolved**. `AXTitles.resolve` reads
   `kAXTitle` directly, short-TTL cached, only off-main. Don't
   assume `Window.title` is populated by the backend alone.

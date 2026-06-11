@@ -532,7 +532,7 @@ public final class SidebarView: NSView {
     private func drawSkeleton() {
         func bar(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat,
                  _ alpha: CGFloat, _ radius: CGFloat = 4.5) {
-            pal.dim.withAlphaComponent(alpha).setFill()
+            pal.muted.withAlphaComponent(alpha).setFill()
             NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
                          xRadius: radius, yRadius: radius).fill()
         }
@@ -566,7 +566,7 @@ public final class SidebarView: NSView {
         // The sidebar is narrow, so the tree uses a shorter tall strip
         // (±14 vs the grid / rail's ±18) — see `drawGripDots`.
         drawGripDots(in: r, tallExtent: 14,
-                     color: hot ? pal.accent : pal.dim,
+                     color: hot ? pal.primary : pal.muted,
                      alpha: hot ? 0.85 : 0.45)
     }
 
@@ -584,9 +584,9 @@ public final class SidebarView: NSView {
                 let r = NSRect(x: 1, y: band.lowerBound,
                                width: bounds.width - 2,
                                height: band.upperBound - band.lowerBound)
-                pal.accent.withAlphaComponent(0.28).setFill()
+                pal.primary.withAlphaComponent(0.28).setFill()
                 NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6).fill()
-                pal.accent.setStroke()
+                pal.primary.setStroke()
                 let o = NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1),
                                      xRadius: 6, yRadius: 6)
                 o.lineWidth = 2
@@ -597,7 +597,7 @@ public final class SidebarView: NSView {
                                width: bounds.width - 2,
                                height: band.upperBound - band.lowerBound)
                     .insetBy(dx: 1, dy: 1)
-                pal.accent.withAlphaComponent(0.7).setStroke()
+                pal.primary.withAlphaComponent(0.7).setStroke()
                 let o = NSBezierPath(roundedRect: r, xRadius: 6, yRadius: 6)
                 o.lineWidth = 1.5
                 o.setLineDash([4, 3], count: 2, phase: 0)
@@ -633,10 +633,10 @@ public final class SidebarView: NSView {
                                   height: th),
                        withAttributes: [
                         .font: uiFont(13, .bold),
-                        .foregroundColor: pal.text,
+                        .foregroundColor: pal.foreground,
                         .kern: 0.5, .paragraphStyle: para])
                 let lineY = row.maxY - dividerPadBelow
-                pal.divider.setStroke()
+                pal.border.setStroke()
                 let hsep = NSBezierPath()
                 hsep.move(to: NSPoint(x: rowPadX, y: lineY))
                 hsep.line(to: NSPoint(x: bounds.width - rowPadX, y: lineY))
@@ -645,7 +645,7 @@ public final class SidebarView: NSView {
 
             case 1:   // workspace section header — 2-line caption
                 if !c.firstHeader {
-                    pal.divider.setStroke()
+                    pal.border.setStroke()
                     let sep = NSBezierPath()
                     let sy = row.minY + 9           // tighter gap above
                     sep.move(to: NSPoint(x: rowPadX, y: sy))
@@ -674,25 +674,25 @@ public final class SidebarView: NSView {
                                height: nameH),
                     withAttributes: [
                         .font: uiFont(fs, .bold),
-                        .foregroundColor: c.hot ? pal.accent : pal.dim,
+                        .foregroundColor: c.hot ? pal.primary : pal.muted,
                         .kern: 0.6, .paragraphStyle: hp])
-                // Line 2: layout-mode text — accent-2 semibold on the
-                // active WS, `pal.dim` semibold when the WS isn't
+                // Line 2: layout-mode text — secondary semibold on the
+                // active WS, `pal.muted` semibold when the WS isn't
                 // active so non-focused rows recede. No pill
                 // background (the WS name on line 1 carries enough
                 // visual weight for the group); the color + weight
                 // step alone separates the badge from body text.
-                // accent-2 is the palette's secondary hue
-                // (terminal=purple, cute=peach, system=systemPurple),
+                // the secondary accent is the palette's second hue
+                // (terminal=amber, dracula=pink, system=systemPurple),
                 // reserved for status badges so the text never
                 // collides with the primary accent used by the
                 // active WS-name on line 1.
                 if !c.mode.isEmpty {
                     // Layout mode: plain text, no fill — same weight
                     // (bold) as the WS name above it so the two-line
-                    // caption reads as one unit. accent-2 on the active
+                    // caption reads as one unit. secondary on the active
                     // WS, dim when inactive so non-focused rows recede.
-                    let modeColor = c.hot ? pal.accent2 : pal.dim
+                    let modeColor = c.hot ? pal.secondary : pal.muted
                     (layoutBadgeLabel(c.mode) as NSString).draw(
                         in: NSRect(x: rowPadX + gripSpace,
                                    y: capY + nameH + 4,
@@ -714,22 +714,22 @@ public final class SidebarView: NSView {
                 // on light ones (theme-independent). A faint base layer
                 // under any selection / hover fill.
                 if winOrdinal % 2 == 1 {
-                    pal.text.withAlphaComponent(0.05).setFill()
+                    pal.foreground.withAlphaComponent(0.05).setFill()
                     NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
                         .fill()
                 }
                 winOrdinal += 1
                 if sel {
-                    pal.selFill.setFill()
+                    pal.selection.setFill()
                     NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
                         .fill()
-                    pal.accent.setFill()
+                    pal.primary.setFill()
                     NSBezierPath(roundedRect: NSRect(
                         x: pill.minX, y: pill.minY + 3,
                         width: 3, height: pill.height - 6),
                         xRadius: 1.5, yRadius: 1.5).fill()
                 } else if hov {
-                    pal.hoverFill.setFill()
+                    pal.hover.setFill()
                     NSBezierPath(roundedRect: pill, xRadius: 7, yRadius: 7)
                         .fill()
                 }
@@ -776,7 +776,7 @@ public final class SidebarView: NSView {
                         // Dim a hidden (Cmd+H/Cmd+M'd) row, but keep a
                         // selected row at full strength so the highlight
                         // stays legible.
-                        .foregroundColor: (sel ? pal.accent : pal.text)
+                        .foregroundColor: (sel ? pal.primary : pal.foreground)
                             .withAlphaComponent(c.isHidden && !sel ? 0.45 : 1.0),
                         .paragraphStyle: para,
                     ])
@@ -786,7 +786,7 @@ public final class SidebarView: NSView {
                                    width: tw, height: 15),
                         withAttributes: [
                             .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.text.withAlphaComponent(
+                            .foregroundColor: pal.foreground.withAlphaComponent(
                                 c.isHidden && !sel ? 0.45 : 1.0),
                             .paragraphStyle: para,
                         ])
@@ -814,16 +814,16 @@ public final class SidebarView: NSView {
                             xRadius: 5, yRadius: 5)   // rounded rect, not capsule
                         markStroke.lineWidth = 1
                         // Mark = primary accent (green) so the user's own
-                        // handle stands apart from the accent-2 master /
+                        // handle stands apart from the secondary master /
                         // float badge.
-                        pal.accent.setStroke()
+                        pal.primary.setStroke()
                         markStroke.stroke()
                         let pillPara = NSMutableParagraphStyle()
                         pillPara.alignment = .center
                         pillPara.lineBreakMode = .byTruncatingTail
                         let pillAttrs: [NSAttributedString.Key: Any] = [
                             .font: markFont,
-                            .foregroundColor: pal.accent,
+                            .foregroundColor: pal.primary,
                             .paragraphStyle: pillPara,
                         ]
                         let textH = (mark as NSString).size(
@@ -855,14 +855,14 @@ public final class SidebarView: NSView {
                             roundedRect: NSRect(x: lx, y: labelY - 1,
                                                 width: pillW, height: pillH),
                             xRadius: 5, yRadius: 5)
-                        pal.dim.withAlphaComponent(0.15).setFill()
+                        pal.muted.withAlphaComponent(0.15).setFill()
                         chip.fill()
                         let chipPara = NSMutableParagraphStyle()
                         chipPara.alignment = .center
                         chipPara.lineBreakMode = .byTruncatingTail
                         let chipAttrs: [NSAttributedString.Key: Any] = [
                             .font: chipFont,
-                            .foregroundColor: pal.dim,
+                            .foregroundColor: pal.muted,
                             .paragraphStyle: chipPara,
                         ]
                         let chipH = (chipText as NSString)
@@ -877,7 +877,7 @@ public final class SidebarView: NSView {
                     if c.isSticky {
                         // Sticky badge: the word "sticky" — no pill, no
                         // underline — SLANTED via `.obliqueness` in
-                        // accent2. obliqueness shears the glyphs, so it
+                        // secondary. obliqueness shears the glyphs, so it
                         // slants on EVERY font (incl. the mono themes,
                         // which have no true italic face). Text, not a 📌
                         // glyph, to match the other status badges; baseline
@@ -889,7 +889,7 @@ public final class SidebarView: NSView {
                         stPara.lineBreakMode = .byTruncatingTail
                         let stAttrs: [NSAttributedString.Key: Any] = [
                             .font: stFont,
-                            .foregroundColor: pal.accent2,
+                            .foregroundColor: pal.secondary,
                             .paragraphStyle: stPara,
                             .obliqueness: 0.2,   // synthetic slant
                         ]
@@ -925,14 +925,14 @@ public final class SidebarView: NSView {
                             roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
                             xRadius: 5, yRadius: 5)
                         spStroke.lineWidth = 1
-                        pal.dim.setStroke()
+                        pal.muted.setStroke()
                         spStroke.stroke()
                         let spPara = NSMutableParagraphStyle()
                         spPara.alignment = .center
                         spPara.lineBreakMode = .byTruncatingTail
                         let spAttrs: [NSAttributedString.Key: Any] = [
                             .font: spFont,
-                            .foregroundColor: pal.dim,
+                            .foregroundColor: pal.muted,
                             .paragraphStyle: spPara,
                         ]
                         let textH = (spText as NSString)
@@ -960,14 +960,14 @@ public final class SidebarView: NSView {
                             roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
                             xRadius: 5, yRadius: 5)   // rounded rect, not capsule
                         stroke.lineWidth = 1
-                        pal.accent2.setStroke()
+                        pal.secondary.setStroke()
                         stroke.stroke()
                         let lblPara = NSMutableParagraphStyle()
                         lblPara.alignment = .center
                         lblPara.lineBreakMode = .byTruncatingTail
                         let lblAttrs: [NSAttributedString.Key: Any] = [
                             .font: lblFont,
-                            .foregroundColor: pal.accent2,
+                            .foregroundColor: pal.secondary,
                             .paragraphStyle: lblPara,
                         ]
                         let lblH = (labelText as NSString).size(
@@ -981,7 +981,7 @@ public final class SidebarView: NSView {
                     if c.isHidden {
                         // Hidden (Cmd+H / minimized): an outlined pill in
                         // the muted `dim` hue — distinct from the accent
-                        // mark and accent2 master/float — confirming the
+                        // mark and secondary master/float — confirming the
                         // dimmed row is hidden, not gone. Click restores
                         // it. (A hidden window is never master/float/sticky
                         // — those are excluded from hide-reclaim — so this
@@ -999,14 +999,14 @@ public final class SidebarView: NSView {
                             roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
                             xRadius: 5, yRadius: 5)
                         stroke.lineWidth = 1
-                        pal.dim.setStroke()
+                        pal.muted.setStroke()
                         stroke.stroke()
                         let lblPara = NSMutableParagraphStyle()
                         lblPara.alignment = .center
                         lblPara.lineBreakMode = .byTruncatingTail
                         let lblAttrs: [NSAttributedString.Key: Any] = [
                             .font: lblFont,
-                            .foregroundColor: pal.dim,
+                            .foregroundColor: pal.muted,
                             .paragraphStyle: lblPara,
                         ]
                         let lblH = (txt as NSString).size(
@@ -1025,7 +1025,7 @@ public final class SidebarView: NSView {
             if let kbSelRow, kbSelRow == i {
                 let r = (c.kind == 2 ? row.insetBy(dx: 6, dy: 2)
                                      : row.insetBy(dx: 6, dy: 4))
-                pal.accent.setStroke()
+                pal.primary.setStroke()
                 let p = NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1),
                                      xRadius: 7, yRadius: 7)
                 p.lineWidth = 2
@@ -1046,7 +1046,7 @@ public final class SidebarView: NSView {
             for row in rows {
                 if case .window(_, _, let id, _) = row.kind,
                    id == liftedWinID {
-                    (pal.bg ?? .windowBackgroundColor)
+                    (pal.background ?? .windowBackgroundColor)
                         .withAlphaComponent(0.55).setFill()
                     NSBezierPath(roundedRect: row.rect.insetBy(dx: 4, dy: 1),
                                  xRadius: 5, yRadius: 5).fill()
@@ -1217,8 +1217,8 @@ public final class SidebarView: NSView {
     private func showChip(_ label: String) {
         chip.stringValue = label
         chip.font = uiFont(windowFontSize, .semibold)
-        chip.textColor = pal.bg ?? .white
-        chip.layer?.backgroundColor = pal.accent.cgColor
+        chip.textColor = pal.background ?? .white
+        chip.layer?.backgroundColor = pal.primary.cgColor
         chip.sizeToFit()
         let w = min(chip.frame.width + 20, bounds.width - 16)
         chip.frame = NSRect(x: chip.frame.minX, y: chip.frame.minY,
@@ -1264,8 +1264,8 @@ public final class SidebarView: NSView {
         dragCard.image = img
         dragCard.frame = NSRect(x: dragCardPad, y: dragCardPad,
                                 width: r.width, height: r.height)
-        dragCard.layer?.borderColor = pal.accent.withAlphaComponent(0.9).cgColor
-        dragCard.layer?.backgroundColor = (pal.bg ?? NSColor(white: 0.10, alpha: 1)).cgColor
+        dragCard.layer?.borderColor = pal.primary.withAlphaComponent(0.9).cgColor
+        dragCard.layer?.backgroundColor = (pal.background ?? NSColor(white: 0.10, alpha: 1)).cgColor
         dragCardWindow.setContentSize(NSSize(width: r.width + dragCardPad * 2,
                                              height: r.height + dragCardPad * 2))
         // Semi-transparent (dnd-kit style) so the drop-target band shows

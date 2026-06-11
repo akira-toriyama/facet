@@ -661,7 +661,7 @@ public final class RailView: NSView {
         let path = NSBezierPath(roundedRect: c.rect,
                                xRadius: railCellRadius, yRadius: railCellRadius)
         // Mini-screen background.
-        (pal.bg ?? NSColor.windowBackgroundColor)
+        (pal.background ?? NSColor.windowBackgroundColor)
             .withAlphaComponent(0.55).setFill()
         path.fill()
 
@@ -669,9 +669,9 @@ public final class RailView: NSView {
         // dragged is hidden everywhere (its ghost stands in) so it looks
         // lifted off both the hero and its bottom cell.
         let dragSrcID: WindowID? = (drag?.kind == .window) ? drag?.id : nil
-        let winFill = pal.text.withAlphaComponent(0.16)
-        let winFocused = pal.accent.withAlphaComponent(0.30)
-        let winStroke = pal.text.withAlphaComponent(0.40)
+        let winFill = pal.foreground.withAlphaComponent(0.16)
+        let winFocused = pal.primary.withAlphaComponent(0.30)
+        let winStroke = pal.foreground.withAlphaComponent(0.40)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
         for w in c.wins where w.id != dragSrcID {
@@ -688,31 +688,31 @@ public final class RailView: NSView {
         if let d = drag, d.dropTargetWS == c.wsIndex {
             switch d.kind {
             case .workspace:
-                pal.text.withAlphaComponent(0.18).setFill(); path.fill()
-                pal.text.withAlphaComponent(0.85).setStroke(); path.lineWidth = 2
+                pal.foreground.withAlphaComponent(0.18).setFill(); path.fill()
+                pal.foreground.withAlphaComponent(0.85).setStroke(); path.lineWidth = 2
             case .window:
-                pal.accent.withAlphaComponent(0.28).setFill(); path.fill()
-                pal.accent.setStroke(); path.lineWidth = 2
+                pal.primary.withAlphaComponent(0.28).setFill(); path.fill()
+                pal.primary.setStroke(); path.lineWidth = 2
             }
         } else if let d = drag, d.kind == .workspace, d.sourceWS == c.wsIndex {
-            pal.text.withAlphaComponent(0.06).setFill(); path.fill()
-            pal.text.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
+            pal.foreground.withAlphaComponent(0.06).setFill(); path.fill()
+            pal.foreground.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
         } else if c.isHero {
             // Always prominent: PRIMARY accent when the hero is the live
             // active WS, SECONDARY accent when browsing a different WS
             // (matches the browse-target strip cell — 2-b carousel).
-            (c.isActive ? pal.accent : pal.accent2).setStroke()
+            (c.isActive ? pal.primary : pal.secondary).setStroke()
             path.lineWidth = 2.5
         } else if c.isActive {
-            pal.accent.setStroke(); path.lineWidth = 2          // PRIMARY = active WS
+            pal.primary.setStroke(); path.lineWidth = 2          // PRIMARY = active WS
         } else if drag == nil && selectedWS == c.wsIndex {
             // Browse target (≠ active) — SECONDARY accent border so it
             // reads apart from the primary-accent active WS (2-b carousel).
-            pal.accent2.setStroke(); path.lineWidth = 2
+            pal.secondary.setStroke(); path.lineWidth = 2
         } else if hoverWS == c.wsIndex {
-            pal.text.withAlphaComponent(0.7).setStroke(); path.lineWidth = 1.5
+            pal.foreground.withAlphaComponent(0.7).setStroke(); path.lineWidth = 1.5
         } else {
-            pal.divider.setStroke(); path.lineWidth = 1
+            pal.border.setStroke(); path.lineWidth = 1
         }
         path.stroke()
 
@@ -730,8 +730,8 @@ public final class RailView: NSView {
            let hit = c.wins.first(where: { $0.id == sel.id }) {
             let ring = NSBezierPath(roundedRect: hit.rect.insetBy(dx: -1, dy: -1),
                                     xRadius: 3, yRadius: 3)
-            pal.accent.withAlphaComponent(0.30).setFill(); ring.fill()
-            pal.accent.setStroke(); ring.lineWidth = c.isHero ? 3 : 2; ring.stroke()
+            pal.primary.withAlphaComponent(0.30).setFill(); ring.fill()
+            pal.primary.setStroke(); ring.lineWidth = c.isHero ? 3 : 2; ring.stroke()
         }
     }
 

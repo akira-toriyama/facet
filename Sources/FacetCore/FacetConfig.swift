@@ -13,6 +13,7 @@
 
 import CoreGraphics
 import Foundation
+import Palette   // sill's pure (AppKit-free) theme layer — `canonical(_:)`
 
 /// Per-WS configuration parsed from a `[desktop.N]` inline table:
 /// `1 = { name = "Dev", layout = "bsp" }`. `name` is required;
@@ -172,23 +173,15 @@ public struct FacetConfig: Sendable {
     }
 
     /// Falls back to `"terminal"` for unset or unrecognised values.
-    /// This list must stay in sync with sill's `canonicalThemeNames` /
-    /// `paletteFor` (the pure `Palette` module) — FacetCore deliberately
-    /// doesn't link sill here, so the set of valid names is duplicated by
-    /// necessity. (A future dedup via `import Palette` is layer-legal —
-    /// sill's `Palette` module is AppKit-free — but is deferred so this
-    /// migration stays focused on the View layer.)
+    /// The set of valid names is sill's `canonicalThemeNames` (the single
+    /// source of truth) — `canonical(_:)` lowercases / trims and returns the
+    /// matched name, or `nil` for an unknown one (silently clamped to
+    /// `terminal` here; the CLI rejects loudly instead). FacetCore links
+    /// sill's pure `Palette` module for this — no hand-kept duplicate list.
+    /// `random` is a member of `canonicalThemeNames`, so it passes through;
+    /// `paletteFor` then picks a concrete theme each call.
     public var effectiveTheme: String {
-        let raw = (theme ?? "terminal").lowercased()
-        let known = [
-            "terminal", "cute", "system",
-            "nord", "dracula", "gruvbox", "catppuccin", "rosepine",
-            "everforest", "solarized", "onedark", "monokai", "hacker",
-            "paper", "mono-light", "mono-dark", "monotone",
-            "neon", "cyber", "vapor", "kawaii", "rainbow", "chomp",
-            "random",   // meta: paletteFor picks a concrete theme
-        ]
-        return known.contains(raw) ? raw : "terminal"
+        canonical(theme ?? "terminal") ?? "terminal"
     }
 
     /// 1-12 clamp. Default 4.

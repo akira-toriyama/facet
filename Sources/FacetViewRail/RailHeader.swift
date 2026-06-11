@@ -25,7 +25,7 @@ extension RailView {
         // reads apart from the PRIMARY-accent active WS (2-b — mid-browse
         // they're different cells; at rest selected == active = primary).
         let browseTarget = kbWholeWS && !cell.isActive
-        let pickColor = browseTarget ? pal.accent2 : pal.accent
+        let pickColor = browseTarget ? pal.secondary : pal.primary
         let hot = cell.isActive || hover || kbWholeWS
 
         // Band fill — pick-colour-strong when this WS is the keyboard
@@ -37,8 +37,8 @@ extension RailView {
             pickColor.setStroke(); band.lineWidth = 1.5; band.stroke()
         } else {
             (cell.isActive
-                ? pal.accent.withAlphaComponent(hover ? 0.20 : 0.12)
-                : pal.dim.withAlphaComponent(hover ? 0.20 : 0.10)).setFill()
+                ? pal.primary.withAlphaComponent(hover ? 0.20 : 0.12)
+                : pal.muted.withAlphaComponent(hover ? 0.20 : 0.10)).setFill()
             band.fill()
         }
 
@@ -46,7 +46,7 @@ extension RailView {
         drawGripDots(in: NSRect(x: hb.minX + 4, y: hb.minY,
                                 width: railHeaderGripW, height: hb.height),
                      tallExtent: 18,
-                     color: browseTarget ? pal.accent2 : (hot ? pal.accent : pal.text),
+                     color: browseTarget ? pal.secondary : (hot ? pal.primary : pal.foreground),
                      alpha: hot ? 0.85 : 0.5)
 
         // Name (+ mode), left-aligned, vertically centred.
@@ -58,8 +58,8 @@ extension RailView {
         let nameFont = min(railHeaderNameMaxFont,
                            max(railHeaderNameMinFont,
                                (hb.height * railHeaderNameFrac).rounded()))
-        let nameColor = browseTarget ? pal.accent2
-            : (cell.isActive ? pal.accent : pal.text)
+        let nameColor = browseTarget ? pal.secondary
+            : (cell.isActive ? pal.primary : pal.foreground)
         let name = railLabel(cell.name, cell.wsIndex)
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {
@@ -73,7 +73,7 @@ extension RailView {
             let modeFont = min(railHeaderModeMaxFont,
                                max(railHeaderModeMinFont,
                                    (hb.height * railHeaderModeFrac).rounded()))
-            let modeColor = cell.isActive ? pal.accent2 : pal.dim
+            let modeColor = cell.isActive ? pal.secondary : pal.muted
             let nameH = nameFont * 1.25
             let modeH = (modeFont * 1.3).rounded()
             let gap: CGFloat = 2

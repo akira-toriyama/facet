@@ -8,7 +8,7 @@
 #     https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
 #
 # facet only ever READS this file; runtime CLI overrides (e.g.
-# `facet --theme=cute`) apply for the current session only. To
+# `facet --theme=dracula`) apply for the current session only. To
 # make a change stick, edit the value here and restart facet.
 #
 # Out-of-range / unknown values are silently clamped to safe
@@ -24,54 +24,43 @@
 # (status badges).
 #
 # Dark, monospace (editor-style):
-#   "terminal"   — near-black, Tokyo-Night green/purple. The original.
-#   "nord"       — cool polar-night blue-grey; frost-cyan + sand.
-#   "dracula"    — vivid dark; purple + green.
-#   "gruvbox"    — retro warm dark; orange + aqua.
-#   "catppuccin" — soft pastel dark (Mocha); mauve + green.
-#   "rosepine"   — muted aubergine; iris + rose.
-#   "everforest" — soft forest dark; green + orange.
-#   "solarized"  — classic teal-base dark; blue + orange.
-#   "onedark"    — Atom One Dark; blue + yellow.
-#   "monokai"    — high-energy; lime + magenta.
-#   "hacker"     — black base, neon-green + amber (green-on-black).
+#   "terminal"         — classic green-on-black; emerald text + amber
+#                        accent. The default.
+#   "chomp"            — Pac-Man arcade; bright yellow on black, blue accent.
+#   "cobalt2"          — deep cobalt blue; gold + sky-blue (Wes Bos).
+#   "shades-of-purple" — rich royal purple; gold + aqua.
+#   "tokyo-hack"       — dark indigo; red-orange + pink.
+#   "github-dark"      — GitHub dark; blue + green on slate.
+#   "dracula"          — classic Dracula; purple + pink on charcoal.
+#   "catppuccin-mocha" — soft pastel dark (Mocha); mauve + blue.
+#   "gruvbox"          — retro warm dark; orange + aqua.
 #
-# Neon (vivid electric; signature hue on a hue-tinted near-black):
-#   "neon"       — electric cyan on blue-black; magenta accent, mono.
-#   "cyber"      — aqua/teal on teal-black; hot-pink accent, mono.
-#   "vapor"      — synthwave pink on purple-black; cyan accent, mono.
-#   "rainbow"    — loud max-saturation (readability secondary): white on
-#                  violet-black, vivid rose + electric-cyan, rounded.
-#                  Set `theme-cycle-seconds` (below) to ANIMATE it — the
-#                  accents then rotate through the spectrum.
+# Animated (rounded; cycles its accents — see `theme-cycle-seconds`):
+#   "rainbow"          — loud max-saturation: white on violet-black, vivid
+#                        rose + electric-cyan. Set `theme-cycle-seconds`
+#                        (below) to ANIMATE — the accents rotate through the
+#                        spectrum. ("chomp" also flashes when cycled.)
 #
 # Light:
-#   "cute"       — soft pastel pink, rounded font.
-#   "kawaii"     — candy lavender; purple + mint, rounded font.
-#   "paper"      — clean daytime white; blue + amber, system font.
-#
-# Monochrome:
-#   "mono-light" — stark black-on-white, mono font.
-#   "mono-dark"  — stark white-on-black / OLED, mono font.
-#   "monotone"   — soft graphite greyscale, system font.
+#   "github-light"     — GitHub light; blue + violet on white. System font.
+#   "catppuccin-latte" — soft pastel light (Latte); purple + teal.
 #
 # Adaptive:
-#   "system"     — native vibrancy + dynamic colors, follows macOS
-#                  light/dark. System font.
+#   "system"           — native vibrancy + dynamic colors, follows macOS
+#                        light/dark. Menu font.
 #
 # Special:
-#   "random"     — pick a random theme at each launch / `--reload`
-#                  (excludes "system").
+#   "random"           — pick a random theme at each launch / `--reload`
+#                        (excludes "system").
 #
 # Unknown names clamp to "terminal". CLI override (session only):
-# `facet --theme=nord`.
+# `facet --theme=dracula`.
 theme = "terminal"
 
-# ANIMATE the theme: an animatable theme (rainbow / neon / cyber / vapor
-# / kawaii) cycles its accents over this many seconds — rainbow rotates
-# the full spectrum, the neon family cycle their own palette. Independent
-# of the border's cycle-seconds below. Omit → static palette.
-# 1–120 clamp, default 6.
+# ANIMATE the theme: an animatable theme (rainbow / chomp) cycles its
+# accents over this many seconds — rainbow rotates the full spectrum,
+# chomp cycles its arcade flash palette. Independent of the border's
+# cycle-seconds below. Omit → static palette. 1–120 clamp, default 6.
 # theme-cycle-seconds = 3
 
 
@@ -88,6 +77,7 @@ theme = "terminal"
 #   "cyber"   — teal / aqua matrix.
 #   "vapor"   — synthwave pink → purple → cyan.
 #   "kawaii"  — soft pastels.
+#   "chomp"   — arcade yellow → blue (the chomp theme's flash).
 #   "rainbow" — full spectrum (resting hue slowly cycles).
 #   "random"  — pick a random effect at each launch / `--reload`.
 #
@@ -102,8 +92,8 @@ glow = true
 # Continuous-animation period: seconds per cycle (lower = faster).
 # Drives the "rainbow" hue rotation AND the width breath below.
 # SETTING this key also makes a non-rainbow effect (neon / cyber /
-# vapor / kawaii) continuously CYCLE its border through its own palette
-# over this period (omit the key → that effect stays a steady color).
+# vapor / kawaii / chomp) continuously CYCLE its border through its own
+# palette over this period (omit the key → that effect stays steady).
 # Border-only — to animate the THEME, use `theme-cycle-seconds` above.
 # 1–120 clamp, default 6.
 # cycle-seconds = 3

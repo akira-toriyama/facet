@@ -59,16 +59,16 @@ public final class SearchBar: NSView {
     }
 
     public func applyTheme() {
-        let base = pal.bg ?? NSColor.textBackgroundColor
+        let base = pal.background ?? NSColor.textBackgroundColor
         layer?.backgroundColor =
             (base.blended(withFraction: 0.06, of: .white) ?? base).cgColor
-        layer?.borderColor = pal.divider.cgColor
+        layer?.borderColor = pal.border.cgColor
         let f = uiFont(13, .regular)
         field.font = f
-        field.textColor = pal.text
+        field.textColor = pal.foreground
         field.placeholderAttributedString = NSAttributedString(
             string: "type to filter…",
-            attributes: [.foregroundColor: pal.dim, .font: f])
+            attributes: [.foregroundColor: pal.muted, .font: f])
         needsDisplay = true
     }
 
@@ -85,7 +85,7 @@ public final class SearchBar: NSView {
         super.draw(dirty)
         let a: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 15),
-            .foregroundColor: pal.dim,
+            .foregroundColor: pal.muted,
         ]
         let g = "⌕" as NSString
         let s = g.size(withAttributes: a)

@@ -223,14 +223,14 @@ enum FacetApp {
                                              Greppable line format.
 
         SERVER CONTROLS
-          facet --theme=NAME                 22 themes: terminal, nord,
-                                             dracula, gruvbox, catppuccin,
-                                             rosepine, everforest, solarized,
-                                             onedark, monokai, hacker, neon,
-                                             cyber, vapor, rainbow, cute,
-                                             kawaii, paper, system, mono-light,
-                                             mono-dark, monotone (+ "random").
-                                             session only; edit config.toml
+          facet --theme=NAME                 13 themes: terminal, chomp,
+                                             rainbow, cobalt2,
+                                             shades-of-purple, tokyo-hack,
+                                             github-dark, dracula,
+                                             catppuccin-mocha, gruvbox,
+                                             github-light, catppuccin-latte,
+                                             system (+ "random"). session
+                                             only; edit config.toml
           facet --quit                       terminate the server
           facet --reload                     re-read config.toml + apply
                                              (theme / preview-mode).

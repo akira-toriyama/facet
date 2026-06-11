@@ -40,7 +40,7 @@ final class PanelHost: NSObject {
     /// glow / width / flash / breath) is driven by `borderFX`, shared
     /// with the grid + rail borders; `borderFX.apply(to:)` paints it.
     /// When the effect is off, `borderFX.color` falls back to
-    /// `pal.accent`, so the panel keeps its plain accent border.
+    /// `pal.primary`, so the panel keeps its plain accent border.
     private let borderLayer = CALayer()
     private let borderFX = BorderFX()
 
@@ -104,7 +104,7 @@ final class PanelHost: NSObject {
         scroll.documentView = view
 
         effect = NSVisualEffectView()
-        effect.material = .sidebar     // shown only when pal.bg == nil
+        effect.material = .sidebar     // shown only when pal.background == nil
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
@@ -121,7 +121,7 @@ final class PanelHost: NSObject {
         bgView.layer?.cornerRadius = 12
         bgView.layer?.cornerCurve = .continuous
         bgView.layer?.masksToBounds = true
-        bgView.layer?.backgroundColor = (pal.bg ?? .clear).cgColor
+        bgView.layer?.backgroundColor = (pal.background ?? .clear).cgColor
         bgView.autoresizingMask = [.width, .height]
 
         searchBar = SearchBar(frame: .zero)
@@ -140,7 +140,7 @@ final class PanelHost: NSObject {
         // in `applyTheme`. The border draws inside the layer bounds, so
         // it stays within `effect`'s masksToBounds clip.
         borderLayer.borderWidth = 1.5
-        borderLayer.borderColor = pal.accent.cgColor
+        borderLayer.borderColor = pal.primary.cgColor
         borderLayer.cornerRadius = cornerRadius
         borderLayer.cornerCurve = .continuous
         borderLayer.zPosition = 100
@@ -333,13 +333,13 @@ final class PanelHost: NSObject {
     /// Re-apply the current `pal` to the panel chrome. Call after
     /// `paletteFor(...)` changes `pal`.
     func applyTheme() {
-        bgView.layer?.backgroundColor = (pal.bg ?? .clear).cgColor
-        borderFX.apply(to: borderLayer)   // re-reads pal.accent when off
+        bgView.layer?.backgroundColor = (pal.background ?? .clear).cgColor
+        borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
     }
 
     /// Apply the `[border]` config (shared `BorderFX`). The panel border
-    /// shows the effect color when on, or `pal.accent` when off. Called
+    /// shows the effect color when on, or `pal.primary` when off. Called
     /// by the Controller at startup + on hot-reload.
     func applyBorder(effectName: String, glow: Bool, width: CGFloat,
                      cycleSeconds: CGFloat, cycleColors: Bool,
