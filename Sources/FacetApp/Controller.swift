@@ -837,16 +837,20 @@ final class Controller: NSObject {
 
     // MARK: - Theme color animator (⑪)
 
-    /// Themes whose accents can cycle when `[border] cycle-seconds` is set
-    /// — `rainbow` (full spectrum) + the neon family (their own palettes).
-    private static let animatableThemes: Set<String> =
-        ["rainbow", "neon", "cyber", "vapor", "kawaii"]
-
     /// Run the theme color cycle when the active theme is animatable AND
     /// `theme-cycle-seconds` is set (independent of the border cycle); the
     /// palette's accents rotate over that period. Off otherwise.
+    ///
+    /// "Animatable" is DERIVED from sill's effect catalog
+    /// (`isAnimatableTheme`) instead of a hand-kept set — the single source
+    /// of truth lives in `Effects`. Post Phase-V rebuild the animatable
+    /// themes are `rainbow` (full spectrum) and `chomp` (its flash palette).
+    /// `random` is excluded: it re-picks a concrete effect every tick, so
+    /// animating it would flicker chaotically (and the old hand-kept set
+    /// never animated `random` either).
     private func updateThemeAnimator() {
-        let on = Self.animatableThemes.contains(currentThemeName)
+        let on = currentThemeName != "random"
+            && isAnimatableTheme(currentThemeName)
             && config.themeCycleSeconds != nil
         if on, themeFXTimer == nil {
             let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
@@ -862,18 +866,21 @@ final class Controller: NSObject {
     private func tickThemeFX() {
         themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
         if themeFXPhase >= 1 { themeFXPhase -= 1 }
-        // sill's `animatedPalette` returns only the live accent / accent2 /
-        // selFill (an `AnimatedFrame`); fold them onto the steady resolved
-        // base so bg / text / dim / dividers hold and the UI stays usable.
+        // sill's `animatedPalette` returns only the live primary / secondary
+        // / selection (an `AnimatedFrame`); fold them onto the steady
+        // resolved base so background / foreground / muted / border hold and
+        // the UI stays usable.
         guard let f = animatedPalette(theme: currentThemeName, at: themeFXPhase)
         else { return }
         let base = resolve(paletteFor(currentThemeName))
         pal = ResolvedPalette(
-            bg: base.bg, text: base.text, dim: base.dim,
-            accent: f.accent, accent2: f.accent2,
-            divider: base.divider, hoverFill: base.hoverFill,
-            selFill: f.selFill, error: base.error, font: base.font,
-            bgAlpha: base.bgAlpha, vibrancyMaterial: base.vibrancyMaterial,
+            background: base.background, foreground: base.foreground,
+            muted: base.muted, tertiary: base.tertiary,
+            primary: f.primary, secondary: f.secondary,
+            border: base.border, hover: base.hover,
+            selection: f.selection, error: base.error, font: base.font,
+            backgroundAlpha: base.backgroundAlpha,
+            vibrancyMaterial: base.vibrancyMaterial,
             forceDarkAqua: base.forceDarkAqua)
         panelHost.applyTheme()
         sidebarView.needsDisplay = true

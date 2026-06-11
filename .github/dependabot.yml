@@ -4,9 +4,13 @@
 #   update-tap) pin third-party actions (checkout, setup-xcode,
 #   install-action, etc) by major version. Weekly update PRs keep
 #   them honest without flooding the inbox.
-# - Swift Package Manager intentionally omitted: facet pulls zero
-#   external SwiftPM dependencies (Apple frameworks only); see
-#   the "dependency policy" in design-principles memory.
+# - Swift Package Manager: facet's only SwiftPM dependency is
+#   `sill` — its own shared theming foundation (plan atelier), not a
+#   third-party lib (the "dependency policy" in the design-principles
+#   memory permits depending on our own shared lib). A `swift`
+#   updates block lands once facet re-pins sill by SemVer url; the
+#   Phase-V migration is temporarily on a local path dep, which
+#   dependabot does not track.
 #
 # Commit messages follow the gitmoji + Conventional Commits
 # convention in docs/commit-convention.md so commit-lint.yml stays

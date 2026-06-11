@@ -509,14 +509,14 @@ public final class GridView: NSView {
         if commitZoom.draw(in: bounds) { return }
         // Palette: very faint cell fills + strokes so window thumbs
         // do the visual work, accent reserved for active / drop-target.
-        let activeColor = pal.accent
-        let cellFill    = pal.dim.withAlphaComponent(0.08)
-        let cellStroke  = pal.dim.withAlphaComponent(0.22)
-        let labelColor  = pal.text.withAlphaComponent(0.85)
-        let activeFill  = pal.accent.withAlphaComponent(0.10)
-        let winFill     = pal.text.withAlphaComponent(0.18)
-        let winFocused  = pal.accent.withAlphaComponent(0.32)
-        let winStroke   = pal.text.withAlphaComponent(0.45)
+        let activeColor = pal.primary
+        let cellFill    = pal.muted.withAlphaComponent(0.08)
+        let cellStroke  = pal.muted.withAlphaComponent(0.22)
+        let labelColor  = pal.foreground.withAlphaComponent(0.85)
+        let activeFill  = pal.primary.withAlphaComponent(0.10)
+        let winFill     = pal.foreground.withAlphaComponent(0.18)
+        let winFocused  = pal.primary.withAlphaComponent(0.32)
+        let winStroke   = pal.foreground.withAlphaComponent(0.45)
         // Drop target: accent stroke + tint when a drag is over a
         // cell different from source. A workspace swap (header drag)
         // uses text-color instead so the user can tell at a glance
@@ -536,22 +536,22 @@ public final class GridView: NSView {
             if isDrop {
                 switch dragKind {
                 case .workspace:
-                    pal.text.withAlphaComponent(0.18).setFill()
+                    pal.foreground.withAlphaComponent(0.18).setFill()
                     path.fill()
-                    pal.text.withAlphaComponent(0.85).setStroke()
+                    pal.foreground.withAlphaComponent(0.85).setStroke()
                     path.lineWidth = 2
                     path.stroke()
                 case .window, .none:
-                    pal.accent.withAlphaComponent(0.28).setFill()
+                    pal.primary.withAlphaComponent(0.28).setFill()
                     path.fill()
-                    pal.accent.setStroke()
+                    pal.primary.setStroke()
                     path.lineWidth = 2
                     path.stroke()
                 }
             } else if isSwapSource {
-                pal.text.withAlphaComponent(0.06).setFill()
+                pal.foreground.withAlphaComponent(0.06).setFill()
                 path.fill()
-                pal.text.withAlphaComponent(0.40).setStroke()
+                pal.foreground.withAlphaComponent(0.40).setStroke()
                 path.lineWidth = 1
                 path.stroke()
             } else {
@@ -563,7 +563,7 @@ public final class GridView: NSView {
                     activeColor.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 1
                 } else if drag == nil, hoverWS == cell.wsIndex {
-                    pal.text.withAlphaComponent(0.7).setStroke()
+                    pal.foreground.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 1.5
                 } else {
                     cellStroke.setStroke()
@@ -579,7 +579,7 @@ public final class GridView: NSView {
             // accent, a browse target (selected but not active) gets
             // the secondary accent.
             if drag == nil, kbSelectedWS == cell.wsIndex {
-                (cell.isActive ? pal.accent : pal.accent2).setStroke()
+                (cell.isActive ? pal.primary : pal.secondary).setStroke()
                 let kc = NSBezierPath(
                     roundedRect: cell.rect.insetBy(dx: 1.5, dy: 1.5),
                     xRadius: gridCellCornerRadius,
@@ -619,8 +619,8 @@ public final class GridView: NSView {
                     let ko = NSBezierPath(
                         roundedRect: s.hit.rect.insetBy(dx: 1, dy: 1),
                         xRadius: 3, yRadius: 3)
-                    pal.accent.withAlphaComponent(0.30).setFill(); ko.fill()
-                    pal.accent.setStroke()
+                    pal.primary.withAlphaComponent(0.30).setFill(); ko.fill()
+                    pal.primary.setStroke()
                     ko.lineWidth = 2.5
                     ko.stroke()
                 }
@@ -640,16 +640,16 @@ public final class GridView: NSView {
             let headerHot = cell.isActive || headerSel || headerHover
             (cell.isActive
                 ? activeColor.withAlphaComponent(headerHover ? 0.20 : 0.12)
-                : pal.dim.withAlphaComponent(headerHover ? 0.20 : 0.10))
+                : pal.muted.withAlphaComponent(headerHover ? 0.20 : 0.10))
                 .setFill()
             NSBezierPath(roundedRect: hb.insetBy(dx: 0, dy: 1),
                          xRadius: 4, yRadius: 4).fill()
             if headerSel {
                 // Match the cell cursor + rail: accent for the active
-                // WS, accent2 for a browse target — not a plain text
+                // WS, secondary for a browse target — not a plain text
                 // stroke (the WS-name slot is the open-time selection
                 // since grid opens at kbSelectedWindowIdx == -1).
-                (cell.isActive ? pal.accent : pal.accent2).setStroke()
+                (cell.isActive ? pal.primary : pal.secondary).setStroke()
                 let ho = NSBezierPath(
                     roundedRect: hb.insetBy(dx: 0.75, dy: 1.25),
                     xRadius: 4, yRadius: 4)
@@ -686,11 +686,11 @@ public final class GridView: NSView {
                 let modeFont = min(gridHeaderModeMaxFont,
                                    max(gridHeaderModeMinFont,
                                        (hb.height * gridHeaderModeFrac).rounded()))
-                // Layout-mode text — accent-2 semibold on the active
-                // WS, `pal.dim` on the rest. No pill background — the
+                // Layout-mode text — secondary semibold on the active
+                // WS, `pal.muted` on the rest. No pill background — the
                 // text + color step alone carries the badge weight,
                 // matching the tree header's restyle.
-                let modeColor = cell.isActive ? pal.accent2 : pal.dim
+                let modeColor = cell.isActive ? pal.secondary : pal.muted
                 let mAttrs: [NSAttributedString.Key: Any] = [
                     .font: uiFont(modeFont, .semibold),
                     .foregroundColor: modeColor,
@@ -763,7 +763,7 @@ public final class GridView: NSView {
         wp.stroke()
         // Mark badge — same corner pill / dot as the rail (M9-5 #3).
         if let mark = w.mark { drawMiniMarkBadge(mark, in: r) }
-        // Secondary-tag dots (M11-3 PR3b) — bottom-left, accent2.
+        // Secondary-tag dots (M11-3 PR3b) — bottom-left, secondary.
         drawMiniTagDots(w.tags.count, in: r)
     }
 
@@ -999,7 +999,7 @@ public final class GridView: NSView {
         g.layer?.cornerRadius = 4
         g.layer?.cornerCurve = .continuous
         g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.accent.cgColor
+        g.layer?.borderColor = pal.primary.cgColor
         g.layer?.borderWidth = 1.5
         g.layer?.shadowColor = NSColor.black.cgColor
         g.layer?.shadowOffset = CGSize(width: 0, height: -4)
@@ -1019,7 +1019,7 @@ public final class GridView: NSView {
             iv.autoresizingMask = [.width, .height]
             g.addSubview(iv)
         } else {
-            g.layer?.backgroundColor = pal.accent
+            g.layer?.backgroundColor = pal.primary
                 .withAlphaComponent(0.45).cgColor
             if let icon = AppIcons.icon(forPID: hit.pid) {
                 let side = max(16, min(min(lifted.width,
@@ -1051,9 +1051,9 @@ public final class GridView: NSView {
         g.layer?.cornerRadius = gridCellCornerRadius
         g.layer?.cornerCurve = .continuous
         g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.text.withAlphaComponent(0.85).cgColor
+        g.layer?.borderColor = pal.foreground.withAlphaComponent(0.85).cgColor
         g.layer?.borderWidth = 2
-        g.layer?.backgroundColor = pal.text
+        g.layer?.backgroundColor = pal.foreground
             .withAlphaComponent(0.10).cgColor
         g.layer?.shadowColor = NSColor.black.cgColor
         g.layer?.shadowOffset = CGSize(width: 0, height: -4)
@@ -1063,7 +1063,7 @@ public final class GridView: NSView {
         if cell.windows.isEmpty {
             let label = NSTextField(labelWithString: cell.label)
             label.font = uiFont(gridGhostLabelSize, .bold)
-            label.textColor = pal.text.withAlphaComponent(0.95)
+            label.textColor = pal.foreground.withAlphaComponent(0.95)
             label.alignment = .center
             label.sizeToFit()
             label.frame = NSRect(
@@ -1091,7 +1091,7 @@ public final class GridView: NSView {
                 } else if let icon = AppIcons.icon(forPID: hit.pid) {
                     iv.image = icon
                     iv.imageScaling = .scaleProportionallyDown
-                    iv.layer?.backgroundColor = pal.text
+                    iv.layer?.backgroundColor = pal.foreground
                         .withAlphaComponent(0.22).cgColor
                 }
                 g.addSubview(iv)

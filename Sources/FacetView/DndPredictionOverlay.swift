@@ -12,7 +12,7 @@
 // PreviewOverlay pattern) so it floats above the desktop windows while
 // facet stays fully operable. Palette echoes the tree DnD: the dragged
 // window (X) gets a solid accent outline, the windows it reshapes get a
-// dashed accent2 outline.
+// dashed secondary outline.
 
 import AppKit
 import FacetCore
@@ -80,15 +80,15 @@ private final class PredictionView: NSView {
         veil.fill()
 
         // 2. Outline the spotlit slots — solid accent for the dragged
-        //    window, dashed accent2 for the windows it reshapes.
+        //    window, dashed secondary for the windows it reshapes.
         for (id, f) in moving {
             let path = NSBezierPath(roundedRect: local(f),
                                     xRadius: 4, yRadius: 4)
             if id == dragged {
-                pal.accent.setStroke(); path.lineWidth = 2
+                pal.primary.setStroke(); path.lineWidth = 2
                 path.stroke()
             } else {
-                pal.accent2.setStroke(); path.lineWidth = 1.5
+                pal.secondary.setStroke(); path.lineWidth = 1.5
                 path.setLineDash([4, 3], count: 2, phase: 0)
                 path.stroke()
             }

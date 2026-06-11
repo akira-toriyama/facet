@@ -6,10 +6,10 @@ final class TOMLTests: XCTestCase {
     func testTopLevelKeyValuePairs() {
         let p = parseTOMLSubset("""
             default-view = "tree"
-            theme = "cute"
+            theme = "dracula"
             """)
         XCTAssertEqual(p[""]?["default-view"], .string("tree"))
-        XCTAssertEqual(p[""]?["theme"], .string("cute"))
+        XCTAssertEqual(p[""]?["theme"], .string("dracula"))
     }
 
     func testSectionScopesKeys() {
@@ -186,7 +186,7 @@ final class TOMLTests: XCTestCase {
 
     func testArrayOfTablesIgnoresOtherSectionsAndKeys() {
         let tables = parseTOMLArrayOfTables("""
-            theme = "cute"
+            theme = "dracula"
 
             [grid]
             cols = 4

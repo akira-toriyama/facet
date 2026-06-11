@@ -32,7 +32,7 @@ final class StatusTests: XCTestCase {
         defer { try? FileManager.default.removeItem(atPath: path) }
         let snap = StatusSnapshot(
             backend: "stub",
-            theme: "cute",
+            theme: "dracula",
             defaultView: nil,
             workspaces: [
                 .init(index: 1, name: "main",

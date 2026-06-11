@@ -47,11 +47,15 @@ final class FacetConfigTests: XCTestCase {
     func testEffectiveThemeFallsBackToTerminal() {
         var c = FacetConfig()
         XCTAssertEqual(c.effectiveTheme, "terminal")
-        c.theme = "Cute"
-        XCTAssertEqual(c.effectiveTheme, "cute")
+        c.theme = "Dracula"
+        XCTAssertEqual(c.effectiveTheme, "dracula",
+                       "a known name resolves case-insensitively")
         c.theme = "nonsuch-theme"
         XCTAssertEqual(c.effectiveTheme, "terminal",
                        "unknown theme name → default")
+        c.theme = "nord"
+        XCTAssertEqual(c.effectiveTheme, "terminal",
+                       "a Phase-V-cut theme name (nord) → default")
     }
 
     func testEffectiveGridColsClampsAndDefaults() {
@@ -182,7 +186,7 @@ final class FacetConfigTests: XCTestCase {
     func testFromTOMLMapsAllRecognisedKeys() {
         let parsed = parseTOMLSubset("""
             default-view = "tree"
-            theme = "cute"
+            theme = "dracula"
 
             [grid]
             cols = 6
@@ -191,7 +195,7 @@ final class FacetConfigTests: XCTestCase {
             """)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.effectiveDefaultView, "tree")
-        XCTAssertEqual(c.effectiveTheme, "cute")
+        XCTAssertEqual(c.effectiveTheme, "dracula")
         XCTAssertEqual(c.effectiveGridCols, 6)
         XCTAssertEqual(c.effectiveGridLabelPosition, "down")
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
@@ -291,7 +295,7 @@ final class FacetConfigTests: XCTestCase {
 
     func testNoWarningsForValidValues() {
         var c = FacetConfig()
-        c.theme = "cute"
+        c.theme = "dracula"
         c.defaultLayout = "bsp"
         c.railEdge = "left"
         c.treePreviewMode = "mirror"
@@ -305,7 +309,7 @@ final class FacetConfigTests: XCTestCase {
     func testValidValuesAreCaseInsensitive() {
         var c = FacetConfig()
         c.defaultLayout = "BSP"
-        c.theme = "Cute"
+        c.theme = "Dracula"
         c.railEdge = "LEFT"
         XCTAssertTrue(c.unknownValueWarnings().isEmpty,
                       "a known name in any case is not a clamp")

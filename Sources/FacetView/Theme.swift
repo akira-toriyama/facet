@@ -1,11 +1,12 @@
 // Shared drawing helpers for the tree / grid / rail views (grip dots,
 // mark badges, tag dots, a themed text line, the layout-mode label).
 //
-// The theme STATE itself — the module-level `pal` (now a PaletteKit
-// `ResolvedPalette`) and the `uiFont` factory — moved to sill's
+// The theme STATE itself — the module-level `pal` (a PaletteKit
+// `ResolvedPalette`) and the `uiFont` factory — lives in sill's
 // PaletteKit (plan atelier) and is re-exported via Palette.swift, so the
-// helpers below (and every view call site) keep reading `pal.*` /
-// `uiFont(...)` unchanged.
+// helpers below (and every view call site) read `pal.*` (the Phase-V
+// Tailwind field names: `foreground` / `muted` / `primary` / …) and
+// `uiFont(...)` without a per-file import.
 
 import AppKit
 import PaletteKit
@@ -73,7 +74,7 @@ public func drawMiniMarkBadge(_ mark: String, in rect: NSRect) {
     guard !mark.isEmpty else { return }
     let pad: CGFloat = 2, pillH: CGFloat = 9
     let attrs: [NSAttributedString.Key: Any] = [
-        .font: uiFont(7, .bold), .foregroundColor: pal.accent,
+        .font: uiFont(7, .bold), .foregroundColor: pal.primary,
     ]
     let textW = (mark as NSString).size(withAttributes: attrs).width
     let pillW = min(textW + 6, rect.width - pad * 2)
@@ -82,8 +83,8 @@ public func drawMiniMarkBadge(_ mark: String, in rect: NSRect) {
                           width: pillW, height: pillH)
         let pp = NSBezierPath(roundedRect: pill,
                               xRadius: pillH / 2, yRadius: pillH / 2)
-        (pal.bg ?? .black).withAlphaComponent(0.6).setFill(); pp.fill()
-        pal.accent.setStroke(); pp.lineWidth = 0.75; pp.stroke()
+        (pal.background ?? .black).withAlphaComponent(0.6).setFill(); pp.fill()
+        pal.primary.setStroke(); pp.lineWidth = 0.75; pp.stroke()
         let para = NSMutableParagraphStyle()
         para.alignment = .center; para.lineBreakMode = .byTruncatingTail
         var a = attrs; a[.paragraphStyle] = para
@@ -93,7 +94,7 @@ public func drawMiniMarkBadge(_ mark: String, in rect: NSRect) {
                        width: pillW, height: th), withAttributes: a)
     } else {
         let d: CGFloat = 4
-        pal.accent.setFill()
+        pal.primary.setFill()
         NSBezierPath(ovalIn: NSRect(x: rect.minX + pad, y: rect.minY + pad,
                                     width: d, height: d)).fill()
     }
@@ -102,7 +103,7 @@ public func drawMiniMarkBadge(_ mark: String, in rect: NSRect) {
 /// Secondary-tag membership for the tiny grid / rail thumbnails: this
 /// window is ALSO in `count` other tags (it's already shown under its
 /// primary tag's cell). Surface that as up to 3 small dots in the
-/// BOTTOM-left — `accent2`, so they read apart from the top-left accent
+/// BOTTOM-left — `secondary`, so they read apart from the top-left accent
 /// mark badge — plus a `+` when there are more than 3. Caller draws
 /// inside its own cell clip; coords are flipped (maxY = visual bottom).
 /// Tree shows the names as `#tag` chips instead; the mini views only
@@ -112,7 +113,7 @@ public func drawMiniTagDots(_ count: Int, in rect: NSRect) {
     guard count > 0, rect.width > 10, rect.height > 10 else { return }
     let r: CGFloat = 1.6, gap: CGFloat = 3, pad: CGFloat = 3
     let shown = min(count, 3)
-    pal.accent2.setFill()
+    pal.secondary.setFill()
     let cy = rect.maxY - pad - r
     var cx = rect.minX + pad + r
     for _ in 0..<shown {
@@ -124,6 +125,6 @@ public func drawMiniTagDots(_ count: Int, in rect: NSRect) {
         ("+" as NSString).draw(
             in: NSRect(x: cx - r, y: cy - 5, width: 8, height: 10),
             withAttributes: [.font: uiFont(7, .bold),
-                             .foregroundColor: pal.accent2])
+                             .foregroundColor: pal.secondary])
     }
 }

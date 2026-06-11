@@ -28,7 +28,7 @@ extension RailView {
         g.layer?.cornerRadius = 4
         g.layer?.cornerCurve = .continuous
         g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.accent.cgColor
+        g.layer?.borderColor = pal.primary.cgColor
         g.layer?.borderWidth = 1.5
         g.layer?.shadowColor = NSColor.black.cgColor
         g.layer?.shadowOffset = CGSize(width: 0, height: -4)
@@ -44,7 +44,7 @@ extension RailView {
         } else {
             // No app-icon fallback (rail shows captures only); a not-yet-
             // captured window lifts as a plain accent tile.
-            g.layer?.backgroundColor = pal.accent.withAlphaComponent(0.45).cgColor
+            g.layer?.backgroundColor = pal.primary.withAlphaComponent(0.45).cgColor
         }
         addSubview(g)
         dragGhost = g
@@ -59,9 +59,9 @@ extension RailView {
         g.layer?.cornerRadius = railCellRadius
         g.layer?.cornerCurve = .continuous
         g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.text.withAlphaComponent(0.85).cgColor
+        g.layer?.borderColor = pal.foreground.withAlphaComponent(0.85).cgColor
         g.layer?.borderWidth = 2
-        g.layer?.backgroundColor = pal.text.withAlphaComponent(0.10).cgColor
+        g.layer?.backgroundColor = pal.foreground.withAlphaComponent(0.10).cgColor
         g.layer?.shadowColor = NSColor.black.cgColor
         g.layer?.shadowOffset = CGSize(width: 0, height: -4)
         g.layer?.shadowRadius = railLiftShadowRadius
@@ -69,7 +69,7 @@ extension RailView {
         if cell.wins.isEmpty {
             let label = NSTextField(labelWithString: railLabel(cell.name, cell.wsIndex))
             label.font = uiFont(railGhostLabelSize, .bold)
-            label.textColor = pal.text.withAlphaComponent(0.95)
+            label.textColor = pal.foreground.withAlphaComponent(0.95)
             label.alignment = .center
             label.sizeToFit()
             label.frame = NSRect(
@@ -91,7 +91,7 @@ extension RailView {
                     iv.image = img
                     iv.imageScaling = .scaleAxesIndependently
                 } else {
-                    iv.layer?.backgroundColor = pal.text.withAlphaComponent(0.22).cgColor
+                    iv.layer?.backgroundColor = pal.foreground.withAlphaComponent(0.22).cgColor
                 }
                 g.addSubview(iv)
             }

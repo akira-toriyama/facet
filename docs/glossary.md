@@ -463,11 +463,16 @@ view を出す動作の **修飾子**（verb ではない）。`--view=tree` と
 - **Don't call it:** safe getters, validated accessors, バリデート getter
 
 ### `pal` (palette)
-`Sources/FacetView/Theme.swift` の **`@MainActor` module-level var**。
-view ファイルが `pal.text` / `pal.dim` などを直接参照する。**改名しない**
-（view 側 ~数百箇所の変更を引き起こすが behavior 利得ゼロ）。
-- preset: `.terminal` / `.cute` / `.system`（`NSColor` が Sendable でない
-  ため `@MainActor`）
+sill の PaletteKit が公開する **`@MainActor` module-level var**
+（`ResolvedPalette`）。`Sources/FacetView/Palette.swift` が `@_exported
+import` で再公開し、view ファイルが `pal.foreground` / `pal.muted` /
+`pal.primary` などを直接参照する。**`pal` という変数名は改名しない**
+（view 側 ~数百箇所の変更を引き起こすが behavior 利得ゼロ）。ロール名は
+Phase V で Tailwind 風にリネーム（`text→foreground` / `dim→muted` /
+`accent→primary` / `accent2→secondary` …）。
+- preset: `ThemeSpec` の `.terminal` / `.dracula` / `.system` … は純粋
+  `Sendable`（UInt32 hex）。`@MainActor` 制約は解決後の `ResolvedPalette`
+  / `resolve(_:)` 側（`NSColor` が Sendable でないため）。
 - **Don't call it:** theme.current, currentPalette, theme, テーマ
 
 ---

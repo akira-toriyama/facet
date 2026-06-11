@@ -67,7 +67,7 @@ public final class BorderFX {
 
     /// Whether an effect is active (vs "off"). Grid / rail draw a border
     /// only when active; the tree panel draws a plain accent border even
-    /// when off (so `color` falls back to `pal.accent`).
+    /// when off (so `color` falls back to `pal.primary`).
     public var active: Bool { fx != nil }
     public var glowEnabled: Bool { glowOn }
     private var flashing: Bool { flashStep >= 0 && flashStep < flashSeq.count }
@@ -82,10 +82,10 @@ public final class BorderFX {
     }
 
     /// Current border color: the flash blink, the rotating rainbow hue,
-    /// the effect's fixed steady color, or `pal.accent` when off.
+    /// the effect's fixed steady color, or `pal.primary` when off.
     public var color: NSColor {
         if flashing { return flashSeq[flashStep] }
-        guard let fx else { return pal.accent }
+        guard let fx else { return pal.primary }
         if fx.cycles {
             return NSColor(hue: cyclePhase, saturation: 0.9,
                            brightness: 1, alpha: 1)

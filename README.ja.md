@@ -47,8 +47,8 @@ DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**:
 swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾
 キーは使わない。
 
-各 view は同じ backend と同じテーマ (terminal / nord / dracula /
-catppuccin / hacker / mono-light … 全17テーマ + `random`、ライブ切替) を共有。
+各 view は同じ backend と同じテーマ (terminal / chomp / rainbow /
+dracula / github-dark / catppuccin-mocha … 全13テーマ + `random`、ライブ切替) を共有。
 
 ## レイアウト
 
@@ -309,15 +309,15 @@ Recording** も付与。
 facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 なし、 source of truth は 1 ファイル)。 設定可能な項目はリポジトリ
 ルートの [config.toml](config.toml) のコメントを参照。 CLI override
-(`facet --theme=cute` 等) はセッション中のみ有効; 永続化したい
+(`facet --theme=dracula` 等) はセッション中のみ有効; 永続化したい
 場合はファイルを編集。
 
 よく触る key:
 
-- `theme` (トップレベル) — 全17テーマ: `terminal` (default) / `nord` /
-  `dracula` / `gruvbox` / `catppuccin` / `rosepine` / `everforest` /
-  `solarized` / `onedark` / `monokai` / `hacker` / `cute` / `paper` /
-  `system` / `mono-light` / `mono-dark` / `monotone`、加えて `random`
+- `theme` (トップレベル) — 全13テーマ: `terminal` (default) / `chomp` /
+  `rainbow` / `cobalt2` / `shades-of-purple` / `tokyo-hack` /
+  `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
+  `github-light` / `catppuccin-latte` / `system`、加えて `random`
   (起動/`--reload` ごとにランダム選択・`system` は除外)
 - `default-view` (トップレベル) — `tree` / `grid`
 - `[tree]` テーブル — `preview-mode` (`popover` / `mirror`) と、パネル
@@ -446,7 +446,7 @@ facet status                      # スナップショット: backend /
                                   # lastError / timestamp
 
 # Server 制御
-facet --theme=NAME                # 全17テーマ + random (terminal, …, hacker; config.toml 参照)
+facet --theme=NAME                # 全13テーマ + random (terminal, chomp, …, catppuccin-latte; config.toml 参照)
 facet --reload                    # config.toml 再読込 + 反映
                                   # (theme / preview-mode)
 facet --quit                      # server 終了
