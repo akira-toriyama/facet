@@ -57,13 +57,8 @@ let package = Package(
         // on a single pre-1.0 minor (a pre-1.0 minor can break, so don't
         // auto-jump). For local, atomic sill↔facet editing, temporarily
         // swap this line for `.package(path: "../sill")`.
-        //
-        // ⚠️ MIGRATION IN PROGRESS (Phase V): using the path dep against
-        // local sill `feat/phase-v-catalog`. Restore the url+SemVer pin
-        // (sill 0.3.0) before merge — a path dep breaks CI/brew.
-        .package(path: "../sill"),
-        // .package(url: "https://github.com/akira-toriyama/sill.git",
-        //          .upToNextMinor(from: "0.1.0")),
+        .package(url: "https://github.com/akira-toriyama/sill.git",
+                 .upToNextMinor(from: "0.3.0")),
     ],
     targets: [
         // FacetCore links sill's PURE `Palette` module (AppKit-free, so it
