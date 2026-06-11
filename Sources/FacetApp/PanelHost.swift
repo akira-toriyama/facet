@@ -104,7 +104,11 @@ final class PanelHost: NSObject {
         scroll.documentView = view
 
         effect = NSVisualEffectView()
-        effect.material = .sidebar     // shown only when pal.background == nil
+        // Shown only when pal.background == nil (the `system` theme; every
+        // concrete theme paints an opaque bgView over it). Honor the
+        // resolved material — `system` asks for `.menu` (native context-menu
+        // look); `.sidebar` is the fallback for any other vibrancy theme.
+        effect.material = pal.vibrancyMaterial ?? .sidebar
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
@@ -334,6 +338,11 @@ final class PanelHost: NSObject {
     /// `paletteFor(...)` changes `pal`.
     func applyTheme() {
         bgView.layer?.backgroundColor = (pal.background ?? .clear).cgColor
+        // Re-honor the material on every theme switch, so toggling TO
+        // `system` at runtime swaps the backdrop to `.menu` (and back to
+        // `.sidebar` for another vibrancy theme). Harmless for concrete
+        // themes — their opaque bgView hides the effect entirely.
+        effect.material = pal.vibrancyMaterial ?? .sidebar
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
     }
