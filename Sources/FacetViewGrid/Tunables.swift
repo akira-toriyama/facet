@@ -3,6 +3,7 @@
 // cell, no extra index badge.
 
 import CoreGraphics
+import FacetView
 import Foundation
 
 let gridOuterPad: CGFloat = 48          // overlay edge → outermost cell row
@@ -42,6 +43,16 @@ let gridLiftScale: CGFloat = 1.06
 let gridLiftDuration: TimeInterval = 0.14
 let gridLiftShadowRadius: CGFloat = 14
 let gridLiftShadowOpacity: Float = 0.45
+
+/// The grid's tunables bundled for the shared FacetView drag-ghost
+/// construction (DragGhost.swift).
+let gridGhostStyle = DragGhostStyle(
+    liftScale: gridLiftScale,
+    shadowRadius: gridLiftShadowRadius,
+    shadowOpacity: gridLiftShadowOpacity,
+    liftDuration: gridLiftDuration,
+    cellCornerRadius: gridCellCornerRadius,
+    ghostLabelSize: gridGhostLabelSize)
 
 // dnd-kit-style "animated reorder" after a successful drop: every
 // window thumb whose rect changed slides from its old rect to its
