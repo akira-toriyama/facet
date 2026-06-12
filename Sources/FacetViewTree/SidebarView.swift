@@ -59,6 +59,11 @@ public final class SidebarView: NSView {
     private var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public private(set) var signature = ""
     public private(set) var contentHeight: CGFloat = 40
+    /// Natural content width (widest row's untruncated text, floored at
+    /// the clip width). PanelHost sizes the documentView to this so the
+    /// panel scrolls horizontally to read overflowing titles (B). Set by
+    /// `update`; read through PanelHost's layout.
+    public private(set) var contentWidth: CGFloat = sidebarWidth
 
     /// While true, `draw` renders placeholder rows and `update`
     /// holds (incoming refreshes don't replace the skeleton). Driven
@@ -256,7 +261,47 @@ public final class SidebarView: NSView {
         if sig == signature { return contentHeight }
         signature = sig
         rows.removeAll(); cells.removeAll(); wsBands.removeAll()
-        let w = max(bounds.width, sidebarWidth)
+
+        // Resolve which windows each workspace shows (search filters by
+        // window; a zero-match workspace drops out — see #202). Reused for
+        // both the width pre-pass and the row build below.
+        let shown: [(ws: Workspace, wins: [Window])] = workspaces.compactMap { ws in
+            let wins = searching
+                ? ws.windows.filter { fuzzyMatch(query, $0.appName + " " + eff($0)) }
+                : ws.windows
+            if searching && wins.isEmpty { return nil }
+            return (ws, wins)
+        }
+
+        // Horizontal content width = the widest row's NATURAL (untruncated)
+        // text width, floored at the visible clip width. Titles draw at
+        // full width and the panel scrolls sideways to read overflow (B);
+        // nothing is tail-truncated. Measured up front because every row
+        // rect — and thus hit-testing — is built at this width.
+        let clipW = enclosingScrollView?.contentView.bounds.width ?? bounds.width
+        let txWin = rowPadX + 2 + iconSize + 8
+        let gripSpace = headerGripW + 6
+        var naturalW = sidebarWidth
+        for (ws, wins) in shown {
+            let nm = (ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name).uppercased()
+            let nameW = (nm as NSString).size(
+                withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+            let modeW = ws.layoutMode.isEmpty ? 0
+                : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
+                    withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+            naturalW = max(naturalW,
+                           rowPadX + gripSpace + ceil(max(nameW, modeW)) + rowPadX)
+            for win in wins {
+                let appW = (win.appName as NSString).size(
+                    withAttributes: [.font: uiFont(windowFontSize, .semibold)]).width
+                let tt = eff(win)
+                let titleW = tt.isEmpty ? 0
+                    : (tt as NSString).size(
+                        withAttributes: [.font: uiFont(windowFontSize - 1, .semibold)]).width
+                naturalW = max(naturalW, txWin + ceil(max(appW, titleW)) + rowPadX)
+            }
+        }
+        let w = max(clipW, naturalW)
         var y: CGFloat = 6        // small top inset
 
         // Append one window row (TreeRow + Cell) and advance `y`. Shared
@@ -312,13 +357,7 @@ public final class SidebarView: NSView {
         // cross-WS list; keeping the grouping is the only behavioural
         // change.
         var firstHeader = true
-        for ws in workspaces {
-            let wins = searching
-                ? ws.windows.filter {
-                    fuzzyMatch(query, $0.appName + " " + eff($0))
-                  }
-                : ws.windows
-            if searching && wins.isEmpty { continue }
+        for (ws, wins) in shown {
             let start = y
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
@@ -341,6 +380,7 @@ public final class SidebarView: NSView {
             y += 3
         }
         contentHeight = y + 6
+        contentWidth = w
         if kbNav { resolveSel() }
         needsDisplay = true
         return contentHeight
@@ -610,7 +650,11 @@ public final class SidebarView: NSView {
             }
         }
         let para = NSMutableParagraphStyle()
-        para.lineBreakMode = .byTruncatingTail
+        // No tail-truncation (no "…"): rows are laid out at the natural
+        // content width (see update's pre-pass) and the panel scrolls
+        // horizontally to read overflow (B). Clip rather than ellipsize so
+        // a sub-pixel measurement gap never reintroduces "…".
+        para.lineBreakMode = .byClipping
 
         let kbSelRow = kbNav ? kbSel.flatMap(kbIndex(of:)) : nil
         var winOrdinal = 0   // window-row counter for the zebra stripe
@@ -628,7 +672,7 @@ public final class SidebarView: NSView {
                     sep.stroke()
                 }
                 let hp = NSMutableParagraphStyle()
-                hp.lineBreakMode = .byTruncatingTail
+                hp.lineBreakMode = .byClipping     // no "…" — see `para` (B)
                 hp.maximumLineHeight = row.height
                 let fs = c.hot ? activeHeaderFontSize : headerFontSize
                 let capY = c.firstHeader ? row.minY + 6 : row.minY + 18

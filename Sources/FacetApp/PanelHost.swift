@@ -105,8 +105,14 @@ final class PanelHost: NSObject {
         scroll = NSScrollView()
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = true   // shows only when content
+                                              // is wider than the panel (B)
         scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
+        // Theme-matched scrollbars (pal-coloured knob) instead of the
+        // system grey, keeping the overlay style + auto-fade.
+        scroll.verticalScroller = ThemedScroller()
+        scroll.horizontalScroller = ThemedScroller()
         scroll.autoresizingMask = [.width, .height]
         // Flipped clipView so the documentView (SidebarView) is
         // top-anchored — without this, shrinking the panel via the
@@ -386,7 +392,10 @@ final class PanelHost: NSObject {
         handleBar.needsDisplay = true
         let bodyH = max(f.height - sh - hb, 0)
         scroll.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
-        view.frame = NSRect(x: 0, y: 0, width: f.width,
+        // documentView width = the natural content width (≥ clip width) so
+        // overflowing titles scroll horizontally (B); height as before.
+        view.frame = NSRect(x: 0, y: 0,
+                            width: max(f.width, view.contentWidth),
                             height: max(contentH, bodyH))
         // Border tracks the panel size. Disable the implicit layer
         // animation so it doesn't lag a frame behind a live resize.
@@ -412,6 +421,8 @@ final class PanelHost: NSObject {
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
         handleBar.needsDisplay = true
+        scroll.verticalScroller?.needsDisplay = true
+        scroll.horizontalScroller?.needsDisplay = true
     }
 
     /// Apply the `[border]` config (shared `BorderFX`). The panel border
