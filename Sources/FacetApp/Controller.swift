@@ -179,6 +179,9 @@ final class Controller: NSObject {
         self.panelHost = PanelHost(view: view)
         super.init()
         view.controller = self
+        panelHost.handleBar.onResetGeometry = { [weak self] in
+            self?.resetPanelGeometry()
+        }
         if #available(macOS 14.0, *) { winPreview = WindowPreview() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {

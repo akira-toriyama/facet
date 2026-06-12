@@ -85,6 +85,10 @@ public final class SidebarView: NSView {
     // across internal relayouts (update's `macDesktop` arg is a
     // double-optional: omitted = keep current).
     private var macDesktopOrdinal: Int?
+    /// The mac-desktop ordinal currently shown ("Desktop N"). Read by
+    /// PanelHost to label the pinned `HandleBar`. nil when SkyLight is
+    /// unavailable.
+    public var shownMacDesktopOrdinal: Int? { macDesktopOrdinal }
     // AX-resolved titles for windows the backend left blank; kept
     // across internal relayouts that don't re-resolve.
     private var titleOverride: [WindowID: String] = [:]
@@ -293,19 +297,10 @@ public final class SidebarView: NSView {
             y += rh
         }
 
-        // Top drag-handle band: grab to move the panel (mouseDown
-        // routes a `.handle` drag to panel-move, mode 1) and shows the
-        // mac desktop ("Desktop N") when SkyLight resolves the
-        // ordinal — the panel previously had no grab affordance.
-        let hbr = NSRect(x: 0, y: y, width: w, height: handleRowH)
-        rows.append(TreeRow(rect: hbr, kind: .handle))
-        cells.append(Cell(row: hbr, kind: 0, hot: false, firstHeader: false,
-                          pid: 0, app: "", title: "",
-                          text: macDesktopOrdinal.map { "Desktop \($0)" } ?? "",
-                          mode: "", isMaster: false, isFloating: false,
-                          isSticky: false, mark: nil, isHidden: false,
-                          scratchpad: nil, tags: []))
-        y += handleRowH
+        // The "Desktop N" grab band is no longer a scrolling row — it's
+        // pinned at the panel top by PanelHost's `HandleBar`, so a long
+        // workspace list never scrolls the panel-move handle off-screen
+        // (its label comes from `shownMacDesktopOrdinal`).
 
         // One grouped pass for BOTH modes: every workspace emits its
         // header + window rows. In search mode the windows are filtered
@@ -622,37 +617,6 @@ public final class SidebarView: NSView {
         for (i, c) in cells.enumerated() {
             let row = c.row
             switch c.kind {
-            case 0:   // top drag-handle band: grab to move the panel;
-                      // shows the mac desktop ("Desktop N").
-                      // Divider sits `dividerPadBelow` above the band's
-                      // bottom edge; label + grip centre in the zone
-                      // above it, so the line reads with breathing room
-                      // on both sides.
-                let dividerPadBelow: CGFloat = 6
-                let zoneH = row.height - dividerPadBelow
-                drawGrip(in: NSRect(x: rowPadX,
-                                    y: row.minY + (zoneH - 12) / 2,
-                                    width: headerGripW, height: 12),
-                         hot: hoverIdx == i)
-                let th: CGFloat = 18
-                let t = c.text as NSString
-                t.draw(in: NSRect(x: rowPadX + headerGripW + 7,
-                                  y: row.minY + (zoneH - th) / 2,
-                                  width: bounds.width
-                                      - (rowPadX * 2 + headerGripW + 7),
-                                  height: th),
-                       withAttributes: [
-                        .font: uiFont(13, .bold),
-                        .foregroundColor: pal.foreground,
-                        .kern: 0.5, .paragraphStyle: para])
-                let lineY = row.maxY - dividerPadBelow
-                pal.border.setStroke()
-                let hsep = NSBezierPath()
-                hsep.move(to: NSPoint(x: rowPadX, y: lineY))
-                hsep.line(to: NSPoint(x: bounds.width - rowPadX, y: lineY))
-                hsep.lineWidth = 1
-                hsep.stroke()
-
             case 1:   // workspace section header — 2-line caption
                 if !c.firstHeader {
                     pal.border.setStroke()
@@ -1091,14 +1055,8 @@ public final class SidebarView: NSView {
         let row = rows.first(where: { $0.rect.contains(start) })
         draggingWid = nil; dropWS = nil; dragLabel = nil
 
-        // Double-click the top handle band ("Desktop N") → reset the
-        // panel to its `[tree]` config geometry (or the built-in default
-        // when none is set). The single click on a handle is a no-op
-        // (handleClick), so the first click of the pair is harmless.
-        if e.clickCount == 2, case .handle? = row?.kind {
-            controller?.resetPanelGeometry()
-            return
-        }
+        // (Double-click-to-reset-geometry now lives on the pinned
+        // HandleBar, not on a scrolling row.)
 
         var mode = 0          // 0 undecided · 1 panel-move · 2 window-drag
         var dragWS = 0
@@ -1147,7 +1105,7 @@ public final class SidebarView: NSView {
                         mode = 1                       // ⌘+drag anywhere → move
                     } else {
                         switch row?.kind {
-                        case .none, .handle?, .search?:
+                        case .none, .search?:
                             mode = 1                   // empty / search → move
                         case .window(let ws, _, let wid, _)?:
                             mode = 2
@@ -1385,7 +1343,7 @@ public final class SidebarView: NSView {
 
     private func handleClick(_ row: TreeRow) {
         switch row.kind {
-        case .handle, .search:
+        case .search:
             break
         case .header(let i):
             // Move highlight to that workspace immediately: its
