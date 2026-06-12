@@ -88,11 +88,12 @@ final class TOMLTests: XCTestCase {
     }
 
     func testUnknownValueShapeIsSkipped() {
-        // `1.5` isn't supported (no float case) → skipped, leaves
-        // surrounding keys intact.
+        // An unquoted bareword is no supported shape → skipped, leaving
+        // surrounding keys intact. (Floats DO parse now — see
+        // `testFloatValueParsing` — so this uses a genuine non-value.)
         let p = parseTOMLSubset("""
             ok = 1
-            bad = 1.5
+            bad = unquoted
             also_ok = 2
             """)
         XCTAssertEqual(p[""]?["ok"], .int(1))
