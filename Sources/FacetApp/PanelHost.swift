@@ -33,6 +33,11 @@ final class PanelHost: NSObject {
     private let bgView = NSView()
     let searchBar: SearchBar
     private let view: SidebarView
+    /// Per-surface palette (PR-B) — the tree box, shared with every piece
+    /// of tree chrome (sidebar, search bar, handle bar, border, scrollers)
+    /// so a re-theme / cycle updates all of it at once.
+    let paletteBox: PaletteBox
+    private var pal: ResolvedPalette { paletteBox.pal }
     /// Pinned "Desktop N" grab band at the panel top — a sibling of the
     /// scroll view (never scrolls). Controller wires its `onResetGeometry`;
     /// PanelHost feeds its ordinal + sizes it in `applySubviewLayout`.
@@ -80,8 +85,12 @@ final class PanelHost: NSObject {
 
     // MARK: - Init
 
-    init(view: SidebarView) {
+    init(view: SidebarView, paletteBox: PaletteBox) {
         self.view = view
+        self.paletteBox = paletteBox
+        view.paletteBox = paletteBox
+        handleBar.paletteBox = paletteBox
+        borderFX.paletteBox = paletteBox
 
         // Built-in default: top-left of the main screen, auto height.
         // The Controller seeds `[tree]` config geometry over this (via
@@ -111,8 +120,10 @@ final class PanelHost: NSObject {
         scroll.autohidesScrollers = true
         // Theme-matched scrollbars (pal-coloured knob) instead of the
         // system grey, keeping the overlay style + auto-fade.
-        scroll.verticalScroller = ThemedScroller()
-        scroll.horizontalScroller = ThemedScroller()
+        let vScroller = ThemedScroller(); vScroller.paletteBox = paletteBox
+        let hScroller = ThemedScroller(); hScroller.paletteBox = paletteBox
+        scroll.verticalScroller = vScroller
+        scroll.horizontalScroller = hScroller
         scroll.autoresizingMask = [.width, .height]
         // Flipped clipView so the documentView (SidebarView) is
         // top-anchored — without this, shrinking the panel via the
@@ -128,7 +139,7 @@ final class PanelHost: NSObject {
         // concrete theme paints an opaque bgView over it). Honor the
         // resolved material — `system` asks for `.menu` (native context-menu
         // look); `.sidebar` is the fallback for any other vibrancy theme.
-        effect.material = pal.vibrancyMaterial ?? .sidebar
+        effect.material = paletteBox.pal.vibrancyMaterial ?? .sidebar
         effect.blendingMode = .behindWindow
         effect.state = .active
         effect.wantsLayer = true
@@ -145,10 +156,11 @@ final class PanelHost: NSObject {
         bgView.layer?.cornerRadius = 12
         bgView.layer?.cornerCurve = .continuous
         bgView.layer?.masksToBounds = true
-        bgView.layer?.backgroundColor = (pal.background ?? .clear).cgColor
+        bgView.layer?.backgroundColor = (paletteBox.pal.background ?? .clear).cgColor
         bgView.autoresizingMask = [.width, .height]
 
         searchBar = SearchBar(frame: .zero)
+        searchBar.paletteBox = paletteBox
         searchBar.isHidden = true
         searchBar.applyTheme()
         searchBar.autoresizingMask = [.width, .minYMargin]
@@ -165,7 +177,7 @@ final class PanelHost: NSObject {
         // in `applyTheme`. The border draws inside the layer bounds, so
         // it stays within `effect`'s masksToBounds clip.
         borderLayer.borderWidth = 1.5
-        borderLayer.borderColor = pal.primary.cgColor
+        borderLayer.borderColor = paletteBox.pal.primary.cgColor
         borderLayer.cornerRadius = cornerRadius
         borderLayer.cornerCurve = .continuous
         borderLayer.zPosition = 100

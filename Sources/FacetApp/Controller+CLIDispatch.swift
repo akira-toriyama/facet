@@ -466,19 +466,19 @@ extension Controller {
         scheduleReconcile(after: 0.05)
     }
 
-    /// Live re-theme from `facet --theme=...`. Runtime-only —
-    /// the change does NOT persist across restarts. config.toml
-    /// is the single source of truth for theme; to make a runtime
-    /// pick stick, edit ``theme = "..."`` in the user's config.
+    /// Live re-theme from `facet --theme=...`. Runtime-only — the change
+    /// does NOT persist across restarts, and it OVERRIDES the per-view
+    /// `[tree]/[grid]/[rail].theme` keys (every surface shows `name`) until
+    /// the user edits a theme key in config (then config wins) or issues
+    /// another `--theme=`. config.toml is the single source of truth; to
+    /// make a pick stick, edit ``[theme] name`` in the user's config.
     func applyStyle(_ name: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
         Log.debug("applyStyle name=\(key)")
-        currentThemeName = key
-        pal = resolve(paletteFor(key))
-        panelHost.applyTheme()
-        sidebarView.needsDisplay = true
-        updateThemeAnimator()
+        themeOverride = key
+        resolveSurfacePalettes()
+        reapplyThemes()
     }
 
     /// Human-readable range hint for out-of-range error messages.

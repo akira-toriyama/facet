@@ -33,6 +33,10 @@ public final class HandleBar: NSView {
     private var hot = false
     public override var isFlipped: Bool { true }
 
+    /// Per-surface palette (PR-B). Wired by PanelHost to the tree box.
+    public var paletteBox: PaletteBox!
+    var pal: ResolvedPalette { paletteBox.pal }
+
     public override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true

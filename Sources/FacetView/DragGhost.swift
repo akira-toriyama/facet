@@ -77,7 +77,8 @@ public struct MiniThumbSpec {
 public func makeWindowGhost(over rect: CGRect,
                             thumbnail: NSImage?,
                             iconFallback: () -> NSImage?,
-                            style: DragGhostStyle) -> NSView {
+                            style: DragGhostStyle,
+                            pal: ResolvedPalette) -> NSView {
     let lifted = CGRect(
         x: rect.midX - (rect.width  * style.liftScale) / 2,
         y: rect.midY - (rect.height * style.liftScale) / 2,
@@ -130,7 +131,8 @@ public func makeWindowGhost(over rect: CGRect,
 public func makeWorkspaceGhost(cellRect: CGRect,
                                label: String,
                                thumbs: [MiniThumbSpec],
-                               style: DragGhostStyle) -> NSView {
+                               style: DragGhostStyle,
+                               pal: ResolvedPalette) -> NSView {
     let g = FlippedView(frame: cellRect)
     g.wantsLayer = true
     g.layer?.cornerRadius = style.cellCornerRadius

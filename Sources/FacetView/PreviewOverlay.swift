@@ -17,6 +17,11 @@ public final class PreviewOverlay {
     private let iv = NSImageView()
     public private(set) var shownWindow: WindowID?
 
+    /// Per-surface palette (PR-B). Wired by the pool to the tree box —
+    /// the preview border echoes the tree theme accent.
+    public var paletteBox: PaletteBox!
+    private var pal: ResolvedPalette { paletteBox.pal }
+
     public init() {
         panel = .clickThroughOverlay(hasShadow: true)
         iv.imageScaling = .scaleProportionallyUpOrDown

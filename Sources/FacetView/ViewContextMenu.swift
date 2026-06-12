@@ -17,7 +17,8 @@ public enum ViewContextMenu {
         at scr: NSPoint,
         backend: any WindowBackend,
         workspaceIndex ws: Int,
-        workspaces: [Workspace]
+        workspaces: [Workspace],
+        palette: ResolvedPalette
     ) {
         let modes = backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
@@ -25,7 +26,8 @@ public enum ViewContextMenu {
         PopupMenu.shared.show(at: scr,
                               header: "WS\(ws + 1) layout",
                               items: modes,
-                              checkedIndex: idx) { i in
+                              checkedIndex: idx,
+                              palette: palette) { i in
             cliQueue.async { backend.setLayoutMode(workspaceIndex: ws, mode: modes[i]) }
         }
     }
@@ -42,6 +44,7 @@ public enum ViewContextMenu {
         pid: Int,
         windowID id: WindowID,
         title: String,
+        palette: ResolvedPalette,
         runOps: @escaping (_ ops: [WindowAction], _ window: Window, _ ws: Int) -> Void
     ) {
         let wsModel = workspaces.first { $0.index == ws }
@@ -59,7 +62,8 @@ public enum ViewContextMenu {
         PopupMenu.shared.show(at: scr,
                               header: "Window",
                               items: menu.map(\.label),
-                              checkedIndex: nil) { i in
+                              checkedIndex: nil,
+                              palette: palette) { i in
             let item = menu[i]
             if item.isClose {
                 cliQueue.async { backend.closeWindow(id) }

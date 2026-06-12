@@ -13,6 +13,14 @@ import FacetView
 
 public final class GridView: NSView {
 
+    /// Per-surface palette (PR-B). The Controller wires the grid box at
+    /// build time; `pal` reads route through it (the grid overlay's own
+    /// `[grid].theme`), and the box is shared with the grid's `BorderFX`.
+    public var paletteBox: PaletteBox! {
+        didSet { borderFX.paletteBox = paletteBox }
+    }
+    var pal: ResolvedPalette { paletteBox.pal }
+
     // MARK: - Inputs (Controller-supplied)
 
     /// Snapshot taken at show time — we don't track live backend
@@ -762,9 +770,9 @@ public final class GridView: NSView {
         wp.lineWidth = 0.5
         wp.stroke()
         // Mark badge — same corner pill / dot as the rail (M9-5 #3).
-        if let mark = w.mark { drawMiniMarkBadge(mark, in: r) }
+        if let mark = w.mark { drawMiniMarkBadge(mark, in: r, pal: pal) }
         // Secondary-tag dots (M11-3 PR3b) — bottom-left, secondary.
-        drawMiniTagDots(w.tags.count, in: r)
+        drawMiniTagDots(w.tags.count, in: r, pal: pal)
     }
 
     // MARK: - Hover (header highlight)
@@ -812,14 +820,15 @@ public final class GridView: NSView {
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
-                                       workspaces: workspaces)
+                                       workspaces: workspaces, palette: pal)
             return
         }
         if let cell = cells.first(where: { $0.rect.contains(p) }),
            let wh = cell.windows.first(where: { $0.rect.contains(p) }) {
             ViewContextMenu.showWindow(
                 at: scr, backend: backend, workspaceIndex: cell.wsIndex,
-                workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: ""
+                workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: "",
+                palette: pal
             ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
         }
     }
@@ -835,12 +844,14 @@ public final class GridView: NSView {
         }
         if kbSelectedWindowIdx == -1 {
             ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
-                                       workspaceIndex: ws, workspaces: workspaces)
+                                       workspaceIndex: ws, workspaces: workspaces,
+                                       palette: pal)
         } else if kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < cell.windows.count {
             let wh = cell.windows[kbSelectedWindowIdx]
             ViewContextMenu.showWindow(
                 at: screenPt(wh.rect), backend: backend, workspaceIndex: ws,
-                workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: ""
+                workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: "",
+                palette: pal
             ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
         }
     }
@@ -982,7 +993,8 @@ public final class GridView: NSView {
             over: hit.rect,
             thumbnail: thumbnails[hit.id],
             iconFallback: { AppIcons.icon(forPID: hit.pid) },
-            style: gridGhostStyle)
+            style: gridGhostStyle,
+            pal: pal)                          // PR-B: grid's per-view palette
         addSubview(g)
         dragGhost = g
 
@@ -1009,7 +1021,8 @@ public final class GridView: NSView {
         let g = makeWorkspaceGhost(cellRect: cell.rect,
                                    label: cell.label,
                                    thumbs: thumbs,
-                                   style: gridGhostStyle)
+                                   style: gridGhostStyle,
+                                   pal: pal)     // PR-B: grid's per-view palette
         addSubview(g)
         dragGhost = g
 

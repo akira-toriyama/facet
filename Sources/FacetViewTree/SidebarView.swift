@@ -13,6 +13,12 @@ public final class SidebarView: NSView {
 
     // MARK: - Wiring
 
+    /// Per-surface palette (PR-B). The Controller wires the tree box at
+    /// construction; `pal` reads route through it — the tree panel's own
+    /// `[tree].theme`.
+    public var paletteBox: PaletteBox!
+    var pal: ResolvedPalette { paletteBox.pal }
+
     public weak var controller: TreeController?
     private let backend: any WindowBackend
 
@@ -1695,7 +1701,8 @@ public final class SidebarView: NSView {
     // identical themed popup (③).
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int) {
         ViewContextMenu.showLayout(at: scr, backend: backend,
-                                   workspaceIndex: ws, workspaces: lastWorkspaces)
+                                   workspaceIndex: ws, workspaces: lastWorkspaces,
+                                   palette: pal)
     }
 
     private func showWindowMenu(at scr: NSPoint,
@@ -1705,7 +1712,8 @@ public final class SidebarView: NSView {
                                 title: String) {
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
-            workspaces: lastWorkspaces, pid: pid, windowID: id, title: title
+            workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
+            palette: pal
         ) { [weak self] ops, window, ws in
             self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)
         }

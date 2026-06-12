@@ -17,6 +17,11 @@ public final class PopupMenuView: NSView {
     private var hover: Int?
     public var sel: Int?                       // keyboard-highlighted item
 
+    /// Palette the menu is drawn in (PR-B). Set by `PopupMenu.show` to
+    /// the INVOKING surface's palette, so a menu popped from the tree /
+    /// grid / rail matches that surface's per-view theme.
+    public var palette: ResolvedPalette = resolve(.terminal)
+
     /// Move the keyboard selection (clamped to [0, items.count - 1]).
     public func move(_ d: Int) {
         guard !items.isEmpty else { return }
@@ -63,12 +68,12 @@ public final class PopupMenuView: NSView {
     }
 
     public override func draw(_ dirty: NSRect) {
-        let bg = pal.background ?? NSColor.windowBackgroundColor
+        let bg = palette.background ?? NSColor.windowBackgroundColor
         let card = NSBezierPath(
             roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
             xRadius: 9, yRadius: 9)
         bg.setFill(); card.fill()
-        pal.border.setStroke(); card.lineWidth = 1; card.stroke()
+        palette.border.setStroke(); card.lineWidth = 1; card.stroke()
 
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
@@ -78,10 +83,10 @@ public final class PopupMenuView: NSView {
                        width: bounds.width - Self.padX * 2,
                        height: Self.headerH),
             withAttributes: [.font: uiFont(12, .bold),
-                             .foregroundColor: pal.primary,
+                             .foregroundColor: palette.primary,
                              .paragraphStyle: para])
         let sy = Self.padV + Self.headerH + Self.sepH / 2
-        pal.border.setStroke()
+        palette.border.setStroke()
         let sp = NSBezierPath()
         sp.move(to: NSPoint(x: Self.padX, y: sy))
         sp.line(to: NSPoint(x: bounds.width - Self.padX, y: sy))
@@ -93,14 +98,14 @@ public final class PopupMenuView: NSView {
                            width: bounds.width, height: Self.rowH)
             if sel == i {
                 let pill = r.insetBy(dx: 5, dy: 2)
-                pal.selection.setFill()
+                palette.selection.setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
-                pal.primary.setStroke()
+                palette.primary.setStroke()
                 let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
                                      xRadius: 6, yRadius: 6)
                 o.lineWidth = 1.5; o.stroke()
             } else if hover == i {
-                pal.hover.setFill()
+                palette.hover.setFill()
                 NSBezierPath(roundedRect: r.insetBy(dx: 5, dy: 2),
                              xRadius: 6, yRadius: 6).fill()
             }
@@ -111,7 +116,7 @@ public final class PopupMenuView: NSView {
                            height: r.height - 6),
                 withAttributes: [
                     .font: uiFont(13, isCur ? .semibold : .regular),
-                    .foregroundColor: isCur ? pal.primary : pal.foreground,
+                    .foregroundColor: isCur ? palette.primary : palette.foreground,
                     .paragraphStyle: para,
                 ])
             if isCur {
@@ -119,7 +124,7 @@ public final class PopupMenuView: NSView {
                     in: NSRect(x: Self.padX, y: r.minY + 5,
                                width: 16, height: r.height - 6),
                     withAttributes: [.font: uiFont(12, .bold),
-                                     .foregroundColor: pal.primary])
+                                     .foregroundColor: palette.primary])
             }
         }
     }
@@ -166,9 +171,11 @@ public final class PopupMenu {
                      header: String,
                      items: [String],
                      checkedIndex: Int?,
+                     palette: ResolvedPalette,
                      onPick: @escaping (Int) -> Void) {
         close()
         let v = PopupMenuView()
+        v.palette = palette
         v.header = header
         v.items = items
         v.checkedIndex = checkedIndex

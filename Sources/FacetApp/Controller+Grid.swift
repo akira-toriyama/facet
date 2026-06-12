@@ -66,6 +66,7 @@ extension Controller {
             .withAlphaComponent(gridBackdropAlpha).cgColor
 
         let gv = GridView(frame: host.bounds)
+        gv.paletteBox = gridPaletteBox          // PR-B: grid's own [grid].theme
         gv.autoresizingMask = [.width, .height]
         gv.workspaces = lastWorkspaces
         gv.activeIndex = lastWorkspaces.first(where: {

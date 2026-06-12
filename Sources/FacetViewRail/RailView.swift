@@ -33,6 +33,15 @@ import FacetView
 
 public final class RailView: NSView {
 
+    /// Per-surface palette (PR-B). The Controller wires the rail box at
+    /// build time; `pal` reads (here and in the RailHeader / RailDrag
+    /// extensions) route through it — the rail's own `[rail].theme` — and
+    /// the box is shared with the rail's `BorderFX`.
+    public var paletteBox: PaletteBox! {
+        didSet { borderFX.paletteBox = paletteBox }
+    }
+    var pal: ResolvedPalette { paletteBox.pal }
+
     // MARK: - Inputs (Controller-supplied)
 
     public var workspaces: [Workspace] = []
@@ -745,8 +754,8 @@ public final class RailView: NSView {
             NSGraphicsContext.restoreGraphicsState()
         }
         stroke.setStroke(); p.lineWidth = 0.5; p.stroke()
-        if let mark = w.mark { drawMiniMarkBadge(mark, in: w.rect) }
-        drawMiniTagDots(w.tags.count, in: w.rect)
+        if let mark = w.mark { drawMiniMarkBadge(mark, in: w.rect, pal: pal) }
+        drawMiniTagDots(w.tags.count, in: w.rect, pal: pal)
     }
 
     // MARK: - Hover
@@ -866,7 +875,7 @@ public final class RailView: NSView {
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
-                                       workspaces: workspaces)
+                                       workspaces: workspaces, palette: pal)
             return
         }
         if let w = heroWinAt(p), let h = hero {
@@ -887,7 +896,8 @@ public final class RailView: NSView {
             let scr = win.convertPoint(toScreen:
                 convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
             ViewContextMenu.showLayout(at: scr, backend: backend,
-                                       workspaceIndex: ws, workspaces: workspaces)
+                                       workspaceIndex: ws, workspaces: workspaces,
+                                       palette: pal)
         } else if let h = hero, kbSelectedWindowIdx >= 0,
                   kbSelectedWindowIdx < h.wins.count {
             let w = h.wins[kbSelectedWindowIdx]
@@ -901,7 +911,8 @@ public final class RailView: NSView {
                              ws: Int, w: MiniWindowHit) {
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
-            workspaces: workspaces, pid: w.pid, windowID: w.id, title: ""
+            workspaces: workspaces, pid: w.pid, windowID: w.id, title: "",
+            palette: pal
         ) { [weak self] ops, win, ws in self?.onRunWindowOps?(ops, win, ws) }
     }
 

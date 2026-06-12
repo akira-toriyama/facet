@@ -70,7 +70,8 @@ public func drawGripDots(in r: NSRect, tallExtent: CGFloat,
 /// ~60% scale; shared by grid + rail so the badge reads the same in
 /// both (M9-5 #3). Caller draws inside its own cell clip.
 @MainActor
-public func drawMiniMarkBadge(_ mark: String, in rect: NSRect) {
+public func drawMiniMarkBadge(_ mark: String, in rect: NSRect,
+                             pal: ResolvedPalette) {
     guard !mark.isEmpty else { return }
     let pad: CGFloat = 2, pillH: CGFloat = 9
     let attrs: [NSAttributedString.Key: Any] = [
@@ -109,7 +110,8 @@ public func drawMiniMarkBadge(_ mark: String, in rect: NSRect) {
 /// Tree shows the names as `#tag` chips instead; the mini views only
 /// have room for dots (M11-3 PR3b).
 @MainActor
-public func drawMiniTagDots(_ count: Int, in rect: NSRect) {
+public func drawMiniTagDots(_ count: Int, in rect: NSRect,
+                           pal: ResolvedPalette) {
     guard count > 0, rect.width > 10, rect.height > 10 else { return }
     let r: CGFloat = 1.6, gap: CGFloat = 3, pad: CGFloat = 3
     let shown = min(count, 3)

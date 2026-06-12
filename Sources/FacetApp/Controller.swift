@@ -60,11 +60,39 @@ final class Controller: NSObject {
     /// the only reliable signal that windows were parked / unparked).
     private var prevActiveWSIndex: Int?
     var userHidden = false
-    /// Active theme name (config seed or runtime `--theme=`) — drives the
-    /// theme color animator (⑪).
-    var currentThemeName = "terminal"
+    // MARK: - Per-surface palettes (PR-B)
+
+    /// Each painted surface owns its resolved palette, driven by the
+    /// config keys `[tree]/[grid]/[rail].theme` (`""` / unset = inherit
+    /// `[theme]`). The box is the shared, mutable handle so that surface's
+    /// whole chrome reads one palette and updates together on a re-theme
+    /// (hot-reload, `--theme=`) or a 30 Hz animator tick.
+    let treePaletteBox = PaletteBox(resolve(.terminal))
+    let gridPaletteBox = PaletteBox(resolve(.terminal))
+    let railPaletteBox = PaletteBox(resolve(.terminal))
+    /// Concrete theme name per surface — `random` is resolved to a real
+    /// theme ONCE per config load (not per frame); drives the animator.
+    var treeThemeName = "terminal"
+    var gridThemeName = "terminal"
+    var railThemeName = "terminal"
+    /// The pre-random-roll SOURCE each surface last resolved from (the
+    /// `--theme=` override, or its per-view effective theme). A hot-reload
+    /// re-resolves only the surfaces whose source changed, so saving an
+    /// unrelated key never re-rolls a `random` surface or snaps a running
+    /// color-cycle back to phase 0.
+    var treeSource = ""
+    var gridSource = ""
+    var railSource = ""
+    /// Active `facet --theme=` session override (nil = follow config).
+    /// Persists across hot-reloads until the user edits a theme key (then
+    /// config wins) or issues another `--theme=`.
+    var themeOverride: String?
     private var themeFXTimer: Timer?
-    private var themeFXPhase: CGFloat = 0
+    /// Per-surface theme-cycle phase (0…1). Only animatable surfaces
+    /// (rainbow / chomp + `[theme].color-cycle-ms`) advance theirs.
+    var treeFXPhase: CGFloat = 0
+    var gridFXPhase: CGFloat = 0
+    var railFXPhase: CGFloat = 0
     /// Whether `[tree] line-pets` is active (after typo validation). The
     /// theme-FX timer keeps running while this is true so the tree can
     /// animate its pets even on a non-cycling theme.
@@ -182,9 +210,14 @@ final class Controller: NSObject {
             frame: NSRect(x: 0, y: 0, width: sidebarWidth, height: 400),
             backend: backend)
         self.sidebarView = view
-        self.panelHost = PanelHost(view: view)
+        self.panelHost = PanelHost(view: view, paletteBox: treePaletteBox)
         super.init()
         view.controller = self
+        // PR-B: each surface's chrome shares its box. Tree chrome is wired
+        // inside PanelHost.init; the Controller-owned tree overlays get the
+        // tree box here. Grid / rail views get their boxes at build time.
+        dndOverlay.paletteBox = treePaletteBox
+        previewPool.paletteBox = treePaletteBox
         panelHost.handleBar.onResetGeometry = { [weak self] in
             self?.resetPanelGeometry()
         }
@@ -204,7 +237,11 @@ final class Controller: NSObject {
             self?.handlePanelKeyChange(isKey: isKey)
         }
         applyBorderFromConfig()
-        currentThemeName = config.effectiveTheme
+        resolveSurfacePalettes()      // PR-B: seed all three boxes from config
+        // PanelHost.init painted its bg / border / vibrancy layers from the
+        // box's terminal seed; re-apply now that the tree box holds the
+        // configured theme so the first frame is correct.
+        panelHost.applyTheme()
         updateThemeAnimator()
         seedTreeGeometry()
         applyPetsFromConfig()
@@ -353,6 +390,12 @@ final class Controller: NSObject {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
         let oldPrev = config.effectiveTreePreviewMode
+        // PR-B: snapshot the per-view effective themes so we can tell a
+        // deliberate theme edit (→ a live `--theme=` override yields to
+        // config) from an unrelated save (→ the override survives).
+        let oldThemes = [config.effectiveTreeTheme,
+                         config.effectiveGridTheme,
+                         config.effectiveRailTheme]
         config = fresh
         logConfigWarnings()
         applyBorderFromConfig()
@@ -362,9 +405,15 @@ final class Controller: NSObject {
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
             + "preview-mode=\(oldPrev)→\(newPrev)")
-        if newTheme != oldTheme {
-            applyStyle(newTheme)
-        }
+        // PR-B: re-resolve all three surface palettes. resolveSurfacePalettes
+        // re-rolls only the surfaces whose source changed, so an unrelated
+        // save won't jump a running color-cycle. A theme-key edit drops any
+        // live `--theme=` override (config becomes source of truth again).
+        let newThemes = [config.effectiveTreeTheme,
+                         config.effectiveGridTheme,
+                         config.effectiveRailTheme]
+        if themeOverride != nil, newThemes != oldThemes { themeOverride = nil }
+        applyThemesFromConfig()
         // Always refresh the snapshot — [workspaces] changes need
         // to surface in `facet status` without waiting for the
         // next backend event.
@@ -381,32 +430,114 @@ final class Controller: NSObject {
         for warning in config.unknownValueWarnings() { Log.line(warning) }
     }
 
+    // MARK: - Per-surface palette resolution (PR-B)
+
+    /// Resolve all three surface palettes into their boxes. Called at
+    /// startup + on hot-reload + after a `--theme=` override (via
+    /// `applyStyle`). Honors the active `themeOverride` (forces every
+    /// surface) else the per-view `[tree]/[grid]/[rail].theme` keys.
+    ///
+    /// `random` semantics: an APP-WIDE random — a single `--theme=random`,
+    /// or an inherited `[theme].name = random` — rolls ONE concrete theme
+    /// shared by every surface that inherits it (matches the pre-PR-B
+    /// single-`pal` behavior). A surface whose OWN key is literally
+    /// `theme = "random"` rolls its own. Rolled ONCE per load.
+    ///
+    /// Each surface only re-resolves when its SOURCE (override / per-view
+    /// effective theme) actually changed, so an unrelated config save
+    /// neither re-rolls a `random` surface nor restarts a running cycle.
+    func resolveSurfacePalettes() {
+        let override = themeOverride
+        var appRandom: String?
+        func sharedRandom() -> String {
+            if appRandom == nil { appRandom = randomConcreteTheme() }
+            return appRandom!
+        }
+        func apply(effective: String, rawKey: String?,
+                   source: inout String, name: inout String,
+                   phase: inout CGFloat, box: PaletteBox) {
+            let src = override ?? effective
+            // Reload fast-path: an unchanged source keeps the surface's
+            // current concrete theme (no random re-roll) AND its cycle
+            // phase. The override path always re-resolves so a re-issued
+            // `--theme=` (incl. a fresh `--theme=random` roll) still lands.
+            if override == nil, src == source { return }
+            let concrete: String
+            if src == "random" {
+                let ownRandom = override == nil
+                    && rawKey?.trimmingCharacters(in: .whitespaces)
+                        .lowercased() == "random"
+                concrete = ownRandom ? randomConcreteTheme() : sharedRandom()
+            } else {
+                concrete = src
+            }
+            if concrete != name { phase = 0 }   // restart cycle only on a real change
+            source = src
+            name = concrete
+            box.pal = resolve(paletteFor(concrete))
+        }
+        apply(effective: config.effectiveTreeTheme, rawKey: config.treeTheme,
+              source: &treeSource, name: &treeThemeName,
+              phase: &treeFXPhase, box: treePaletteBox)
+        apply(effective: config.effectiveGridTheme, rawKey: config.gridTheme,
+              source: &gridSource, name: &gridThemeName,
+              phase: &gridFXPhase, box: gridPaletteBox)
+        apply(effective: config.effectiveRailTheme, rawKey: config.railTheme,
+              source: &railSource, name: &railThemeName,
+              phase: &railFXPhase, box: railPaletteBox)
+    }
+
+    /// One concrete theme for a `random` surface — the same pool
+    /// `paletteFor("random")` draws from (every catalog theme but
+    /// `system`), picked once at load so the surface holds steady.
+    func randomConcreteTheme() -> String {
+        canonicalThemeNames
+            .filter { $0 != "random" && $0 != "system" }
+            .randomElement() ?? "terminal"
+    }
+
+    /// Re-theme every surface + chrome and re-gate the animator. Shared by
+    /// the live `--theme=` override (`applyStyle`) and the hot-reload path.
+    func reapplyThemes() {
+        panelHost.applyTheme()
+        sidebarView.needsDisplay = true
+        gridView?.needsDisplay = true
+        railView?.needsDisplay = true
+        updateThemeAnimator()
+    }
+
+    /// Re-resolve every surface's palette from fresh config (hot-reload).
+    /// Honors a live `--theme=` override if still active (the caller clears
+    /// it when a theme key changed); otherwise follows the per-view keys.
+    func applyThemesFromConfig() {
+        resolveSurfacePalettes()
+        reapplyThemes()
+    }
+
     // MARK: - Theme color animator (⑪)
 
-    /// Run the theme color cycle when the active theme is animatable AND
-    /// `theme-cycle-seconds` is set (independent of the border cycle); the
-    /// palette's accents rotate over that period. Off otherwise.
-    ///
-    /// "Animatable" is DERIVED from sill's effect catalog
-    /// (`isAnimatableTheme`) instead of a hand-kept set — the single source
-    /// of truth lives in `Effects`. Post Phase-V rebuild the animatable
-    /// themes are `rainbow` (full spectrum) and `chomp` (its flash palette).
-    /// `random` is excluded: it re-picks a concrete effect every tick, so
-    /// animating it would flicker chaotically (and the old hand-kept set
-    /// never animated `random` either).
-    /// Is the active theme a color-cycling one with cycling switched on?
-    /// (rainbow / chomp + `theme-cycle-seconds`; `random` excluded.)
-    private var themeIsCycling: Bool {
-        currentThemeName != "random"
-            && isAnimatableTheme(currentThemeName)
-            && config.themeColorCycleMs != nil
+    /// Is `name` a color-cycling theme with cycling switched on?
+    /// (rainbow / chomp + `[theme].color-cycle-ms`.) "Animatable" is
+    /// DERIVED from sill's effect catalog (`isAnimatableTheme`), the single
+    /// source of truth in `Effects`. `name` is always a CONCRETE theme here
+    /// (`random` is resolved once at load), so a random-rolled rainbow /
+    /// chomp animates cleanly — no per-tick re-pick, no flicker.
+    private func surfaceIsCycling(_ name: String) -> Bool {
+        isAnimatableTheme(name) && config.themeColorCycleMs != nil
+    }
+
+    /// Any surface needs the cycle clock running.
+    private var anySurfaceCycling: Bool {
+        surfaceIsCycling(treeThemeName)
+            || surfaceIsCycling(gridThemeName)
+            || surfaceIsCycling(railThemeName)
     }
 
     func updateThemeAnimator() {
-        // The one 30 Hz timer drives two independent tree animations:
-        // the theme color cycle AND the line-pets. Run it while EITHER
-        // is live so pets keep orbiting even on a static theme.
-        let on = themeIsCycling || petsActive
+        // The one 30 Hz timer drives two independent animations: the
+        // per-surface theme color cycle AND the tree line-pets. Run it
+        // while EITHER is live so pets keep orbiting even on a static theme.
+        let on = anySurfaceCycling || petsActive
         if on, themeFXTimer == nil {
             let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tickThemeFX() }
@@ -418,32 +549,46 @@ final class Controller: NSObject {
         }
     }
 
+    /// Advance one surface's cycle phase and fold sill's live accents onto
+    /// its steady base. Returns true if the surface was repainted.
+    private func tickSurfaceCycle(name: String, phase: inout CGFloat,
+                                  box: PaletteBox) -> Bool {
+        guard surfaceIsCycling(name) else { return false }
+        phase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
+        if phase >= 1 { phase -= 1 }
+        // `animatedPalette` returns only the live primary / secondary /
+        // selection; fold them onto the steady resolved base so background
+        // / foreground / muted / border hold and the UI stays usable.
+        guard let f = animatedPalette(theme: name, at: phase) else { return false }
+        let base = resolve(paletteFor(name))
+        box.pal = ResolvedPalette(
+            background: base.background, foreground: base.foreground,
+            muted: base.muted, tertiary: base.tertiary,
+            primary: f.primary, secondary: f.secondary,
+            border: base.border, hover: base.hover,
+            selection: f.selection, error: base.error, font: base.font,
+            backgroundAlpha: base.backgroundAlpha,
+            vibrancyMaterial: base.vibrancyMaterial,
+            forceDarkAqua: base.forceDarkAqua)
+        return true
+    }
+
     private func tickThemeFX() {
-        // Theme color cycle: fold the live accents onto the steady base.
-        // Skipped when the timer is up only for line-pets (static theme).
-        if themeIsCycling {
-            themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
-            if themeFXPhase >= 1 { themeFXPhase -= 1 }
-            // sill's `animatedPalette` returns only the live primary /
-            // secondary / selection (an `AnimatedFrame`); fold them onto
-            // the steady resolved base so background / foreground / muted
-            // / border hold and the UI stays usable.
-            if let f = animatedPalette(theme: currentThemeName, at: themeFXPhase) {
-                let base = resolve(paletteFor(currentThemeName))
-                pal = ResolvedPalette(
-                    background: base.background, foreground: base.foreground,
-                    muted: base.muted, tertiary: base.tertiary,
-                    primary: f.primary, secondary: f.secondary,
-                    border: base.border, hover: base.hover,
-                    selection: f.selection, error: base.error, font: base.font,
-                    backgroundAlpha: base.backgroundAlpha,
-                    vibrancyMaterial: base.vibrancyMaterial,
-                    forceDarkAqua: base.forceDarkAqua)
-                panelHost.applyTheme()
-                sidebarView.needsDisplay = true
-                gridView?.needsDisplay = true
-                railView?.needsDisplay = true
-            }
+        // Per-surface theme color cycle. Each animatable surface advances
+        // its own phase + box; non-cycling surfaces hold their steady
+        // palette. Repaint only the surfaces that changed.
+        if tickSurfaceCycle(name: treeThemeName, phase: &treeFXPhase,
+                            box: treePaletteBox) {
+            panelHost.applyTheme()
+            sidebarView.needsDisplay = true
+        }
+        if tickSurfaceCycle(name: gridThemeName, phase: &gridFXPhase,
+                            box: gridPaletteBox) {
+            gridView?.needsDisplay = true
+        }
+        if tickSurfaceCycle(name: railThemeName, phase: &railFXPhase,
+                            box: railPaletteBox) {
+            railView?.needsDisplay = true
         }
         // Line-pets ride a panel-level overlay (above the border); repaint
         // it every tick so they keep orbiting even on a static theme.

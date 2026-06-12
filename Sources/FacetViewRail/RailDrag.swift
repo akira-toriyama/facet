@@ -24,7 +24,8 @@ extension RailView {
         let g = makeWindowGhost(over: hit.rect,
                                 thumbnail: thumbnails[hit.id],
                                 iconFallback: { nil },
-                                style: railGhostStyle)
+                                style: railGhostStyle,
+                                pal: pal)        // PR-B: rail's per-view palette
         addSubview(g)
         dragGhost = g
         liftShadow(g, style: railGhostStyle)
@@ -42,7 +43,8 @@ extension RailView {
         let g = makeWorkspaceGhost(cellRect: cell.rect,
                                    label: railLabel(cell.name, cell.wsIndex),
                                    thumbs: thumbs,
-                                   style: railGhostStyle)
+                                   style: railGhostStyle,
+                                   pal: pal)     // PR-B: rail's per-view palette
         addSubview(g)
         dragGhost = g
         liftShadow(g, style: railGhostStyle)

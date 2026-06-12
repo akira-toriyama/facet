@@ -29,6 +29,10 @@ public final class SearchBar: NSView {
     public let field = NSTextField()
     public override var isFlipped: Bool { true }
 
+    /// Per-surface palette (PR-B). Wired by PanelHost to the tree box.
+    public var paletteBox: PaletteBox!
+    var pal: ResolvedPalette { paletteBox.pal }
+
     public override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true

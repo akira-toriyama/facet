@@ -22,6 +22,12 @@ public final class DndPredictionOverlay {
     private let panel: NSPanel
     private let view = PredictionView()
 
+    /// Per-surface palette (PR-B). The Controller wires the tree box —
+    /// the drag-prediction outline echoes the tree DnD palette.
+    public var paletteBox: PaletteBox! {
+        didSet { view.paletteBox = paletteBox }
+    }
+
     public init() {
         panel = .clickThroughOverlay(hasShadow: false)
         panel.contentView = view
@@ -50,6 +56,8 @@ public final class DndPredictionOverlay {
 }
 
 private final class PredictionView: NSView {
+    var paletteBox: PaletteBox!
+    var pal: ResolvedPalette { paletteBox.pal }
     var origin: CGPoint = .zero                  // panel/screen origin (AppKit)
     var frames: [WindowID: NSRect] = [:]
     var dragged: WindowID?

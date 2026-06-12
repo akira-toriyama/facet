@@ -568,11 +568,12 @@ enum FacetApp {
             }
             exit(2)
         }
-        // config.toml is the single source of truth for theme.
-        // Runtime `--theme=...` overrides this for the current
-        // session only (no UserDefaults persist); to make a theme
-        // stick, edit config.toml.
-        pal = resolve(paletteFor(cfg.effectiveTheme))
+        // config.toml is the single source of truth for theme. Runtime
+        // `--theme=...` overrides it for the session only (no UserDefaults
+        // persist); to make a theme stick, edit config.toml. PR-B: the
+        // theme is resolved PER SURFACE into the Controller's palette
+        // boxes (`[tree]/[grid]/[rail].theme`), not the legacy module-level
+        // `pal`, so there is no global seed here anymore.
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
