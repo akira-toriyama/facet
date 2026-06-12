@@ -307,43 +307,45 @@ public final class SidebarView: NSView {
                           scratchpad: nil, tags: []))
         y += handleRowH
 
-        if searching {
-            // Flat cross-workspace result list (no headers).
-            for ws in workspaces {
-                for win in ws.windows {
-                    let wt = eff(win)
-                    guard fuzzyMatch(query, win.appName + " " + wt)
-                    else { continue }
-                    appendWindowRow(win, wsIndex: ws.index)
-                }
+        // One grouped pass for BOTH modes: every workspace emits its
+        // header + window rows. In search mode the windows are filtered
+        // by the query (the WS name itself is NOT searched) and a
+        // workspace with zero matches is skipped — so the headers stay
+        // (you keep your bearings) while results stay tight. Non-search
+        // keeps every workspace + window (an empty WS still shows its
+        // header, unchanged). Previously search was a flat, header-less
+        // cross-WS list; keeping the grouping is the only behavioural
+        // change.
+        var firstHeader = true
+        for ws in workspaces {
+            let wins = searching
+                ? ws.windows.filter {
+                    fuzzyMatch(query, $0.appName + " " + eff($0))
+                  }
+                : ws.windows
+            if searching && wins.isEmpty { continue }
+            let start = y
+            let hh = firstHeader ? headerFirstRowH : headerRowH
+            let hr = NSRect(x: 0, y: y, width: w, height: hh)
+            rows.append(TreeRow(rect: hr,
+                                kind: .header(workspaceIndex: ws.index)))
+            let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
+            cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
+                              firstHeader: firstHeader, pid: 0, app: "",
+                              title: "", text: t.uppercased(),
+                              mode: ws.layoutMode,
+                              isMaster: false, isFloating: false,
+                              isSticky: false, mark: nil, isHidden: false,
+                              scratchpad: nil, tags: []))
+            firstHeader = false
+            y += hh
+            for win in wins {
+                appendWindowRow(win, wsIndex: ws.index)
             }
-            contentHeight = y + 6
-        } else {
-            var firstHeader = true
-            for ws in workspaces {
-                let start = y
-                let hh = firstHeader ? headerFirstRowH : headerRowH
-                let hr = NSRect(x: 0, y: y, width: w, height: hh)
-                rows.append(TreeRow(rect: hr,
-                                    kind: .header(workspaceIndex: ws.index)))
-                let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
-                cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
-                                  firstHeader: firstHeader, pid: 0, app: "",
-                                  title: "", text: t.uppercased(),
-                                  mode: ws.layoutMode,
-                                  isMaster: false, isFloating: false,
-                                  isSticky: false, mark: nil, isHidden: false,
-                                  scratchpad: nil, tags: []))
-                firstHeader = false
-                y += hh
-                for win in ws.windows {
-                    appendWindowRow(win, wsIndex: ws.index)
-                }
-                wsBands[ws.index] = start...(y + 3)
-                y += 3
-            }
-            contentHeight = y + 6
+            wsBands[ws.index] = start...(y + 3)
+            y += 3
         }
+        contentHeight = y + 6
         if kbNav { resolveSel() }
         needsDisplay = true
         return contentHeight
