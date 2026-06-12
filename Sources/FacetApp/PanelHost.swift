@@ -105,6 +105,8 @@ final class PanelHost: NSObject {
         scroll = NSScrollView()
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = true   // shows only when content
+                                              // is wider than the panel (B)
         scroll.scrollerStyle = .overlay
         scroll.autohidesScrollers = true
         scroll.autoresizingMask = [.width, .height]
@@ -386,7 +388,10 @@ final class PanelHost: NSObject {
         handleBar.needsDisplay = true
         let bodyH = max(f.height - sh - hb, 0)
         scroll.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
-        view.frame = NSRect(x: 0, y: 0, width: f.width,
+        // documentView width = the natural content width (≥ clip width) so
+        // overflowing titles scroll horizontally (B); height as before.
+        view.frame = NSRect(x: 0, y: 0,
+                            width: max(f.width, view.contentWidth),
                             height: max(contentH, bodyH))
         // Border tracks the panel size. Disable the implicit layer
         // animation so it doesn't lag a frame behind a live resize.
