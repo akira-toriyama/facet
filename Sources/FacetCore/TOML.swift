@@ -15,6 +15,13 @@ import Foundation
 
 public enum TOMLValue: Sendable, Equatable {
     case int(Int)
+    /// Floating-point scalar: `key = 1.5`. Parsed only when the token
+    /// has a fractional part / exponent (a bare `2` stays `.int` so
+    /// existing integer readers keep matching). Lets fractional knobs
+    /// like `[tree] pet-scale = 0.9` or `[border] width = 1.5` take a
+    /// non-integer value; readers that want a `Double` accept either
+    /// case (`.int` widens, `.double` passes through).
+    case double(Double)
     case string(String)
     case bool(Bool)
     /// Inline array of strings: `key = ["a", "b"]`. Only the
@@ -31,6 +38,17 @@ public enum TOMLValue: Sendable, Equatable {
     /// elsewhere), so layout names ("bsp", "stack", …) are safe
     /// but `name = "tag # 1"` isn't.
     case table([String: TOMLValue])
+
+    /// Read a numeric scalar as `Double`, widening an `.int`. Lets a
+    /// fractional knob accept both `key = 2` and `key = 1.5` without the
+    /// caller pattern-matching two cases. `nil` for non-numeric values.
+    public var asDouble: Double? {
+        switch self {
+        case .int(let n):    return Double(n)
+        case .double(let d): return d
+        default:             return nil
+        }
+    }
 }
 
 /// Pure-function TOML subset parser. Output keyed by section name
@@ -155,6 +173,9 @@ func parseTOMLScalar(_ raw: String) -> TOMLValue? {
     } else if val == "true" { return .bool(true) }
     else if val == "false" { return .bool(false) }
     else if let i = Int(val) { return .int(i) }
+    // Float only after Int fails, so a bare `2` stays `.int` (integer
+    // readers keep matching) and `1.5` / `1e3` becomes `.double`.
+    else if let d = Double(val) { return .double(d) }
     return nil                                   // skip unknown shapes
 }
 

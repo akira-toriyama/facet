@@ -131,6 +131,64 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?[2]?.name, "Web")
     }
 
+    // MARK: - [tree] line-pets
+
+    func testEffectiveTreeLinePetsDefaultsEmpty() {
+        let c = FacetConfig()
+        XCTAssertEqual(c.effectiveTreeLinePets, [], "unset → off")
+    }
+
+    func testEffectiveTreeLinePetsNormalizes() {
+        var c = FacetConfig()
+        c.treeLinePets = ["Chomp", "  ghost ", ""]
+        XCTAssertEqual(c.effectiveTreeLinePets, ["chomp", "ghost"],
+                       "lower-cased, trimmed, empty entries dropped, order kept")
+    }
+
+    func testTreeLinePetsParsesArrayAndCommaString() {
+        let arr = FacetConfig.from(toml: parseTOMLSubset("""
+            [tree]
+            line-pets = ["chomp", "ghost"]
+            """))
+        XCTAssertEqual(arr.effectiveTreeLinePets, ["chomp", "ghost"],
+                       "TOML array form")
+        let csv = FacetConfig.from(toml: parseTOMLSubset("""
+            [tree]
+            line-pets = "chomp, ghost"
+            """))
+        XCTAssertEqual(csv.effectiveTreeLinePets, ["chomp", "ghost"],
+                       "lenient comma-string form")
+    }
+
+    func testEffectiveTreePetScaleDefaultsAndClamps() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveTreePetScale, 0.9, "default")
+        c.treePetScale = 1.5
+        XCTAssertEqual(c.effectiveTreePetScale, 1.5)
+        c.treePetScale = -3
+        XCTAssertEqual(c.effectiveTreePetScale, 0.1, "floor 0.1")
+    }
+
+    func testEffectiveTreePetLapSecondsDefaultsAndClamps() {
+        var c = FacetConfig()
+        XCTAssertEqual(c.effectiveTreePetLapSeconds, 8, "default")
+        c.treePetLapSeconds = 12
+        XCTAssertEqual(c.effectiveTreePetLapSeconds, 12)
+        c.treePetLapSeconds = 0
+        XCTAssertEqual(c.effectiveTreePetLapSeconds, 0.5, "floor 0.5")
+    }
+
+    func testTreePetScaleParsesFloatViaTOML() {
+        let c = FacetConfig.from(toml: parseTOMLSubset("""
+            [tree]
+            pet-scale = 1.25
+            pet-lap-seconds = 6
+            """))
+        XCTAssertEqual(c.effectiveTreePetScale, 1.25,
+                       "fractional pet-scale survives the new .double parse")
+        XCTAssertEqual(c.effectiveTreePetLapSeconds, 6)
+    }
+
     // MARK: - [[exclude]] rules
 
     func testExclusionRulesParsedFromTOML() {

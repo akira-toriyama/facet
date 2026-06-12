@@ -63,6 +63,10 @@ final class Controller: NSObject {
     private var currentThemeName = "terminal"
     private var themeFXTimer: Timer?
     private var themeFXPhase: CGFloat = 0
+    /// Whether `[tree] line-pets` is active (after typo validation). The
+    /// theme-FX timer keeps running while this is true so the tree can
+    /// animate its pets even on a non-cycling theme.
+    private var petsActive = false
 
     /// Last surfaced operational error (e.g. out-of-range workspace
     /// switch, no-focused-window window move). Held in-memory and
@@ -194,6 +198,7 @@ final class Controller: NSObject {
         currentThemeName = config.effectiveTheme
         updateThemeAnimator()
         seedTreeGeometry()
+        applyPetsFromConfig()
     }
 
     /// Seed the tree panel's geometry from `[tree]` config (pos-x /
@@ -343,6 +348,7 @@ final class Controller: NSObject {
         logConfigWarnings()
         applyBorderFromConfig()
         seedTreeGeometry()
+        applyPetsFromConfig()
         let newTheme = config.effectiveTheme
         let newPrev = config.effectiveTreePreviewMode
         Log.debug("reloadConfig: theme=\(oldTheme)→\(newTheme) "
@@ -848,10 +854,19 @@ final class Controller: NSObject {
     /// `random` is excluded: it re-picks a concrete effect every tick, so
     /// animating it would flicker chaotically (and the old hand-kept set
     /// never animated `random` either).
-    private func updateThemeAnimator() {
-        let on = currentThemeName != "random"
+    /// Is the active theme a color-cycling one with cycling switched on?
+    /// (rainbow / chomp + `theme-cycle-seconds`; `random` excluded.)
+    private var themeIsCycling: Bool {
+        currentThemeName != "random"
             && isAnimatableTheme(currentThemeName)
             && config.themeCycleSeconds != nil
+    }
+
+    private func updateThemeAnimator() {
+        // The one 30 Hz timer drives two independent tree animations:
+        // the theme color cycle AND the line-pets. Run it while EITHER
+        // is live so pets keep orbiting even on a static theme.
+        let on = themeIsCycling || petsActive
         if on, themeFXTimer == nil {
             let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tickThemeFX() }
@@ -864,28 +879,49 @@ final class Controller: NSObject {
     }
 
     private func tickThemeFX() {
-        themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
-        if themeFXPhase >= 1 { themeFXPhase -= 1 }
-        // sill's `animatedPalette` returns only the live primary / secondary
-        // / selection (an `AnimatedFrame`); fold them onto the steady
-        // resolved base so background / foreground / muted / border hold and
-        // the UI stays usable.
-        guard let f = animatedPalette(theme: currentThemeName, at: themeFXPhase)
-        else { return }
-        let base = resolve(paletteFor(currentThemeName))
-        pal = ResolvedPalette(
-            background: base.background, foreground: base.foreground,
-            muted: base.muted, tertiary: base.tertiary,
-            primary: f.primary, secondary: f.secondary,
-            border: base.border, hover: base.hover,
-            selection: f.selection, error: base.error, font: base.font,
-            backgroundAlpha: base.backgroundAlpha,
-            vibrancyMaterial: base.vibrancyMaterial,
-            forceDarkAqua: base.forceDarkAqua)
-        panelHost.applyTheme()
-        sidebarView.needsDisplay = true
-        gridView?.needsDisplay = true
-        railView?.needsDisplay = true
+        // Theme color cycle: fold the live accents onto the steady base.
+        // Skipped when the timer is up only for line-pets (static theme).
+        if themeIsCycling {
+            themeFXPhase += (1.0 / 30.0) / config.effectiveThemeCycleSeconds
+            if themeFXPhase >= 1 { themeFXPhase -= 1 }
+            // sill's `animatedPalette` returns only the live primary /
+            // secondary / selection (an `AnimatedFrame`); fold them onto
+            // the steady resolved base so background / foreground / muted
+            // / border hold and the UI stays usable.
+            if let f = animatedPalette(theme: currentThemeName, at: themeFXPhase) {
+                let base = resolve(paletteFor(currentThemeName))
+                pal = ResolvedPalette(
+                    background: base.background, foreground: base.foreground,
+                    muted: base.muted, tertiary: base.tertiary,
+                    primary: f.primary, secondary: f.secondary,
+                    border: base.border, hover: base.hover,
+                    selection: f.selection, error: base.error, font: base.font,
+                    backgroundAlpha: base.backgroundAlpha,
+                    vibrancyMaterial: base.vibrancyMaterial,
+                    forceDarkAqua: base.forceDarkAqua)
+                panelHost.applyTheme()
+                sidebarView.needsDisplay = true
+                gridView?.needsDisplay = true
+                railView?.needsDisplay = true
+            }
+        }
+        // Line-pets ride a panel-level overlay (above the border); repaint
+        // it every tick so they keep orbiting even on a static theme.
+        if petsActive { panelHost.redrawPets() }
+    }
+
+    /// Push `[tree] line-pets` onto the panel overlay + (re)gate the FX
+    /// timer. Called at startup + on hot-reload, mirroring
+    /// `applyBorderFromConfig`.
+    private func applyPetsFromConfig() {
+        panelHost.setPets(names: config.effectiveTreeLinePets,
+                          scale: config.effectiveTreePetScale,
+                          lapSeconds: config.effectiveTreePetLapSeconds)
+        // `hasPets` reflects post-validation names (typos dropped), so a
+        // config of only-typos correctly parks the timer.
+        petsActive = panelHost.hasPets
+        updateThemeAnimator()
+        panelHost.redrawPets()
     }
 
     // MARK: - Refresh / apply

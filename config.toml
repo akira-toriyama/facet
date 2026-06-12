@@ -210,6 +210,28 @@ preview-mode = "popover"
 # width  = 400
 # height = 600
 
+# Line-pets: tiny arcade sprites that walk the tree panel's outer
+# border — a shared decoration from the sill theming library (the same
+# pets ride halo's focus ring and wand's cards). They ride a transparent
+# overlay just above the border, so they sit ON the frame, in front.
+# Theme-agnostic: each sprite's colours are baked in, so they read the
+# same under any theme. Opt-in — leave empty / unset for none.
+#
+#   "chomp" — yellow chomping wedge (mouth opens / closes).
+#   "ghost" — red Blinky-style ghost (dome + scalloped skirt + eyes).
+#
+# Accepts a TOML array or a lenient comma string; order = chase order
+# (the first leads, the rest trail). Unknown names are dropped.
+# line-pets = ["chomp", "ghost"]   # or "chomp, ghost"
+#
+# Pet size multiplier on the baked-in sprite. Default 0.9 — a touch
+# under the row height so it reads without swamping the text. ≥ 0.1.
+# pet-scale = 0.9
+#
+# Seconds for a pet to circle the row once (size-independent tempo;
+# the speed is derived from the row's perimeter). Default 8. ≥ 0.5.
+# pet-lap-seconds = 8
+
 
 # -----------------------------------------------------------------
 # Tiling gaps

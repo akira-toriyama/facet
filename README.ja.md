@@ -325,7 +325,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   原点**: 0,0 = メイン画面の左上・y は下方向・4つ全て必須)。毎起動 /
   `--reload` で権威 (ドラッグ・CLI geom は session 限り) なので、位置/
   サイズを固定するならここに書く。座標は `facet --view=tree --pos-x/...`
-  と同じ。
+  と同じ。さらに `line-pets` — **tree パネルの外枠**を歩くアーケード
+  sprite (`chomp` / `ghost`)。透明オーバーレイに乗って枠の手前に描かれる。
+  共有テーマライブラリ sill 由来の装飾 (同じ pet が halo のフォーカス枠も
+  周回)。`pet-scale` (既定0.9) / `pet-lap-seconds` (既定8) で調整。空 = off
+  (opt-in)。
 - `[layout]` テーブル — `inner-gap` (タイル window 間の隙間) と
   `outer-gap` (画面端からの距離)、 単位 pt。 `outer-gap` は4辺一括、
   `outer-gap-top` / `-bottom` / `-left` / `-right` で辺ごとに上書き。

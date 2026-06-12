@@ -36,6 +36,27 @@ final class TOMLTests: XCTestCase {
         XCTAssertEqual(p[""]?["b2"], .bool(false))
     }
 
+    func testFloatValueParsing() {
+        // A bare integer stays `.int` (so existing int readers match);
+        // only a fractional / exponent token becomes `.double`.
+        let p = parseTOMLSubset("""
+            whole = 2
+            frac = 1.5
+            zero = 0.9
+            """)
+        XCTAssertEqual(p[""]?["whole"], .int(2),
+                       "integer literal stays .int")
+        XCTAssertEqual(p[""]?["frac"], .double(1.5))
+        XCTAssertEqual(p[""]?["zero"], .double(0.9))
+    }
+
+    func testAsDoubleWidensIntAndDouble() {
+        XCTAssertEqual(TOMLValue.int(2).asDouble, 2.0)
+        XCTAssertEqual(TOMLValue.double(1.5).asDouble, 1.5)
+        XCTAssertNil(TOMLValue.string("x").asDouble)
+        XCTAssertNil(TOMLValue.bool(true).asDouble)
+    }
+
     func testLineCommentsAreIgnored() {
         let p = parseTOMLSubset("""
             # this whole line is comment
@@ -67,11 +88,12 @@ final class TOMLTests: XCTestCase {
     }
 
     func testUnknownValueShapeIsSkipped() {
-        // `1.5` isn't supported (no float case) → skipped, leaves
-        // surrounding keys intact.
+        // An unquoted bareword is no supported shape → skipped, leaving
+        // surrounding keys intact. (Floats DO parse now — see
+        // `testFloatValueParsing` — so this uses a genuine non-value.)
         let p = parseTOMLSubset("""
             ok = 1
-            bad = 1.5
+            bad = unquoted
             also_ok = 2
             """)
         XCTAssertEqual(p[""]?["ok"], .int(1))

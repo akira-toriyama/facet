@@ -1053,6 +1053,7 @@ public final class SidebarView: NSView {
                 }
             }
         }
+
     }
 
     /// Unified drag/lift context for `draw`: the source workspace,

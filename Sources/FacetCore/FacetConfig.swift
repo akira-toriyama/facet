@@ -63,6 +63,24 @@ public struct FacetConfig: Sendable {
     public var treePosY: Int?
     public var treeWidth: Int?
     public var treeHeight: Int?
+    /// Arcade "line-pets" that walk the tree panel's outer border —
+    /// a shared sill decoration (`Effects.drawLinePets`, also on halo's
+    /// ring + wand's cards). Names from `canonicalLinePetNames`
+    /// (`"chomp"` / `"ghost"`); unknown names are dropped at the view
+    /// seam. Accepts a TOML array (`["chomp", "ghost"]`) or a lenient
+    /// comma string (`"chomp, ghost"`). Empty / unset = off (opt-in).
+    /// Read through `effectiveTreeLinePets`.
+    public var treeLinePets: [String]?
+    /// Pet size multiplier on the baked-in sprite (chomp ø14 / ghost
+    /// 14×16 pt at 1.0). Default 0.9 — a touch under the row height so
+    /// the sprite reads without swamping the text. Read through
+    /// `effectiveTreePetScale` (clamped ≥ 0.1).
+    public var treePetScale: Double?
+    /// Seconds for a pet to circle the row once — a size-independent
+    /// tempo (the view derives pt/s from the row perimeter, so the orbit
+    /// feels equally lively at any panel width). Default 8. Read through
+    /// `effectiveTreePetLapSeconds` (clamped ≥ 0.5).
+    public var treePetLapSeconds: Double?
 
     // [layout]
     /// Startup layout mode every workspace begins in (`float` / `bsp`
@@ -242,6 +260,25 @@ public struct FacetConfig: Sendable {
     public var effectiveTreePreviewMode: String {
         let raw = (treePreviewMode ?? "popover").lowercased()
         return ["popover", "mirror"].contains(raw) ? raw : "popover"
+    }
+
+    /// Validated line-pet names for the tree, in author order, lower-
+    /// cased + trimmed, empty entries dropped. Empty ⇒ pets off. Typo
+    /// *names* aren't dropped here (FacetCore can't link `Effects`'
+    /// `LinePet` without pulling AppKit) — the view seam drops anything
+    /// `LinePet(rawValue:)` rejects. Empty `[]` and unset both ⇒ `[]`.
+    public var effectiveTreeLinePets: [String] {
+        (treeLinePets ?? [])
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+    /// Pet size multiplier, clamped to a sane floor. Default 0.9.
+    public var effectiveTreePetScale: CGFloat {
+        CGFloat(max(0.1, treePetScale ?? 0.9))
+    }
+    /// Seconds per pet lap, clamped to a sane floor. Default 8.
+    public var effectiveTreePetLapSeconds: CGFloat {
+        CGFloat(max(0.5, treePetLapSeconds ?? 8))
     }
 
     /// The tree-panel geometry seed as a CGRect (TOP-LEFT origin: x,y
@@ -509,6 +546,20 @@ public struct FacetConfig: Sendable {
         if case .int(let n)? = toml["tree"]?["pos-y"] { c.treePosY = n }
         if case .int(let n)? = toml["tree"]?["width"] { c.treeWidth = n }
         if case .int(let n)? = toml["tree"]?["height"] { c.treeHeight = n }
+        // line-pets: a TOML array (`["chomp", "ghost"]`) or a lenient
+        // comma string (`"chomp, ghost"`). Either form lands as a raw
+        // name list; validation happens at the view seam.
+        if case .stringArray(let a)? = toml["tree"]?["line-pets"] {
+            c.treeLinePets = a
+        } else if case .string(let s)? = toml["tree"]?["line-pets"] {
+            c.treeLinePets = s.split(separator: ",").map(String.init)
+        }
+        if let v = toml["tree"]?["pet-scale"]?.asDouble {
+            c.treePetScale = v
+        }
+        if let v = toml["tree"]?["pet-lap-seconds"]?.asDouble {
+            c.treePetLapSeconds = v
+        }
         // [layout]
         if case .string(let s)? = toml["layout"]?["default"] {
             c.defaultLayout = s
@@ -554,8 +605,8 @@ public struct FacetConfig: Sendable {
         if case .bool(let b)? = toml["border"]?["glow"] {
             c.borderGlow = b
         }
-        if case .int(let n)? = toml["border"]?["width"] {
-            c.borderWidth = CGFloat(n)
+        if let v = toml["border"]?["width"]?.asDouble {
+            c.borderWidth = CGFloat(v)      // accepts `2` or `1.5`
         }
         if case .int(let n)? = toml["border"]?["cycle-seconds"] {
             c.borderCycleSeconds = n
