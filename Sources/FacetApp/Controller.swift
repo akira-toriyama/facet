@@ -2083,8 +2083,8 @@ extension Controller: TreeController {
 
     // -- Panel mechanics → delegate to PanelHost
 
-    func setPanelOrigin(to origin: CGPoint) {
-        panelHost.setPanelOrigin(to: origin)
+    func syncPanelAfterDrag() {
+        panelHost.syncPanelAfterDrag()
     }
 
     /// Header double-click: reset the panel to its `[tree]` config

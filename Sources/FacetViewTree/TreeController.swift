@@ -21,14 +21,14 @@ public protocol TreeController: AnyObject, Sendable {
     /// target and shouldn't second-guess.
     func exitActive(restore: Bool)
 
-    /// User is dragging the panel. `origin` is the panel's new
-    /// bottom-left in screen coordinates, computed *absolutely* from the
-    /// live cursor (NSEvent.mouseLocation) rather than by accumulating
-    /// per-event deltas or reconstructing from the moving window's frame
-    /// — both drift/jitter at speed. Controller updates the panel's frame
-    /// in real time. Session-only — the position isn't persisted (it
-    /// seeds from `[tree]` config each launch).
-    func setPanelOrigin(to origin: CGPoint)
+    /// The user finished dragging the panel. The live move is driven by
+    /// the window server (NSWindow.performDrag(with:)), so the view layer
+    /// does no per-event frame writes; this is the one post-drag callback.
+    /// Controller re-derives the persisted top-left anchor from the
+    /// panel's final frame and re-syncs the pet overlay. Session-only —
+    /// the position isn't persisted (it seeds from `[tree]` config each
+    /// launch).
+    func syncPanelAfterDrag()
 
     /// Double-click on the panel's top handle band — reset the panel to
     /// its `[tree]` config geometry, or the built-in default when none

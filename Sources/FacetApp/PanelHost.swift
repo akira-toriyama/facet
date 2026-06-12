@@ -260,16 +260,16 @@ final class PanelHost: NSObject {
 
     // MARK: - Geometry
 
-    /// Move the panel to an absolute bottom-left `origin` in screen
-    /// coords (the live drag uses this — see `setPanelOrigin(to:)` on
-    /// `TreeController` for why absolute-from-cursor beats deltas). No
-    /// syncPetWindow() here: petWindow is an addChildWindow child, so the
-    /// OS translates it with the parent for free on a pure origin move;
-    /// an explicit setFrame would double-position the overlay every drag
-    /// event. syncPetWindow() stays in the resize path (applySubviewLayout).
-    func setPanelOrigin(to origin: NSPoint) {
-        panel.setFrameOrigin(origin)
+    /// Re-sync panel-derived state after a window-server-driven drag
+    /// (the live move runs via `NSWindow.performDrag(with:)` in
+    /// `SidebarView`, so nothing here fires mid-drag). Re-derives the
+    /// persisted top-left anchor from the panel's settled frame and
+    /// re-asserts the pet overlay inset — the addChildWindow child
+    /// auto-followed during the drag, so the syncPetWindow() is
+    /// belt-and-suspenders.
+    func syncPanelAfterDrag() {
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        syncPetWindow()
     }
 
     /// Pin the panel to an exact rect in **TOP-LEFT origin** — `x`
@@ -463,6 +463,23 @@ extension PanelHost: NSWindowDelegate {
 
     // A live resize updates the in-memory geometry (windowDidResize)
     // but is NOT persisted — geometry sticks only via `[tree]` config.
+
+    nonisolated func windowDidMove(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            // Keep the persisted top-left anchor synced to the panel's
+            // LIVE position. Critical during a performDrag panel move
+            // (SidebarView): that runs its own modal tracking loop in which
+            // facet's refresh timers still fire, so layout() can run
+            // mid-drag — and layout() reconstructs the frame from anchorTL,
+            // so a STALE anchor would yank the panel back toward its
+            // pre-drag spot ("tree returns to its original position" mid-
+            // drag). Updating here every move keeps layout()'s
+            // `panel.frame != frame` guard a no-op during the drag. Fires
+            // for programmatic layout() setFrame too — harmless, anchorTL
+            // just re-asserts the value layout() derived it from.
+            anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        }
+    }
 
     nonisolated func windowDidBecomeKey(_ notification: Notification) {
         MainActor.assumeIsolated { onKeyChanged?(true) }
