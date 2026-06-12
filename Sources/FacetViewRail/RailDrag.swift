@@ -1,9 +1,10 @@
 // Drag ghosts + commit/cancel for the rail's window-move and
-// workspace-swap gestures. Module-local copies of the grid's
-// installDragGhost / installWorkspaceGhost / commitDrop /
-// commitContentSwap / cancelDrop machinery, minus the FLIP reorder
-// tweens (the rail just lets the backend re-place windows). State
-// lives on RailView; these are the behaviour.
+// workspace-swap gestures. Ghost construction is the shared FacetView
+// helper (DragGhost.swift), fed the rail's tunables; the commit /
+// cancel lifecycle stays module-local — the rail has no FLIP reorder
+// tweens (it just lets the backend re-place windows) and instead
+// carries the ack-deadline poll the grid lacks. State lives on
+// RailView; these are the behaviour.
 
 import AppKit
 import CoreGraphics
@@ -14,107 +15,41 @@ extension RailView {
 
     // MARK: - Ghosts
 
-    /// Thumb-sized accent ghost for a window drag — installed already
-    /// at lifted size so cursor-follow starts on frame 1; only the
-    /// shadow fades in.
+    // Construction is the shared FacetView helper (DragGhost.swift),
+    // fed the rail's tunables (`railGhostStyle`). The rail passes no
+    // app-icon fallback (it shows captures only) — a not-yet-captured
+    // window lifts as a plain accent tile / placeholder fill.
+
     func installDragGhost(for hit: MiniWindowHit) {
-        let lifted = NSRect(
-            x: hit.rect.midX - (hit.rect.width  * railLiftScale) / 2,
-            y: hit.rect.midY - (hit.rect.height * railLiftScale) / 2,
-            width:  hit.rect.width  * railLiftScale,
-            height: hit.rect.height * railLiftScale)
-        let g = NSView(frame: lifted)
-        g.wantsLayer = true
-        g.layer?.cornerRadius = 4
-        g.layer?.cornerCurve = .continuous
-        g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.primary.cgColor
-        g.layer?.borderWidth = 1.5
-        g.layer?.shadowColor = NSColor.black.cgColor
-        g.layer?.shadowOffset = CGSize(width: 0, height: -4)
-        g.layer?.shadowRadius = railLiftShadowRadius
-        g.layer?.shadowOpacity = 0
-        if let img = thumbnails[hit.id] {
-            g.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.15).cgColor
-            let iv = NSImageView(frame: g.bounds)
-            iv.image = img
-            iv.imageScaling = .scaleAxesIndependently
-            iv.autoresizingMask = [.width, .height]
-            g.addSubview(iv)
-        } else {
-            // No app-icon fallback (rail shows captures only); a not-yet-
-            // captured window lifts as a plain accent tile.
-            g.layer?.backgroundColor = pal.primary.withAlphaComponent(0.45).cgColor
-        }
+        let g = makeWindowGhost(over: hit.rect,
+                                thumbnail: thumbnails[hit.id],
+                                iconFallback: { nil },
+                                style: railGhostStyle)
         addSubview(g)
         dragGhost = g
-        liftShadow(g)
+        liftShadow(g, style: railGhostStyle)
     }
 
-    /// Cell-sized ghost for a workspace swap — reproduces the source
-    /// cell's mini-thumbnails so it reads as "the whole cell floating."
     func installWorkspaceGhost(for cell: Cell) {
-        let g = FlippedView(frame: cell.rect)
-        g.wantsLayer = true
-        g.layer?.cornerRadius = railCellRadius
-        g.layer?.cornerCurve = .continuous
-        g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.foreground.withAlphaComponent(0.85).cgColor
-        g.layer?.borderWidth = 2
-        g.layer?.backgroundColor = pal.foreground.withAlphaComponent(0.10).cgColor
-        g.layer?.shadowColor = NSColor.black.cgColor
-        g.layer?.shadowOffset = CGSize(width: 0, height: -4)
-        g.layer?.shadowRadius = railLiftShadowRadius
-        g.layer?.shadowOpacity = 0
-        if cell.wins.isEmpty {
-            let label = NSTextField(labelWithString: railLabel(cell.name, cell.wsIndex))
-            label.font = uiFont(railGhostLabelSize, .bold)
-            label.textColor = pal.foreground.withAlphaComponent(0.95)
-            label.alignment = .center
-            label.sizeToFit()
-            label.frame = NSRect(
-                x: (g.bounds.width  - label.frame.width)  / 2,
-                y: (g.bounds.height - label.frame.height) / 2,
-                width: label.frame.width, height: label.frame.height)
-            label.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
-            g.addSubview(label)
-        } else {
-            for hit in cell.wins {
-                let local = NSRect(x: hit.rect.minX - cell.rect.minX,
-                                   y: hit.rect.minY - cell.rect.minY,
-                                   width: hit.rect.width, height: hit.rect.height)
-                let iv = NSImageView(frame: local)
-                iv.wantsLayer = true
-                iv.layer?.cornerRadius = 3
-                iv.layer?.masksToBounds = true
-                if let img = thumbnails[hit.id] {
-                    iv.image = img
-                    iv.imageScaling = .scaleAxesIndependently
-                } else {
-                    iv.layer?.backgroundColor = pal.foreground.withAlphaComponent(0.22).cgColor
-                }
-                g.addSubview(iv)
-            }
+        let thumbs = cell.wins.map { hit -> MiniThumbSpec in
+            let local = NSRect(x: hit.rect.minX - cell.rect.minX,
+                               y: hit.rect.minY - cell.rect.minY,
+                               width: hit.rect.width, height: hit.rect.height)
+            let content = thumbnails[hit.id]
+                .map { MiniThumbContent.capture($0) } ?? .placeholder
+            return MiniThumbSpec(rect: local, content: content)
         }
+        let g = makeWorkspaceGhost(cellRect: cell.rect,
+                                   label: railLabel(cell.name, cell.wsIndex),
+                                   thumbs: thumbs,
+                                   style: railGhostStyle)
         addSubview(g)
         dragGhost = g
-        liftShadow(g)
-    }
-
-    private func liftShadow(_ g: NSView) {
-        let fade = CABasicAnimation(keyPath: "shadowOpacity")
-        fade.fromValue = 0
-        fade.toValue = railLiftShadowOpacity
-        fade.duration = railLiftDuration
-        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        g.layer?.shadowOpacity = railLiftShadowOpacity
-        g.layer?.add(fade, forKey: "shadow-lift")
+        liftShadow(g, style: railGhostStyle)
     }
 
     func positionDragGhost(at p: NSPoint) {
-        guard let g = dragGhost else { return }
-        g.frame.origin = NSPoint(x: p.x - g.frame.width / 2,
-                                 y: p.y - g.frame.height / 2)
+        positionGhost(dragGhost, at: p)
     }
 
     // MARK: - Commit / cancel

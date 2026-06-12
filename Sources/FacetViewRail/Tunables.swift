@@ -9,6 +9,7 @@
 // and edge are configurable ([rail] strip / cells / edge).
 
 import CoreGraphics
+import FacetView
 import Foundation
 
 /// Backdrop opacity — solid black so the desktop is fully hidden
@@ -97,3 +98,13 @@ let railLiftShadowRadius: CGFloat = 14
 let railLiftShadowOpacity: Float = 0.45
 /// Centred label size on an empty-WS swap ghost.
 let railGhostLabelSize: CGFloat = 22
+
+/// The rail's tunables bundled for the shared FacetView drag-ghost
+/// construction (DragGhost.swift).
+let railGhostStyle = DragGhostStyle(
+    liftScale: railLiftScale,
+    shadowRadius: railLiftShadowRadius,
+    shadowOpacity: railLiftShadowOpacity,
+    liftDuration: railLiftDuration,
+    cellCornerRadius: railCellRadius,
+    ghostLabelSize: railGhostLabelSize)

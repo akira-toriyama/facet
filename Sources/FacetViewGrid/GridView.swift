@@ -970,144 +970,54 @@ public final class GridView: NSView {
 
     // MARK: - Drag ghost
 
-    /// Fade the lifted ghost's drop shadow in over `gridLiftDuration`
-    /// (shared by the window + workspace ghosts). Mirrors the rail's
-    /// `liftShadow`.
-    private func gridLiftShadow(_ g: NSView) {
-        let fade = CABasicAnimation(keyPath: "shadowOpacity")
-        fade.fromValue = 0
-        fade.toValue = gridLiftShadowOpacity
-        fade.duration = gridLiftDuration
-        fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        g.layer?.shadowOpacity = gridLiftShadowOpacity
-        g.layer?.add(fade, forKey: "shadow-lift")
-    }
+    // Construction is the shared FacetView helper (DragGhost.swift),
+    // fed the grid's tunables (`gridGhostStyle`). These wrappers map
+    // the grid's `Cell` / thumbnail cache into the helper args —
+    // including the app-icon fallback when no thumbnail is cached
+    // (capture in flight / SR denied) — and keep `dragGhost` + the
+    // shadow fade local.
 
     private func installDragGhost(for hit: MiniWindowHit) {
-        // Ghost installed already at "lifted" size so cursor-follow
-        // can start on frame 1 with no pause. Only animation is the
-        // shadow softly fading in. Going instant on size + animated
-        // only on shadow gives smooth feel without the "ガクッ" of a
-        // size tween being yanked by mouseDragged origin writes.
-        let lifted = NSRect(
-            x: hit.rect.midX - (hit.rect.width  * gridLiftScale) / 2,
-            y: hit.rect.midY - (hit.rect.height * gridLiftScale) / 2,
-            width:  hit.rect.width  * gridLiftScale,
-            height: hit.rect.height * gridLiftScale)
-        let g = NSView(frame: lifted)
-        g.wantsLayer = true
-        g.layer?.cornerRadius = 4
-        g.layer?.cornerCurve = .continuous
-        g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.primary.cgColor
-        g.layer?.borderWidth = 1.5
-        g.layer?.shadowColor = NSColor.black.cgColor
-        g.layer?.shadowOffset = CGSize(width: 0, height: -4)
-        g.layer?.shadowRadius = gridLiftShadowRadius
-        g.layer?.shadowOpacity = 0
-        // Ghost shows the same ScreenCaptureKit thumbnail the source
-        // cell was showing so the drag *looks* like the thumb lifted
-        // off the cell. Falls back to accent fill + app icon if no
-        // thumbnail cached (capture in flight / SR denied).
-        if let img = thumbnails[hit.id] {
-            g.layer?.backgroundColor = NSColor.black
-                .withAlphaComponent(0.15).cgColor
-            let iv = NSImageView(frame: g.bounds)
-            iv.image = img
-            iv.imageScaling = .scaleAxesIndependently
-            iv.imageAlignment = .alignCenter
-            iv.autoresizingMask = [.width, .height]
-            g.addSubview(iv)
-        } else {
-            g.layer?.backgroundColor = pal.primary
-                .withAlphaComponent(0.45).cgColor
-            if let icon = AppIcons.icon(forPID: hit.pid) {
-                let side = max(16, min(min(lifted.width,
-                                           lifted.height) - 8, 48))
-                let iv = NSImageView(frame: NSRect(
-                    x: (lifted.width  - side) / 2,
-                    y: (lifted.height - side) / 2,
-                    width: side, height: side))
-                iv.image = icon
-                iv.imageScaling = .scaleProportionallyDown
-                g.addSubview(iv)
-            }
-        }
+        let g = makeWindowGhost(
+            over: hit.rect,
+            thumbnail: thumbnails[hit.id],
+            iconFallback: { AppIcons.icon(forPID: hit.pid) },
+            style: gridGhostStyle)
         addSubview(g)
         dragGhost = g
 
-        gridLiftShadow(g)
+        liftShadow(g, style: gridGhostStyle)
     }
 
-    /// Cell-sized ghost for a workspace drag. Reproduces the source
-    /// cell's contents (thumbnails laid out in their backend
-    /// positions) so the gesture feels like "the whole cell is
-    /// floating with the cursor" — visually distinct from the
-    /// thumb-sized accent ghost of a window drag. Falls back to a
-    /// centred WS label for empty cells.
     private func installWorkspaceGhost(for cell: Cell) {
-        let g = FlippedView(frame: cell.rect)
-        g.wantsLayer = true
-        g.layer?.cornerRadius = gridCellCornerRadius
-        g.layer?.cornerCurve = .continuous
-        g.layer?.masksToBounds = true
-        g.layer?.borderColor = pal.foreground.withAlphaComponent(0.85).cgColor
-        g.layer?.borderWidth = 2
-        g.layer?.backgroundColor = pal.foreground
-            .withAlphaComponent(0.10).cgColor
-        g.layer?.shadowColor = NSColor.black.cgColor
-        g.layer?.shadowOffset = CGSize(width: 0, height: -4)
-        g.layer?.shadowRadius = gridLiftShadowRadius
-        g.layer?.shadowOpacity = 0
-
-        if cell.windows.isEmpty {
-            let label = NSTextField(labelWithString: cell.label)
-            label.font = uiFont(gridGhostLabelSize, .bold)
-            label.textColor = pal.foreground.withAlphaComponent(0.95)
-            label.alignment = .center
-            label.sizeToFit()
-            label.frame = NSRect(
-                x: (g.bounds.width  - label.frame.width)  / 2,
-                y: (g.bounds.height - label.frame.height) / 2,
-                width: label.frame.width,
-                height: label.frame.height)
-            label.autoresizingMask =
-                [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
-            g.addSubview(label)
-        } else {
-            for hit in cell.windows {
-                let localRect = NSRect(
-                    x: hit.rect.minX - cell.rect.minX,
-                    y: hit.rect.minY - cell.rect.minY,
-                    width: hit.rect.width,
-                    height: hit.rect.height)
-                let iv = NSImageView(frame: localRect)
-                iv.wantsLayer = true
-                iv.layer?.cornerRadius = 3
-                iv.layer?.masksToBounds = true
-                if let img = thumbnails[hit.id] {
-                    iv.image = img
-                    iv.imageScaling = .scaleAxesIndependently
-                } else if let icon = AppIcons.icon(forPID: hit.pid) {
-                    iv.image = icon
-                    iv.imageScaling = .scaleProportionallyDown
-                    iv.layer?.backgroundColor = pal.foreground
-                        .withAlphaComponent(0.22).cgColor
-                }
-                g.addSubview(iv)
+        let thumbs = cell.windows.map { hit -> MiniThumbSpec in
+            let localRect = NSRect(
+                x: hit.rect.minX - cell.rect.minX,
+                y: hit.rect.minY - cell.rect.minY,
+                width: hit.rect.width,
+                height: hit.rect.height)
+            let content: MiniThumbContent
+            if let img = thumbnails[hit.id] {
+                content = .capture(img)
+            } else if let icon = AppIcons.icon(forPID: hit.pid) {
+                content = .icon(icon)
+            } else {
+                content = .blank
             }
+            return MiniThumbSpec(rect: localRect, content: content)
         }
+        let g = makeWorkspaceGhost(cellRect: cell.rect,
+                                   label: cell.label,
+                                   thumbs: thumbs,
+                                   style: gridGhostStyle)
         addSubview(g)
         dragGhost = g
 
-        gridLiftShadow(g)
+        liftShadow(g, style: gridGhostStyle)
     }
 
     private func positionDragGhost(at p: NSPoint) {
-        guard let g = dragGhost else { return }
-        g.frame.origin = NSPoint(
-            x: p.x - g.frame.width / 2,
-            y: p.y - g.frame.height / 2)
+        positionGhost(dragGhost, at: p)
     }
 
     // MARK: - Commit / cancel
