@@ -1383,6 +1383,7 @@ enum FacetApp {
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
+        installMainMenu()
         AX.ensureTrusted()
 
         // Single backend since Phase ε (v2.0.0). `WindowBackend`
@@ -1419,5 +1420,61 @@ enum FacetApp {
         }
 
         app.run()
+    }
+
+    /// Install a minimal main menu (App + Edit) at startup.
+    ///
+    /// facet runs `.accessory` (LSUIElement), so with no main menu the
+    /// standard editing key equivalents (⌘A/C/V/X/Z, ⇧⌘Z) are never
+    /// dispatched to a text field's field editor — that's why the tree
+    /// `s` search box couldn't select-all / copy / paste / undo. The
+    /// Edit menu's items target the first responder (action sent to
+    /// `nil`), so when the field editor is focused they drive its
+    /// `selectAll:`/`copy:`/`paste:`/`cut:`/`undo:`/`redo:`. The menu
+    /// bar is hidden in `.accessory`; it only appears (and these key
+    /// equivalents fire) once `--active` flips the app to `.regular` +
+    /// activates it (Controller.enterActive) — which is exactly when the
+    /// search box is usable, so the shortcuts work where they're needed.
+    @MainActor
+    private static func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu (the bold first slot) — conventional + carries ⌘Q.
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu()
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "Quit facet",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+
+        // Edit menu — the reason this whole menu exists (see above).
+        // These are the standard first-responder editing actions;
+        // targeting nil routes them through the responder chain to
+        // whatever field editor is focused. `undo:`/`redo:` aren't
+        // declared @objc on any nameable class, so they stay string
+        // selectors (the field editor handles them via its undo manager).
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "Edit")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "Undo",
+                         action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "Redo",
+                                    action: Selector(("redo:")),
+                                    keyEquivalent: "Z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut",
+                         action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy",
+                         action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste",
+                         action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All",
+                         action: #selector(NSText.selectAll(_:)),
+                         keyEquivalent: "a")
+
+        NSApp.mainMenu = mainMenu
     }
 }
