@@ -476,16 +476,24 @@ public final class SidebarView: NSView {
     {
         enum T { case win(WindowID); case ws(Int) }
         var t: T?
-        if kbNav, let s = kbSel {
-            switch s {
-            case .win(let id):                  t = .win(id)
-            case .hdr(let w):                   t = .ws(w)
-            }
-        } else if let h = hoverIdx, rows.indices.contains(h) {
+        // Hover wins when the pointer is over a previewable row — this is
+        // what makes hover previews work in `--active` (kbNav) mode too,
+        // not just plain mode (previously kbNav short-circuited to kbSel
+        // and ignored hover entirely). Keyboard nav clears `hoverIdx`
+        // (see setSel), so an arrow key hands the preview to the keyboard
+        // selection and the next mouseMoved hands it back to hover —
+        // "most recent input wins".
+        if let h = hoverIdx, rows.indices.contains(h) {
             switch rows[h].kind {
             case .window(_, _, let id, _):      t = .win(id)
             case .header(let w):                t = .ws(w)
             default:                            break
+            }
+        }
+        if t == nil, kbNav, let s = kbSel {
+            switch s {
+            case .win(let id):                  t = .win(id)
+            case .hdr(let w):                   t = .ws(w)
             }
         }
         guard let t, let win = self.window else { return [] }
@@ -1484,6 +1492,11 @@ public final class SidebarView: NSView {
 
     private func setSel(_ s: TreeKbSel?) {
         kbSel = s
+        // Keyboard nav takes the preview back from hover (and clears the
+        // stale hover highlight). previewTargets() prefers hoverIdx, so
+        // without this an arrow key wouldn't move the preview while the
+        // mouse rests on a row. Next mouseMoved re-sets hoverIdx.
+        hoverIdx = nil
         needsDisplay = true
         if s != nil { scrollSelVisible() }
         controller?.previewTargetChanged()
