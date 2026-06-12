@@ -1,14 +1,11 @@
 name: update-tap
 
-# When a Release is Published (or via manual dispatch), bump the
-# Homebrew tap formula at akira-toriyama/homebrew-tap to that tag and
-# the fresh source-tarball sha256. Idempotent — re-running on the
-# same tag is a no-op when the formula already matches.
-#
-# Cross-repo write requires a PAT (the workflow's GITHUB_TOKEN can
-# only touch this repo). Add a fine-grained PAT with `Contents: Read
-# & write` scoped to homebrew-tap only, as repo secret
-# `HOMEBREW_TAP_TOKEN`.
+# Thin caller — delegates to the shared reusable at
+# akira-toriyama/.github/.github/workflows/update-tap.yml. The bump logic
+# + docs live there; this file only declares the trigger and the formula
+# name. Cross-repo write needs repo secret HOMEBREW_TAP_TOKEN (a
+# fine-grained PAT with Contents: Read & write on homebrew-tap).
+
 on:
   release:
     types: [published]
@@ -19,80 +16,11 @@ on:
         required: false
         default: ""
 
-concurrency:
-  group: update-tap
-  cancel-in-progress: false
-
-permissions:
-  contents: read
-
 jobs:
   bump:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Resolve tag
-        id: tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "release" ]; then
-            t="${{ github.event.release.tag_name }}"
-          elif [ -n "${{ github.event.inputs.tag }}" ]; then
-            t="${{ github.event.inputs.tag }}"
-          else
-            t="$(gh release view --repo ${{ github.repository }} \
-                  --json tagName --jq .tagName)"
-          fi
-          echo "tag=$t" >> "$GITHUB_OUTPUT"
-          echo "::notice::Target tag = $t"
-
-      - name: Download source tarball + compute sha256
-        id: sha
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          set -euo pipefail
-          url="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
-          curl -fsSL -o src.tgz "$url"
-          s="$(sha256sum src.tgz | awk '{print $1}')"
-          echo "sha=$s" >> "$GITHUB_OUTPUT"
-          echo "::notice::sha256 = $s"
-
-      - name: Checkout homebrew-tap (PAT)
-        uses: actions/checkout@v6
-        with:
-          repository: akira-toriyama/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: tap
-
-      - name: Bump Formula (idempotent)
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-          NEW_SHA: ${{ steps.sha.outputs.sha }}
-        run: |
-          set -euo pipefail
-          f="tap/Formula/facet.rb"
-          # No-op when the formula already matches.
-          if grep -q "archive/refs/tags/${TAG}.tar.gz" "$f" \
-             && grep -q "sha256 \"${NEW_SHA}\"" "$f"; then
-            echo "::notice::Formula already at ${TAG} — nothing to do."
-            exit 0
-          fi
-          sed -i -E "s|archive/refs/tags/v[0-9]+\.[0-9]+\.[0-9]+\.tar\.gz|archive/refs/tags/${TAG}.tar.gz|g" "$f"
-          sed -i -E "s|sha256 \"[0-9a-f]{64}\"|sha256 \"${NEW_SHA}\"|g" "$f"
-          # On any version bump, drop a leftover `revision N` line.
-          # Revision only matters when REbuilding the same upstream
-          # version (e.g. an install-script fix at the same tag); a
-          # fresh tag naturally resets it. Without this, a revision
-          # bumped while fixing a prior release follows the formula
-          # forward and produces e.g. `1.5.0_2` when the natural
-          # display is `1.5.0`.
-          sed -i -E '/^  revision [0-9]+$/d' "$f"
-          cd tap
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/facet.rb
-          git commit -m "homebrew: bump facet to ${TAG}"
-          git push
-          echo "::notice::Bumped tap to ${TAG} (sha ${NEW_SHA:0:12}…)."
+    uses: akira-toriyama/.github/.github/workflows/update-tap.yml@main
+    with:
+      formula: facet
+      tag: ${{ github.event.inputs.tag || '' }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
