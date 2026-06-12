@@ -2083,8 +2083,8 @@ extension Controller: TreeController {
 
     // -- Panel mechanics → delegate to PanelHost
 
-    func movePanel(by delta: CGSize) {
-        panelHost.movePanel(by: delta)
+    func setPanelOrigin(to origin: CGPoint) {
+        panelHost.setPanelOrigin(to: origin)
     }
 
     /// Header double-click: reset the panel to its `[tree]` config

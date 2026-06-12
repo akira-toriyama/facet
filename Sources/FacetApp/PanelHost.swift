@@ -260,12 +260,16 @@ final class PanelHost: NSObject {
 
     // MARK: - Geometry
 
-    func movePanel(by d: CGSize) {
-        var o = panel.frame.origin
-        o.x += d.width; o.y += d.height
-        panel.setFrameOrigin(o)
+    /// Move the panel to an absolute bottom-left `origin` in screen
+    /// coords (the live drag uses this — see `setPanelOrigin(to:)` on
+    /// `TreeController` for why absolute-from-cursor beats deltas). No
+    /// syncPetWindow() here: petWindow is an addChildWindow child, so the
+    /// OS translates it with the parent for free on a pure origin move;
+    /// an explicit setFrame would double-position the overlay every drag
+    /// event. syncPetWindow() stays in the resize path (applySubviewLayout).
+    func setPanelOrigin(to origin: NSPoint) {
+        panel.setFrameOrigin(origin)
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
-        syncPetWindow()
     }
 
     /// Pin the panel to an exact rect in **TOP-LEFT origin** — `x`
