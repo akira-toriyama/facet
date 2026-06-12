@@ -35,9 +35,9 @@
 #   "catppuccin-mocha" — soft pastel dark (Mocha); mauve + blue.
 #   "gruvbox"          — retro warm dark; orange + aqua.
 #
-# Animated (rounded; cycles its accents — see `theme-cycle-seconds`):
+# Animated (rounded; cycles its accents — see `color-cycle-ms`):
 #   "rainbow"          — loud max-saturation: white on violet-black, vivid
-#                        rose + electric-cyan. Set `theme-cycle-seconds`
+#                        rose + electric-cyan. Set `color-cycle-ms`
 #                        (below) to ANIMATE — the accents rotate through the
 #                        spectrum. ("chomp" also flashes when cycled.)
 #
@@ -55,13 +55,15 @@
 #
 # Unknown names clamp to "terminal". CLI override (session only):
 # `facet --theme=dracula`.
-theme = "terminal"
+[theme]
+name = "terminal"
 
 # ANIMATE the theme: an animatable theme (rainbow / chomp) cycles its
-# accents over this many seconds — rainbow rotates the full spectrum,
-# chomp cycles its arcade flash palette. Independent of the border's
-# cycle-seconds below. Omit → static palette. 1–120 clamp, default 6.
-# theme-cycle-seconds = 3
+# accents over this period (integer milliseconds) — rainbow rotates the
+# full spectrum, chomp cycles its arcade flash palette. Independent of
+# the border's color-cycle-ms below. Omit → static palette.
+# 1000–120000 clamp, default 6000.
+# color-cycle-ms = 3000
 
 
 # -----------------------------------------------------------------
@@ -89,16 +91,16 @@ effect = "off"
 glow = true
 # Border line width in points. 0.5–30 clamp, default 1.5.
 # width = 10
-# Continuous-animation period: seconds per cycle (lower = faster).
-# Drives the "rainbow" hue rotation AND the width breath below.
-# SETTING this key also makes a non-rainbow effect (neon / cyber /
-# vapor / kawaii / chomp) continuously CYCLE its border through its own
-# palette over this period (omit the key → that effect stays steady).
-# Border-only — to animate the THEME, use `theme-cycle-seconds` above.
-# 1–120 clamp, default 6.
-# cycle-seconds = 3
+# Continuous-animation period: milliseconds per cycle (lower =
+# faster). Drives the "rainbow" hue rotation AND the width breath
+# below. SETTING this key also makes a non-rainbow effect (neon /
+# cyber / vapor / kawaii / chomp) continuously CYCLE its border
+# through its own palette over this period (omit the key → that
+# effect stays steady). Border-only — to animate the THEME, use
+# `[theme].color-cycle-ms` above. 1000–120000 clamp, default 6000.
+# color-cycle-ms = 3000
 # Width breathing: when BOTH are set (max > min) the border width
-# oscillates min↔max over cycle-seconds, for ANY effect (overrides
+# oscillates min↔max over color-cycle-ms, for ANY effect (overrides
 # the fixed `width`). Each 0.5–30. Leave unset for a constant width.
 # min-width = 5
 # max-width = 15
@@ -108,6 +110,12 @@ glow = true
 # Grid overview
 # -----------------------------------------------------------------
 [grid]
+
+# Per-view theme override — this surface only. `""` (the default)
+# inherits `[theme].name`, so all views share the app theme unless
+# you opt a surface out (e.g. a light grid over a dark tree).
+# Same name catalog as `[theme].name` (incl. "random").
+theme = ""
 
 # Number of columns in the overview grid. The row count is derived
 # from the number of workspaces (e.g. 15 workspaces with cols = 5
@@ -139,6 +147,12 @@ thumbnail-refresh-seconds = 4
 # Rail-view (full-screen workspace overview) options
 # -----------------------------------------------------------------
 [rail]
+
+# Per-view theme override — this surface only. `""` (the default)
+# inherits `[theme].name`, so all views share the app theme unless
+# you opt a surface out (e.g. a light grid over a dark tree).
+# Same name catalog as `[theme].name` (incl. "random").
+theme = ""
 
 # Which screen edge the rail's workspace strip docks against:
 #
@@ -175,6 +189,12 @@ cells = 7
 # Tree-view (sidebar) options
 # -----------------------------------------------------------------
 [tree]
+
+# Per-view theme override — this surface only. `""` (the default)
+# inherits `[theme].name`, so all views share the app theme unless
+# you opt a surface out (e.g. a light grid over a dark tree).
+# Same name catalog as `[theme].name` (incl. "random").
+theme = ""
 
 # How the hover-preview overlay of a non-active workspace window
 # is sized and placed.
@@ -220,9 +240,9 @@ preview-mode = "popover"
 #   "chomp" — yellow chomping wedge (mouth opens / closes).
 #   "ghost" — red Blinky-style ghost (dome + scalloped skirt + eyes).
 #
-# Accepts a TOML array or a lenient comma string; order = chase order
-# (the first leads, the rest trail). Unknown names are dropped.
-# line-pets = ["chomp", "ghost"]   # or "chomp, ghost"
+# A TOML array (`[]` = off); order = chase order (the first leads,
+# the rest trail). Unknown names drop with a logged warning.
+# line-pets = ["chomp", "ghost"]
 #
 # Pet size multiplier on the baked-in sprite. Default 0.9 — a touch
 # under the row height so it reads without swamping the text. ≥ 0.1.
@@ -393,8 +413,8 @@ enabled = false
 #                unnamed (empty-title) window.
 #   role       — exact AX role     (e.g. "AXWindow").
 #   subrole    — exact AX subrole  (e.g. "AXDialog").
-#   max_width  — match windows no wider than this (points).
-#   max_height — match windows no taller than this (points).
+#   max-width  — match windows no wider than this (points).
+#   max-height — match windows no taller than this (points).
 #
 # action defaults to "float". A rule with no match key is ignored (it
 # would match nothing). A bad regex simply never matches — it can't
@@ -467,7 +487,7 @@ action = "ignore"
 # [[assign]] — statically map windows to tags at startup (`by=tag`
 # only; runtime re-tagging isn't supported). Match keys mirror
 # [[exclude]] (app / title / role / subrole substring-regex,
-# max_width / max_height). Tags come from `tag = "x"` and/or
+# max-width / max-height). Tags come from `tag = "x"` and/or
 # `tags = ["x", "y"]` (unioned). A table with no match key or no tag
 # is dropped; an unknown tag name (not declared in [[tag]]) is a
 # startup error.

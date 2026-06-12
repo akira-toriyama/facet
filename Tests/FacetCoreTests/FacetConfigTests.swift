@@ -145,19 +145,21 @@ final class FacetConfigTests: XCTestCase {
                        "lower-cased, trimmed, empty entries dropped, order kept")
     }
 
-    func testTreeLinePetsParsesArrayAndCommaString() {
+    func testTreeLinePetsParsesArrayOnly() {
         let arr = FacetConfig.from(toml: parseTOMLSubset("""
             [tree]
             line-pets = ["chomp", "ghost"]
             """))
         XCTAssertEqual(arr.effectiveTreeLinePets, ["chomp", "ghost"],
                        "TOML array form")
+        // The old lenient comma-string form is retired (family grammar:
+        // arrays are arrays) — a string value is ignored, pets stay off.
         let csv = FacetConfig.from(toml: parseTOMLSubset("""
             [tree]
             line-pets = "chomp, ghost"
             """))
-        XCTAssertEqual(csv.effectiveTreeLinePets, ["chomp", "ghost"],
-                       "lenient comma-string form")
+        XCTAssertEqual(csv.effectiveTreeLinePets, [],
+                       "comma-string form no longer parses")
     }
 
     func testEffectiveTreePetScaleDefaultsAndClamps() {
@@ -199,7 +201,7 @@ final class FacetConfigTests: XCTestCase {
 
             [[exclude]]
             title = "^$"
-            max_width = 400
+            max-width = 400
             action = "ignore"
 
             [[exclude]]

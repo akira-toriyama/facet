@@ -375,8 +375,8 @@ Frequently-touched keys:
   `vapor` / `kawaii` / `rainbow` / `random`; `glow` (default `true`)
   toggles the bloom; `width` sets the line width (px, clamp 0.5–30,
   default 1.5).
-  The border flashes a neon burst on a workspace switch. `cycle-seconds`
-  (clamp 1–120, default 6 — lower is faster) is the period of the
+  The border flashes a neon burst on a workspace switch. `color-cycle-ms`
+  (clamp 1000–120000, default 6000 — lower is faster) is the period of the
   continuous animation: `rainbow`'s hue rotation, and — when
   `min-width`/`max-width` are both set (max > min, each 0.5–30) — a
   width breath that oscillates the border between them (any effect,
@@ -396,7 +396,7 @@ Frequently-touched keys:
 - `[[exclude]]` rules — keep popups / unnamed / auxiliary windows out
   of the tiling layout. Match by `app` (bundle-id regex), `title`
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or
-  `max_width` / `max_height` (points). Keys within a rule AND; rules
+  `max-width` / `max-height` (points). Keys within a rule AND; rules
   OR (first match wins). `action = "float"` (default) keeps the window
   tracked but untiled; `"ignore"` drops it entirely. The template
   ships one default that floats tiny unnamed popups. (System sheets /
