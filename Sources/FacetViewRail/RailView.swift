@@ -462,22 +462,17 @@ public final class RailView: NSView {
     }
 
     /// Map a workspace's windows into mini-thumbnail rects inside a
-    /// cell. Both window frame and `screen` are CG y-down, so this is
-    /// a straight scale (no vertical flip) — the cell is in the
-    /// flipped view's coords. (Local copy of the grid's
-    /// `gridScaledWindowRect`; kept module-local to avoid a
-    /// cross-view-module import for one pure helper.)
+    /// cell. The rect math is the shared `scaledWindowRect`
+    /// (FacetCore) — rail keeps only the `>= 2` px cull and its own
+    /// `MiniWindowHit` construction.
     private func scaledWins(_ ws: Workspace, _ cell: NSRect,
                             _ screen: CGRect) -> [MiniWindowHit] {
-        guard screen.width > 0, screen.height > 0 else { return [] }
-        let sx = cell.width / screen.width
-        let sy = cell.height / screen.height
         var out: [MiniWindowHit] = []
         for win in ws.windows {
             guard let f = win.frame else { continue }
-            let r = NSRect(x: cell.minX + (f.minX - screen.minX) * sx,
-                           y: cell.minY + (f.minY - screen.minY) * sy,
-                           width: f.width * sx, height: f.height * sy)
+            let r = scaledWindowRect(windowFrame: f,
+                                     screenFrame: screen,
+                                     cellRect: cell)
             guard r.width >= 2, r.height >= 2 else { continue }
             out.append(MiniWindowHit(pid: win.pid, id: win.id,
                               isFocused: win.isFocused, rect: r,
