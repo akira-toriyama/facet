@@ -7,7 +7,6 @@ import AppKit
 import FacetCore
 
 enum TreeRowKind {
-    case handle
     case header(workspaceIndex: Int)
     case window(workspaceIndex: Int,
                 pid: Int,

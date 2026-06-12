@@ -33,6 +33,10 @@ final class PanelHost: NSObject {
     private let bgView = NSView()
     let searchBar: SearchBar
     private let view: SidebarView
+    /// Pinned "Desktop N" grab band at the panel top — a sibling of the
+    /// scroll view (never scrolls). Controller wires its `onResetGeometry`;
+    /// PanelHost feeds its ordinal + sizes it in `applySubviewLayout`.
+    let handleBar = HandleBar()
 
     /// Outer panel border. Drawn as a layer (never a view) so it can't
     /// intercept clicks; sits above the chrome via `zPosition`, tracks
@@ -146,6 +150,7 @@ final class PanelHost: NSObject {
         effect.addSubview(bgView)
         effect.addSubview(scroll)
         effect.addSubview(searchBar)
+        effect.addSubview(handleBar)
 
         // Outer accent border, on top of the chrome. A layer (not a
         // view) can't intercept clicks; `zPosition` keeps it above the
@@ -370,10 +375,19 @@ final class PanelHost: NSObject {
                                  width: f.width - 16,
                                  height: max(sh - 9, 0))
         searchBar.needsLayout = true
-        scroll.frame = NSRect(x: 0, y: 0,
-                              width: f.width, height: f.height - sh)
+        // Pinned grab band sits just below the search bar (or at the very
+        // top when not searching); the scroll view fills the rest below
+        // it. The band never scrolls, so a long list can't carry the
+        // panel-move handle off-screen.
+        let hb = HandleBar.height
+        handleBar.frame = NSRect(x: 0, y: f.height - sh - hb,
+                                 width: f.width, height: hb)
+        handleBar.ordinal = view.shownMacDesktopOrdinal
+        handleBar.needsDisplay = true
+        let bodyH = max(f.height - sh - hb, 0)
+        scroll.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
         view.frame = NSRect(x: 0, y: 0, width: f.width,
-                            height: max(contentH, f.height - sh))
+                            height: max(contentH, bodyH))
         // Border tracks the panel size. Disable the implicit layer
         // animation so it doesn't lag a frame behind a live resize.
         CATransaction.begin()
@@ -397,6 +411,7 @@ final class PanelHost: NSObject {
         effect.material = pal.vibrancyMaterial ?? .sidebar
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
+        handleBar.needsDisplay = true
     }
 
     /// Apply the `[border]` config (shared `BorderFX`). The panel border
