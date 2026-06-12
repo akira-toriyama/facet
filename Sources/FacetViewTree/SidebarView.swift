@@ -55,6 +55,19 @@ public final class SidebarView: NSView {
     // are listed (cross-workspace flat list).
     public private(set) var searching = false
     public private(set) var query = ""
+    /// Session-only ring of committed search queries (#187) — newest
+    /// first, capped at `searchHistoryMax`, deduped (re-use moves an
+    /// entry back to the head). Pushed on Return-activation only, so
+    /// Esc-abandoned queries never enter. Never persisted to disk —
+    /// same lifecycle as the catalog state.
+    public private(set) var searchHistory: [String] = []
+    private let searchHistoryMax = 10
+    /// Recall cursor into `searchHistory` while ↑↓-browsing in state
+    /// A (nil = not recalling). `searchDraft` holds whatever was
+    /// typed before the first ↑ so walking ↓ past the newest entry
+    /// restores it.
+    private var searchHistoryCursor: Int?
+    private var searchDraft = ""
 
     private var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public private(set) var signature = ""
@@ -427,16 +440,68 @@ public final class SidebarView: NSView {
 
     /// Input comes from a real NSTextField (Controller-owned SearchBar)
     /// so the IME works; the field is the source of truth for `query`.
-    public func beginSearch() { searching = true; query = ""; rebuildSearch() }
+    public func beginSearch() {
+        searching = true; query = ""
+        searchHistoryCursor = nil
+        rebuildSearch()
+    }
 
     public func setQuery(_ s: String) {
         guard searching else { return }
+        // User typing starts a fresh draft lineage — the next ↑
+        // recalls from the head again (#187).
+        searchHistoryCursor = nil
         query = s; rebuildSearch()
+    }
+
+    /// `setQuery` minus the cursor reset — the recall path applies a
+    /// history entry to the filter without ending its own browse.
+    public func applyRecalledQuery(_ s: String) {
+        guard searching else { return }
+        query = s; rebuildSearch()
+    }
+
+    /// ↑↓ in state A (#187): walk the query ring. `delta` +1 = older,
+    /// -1 = newer; `current` is the live box text (captured as the
+    /// draft on the first ↑). Returns the text to put in the box —
+    /// a history entry, or the draft when ↓ walks past the newest —
+    /// or nil for a no-op (empty ring / ↓ with no recall active).
+    public func recallHistory(_ delta: Int, current: String) -> String? {
+        guard searching, !searchHistory.isEmpty else { return nil }
+        switch (searchHistoryCursor, delta) {
+        case (nil, let d) where d > 0:        // first ↑ → newest entry
+            searchDraft = current
+            searchHistoryCursor = 0
+        case (nil, _):                        // ↓ without a recall: no-op
+            return nil
+        case (let c?, let d):
+            let n = c + d
+            if n < 0 {                        // ↓ past newest → the draft
+                searchHistoryCursor = nil
+                return searchDraft
+            }
+            searchHistoryCursor = min(n, searchHistory.count - 1)
+        }
+        return searchHistory[searchHistoryCursor!]
+    }
+
+    /// Return-activation pushes the query (#187 — committed queries
+    /// only; Esc-abandoned ones never land here). Dedupe by moving a
+    /// re-used entry back to the head; cap at `searchHistoryMax`.
+    private func pushSearchHistory(_ q: String) {
+        let t = q.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        searchHistory.removeAll { $0 == t }
+        searchHistory.insert(t, at: 0)
+        if searchHistory.count > searchHistoryMax {
+            searchHistory.removeLast(searchHistory.count - searchHistoryMax)
+        }
     }
 
     public func endSearch() {
         guard searching else { return }
         searching = false; query = ""
+        searchHistoryCursor = nil
         signature = ""; _ = update(lastWorkspaces)
         needsDisplay = true
         controller?.previewTargetChanged()
@@ -1662,6 +1727,9 @@ public final class SidebarView: NSView {
     public func kbActivate() {
         guard let s = kbSel, let i = kbIndex(of: s) else { return }
         let row = rows[i]
+        // #187: a Return-activation is the only thing that commits
+        // the live query to the session history ring.
+        if searching { pushSearchHistory(query) }
         // Leave keyboard mode FIRST so we act exactly like a mouse
         // click (facet no longer the active app). Otherwise,
         // switching to an empty workspace then dropping .regular

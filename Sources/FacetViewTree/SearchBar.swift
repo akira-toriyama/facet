@@ -29,6 +29,35 @@ public final class SearchBar: NSView {
     public let field = NSTextField()
     public override var isFlipped: Bool { true }
 
+    /// True while the field owns key input (= search state A /
+    /// insert; #187 modal focus). False = state B (nav): the panel
+    /// keymap drives the result list and the box just displays the
+    /// filter. Drives the border accent below.
+    public var isFocused: Bool { field.currentEditor() != nil }
+
+    /// Repaint the border when the field gains / loses the editor.
+    /// KVO on the window's `firstResponder` — the only reliable
+    /// signal that also catches a mouse click into the field (which
+    /// bypasses the Controller's enter/leave paths).
+    private var focusObs: NSKeyValueObservation?
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        focusObs = window?.observe(\.firstResponder, options: [.initial]) {
+            [weak self] _, _ in
+            MainActor.assumeIsolated { self?.applyFocusStyle() }
+        }
+    }
+
+    /// Border accent = the A/B visual cue (#187): accent color +
+    /// thicker stroke while the box has focus (caret visible), the
+    /// muted theme border while browsing results in state B.
+    private func applyFocusStyle() {
+        layer?.borderColor = isFocused
+            ? pal.primary.cgColor : pal.border.cgColor
+        layer?.borderWidth = isFocused ? 1.5 : 1
+    }
+
     public override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -62,12 +91,12 @@ public final class SearchBar: NSView {
         let base = pal.background ?? NSColor.textBackgroundColor
         layer?.backgroundColor =
             (base.blended(withFraction: 0.06, of: .white) ?? base).cgColor
-        layer?.borderColor = pal.border.cgColor
+        applyFocusStyle()
         let f = uiFont(13, .regular)
         field.font = f
         field.textColor = pal.foreground
         field.placeholderAttributedString = NSAttributedString(
-            string: "type to filter…",
+            string: "type to filter (↑↓ history)",
             attributes: [.foregroundColor: pal.muted, .font: f])
         needsDisplay = true
     }
