@@ -45,4 +45,9 @@ done
 # quiet. `open` doesn't inherit the shell env, so it goes via --env.
 open "./$APP" --env FACET_DEBUG=1 "${OPEN_ARGS[@]}"
 echo "$APP launched. Grant Accessibility + Screen Recording on first run."
-[[ ${#OPEN_ARGS[@]} -gt 0 ]] && echo "forwarded env: ${OPEN_ARGS[*]}"
+# `if`, not a trailing `[[ … ]] && echo`: with no forwarded vars the
+# bare && idiom would make this last line — and therefore run.sh
+# itself — exit 1, breaking `./run.sh && …` chains (issue #214).
+if [[ ${#OPEN_ARGS[@]} -gt 0 ]]; then
+    echo "forwarded env: ${OPEN_ARGS[*]}"
+fi

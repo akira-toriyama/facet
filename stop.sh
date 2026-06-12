@@ -5,20 +5,49 @@
 # nothing is running (no-op + "(none running)").
 #
 #   ./stop.sh
+#
+# Matching is by EXECUTABLE PATH (ps comm), never by command-line
+# string. A shell whose command line merely *mentions* a facet
+# path — `./run.sh && .build/release/facet status` — must neither
+# be killed nor counted as a survivor (issue #214: the old
+# `ps aux | grep` confirmation false-matched the calling shell,
+# so run.sh's `set -e` aborted between the kill and the relaunch,
+# leaving no server at all).
 
 set -e
 cd "$(dirname "$0")"
 
-pkill -f '/Contents/MacOS/facet' 2>/dev/null || true
-pkill -f '\.build/.*/facet'      2>/dev/null || true
+# PIDs whose executable is a facet binary (bundle or SwiftPM build).
+# `read` keeps everything after the PID in $comm, so executable
+# paths containing spaces survive.
+facet_pids() {
+    ps -axo pid=,comm= | while read -r pid comm; do
+        case "$comm" in
+            */Contents/MacOS/facet|*.build/*/facet) print -r -- "$pid" ;;
+        esac
+    done
+}
 
-# Confirmation pass: anything still alive?
-remaining="$(ps aux \
-    | grep -E '/Contents/MacOS/facet|\.build/.*/facet' \
-    | grep -v grep || true)"
+pids="$(facet_pids)"
+if [[ -z "$pids" ]]; then
+    echo "killed: all facet instances (none running)"
+    exit 0
+fi
+echo "$pids" | xargs kill 2>/dev/null || true
+
+# Confirmation pass: anything still alive? Give TERM a moment
+# (bounded ~2s; exits the loop as soon as the table is clear).
+remaining="$(facet_pids)"
+for _ in {1..10}; do
+    [[ -z "$remaining" ]] && break
+    sleep 0.2
+    remaining="$(facet_pids)"
+done
 if [[ -n "$remaining" ]]; then
     echo "warning: some facet instances survived:" >&2
-    echo "$remaining" >&2
+    for pid in ${(f)remaining}; do
+        ps -p "$pid" -o pid=,comm= >&2 || true
+    done
     exit 1
 fi
 echo "killed: all facet instances"
