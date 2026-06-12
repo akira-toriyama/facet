@@ -354,7 +354,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `effect` = `off` (既定) / `neon` / `cyber` / `vapor` / `kawaii` /
   `rainbow` / `random`、 `glow` (既定 `true`) で bloom on/off、 `width`
   で線幅 (px・0.5–30 クランプ・既定 1.5)。 WS 切替でネオンが一瞬フラッシュ、
-  `cycle-seconds` (1周の秒数・1–120 クランプ・既定 6・小さいほど速い)
+  `color-cycle-ms` (1周の ms・1000–120000 クランプ・既定 6000・小さいほど速い)
   は連続アニメの周期 = `rainbow` の色相回転 +、 `min-width`/`max-width`
   を両方指定 (max > min・各 0.5–30) した時の幅ブリージング (どの effect
   でも幅が min↔max で脈動・固定 `width` を上書き) を駆動。 off は素の
@@ -371,7 +371,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   が対象・起動時読み込み (変更は再起動)。
 - `[[exclude]]` ルール — ポップアップ / 無名窓 / 補助窓をタイル対象から
   外す。 `app` (bundle-id 正規表現)、 `title` (正規表現; `^$` = 無名)、
-  `role` / `subrole` (AX 完全一致)、 `max_width` / `max_height` (pt) で
+  `role` / `subrole` (AX 完全一致)、 `max-width` / `max-height` (pt) で
   マッチ。 1ルール内の key は AND、 複数ルールは OR (上から最初の一致が
   勝ち)。 `action = "float"` (デフォルト) は追跡継続のままタイルから除外、
   `"ignore"` は完全に非管理。 テンプレには「極小の無名ポップアップを

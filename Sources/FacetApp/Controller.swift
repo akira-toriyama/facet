@@ -224,7 +224,7 @@ final class Controller: NSObject {
         let cs = config.effectiveBorderCycleSeconds
         // Explicitly setting `[border] cycle-seconds` also opts a
         // non-rainbow effect into a continuous color cycle (⑧).
-        let cc = config.borderCycleSeconds != nil
+        let cc = config.borderColorCycleMs != nil
         let mn = config.effectiveBorderMinWidth
         let mx = config.effectiveBorderMaxWidth
         panelHost.applyBorder(effectName: e, glow: g, width: w,
@@ -859,7 +859,7 @@ final class Controller: NSObject {
     private var themeIsCycling: Bool {
         currentThemeName != "random"
             && isAnimatableTheme(currentThemeName)
-            && config.themeCycleSeconds != nil
+            && config.themeColorCycleMs != nil
     }
 
     private func updateThemeAnimator() {

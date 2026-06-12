@@ -33,22 +33,32 @@ public struct WorkspaceConfig: Sendable, Equatable {
 public struct FacetConfig: Sendable {
     // Top-level
     public var defaultView: String?         // "tree" | "grid"
-    public var theme: String?               // see effectiveTheme (22 + random)
-    /// Theme color-cycle period (⑪) — animatable themes (rainbow / neon /
-    /// cyber / vapor / kawaii) rotate their accents over this many
-    /// seconds. Set → animate; unset → static. Independent of the border
-    /// cycle. Raw; read `effectiveThemeCycleSeconds`.
-    public var themeCycleSeconds: Int?
+
+    // [theme] — the app-default palette. `theme` keys also live in the
+    // surface-owning blocks ([tree]/[grid]/[rail], `""` = inherit this
+    // one) per the family rule "theme lives with the painted surface".
+    public var theme: String?               // [theme].name; see effectiveTheme
+    /// Theme color-cycle period (`[theme].color-cycle-ms`, integer ms) —
+    /// animatable themes (rainbow / chomp) rotate their accents over
+    /// this period. Set → animate; unset → static. Independent of the
+    /// border cycle. Raw; read `effectiveThemeCycleSeconds`.
+    public var themeColorCycleMs: Int?
 
     // [grid]
     public var gridCols: Int?
     public var gridLabelPosition: String?   // "up" | "down"
     public var thumbnailRefreshSeconds: Int?
+    /// Per-view theme override (`[grid].theme`); `""` / unset inherits
+    /// `[theme].name`. Read through `effectiveGridTheme`.
+    public var gridTheme: String?
 
     // [rail]
     public var railEdge: String?            // "top" | "bottom" | "left" | "right"
     public var railCells: Int?              // max strip cells shown at once
     public var railStrip: Int?              // strip band size, % of short screen edge
+    /// Per-view theme override (`[rail].theme`); `""` / unset inherits
+    /// `[theme].name`. Read through `effectiveRailTheme`.
+    public var railTheme: String?
 
     // [tree]
     /// How the sidebar's hover-preview overlay is sized + placed.
@@ -63,12 +73,15 @@ public struct FacetConfig: Sendable {
     public var treePosY: Int?
     public var treeWidth: Int?
     public var treeHeight: Int?
+    /// Per-view theme override (`[tree].theme`); `""` / unset inherits
+    /// `[theme].name`. Read through `effectiveTreeTheme`.
+    public var treeTheme: String?
     /// Arcade "line-pets" that walk the tree panel's outer border —
     /// a shared sill decoration (`Effects.drawLinePets`, also on halo's
     /// ring + wand's cards). Names from `canonicalLinePetNames`
-    /// (`"chomp"` / `"ghost"`); unknown names are dropped at the view
-    /// seam. Accepts a TOML array (`["chomp", "ghost"]`) or a lenient
-    /// comma string (`"chomp, ghost"`). Empty / unset = off (opt-in).
+    /// (`"chomp"` / `"ghost"`); unknown names drop with a warning.
+    /// A TOML array only (`["chomp", "ghost"]` — the family grammar;
+    /// `[]` = off). Empty / unset = off (opt-in).
     /// Read through `effectiveTreeLinePets`.
     public var treeLinePets: [String]?
     /// Pet size multiplier on the baked-in sprite (chomp ø14 / ghost
@@ -136,8 +149,9 @@ public struct FacetConfig: Sendable {
     public var borderWidth: CGFloat?
     /// Continuous border-animation period — seconds per cycle (lower =
     /// faster). Drives the rainbow hue rotation AND the width breathing.
-    /// Raw; read `effectiveBorderCycleSeconds`.
-    public var borderCycleSeconds: Int?
+    /// Raw (`[border].color-cycle-ms`, integer ms); read
+    /// `effectiveBorderCycleSeconds`.
+    public var borderColorCycleMs: Int?
     /// Width breathing: when BOTH are set (max > min), the border width
     /// oscillates min↔max over `cycle-seconds` (any effect). Unset →
     /// the fixed `width`. Raw; read `effectiveBorderMin/MaxWidth`.
@@ -200,6 +214,19 @@ public struct FacetConfig: Sendable {
     /// `paletteFor` then picks a concrete theme each call.
     public var effectiveTheme: String {
         canonical(theme ?? "terminal") ?? "terminal"
+    }
+
+    /// Per-view themes — `[tree]/[grid]/[rail].theme`. `""` / unset /
+    /// unknown inherit the app default (`effectiveTheme`); a known
+    /// canonical name (incl. `random`) overrides it for that surface
+    /// only. Family rule: the theme key lives with the painted surface.
+    public var effectiveTreeTheme: String { perViewTheme(treeTheme) }
+    public var effectiveGridTheme: String { perViewTheme(gridTheme) }
+    public var effectiveRailTheme: String { perViewTheme(railTheme) }
+
+    private func perViewTheme(_ raw: String?) -> String {
+        guard let raw, !raw.isEmpty else { return effectiveTheme }
+        return canonical(raw) ?? effectiveTheme
     }
 
     /// 1-12 clamp. Default 4.
@@ -384,13 +411,13 @@ public struct FacetConfig: Sendable {
     /// rotation and the width breath share this period (lower = faster).
     /// [1, 120] clamp, default 6.
     public var effectiveBorderCycleSeconds: CGFloat {
-        CGFloat(max(1, min(120, borderCycleSeconds ?? 6)))
+        CGFloat(max(1000, min(120_000, borderColorCycleMs ?? 6000))) / 1000
     }
 
     /// Theme color-cycle period (⑪), seconds. [1, 120] clamp, default 6.
     /// Independent of `effectiveBorderCycleSeconds`.
     public var effectiveThemeCycleSeconds: CGFloat {
-        CGFloat(max(1, min(120, themeCycleSeconds ?? 6)))
+        CGFloat(max(1000, min(120_000, themeColorCycleMs ?? 6000))) / 1000
     }
     /// Width-breathing bounds, px (each clamped 0.5–30), or `nil` when
     /// unset. Breathing runs only when BOTH are set and max > min.
@@ -447,6 +474,16 @@ public struct FacetConfig: Sendable {
               effectiveGridLabelPosition)
         clamp("[window] raise-on-open", raiseOnOpen,
               effectiveRaiseOnOpen.rawValue)
+        // Per-view theme typos inherit the app default — warn with a hint.
+        for (key, raw) in [("[tree].theme", treeTheme),
+                           ("[grid].theme", gridTheme),
+                           ("[rail].theme", railTheme)] {
+            if let raw, !raw.isEmpty, canonical(raw) == nil {
+                let hint = suggest(raw).map { " (did you mean \"\($0)\"?)" } ?? ""
+                out.append("config: unknown \(key) \"\(raw)\" "
+                    + "— inheriting [theme].name" + hint)
+            }
+        }
         // Pet-name typos: clamp-and-log (family standard, wand wording).
         let petRaws = (treeLinePets ?? [])
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
@@ -530,11 +567,14 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml[""]?["default-view"] {
             c.defaultView = s
         }
-        if case .string(let s)? = toml[""]?["theme"] {
+        // [theme] — app-default palette + cycle (the old top-level
+        // bare keys are retired: no flat top-level keys, per the
+        // family reference style).
+        if case .string(let s)? = toml["theme"]?["name"] {
             c.theme = s
         }
-        if case .int(let n)? = toml[""]?["theme-cycle-seconds"] {
-            c.themeCycleSeconds = n
+        if case .int(let n)? = toml["theme"]?["color-cycle-ms"] {
+            c.themeColorCycleMs = n
         }
         // [grouping]
         if case .string(let s)? = toml["grouping"]?["by"] { c.grouping = s }
@@ -550,25 +590,25 @@ public struct FacetConfig: Sendable {
         if case .int(let n)? = toml["grid"]?["thumbnail-refresh-seconds"] {
             c.thumbnailRefreshSeconds = n
         }
+        if case .string(let s)? = toml["grid"]?["theme"] { c.gridTheme = s }
         // [rail]
         if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
         if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
         if case .int(let n)? = toml["rail"]?["strip"] { c.railStrip = n }
+        if case .string(let s)? = toml["rail"]?["theme"] { c.railTheme = s }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
         }
+        if case .string(let s)? = toml["tree"]?["theme"] { c.treeTheme = s }
         if case .int(let n)? = toml["tree"]?["pos-x"] { c.treePosX = n }
         if case .int(let n)? = toml["tree"]?["pos-y"] { c.treePosY = n }
         if case .int(let n)? = toml["tree"]?["width"] { c.treeWidth = n }
         if case .int(let n)? = toml["tree"]?["height"] { c.treeHeight = n }
-        // line-pets: a TOML array (`["chomp", "ghost"]`) or a lenient
-        // comma string (`"chomp, ghost"`). Either form lands as a raw
-        // name list; validation happens at the view seam.
+        // line-pets: a TOML array only (`["chomp", "ghost"]` — the
+        // family grammar; the old lenient comma-string form is gone).
         if case .stringArray(let a)? = toml["tree"]?["line-pets"] {
             c.treeLinePets = a
-        } else if case .string(let s)? = toml["tree"]?["line-pets"] {
-            c.treeLinePets = s.split(separator: ",").map(String.init)
         }
         if let v = toml["tree"]?["pet-scale"]?.asDouble {
             c.treePetScale = v
@@ -624,8 +664,8 @@ public struct FacetConfig: Sendable {
         if let v = toml["border"]?["width"]?.asDouble {
             c.borderWidth = CGFloat(v)      // accepts `2` or `1.5`
         }
-        if case .int(let n)? = toml["border"]?["cycle-seconds"] {
-            c.borderCycleSeconds = n
+        if case .int(let n)? = toml["border"]?["color-cycle-ms"] {
+            c.borderColorCycleMs = n
         }
         if case .int(let n)? = toml["border"]?["min-width"] {
             c.borderMinWidth = n
@@ -743,7 +783,7 @@ public struct FacetConfig: Sendable {
     /// Build `[ExclusionRule]` from the raw TOML text's `[[exclude]]`
     /// array-of-tables. Each table: `app` / `title` / `role` /
     /// `subrole` are strings (regex for app/title, exact for
-    /// role/subrole), `max_width` / `max_height` are ints, `action`
+    /// role/subrole), `max-width` / `max-height` are ints, `action`
     /// is `"float"` (default) or `"ignore"`. A table with no match
     /// key is dropped (it would match nothing). Unknown/typo'd keys
     /// are ignored — a bad rule never breaks the others.
@@ -767,7 +807,7 @@ public struct FacetConfig: Sendable {
             let rule = ExclusionRule(
                 app: str("app"), title: str("title"),
                 role: str("role"), subrole: str("subrole"),
-                maxWidth: dbl("max_width"), maxHeight: dbl("max_height"),
+                maxWidth: dbl("max-width"), maxHeight: dbl("max-height"),
                 action: action)
             let hasKey = rule.app != nil || rule.title != nil
                 || rule.role != nil || rule.subrole != nil
@@ -794,7 +834,7 @@ public struct FacetConfig: Sendable {
 
     /// Build `[AssignRule]` from the raw TOML text's `[[assign]]`
     /// array-of-tables. Match keys mirror `[[exclude]]`
-    /// (`app`/`title`/`role`/`subrole` strings, `max_width`/`max_height`
+    /// (`app`/`title`/`role`/`subrole` strings, `max-width`/`max-height`
     /// ints); tags come from `tag = "x"` and/or `tags = ["x", "y"]`
     /// (unioned). A table with no match key or no tags is dropped (it
     /// would be inert). Unknown tag names are validated separately by
@@ -812,7 +852,7 @@ public struct FacetConfig: Sendable {
             let matcher = WindowMatcher(
                 app: str("app"), title: str("title"),
                 role: str("role"), subrole: str("subrole"),
-                maxWidth: dbl("max_width"), maxHeight: dbl("max_height"))
+                maxWidth: dbl("max-width"), maxHeight: dbl("max-height"))
             var tags: [String] = []
             if case .string(let s)? = t["tag"] { tags.append(s) }
             if case .stringArray(let a)? = t["tags"] { tags += a }
