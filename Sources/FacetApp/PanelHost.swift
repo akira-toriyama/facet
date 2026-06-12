@@ -44,6 +44,16 @@ final class PanelHost: NSObject {
     private let borderLayer = CALayer()
     private let borderFX = BorderFX()
 
+    /// Line-pets overlay — a transparent, click-through child window `pad`
+    /// LARGER than the panel, drawing arcade sprites centred ON the panel's
+    /// outer border (halo's pattern). A separate window because the panel's
+    /// own `effect` view rounds + `masksToBounds`-clips at the edge, which
+    /// would cut a border-centred sprite in half. Kept glued to the panel
+    /// frame by `syncPetWindow()`.
+    private let petPad: CGFloat = 24
+    private let petView: PetWindowView
+    private let petWindow: NSPanel
+
     /// Notified when the panel becomes / resigns key. Controller wires
     /// kbNav on/off here so a plain click on the tree panel (without
     /// --active) still enables keyboard navigation while the panel is
@@ -150,6 +160,18 @@ final class PanelHost: NSObject {
         borderLayer.zPosition = 100
         effect.layer?.addSublayer(borderLayer)
 
+        // Line-pets: a manual sublayer one above borderLayer (zPosition
+        // 101 > 100) so the pets ride IN FRONT of the outer border. The
+        // provider hands back the active band already converted into
+        // `effect`'s (non-flipped) space; nil ⇒ nothing to draw.
+        // Line-pets overlay objects (configured + attached below, after
+        // super.init). The window is glued to the panel by syncPetWindow().
+        petView = PetWindowView(pad: petPad)
+        petWindow = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false)
+
         // .resizable in the styleMask gives us OS-standard edge /
         // corner resize on a borderless + .nonactivatingPanel. The
         // sandbox (sandbox/panel-resize-tester branch) confirmed
@@ -183,6 +205,29 @@ final class PanelHost: NSObject {
             guard let self else { return }
             self.borderFX.apply(to: self.borderLayer)
         }
+
+        // Line-pets overlay: transparent, click-through, riding above the
+        // panel as a child window so it follows moves / Space-switches and
+        // never steals focus. `addChildWindow(ordered: .above)` keeps it in
+        // front of the panel border; `syncPetWindow()` matches its frame.
+        petWindow.isOpaque = false
+        petWindow.backgroundColor = .clear
+        petWindow.hasShadow = false
+        petWindow.ignoresMouseEvents = true
+        petWindow.becomesKeyOnlyIfNeeded = true
+        petWindow.level = panel.level
+        petWindow.collectionBehavior = panel.collectionBehavior
+        petWindow.contentView = petView
+        syncPetWindow()
+        panel.addChildWindow(petWindow, ordered: .above)
+    }
+
+    /// Keep the pet overlay glued `petPad` larger than the panel on every
+    /// side, so the border-centred sprites have room to straddle the line
+    /// without clipping. Called wherever the panel frame changes.
+    private func syncPetWindow() {
+        petWindow.setFrame(panel.frame.insetBy(dx: -petPad, dy: -petPad),
+                           display: false)
     }
 
     // MARK: - Show / hide
@@ -220,6 +265,7 @@ final class PanelHost: NSObject {
         o.x += d.width; o.y += d.height
         panel.setFrameOrigin(o)
         anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        syncPetWindow()
     }
 
     /// Pin the panel to an exact rect in **TOP-LEFT origin** — `x`
@@ -330,6 +376,8 @@ final class PanelHost: NSObject {
         CATransaction.setDisableActions(true)
         borderLayer.frame = f
         CATransaction.commit()
+        // Keep the pet overlay glued to the (possibly resized) panel.
+        syncPetWindow()
     }
 
     // MARK: - Theme
@@ -360,6 +408,21 @@ final class PanelHost: NSObject {
 
     /// WS-switch flash burst (no-op when the effect is off).
     func flashBorder() { borderFX.flash() }
+
+    // MARK: - Line-pets
+
+    /// Install the `[tree] line-pets` config onto the overlay. Called by
+    /// the Controller at startup + on hot-reload.
+    func setPets(names: [String], scale: CGFloat, lapSeconds: CGFloat) {
+        petView.setPets(names: names, scale: scale, lapSeconds: lapSeconds)
+    }
+
+    /// Whether any (validated) pet is configured — the Controller gates
+    /// its redraw timer on this.
+    var hasPets: Bool { petView.hasPets }
+
+    /// Repaint the pets one frame (driven by the Controller's 30 Hz tick).
+    func redrawPets() { petView.needsDisplay = true }
 
     // MARK: - Helpers
 

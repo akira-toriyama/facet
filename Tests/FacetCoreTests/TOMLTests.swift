@@ -36,6 +36,27 @@ final class TOMLTests: XCTestCase {
         XCTAssertEqual(p[""]?["b2"], .bool(false))
     }
 
+    func testFloatValueParsing() {
+        // A bare integer stays `.int` (so existing int readers match);
+        // only a fractional / exponent token becomes `.double`.
+        let p = parseTOMLSubset("""
+            whole = 2
+            frac = 1.5
+            zero = 0.9
+            """)
+        XCTAssertEqual(p[""]?["whole"], .int(2),
+                       "integer literal stays .int")
+        XCTAssertEqual(p[""]?["frac"], .double(1.5))
+        XCTAssertEqual(p[""]?["zero"], .double(0.9))
+    }
+
+    func testAsDoubleWidensIntAndDouble() {
+        XCTAssertEqual(TOMLValue.int(2).asDouble, 2.0)
+        XCTAssertEqual(TOMLValue.double(1.5).asDouble, 1.5)
+        XCTAssertNil(TOMLValue.string("x").asDouble)
+        XCTAssertNil(TOMLValue.bool(true).asDouble)
+    }
+
     func testLineCommentsAreIgnored() {
         let p = parseTOMLSubset("""
             # this whole line is comment

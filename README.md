@@ -342,7 +342,12 @@ Frequently-touched keys:
   points, **top-left origin**: 0,0 = top-left of the main screen, y
   down; all four needed). Authoritative each launch / `--reload`;
   drags / CLI geom are session-only, so set it here to pin the panel.
-  Same coords as `facet --view=tree --pos-x/...`.
+  Same coords as `facet --view=tree --pos-x/...`. Also `line-pets` —
+  opt-in arcade sprites (`chomp` / `ghost`) that walk the **tree panel's
+  outer border** (riding a transparent overlay just in front of the
+  frame); a shared decoration from the sill theming library (the same
+  pets ride halo's focus ring). Tune with `pet-scale` (default 0.9) and
+  `pet-lap-seconds` (default 8). Empty = off.
 - `[layout]` table — `inner-gap` (space between tiled windows) and
   `outer-gap` (distance from the screen edges), in points. `outer-gap`
   sets all four edges; `outer-gap-top` / `-bottom` / `-left` /
