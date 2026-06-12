@@ -246,16 +246,23 @@ final class FacetConfigTests: XCTestCase {
     func testFromTOMLMapsAllRecognisedKeys() {
         let parsed = parseTOMLSubset("""
             default-view = "tree"
-            theme = "dracula"
+
+            [theme]
+            name = "dracula"
 
             [grid]
             cols = 6
             label-position = "down"
             thumbnail-refresh-seconds = 10
+            theme = "github-light"
             """)
         let c = FacetConfig.from(toml: parsed)
         XCTAssertEqual(c.effectiveDefaultView, "tree")
         XCTAssertEqual(c.effectiveTheme, "dracula")
+        XCTAssertEqual(c.effectiveGridTheme, "github-light",
+                       "per-view override parses")
+        XCTAssertEqual(c.effectiveTreeTheme, "dracula",
+                       "unset per-view key inherits [theme].name")
         XCTAssertEqual(c.effectiveGridCols, 6)
         XCTAssertEqual(c.effectiveGridLabelPosition, "down")
         XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
@@ -522,15 +529,28 @@ final class FacetConfigTests: XCTestCase {
     func testBorderAndThemeCycleClampIndependently() {
         var c = FacetConfig()
         XCTAssertEqual(c.effectiveBorderCycleSeconds, 6, accuracy: 0.0001,
-                       "border default")
+                       "border default (6000 ms)")
         XCTAssertEqual(c.effectiveThemeCycleSeconds, 6, accuracy: 0.0001,
-                       "theme default")
-        c.borderCycleSeconds = 200   // over ceiling
-        c.themeCycleSeconds = 0      // under floor
+                       "theme default (6000 ms)")
+        c.borderColorCycleMs = 200_000   // over ceiling (120000 ms)
+        c.themeColorCycleMs = 0          // under floor (1000 ms)
         XCTAssertEqual(c.effectiveBorderCycleSeconds, 120, accuracy: 0.0001,
                        "border ceiling")
         XCTAssertEqual(c.effectiveThemeCycleSeconds, 1, accuracy: 0.0001,
                        "theme floor — independent of the border cycle")
+    }
+
+    func testPerViewThemeInheritsAndOverrides() {
+        var c = FacetConfig()
+        c.theme = "dracula"
+        XCTAssertEqual(c.effectiveTreeTheme, "dracula", "unset → inherit")
+        c.gridTheme = ""
+        XCTAssertEqual(c.effectiveGridTheme, "dracula", "\"\" → inherit")
+        c.railTheme = "github-light"
+        XCTAssertEqual(c.effectiveRailTheme, "github-light", "override wins")
+        c.treeTheme = "drakula"   // typo
+        XCTAssertEqual(c.effectiveTreeTheme, "dracula",
+                       "unknown → inherit (warned via unknownValueWarnings)")
     }
 
     func testEffectiveBorderBreathWidthsOptionalClamp() {
