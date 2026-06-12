@@ -78,7 +78,7 @@ final class PanelHost: NSObject {
     // MARK: - Tunables
 
     private let screenMargin: CGFloat = 8
-    private let searchRowH: CGFloat = 34           // band when searching
+    private let searchRowH: CGFloat = 38           // band when searching
     private let minWidth: CGFloat = 160
     private let minHeight: CGFloat = 140
     private let cornerRadius: CGFloat = 12
@@ -389,9 +389,13 @@ final class PanelHost: NSObject {
         bgView.frame = f
         let sh: CGFloat = searching ? searchRowH : 0
         searchBar.isHidden = !searching
+        // 8pt top inset (matching the side insets) keeps the box clear
+        // of the panel's radius-12 accent-border curve — at 4pt the two
+        // borders crowded into one blob at the top corners (#186).
+        // Bottom gap stays 5; box height = sh - 13 = 25 as before.
         searchBar.frame = NSRect(x: 8, y: f.height - sh + 5,
                                  width: f.width - 16,
-                                 height: max(sh - 9, 0))
+                                 height: max(sh - 13, 0))
         searchBar.needsLayout = true
         // Pinned grab band sits just below the search bar (or at the very
         // top when not searching); the scroll view fills the rest below
