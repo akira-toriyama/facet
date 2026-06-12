@@ -263,14 +263,16 @@ public struct FacetConfig: Sendable {
     }
 
     /// Validated line-pet names for the tree, in author order, lower-
-    /// cased + trimmed, empty entries dropped. Empty ⇒ pets off. Typo
-    /// *names* aren't dropped here (FacetCore can't link `Effects`'
-    /// `LinePet` without pulling AppKit) — the view seam drops anything
-    /// `LinePet(rawValue:)` rejects. Empty `[]` and unset both ⇒ `[]`.
+    /// cased + trimmed, empty entries dropped, unknown names dropped
+    /// against sill Palette's `canonicalLinePetNames` (pure since 0.6.0,
+    /// so FacetCore validates here — the old "view seam drops silently"
+    /// workaround is retired; typos warn via `unknownValueWarnings`).
+    /// Empty `[]` and unset both ⇒ `[]` (pets off).
     public var effectiveTreeLinePets: [String] {
         (treeLinePets ?? [])
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             .filter { !$0.isEmpty }
+            .filter { canonicalLinePetNames.contains($0) }
     }
     /// Pet size multiplier, clamped to a sane floor. Default 0.9.
     public var effectiveTreePetScale: CGFloat {
@@ -362,17 +364,15 @@ public struct FacetConfig: Sendable {
     /// keeps its outer-gap inset unless the user opts in.
     public var effectiveSmartGaps: Bool { smartGaps ?? false }
 
-    /// Tree-panel border effect: off | neon | cyber | vapor | kawaii |
-    /// rainbow | chomp; unknown / unset → "off" (opt-in). Must stay in
-    /// sync with sill's `canonicalEffectNames` / `borderEffectFor` (the
-    /// `Effects` module) — FacetCore can't link Effects here (it pulls in
-    /// AppKit), so the name set is duplicated (same pattern as
-    /// `effectiveTheme`).
+    /// Tree-panel border effect; unknown / unset → "off" (opt-in). The
+    /// name set IS sill Palette's `canonicalEffectNames` (single source
+    /// of truth since sill 0.6.0 moved the pure vocabulary out of the
+    /// AppKit-gated Effects module — the hand-copied list this accessor
+    /// used to carry is retired). `"off"` is a member, so it
+    /// canonicalizes like any other name.
     public var effectiveBorderEffect: String {
         let raw = (borderEffect ?? "off").lowercased()
-        let known = ["off", "neon", "cyber", "vapor", "kawaii",
-                     "rainbow", "chomp", "random"]
-        return known.contains(raw) ? raw : "off"
+        return canonicalEffectNames.contains(raw) ? raw : "off"
     }
     /// Neon glow (bloom) on the border effect. Default on.
     public var effectiveBorderGlow: Bool { borderGlow ?? true }
@@ -430,7 +430,14 @@ public struct FacetConfig: Sendable {
             out.append("config: unknown \(key) \"\(raw)\" "
                 + "— using default \"\(effective)\"")
         }
-        clamp("theme", theme, effectiveTheme)
+        // Theme gets the richer treatment: same clamp, plus sill
+        // suggest(_:)'s "did you mean" when a near-miss exists.
+        if let raw = theme, !raw.isEmpty,
+           raw.lowercased() != effectiveTheme.lowercased() {
+            let hint = suggest(raw).map { " (did you mean \"\($0)\"?)" } ?? ""
+            out.append("config: unknown theme \"\(raw)\" "
+                + "— using default \"\(effectiveTheme)\"" + hint)
+        }
         clamp("layout", defaultLayout, effectiveDefaultLayout)
         clamp("rail edge", railEdge, effectiveRailEdge.rawValue)
         clamp("preview-mode", treePreviewMode, effectiveTreePreviewMode)
@@ -440,6 +447,15 @@ public struct FacetConfig: Sendable {
               effectiveGridLabelPosition)
         clamp("[window] raise-on-open", raiseOnOpen,
               effectiveRaiseOnOpen.rawValue)
+        // Pet-name typos: clamp-and-log (family standard, wand wording).
+        let petRaws = (treeLinePets ?? [])
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty }
+        for raw in petRaws where !canonicalLinePetNames.contains(raw) {
+            out.append("config: [tree].line-pets contains unrecognised "
+                + "entry \"\(raw)\" — dropped (valid: "
+                + canonicalLinePetNames.sorted().joined(separator: ", ") + ")")
+        }
         if treeGeometryPartial {
             out.append("config: [tree] geometry needs all of pos-x / "
                 + "pos-y / width / height — partial set ignored")

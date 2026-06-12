@@ -983,8 +983,9 @@ enum FacetApp {
         switch canonicalize(name, allowed: canonicalThemeNames) {
         case .success(let n): return n
         case .failure(.unknownValue(let v, let expected)):
+            let hint = suggest(v).map { " — did you mean \"\($0)\"?" } ?? ""
             die("unknown theme \"\(v)\" — expected one of: "
-                + expected.joined(separator: ", "))
+                + expected.joined(separator: ", ") + hint)
         case .failure:
             die("unknown theme \"\(name)\"")
         }
