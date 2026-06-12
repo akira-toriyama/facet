@@ -589,6 +589,20 @@ brew-installed `facet` never pollutes your shell. (There is no
 swaps it in, brings it on screen. `./stop.sh` is the "I lost
 track of what's running" escape hatch.
 
+Launching the bundle doesn't put the `facet` CLI on your PATH
+(`zsh: command not found: facet` — the Homebrew install handles
+this for you; a source build doesn't). Piggyback an alias on
+the rebuild loop — from the repo root:
+
+```sh
+./run.sh && alias facet="$PWD/.build/release/facet"
+```
+
+Session-scoped by design: no rc file is touched, a new tab just
+re-runs the line above, and anywhere the alias isn't defined a
+plain `facet` still resolves to the Homebrew install. The alias
+stores the build *path*, so rebuilding refreshes what it runs.
+
 Just verifying without a bundle:
 
 ```sh
