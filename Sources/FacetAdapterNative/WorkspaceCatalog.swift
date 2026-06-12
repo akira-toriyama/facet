@@ -77,6 +77,14 @@ struct WindowRef: Hashable, Sendable {
 struct WorkspaceCatalog {
 
     // MARK: - State
+    //
+    // Stored state lives ONLY here on the primary declaration — the
+    // behaviour clusters were split into WorkspaceCatalog+*.swift
+    // same-module extensions (#182 phase 2), which is why most setters
+    // are plain `var` rather than `private(set)` (a cross-file
+    // extension can't reach a `private(set)` setter). The state is
+    // still catalog-internal by convention: NativeAdapter consumes
+    // snapshots / plans and never writes these fields directly.
 
     /// The live, mutable workspace set — authority for membership,
     /// order, and names (replaces the config list that callers used to
@@ -111,7 +119,7 @@ struct WorkspaceCatalog {
     /// Window → slot (workspace + pid). Survives across reconciles
     /// so a window the user moved stays where they put it; new
     /// windows land in `activeIndex` on the next reconcile.
-    private(set) var windowMap: [WindowID: WindowSlot] = [:]
+    var windowMap: [WindowID: WindowSlot] = [:]
 
     // MARK: - Tag grouping state (M11-3, `by = "tag"`)
 
@@ -119,39 +127,48 @@ struct WorkspaceCatalog {
     /// `WindowSlot.workspace == activeIndex`; `.tag` keys it off
     /// `WindowSlot.tags & lens != 0`. Set once at `seedTags`, immutable
     /// for the session (config-static; change needs a restart).
-    private(set) var grouping: Grouping = .workspace
+    var grouping: Grouping = .workspace
     /// Tag vocabulary (declaration order = bit positions). Empty in
     /// workspace mode.
-    private(set) var tagModel = TagModel([])
+    var tagModel = TagModel([])
     /// `[[assign]]` rules — match a new window, give it tags. Applied
     /// once at appearance (`tagsForNewWindow`); never re-run.
-    private(set) var assignRules = AssignRules([])
+    var assignRules = AssignRules([])
     /// Current lens = the visible tag mask (tag mode). Seeded to the
     /// first tag's bit; mutated by `setLens`. `0` in workspace mode.
-    private(set) var lens: UInt64 = 0
+    var lens: UInt64 = 0
 
     /// Windows currently parked at the bottom-right anchor sliver.
     /// `markAnchorParked` populates; `consumeAnchorRestore` clears.
     /// The adapter checks `shouldParkAnchor` before invoking AX so
     /// a poll-driven refresh can't re-park on top of a park.
-    private(set) var anchorParked: Set<WindowID> = []
+    var anchorParked: Set<WindowID> = []
 
     /// Position the window held before facet parked it at the
     /// anchor sliver. Recorded at park time, consumed at restore
     /// time.
-    private(set) var originalPositions: [WindowID: CGPoint] = [:]
+    var originalPositions: [WindowID: CGPoint] = [:]
 
     /// Per-WS layout mode. Missing entries default to `"float"`
     /// (Phase γ frozen decision: existing users see no surprise
     /// behaviour on upgrade). Valid values: `"float"` / `"bsp"`
     /// / `"stack"`.
-    private(set) var layoutModes: [Int: String] = [:]
+    var layoutModes: [Int: String] = [:]
+
+    /// Mode a WS uses when it has no explicit `layoutModes` entry.
+    /// Seeded from `[layout] default` (config) by the adapter on
+    /// every refresh; `"float"` (Phase γ frozen default) until set.
+    /// Layout mode is otherwise session-only, so this is what a
+    /// fresh launch / per-mac-desktop catalog starts every WS in.
+    /// (Moved up from the Layout-mode cluster — extensions can't hold
+    /// stored state; behaviour lives in WorkspaceCatalog+Layout.swift.)
+    var defaultMode: String = "float"
 
     /// Per-WS BSP tree. Only present for WSs in `"bsp"` mode;
     /// other modes have no entry. Tree IDs are kept in sync with
     /// `windowMap` by `reconcile` / `moveWindow` / `drop` and by
     /// the explicit `setMode` migration path.
-    private(set) var layoutTrees: [Int: LayoutTree] = [:]
+    var layoutTrees: [Int: LayoutTree] = [:]
 
     /// Per-WS window order, shared by `"stack"` mode and the
     /// stateless `LayoutEngine`s (master-* / grid / spiral). Index 0 is
@@ -163,7 +180,7 @@ struct WorkspaceCatalog {
     /// master — see `attachToLayout`); `cycleStack` rotates the array
     /// and `promoteToMaster` moves a chosen window to index 0. Absent
     /// for bsp (uses `layoutTrees`) and float (no managed order).
-    private(set) var stackOrders: [Int: [WindowID]] = [:]
+    var stackOrders: [Int: [WindowID]] = [:]
 
     /// Per-WS layout knobs (master ratio / master count) for the
     /// stateless engines that read them (the master-* engines).
@@ -171,13 +188,13 @@ struct WorkspaceCatalog {
     /// Missing entry → `LayoutParams()` defaults. Kept across mode
     /// flips so a WS remembers its ratio when you toggle away and
     /// back.
-    private(set) var layoutParams: [Int: LayoutParams] = [:]
+    var layoutParams: [Int: LayoutParams] = [:]
 
     /// Windows the user (or AX role detector) flagged as floating.
     /// Floating windows are skipped by the tiler and stay at the
     /// user's last-set position. Independent of `anchorParked`
     /// (which is hide state, not a per-window opt-out).
-    private(set) var floatingWindows: Set<WindowID> = []
+    var floatingWindows: Set<WindowID> = []
 
     /// Per-WS snapshot of which window was focused at the moment
     /// the user left that WS. Written by `recordLeaveFocus`
@@ -187,7 +204,7 @@ struct WorkspaceCatalog {
     /// they were on. Cleared when the recorded window is closed
     /// or moved to a different WS, so a stale entry can't pin
     /// focus to a now-missing window.
-    private(set) var lastFocusedOnLeave: [Int: WindowID] = [:]
+    var lastFocusedOnLeave: [Int: WindowID] = [:]
 
     /// User-assigned window marks (`facet window --mark=NAME`), a 1:1
     /// bijection between mark name and window: each name maps to one
@@ -197,7 +214,7 @@ struct WorkspaceCatalog {
     /// catalog is swapped per mac desktop). Pruned in `forgetWindow` when a
     /// window closes. Keyed by name → `WindowID`; stable across WS
     /// reorder (WindowID is the window-server id), so no remap needed.
-    private(set) var marks: [String: WindowID] = [:]
+    var marks: [String: WindowID] = [:]
 
     /// Sticky windows (`facet window --toggle-sticky`): pinned visible
     /// across **every facet workspace in this mac desktop**. Two
@@ -213,7 +230,7 @@ struct WorkspaceCatalog {
     /// job. Session-only, per-mac-desktop (this catalog is swapped per
     /// mac desktop). Pruned in `forgetWindow` on close. Orthogonal to `marks`
     /// (a window can carry both).
-    private(set) var everywhereWindows: Set<WindowID> = []
+    var everywhereWindows: Set<WindowID> = []
 
     /// Named scratchpad shelves (`facet scratchpad --stash=NAME`): a
     /// 1:1 bijection name ⇄ window, like `marks`, but the window is
@@ -222,7 +239,7 @@ struct WorkspaceCatalog {
     /// Session-only, per-mac-desktop (this catalog is swapped per
     /// mac desktop); pruned in `forgetWindow`. Mutually exclusive with sticky
     /// (`stashWindow` clears sticky; `setSticky` clears the shelf).
-    private(set) var scratchpads: [String: WindowID] = [:]
+    var scratchpads: [String: WindowID] = [:]
 
     /// Subset of `scratchpads` values that are currently *stashed*
     /// (hidden on the shelf), as opposed to *settled* (summoned, on a
@@ -232,7 +249,7 @@ struct WorkspaceCatalog {
     /// `resyncVisibleState` skip it explicitly via this set. A settled
     /// scratchpad window is in `scratchpads` but NOT here, so it parks /
     /// restores like any normal floating window.
-    private(set) var stashedWindows: Set<WindowID> = []
+    var stashedWindows: Set<WindowID> = []
 
     /// IDs that have been observed `isOnscreen=true` once but not
     /// yet committed to `windowMap`. Reconcile requires **two
@@ -243,7 +260,7 @@ struct WorkspaceCatalog {
     /// catalog leaves the mac desktop, or the window enters
     /// `windowMap` for real. See memory
     /// `facet-macos-spaces-coexistence`.
-    private(set) var pendingAddCandidates: Set<WindowID> = []
+    var pendingAddCandidates: Set<WindowID> = []
 
     /// IDs reconcile has decided NOT to auto-manage on a later
     /// `isOnscreen` flip. Populated two ways:
@@ -265,7 +282,7 @@ struct WorkspaceCatalog {
     /// `isOnscreen=false` during creation; the next reconcile
     /// catches them with `true` and adds them. See memory
     /// `facet-macos-spaces-coexistence`.
-    private(set) var examinedIDs: Set<WindowID> = []
+    var examinedIDs: Set<WindowID> = []
 
     /// Windows the user hid (Cmd+H) or minimized (Cmd+M): kept in
     /// `windowMap` (their WS assignment + marks survive) but detached
@@ -278,7 +295,7 @@ struct WorkspaceCatalog {
     /// (`isOnscreen` stays true), so it never lands a window here —
     /// only a user hide / minimize does. See memory
     /// `facet-hide-reclaim-decisions`.
-    private(set) var hiddenMembers: Set<WindowID> = []
+    var hiddenMembers: Set<WindowID> = []
 
     /// Managed windows seen `isOnscreen=false` once but not yet
     /// reclaimed. Mirrors `pendingAddCandidates`: a window must read
@@ -287,1074 +304,9 @@ struct WorkspaceCatalog {
     /// mac-desktop switch animation isn't mistaken for a user Cmd+H /
     /// minimize. Cleared when the window comes back on-screen or is
     /// forgotten.
-    private(set) var pendingHideCandidates: Set<WindowID> = []
+    var pendingHideCandidates: Set<WindowID> = []
 
     init() {}
-
-    // MARK: - Reconcile
-
-    struct ReconcileResult: Equatable, Sendable {
-        let added: Int
-        let removed: Int
-        /// IDs that newly joined `windowMap` this reconcile. Empty
-        /// when `added == 0`. Order is insertion order from this
-        /// reconcile pass (which is dictionary-iteration order over
-        /// `liveByID`, so non-deterministic across runs — fine for
-        /// the open/close animation gate; not a stable handle).
-        let addedIDs: [WindowID]
-        /// IDs that left `windowMap` this reconcile (truly gone from
-        /// the CGWindowList enumeration — `.optionAll` is on, so an
-        /// off-screen / cross-mac-desktop window stays managed, not in
-        /// here). Empty when `removed == 0`.
-        let removedIDs: [WindowID]
-        init(added: Int, removed: Int,
-             addedIDs: [WindowID] = [], removedIDs: [WindowID] = []) {
-            self.added = added
-            self.removed = removed
-            self.addedIDs = addedIDs
-            self.removedIDs = removedIDs
-        }
-    }
-
-    /// Reconcile `windowMap` against the live CGWindowList. Gone
-    /// IDs are dropped from `windowMap`, `anchorParked`,
-    /// `originalPositions`, `floatingWindows`, and from any
-    /// `layoutTrees` that held them. New IDs land in
-    /// `activeIndex` with their owning pid recorded; if the
-    /// active WS is in `"bsp"` mode and the new window isn't
-    /// flagged floating, it's also inserted into that WS's tree
-    /// (memory: `facet-workspace-model` + `facet-phase-gamma-decisions`).
-    ///
-    /// Pid is refreshed on every reconcile even for known windows;
-    /// pid is stable across a process's lifetime, but if a window
-    /// id is ever reused after its owner died the fresh value wins.
-    ///
-    /// `trusted` lists ids the adapter saw a `kAXWindowCreated` for —
-    /// genuinely new windows, which can't be a mac-desktop switch
-    /// `isOnscreen` flip of an existing one. They skip the two-tick
-    /// gate (added on first on-screen sight) but still honour
-    /// `allowAutoAdd` and the off-screen defer, so off-desktop windows
-    /// and the flip case remain protected.
-    ///
-    /// `ignore` lists ids that matched a config `[[exclude]]` rule
-    /// with `action="ignore"` — they're marked examined and never
-    /// enter `windowMap` (fully unmanaged). First-sight only: a
-    /// window already in `windowMap` is untouched.
-    @discardableResult
-    mutating func reconcile(live: [Window],
-                                   focused: WindowID? = nil,
-                                   activeRect: CGRect = .zero,
-                                   autoFloat: Set<WindowID> = [],
-                                   trusted: Set<WindowID> = [],
-                                   ignore: Set<WindowID> = [],
-                                   deferred: Set<WindowID> = [],
-                                   requireConfirm: Bool = false,
-                                   tags: [WindowID: UInt64] = [:])
-        -> ReconcileResult
-    {
-        let liveByID = Dictionary(uniqueKeysWithValues:
-                                  live.map { ($0.id, $0) })
-        let liveIDs = Set(liveByID.keys)
-        // Truly-gone IDs only: a window absent from the full
-        // CGWindowList enumeration (which now includes off-screen
-        // windows via .optionAll). A window that's merely on a
-        // different mac desktop, minimized to the Dock, or Cmd+H'd
-        // stays in `liveByID` with `isOnscreen=false` — we keep its
-        // WS assignment (a user hide gives up only its tile slot, which
-        // `reconcileHidden` reclaims for the neighbours; the window
-        // itself is never forgotten until it truly closes).
-        let goneIDs = windowMap.keys.filter { !liveIDs.contains($0) }
-        for id in goneIDs { forgetWindow(id) }
-        // "Are we on a mac desktop that holds at least one window
-        // facet already manages?" If not, suppress auto-add so a
-        // window the user opens while parked on an unrelated mac desktop
-        // (e.g. open Finder after switching to mac desktop 2) doesn't
-        // slide into `activeIndex` and pollute the user's facet
-        // tree. The catalog has no public way to know its own
-        // mac-desktop membership without dipping into private SkyLight
-        // APIs, so this heuristic uses the visibility of an
-        // already-managed window as a proxy: if one of ours is
-        // on-screen, the user is on "our" mac desktop. Empty-catalog
-        // bootstrap is exempt — facet has to be able to pick up
-        // its first batch of windows.
-        let onFacetSpace = windowMap.keys.contains { id in
-            liveByID[id]?.isOnscreen == true
-        }
-        let allowAutoAdd = windowMap.isEmpty || onFacetSpace
-        var added = 0
-        var addedIDs: [WindowID] = []
-        for (id, w) in liveByID {
-            if let existing = windowMap[id] {
-                if existing.pid != w.pid {
-                    windowMap[id] = WindowSlot(
-                        workspace: existing.workspace, pid: w.pid,
-                        tags: existing.tags)
-                }
-                continue
-            }
-            // Bulk-marked pre-existing (other mac desktop at startup /
-            // mac-desktop-change snapshot, Cmd+H'd window seen at
-            // startup, etc.). Stay out of `windowMap` even if
-            // the OS later flips them on-screen.
-            if examinedIDs.contains(id) { continue }
-            // Config `[[exclude]] action="ignore"`: never manage.
-            // Mark examined so it's not reconsidered (and the
-            // adapter's classify pass stops re-probing it).
-            if ignore.contains(id) {
-                examinedIDs.insert(id)
-                continue
-            }
-            // Adapter couldn't resolve this window's AX role yet (the
-            // probe raced a still-creating window, or the per-call probe
-            // cap was hit). Skip WITHOUT marking examined so the next
-            // reconcile re-probes it: a real window resolves and joins
-            // within a poll or two; a transient popup (autocomplete /
-            // dropdown) vanishes before it resolves and never joins.
-            // Mirrors the off-screen defer below — both are "decide
-            // later" states, not "never manage" (`examined`) states.
-            if deferred.contains(id) {
-                pendingAddCandidates.remove(id)
-                continue
-            }
-            // Off-desktop new window: see `allowAutoAdd` above.
-            // Don't mark examined either — when the user comes
-            // back to facet's mac desktop and the window is moved here
-            // (or any managed window becomes visible alongside
-            // it), the next reconcile will add it.
-            if !allowAutoAdd {
-                pendingAddCandidates.remove(id)
-                continue
-            }
-            // First-sight off-screen: defer the decision. Don't
-            // mark examined yet — newly-opened windows (e.g.
-            // Chrome's first window post-launch) can briefly
-            // report `isOnscreen=false` during creation, and a
-            // premature examined-mark here would lock them out
-            // for good.
-            guard w.isOnscreen else {
-                pendingAddCandidates.remove(id)
-                continue
-            }
-            // Two-tick gate. A window must be seen `isOnscreen=
-            // true` on TWO consecutive reconciles before joining
-            // `windowMap`. This swallows the transient cross-
-            // mac-desktop visibility flip that happens during a
-            // mac-desktop switch animation: a Finder window
-            // opened on mac desktop N briefly reads `isOnscreen=true`
-            // when the user swipes back to mac desktop 1, but settles
-            // to `false` by the next reconcile — without the
-            // gate it would pile into `activeIndex`. Cost: a
-            // genuine new window takes one extra ~2 s poll
-            // before showing up in the sidebar.
-            //
-            // Tests that don't simulate the poll loop opt out
-            // via `requireConfirm: false` and get the old
-            // single-call commit behaviour.
-            //
-            // `trusted` ids (a `kAXWindowCreated` fired for them) skip
-            // the gate: a brand-new window can't be the cross-mac-desktop
-            // flip the gate defends against, so making it wait a
-            // second tick only adds the ~2s latency we're removing.
-            if requireConfirm,
-               !pendingAddCandidates.contains(id),
-               !trusted.contains(id)
-            {
-                pendingAddCandidates.insert(id)
-                continue
-            }
-            pendingAddCandidates.remove(id)
-            windowMap[id] = WindowSlot(
-                workspace: activeIndex, pid: w.pid, tags: tags[id] ?? 0)
-            examinedIDs.insert(id)
-            added += 1
-            addedIDs.append(id)
-            // Phase γ.3: AX role pre-flag — if the adapter
-            // told us this id should be floating (sheet /
-            // dialog / palette), mark it BEFORE the tile /
-            // stack insert below so it skips both.
-            if autoFloat.contains(id) {
-                floatingWindows.insert(id)
-            }
-            attachToLayout(id, workspace: activeIndex,
-                           focused: focused,
-                           in: activeRect)
-        }
-        return ReconcileResult(added: added, removed: goneIDs.count,
-                               addedIDs: addedIDs, removedIDs: goneIDs)
-    }
-
-    /// Hide-reclaim pass. A managed window reading `isOnscreen=false`
-    /// was hidden by the user (Cmd+H app-hide / Cmd+M minimize) — facet
-    /// parks its own off-WS / stack windows at the on-screen anchor
-    /// sliver, which keeps `isOnscreen=true`, so it never produces this
-    /// state. Such a window keeps its `windowMap` slot (WS assignment +
-    /// marks survive) but is pulled out of the layout containers so the
-    /// remaining tiled windows reclaim its freed slot; when it returns
-    /// on-screen it re-attaches at the tail (like a newly-opened
-    /// window, per the grill).
-    ///
-    /// MUST run AFTER the adapter's off-desktop drift heal so a window
-    /// merely parked on another mac desktop (also `isOnscreen=false`)
-    /// has already been evicted from this catalog and isn't mistaken
-    /// for a hide. The two-tick `pendingHideCandidates` gate additionally
-    /// swallows the transient off-screen flip during a mac-desktop switch
-    /// animation (mirrors the add path's `pendingAddCandidates`).
-    ///
-    /// Returns the ids whose state changed this pass so the caller can
-    /// drive the open/close reflow animation (a hide reflows like a
-    /// close; a reveal snaps in like an open).
-    mutating func reconcileHidden(liveByID: [WindowID: Window],
-                                  focused: WindowID?,
-                                  activeRect: CGRect)
-        -> (hidden: [WindowID], revealed: [WindowID])
-    {
-        var newlyHidden: [WindowID] = []
-        var newlyRevealed: [WindowID] = []
-        for (id, slot) in windowMap {
-            // Default to on-screen when the live snapshot lacks the id
-            // (shouldn't happen post-reconcile, but never strand a
-            // window as hidden on a missing read).
-            let onscreen = liveByID[id]?.isOnscreen ?? true
-            if hiddenMembers.contains(id) {
-                guard onscreen else { continue }   // still hidden
-                hiddenMembers.remove(id)
-                pendingHideCandidates.remove(id)
-                attachToLayout(id, workspace: slot.workspace,
-                               focused: focused, in: activeRect)
-                newlyRevealed.append(id)
-                continue
-            }
-            // Not currently hidden. A hide candidate is off-screen,
-            // not parked by facet (sliver = on-screen), and tiled
-            // (floating / sticky windows hold no tile slot to reclaim).
-            guard !onscreen,
-                  !anchorParked.contains(id),
-                  !floatingWindows.contains(id)
-            else {
-                pendingHideCandidates.remove(id)
-                continue
-            }
-            // Two-tick confirm: detach only after a second consecutive
-            // off-screen sighting, so a mac-desktop switch transient doesn't
-            // strip a window's slot then re-grant it (a visible flicker).
-            guard pendingHideCandidates.contains(id) else {
-                pendingHideCandidates.insert(id)
-                continue
-            }
-            pendingHideCandidates.remove(id)
-            hiddenMembers.insert(id)
-            detachFromLayouts(id)
-            newlyHidden.append(id)
-        }
-        return (newlyHidden, newlyRevealed)
-    }
-
-    /// Bulk-mark every id in `live` as pre-existing (don't
-    /// auto-add later on an `isOnscreen` flip). Called from the
-    /// adapter **once at startup** (the `didBootstrap` guard), with
-    /// the first enumeration's off-screen windows — so pre-existing
-    /// windows on other mac desktops can't slide into `activeIndex`
-    /// when a later flip reads them on-screen. NOT re-run on
-    /// mac-desktop switch: `classifyNewWindows` skips off-screen
-    /// windows outright, and the destination desktop's own catalog
-    /// adopts its windows once they read on-screen. Idempotent.
-    mutating func markPreExisting(_ ids: some Sequence<WindowID>) {
-        examinedIDs.formUnion(ids)
-    }
-
-    /// Forget a window (called by `closeWindow` after AX press
-    /// succeeded). Idempotent.
-    mutating func drop(_ id: WindowID) {
-        forgetWindow(id)
-    }
-
-    /// Drop every per-window bookkeeping entry for `id`. Shared
-    /// by `reconcile` (window gone from the live CGWindowList)
-    /// and `drop` (explicit close). New per-window state (Phase ζ
-    /// onward) should be cleared here too rather than at each
-    /// call site — that's the invariant this helper exists to
-    /// hold.
-    private mutating func forgetWindow(_ id: WindowID) {
-        windowMap.removeValue(forKey: id)
-        clearParkedState(of: id)
-        floatingWindows.remove(id)
-        detachFromLayouts(id)
-        clearLeaveFocus(of: id)
-        examinedIDs.remove(id)
-        pendingAddCandidates.remove(id)
-        hiddenMembers.remove(id)                  // drop hide-reclaim state
-        pendingHideCandidates.remove(id)
-        marks = marks.filter { $0.value != id }   // drop any mark on it
-        everywhereWindows.remove(id)              // drop sticky on it
-        scratchpads = scratchpads.filter { $0.value != id }  // drop shelf
-        stashedWindows.remove(id)
-    }
-
-    /// Clear all hide-state bookkeeping for `id` without
-    /// returning the originalPosition. Used by stack-top apply
-    /// where the AX setPosition + setSize sweeps the window to
-    /// a fresh rect, so the recorded pre-park position has no
-    /// further meaning.
-    mutating func clearParkedState(of id: WindowID) {
-        anchorParked.remove(id)
-        originalPositions.removeValue(forKey: id)
-    }
-
-    // MARK: - Layout maintenance (internal)
-
-    /// Remove `id` from any layout container (`layoutTrees` and
-    /// `stackOrders`) that holds it. Memory: lessons file
-    /// "stackOrders / layoutTrees 並列メンテ" — every mutator
-    /// must touch both, this is the one place to forget.
-    /// Idempotent.
-    private mutating func detachFromLayouts(_ id: WindowID) {
-        for (ws, var tree) in layoutTrees where tree.contains(id) {
-            tree.remove(id)
-            layoutTrees[ws] = tree
-        }
-        for (ws, var order) in stackOrders where order.contains(id) {
-            order.removeAll { $0 == id }
-            stackOrders[ws] = order
-        }
-    }
-
-    /// Insert `id` into the layout container appropriate to
-    /// `n1Based`'s mode (bsp → tree; stack → per-WS order at index 0
-    /// so the joining window is the one shown; stateless engine →
-    /// append to the per-WS order so it joins the stack without
-    /// seizing master; anything else → no-op). Skips when `id` is
-    /// floating.
-    /// `focused` / `rect` only matter for the bsp path (passed
-    /// to `LayoutTree.insert` for orientation choice).
-    private mutating func attachToLayout(_ id: WindowID,
-                                         workspace n1Based: Int,
-                                         focused: WindowID?,
-                                         in rect: CGRect) {
-        guard !floatingWindows.contains(id) else { return }
-        let m = mode(of: n1Based)
-        if m == "bsp" {
-            var tree = layoutTrees[n1Based] ?? LayoutTree()
-            tree.insert(id, focused: focused, in: rect)
-            layoutTrees[n1Based] = tree
-        } else if m == "stack" {
-            // Stack ("one at a time") shows order[0] and parks the rest
-            // at the anchor sliver, so a joining window takes the TOP
-            // (index 0) — you see what you just opened / moved in.
-            var order = stackOrders[n1Based] ?? []
-            order.removeAll { $0 == id }
-            order.insert(id, at: 0)
-            stackOrders[n1Based] = order
-        } else if LayoutRegistry.engine(named: m) != nil {
-            // Stateless master-stack / tiling engines (master-* / grid
-            // / spiral) share the same per-WS order. A
-            // window joining — new adoption, un-float, or move-in —
-            // APPENDS to the end so it joins the stack rather than
-            // seizing the master slot (order[0]); opening or moving a
-            // window must not displace the established master. Master is
-            // taken only by the explicit `promoteToMaster`. Bonus: if a
-            // window ever slips past the classify gate, the tail is the
-            // least-disruptive slot — it shifts nothing.
-            var order = stackOrders[n1Based] ?? []
-            order.removeAll { $0 == id }
-            order.append(id)
-            stackOrders[n1Based] = order
-        }
-    }
-
-    // MARK: - Layout mode
-
-    /// Mode a WS uses when it has no explicit `layoutModes` entry.
-    /// Seeded from `[layout] default` (config) by the adapter on
-    /// every refresh; `"float"` (Phase γ frozen default) until set.
-    /// Layout mode is otherwise session-only, so this is what a
-    /// fresh launch / per-mac-desktop catalog starts every WS in.
-    var defaultMode: String = "float"
-
-    /// 1-based WS index → mode string. Missing entries fall back to
-    /// `defaultMode` (config `[layout] default`, else `"float"`).
-    func mode(of n1Based: Int) -> String {
-        layoutModes[n1Based] ?? defaultMode
-    }
-
-    /// Change the mode of a workspace. Side-effects on layout
-    /// state:
-    ///   - → `"bsp"`: build a fresh tree from the WS's current
-    ///     non-floating windows (auto-balance order, sorted by
-    ///     `WindowID.serverID` for deterministic insertion).
-    ///     Discards any existing stack order.
-    ///   - → `"stack"`: build a fresh stack-order list from the
-    ///     WS's current non-floating windows (id-sorted; caller
-    ///     can promote a different top via `cycleStack` if the
-    ///     starting top matters). Discards any existing tree.
-    ///   - → `"float"` / anything else: discard both tree and
-    ///     stack-order entries. Adapter leaves the windows
-    ///     wherever they were last placed.
-    ///
-    /// Caller drives the AX side-effects (re-tile / re-stack /
-    /// no-op). Returns the normalised mode so the caller can
-    /// branch.
-    @discardableResult
-    mutating func setMode(workspace n1Based: Int,
-                                 to mode: String,
-                                 in rect: CGRect = .zero) -> String {
-        let normalised = mode.lowercased()
-        layoutModes[n1Based] = normalised
-        let members = nonFloatingMembers(of: n1Based)
-        switch normalised {
-        case "bsp":
-            var tree = LayoutTree()
-            for id in members {
-                tree.insert(id, focused: nil, in: rect)
-            }
-            layoutTrees[n1Based] = tree
-            stackOrders.removeValue(forKey: n1Based)
-        case "stack":
-            stackOrders[n1Based] = members
-            layoutTrees.removeValue(forKey: n1Based)
-        default:
-            if LayoutRegistry.engine(named: normalised) != nil {
-                // Stateless engine (master-*, grid, spiral): seed the
-                // shared per-WS order; discard any tree.
-                stackOrders[n1Based] = members
-                layoutTrees.removeValue(forKey: n1Based)
-            } else {
-                // float / unknown → no managed layout state.
-                layoutTrees.removeValue(forKey: n1Based)
-                stackOrders.removeValue(forKey: n1Based)
-            }
-        }
-        return normalised
-    }
-
-    // MARK: - Stack ops
-
-    /// Ordered stack members of `n1Based` (top first), or empty
-    /// when the WS isn't in `"stack"` mode.
-    func stackOrder(of n1Based: Int) -> [WindowID] {
-        stackOrders[n1Based] ?? []
-    }
-
-    enum CycleDirection: Sendable { case next, prev }
-
-    /// Rotate the stack array of `n1Based` so a different member
-    /// becomes the top. `next` rotates left (current top goes to
-    /// the end); `prev` rotates right (last member jumps to top).
-    /// Returns the new top, or nil when the WS has fewer than 2
-    /// stack members (cycle is a no-op).
-    @discardableResult
-    mutating func cycleStack(workspace n1Based: Int,
-                                    direction: CycleDirection)
-        -> WindowID?
-    {
-        guard var order = stackOrders[n1Based],
-              order.count >= 2 else { return nil }
-        switch direction {
-        case .next:
-            order.append(order.removeFirst())
-        case .prev:
-            order.insert(order.removeLast(), at: 0)
-        }
-        stackOrders[n1Based] = order
-        return order.first
-    }
-
-    /// Move `id` to the front (master slot / index 0) of the WS's
-    /// shared order. No-op — returns `false` — when the WS has no
-    /// maintained order, doesn't contain `id`, or `id` is already the
-    /// master. Used by `promoteToMaster` for the master-stack engines.
-    @discardableResult
-    mutating func promoteToMaster(_ id: WindowID,
-                                         workspace n1Based: Int) -> Bool {
-        guard var order = stackOrders[n1Based],
-              let idx = order.firstIndex(of: id), idx != 0
-        else { return false }
-        order.remove(at: idx)
-        order.insert(id, at: 0)
-        stackOrders[n1Based] = order
-        return true
-    }
-
-    // MARK: - Leave-focus snapshot (auto-focus on re-entry)
-
-    /// Remember which window was focused on `ws` at leave time.
-    /// Called unconditionally on every `switchWorkspace` so the
-    /// snapshot is fresh regardless of whether the next entry to
-    /// `ws` will auto-focus or not. `id` is whatever
-    /// `frontmostFocusedCGID` reported at leave time — even if it
-    /// turns out to belong to a different WS (rare race), the
-    /// stale entry self-cleans on the next reconcile / drop /
-    /// move that touches `id`.
-    mutating func recordLeaveFocus(_ id: WindowID, in ws: Int) {
-        lastFocusedOnLeave[ws] = id
-    }
-
-    /// Drop `id` from every WS's leave-focus snapshot. Called
-    /// from `reconcile` / `drop` / `moveWindow` so a closed or
-    /// relocated window can't keep pinning auto-focus on a
-    /// no-longer-valid target.
-    mutating func clearLeaveFocus(of id: WindowID) {
-        for (ws, recorded) in lastFocusedOnLeave where recorded == id {
-            lastFocusedOnLeave.removeValue(forKey: ws)
-        }
-    }
-
-    /// Pick the window an auto-focus switch into `ws` should
-    /// settle on. `windows` is the live window list of that WS
-    /// (caller passes the filtered subset so this method stays
-    /// pure on the snapshot). Returns:
-    ///   1. `lastFocusedOnLeave[ws]` if still present in `windows`
-    ///   2. else `Sequence<Window>.predictedFocus()` — the same
-    ///      chain the sidebar's optimistic header highlight uses,
-    ///      so the two never drift.
-    /// `nil` only when `windows` is empty (= the 2-b empty-WS
-    /// branch the caller handles with a defocus instead).
-    func autoFocusTarget(in ws: Int, windows: [Window]) -> Window? {
-        if let recorded = lastFocusedOnLeave[ws],
-           let hit = windows.first(where: { $0.id == recorded }) {
-            return hit
-        }
-        return windows.predictedFocus()
-    }
-
-    // MARK: - Floating
-
-    func isFloating(_ id: WindowID) -> Bool {
-        floatingWindows.contains(id)
-    }
-
-    /// Flip the floating flag on `id` and adjust the tree of the
-    /// owning WS (if it's in `"bsp"` mode): a window flipping to
-    /// floating is removed from the tree; flipping back inserts
-    /// it (auto-balance against the focused leaf).
-    ///
-    /// `rect` is the active display's `visibleFrame` — only used
-    /// for the *orientation choice* when re-inserting; tile
-    /// frames are recomputed every time `tiledFrames` runs.
-    mutating func toggleFloat(_ id: WindowID,
-                                     focused: WindowID? = nil,
-                                     in rect: CGRect = .zero) {
-        guard let slot = windowMap[id] else { return }
-        // Float-exit = sticky-exit (Q13): a sticky window is always
-        // floating, so the only thing "toggle float" can mean for it is
-        // "stop". Clearing sticky already un-floats + re-homes it as a
-        // tiled window of the active WS — the same landing as
-        // `--toggle-sticky` off — so defer to that one path.
-        if everywhereWindows.contains(id) {
-            clearSticky(id, focused: focused, in: rect)
-            return
-        }
-        // Float-exit = scratchpad-exit (Q13), same shape as sticky: a
-        // settled scratchpad window is force-floating, so "toggle float"
-        // means "let it go" — release drops the shelf entry and re-homes
-        // it as a tiled window of the active WS. (A stashed window is
-        // off-screen / unfocusable, so it never reaches here.)
-        if let name = scratchpad(forWindow: id) {
-            releaseScratchpad(name, focused: focused, in: rect)
-            return
-        }
-        let wasFloating = floatingWindows.contains(id)
-        if wasFloating {
-            floatingWindows.remove(id)
-            // Re-enter the WS's layout (no-op if mode is float).
-            attachToLayout(id, workspace: slot.workspace,
-                           focused: focused, in: rect)
-        } else {
-            floatingWindows.insert(id)
-            detachFromLayouts(id)
-        }
-    }
-
-    // MARK: - Tree operations
-
-    /// Rotate the parent split of `id`. Looks up the owning WS,
-    /// then defers to `LayoutTree.toggleOrientation`. No-op when
-    /// the window isn't in any tree (float / unknown / stack WS).
-    mutating func toggleOrientation(of id: WindowID) {
-        guard let slot = windowMap[id],
-              var tree = layoutTrees[slot.workspace] else { return }
-        tree.toggleOrientation(of: id)
-        layoutTrees[slot.workspace] = tree
-    }
-
-    /// Rotate the whole bsp tree of `n1Based` clockwise by `degrees`
-    /// (90 / 180 / 270). No-op (returns false) when the WS isn't in
-    /// bsp mode, has no tree, or the rotation leaves the tree
-    /// unchanged (≤1 leaf). Returns whether the tree changed so the
-    /// adapter can skip a pointless reflow.
-    @discardableResult
-    mutating func rotateTree(workspace n1Based: Int,
-                                    degrees: Int) -> Bool {
-        guard mode(of: n1Based) == "bsp",
-              var tree = layoutTrees[n1Based] else { return false }
-        let before = tree
-        tree.rotate(degrees: degrees)
-        guard tree != before else { return false }
-        layoutTrees[n1Based] = tree
-        return true
-    }
-
-    /// Mirror the whole bsp tree of `n1Based` across `axis`. Same
-    /// no-op / change-detection contract as `rotateTree`.
-    @discardableResult
-    mutating func mirrorTree(workspace n1Based: Int,
-                                    axis: LayoutTree.Axis) -> Bool {
-        guard mode(of: n1Based) == "bsp",
-              var tree = layoutTrees[n1Based] else { return false }
-        let before = tree
-        tree.mirror(axis)
-        guard tree != before else { return false }
-        layoutTrees[n1Based] = tree
-        return true
-    }
-
-    // MARK: - Swap / insert (real-window DnD, 枠C)
-
-    /// Swap two tiled windows within `n1Based`. bsp → swap their tree
-    /// leaves; stateless / stack → swap their order slots. No-op
-    /// (returns false) when the mode keeps no managed order (bsp with no
-    /// tree / float), the two are the same window, or either isn't a
-    /// non-floating member of the WS (membership is enforced by the
-    /// order / tree lookup, so cross-WS or floating operands no-op).
-    @discardableResult
-    mutating func swapWindows(_ a: WindowID, _ b: WindowID,
-                              workspace n1Based: Int) -> Bool {
-        if mode(of: n1Based) == "bsp" {
-            guard var tree = layoutTrees[n1Based] else { return false }
-            let before = tree
-            tree.swap(a, b)
-            guard tree != before else { return false }
-            layoutTrees[n1Based] = tree
-            return true
-        }
-        guard hasManagedOrder(n1Based),
-              let next = WindowOrder.swapped(orderedMembers(of: n1Based), a, b)
-        else { return false }
-        stackOrders[n1Based] = next
-        return true
-    }
-
-    /// Insert `moved` beside `target` on `edge` within `n1Based`. bsp →
-    /// split the target leaf on that edge; stateless / stack → move
-    /// `moved` before / after `target` in the order. Same no-op /
-    /// change-detection contract as `swapWindows`.
-    @discardableResult
-    mutating func insertWindow(_ moved: WindowID, beside target: WindowID,
-                               edge: InsertEdge,
-                               workspace n1Based: Int) -> Bool {
-        if mode(of: n1Based) == "bsp" {
-            guard var tree = layoutTrees[n1Based] else { return false }
-            let before = tree
-            tree.insert(moved, beside: target, edge: edge)
-            guard tree != before else { return false }
-            layoutTrees[n1Based] = tree
-            return true
-        }
-        guard hasManagedOrder(n1Based),
-              let next = WindowOrder.inserted(orderedMembers(of: n1Based),
-                                              moving: moved, beside: target,
-                                              edge: edge)
-        else { return false }
-        stackOrders[n1Based] = next
-        return true
-    }
-
-    /// Whether `n1Based`'s mode keeps a per-WS window order that
-    /// swap / insert can reorder (the `"stack"` mode + the stateless
-    /// engines). bsp uses a tree (handled separately); float keeps none.
-    private func hasManagedOrder(_ n1Based: Int) -> Bool {
-        let m = mode(of: n1Based)
-        return m == "stack" || LayoutRegistry.engine(named: m) != nil
-    }
-
-    // MARK: - Resize (real-window edge drag, 枠C 機能2)
-
-    /// Follow a real resize of `id` to `newFrame` (FOLLOW model — the
-    /// window was resized natively, we only adjust the ratio so the
-    /// neighbour tracks it). bsp → mutate the controlling `Split.ratio`;
-    /// master-* → the master / stack divider (`masterRatio`)
-    /// only. No-op (false) for any other mode, an off-tree window, or a
-    /// drag that doesn't move a divider-controlling edge. `rect` is the
-    /// active display rect.
-    /// Follow a real resize of `id` to `newFrame`. Returns the set of
-    /// windows a LIVE reflow must freeze (the dragged window + the same-
-    /// subtree mates that comove off its divider), or `nil` when nothing
-    /// changed. The settle path reflows everyone and ignores the set;
-    /// master layouts have no subtree so the set is just `{id}`.
-    mutating func applyResize(_ id: WindowID, to newFrame: CGRect,
-                              workspace n1Based: Int, in rect: CGRect,
-                              innerGap: CGFloat = 0) -> Set<WindowID>? {
-        let m = mode(of: n1Based)
-        if m == "bsp" {
-            guard var tree = layoutTrees[n1Based],
-                  let cur = tree.frames(in: rect)[id] else { return nil }
-            // The live frame is gap-inset; the tree works in un-gapped
-            // coords. Map the dragged edges back, else the constant gap
-            // offset reads as a cross-axis edge move and a pure vertical
-            // resize wrongly nudges the horizontal neighbour. See `ungap`.
-            let target = Self.ungap(newFrame, current: cur, in: rect,
-                                    gap: innerGap)
-            let before = tree
-            let frozen = tree.resize(id, to: target, in: rect)
-            guard tree != before else { return nil }
-            layoutTrees[n1Based] = tree
-            return frozen.union([id])
-        }
-        guard let cur = engineFrames(for: n1Based, in: rect)[id] else {
-            return nil
-        }
-        let target = Self.ungap(newFrame, current: cur, in: rect, gap: innerGap)
-        guard let ratio = masterRatioFromResize(id, to: target, mode: m,
-                                                 workspace: n1Based, in: rect)
-        else { return nil }
-        let params0 = params(of: n1Based)
-        let next = LayoutParams(masterRatio: ratio,
-                                masterCount: params0.masterCount)
-        guard next.masterRatio != params0.masterRatio else { return nil }
-        layoutParams[n1Based] = next
-        return [id]
-    }
-
-    /// Map a gap-inset on-screen frame back to the un-gapped layout coords
-    /// the tree / engine math uses. `applyInnerGap` shrinks every edge that
-    /// has a neighbour by `gap/2`; this adds exactly that back per edge,
-    /// using `current` (the window's computed un-gapped frame) to tell
-    /// which edges are interior — so the resize ratio is read from the true
-    /// divider position, not a gap-offset one. `gap <= 0` is identity.
-    private static func ungap(_ f: CGRect, current cur: CGRect,
-                              in rect: CGRect, gap: CGFloat) -> CGRect {
-        guard gap > 0 else { return f }
-        let key = WindowID(serverID: 0)
-        let g = applyInnerGap([key: cur], in: rect, gap: gap)[key] ?? cur
-        let minX = f.minX - (g.minX - cur.minX)
-        let maxX = f.maxX - (g.maxX - cur.maxX)
-        let minY = f.minY - (g.minY - cur.minY)
-        let maxY = f.maxY - (g.maxY - cur.maxY)
-        return CGRect(x: minX, y: minY,
-                      width: maxX - minX, height: maxY - minY)
-    }
-
-    /// The master/stack divider fraction implied by resizing `id` to
-    /// `newFrame` in a stateless master layout — `nil` when the mode has
-    /// no master divider or `id`'s divider-facing edge didn't move (the
-    /// caller's change-detection then no-ops). The divider is always the
-    /// master band's inner edge: master-left = master right edge / stack
-    /// left edge, master-right = the X mirror (master left / stack
-    /// right), master-top = master bottom / stack top, master-bottom =
-    /// the Y mirror, master-center = (symmetric) the master's own width
-    /// fraction.
-    private func masterRatioFromResize(_ id: WindowID, to f: CGRect,
-                                       mode m: String, workspace n1Based: Int,
-                                       in rect: CGRect) -> CGFloat? {
-        guard rect.width > 0, rect.height > 0,
-              let idx = orderedMembers(of: n1Based).firstIndex(of: id)
-        else { return nil }
-        let isMaster = idx < params(of: n1Based).masterCount
-        switch m {
-        case "master-left":
-            return isMaster ? (f.maxX - rect.minX) / rect.width
-                            : (f.minX - rect.minX) / rect.width
-        case "master-right":
-            return isMaster ? (rect.maxX - f.minX) / rect.width
-                            : (rect.maxX - f.maxX) / rect.width
-        case "master-top":
-            return isMaster ? (f.maxY - rect.minY) / rect.height
-                            : (f.minY - rect.minY) / rect.height
-        case "master-bottom":
-            return isMaster ? (rect.maxY - f.minY) / rect.height
-                            : (rect.maxY - f.maxY) / rect.height
-        case "master-center":
-            return isMaster ? f.width / rect.width : nil   // sides: not v1
-        default:
-            return nil
-        }
-    }
-
-    /// Tree-computed frames for every tiled window in the WS,
-    /// keyed by `WindowID`. Empty when the WS isn't in `"bsp"`
-    /// mode or has no tree.
-    func tiledFrames(for n1Based: Int,
-                            in rect: CGRect) -> [WindowID: CGRect] {
-        guard mode(of: n1Based) == "bsp",
-              let tree = layoutTrees[n1Based] else { return [:] }
-        return tree.frames(in: rect)
-    }
-
-    /// Non-floating windows of `n1Based`, sorted by `serverID` for a
-    /// stable, deterministic order. Shared by `setMode` (tree / stack
-    /// seeding) and the stateless layout-engine path so both agree on
-    /// "which windows, in what order".
-    func nonFloatingMembers(of n1Based: Int) -> [WindowID] {
-        windowMap
-            .filter { $0.value.workspace == n1Based
-                && !floatingWindows.contains($0.key)
-                // Hidden (Cmd+H / minimized) windows give up their tile
-                // slot — excluding them here makes every stateless engine
-                // and the bsp re-seed reclaim it (memory
-                // `facet-hide-reclaim-decisions`).
-                && !hiddenMembers.contains($0.key) }
-            .map(\.key)
-            .sorted { $0.serverID < $1.serverID }
-    }
-
-    /// The WS's non-floating windows in maintained order
-    /// (`stackOrders`), reconciled against current membership: stale
-    /// ids dropped, any member missing from the order appended. Feeds
-    /// stateless engines a stable + complete order even if the order
-    /// and membership briefly drift (a missing member would otherwise
-    /// get no frame and be left wherever it was).
-    func orderedMembers(of n1Based: Int) -> [WindowID] {
-        let members = nonFloatingMembers(of: n1Based)
-        let memberSet = Set(members)
-        let maintained = (stackOrders[n1Based] ?? [])
-            .filter { memberSet.contains($0) }
-        let have = Set(maintained)
-        return maintained + members.filter { !have.contains($0) }
-    }
-
-    /// Frames from the registered stateless `LayoutEngine` for
-    /// `n1Based`'s mode, or empty when the mode isn't a registered
-    /// engine (bsp / stack / float). The engine is pure; this hands
-    /// it the WS's stable, complete member order + the rect to carve.
-    func engineFrames(for n1Based: Int,
-                             in rect: CGRect) -> [WindowID: CGRect] {
-        guard let engine = LayoutRegistry.engine(named: mode(of: n1Based))
-        else { return [:] }
-        return engine.frames(order: orderedMembers(of: n1Based),
-                             focused: nil,
-                             params: params(of: n1Based),
-                             in: rect)
-    }
-
-    // MARK: - Layout knobs (master ratio / count)
-
-    /// Per-WS layout knobs, or defaults when none set.
-    func params(of n1Based: Int) -> LayoutParams {
-        layoutParams[n1Based] ?? LayoutParams()
-    }
-
-    /// Nudge the master ratio by `delta` (clamped 0.05…0.95 by
-    /// `LayoutParams`). Returns whether the value actually changed
-    /// (false at the clamp boundary, so the caller can skip a
-    /// pointless re-tile).
-    @discardableResult
-    mutating func adjustMasterRatio(workspace n1Based: Int,
-                                           delta: CGFloat) -> Bool {
-        let cur = params(of: n1Based)
-        let next = LayoutParams(masterRatio: cur.masterRatio + delta,
-                                masterCount: cur.masterCount)
-        layoutParams[n1Based] = next
-        return next.masterRatio != cur.masterRatio
-    }
-
-    /// Nudge the master count by `delta` (clamped ≥ 1). Returns
-    /// whether the value actually changed.
-    @discardableResult
-    mutating func adjustMasterCount(workspace n1Based: Int,
-                                           delta: Int) -> Bool {
-        let cur = params(of: n1Based)
-        let next = LayoutParams(masterRatio: cur.masterRatio,
-                                masterCount: cur.masterCount + delta)
-        layoutParams[n1Based] = next
-        return next.masterCount != cur.masterCount
-    }
-
-    /// Reset a workspace's master knobs to defaults (`balance`):
-    /// master ratio → 0.5, master count → 1. Undoes accumulated
-    /// `grow`/`shrink`/`inc`/`dec` nudges so the layout returns to its
-    /// even baseline. Returns whether anything actually changed (false
-    /// when already at defaults, so the caller can skip a re-tile).
-    @discardableResult
-    mutating func resetParams(workspace n1Based: Int) -> Bool {
-        guard layoutParams[n1Based] != nil,
-              layoutParams[n1Based] != LayoutParams() else { return false }
-        layoutParams[n1Based] = nil          // nil reads back as defaults
-        return true
-    }
-
-    // MARK: - Window marks (1:1 name ⇄ window)
-
-    /// Assign mark `name` to `id`, keeping the bijection: the name's
-    /// previous window loses it, and `id`'s previous mark (if any) is
-    /// cleared, so afterwards exactly `name ⇄ id` holds. No-op only on
-    /// an empty name (the caller rejects that at parse time). `id` need
-    /// not be in `windowMap` — but callers pass the focused window.
-    mutating func setMark(_ name: String, to id: WindowID) {
-        // Clear id's existing name (a window holds at most one mark).
-        marks = marks.filter { $0.value != id }
-        marks[name] = id          // reassigns the name to the new window
-    }
-
-    /// Remove mark `name`. Returns whether it existed, so the caller
-    /// can surface "no such mark" when the user clears nothing.
-    @discardableResult
-    mutating func removeMark(_ name: String) -> Bool {
-        marks.removeValue(forKey: name) != nil
-    }
-
-    /// The window a mark points to, or nil when the name is unset.
-    func window(forMark name: String) -> WindowID? { marks[name] }
-
-    /// The mark a window carries, or nil when unmarked. Used by the
-    /// snapshot to stamp `Window.mark` for the tree badge.
-    func mark(forWindow id: WindowID) -> String? {
-        marks.first { $0.value == id }?.key
-    }
-
-    // MARK: - Sticky windows (pin across every WS)
-
-    /// Whether `id` is sticky (pinned visible across every WS in this
-    /// mac desktop). Stamped on `Window.isSticky` in the snapshot.
-    func isSticky(_ id: WindowID) -> Bool {
-        everywhereWindows.contains(id)
-    }
-
-    /// Make `id` sticky: a member of every facet WS in this native
-    /// mac desktop and force-floating (Q2). No-op for an unknown window.
-    /// Idempotent. Stays at its current frame — pinning shouldn't
-    /// teleport the window (the caller leaves floating windows where
-    /// they are; only the *other* windows of the WS reflow to fill the
-    /// gap it left).
-    mutating func setSticky(_ id: WindowID) {
-        guard windowMap[id] != nil else { return }
-        // Sticky and scratchpad are mutually exclusive (a window can't
-        // be both "always visible everywhere" and "hidden on a shelf").
-        // Drop any shelf membership so the XOR holds in both directions
-        // (`stashWindow` does the reverse).
-        scratchpads = scratchpads.filter { $0.value != id }
-        stashedWindows.remove(id)
-        everywhereWindows.insert(id)
-        floatingWindows.insert(id)   // force floating (Q2)
-        detachFromLayouts(id)        // leave its home WS's tiling
-    }
-
-    /// Clear sticky on `id`: stop pinning it, drop the forced float,
-    /// and re-home it as a normal tiled window of the **active** WS
-    /// (Q4 — it lands in front of the user, not back at its old home,
-    /// so the window the user is looking at never vanishes). No-op when
-    /// `id` isn't sticky / is unknown.
-    mutating func clearSticky(_ id: WindowID,
-                              focused: WindowID? = nil,
-                              in rect: CGRect = .zero) {
-        guard everywhereWindows.contains(id),
-              let slot = windowMap[id] else { return }
-        everywhereWindows.remove(id)
-        floatingWindows.remove(id)
-        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid,
-                                   tags: slot.tags)
-        attachToLayout(id, workspace: activeIndex,
-                       focused: focused, in: rect)
-    }
-
-    // MARK: - Scratchpad shelf (1:1 name ⇄ window, off-screen)
-
-    /// Whether `id` is currently stashed (hidden on a shelf, parked
-    /// off-screen). A *settled* (summoned) scratchpad window returns
-    /// `false` — it lives on a WS like a normal floating window.
-    func isStashed(_ id: WindowID) -> Bool { stashedWindows.contains(id) }
-
-    /// The window on shelf `name`, or nil when the name is unset.
-    func window(forScratchpad name: String) -> WindowID? { scratchpads[name] }
-
-    /// The shelf a window is registered on, or nil. Used by the
-    /// snapshot to stamp `Window.scratchpad` for the settled badge.
-    func scratchpad(forWindow id: WindowID) -> String? {
-        scratchpads.first { $0.value == id }?.key
-    }
-
-    /// Names of currently *stashed* shelves (hidden), for `facet
-    /// status`. Settled shelves are excluded (they show in the tree).
-    func stashedScratchpadNames() -> [String] {
-        scratchpads.filter { stashedWindows.contains($0.value) }
-            .map(\.key).sorted()
-    }
-
-    /// Whether shelf `name`'s window is *visible on the current
-    /// workspace* (settled here, not parked). Drives the toggle branch:
-    /// visible → re-park to shelf; not visible (stashed, or settled on
-    /// another WS) → summon to the current WS (Q8: "pull it here" and
-    /// "summon from shelf" are the same gesture).
-    func isScratchpadVisibleHere(_ name: String) -> Bool {
-        guard let id = scratchpads[name] else { return false }
-        return !stashedWindows.contains(id)
-            && windowMap[id]?.workspace == activeIndex
-    }
-
-    /// Stash the focused window onto shelf `name`, keeping the 1:1
-    /// bijection (the name's old window un-shelves, the window's old
-    /// shelf is released). Clears any sticky (XOR), force-floats so the
-    /// tiler ignores it, detaches it from its home WS's layout, and
-    /// marks it stashed. The adapter does the AX park afterwards. No-op
-    /// (returns false) for an unmanaged window.
-    @discardableResult
-    mutating func stashWindow(_ name: String, id: WindowID) -> Bool {
-        guard windowMap[id] != nil else { return false }
-        // bijection: the name's previous occupant un-shelves; the
-        // window's previous shelf (if any) is released.
-        if let prev = scratchpads[name] { stashedWindows.remove(prev) }
-        scratchpads = scratchpads.filter { $0.value != id }
-        scratchpads[name] = id
-        everywhereWindows.remove(id)   // XOR with sticky
-        floatingWindows.insert(id)     // overlay, not tiled
-        detachFromLayouts(id)
-        stashedWindows.insert(id)
-        return true
-    }
-
-    /// Summon shelf `name` onto the active WS as a settled floating
-    /// overlay: re-home its slot to `activeIndex`, clear the stashed
-    /// flag (so visibility logic stops skipping it), keep it floating.
-    /// The adapter restores it on-screen (`restoreAnchor`) + focuses it.
-    /// Returns the window id, or nil when the shelf is unset / gone.
-    @discardableResult
-    mutating func summonScratchpad(_ name: String) -> WindowID? {
-        guard let id = scratchpads[name], let slot = windowMap[id]
-        else { return nil }
-        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid,
-                                   tags: slot.tags)
-        stashedWindows.remove(id)      // now settled / visible
-        floatingWindows.insert(id)     // settle = floating overlay
-        return id
-    }
-
-    /// Re-park (toggle off) a currently-summoned shelf window: mark it
-    /// stashed again and re-detach. The adapter parks it via
-    /// `parkAnchor`. Returns the window id, or nil when unset / gone.
-    @discardableResult
-    mutating func restashScratchpad(_ name: String) -> WindowID? {
-        guard let id = scratchpads[name], windowMap[id] != nil
-        else { return nil }
-        stashedWindows.insert(id)
-        floatingWindows.insert(id)
-        detachFromLayouts(id)
-        return id
-    }
-
-    /// Release shelf `name`: drop it from the shelf entirely and re-home
-    /// the window as a normal *tiled* window of the active WS (Q4 — same
-    /// landing as un-sticky, in front of the user). The adapter brings
-    /// it on-screen first if it was parked. Returns the freed window id,
-    /// or nil when the shelf was unset.
-    @discardableResult
-    mutating func releaseScratchpad(_ name: String,
-                                    focused: WindowID? = nil,
-                                    in rect: CGRect = .zero) -> WindowID? {
-        guard let id = scratchpads.removeValue(forKey: name),
-              let slot = windowMap[id] else { return nil }
-        stashedWindows.remove(id)
-        floatingWindows.remove(id)
-        windowMap[id] = WindowSlot(workspace: activeIndex, pid: slot.pid,
-                                   tags: slot.tags)
-        attachToLayout(id, workspace: activeIndex,
-                       focused: focused, in: rect)
-        return id
-    }
-
-    /// Resolve the cached pid for a window, or nil if it's not in
-    /// `windowMap`. Used by `closeWindow` so it can skip a
-    /// CGWindowList re-enumeration just to recover pid.
-    func pid(for id: WindowID) -> Int? {
-        windowMap[id]?.pid
-    }
 
     // MARK: - Dynamic workspace set (seed + mutate)
 
@@ -1563,169 +515,6 @@ struct WorkspaceCatalog {
             let n = (activeIndex - 1 + step + count) % count
             return n + 1
         }
-    }
-
-    // MARK: - Tag mode (M11-3, `by = "tag"`)
-
-    /// Seed the tag grouping state once at startup (mirrors `seed` for
-    /// workspace names). Idempotent-ish: only meaningful before any
-    /// window is assigned. `lens` is normally `model.firstBit`.
-    mutating func seedTags(grouping: Grouping, model: TagModel,
-                           rules: AssignRules, lens: UInt64) {
-        // Seed once. `grouping` starts `.workspace` (the default); the
-        // first seed flips it to `.tag`. A later refresh calling this
-        // again would otherwise reset `lens` to the seed value on every
-        // poll, clobbering the user's `setLens` changes.
-        guard self.grouping == .workspace, grouping != .workspace else {
-            return
-        }
-        self.grouping = grouping
-        self.tagModel = model
-        self.assignRules = rules
-        self.lens = lens
-    }
-
-    /// Tag bitmask for a newly-appeared window (tag mode). The UNION of
-    /// every matching `[[assign]]` rule; an unmatched window inherits
-    /// the current lens's PRIMARY tag (its lowest set bit) so it lands
-    /// in exactly one visible place — never zero tags (would be lost)
-    /// and never the whole lens union (a broad `--all` lens shouldn't
-    /// freeze every tag onto a new window). Frozen here — no re-tag.
-    func tagsForNewWindow(_ probe: WindowProbe) -> UInt64 {
-        let assigned = assignRules.mask(for: probe, in: tagModel)
-        if assigned != 0 { return assigned }
-        if lens != 0 { return UInt64(1) << UInt64(lens.trailingZeroBitCount) }
-        return tagModel.firstBit ?? 0
-    }
-
-    /// Non-floating, non-hidden windows visible under the current lens
-    /// — the union to tile in tag mode. One global member set (no
-    /// per-workspace split), same stable serverID order as the
-    /// workspace-mode `nonFloatingMembers`.
-    func visibleNonFloatingMembers() -> [WindowID] {
-        windowMap
-            .filter { ($0.value.tags & lens) != 0
-                && !floatingWindows.contains($0.key)
-                && !hiddenMembers.contains($0.key) }
-            .map(\.key)
-            .sorted { $0.serverID < $1.serverID }
-    }
-
-    /// Tiled frames for the visible lens-union, computed by the global
-    /// default engine (tag mode has one layout over the union, not a
-    /// per-workspace tree). Empty when the default mode isn't a
-    /// stateless engine — `float` (windows keep position) and the
-    /// workspace-only `bsp`/`stack` (forbidden in tag mode by config
-    /// validation, but be defensive) all fall through to empty.
-    func tagUnionFrames(in rect: CGRect) -> [WindowID: CGRect] {
-        guard let engine = LayoutRegistry.engine(named: defaultMode)
-        else { return [:] }
-        return engine.frames(order: visibleNonFloatingMembers(),
-                             focused: nil, params: LayoutParams(), in: rect)
-    }
-
-    /// Tag-mode snapshot: one `Workspace` per tag (header = tag name,
-    /// `isActive` = tag is in the current lens), each tracked window
-    /// listed under its PRIMARY tag once (full-tag-world overview,
-    /// independent of the lens). The tiled set is the lens union (one
-    /// global layout); a window not in the lens shows at its parked
-    /// position. Secondary-tag badges + multi-active styling are the
-    /// view's job (M11-3 PR3).
-    private func tagSnapshot(live: [Window], focused: WindowID?,
-                             activeRect: CGRect) -> [Workspace] {
-        let tracked = live.filter {
-            windowMap[$0.id] != nil && !stashedWindows.contains($0.id)
-        }
-        let unionFrames = tagUnionFrames(in: activeRect)
-        let fallbackTag = tagModel.names.first ?? ""
-        let byTag = Dictionary(grouping: tracked) { w -> String in
-            let mask = windowMap[w.id]?.tags ?? 0
-            return tagModel.primaryName(of: mask) ?? fallbackTag
-        }
-        return tagModel.names.enumerated().map { (i, tagName) in
-            let bit = UInt64(1) << UInt64(i)
-            let isActive = (bit & lens) != 0
-            let wins = (byTag[tagName] ?? []).map { w -> Window in
-                let mask = windowMap[w.id]?.tags ?? 0
-                let floating = floatingWindows.contains(w.id)
-                let inLens = (mask & lens) != 0
-                // A floating window in the lens is on-screen at its OWN
-                // position (it isn't tiled) — show its live frame, like
-                // workspace mode does for active-WS floats. A tiled window
-                // in the lens gets its union slot. Anything out of the lens
-                // is parked → its pre-park position.
-                let frame: CGRect?
-                if floating {
-                    frame = inLens ? w.frame : preParkFrame(for: w)
-                } else if inLens {
-                    frame = unionFrames[w.id] ?? preParkFrame(for: w)
-                } else {
-                    frame = preParkFrame(for: w)
-                }
-                return Window(id: w.id, pid: w.pid, appName: w.appName,
-                              title: w.title,
-                              isFocused: w.id == focused,
-                              isFloating: floating,
-                              frame: frame,
-                              isOnscreen: w.isOnscreen,
-                              isMaster: false,
-                              mark: mark(forWindow: w.id),
-                              isSticky: everywhereWindows.contains(w.id),
-                              scratchpad: scratchpad(forWindow: w.id),
-                              tags: tagModel.names(in: mask))
-            }
-            return Workspace(index: i, name: tagName, isActive: isActive,
-                             layoutMode: defaultMode, windows: wins)
-        }
-    }
-
-    // Lens-command resolvers (pure: name → new mask). `nil` = unknown
-    // tag name (caller surfaces lastError, makes no change).
-    func lensOnly(_ name: String) -> UInt64? { tagModel.bit(for: name) }
-    func lensToggled(_ name: String) -> UInt64? {
-        guard let b = tagModel.bit(for: name) else { return nil }
-        return lens ^ b
-    }
-    var lensAll: UInt64 { tagModel.allMask }
-
-    /// The park/restore delta of a lens change (tag-mode analog of
-    /// `SwitchPlan`).
-    struct LensPlan: Equatable, Sendable {
-        let oldLens: UInt64
-        let newLens: UInt64
-        /// Windows that left the visible union (were shown, now hidden).
-        let toPark: [WindowRef]
-        /// Windows that entered the visible union (were hidden, now
-        /// shown).
-        let toRestore: [WindowRef]
-    }
-
-    /// Set the lens to `newLens` (tag mode). Returns the union-delta
-    /// park/restore plan, or nil when not in tag mode or the lens is
-    /// unchanged. Sticky (`everywhere`) and stashed-scratchpad windows
-    /// are excluded from both lists, exactly like `setActive`.
-    @discardableResult
-    mutating func setLens(_ newLens: UInt64) -> LensPlan? {
-        guard grouping == .tag, newLens != lens else { return nil }
-        let old = lens
-        lens = newLens
-        func shows(_ mask: UInt64, _ tags: UInt64) -> Bool {
-            (tags & mask) != 0
-        }
-        let toPark = windowMap
-            .filter { shows(old, $0.value.tags)
-                && !shows(newLens, $0.value.tags)
-                && !everywhereWindows.contains($0.key)
-                && !stashedWindows.contains($0.key) }
-            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
-        let toRestore = windowMap
-            .filter { shows(newLens, $0.value.tags)
-                && !shows(old, $0.value.tags)
-                && !everywhereWindows.contains($0.key)
-                && !stashedWindows.contains($0.key) }
-            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
-        return LensPlan(oldLens: old, newLens: newLens,
-                        toPark: toPark, toRestore: toRestore)
     }
 
     // MARK: - Move window
@@ -1953,7 +742,7 @@ struct WorkspaceCatalog {
         }
     }
 
-    private func preParkFrame(for w: Window) -> CGRect? {
+    func preParkFrame(for w: Window) -> CGRect? {
         if let origin = originalPositions[w.id], let size = w.frame?.size {
             return CGRect(origin: origin, size: size)
         }
