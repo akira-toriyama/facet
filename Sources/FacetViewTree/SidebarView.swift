@@ -1091,7 +1091,6 @@ public final class SidebarView: NSView {
         }
 
         var mode = 0          // 0 undecided · 1 panel-move · 2 window-drag
-        var grab: CGSize?     // cursor→panel-origin offset (mode-1 absolute move)
         var dragWS = 0
         var dragWindowID = WindowID(serverID: 0)
         let mask: NSEvent.EventTypeMask = [.leftMouseDragged, .leftMouseUp]
@@ -1177,29 +1176,26 @@ public final class SidebarView: NSView {
                     }
                 }
                 if mode == 1 {
-                    // Absolute-position tracking from the LIVE cursor via
-                    // NSEvent.mouseLocation (window-independent screen coords,
-                    // AppKit y-up — the space setFrameOrigin wants, no flip).
-                    // NOT win.convertPoint(toScreen: ev.locationInWindow): that
-                    // re-adds the window's CURRENT origin onto a locationInWindow
-                    // baked against the origin at event-generation time, and
-                    // since THIS loop moves the window between events the stale
-                    // origin no longer matches — the window we move feeds back
-                    // into the coordinate we move it to → overshoot/jitter at
-                    // speed (worst on a fast trackball fling across an
-                    // ultrawide). mouseLocation has no window term and can't
-                    // couple. `grab` (cursor→origin offset) is captured on the
-                    // first move — correct because the loop hasn't moved the
-                    // window yet, so win.frame is the true pre-move origin —
-                    // then held constant. Matches RealWindowDrag.quartzMouse /
-                    // the drag ghost.
-                    let m = NSEvent.mouseLocation
-                    if grab == nil {
-                        grab = CGSize(width: m.x - win.frame.minX,
-                                      height: m.y - win.frame.minY)
-                    }
-                    controller?.setPanelOrigin(to: CGPoint(
-                        x: m.x - grab!.width, y: m.y - grab!.height))
+                    // Hand the panel move to the WINDOW SERVER via
+                    // performDrag(with:) — the same machinery a native title
+                    // bar uses. It tracks at compositor rate (perfect lockstep
+                    // with the cursor, zero per-event main-thread work, no
+                    // coalescing / pointer-acceleration drift) and translates
+                    // the addChildWindow pet overlay for free. The
+                    // .nonactivatingPanel style keeps kCGSPreventsActivation
+                    // set, so this never steals focus / activates facet. It
+                    // runs its OWN modal loop until mouseUp, so it only fits the
+                    // pure-move path: modes 2/3 (window DnD / header swap) keep
+                    // the manual loop below because they need per-event ghost /
+                    // drop-band hooks. Threshold-gated — we only reach here once
+                    // a real drag is confirmed, so plain clicks and the handle
+                    // double-click (handled above) are untouched. On return the
+                    // window has settled at its drop point; re-derive the
+                    // persisted anchor + pet inset, then exit the loop (the
+                    // mouseUp was consumed by performDrag).
+                    win.performDrag(with: ev)
+                    controller?.syncPanelAfterDrag()
+                    break loop
                 } else if mode == 2 || mode == 3 {
                     dropWS = wsBands.first { $0.value.contains(cp.y) }?.key
                     if let t = dropWS, t != dragWS {
