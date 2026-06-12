@@ -25,6 +25,29 @@ public struct MiniWindowHit: Sendable {
     }
 }
 
+/// Map a window's logical frame (backend-supplied; Y-down, CG-style)
+/// onto a cell rect in an overview view. Both sides are Y-down so it's
+/// a straight scale, no vertical flip — the overview views are flipped,
+/// so cell-local rects share the same coord convention. Returns `.zero`
+/// for a degenerate (zero-area) screen frame. Shared by the grid + rail
+/// mini-thumbnails; the `>= 2` px cull and `MiniWindowHit` construction
+/// stay caller-side. Pure / testable.
+public func scaledWindowRect(windowFrame: CGRect,
+                             screenFrame: CGRect,
+                             cellRect: CGRect) -> CGRect {
+    guard screenFrame.width > 0, screenFrame.height > 0 else {
+        return .zero
+    }
+    let scaleX = cellRect.width  / screenFrame.width
+    let scaleY = cellRect.height / screenFrame.height
+    let xRel = (windowFrame.minX - screenFrame.minX) * scaleX
+    let yRel = (windowFrame.minY - screenFrame.minY) * scaleY
+    return CGRect(x: cellRect.minX + xRel,
+                  y: cellRect.minY + yRel,
+                  width:  windowFrame.width  * scaleX,
+                  height: windowFrame.height * scaleY)
+}
+
 /// Sort overview thumbnails into reading order: cluster windows into
 /// rows (midY within half the tallest window's height counts as the
 /// same row, so a sub-pixel y difference between side-by-side windows

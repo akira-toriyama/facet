@@ -34,25 +34,16 @@ public func gridCellSize(usableW: CGFloat,
     return CGSize(width: min(cellW, finalW), height: cellH)
 }
 
-/// Map a window's logical frame (backend-supplied; Y-down,
-/// CG-style) onto a cell rect in the grid view. Both sides are
-/// Y-down so it's a straight scale, no vertical flip. GridView
-/// itself is flipped so cell-local rects share the same coord
-/// convention.
+/// Map a window's logical frame onto a cell rect in the grid view —
+/// delegates to the shared `scaledWindowRect` (FacetCore) so grid /
+/// rail mini-thumbnail rects stay identical. Kept as a thin
+/// module-local name for the existing call sites + `GridMathTests`.
 public func gridScaledWindowRect(windowFrame: CGRect,
                                  screenFrame: CGRect,
                                  cellRect: CGRect) -> CGRect {
-    guard screenFrame.width > 0, screenFrame.height > 0 else {
-        return .zero
-    }
-    let scaleX = cellRect.width  / screenFrame.width
-    let scaleY = cellRect.height / screenFrame.height
-    let xRel = (windowFrame.minX - screenFrame.minX) * scaleX
-    let yRel = (windowFrame.minY - screenFrame.minY) * scaleY
-    return CGRect(x: cellRect.minX + xRel,
-                  y: cellRect.minY + yRel,
-                  width:  windowFrame.width  * scaleX,
-                  height: windowFrame.height * scaleY)
+    scaledWindowRect(windowFrame: windowFrame,
+                     screenFrame: screenFrame,
+                     cellRect: cellRect)
 }
 
 /// Wrap the grid cursor at `index` by `(dx, dy)` in a `cols`-wide,
