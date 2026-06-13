@@ -61,7 +61,7 @@ let package = Package(
         // For local, atomic sill↔facet editing, temporarily swap this
         // line for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "0.7.1")),
+                 .upToNextMinor(from: "0.8.0")),
     ],
     targets: [
         // FacetCore links sill's PURE `Palette` module (AppKit-free, so it
