@@ -74,33 +74,26 @@ extension WorkspaceCatalog {
                              focused: nil, params: LayoutParams(), in: rect)
     }
 
-    /// Tag-mode snapshot: one `Workspace` per tag (header = tag name,
-    /// `isActive` = tag is in the current lens), each tracked window
-    /// listed under its PRIMARY tag once (full-tag-world overview,
-    /// independent of the lens). The tiled set is the lens union (one
-    /// global layout); a window not in the lens shows at its parked
-    /// position. Secondary-tag badges + multi-active styling are the
-    /// view's job (M11-3 PR3).
+    /// Tag-mode snapshot: ONE synthetic `Workspace` holding every tracked
+    /// window as a flat list — no per-tag grouping (#191 PR-6). Each
+    /// window appears once and carries ALL its tag names; the tree renders
+    /// them as `#tag` chips on the row (the view's `tagMode` flag drops the
+    /// workspace header so the list reads flat). This is the full-tag-world
+    /// overview, independent of the lens: the tiled set is the lens union
+    /// (one global layout), but parked (out-of-lens) windows still appear,
+    /// shown at their pre-park position. Returns `[]` when no window is
+    /// tracked so the panel hides (the Controller's empty-list guard)
+    /// rather than show an empty frame.
     func tagSnapshot(live: [Window], focused: WindowID?,
                              activeRect: CGRect) -> [Workspace] {
         let tracked = live.filter {
             windowMap[$0.id] != nil && !stashedWindows.contains($0.id)
         }
+        guard !tracked.isEmpty else { return [] }
         let unionFrames = tagUnionFrames(in: activeRect)
-        let fallbackTag = tagModel.names.first ?? ""
-        let byTag = Dictionary(grouping: tracked) { w -> String in
-            let mask = windowMap[w.id]?.tags ?? 0
-            return tagModel.primaryName(of: mask) ?? fallbackTag
-        }
-        // Iterate defined tags with their real bit (a `names` index is
-        // no longer a bit once a `tag --remove` opens a hole). `index`
-        // is the contiguous display order (0…count-1), not the sparse
-        // bit, so it stays a safe handle for the header-row machinery;
-        // `isActive` keys off the actual bit.
-        return tagModel.bitNames.enumerated().map { (i, entry) in
-            let (bit, tagName) = entry
-            let isActive = (bit & lens) != 0
-            let wins = (byTag[tagName] ?? []).map { w -> Window in
+        let wins = tracked
+            .sorted { $0.id.serverID < $1.id.serverID }
+            .map { w -> Window in
                 let mask = windowMap[w.id]?.tags ?? 0
                 let floating = floatingWindows.contains(w.id)
                 let inLens = (mask & lens) != 0
@@ -129,9 +122,13 @@ extension WorkspaceCatalog {
                               scratchpad: scratchpad(forWindow: w.id),
                               tags: tagModel.names(in: mask))
             }
-            return Workspace(index: i, name: tagName, isActive: isActive,
-                             layoutMode: defaultMode, windows: wins)
-        }
+        // One synthetic, always-active workspace (index 0). `isActive`
+        // keeps the lone "workspace" current so a row click never fires a
+        // spurious workspace switch; `layoutMode` is the union engine,
+        // which feeds the window context menu's mode-gating. The name is
+        // unused — the view's `tagMode` flag renders the list header-less.
+        return [Workspace(index: 0, name: "", isActive: true,
+                          layoutMode: defaultMode, windows: wins)]
     }
 
     // Lens-command resolvers (pure: name → new mask). `nil` = unknown

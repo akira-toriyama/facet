@@ -110,10 +110,10 @@ public struct Window: Sendable {
     public let scratchpad: String?
     /// Tag names this window belongs to, in declaration order
     /// (`[grouping] by = "tag"` mode; empty in workspace mode). The
-    /// window is listed once under its PRIMARY tag (the first / lowest
-    /// entry here); views surface the OTHER entries as small
-    /// secondary-tag badges. Session-only, per-mac-desktop. See memory
-    /// `facet-tag-model-decisions` (M11-3 PR3).
+    /// tag-mode tree is a flat window list, so the window appears once
+    /// and views surface EVERY entry here as a small `#tag` chip on its
+    /// row (no primary tag — #191). Session-only, per-mac-desktop. See
+    /// memory `facet-tag-model-decisions`.
     public let tags: [String]
 
     public init(id: WindowID,

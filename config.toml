@@ -482,8 +482,9 @@ action = "ignore"
 
 # -----------------------------------------------------------------
 # [[tag]] — the tag vocabulary for `by=tag` mode (ignored in
-# workspace mode). One table per tag; declaration order is the tag
-# order (a window's lowest-bit tag is its "primary"). Tables with
+# workspace mode). One table per tag; declaration order fixes each
+# tag's bit and the order its `#tag` chip lists on a window's row (the
+# tag-mode tree is a flat window list, not grouped by tag). Tables with
 # no non-empty name, or a duplicate name, are dropped. Names starting
 # with "_" are reserved (facet uses "_default" as an internal floor
 # every window carries — it never shows as a chip and can't be a

@@ -47,7 +47,7 @@ public final class SidebarView: NSView {
         let mark: String?      // window: user mark → right-edge badge
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
-        let tags: [String]       // window: secondary tag names → `#tag` chips
+        let tags: [String]       // window: tag names → `#tag` chips (flat tag mode)
     }
     private var cells: [Cell] = []
     private var hoverIdx: Int?            // row under the pointer
@@ -61,6 +61,15 @@ public final class SidebarView: NSView {
     // are listed (cross-workspace flat list).
     public private(set) var searching = false
     public private(set) var query = ""
+
+    /// Tag mode (`[grouping] by = "tag"`): the snapshot is ONE synthetic
+    /// flat workspace, so the tree drops the workspace header — the list
+    /// reads as a flat window list with `#tag` chips per row — and
+    /// disables the workspace-targeting DnD (window-move / header-swap),
+    /// since a flat list has nowhere to drop. Set by `update(tagMode:)`
+    /// and sticky across the internal relayouts that omit the arg. (#191
+    /// PR-6.)
+    private var tagModeActive = false
 
     private var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public private(set) var signature = ""
@@ -218,19 +227,24 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(_ workspaces: [Workspace],
                        titles: [WindowID: String]? = nil,
-                       macDesktop: Int?? = nil) -> CGFloat {
+                       macDesktop: Int?? = nil,
+                       tagMode: Bool? = nil) -> CGFloat {
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         // Double-optional: omitting the arg (internal relayouts) keeps
         // the current ordinal; passing it (the Controller refresh)
         // sets it — including to nil when SkyLight is unavailable.
         if let macDesktop { macDesktopOrdinal = macDesktop }
+        // Sticky like `macDesktop`: only the Controller refresh passes
+        // `tagMode`; internal relayouts (omit it) keep the current value.
+        if let tagMode { tagModeActive = tagMode }
         activeWS = workspaces.first(where: { $0.isActive })?.index   // always REAL
         let opt = optimisticHeld()
-        // Multi-active: in tag mode the lens can hold several tags at once,
-        // so every workspace the snapshot marks active is highlighted (read
-        // `ws.isActive`, not a single index). The optimistic overlay
-        // (kbNav / `--active` mid-switch) is workspace-mode only — a single
+        // Read `ws.isActive` (not a single active index): workspace mode
+        // has one active WS, and tag mode emits a single always-active
+        // synthetic workspace (no header is rendered for it — see the
+        // `tagModeActive` gate below). The optimistic overlay (kbNav /
+        // `--active` mid-switch) is workspace-mode only — a single
         // transient target.
         func headerActive(_ ws: Workspace) -> Bool {
             opt ? (ws.index == optActiveWS) : ws.isActive
@@ -244,6 +258,7 @@ public final class SidebarView: NSView {
                 ? (titleOverride[win.id] ?? "") : win.title
         }
         let sig = (searching ? "S:\(query);" : "")
+            + (tagModeActive ? "T;" : "")
             + "D\(macDesktopOrdinal ?? -1);"
             + (opt
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
@@ -319,11 +334,14 @@ public final class SidebarView: NSView {
             let hasLabel = win.isMaster || win.isFloating
             let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
             // Third line under the title holds the mark pill (left) and
-            // the master / float / hidden / scratchpad / tags badges —
-            // present when any of those conditions holds.
+            // the master / float / hidden / scratchpad / tag-chip badges —
+            // present when any of those conditions holds. In tag mode the
+            // chips are EVERY tag the window carries (flat list — no
+            // primary tag is hidden under a header); workspace mode leaves
+            // `tags` empty, so this is `false` there.
             let hasThird = hasLabel || (win.mark != nil)
                 || !win.isOnscreen || (win.scratchpad != nil)
-                || !win.tags.dropFirst().isEmpty
+                || !win.tags.isEmpty
             var rh: CGFloat = baseRH           // compact single line
             if !wt.isEmpty || hasThird {
                 rh = 34                        // top 8 + app 18 + bot 8
@@ -344,7 +362,7 @@ public final class SidebarView: NSView {
                               mark: win.mark,
                               isHidden: !win.isOnscreen,
                               scratchpad: win.scratchpad,
-                              tags: Array(win.tags.dropFirst())))
+                              tags: win.tags))
             y += rh
         }
 
@@ -365,20 +383,26 @@ public final class SidebarView: NSView {
         var firstHeader = true
         for (ws, wins) in shown {
             let start = y
-            let hh = firstHeader ? headerFirstRowH : headerRowH
-            let hr = NSRect(x: 0, y: y, width: w, height: hh)
-            rows.append(TreeRow(rect: hr,
-                                kind: .header(workspaceIndex: ws.index)))
-            let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
-            cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
-                              firstHeader: firstHeader, pid: 0, app: "",
-                              title: "", text: t.uppercased(),
-                              mode: ws.layoutMode,
-                              isMaster: false, isFloating: false,
-                              isSticky: false, mark: nil, isHidden: false,
-                              scratchpad: nil, tags: []))
-            firstHeader = false
-            y += hh
+            // Tag mode renders a flat, header-less window list — the
+            // synthetic workspace has no meaningful name / layout / swap
+            // target, and the per-row `#tag` chips carry the grouping.
+            // Workspace mode emits the section header as before.
+            if !tagModeActive {
+                let hh = firstHeader ? headerFirstRowH : headerRowH
+                let hr = NSRect(x: 0, y: y, width: w, height: hh)
+                rows.append(TreeRow(rect: hr,
+                                    kind: .header(workspaceIndex: ws.index)))
+                let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
+                cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
+                                  firstHeader: firstHeader, pid: 0, app: "",
+                                  title: "", text: t.uppercased(),
+                                  mode: ws.layoutMode,
+                                  isMaster: false, isFloating: false,
+                                  isSticky: false, mark: nil, isHidden: false,
+                                  scratchpad: nil, tags: []))
+                firstHeader = false
+                y += hh
+            }
             for win in wins {
                 appendWindowRow(win, wsIndex: ws.index)
             }
@@ -512,6 +536,13 @@ public final class SidebarView: NSView {
     /// header row as their popover anchor (the caller stacks
     /// them). The active workspace is always skipped — would just
     /// overlay the visible windows on themselves.
+    ///
+    /// Tag mode (#191 PR-6): the snapshot is ONE always-active synthetic
+    /// workspace, so this skip suppresses hover previews for every row.
+    /// That's correct for in-lens (on-screen) windows, but also drops the
+    /// preview for parked (out-of-lens) windows — restoring those would
+    /// need per-window lens membership plumbed to the view, deferred as a
+    /// follow-up rather than threaded through the flat-render change.
     public func previewTargets()
         -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
     {
@@ -859,10 +890,10 @@ public final class SidebarView: NSView {
                             withAttributes: pillAttrs)
                         lx += pillW + 6
                     }
-                    // Secondary-tag chips (#tag): the OTHER tags this window
-                    // belongs to (it's already listed once under its primary
-                    // tag's header). A faint filled chip — distinct from the
-                    // outlined status pills — in `dim`, prefixed `#` so it
+                    // Tag chips (#tag): EVERY tag this window carries (the
+                    // tag-mode list is flat — there is no primary-tag header
+                    // to hide one under). A faint filled chip — distinct from
+                    // the outlined status pills — in `dim`, prefixed `#` so it
                     // can't be mistaken for a mark / scratchpad. Stops before
                     // a chip would overrun the row's right edge.
                     for tag in c.tags {
@@ -1151,8 +1182,12 @@ public final class SidebarView: NSView {
             case .leftMouseDragged:
                 if mode == 0,
                    hypot(cp.x - start.x, cp.y - start.y) >= dragThreshold {
-                    if ev.modifierFlags.contains(.command) {
-                        mode = 1                       // ⌘+drag anywhere → move
+                    // ⌘+drag is always a panel-move; so is ANY drag in tag
+                    // mode, where the flat list has no workspace to drop a
+                    // window / swap a header onto (DnD retag is off — #191
+                    // PR-6). Retagging is via the row context menu / CLI.
+                    if ev.modifierFlags.contains(.command) || tagModeActive {
+                        mode = 1                       // ⌘+drag / tag mode → move
                     } else {
                         switch row?.kind {
                         case .none, .search?:
@@ -1571,6 +1606,9 @@ public final class SidebarView: NSView {
     /// the drop target through the workspace order instead of moving
     /// the selection.
     public func kbToggleLift() {
+        // Tag mode is a flat list with no workspace to move a window /
+        // swap a header into, so the lift gesture is a no-op (#191 PR-6).
+        guard !tagModeActive else { return }
         if kbLifted == nil {
             guard let s = kbSel else { return }
             kbLifted = s

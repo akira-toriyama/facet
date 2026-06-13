@@ -395,8 +395,7 @@ public final class GridView: NSView {
                         id: win.id,
                         isFocused: win.isFocused,
                         rect: wr,
-                        mark: win.mark,
-                        tags: Array(win.tags.dropFirst())))
+                        mark: win.mark))
                 }
             }
             // Header band rect (matches the label draw position) —
@@ -771,8 +770,6 @@ public final class GridView: NSView {
         wp.stroke()
         // Mark badge — same corner pill / dot as the rail (M9-5 #3).
         if let mark = w.mark { drawMiniMarkBadge(mark, in: r, pal: pal) }
-        // Secondary-tag dots (M11-3 PR3b) — bottom-left, secondary.
-        drawMiniTagDots(w.tags.count, in: r, pal: pal)
     }
 
     // MARK: - Hover (header highlight)

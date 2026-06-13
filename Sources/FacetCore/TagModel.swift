@@ -7,9 +7,9 @@
 //
 //   - `TagModel`: the ordered tag vocabulary (config `[[tag]]` order)
 //     and the name ⇄ bit mapping. Declaration order is load-bearing —
-//     it drives tree/rail header order and the "primary tag" (the
-//     lowest-order tag a window holds, where it appears once in the
-//     tree).
+//     it fixes each tag's bit, drives the startup lens (`firstBit`),
+//     and sets the order tag chips list on a window's flat tree row
+//     (`names(in:)`).
 //
 // There is NO static window→tag assignment: a fresh window inherits the
 // current lens's primary tag (the catalog's job), then the user retags
@@ -40,8 +40,8 @@ public struct TagModel: Sendable, Equatable {
     /// is free — a `remove` vacated it and the next `add` reuses the
     /// lowest hole. Trailing `nil`s are trimmed so two models with the
     /// same live tags compare equal regardless of add/remove history.
-    /// Not exposed directly; read `names` (defined names) or `bitNames`
-    /// (bit-aware) instead.
+    /// Not exposed directly; read `names` (defined names) or `bit(for:)`
+    /// (name → bit) instead.
     private let slots: [String?]
 
     /// The reserved top bit (63) — the `_default` floor (M11-3 → #191).
@@ -75,9 +75,8 @@ public struct TagModel: Sendable, Equatable {
 
     /// Defined tag names in declaration (bit) order — freed holes are
     /// omitted, so a `names` index is NOT a bit position once a remove
-    /// has opened a hole (use `bit(for:)` / `bitNames` for bits). The
-    /// tree/rail header order + the `lens --all` / badge name set read
-    /// from here.
+    /// has opened a hole (use `bit(for:)` for bits). The `lens --all`
+    /// union and a window's tag-chip name set read from here.
     public var names: [String] { slots.compactMap { $0 } }
 
     public var isEmpty: Bool { !slots.contains { $0 != nil } }
@@ -120,33 +119,13 @@ public struct TagModel: Sendable, Equatable {
         return UInt64(1) << UInt64(i)
     }
 
-    /// Primary tag of a mask = the lowest set bit's name (slot order).
-    /// This is where a multi-tag window appears once in the tree. `nil`
-    /// when the mask is empty, out of range, or its lowest bit is a
-    /// freed hole / the `_default` floor.
-    public func primaryName(of mask: UInt64) -> String? {
-        guard mask != 0 else { return nil }
-        let i = mask.trailingZeroBitCount
-        guard i < slots.count else { return nil }
-        return slots[i]
-    }
-
-    /// The names present in a mask, in declaration order — the badge
-    /// set for a window (primary first). Freed-hole bits contribute
+    /// The names present in a mask, in declaration order — the tag-chip
+    /// set for a window's flat tree row. Freed-hole bits contribute
     /// nothing.
     public func names(in mask: UInt64) -> [String] {
         slots.enumerated().compactMap { (i, name) in
             guard let name else { return nil }
             return (mask & (UInt64(1) << UInt64(i))) != 0 ? name : nil
-        }
-    }
-
-    /// Defined tags paired with their bit, in slot order (holes
-    /// omitted) — the bit-aware iterator the tag-mode snapshot needs,
-    /// since a `names` index stops equalling a bit once a hole exists.
-    public var bitNames: [(bit: UInt64, name: String)] {
-        slots.enumerated().compactMap { (i, name) in
-            name.map { (UInt64(1) << UInt64(i), $0) }
         }
     }
 
