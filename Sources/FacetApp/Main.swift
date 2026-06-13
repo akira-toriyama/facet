@@ -605,8 +605,7 @@ enum FacetApp {
         let cfg = FacetConfig.load()
         // Fail Fast (M11-3): refuse to start on an incoherent config
         // — `[grouping] by = "tag"` with no `[[tag]]`, or with a
-        // workspace-only default layout (`bsp`/`stack`), or an
-        // `[[assign]]` referencing an undefined tag, or a `by` typo.
+        // workspace-only default layout (`bsp`/`stack`), or a `by` typo.
         // Loud `exit 2` (usage error) rather than silently running the
         // default grouping. No-op in the (default) workspace mode.
         let configErrors = cfg.fatalConfigErrors()

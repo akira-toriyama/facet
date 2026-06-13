@@ -3,17 +3,18 @@
 // In `[grouping] by = "tag"` mode a window carries a SET of tags
 // instead of a single workspace. Visibility is dwm's `tags & viewmask`:
 // a window shows when its tag bits intersect the current `lens`. This
-// file holds the pure pieces:
+// file holds the pure piece:
 //
 //   - `TagModel`: the ordered tag vocabulary (config `[[tag]]` order)
 //     and the name ⇄ bit mapping. Declaration order is load-bearing —
 //     it drives tree/rail header order and the "primary tag" (the
 //     lowest-order tag a window holds, where it appears once in the
 //     tree).
-//   - `AssignRule` / `AssignRules`: config `[[assign]]` — match a
-//     window (shared `WindowMatcher`) and give it tags. A window
-//     matching several rules gets the UNION (multi-membership). A
-//     window matching none inherits at runtime (the catalog's job).
+//
+// There is NO static window→tag assignment: a fresh window inherits the
+// current lens's primary tag (the catalog's job), then the user retags
+// at runtime. (The old config `[[assign]]` rules were retired in #191 —
+// runtime tagging replaces them.)
 //
 // The vocabulary SEEDS from config (`[[tag]]`) but is mutable at
 // runtime (#191): `facet window --tag` retags one window, `facet tag
@@ -214,57 +215,5 @@ public struct TagModel: Sendable, Equatable {
         s[i] = new
         self = TagModel(slots: s)
         return .renamed(UInt64(1) << UInt64(i))
-    }
-}
-
-/// One `[[assign]]` table: a `WindowMatcher` plus the tag names to
-/// give a window it matches. A rule with no constraints or no tags is
-/// inert (dropped by the parser).
-public struct AssignRule: Sendable, Equatable {
-    public let matcher: WindowMatcher
-    /// Tag names this rule assigns (resolved to bits against a
-    /// `TagModel` later — kept as names so the rule is independent of
-    /// the vocabulary's bit layout).
-    public let tags: [String]
-
-    public init(matcher: WindowMatcher, tags: [String]) {
-        self.matcher = matcher
-        self.tags = tags
-    }
-
-    public func matches(_ p: WindowProbe) -> Bool { matcher.matches(p) }
-    public var needsAXRole: Bool { matcher.needsAXRole }
-}
-
-/// Ordered `[[assign]]` set. Unlike `[[exclude]]` (first-match-wins),
-/// assignment UNIONS every matching rule's tags — a window can land in
-/// several tags from several rules (multi-membership).
-public struct AssignRules: Sendable, Equatable {
-    public let rules: [AssignRule]
-    public init(_ rules: [AssignRule] = []) { self.rules = rules }
-
-    public var isEmpty: Bool { rules.isEmpty }
-    public var anyNeedsAXRole: Bool { rules.contains(where: \.needsAXRole) }
-
-    /// Union of tag names from ALL rules that match `p`, de-duplicated,
-    /// in first-seen order. Empty when no rule matches (the window is
-    /// then "unassigned" — the catalog gives it the lens's primary tag
-    /// at appearance).
-    public func tags(for p: WindowProbe) -> [String] {
-        var seen = Set<String>()
-        var out: [String] = []
-        for r in rules where r.matches(p) {
-            for t in r.tags where !seen.contains(t) {
-                seen.insert(t)
-                out.append(t)
-            }
-        }
-        return out
-    }
-
-    /// Union resolved to a bitmask against `model` (unknown tag names
-    /// dropped). Convenience over `tags(for:)` + `model.mask(for:)`.
-    public func mask(for p: WindowProbe, in model: TagModel) -> UInt64 {
-        model.mask(for: tags(for: p))
     }
 }

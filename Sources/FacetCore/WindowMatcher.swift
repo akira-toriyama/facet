@@ -1,10 +1,12 @@
-// Shared window matcher — pure, backend-neutral, unit-testable.
+// Window matcher — pure, backend-neutral, unit-testable.
 //
-// Both `[[exclude]]` (float/ignore/manage a window) and `[[assign]]`
-// (give a window tags, M11-3) match windows by the SAME facts:
+// `[[exclude]]` (float/ignore/manage a window) matches windows by
 // app (bundle id) / title / AX role / subrole / size. This is that
-// one matcher, extracted so the two rule sets share it (DRY — the
-// regex + size + AND semantics live in exactly one place).
+// matcher, kept factored out as its own type so the regex + size +
+// AND semantics live in exactly one place. It was formerly shared
+// with `[[assign]]` too, but that rule set was retired in #191
+// (runtime tagging replaced it), so `[[exclude]]` is its sole
+// consumer now.
 //
 // The adapter supplies a `WindowProbe` (AX role/subrole from its
 // on-demand probe; bundleId/title/size from the window model); a

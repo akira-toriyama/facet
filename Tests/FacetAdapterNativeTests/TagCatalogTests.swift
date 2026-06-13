@@ -17,23 +17,16 @@ final class TagCatalogTests: XCTestCase {
                isFocused: false, isFloating: floating, frame: nil)
     }
 
-    private func probe(bundle: String? = nil, title: String = "")
-        -> WindowProbe
-    {
-        WindowProbe(bundleId: bundle, title: title)
-    }
-
     /// A catalog seeded for tag mode with tags `work`(bit0) `web`(bit1)
-    /// `media`(bit2), lens = work, and the given assign rules.
-    private func tagCatalog(rules: AssignRules = AssignRules([]),
-                            lens: UInt64 = 0b001) -> WorkspaceCatalog {
+    /// `media`(bit2) and the given lens (default = work).
+    private func tagCatalog(lens: UInt64 = 0b001) -> WorkspaceCatalog {
         var c = WorkspaceCatalog()
         c.seed(configs: (1...2).map {
             (index: $0, config: WorkspaceConfig(name: ""))
         })
         c.seedTags(grouping: .tag,
                    model: TagModel(["work", "web", "media"]),
-                   rules: rules, lens: lens)
+                   lens: lens)
         return c
     }
 
@@ -54,34 +47,31 @@ final class TagCatalogTests: XCTestCase {
 
     // MARK: - tagsForNewWindow
 
-    func testAssignedWindowGetsRuleUnion() {
-        let c = tagCatalog(rules: AssignRules([
-            AssignRule(matcher: WindowMatcher(app: "Chrome"), tags: ["web"]),
-            AssignRule(matcher: WindowMatcher(title: "GitHub"),
-                       tags: ["work"]),
-        ]))
-        let m = c.tagsForNewWindow(probe(bundle: "Chrome", title: "GitHub"))
-        XCTAssertEqual(m, 0b011 | TagModel.defaultBit)   // web | work | floor
-    }
-
-    func testUnmatchedWindowInheritsLensPrimaryOnly() {
-        // lens = web|media (0b110); primary = web (lowest set bit).
+    func testNewWindowInheritsLensPrimaryOnly() {
+        // lens = web|media (0b110); primary = web (lowest set bit). A new
+        // window joins the one primary tag, never the whole lens union.
         let c = tagCatalog(lens: 0b110)
-        XCTAssertEqual(c.tagsForNewWindow(probe(bundle: "X")),
-                       0b010 | TagModel.defaultBit)
+        XCTAssertEqual(c.tagsForNewWindow(), 0b010 | TagModel.defaultBit)
     }
 
-    func testUnmatchedWithSingleLensGetsThatTag() {
+    func testNewWindowWithSingleLensGetsThatTag() {
         let c = tagCatalog(lens: 0b100)   // media only
-        XCTAssertEqual(c.tagsForNewWindow(probe(bundle: "X")),
-                       0b100 | TagModel.defaultBit)
+        XCTAssertEqual(c.tagsForNewWindow(), 0b100 | TagModel.defaultBit)
+    }
+
+    func testNewWindowUnderFloorLensIsFloorOnly() {
+        // Startup lens = the _default floor → a window opened before any
+        // lens switch is floor-only (untagged), since the floor is the
+        // lens's lowest (only) bit.
+        let c = tagCatalog(lens: TagModel.defaultBit)
+        XCTAssertEqual(c.tagsForNewWindow(), TagModel.defaultBit)
     }
 
     func testNewWindowAlwaysCarriesDefaultFloor() {
         // The _default floor (bit 63) is ON for every new window, so a
         // window is never tags == 0 / lost (#191).
         let c = tagCatalog(lens: 0b001)
-        let m = c.tagsForNewWindow(probe(bundle: "X"))
+        let m = c.tagsForNewWindow()
         XCTAssertEqual(m & TagModel.defaultBit, TagModel.defaultBit)
         XCTAssertNotEqual(m, 0)
     }

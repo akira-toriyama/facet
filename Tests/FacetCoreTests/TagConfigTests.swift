@@ -45,52 +45,14 @@ final class TagConfigTests: XCTestCase {
         XCTAssertTrue(FacetConfig().effectiveTagModel.isEmpty)
     }
 
-    // MARK: - [[assign]]
-
-    func testAssignSingleTag() {
-        let rules = FacetConfig.assignRules(fromTOML: """
-        [[assign]]
-        app = "com.google.Chrome"
-        tag = "web"
-        """)
-        XCTAssertEqual(rules.count, 1)
-        XCTAssertEqual(rules[0].tags, ["web"])
-        XCTAssertEqual(rules[0].matcher.app, "com.google.Chrome")
-    }
-
-    func testAssignTagsArrayAndDedup() {
-        let rules = FacetConfig.assignRules(fromTOML: """
-        [[assign]]
-        title = "GitHub"
-        tag = "work"
-        tags = ["web", "work"]
-        """)
-        XCTAssertEqual(rules.count, 1)
-        // tag + tags unioned, de-duped, order preserved.
-        XCTAssertEqual(rules[0].tags, ["work", "web"])
-    }
-
-    func testAssignDropsInertRules() {
-        // No match key → inert; no tag → inert. Both dropped.
-        let rules = FacetConfig.assignRules(fromTOML: """
-        [[assign]]
-        tag = "web"
-        [[assign]]
-        app = "X"
-        """)
-        XCTAssertTrue(rules.isEmpty)
-    }
-
     // MARK: - fatalConfigErrors (Fail Fast)
 
     private func tagConfig(layout: String = "grid",
-                           tags: [String] = ["work", "web"],
-                           assigns: [AssignRule] = []) -> FacetConfig {
+                           tags: [String] = ["work", "web"]) -> FacetConfig {
         var c = FacetConfig()
         c.grouping = "tag"
         c.defaultLayout = layout
         if !tags.isEmpty { c.tagDefs = tags }
-        if !assigns.isEmpty { c.assignRules = assigns }
         return c
     }
 
@@ -119,21 +81,5 @@ final class TagConfigTests: XCTestCase {
             XCTAssertTrue(errs.contains { $0.contains("not compatible") },
                           "layout=\(bad)")
         }
-    }
-
-    func testAssignReferencingUnknownTagIsFatal() {
-        let c = tagConfig(assigns: [
-            AssignRule(matcher: WindowMatcher(app: "X"), tags: ["ghost"]),
-        ])
-        XCTAssertTrue(c.fatalConfigErrors().contains {
-            $0.contains("unknown tag") && $0.contains("ghost")
-        })
-    }
-
-    func testAssignReferencingKnownTagIsClean() {
-        let c = tagConfig(assigns: [
-            AssignRule(matcher: WindowMatcher(app: "X"), tags: ["web"]),
-        ])
-        XCTAssertTrue(c.fatalConfigErrors().isEmpty)
     }
 }
