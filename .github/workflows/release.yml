@@ -1,12 +1,9 @@
 name: Release
 
-# Mirrors the canon rolling-draft model: a push to main (PR merge)
-# makes git-cliff compute the next version from Conventional Commits and
-# create/update a single DRAFT GitHub Release. No tag is created here —
-# GitHub generates the tag on the target commit when you manually Publish
-# in the UI. Merge more to main → the next-release draft grows; versions
-# don't multiply while unpublished. workflow_dispatch + dry_run = full
-# preview (no draft, no version consumed). Config: cliff.toml.
+# Thin caller of the shared rolling-DRAFT release (atelier Track 3).
+# The version-compute + dry-run + draft-management logic lives once in
+# akira-toriyama/.github; this file supplies only facet's name + install
+# prose. See that reusable's header for the model. Config: cliff.toml.
 on:
   push:
     branches: [main]
@@ -26,158 +23,31 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+    uses: akira-toriyama/.github/.github/workflows/release.yml@main
+    with:
+      app: Facet
+      dry-run: ${{ github.event.inputs.dry_run == 'true' }}
+      install-notes: |
+        ## Install
 
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+        **Homebrew (build from source):**
 
-      - name: Install git-cliff
-        uses: taiki-e/install-action@v2
-        with:
-          tool: git-cliff@2
+        ```sh
+        brew install akira-toriyama/tap/facet
+        open "$(brew --prefix)/opt/facet/Facet.app"
+        curl --create-dirs -o ~/.config/facet/config.toml \
+          https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
+        ```
 
-      # Next version via git-cliff directly (official recommendation).
-      # Unpublished drafts create no tag, so `last` stays at the last
-      # Published version and the computed `next` is stable across
-      # merges.
-      - name: Compute next version
-        id: ver
-        run: |
-          set -euo pipefail
-          next="$(git-cliff --config cliff.toml --bumped-version | tr -d '[:space:]')"
-          last="$(git tag --sort=-v:refname | head -n1)"
-          echo "next=$next last=${last:-<none>}"
-          if [ -z "$next" ] || [ "$next" = "$last" ]; then
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No release-worthy changes (feat/fix/perf/breaking) since ${last:-<none>}; nothing to do."
-          else
-            echo "release=true"  >> "$GITHUB_OUTPUT"
-            echo "version=$next" >> "$GITHUB_OUTPUT"
-          fi
+        **Prebuilt (`Facet.zip` below):** the app is ad-hoc signed
+        (not notarized), so macOS quarantines it on download. After
+        unzipping:
 
-      - name: Generate release notes
-        if: steps.ver.outputs.release == 'true'
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          set -euo pipefail
-          git-cliff --config cliff.toml --unreleased --tag "$VERSION" --strip all > RELEASE_NOTES.md
-          [ -s RELEASE_NOTES.md ] || echo "Initial release." > RELEASE_NOTES.md
-          cat >> RELEASE_NOTES.md <<'EOF'
+        ```sh
+        xattr -dr com.apple.quarantine /Applications/Facet.app
+        open /Applications/Facet.app
+        ```
 
-          ## Install
-
-          **Homebrew (build from source):**
-
-          ```sh
-          brew install akira-toriyama/tap/facet
-          open "$(brew --prefix)/opt/facet/Facet.app"
-          curl --create-dirs -o ~/.config/facet/config.toml \
-            https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
-          ```
-
-          **Prebuilt (`Facet.zip` below):** the app is ad-hoc signed
-          (not notarized), so macOS quarantines it on download. After
-          unzipping:
-
-          ```sh
-          xattr -dr com.apple.quarantine /Applications/Facet.app
-          open /Applications/Facet.app
-          ```
-
-          Then grant **Accessibility** to *facet* (System Settings →
-          Privacy & Security → Accessibility), and **Screen Recording**
-          if you want grid-view thumbnails.
-          EOF
-
-      - name: Build Facet.app + zip
-        if: steps.ver.outputs.release == 'true'
-        run: |
-          set -euo pipefail
-          swift build -c release
-          CODESIGN_ID="-" ./package.sh
-          mkdir -p artifacts
-          ditto -c -k --sequesterRsrc --keepParent Facet.app artifacts/Facet.zip
-
-      # dry_run (workflow_dispatch only): no draft; upload artifacts +
-      # notes so you can preview without consuming a version.
-      - name: Upload preview (dry run)
-        if: steps.ver.outputs.release == 'true' && github.event.inputs.dry_run == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-preview-${{ steps.ver.outputs.version }}
-          path: |
-            artifacts/Facet.zip
-            RELEASE_NOTES.md
-
-      - name: Dry-run summary
-        if: steps.ver.outputs.release == 'true' && github.event.inputs.dry_run == 'true'
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: |
-          {
-            echo "## Dry run: ${VERSION} (no draft created)"
-            echo
-            echo '```'
-            cat RELEASE_NOTES.md
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Normal run (push:main, not dry_run): create/update the single
-      # rolling DRAFT. No tag is created (GitHub tags the target commit
-      # on Publish). Same-version draft is overwritten; stale auto-
-      # drafts of other versions are discarded. Published releases are
-      # never touched.
-      - name: Create or update rolling DRAFT release
-        if: steps.ver.outputs.release == 'true' && github.event.inputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.ver.outputs.version }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          assets="artifacts/Facet.zip"
-
-          # List existing AUTO drafts (unpublished, semver tag).
-          # Published releases (isDraft=false) are excluded — never
-          # touched. bash 3.2 safe (no mapfile).
-          gh release list --limit 100 --json tagName,isDraft \
-            --jq '.[] | select(.isDraft==true and (.tagName|test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .tagName' \
-            > /tmp/drafts.txt || true
-
-          have_current=0
-          while IFS= read -r t; do
-            [ -z "$t" ] && continue
-            if [ "$t" = "$VERSION" ]; then
-              have_current=1
-            else
-              echo "::notice::Superseding stale auto-draft $t -> $VERSION"
-              gh release delete "$t" --yes || true
-              git push origin ":refs/tags/$t" 2>/dev/null || true
-            fi
-          done < /tmp/drafts.txt
-
-          if [ "$have_current" -eq 1 ]; then
-            gh release upload "$VERSION" $assets --clobber
-            gh release edit "$VERSION" --draft \
-              --title "$VERSION" --notes-file RELEASE_NOTES.md --target "$SHA"
-            url="$(gh release view "$VERSION" --json url --jq .url)"
-            action="updated"
-          else
-            url="$(gh release create "$VERSION" --draft --target "$SHA" \
-              --title "$VERSION" --notes-file RELEASE_NOTES.md $assets)"
-            action="created"
-          fi
-
-          echo "::notice::Draft release ${action} (unpublished, no tag yet). Review & Publish manually: ${url}"
-          {
-            echo "## Draft release ${VERSION} ${action} (unpublished)"
-            echo
-            echo "Merging more to main grows this draft. Review and Publish"
-            echo "manually (the tag is created at Publish time): ${url}"
-          } >> "$GITHUB_STEP_SUMMARY"
+        Then grant **Accessibility** to *facet* (System Settings →
+        Privacy & Security → Accessibility), and **Screen Recording**
+        if you want grid-view thumbnails.
