@@ -5,30 +5,22 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  # Cancel in-flight builds on the same PR / branch when a new push
+  # arrives — only the latest commit matters for the required check.
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-15
+    # Bounded so a hung `swift build` can't burn 6 h of free macOS minutes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
-      # macos runners default to an older Xcode (Swift 5.x); the package
-      # needs the Swift 6 toolchain. Pin the latest stable Xcode.
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: Show toolchain
-        run: swift --version
-
-      - name: Build (release)
-        run: swift build -c release
-
-      # XCTest needs Xcode (CommandLineTools has none) — runs here, not
-      # in the CLT-only local dev flow (CLAUDE.md). Covers the pure
-      # logic: paletteFor, canonicalStyles, fuzzyMatch, GridMath,
-      # TOML parser, FacetConfig, RiftMapper, etc.
-      - name: Test
-        run: swift test
+      # Shared Swift build (setup-xcode + SPM cache + build + test).
+      - uses: akira-toriyama/.github/actions/swift-build@main
 
       - name: Assemble & ad-hoc sign app bundle
         env:
