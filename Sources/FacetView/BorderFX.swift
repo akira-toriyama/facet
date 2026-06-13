@@ -45,6 +45,12 @@ public final class BorderFX {
     /// draw()-based view.
     public var onRepaint: (() -> Void)?
 
+    /// Per-surface palette (PR-B). The owner (PanelHost / GridView /
+    /// RailView) wires its surface box right after construction; the
+    /// "off" fallback color reads `pal.primary` through it.
+    public var paletteBox: PaletteBox!
+    private var pal: ResolvedPalette { paletteBox.pal }
+
     public init() {}
 
     /// Push the `[border]` config. `effectName == "off"` (or unknown)

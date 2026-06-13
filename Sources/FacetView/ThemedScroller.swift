@@ -13,6 +13,11 @@ public final class ThemedScroller: NSScroller {
     // legacy gutter style.
     public override class var isCompatibleWithOverlayScrollers: Bool { true }
 
+    /// Per-surface palette (PR-B). Wired by PanelHost to the tree box —
+    /// the scroll knob follows the tree theme's foreground.
+    public var paletteBox: PaletteBox!
+    private var pal: ResolvedPalette { paletteBox.pal }
+
     public override func drawKnob() {
         let r = rect(for: .knob)
         guard r.width > 1, r.height > 1 else { return }

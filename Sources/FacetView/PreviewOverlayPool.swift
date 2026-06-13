@@ -11,6 +11,10 @@ public final class PreviewOverlayPool {
     private var all: [PreviewOverlay] = []
     private var inUse: [WindowID: PreviewOverlay] = [:]
 
+    /// Per-surface palette (PR-B). The Controller wires the tree box;
+    /// each pooled overlay inherits it on creation.
+    public var paletteBox: PaletteBox!
+
     public init() {}
 
     public var inUseWindows: Set<WindowID> { Set(inUse.keys) }
@@ -27,7 +31,7 @@ public final class PreviewOverlayPool {
         }) {
             o = free
         } else {
-            o = PreviewOverlay(); all.append(o)
+            o = PreviewOverlay(); o.paletteBox = paletteBox; all.append(o)
         }
         inUse[id] = o
         o.show(img, at: screenFrame, for: id)

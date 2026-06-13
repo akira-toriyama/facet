@@ -62,6 +62,7 @@ extension Controller {
                                       .fullScreenAuxiliary]
 
         let rv = RailView(frame: NSRect(origin: .zero, size: scr.frame.size))
+        rv.paletteBox = railPaletteBox          // PR-B: rail's own [rail].theme
         rv.autoresizingMask = [.width, .height]
         rv.screenFrame = scr.frame
         rv.edge = edge                              // M9-3: docked edge
