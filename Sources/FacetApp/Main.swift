@@ -33,6 +33,8 @@
 //               --cycle-stack=next|prev / --grow-master / --shrink-master
 //               / --inc-master / --dec-master
 //               / --focus=up|down|left|right / --move=up|down|left|right
+//               / --tag=NAME / --untag=NAME / --toggle-tag=NAME
+//                 (tag mode only — [grouping] by="tag")
 //   Scratchpad: facet scratchpad --stash=NAME / --toggle=NAME
 //               / --release=NAME
 //   Lens      : facet lens --only=NAME / --toggle=NAME / --all
@@ -179,6 +181,14 @@ enum FacetApp {
           facet window --focus-mark=NAME     jump focus to the marked
                                              window (switches WS if needed)
           facet window --unmark=NAME         remove a mark
+          facet window --tag=NAME            add tag NAME (tag mode;
+                                             creates NAME if new; #-prefix
+                                             ok, e.g. --tag=#190)
+          facet window --untag=NAME          remove tag NAME (rejects an
+                                             unknown tag)
+          facet window --toggle-tag=NAME     add / remove tag NAME
+                                             (creates NAME if new)
+                                             (requires [grouping] by="tag")
           facet window --toggle-float        flip its float flag
           facet window --toggle-sticky       pin it across every workspace
                                              (PiP / timer / chat); flip off

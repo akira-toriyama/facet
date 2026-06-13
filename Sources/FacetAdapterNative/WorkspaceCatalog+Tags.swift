@@ -141,6 +141,91 @@ extension WorkspaceCatalog {
     /// floor (no user tag). User-only `allMask` would park those (#191).
     var lensAll: UInt64 { tagModel.allMask | TagModel.defaultBit }
 
+    // MARK: - Runtime window tagging (#191, tag mode)
+
+    /// How a single-window retag changed its lens visibility, so the
+    /// adapter can park / restore exactly that one window (the
+    /// single-window analog of `LensPlan`). Sticky (`everywhere`) and
+    /// stashed-scratchpad windows are never parked, so they always
+    /// report `.unchanged`.
+    enum RetagVisibility: Equatable, Sendable {
+        case unchanged
+        case park       // was in the lens union, now out
+        case restore    // was out of the lens union, now in
+    }
+
+    /// Append `name` to the session tag vocabulary if absent and return
+    /// its bit; returns the existing bit when already defined. `nil`
+    /// when the vocabulary is full (63 user tags) or `name` is the
+    /// reserved `_default`. The auto-vivify primitive shared by
+    /// `window --tag`/`--toggle-tag` (and later `tag --add`). The CLI
+    /// parser already rejects malformed names.
+    @discardableResult
+    mutating func addTagName(_ name: String) -> UInt64? {
+        if let bit = tagModel.bit(for: name) { return bit }     // defined
+        guard name != TagModel.defaultName else { return nil }  // reserved
+        guard tagModel.count < TagModel.maxUserTags else { return nil } // full
+        tagModel = TagModel(tagModel.names + [name])
+        return tagModel.bit(for: name)
+    }
+
+    /// Add tag `name` to window `id`, auto-vivifying an unknown name.
+    /// Keeps the `_default` floor. `nil` when the window isn't tracked
+    /// or the vocabulary is full; otherwise the visibility transition
+    /// the adapter should apply.
+    mutating func addTagToWindow(_ id: WindowID,
+                                 name: String) -> RetagVisibility? {
+        guard var slot = windowMap[id] else { return nil }
+        guard let bit = addTagName(name) else { return nil }
+        let old = slot.tags
+        slot.tags = old | bit | TagModel.defaultBit
+        windowMap[id] = slot
+        return retagVisibility(id, old: old, new: slot.tags)
+    }
+
+    /// Remove tag `name` from window `id`. Strict — rejects an unknown
+    /// or reserved name (`nil`), unlike the auto-vivifying add. The
+    /// `_default` floor is never removed. `nil` also when the window
+    /// isn't tracked.
+    mutating func removeTagFromWindow(_ id: WindowID,
+                                      name: String) -> RetagVisibility? {
+        guard var slot = windowMap[id] else { return nil }
+        guard name != TagModel.defaultName,
+              let bit = tagModel.bit(for: name) else { return nil }
+        let old = slot.tags
+        slot.tags = (old & ~bit) | TagModel.defaultBit
+        windowMap[id] = slot
+        return retagVisibility(id, old: old, new: slot.tags)
+    }
+
+    /// Toggle tag `name` on window `id`, auto-vivifying an unknown
+    /// name. Keeps the `_default` floor (the toggled bit is never the
+    /// floor — `addTagName` rejects `_default`). `nil` as `addTag…`.
+    mutating func toggleTagOnWindow(_ id: WindowID,
+                                    name: String) -> RetagVisibility? {
+        guard var slot = windowMap[id] else { return nil }
+        guard let bit = addTagName(name) else { return nil }
+        let old = slot.tags
+        slot.tags = (old ^ bit) | TagModel.defaultBit
+        windowMap[id] = slot
+        return retagVisibility(id, old: old, new: slot.tags)
+    }
+
+    /// The lens-visibility transition between two tag masks for one
+    /// window — mirrors `setLens`'s park/restore filter (sticky and
+    /// stashed windows are never parked).
+    private func retagVisibility(_ id: WindowID,
+                                 old: UInt64, new: UInt64) -> RetagVisibility {
+        if everywhereWindows.contains(id) || stashedWindows.contains(id) {
+            return .unchanged
+        }
+        let wasShown = (old & lens) != 0
+        let nowShown = (new & lens) != 0
+        if wasShown && !nowShown { return .park }
+        if !wasShown && nowShown { return .restore }
+        return .unchanged
+    }
+
     /// The park/restore delta of a lens change (tag-mode analog of
     /// `SwitchPlan`).
     struct LensPlan: Equatable, Sendable {

@@ -123,6 +123,31 @@ extension Controller {
                     }
                     self.scheduleReconcile(after: 0.05)
 
+                case let s where s.hasPrefix("window-toggle-tag:"):
+                    let name = String(
+                        s.dropFirst("window-toggle-tag:".count))
+                    if !self.backend.toggleTagOnFocusedWindow(name) {
+                        self.setError("window --toggle-tag=\(name): "
+                            + "no focused window / not tag mode")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("window-tag:"):
+                    let name = String(s.dropFirst("window-tag:".count))
+                    if !self.backend.addTagToFocusedWindow(name) {
+                        self.setError("window --tag=\(name): "
+                            + "no focused window / not tag mode")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("window-untag:"):
+                    let name = String(s.dropFirst("window-untag:".count))
+                    if !self.backend.removeTagFromFocusedWindow(name) {
+                        self.setError("window --untag=\(name): "
+                            + "no such tag / no focused window")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
                 case let s where s.hasPrefix("scratchpad-stash:"):
                     let name = String(s.dropFirst("scratchpad-stash:".count))
                     if !self.backend.stashScratchpad(name) {
