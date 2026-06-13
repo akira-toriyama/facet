@@ -1751,7 +1751,14 @@ public final class SidebarView: NSView {
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
             workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
-            palette: pal
+            palette: pal,
+            tagMode: tagModeActive,
+            onAddTag: { [weak self] wid in
+                self?.controller?.beginTagInput(forWindow: wid)
+            },
+            onRemoveTag: { [weak self] wid, tag in
+                self?.controller?.removeTagFromWindow(tag, windowID: wid)
+            }
         ) { [weak self] ops, window, ws in
             self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)
         }

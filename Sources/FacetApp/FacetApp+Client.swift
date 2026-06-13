@@ -638,36 +638,34 @@ extension FacetApp {
     }
 
     /// Parse a tag name from a `--flag=NAME` argument
-    /// (`window --tag=` / `--untag=` / `--toggle-tag=`). Strips a
-    /// leading `#` (`#190` → `190`; the display form re-adds it). Loud
-    /// reject (exit 2) on: empty, a leading `_` (reserved for the
-    /// `_default` floor), or any of `=` `,` `:` (the CLI / DNC
-    /// delimiters). Case-preserved. Separate from `parseMarkName`
-    /// because tag names carry stricter rules than mark labels.
+    /// (`window --tag=` / `--untag=` / `--toggle-tag=`). Delegates to
+    /// `validateTagName` → `TagName.sanitized` (strip a leading `#`, trim
+    /// surrounding whitespace, then loud-reject (exit 2): empty, a leading
+    /// `_` (reserved for the `_default` floor), or any of `=` `,` `:` (the
+    /// CLI / DNC delimiters); case-preserved). Separate from
+    /// `parseMarkName` because tag names carry stricter rules than mark
+    /// labels.
     static func parseTagName(_ arg: String, prefix: String) -> String {
         let flag = String(prefix.dropLast())   // "--tag" etc. (drop the `=`)
         return validateTagName(String(arg.dropFirst(prefix.count)), flag: flag)
     }
 
     /// Shared tag-name validation (used by `parseTagName` and the
-    /// `--rename=OLD:NEW` halves). Strips a leading `#` (`#190` → `190`;
-    /// the display form re-adds it), then loud-rejects (exit 2): empty,
-    /// a leading `_` (reserved for the `_default` floor), or any of
-    /// `=` `,` `:` (the CLI / DNC delimiters). Case-preserved. `flag`
-    /// tailors the message (e.g. `"--tag"`, `"--rename OLD"`).
+    /// `--rename=OLD:NEW` halves). Delegates the rule to the
+    /// backend-neutral `TagName.sanitized` (strip a leading `#`, trim,
+    /// reject empty / leading `_` / `=`,`,`,`:`; case-preserved) and
+    /// loud-rejects (exit 2) on failure — the GUI tag input shares the
+    /// same helper but silently ignores a bad name. `flag` tailors the
+    /// message (e.g. `"--tag"`, `"--rename OLD"`).
     static func validateTagName(_ s: String, flag: String) -> String {
-        var raw = s
-        if raw.hasPrefix("#") { raw = String(raw.dropFirst()) }
-        guard !raw.isEmpty else {
-            die("\(flag)=NAME: expected a non-empty tag name")
+        // Shared rule with the GUI tag input (`TagName.sanitized`): strip
+        // a leading '#', trim, reject empty / leading '_' (reserved) /
+        // '=,:' (delimiters). The CLI fails loud where the GUI ignores.
+        guard let name = TagName.sanitized(s) else {
+            die("\(flag)=\(s): invalid tag name — must be non-empty, not "
+                + "start with '_' (reserved), and not contain '=', ',' or ':'")
         }
-        guard !raw.hasPrefix("_") else {
-            die("\(flag)=\(raw): tag names cannot start with '_' (reserved)")
-        }
-        guard !raw.contains(where: { "=,:".contains($0) }) else {
-            die("\(flag)=\(raw): tag names cannot contain '=', ',' or ':'")
-        }
-        return raw
+        return name
     }
 
     /// Parse ``tag --rename=OLD:NEW`` into its two names. Both go
