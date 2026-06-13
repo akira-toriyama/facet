@@ -604,6 +604,9 @@ public struct FacetConfig: Sendable {
     ///   - `by = tag` but no `[[tag]]` defined (nothing to show).
     ///   - `by = tag` with a default layout that's workspace-only
     ///     (`bsp` / `stack`) — incompatible per `LayoutGrouping`.
+    ///   - `by = tag` with `default-view = "grid"` — the grid *view*
+    ///     is workspace-only (distinct from the `grid` *layout*, which
+    ///     is fine); tag mode shows the tree view only.
     public func fatalConfigErrors() -> [String] {
         var out: [String] = []
         if let raw = grouping, !raw.isEmpty,
@@ -624,6 +627,16 @@ public struct FacetConfig: Sendable {
                 + "with [grouping] by = \"tag\" (use a stateless layout "
                 + "like \"grid\" / \"master-left\" / \"float\"; "
                 + "\"bsp\" / \"stack\" are workspace-only)")
+        }
+        // The grid VIEW (full-screen overview) is workspace-only — note
+        // this is the `default-view` key, NOT the `grid` *layout* above,
+        // which is a perfectly valid stateless tag-mode layout. `rail`
+        // can't be a default-view (effectiveDefaultView clamps it to nil
+        // → agent-only), so only grid needs flagging here.
+        if effectiveDefaultView == "grid" {
+            out.append("config: default-view = \"grid\" is workspace-only "
+                + "— not available with [grouping] by = \"tag\" "
+                + "(tag mode shows the tree view only)")
         }
         return out
     }

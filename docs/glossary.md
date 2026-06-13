@@ -414,9 +414,10 @@ memory `[[facet-tag-model-decisions]]`。
 
 ### grouping の概念関係（by=workspace / by=tag）
 [[grouping]] は同じ [[mac desktop]] 上の window を **workspace 束ね**（1:n）か **tag 束ね**（1:1 tag world）
-かに切り替える、facet の編成軸。[[facet view]]（tree/grid/rail）は **どちらの束ね方とも直交**（描画 surface）。
-hide は両モードとも [[anchor]]（窓を mac desktop に composited のまま残し preview を温存。別 desktop 退避 /
-order-out は preview を殺すので不採用）。
+かに切り替える、facet の編成軸。[[facet view]] のうち **tree はどちらの束ね方も描画**（grouping 非依存）だが、
+**grid / rail は workspace 専用**＝by=tag では使えない（`--view`/`--hide`/`--toggle`＝grid|rail と
+`default-view="grid"` は **exit 2**・#191 PR-5）。hide は両モードとも [[anchor]]（窓を mac desktop に
+composited のまま残し preview を温存。別 desktop 退避 / order-out は preview を殺すので不採用）。
 
 ```mermaid
 flowchart TB
@@ -425,9 +426,9 @@ flowchart TB
   MD -->|"by=tag (1:1)"| TW["1 × tag world<br/>1窓 = N tag・lens で表示集合を選択"]
   WS -->|"workspace 切替"| HW["hide = anchor<br/>(窓は composited のまま → preview ◯)"]
   TW -->|"lens 切替"| HT["hide = anchor<br/>(同上・intra-desktop)"]
-  VIEW["facet view: tree / grid / rail<br/>(UI surface・grouping と直交)"]
-  VIEW -. renders .-> WS
-  VIEW -. renders .-> TW
+  VIEW["facet view: tree / grid / rail<br/>(UI surface)"]
+  VIEW -. "tree / grid / rail" .-> WS
+  VIEW -. "tree のみ（grid/rail は ws 専用）" .-> TW
 ```
 
 ---

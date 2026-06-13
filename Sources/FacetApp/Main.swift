@@ -99,6 +99,10 @@ enum FacetApp {
           facet --hide=NAME                  close NAME
           facet --toggle=NAME                toggle NAME
 
+          In tag mode ([grouping] by="tag") the tree is the only view —
+          grid / rail aren't available, so --view / --hide / --toggle
+          = grid|rail exit 2.
+
           --active is a modifier — meaningful only with --view=tree.
           Tree alone enables keyboard nav as soon as you click the
           panel; --active just takes focus immediately so a hotkey
@@ -568,6 +572,21 @@ enum FacetApp {
             die("geometry flags are all-or-nothing — specify "
                 + "--pos-x, --pos-y, --width, --height together "
                 + "(got \(count)/4)")
+        }
+
+        // grid / rail are workspace-only surfaces — there is no grid or
+        // rail under `[grouping] by="tag"` (tag mode shows the tree
+        // only). Reject any view op that names them loudly (exit 2)
+        // BEFORE the server-alive check, so the usage error wins over a
+        // "server not running" (exit 3) — the op is wrong regardless of
+        // server state. Symmetric across --view / --hide / --toggle
+        // (clig.dev consistency): naming grid|rail is the same mistake
+        // whichever verb wraps it.
+        for (flag, value) in [("--view", viewArg), ("--hide", hideArg),
+                              ("--toggle", toggleArg)] {
+            if let v = value, v == "grid" || v == "rail" {
+                requireGrouping(.workspace, subject: "\(flag)=\(v)")
+            }
         }
 
         // Any client-mode action is about to fire — make sure a
