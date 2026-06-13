@@ -75,12 +75,14 @@ extension Controller {
         // Two states while `searching`, told apart by whether the
         // box owns key input (`searchBar.isFocused`):
         //   A (box focused / insert) — typing filters, ↑↓ recall the
-        //     query history INTO the box, Esc drops to B.
+        //     query history INTO the box, Enter COMMITS the query
+        //     into nav (vim `/query<CR>` style), Esc also drops to B.
         //   B (box not focused / nav) — the normal tree-nav keymap
         //     drives the (still filtered) result list; `s` returns
         //     to A keeping the text, Esc ends the search.
         // Esc is therefore two-stage (A→B, B→exit); `s` always means
-        // "into the box".
+        // "into the box". Activation — and the history push tied to
+        // it — only happens on B's Return.
         if sidebarView.searching {
             // While the IME has uncommitted text, intercept nothing:
             // Enter commits the conversion, arrows move candidates,
@@ -93,7 +95,12 @@ extension Controller {
                 case 53:                                        // Esc → B
                     leaveSearchField()
                     return true
-                case 36, 76:  sidebarView.kbActivate();      return true
+                case 36, 76:                                    // Enter → B
+                    // Commits the query and moves to the list —
+                    // NOT a direct first-hit activation (that, and
+                    // the history push, happen on B's Return).
+                    leaveSearchField()
+                    return true
                 case 126:     recallSearchHistory(1);        return true
                 case 125:     recallSearchHistory(-1);       return true
                 case 48:      sidebarView.kbMove(shift ? -1 : 1)
