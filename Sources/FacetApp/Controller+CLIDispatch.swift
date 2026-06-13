@@ -148,6 +148,38 @@ extension Controller {
                     }
                     self.scheduleReconcile(after: 0.05)
 
+                case let s where s.hasPrefix("tag-add:"):
+                    let name = String(s.dropFirst("tag-add:".count))
+                    if !self.backend.addTag(name) {
+                        self.setError("tag --add=\(name): not tag mode, "
+                            + "or vocabulary full (63 tags)")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("tag-remove:"):
+                    let name = String(s.dropFirst("tag-remove:".count))
+                    if !self.backend.removeTag(name) {
+                        self.setError("tag --remove=\(name): no such tag, "
+                            + "or not tag mode")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
+                case let s where s.hasPrefix("tag-rename:"):
+                    // Payload OLD:NEW — neither half can contain ':'
+                    // (the CLI's parseTagName forbids it), so one split
+                    // is unambiguous.
+                    let body = String(s.dropFirst("tag-rename:".count))
+                    let parts = body
+                        .split(separator: ":", maxSplits: 1,
+                               omittingEmptySubsequences: false)
+                        .map(String.init)
+                    if parts.count != 2
+                        || !self.backend.renameTag(parts[0], to: parts[1]) {
+                        self.setError("tag --rename=\(body): no such tag, "
+                            + "or the new name is already in use")
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
                 case let s where s.hasPrefix("scratchpad-stash:"):
                     let name = String(s.dropFirst("scratchpad-stash:".count))
                     if !self.backend.stashScratchpad(name) {

@@ -39,6 +39,8 @@
 //               / --release=NAME
 //   Lens      : facet lens --only=NAME / --toggle=NAME / --all
 //               (tag mode only — [grouping] by="tag")
+//   Tag       : facet tag --add=NAME / --remove=NAME / --rename=OLD:NEW
+//               (tag mode only — edits the tag vocabulary)
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
 // NOT supported (would be ambiguous about which view to activate).
@@ -172,6 +174,18 @@ enum FacetApp {
           facet lens --all                   show every tag
                                              (requires [grouping] by="tag";
                                              no-op under by="workspace")
+
+        TAG                                  (tag mode: the tag vocabulary)
+          facet tag --add=NAME               declare tag NAME (no window
+                                             touched; idempotent)
+          facet tag --remove=NAME            delete NAME — strips it from
+                                             every window; its bit is freed
+                                             for a later tag to reuse
+          facet tag --rename=OLD:NEW         rename OLD to NEW in place
+                                             (windows keep the tag); rejects
+                                             an unknown OLD or an NEW that
+                                             already exists
+                                             (requires [grouping] by="tag")
 
         WINDOW                               (focused window)
           facet window --move-to=N           move it to workspace N
@@ -434,6 +448,14 @@ enum FacetApp {
         // the tag-mode analog of `workspace --focus`.
         if argv.first == "lens" {
             runLensCommand(Array(argv.dropFirst()))
+        }
+        // `facet tag <flag>` — tag-vocabulary management (add / remove /
+        // rename). A new subject: it edits the tag SET itself, the
+        // tag-mode analog of `workspace --add/--remove/--rename`.
+        // (`window --tag` attaches a tag to the focused window; `tag
+        // --add` declares one with no window.)
+        if argv.first == "tag" {
+            runTagCommand(Array(argv.dropFirst()))
         }
         // Read-only query sub-command. Plain noun (no `--`)
         // because it returns data rather than triggering a verb.

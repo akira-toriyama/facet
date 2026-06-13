@@ -456,11 +456,7 @@ extension NativeAdapter {
         _ mutate: (inout WorkspaceCatalog, WindowID)
             -> WorkspaceCatalog.RetagVisibility?
     ) -> Bool {
-        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
-              catalog.grouping == .tag else {
-            Log.debug("native: \(verb) \"\(name)\" — not tag mode / unmanaged")
-            return false
-        }
+        guard tagVocabReady(verb, name) else { return false }
         guard let id = focusedWindow() else {
             Log.debug("native: \(verb) \"\(name)\" — no focused window")
             return false
@@ -479,5 +475,80 @@ extension NativeAdapter {
         Log.debug("native: \(verb) \"\(name)\" -> \(id.serverID) [\(vis)]")
         eventContinuation.yield(.refreshNeeded)
         return true
+    }
+
+    /// Tag-mode + managed-desktop gate shared by every runtime tag verb
+    /// (`window --tag/--untag/--toggle-tag` and `tag --add/--remove/
+    /// --rename`). `false` (with a debug line) when the run isn't in tag
+    /// mode or this mac desktop is hands-off.
+    private func tagVocabReady(_ verb: String, _ name: String) -> Bool {
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
+              catalog.grouping == .tag else {
+            Log.debug("native: \(verb) \"\(name)\" — not tag mode / unmanaged")
+            return false
+        }
+        return true
+    }
+
+    // MARK: - Runtime tag vocabulary (#191, tag mode — `facet tag`)
+
+    /// `facet tag --add=NAME`: declare a tag in the session vocabulary
+    /// without touching any window. Idempotent (a defined name is a
+    /// no-op success). `false` only when not in tag mode / unmanaged or
+    /// the vocabulary is full (63 user tags).
+    public func addTag(_ name: String) -> Bool {
+        guard tagVocabReady("tag --add", name) else { return false }
+        guard catalog.addTagName(name) != nil else {
+            Log.debug("native: tag --add \"\(name)\" — rejected (full / reserved)")
+            return false
+        }
+        Log.debug("native: tag --add \"\(name)\"")
+        // No window changed, but the (interim) grouped tree gains an
+        // empty header for the new tag — repaint.
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
+    /// `facet tag --remove=NAME`: delete a tag, stripping its bit from
+    /// every window and freeing it for reuse. Parks / restores windows
+    /// whose lens visibility flipped and re-tiles the union — the
+    /// vocabulary analog of `setLens`. `false` when not in tag mode /
+    /// unmanaged or `name` is unknown / reserved.
+    public func removeTag(_ name: String) -> Bool {
+        guard tagVocabReady("tag --remove", name) else { return false }
+        guard let plan = catalog.removeTagName(name) else {
+            Log.debug("native: tag --remove \"\(name)\" — rejected (unknown / reserved)")
+            return false
+        }
+        cancelSlideForRetarget()
+        let rect = activeDisplayRect()
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
+        applyLensAutoFocus(newLens: plan.newLens)
+        Log.debug("native: tag --remove \"\(name)\" "
+            + "parked=\(plan.toPark.count) restored=\(plan.toRestore.count)")
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
+    /// `facet tag --rename=OLD:NEW`: rename a tag in place (bit kept, so
+    /// no window mask / lens edit). `false` when not in tag mode /
+    /// unmanaged, `old` is unknown, or `new` is already defined.
+    public func renameTag(_ old: String, to new: String) -> Bool {
+        guard tagVocabReady("tag --rename", "\(old):\(new)") else {
+            return false
+        }
+        switch catalog.renameTagName(old, to: new) {
+        case .renamed:
+            Log.debug("native: tag --rename \"\(old)\" -> \"\(new)\"")
+            eventContinuation.yield(.refreshNeeded)
+            return true
+        case .unknownOld:
+            Log.debug("native: tag --rename \"\(old)\" — no such tag")
+            return false
+        case .collision:
+            Log.debug("native: tag --rename -> \"\(new)\" — name already in use")
+            return false
+        }
     }
 }

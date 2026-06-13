@@ -393,6 +393,53 @@ extension FacetApp {
         die("facet lens: dispatch fell through (bug)")
     }
 
+    /// Sub-command parser for ``facet tag <flag>`` (M11-3 tag mode).
+    /// Edits the session tag VOCABULARY (not a window — that's
+    /// ``facet window --tag``). Subject-verb mirror of ``facet
+    /// workspace``: one action per invocation, loud reject on zero /
+    /// multiple / unknown. Verbs:
+    ///   --add=NAME        declare tag NAME (no window touched; idempotent)
+    ///   --remove=NAME     delete NAME — strips it from every window; its
+    ///                     bit is freed for reuse
+    ///   --rename=OLD:NEW  rename OLD to NEW in place (bit kept); rejects
+    ///                     an unknown OLD or an already-defined NEW
+    /// Tag-mode only — `requireGrouping(.tag)`.
+    static func runTagCommand(_ args: [String]) -> Never {
+        var addArg: String?
+        var removeArg: String?
+        var renameArg: (String, String)?
+        var i = 0
+        while i < args.count {
+            defer { i += 1 }
+            let a = args[i]
+            switch true {
+            case a.hasPrefix("--add="):
+                addArg = parseTagName(a, prefix: "--add=")
+            case a.hasPrefix("--remove="):
+                removeArg = parseTagName(a, prefix: "--remove=")
+            case a.hasPrefix("--rename="):
+                renameArg = parseTagRename(a)
+            default:
+                die("unknown `tag` flag \"\(a)\" — see `facet --help`")
+            }
+        }
+        let count = [addArg != nil, removeArg != nil, renameArg != nil]
+            .filter { $0 }.count
+        guard count > 0 else {
+            die("facet tag: no action specified — see `facet --help`")
+        }
+        guard count == 1 else {
+            die("facet tag: pick one action per invocation — "
+                + "see `facet --help`")
+        }
+        requireGrouping(.tag, subject: "tag")
+        requireServerAlive()
+        if let n = addArg    { postControl("tag-add:" + n) }
+        if let n = removeArg { postControl("tag-remove:" + n) }
+        if let r = renameArg { postControl("tag-rename:\(r.0):\(r.1)") }
+        die("facet tag: dispatch fell through (bug)")
+    }
+
     /// Sub-command parser for ``facet window <flag>``. Subcommand
     /// shape keeps room for future window-scoped ops
     /// (``--close``, ``--float``, …) without polluting the flat
@@ -598,9 +645,19 @@ extension FacetApp {
     /// delimiters). Case-preserved. Separate from `parseMarkName`
     /// because tag names carry stricter rules than mark labels.
     static func parseTagName(_ arg: String, prefix: String) -> String {
-        var raw = String(arg.dropFirst(prefix.count))
-        if raw.hasPrefix("#") { raw = String(raw.dropFirst()) }
         let flag = String(prefix.dropLast())   // "--tag" etc. (drop the `=`)
+        return validateTagName(String(arg.dropFirst(prefix.count)), flag: flag)
+    }
+
+    /// Shared tag-name validation (used by `parseTagName` and the
+    /// `--rename=OLD:NEW` halves). Strips a leading `#` (`#190` → `190`;
+    /// the display form re-adds it), then loud-rejects (exit 2): empty,
+    /// a leading `_` (reserved for the `_default` floor), or any of
+    /// `=` `,` `:` (the CLI / DNC delimiters). Case-preserved. `flag`
+    /// tailors the message (e.g. `"--tag"`, `"--rename OLD"`).
+    static func validateTagName(_ s: String, flag: String) -> String {
+        var raw = s
+        if raw.hasPrefix("#") { raw = String(raw.dropFirst()) }
         guard !raw.isEmpty else {
             die("\(flag)=NAME: expected a non-empty tag name")
         }
@@ -611,6 +668,23 @@ extension FacetApp {
             die("\(flag)=\(raw): tag names cannot contain '=', ',' or ':'")
         }
         return raw
+    }
+
+    /// Parse ``tag --rename=OLD:NEW`` into its two names. Both go
+    /// through `validateTagName`; splitting on `:` is unambiguous
+    /// because tag names can't contain it. Loud reject (exit 2) on a
+    /// missing half / an extra `:` (≠ 2 parts) or an invalid name.
+    static func parseTagRename(_ arg: String) -> (String, String) {
+        let raw = String(arg.dropFirst("--rename=".count))
+        let parts = raw.split(separator: ":",
+                              omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2 else {
+            die("--rename expects OLD:NEW (two tag names joined by ':') — "
+                + "got \"\(raw)\"")
+        }
+        let old = validateTagName(parts[0], flag: "--rename OLD")
+        let new = validateTagName(parts[1], flag: "--rename NEW")
+        return (old, new)
     }
 
     /// Parse `--rotate=90|180|270`. Loud reject on anything else
