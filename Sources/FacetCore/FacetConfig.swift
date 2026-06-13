@@ -14,6 +14,7 @@
 import CoreGraphics
 import Foundation
 import Palette   // sill's pure (AppKit-free) theme layer — `canonical(_:)`
+import Toml      // sill's pure TOML subset parser (`Toml.Value` accessors)
 
 /// Per-WS configuration parsed from a `[desktop.N]` inline table:
 /// `1 = { name = "Dev", layout = "bsp" }`. `name` is required;
@@ -573,7 +574,7 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["theme"]?["name"] {
             c.theme = s
         }
-        if case .int(let n)? = toml["theme"]?["color-cycle-ms"] {
+        if let n = toml["theme"]?["color-cycle-ms"]?.asInt {
             c.themeColorCycleMs = n
         }
         // [grouping]
@@ -583,31 +584,31 @@ public struct FacetConfig: Sendable {
             c.raiseOnOpen = s
         }
         // [grid]
-        if case .int(let n)? = toml["grid"]?["cols"] { c.gridCols = n }
+        if let n = toml["grid"]?["cols"]?.asInt { c.gridCols = n }
         if case .string(let s)? = toml["grid"]?["label-position"] {
             c.gridLabelPosition = s
         }
-        if case .int(let n)? = toml["grid"]?["thumbnail-refresh-seconds"] {
+        if let n = toml["grid"]?["thumbnail-refresh-seconds"]?.asInt {
             c.thumbnailRefreshSeconds = n
         }
         if case .string(let s)? = toml["grid"]?["theme"] { c.gridTheme = s }
         // [rail]
         if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
-        if case .int(let n)? = toml["rail"]?["cells"] { c.railCells = n }
-        if case .int(let n)? = toml["rail"]?["strip"] { c.railStrip = n }
+        if let n = toml["rail"]?["cells"]?.asInt { c.railCells = n }
+        if let n = toml["rail"]?["strip"]?.asInt { c.railStrip = n }
         if case .string(let s)? = toml["rail"]?["theme"] { c.railTheme = s }
         // [tree]
         if case .string(let s)? = toml["tree"]?["preview-mode"] {
             c.treePreviewMode = s
         }
         if case .string(let s)? = toml["tree"]?["theme"] { c.treeTheme = s }
-        if case .int(let n)? = toml["tree"]?["pos-x"] { c.treePosX = n }
-        if case .int(let n)? = toml["tree"]?["pos-y"] { c.treePosY = n }
-        if case .int(let n)? = toml["tree"]?["width"] { c.treeWidth = n }
-        if case .int(let n)? = toml["tree"]?["height"] { c.treeHeight = n }
+        if let n = toml["tree"]?["pos-x"]?.asInt { c.treePosX = n }
+        if let n = toml["tree"]?["pos-y"]?.asInt { c.treePosY = n }
+        if let n = toml["tree"]?["width"]?.asInt { c.treeWidth = n }
+        if let n = toml["tree"]?["height"]?.asInt { c.treeHeight = n }
         // line-pets: a TOML array only (`["chomp", "ghost"]` — the
         // family grammar; the old lenient comma-string form is gone).
-        if case .stringArray(let a)? = toml["tree"]?["line-pets"] {
+        if let a = toml["tree"]?["line-pets"]?.asStringArray {
             c.treeLinePets = a
         }
         if let v = toml["tree"]?["pet-scale"]?.asDouble {
@@ -620,22 +621,22 @@ public struct FacetConfig: Sendable {
         if case .string(let s)? = toml["layout"]?["default"] {
             c.defaultLayout = s
         }
-        if case .int(let n)? = toml["layout"]?["inner-gap"] {
+        if let n = toml["layout"]?["inner-gap"]?.asInt {
             c.innerGap = CGFloat(n)
         }
-        if case .int(let n)? = toml["layout"]?["outer-gap"] {
+        if let n = toml["layout"]?["outer-gap"]?.asInt {
             c.outerGap = CGFloat(n)
         }
-        if case .int(let n)? = toml["layout"]?["outer-gap-top"] {
+        if let n = toml["layout"]?["outer-gap-top"]?.asInt {
             c.outerGapTop = CGFloat(n)
         }
-        if case .int(let n)? = toml["layout"]?["outer-gap-bottom"] {
+        if let n = toml["layout"]?["outer-gap-bottom"]?.asInt {
             c.outerGapBottom = CGFloat(n)
         }
-        if case .int(let n)? = toml["layout"]?["outer-gap-left"] {
+        if let n = toml["layout"]?["outer-gap-left"]?.asInt {
             c.outerGapLeft = CGFloat(n)
         }
-        if case .int(let n)? = toml["layout"]?["outer-gap-right"] {
+        if let n = toml["layout"]?["outer-gap-right"]?.asInt {
             c.outerGapRight = CGFloat(n)
         }
         if case .bool(let b)? = toml["layout"]?["smart-gaps"] {
@@ -645,7 +646,7 @@ public struct FacetConfig: Sendable {
         if case .bool(let b)? = toml["animation"]?["enabled"] {
             c.animationsEnabled = b
         }
-        if case .int(let n)? = toml["animation"]?["duration-ms"] {
+        if let n = toml["animation"]?["duration-ms"]?.asInt {
             c.animationDurationMs = n
         }
         if case .string(let s)? = toml["animation"]?["curve"] {
@@ -664,13 +665,13 @@ public struct FacetConfig: Sendable {
         if let v = toml["border"]?["width"]?.asDouble {
             c.borderWidth = CGFloat(v)      // accepts `2` or `1.5`
         }
-        if case .int(let n)? = toml["border"]?["color-cycle-ms"] {
+        if let n = toml["border"]?["color-cycle-ms"]?.asInt {
             c.borderColorCycleMs = n
         }
-        if case .int(let n)? = toml["border"]?["min-width"] {
+        if let n = toml["border"]?["min-width"]?.asInt {
             c.borderMinWidth = n
         }
-        if case .int(let n)? = toml["border"]?["max-width"] {
+        if let n = toml["border"]?["max-width"]?.asInt {
             c.borderMaxWidth = n
         }
         // [desktop.N] per-mac-desktop workspace configs. The TOML
@@ -855,7 +856,7 @@ public struct FacetConfig: Sendable {
                 maxWidth: dbl("max-width"), maxHeight: dbl("max-height"))
             var tags: [String] = []
             if case .string(let s)? = t["tag"] { tags.append(s) }
-            if case .stringArray(let a)? = t["tags"] { tags += a }
+            if let a = t["tags"]?.asStringArray { tags += a }
             // de-dup, drop empties, preserve order
             var seen = Set<String>()
             tags = tags.filter { !$0.isEmpty && seen.insert($0).inserted }
