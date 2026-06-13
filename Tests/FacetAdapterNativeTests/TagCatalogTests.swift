@@ -61,18 +61,29 @@ final class TagCatalogTests: XCTestCase {
                        tags: ["work"]),
         ]))
         let m = c.tagsForNewWindow(probe(bundle: "Chrome", title: "GitHub"))
-        XCTAssertEqual(m, 0b011)   // web | work
+        XCTAssertEqual(m, 0b011 | TagModel.defaultBit)   // web | work | floor
     }
 
     func testUnmatchedWindowInheritsLensPrimaryOnly() {
         // lens = web|media (0b110); primary = web (lowest set bit).
         let c = tagCatalog(lens: 0b110)
-        XCTAssertEqual(c.tagsForNewWindow(probe(bundle: "X")), 0b010)
+        XCTAssertEqual(c.tagsForNewWindow(probe(bundle: "X")),
+                       0b010 | TagModel.defaultBit)
     }
 
     func testUnmatchedWithSingleLensGetsThatTag() {
         let c = tagCatalog(lens: 0b100)   // media only
-        XCTAssertEqual(c.tagsForNewWindow(probe(bundle: "X")), 0b100)
+        XCTAssertEqual(c.tagsForNewWindow(probe(bundle: "X")),
+                       0b100 | TagModel.defaultBit)
+    }
+
+    func testNewWindowAlwaysCarriesDefaultFloor() {
+        // The _default floor (bit 63) is ON for every new window, so a
+        // window is never tags == 0 / lost (#191).
+        let c = tagCatalog(lens: 0b001)
+        let m = c.tagsForNewWindow(probe(bundle: "X"))
+        XCTAssertEqual(m & TagModel.defaultBit, TagModel.defaultBit)
+        XCTAssertNotEqual(m, 0)
     }
 
     // MARK: - reconcile stores + preserves tags
@@ -163,7 +174,8 @@ final class TagCatalogTests: XCTestCase {
         XCTAssertEqual(c.lensOnly("web"), 0b010)
         XCTAssertNil(c.lensOnly("ghost"))
         XCTAssertEqual(c.lensToggled("web"), 0b011)   // work + web
-        XCTAssertEqual(c.lensAll, 0b111)
+        // --all = every user tag PLUS the _default floor.
+        XCTAssertEqual(c.lensAll, 0b111 | TagModel.defaultBit)
     }
 
     func testLensToggledOff() {

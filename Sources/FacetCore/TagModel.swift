@@ -20,14 +20,31 @@
 // to learn tag changes).
 
 /// The ordered tag vocabulary plus name ⇄ bit mapping. Bit `i` is tag
-/// `names[i]`; up to 64 tags (a `UInt64` mask, dwm caps at 31). Names
-/// past 64 are dropped at construction.
+/// `names[i]`; up to 63 USER tags (a `UInt64` mask, dwm caps at 31).
+/// Bit 63 is reserved for the `_default` floor (`defaultBit`) and is
+/// NOT part of the user vocabulary, so names past 63 are dropped at
+/// construction.
 public struct TagModel: Sendable, Equatable {
     /// Tag names in `[[tag]]` declaration order. Index = bit position.
     public let names: [String]
 
+    /// The reserved top bit (63) — the `_default` floor (M11-3 → #191).
+    /// In tag mode every window carries it, so a window is never
+    /// `tags == 0` ("lost"). It is NOT part of the user vocabulary: it
+    /// never appears in `[[tag]]`, in `names`, in a `lens --only` mask,
+    /// or as a tree chip. User tags occupy bits 0...62; `allMask` (the
+    /// `lens --all` user-tag union) never sets it. The catalog ORs it
+    /// in where the floor must apply (new windows, `lens --all`).
+    public static let defaultBit: UInt64 = UInt64(1) << 63
+    /// Internal marker name for `defaultBit`. Reserved: the CLI
+    /// tag-name parser rejects it (leading `_`) and it never appears in
+    /// `names`.
+    public static let defaultName = "_default"
+    /// Max user-tag count — bit 63 is reserved for `defaultBit`.
+    public static let maxUserTags = 63
+
     public init(_ names: [String]) {
-        self.names = Array(names.prefix(64))
+        self.names = Array(names.prefix(TagModel.maxUserTags))
     }
 
     public var isEmpty: Bool { names.isEmpty }
@@ -46,10 +63,15 @@ public struct TagModel: Sendable, Equatable {
         tagNames.reduce(0) { $0 | (bit(for: $1) ?? 0) }
     }
 
-    /// Mask with every defined tag set — `lens --all`. Empty model → 0.
+    /// Mask with every defined USER tag set — the `lens --all` user-tag
+    /// union (bits 0...62). Empty model → 0. Never sets `defaultBit`
+    /// (bit 63); the catalog ORs that in separately so `--all` also
+    /// reveals windows carrying only the `_default` floor.
     public var allMask: UInt64 {
         guard count > 0 else { return 0 }
-        return count >= 64 ? .max : (UInt64(1) << UInt64(count)) - 1
+        return count >= TagModel.maxUserTags
+            ? (TagModel.defaultBit - 1)               // bits 0...62
+            : (UInt64(1) << UInt64(count)) - 1
     }
 
     /// The first tag (declaration order) — the startup lens default

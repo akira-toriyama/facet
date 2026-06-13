@@ -31,14 +31,21 @@ extension WorkspaceCatalog {
     /// Tag bitmask for a newly-appeared window (tag mode). The UNION of
     /// every matching `[[assign]]` rule; an unmatched window inherits
     /// the current lens's PRIMARY tag (its lowest set bit) so it lands
-    /// in exactly one visible place — never zero tags (would be lost)
-    /// and never the whole lens union (a broad `--all` lens shouldn't
-    /// freeze every tag onto a new window). Frozen here — no re-tag.
+    /// in exactly one visible place — never the whole lens union (a
+    /// broad `--all` lens shouldn't freeze every tag onto a new
+    /// window). Always carries the `_default` floor
+    /// (`TagModel.defaultBit`) so the window is never `0` / lost (#191).
     func tagsForNewWindow(_ probe: WindowProbe) -> UInt64 {
+        let base: UInt64
         let assigned = assignRules.mask(for: probe, in: tagModel)
-        if assigned != 0 { return assigned }
-        if lens != 0 { return UInt64(1) << UInt64(lens.trailingZeroBitCount) }
-        return tagModel.firstBit ?? 0
+        if assigned != 0 {
+            base = assigned
+        } else if lens != 0 {
+            base = UInt64(1) << UInt64(lens.trailingZeroBitCount)
+        } else {
+            base = tagModel.firstBit ?? 0
+        }
+        return base | TagModel.defaultBit
     }
 
     /// Non-floating, non-hidden windows visible under the current lens
@@ -129,7 +136,10 @@ extension WorkspaceCatalog {
         guard let b = tagModel.bit(for: name) else { return nil }
         return lens ^ b
     }
-    var lensAll: UInt64 { tagModel.allMask }
+    /// `lens --all` — every user tag PLUS the `_default` floor, so the
+    /// "show everything" lens also reveals windows that carry only the
+    /// floor (no user tag). User-only `allMask` would park those (#191).
+    var lensAll: UInt64 { tagModel.allMask | TagModel.defaultBit }
 
     /// The park/restore delta of a lens change (tag-mode analog of
     /// `SwitchPlan`).

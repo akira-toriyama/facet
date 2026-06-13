@@ -44,11 +44,15 @@ struct WindowSlot: Equatable, Sendable {
     /// `tags`).
     let workspace: Int
     let pid: Int
-    /// Tag bitmask (M11-3 `[grouping] by = "tag"`). Frozen at window
-    /// appearance. `0` in workspace mode (unused) and for a window not
-    /// yet tag-assigned. Every `WindowSlot` re-creation must carry this
-    /// forward or a tag-mode window silently loses its tags.
-    let tags: UInt64
+    /// Tag bitmask (M11-3 `[grouping] by = "tag"`). `0` in workspace
+    /// mode (unused) and for a window not yet tag-assigned. In tag mode
+    /// a window always carries the `_default` floor
+    /// (`TagModel.defaultBit`, bit 63) so it is never `0` / lost.
+    /// Mutable: #191 runtime tagging (`facet window
+    /// --tag`/`--untag`/`--toggle-tag`) rewrites it in place. Every
+    /// `WindowSlot` re-creation must still carry this forward or a
+    /// tag-mode window silently loses its tags.
+    var tags: UInt64
     init(workspace: Int, pid: Int, tags: UInt64 = 0) {
         self.workspace = workspace
         self.pid = pid
