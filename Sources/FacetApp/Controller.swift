@@ -360,8 +360,9 @@ final class Controller: NSObject {
         }
         rescheduleThumbnailTimer()
         installCLIControl()
-        writeStatus([])     // touch the file so `facet query` works
-                            // even before the first backend reply
+        writeStatus([])     // touch the files so `facet query` /
+        writeQuery()        // `facet query --windows` work even before
+                            // the first backend reply
         installConfigWatcher()
         installDisplayObserver()
         installRealWindowDrag()
@@ -822,6 +823,7 @@ final class Controller: NSObject {
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
         writeStatus(wss)
+        writeQuery()
     }
 
     /// Snapshot the current workspace state to
@@ -852,6 +854,39 @@ final class Controller: NSObject {
             timestamp: ISO8601DateFormatter().string(from: Date()))
         do { try snap.write() } catch {
             Log.debug("writeStatus failed: \(error)")
+        }
+    }
+
+    /// Leading-edge throttle for `writeQuery()`. The window-query sweep
+    /// (`backend.queryEntries()`) is much heavier than `writeStatus`
+    /// (a full CGWindowList + SkyLight + AX-title pass over EVERY mac
+    /// desktop), so we cap it: a query file 0.5 s stale is fine for a CLI
+    /// read, and the 2 s poll guarantees eventual freshness.
+    private static let queryWriteThrottle: TimeInterval = 0.5
+    private var lastQueryWriteAt: Date?
+
+    /// Snapshot every window to `/tmp/facet-query.json` for
+    /// `facet query --windows` (#223). Runs `backend.queryEntries()` OFF
+    /// the main actor on `cliQueue` — the sweep is heavy and AXTitles is
+    /// cliQueue-only by contract; the atomic file write is pure I/O.
+    /// Throttled (see `queryWriteThrottle`); errors swallowed, same as
+    /// `writeStatus` (a debugging/inspection convenience, not a
+    /// correctness path). Hooked to `apply()` (every reconcile) + once at
+    /// `start()`.
+    private func writeQuery() {
+        let now = Date()
+        if let last = lastQueryWriteAt,
+           now.timeIntervalSince(last) < Self.queryWriteThrottle { return }
+        lastQueryWriteAt = now
+        // Read the catalog state HERE on the main actor (a quick read,
+        // same place the DNC dispatch mutates it — so no race), then do
+        // the heavy CGWindowList + SkyLight + AX sweep off-main with that
+        // immutable snapshot (which touches no catalog).
+        let states = backend.queryFacetStates()
+        cliQueue.async { [bk = backend] in
+            let entries = bk.queryEntries(facetStates: states)
+            do { try WindowQuery.write(entries) }
+            catch { Log.debug("writeQuery failed: \(error)") }
         }
     }
 
