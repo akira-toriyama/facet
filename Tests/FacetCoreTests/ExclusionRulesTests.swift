@@ -100,4 +100,25 @@ final class ExclusionRulesTests: XCTestCase {
         ]).anyNeedsAXRole)
         XCTAssertFalse(ExclusionRules([ExclusionRule(app: "x")]).anyNeedsAXRole)
     }
+
+    // MARK: - WindowMatcher (the shared matcher; `[[exclude]]`'s sole
+    // consumer since `[[assign]]` was retired in #191)
+
+    func testUnconstrainedMatcherNeverMatches() {
+        XCTAssertFalse(WindowMatcher().isConstrained)
+        XCTAssertFalse(WindowMatcher().matches(probe(bundle: "any", title: "x")))
+    }
+
+    func testMatcherANDsKeys() {
+        let m = WindowMatcher(app: "Chrome", title: "Save")
+        XCTAssertTrue(m.matches(probe(bundle: "Chrome", title: "Save As")))
+        XCTAssertFalse(m.matches(probe(bundle: "Chrome", title: "Open")))
+        XCTAssertFalse(m.matches(probe(bundle: "Safari", title: "Save As")))
+    }
+
+    func testMatcherNeedsAXRole() {
+        XCTAssertTrue(WindowMatcher(role: "AXWindow").needsAXRole)
+        XCTAssertTrue(WindowMatcher(subrole: "AXDialog").needsAXRole)
+        XCTAssertFalse(WindowMatcher(app: "X").needsAXRole)
+    }
 }

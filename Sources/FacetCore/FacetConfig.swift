@@ -184,11 +184,6 @@ public struct FacetConfig: Sendable {
     /// `effectiveTagModel`.
     public var tagDefs: [String]?
 
-    /// `[[assign]]` rules — match a window and give it tags (M11-3).
-    /// `nil` when none. Parsed from raw TOML by `load`. Read
-    /// `effectiveAssignRules`.
-    public var assignRules: [AssignRule]?
-
     /// `[window] raise-on-open` — how a freshly-opened floating window
     /// (sheet / dialog / palette / `[[exclude]]` `action="float"`) is
     /// surfaced on first sight. Raw; read `effectiveRaiseOnOpen`.
@@ -565,7 +560,7 @@ public struct FacetConfig: Sendable {
     /// driven by the single declarative `configSpec` (which ALSO emits the
     /// JSON Schema — see `FacetConfig+Spec.swift`); the dynamic
     /// `[desktop.N]` sections are decoded by their own helper. The
-    /// `[[exclude]]/[[tag]]/[[assign]]` arrays-of-tables are filled by
+    /// `[[exclude]]/[[tag]]` arrays-of-tables are filled by
     /// `load` from the raw text (they don't live in this flat map).
     public static func from(toml: [String: [String: TOMLValue]])
         -> FacetConfig
@@ -600,11 +595,6 @@ public struct FacetConfig: Sendable {
         TagModel(tagDefs ?? [])
     }
 
-    /// Effective `[[assign]]` rule set (empty when none configured).
-    public var effectiveAssignRules: AssignRules {
-        AssignRules(assignRules ?? [])
-    }
-
     /// Fatal config errors that should refuse startup (Fail Fast /
     /// Rule of Repair — never silently fall back). Empty = OK to start.
     /// The app entry prints these to stderr and `exit 2`.
@@ -614,7 +604,6 @@ public struct FacetConfig: Sendable {
     ///   - `by = tag` but no `[[tag]]` defined (nothing to show).
     ///   - `by = tag` with a default layout that's workspace-only
     ///     (`bsp` / `stack`) — incompatible per `LayoutGrouping`.
-    ///   - `[[assign]]` references a tag name not in `[[tag]]`.
     public func fatalConfigErrors() -> [String] {
         var out: [String] = []
         if let raw = grouping, !raw.isEmpty,
@@ -635,13 +624,6 @@ public struct FacetConfig: Sendable {
                 + "with [grouping] by = \"tag\" (use a stateless layout "
                 + "like \"grid\" / \"master-left\" / \"float\"; "
                 + "\"bsp\" / \"stack\" are workspace-only)")
-        }
-        let known = Set(model.names)
-        for r in effectiveAssignRules.rules {
-            for t in r.tags where !known.contains(t) {
-                out.append("config: [[assign]] references unknown tag "
-                    + "\"\(t)\" — add it as a [[tag]]")
-            }
         }
         return out
     }
@@ -707,38 +689,6 @@ public struct FacetConfig: Sendable {
         return out
     }
 
-    /// Build `[AssignRule]` from the raw TOML text's `[[assign]]`
-    /// array-of-tables. Match keys mirror `[[exclude]]`
-    /// (`app`/`title`/`role`/`subrole` strings, `max-width`/`max-height`
-    /// ints); tags come from `tag = "x"` and/or `tags = ["x", "y"]`
-    /// (unioned). A table with no match key or no tags is dropped (it
-    /// would be inert). Unknown tag names are validated separately by
-    /// `fatalConfigErrors`, not here.
-    public static func assignRules(fromTOML text: String) -> [AssignRule] {
-        parseTOMLArrayOfTables(text, table: "assign").compactMap { t in
-            func str(_ k: String) -> String? {
-                if case .string(let s)? = t[k] { return s }
-                return nil
-            }
-            func dbl(_ k: String) -> Double? {
-                if case .int(let n)? = t[k] { return Double(n) }
-                return nil
-            }
-            let matcher = WindowMatcher(
-                app: str("app"), title: str("title"),
-                role: str("role"), subrole: str("subrole"),
-                maxWidth: dbl("max-width"), maxHeight: dbl("max-height"))
-            var tags: [String] = []
-            if case .string(let s)? = t["tag"] { tags.append(s) }
-            if let a = t["tags"]?.asStringArray { tags += a }
-            // de-dup, drop empties, preserve order
-            var seen = Set<String>()
-            tags = tags.filter { !$0.isEmpty && seen.insert($0).inserted }
-            guard matcher.isConstrained, !tags.isEmpty else { return nil }
-            return AssignRule(matcher: matcher, tags: tags)
-        }
-    }
-
     // MARK: - Disk
 
     public static var defaultPath: String {
@@ -765,8 +715,6 @@ public struct FacetConfig: Sendable {
             if !rules.isEmpty { c.exclusionRules = rules }
             let tags = tagDefs(fromTOML: text)
             if !tags.isEmpty { c.tagDefs = tags }
-            let assigns = assignRules(fromTOML: text)
-            if !assigns.isEmpty { c.assignRules = assigns }
             return c
         }
         FileHandle.standardError.write(Data(

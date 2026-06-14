@@ -70,15 +70,17 @@ extension NativeAdapter {
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
             forMacDesktopOrdinal: activeMacDesktopOrdinal))
-        // Tag mode (M11-3): seed the tag vocabulary + assign rules +
-        // initial lens (first tag) once. `seedTags` is idempotent — it
-        // only takes on the first call, so a later refresh won't reset
-        // the user's lens.
+        // Tag mode (M11-3): seed the tag vocabulary + initial lens once.
+        // The initial lens is the `_default` floor (show-all, nothing
+        // pre-selected) — there is no static window→tag assignment
+        // (`[[assign]]` retired in #191; runtime `facet window --tag` /
+        // `facet tag` own tagging). `seedTags` is idempotent — it only
+        // takes on the first call, so a later refresh won't reset the
+        // user's lens.
         if config.effectiveGrouping == .tag {
-            let model = config.effectiveTagModel
-            catalog.seedTags(grouping: .tag, model: model,
-                             rules: config.effectiveAssignRules,
-                             lens: model.firstBit ?? 0)
+            catalog.seedTags(grouping: .tag,
+                             model: config.effectiveTagModel,
+                             lens: TagModel.defaultBit)
         }
         let live = enumerateCGWindows()
         // raise-on-open bookkeeping: flag genuinely-new windows by their
@@ -454,10 +456,12 @@ extension NativeAdapter {
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
-        // Tag mode (M11-3): compute each new window's tag bitmask from
-        // the probe here (this is the only place AX role/subrole are
-        // resolved, which `[[assign]]` rules may key on). The catalog
-        // applies the mask when the window joins `windowMap`.
+        // Tag mode (M11-3): compute each new window's tag bitmask
+        // (`tagsForNewWindow` — lens-derived, no probe needed). The
+        // probe below is built for the `[[exclude]]` action lookup,
+        // the sole consumer of the resolved AX role/subrole now that
+        // `[[assign]]` is retired (#191). The catalog applies the mask
+        // when the window joins `windowMap`.
         let tagMode = config.effectiveGrouping == .tag
         var tagMasks: [WindowID: UInt64] = [:]
         var autoFloat: Set<WindowID> = []
@@ -541,7 +545,7 @@ extension NativeAdapter {
             let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
                                     role: role, subrole: subrole,
                                     size: w.frame?.size)
-            if tagMode { tagMasks[w.id] = catalog.tagsForNewWindow(probe) }
+            if tagMode { tagMasks[w.id] = catalog.tagsForNewWindow() }
             switch rules.action(for: probe) {
             case .manage:
                 Log.debug("native: rule=manage wsid=\(w.id.serverID) "

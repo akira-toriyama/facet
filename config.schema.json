@@ -36,45 +36,6 @@
       },
       "type" : "object"
     },
-    "assign" : {
-      "items" : {
-        "additionalProperties" : false,
-        "description" : "Match a window and give it tags (M11-3).",
-        "properties" : {
-          "app" : {
-            "type" : "string"
-          },
-          "max-height" : {
-            "type" : "integer"
-          },
-          "max-width" : {
-            "type" : "integer"
-          },
-          "role" : {
-            "type" : "string"
-          },
-          "subrole" : {
-            "type" : "string"
-          },
-          "tag" : {
-            "description" : "Single tag to assign.",
-            "type" : "string"
-          },
-          "tags" : {
-            "description" : "Multiple tags to assign.",
-            "items" : {
-              "type" : "string"
-            },
-            "type" : "array"
-          },
-          "title" : {
-            "type" : "string"
-          }
-        },
-        "type" : "object"
-      },
-      "type" : "array"
-    },
     "border" : {
       "additionalProperties" : false,
       "description" : "Tree-panel border effect.",

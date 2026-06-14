@@ -396,9 +396,13 @@ API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
 ### tag
 **window に付く可視性ラベル**（[[grouping]] `by=tag` 時のみ）。1 window = タグの集合（bitmask /
 OptionSet 的・多重所属）。可視性述語 = `window.tags ∩ [[lens]] ≠ ∅`（dwm `tags & viewmask` 直写し）。
-`config.toml` の `[[tag]]` で宣言（記載順がタグ順＝primary タグ）・`[[assign]]` で window→tag を **静的割当**
-（起動時固定・runtime 再タグ不可）。**M11-3 (#176) で実装済**。
+`config.toml` の `[[tag]]` は **起動時の語彙 seed のみ**（記載順がタグ順＝primary タグ）。**割当は runtime**：
+新規窓は現 [[lens]] の primary タグを継ぐだけで、`facet window --tag/--untag/--toggle-tag` と
+`facet tag --add/--remove/--rename` で窓・語彙を動的編集（session-only）。**静的 `[[assign]]` は #191 で廃止**
+（runtime タグ付けが置換）。**M11-3 (#176) で実装・#191 で runtime 動的化**。
 memory `[[facet-tag-model-decisions]]`。
+- **`_default`（システム予約）**: 全 tag モード窓が常に持つ floor bit（bit63）。`tags==0`（迷子）を無くすための
+  内部マーカーで、`[[tag]]` 名にできず・チップ非表示・`lens --all` の user-tag union にも入らない（floor は別途 OR）。
 - **Don't call it:** label, category, workspace（tag は多重所属、workspace は 1 窓 1 個）, group, ラベル, カテゴリ
 
 ### tag world

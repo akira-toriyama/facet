@@ -18,7 +18,7 @@
 // clamps at runtime so a typo can't break the layout).
 //
 // NOT decoded here (facet parses these from the raw TOML text itself —
-// they're non-uniform): the `[[exclude]]` / `[[tag]]` / `[[assign]]`
+// they're non-uniform): the `[[exclude]]` / `[[tag]]`
 // arrays-of-tables and the dynamic `[desktop.N]` sections. The spec still
 // DESCRIBES them so completion covers them.
 
@@ -165,15 +165,6 @@ public extension FacetConfig {
             .init("tag", kind: .arrayOfTables, doc: "Declared tag names (M11-3).",
                   fields: [
                 .descOnly("name", doc: "Tag name (required)."),
-            ]),
-
-            .init("assign", kind: .arrayOfTables,
-                  doc: "Match a window and give it tags (M11-3).", fields: [
-                .descOnly("app"), .descOnly("title"), .descOnly("role"),
-                .descOnly("subrole"),
-                .descOnly("max-width", .integer), .descOnly("max-height", .integer),
-                .descOnly("tag", doc: "Single tag to assign."),
-                .descArray("tags", doc: "Multiple tags to assign."),
             ]),
 
             .init("desktop", kind: .dynamicTable,

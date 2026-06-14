@@ -133,13 +133,12 @@ struct WorkspaceCatalog {
     /// for the session (config-static; change needs a restart).
     var grouping: Grouping = .workspace
     /// Tag vocabulary (declaration order = bit positions). Empty in
-    /// workspace mode.
+    /// workspace mode. Seeded from `[[tag]]`, then mutated at runtime by
+    /// `facet tag --add/--remove/--rename` (#191).
     var tagModel = TagModel([])
-    /// `[[assign]]` rules — match a new window, give it tags. Applied
-    /// once at appearance (`tagsForNewWindow`); never re-run.
-    var assignRules = AssignRules([])
     /// Current lens = the visible tag mask (tag mode). Seeded to the
-    /// first tag's bit; mutated by `setLens`. `0` in workspace mode.
+    /// `_default` floor (show-all, nothing pre-selected); mutated by
+    /// `setLens`. `0` in workspace mode.
     var lens: UInt64 = 0
 
     /// Windows currently parked at the bottom-right anchor sliver.

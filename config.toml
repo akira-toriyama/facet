@@ -479,8 +479,20 @@ action = "ignore"
 # -----------------------------------------------------------------
 # [[tag]] — the tag vocabulary for `by=tag` mode (ignored in
 # workspace mode). One table per tag; declaration order is the tag
-# order (a window's first matching tag is its "primary"). Tables with
-# no non-empty name, or a duplicate name, are dropped.
+# order (a window's lowest-bit tag is its "primary"). Tables with
+# no non-empty name, or a duplicate name, are dropped. Names starting
+# with "_" are reserved (facet uses "_default" as an internal floor
+# every window carries — it never shows as a chip and can't be a
+# [[tag]] name).
+#
+# Tags are assigned at RUNTIME, not in config — there is no static
+# window→tag mapping. A freshly-opened window joins whatever tag the
+# current `facet lens` shows (at startup that's nothing — every window
+# is visible but untagged). Tag windows + edit the vocabulary live:
+#   facet window --tag=NAME / --untag=NAME / --toggle-tag=NAME
+#   facet tag --add=NAME / --remove=NAME / --rename=OLD:NEW
+#   facet lens --only=NAME / --toggle=NAME / --all
+# All of this is session-only; [[tag]] is just the startup seed.
 # -----------------------------------------------------------------
 # [[tag]]
 # name = "web"
@@ -488,23 +500,6 @@ action = "ignore"
 # name = "code"
 # [[tag]]
 # name = "chat"
-
-# -----------------------------------------------------------------
-# [[assign]] — statically map windows to tags at startup (`by=tag`
-# only; runtime re-tagging isn't supported). Match keys mirror
-# [[exclude]] (app / title / role / subrole substring-regex,
-# max-width / max-height). Tags come from `tag = "x"` and/or
-# `tags = ["x", "y"]` (unioned). A table with no match key or no tag
-# is dropped; an unknown tag name (not declared in [[tag]]) is a
-# startup error.
-# -----------------------------------------------------------------
-# [[assign]]
-# app = "com.google.Chrome"
-# tag = "web"
-#
-# [[assign]]
-# app = "com.apple.dt.Xcode"
-# tags = ["code"]
 
 
 # -----------------------------------------------------------------

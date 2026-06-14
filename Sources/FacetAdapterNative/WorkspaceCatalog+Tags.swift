@@ -12,9 +12,10 @@ extension WorkspaceCatalog {
 
     /// Seed the tag grouping state once at startup (mirrors `seed` for
     /// workspace names). Idempotent-ish: only meaningful before any
-    /// window is assigned. `lens` is normally `model.firstBit`.
+    /// window is assigned. `lens` is normally `TagModel.defaultBit`
+    /// (the floor — show-all at startup).
     mutating func seedTags(grouping: Grouping, model: TagModel,
-                           rules: AssignRules, lens: UInt64) {
+                           lens: UInt64) {
         // Seed once. `grouping` starts `.workspace` (the default); the
         // first seed flips it to `.tag`. A later refresh calling this
         // again would otherwise reset `lens` to the seed value on every
@@ -24,23 +25,22 @@ extension WorkspaceCatalog {
         }
         self.grouping = grouping
         self.tagModel = model
-        self.assignRules = rules
         self.lens = lens
     }
 
-    /// Tag bitmask for a newly-appeared window (tag mode). The UNION of
-    /// every matching `[[assign]]` rule; an unmatched window inherits
-    /// the current lens's PRIMARY tag (its lowest set bit) so it lands
-    /// in exactly one visible place — never the whole lens union (a
-    /// broad `--all` lens shouldn't freeze every tag onto a new
-    /// window). Always carries the `_default` floor
+    /// Tag bitmask for a newly-appeared window (tag mode). A fresh
+    /// window inherits the current lens's PRIMARY tag (its lowest set
+    /// bit) so it lands in exactly one visible place — never the whole
+    /// lens union (a broad `--all` lens shouldn't freeze every tag onto
+    /// a new window). Always carries the `_default` floor
     /// (`TagModel.defaultBit`) so the window is never `0` / lost (#191).
-    func tagsForNewWindow(_ probe: WindowProbe) -> UInt64 {
+    /// At startup the lens IS the floor alone, so a window opened before
+    /// any lens switch is floor-only (untagged) until the user tags it
+    /// via `facet window --tag`. (There is no static `[[assign]]` —
+    /// retired in #191; runtime tagging is the only path.)
+    func tagsForNewWindow() -> UInt64 {
         let base: UInt64
-        let assigned = assignRules.mask(for: probe, in: tagModel)
-        if assigned != 0 {
-            base = assigned
-        } else if lens != 0 {
+        if lens != 0 {
             base = UInt64(1) << UInt64(lens.trailingZeroBitCount)
         } else {
             base = tagModel.firstBit ?? 0

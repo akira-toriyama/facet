@@ -9,10 +9,10 @@
 // (keep tracking, still shown in the tree) or ignore them entirely
 // (fully unmanaged, like yabai's `manage=off`).
 //
-// The matching itself lives in `WindowMatcher` (shared with
-// `[[assign]]`, M11-3); this file is the exclusion *policy* on top of
-// it (the action + first-match-wins rule set). Pure, backend-neutral,
-// unit-testable.
+// The matching itself lives in `WindowMatcher` (`[[exclude]]`-only
+// since `[[assign]]` was retired in #191); this file is the exclusion
+// *policy* on top of it (the action + first-match-wins rule set).
+// Pure, backend-neutral, unit-testable.
 
 import CoreGraphics
 import Foundation
