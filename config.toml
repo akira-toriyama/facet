@@ -14,7 +14,7 @@
 #     https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
 #
 # facet only ever READS this file; runtime CLI overrides (e.g.
-# `facet --theme=dracula`) apply for the current session only. To
+# `facet --theme dracula`) apply for the current session only. To
 # make a change stick, edit the value here and restart facet.
 #
 # Out-of-range / unknown values are silently clamped to safe
@@ -60,7 +60,7 @@
 #                        (excludes "system").
 #
 # Unknown names clamp to "terminal". CLI override (session only):
-# `facet --theme=dracula`.
+# `facet --theme dracula`.
 [theme]
 name = "terminal"
 
@@ -141,7 +141,7 @@ cols = 5
 label-position = "up"
 
 # Background ScreenCaptureKit refresh cadence (seconds) that keeps
-# grid-view thumbnails warm so `--view=grid` paints immediately
+# grid-view thumbnails warm so `--view grid` paints immediately
 # with real screenshots instead of icon-fallback. 0 disables the
 # background refresh entirely (cells still capture on demand the
 # first time the grid opens, just with a brief icon flash).
@@ -167,7 +167,7 @@ theme = ""
 #   "left"             — strip down the left, browse with ↑/↓
 #   "right"            — strip down the right, browse with ↑/↓
 #
-# A one-off `facet --view=rail --edge=NAME` overrides this for that
+# A one-off `facet --view rail --edge NAME` overrides this for that
 # open. Unknown / unset → "bottom".
 edge = "bottom"
 
@@ -225,7 +225,7 @@ preview-mode = "popover"
 # Tree-panel geometry — where the sidebar opens and its size, in
 # screen points with a TOP-LEFT origin: (0,0) is the top-left corner
 # of the main screen, x grows right, y grows DOWN. Same coords as the
-# CLI `facet --view=tree --pos-x/--pos-y/--width/--height`. All FOUR
+# CLI `facet --view tree --pos-x/--pos-y/--width/--height`. All FOUR
 # are needed to take effect; a partial set is ignored (logged). Leave
 # all unset for the built-in default (top-left, auto height). This
 # config value is authoritative each launch / `--reload` — dragging or
@@ -265,7 +265,7 @@ preview-mode = "popover"
 [layout]
 
 # Startup layout mode every workspace begins in. Layout mode is
-# otherwise session-only (set live with `facet workspace --layout=NAME`
+# otherwise session-only (set live with `facet workspace --layout NAME`
 # and lost on restart), so this is the seed each launch — and each
 # mac desktop's independent catalog — starts every workspace
 # from.
@@ -353,7 +353,7 @@ enabled = false
 # event-driven — sub-toggle for background reflows (window open / close
 # rearranges the remaining tiled windows). Defaults to true when the
 # master `enabled` switch is on. Flip to false to keep WS-switch + your
-# own `--toggle-float` / `--layout=` retiles animated but snap on
+# own `--toggle-float` / `--layout NAME` retiles animated but snap on
 # background opens / closes. New windows always snap to their tile slot
 # regardless (they don't have a meaningful "previous" position to glide
 # from).
@@ -494,9 +494,9 @@ action = "ignore"
 # window→tag mapping. A freshly-opened window joins whatever tag the
 # current `facet lens` shows (at startup that's nothing — every window
 # is visible but untagged). Tag windows + edit the vocabulary live:
-#   facet window --tag=NAME / --untag=NAME / --toggle-tag=NAME
-#   facet tag --add=NAME / --remove=NAME / --rename=OLD:NEW
-#   facet lens --only=NAME / --toggle=NAME / --all
+#   facet window --tag NAME / --untag NAME / --toggle-tag NAME
+#   facet tag --add NAME / --remove NAME / --rename OLD NEW
+#   facet lens --only NAME / --toggle NAME / --all
 # All of this is session-only; [[tag]] is just the startup seed.
 # -----------------------------------------------------------------
 # [[tag]]
@@ -522,15 +522,15 @@ action = "ignore"
 # config key. Each WS starts at `[layout] default` (see above) and
 # can be changed live with:
 #
-#     facet workspace --focus=1
-#     facet workspace --layout=bsp     # this WS now auto-tiles BSP
-#     facet workspace --layout=stack   # or single-window stack mode
+#     facet workspace --focus 1
+#     facet workspace --layout bsp     # this WS now auto-tiles BSP
+#     facet workspace --layout stack   # or single-window stack mode
 #
 # Other tiling-related verbs:
 #     facet workspace --retile             # recompute + reapply layout
 #     facet window --toggle-float          # exclude window from layout
 #     facet window --toggle-orientation    # rotate parent split (bsp)
-#     facet window --cycle-stack=next|prev # rotate stack focus
+#     facet window --cycle-stack next|prev # rotate stack focus
 #
 # Frozen scope: bsp / stack / float. master_stack / scrolling /
 # traditional are out (see docs/architecture.md "Phase γ frozen

@@ -82,7 +82,7 @@ public final class SidebarView: NSView {
 
     /// While true, `draw` renders placeholder rows and `update`
     /// holds (incoming refreshes don't replace the skeleton). Driven
-    /// by the CLI `facet --view=tree --loading[=MS]`: an external
+    /// by the CLI `facet --view tree --loading MS`: an external
     /// tool (e.g. chord) shows the skeleton just BEFORE triggering a
     /// mac-desktop switch, so the shared panel never flashes the
     /// previous mac desktop's tree. The Controller clears it on a timer.
@@ -502,7 +502,7 @@ public final class SidebarView: NSView {
     /// pointing-hand; off-rows → arrow.
     ///
     /// NOTE: cursor changes only take effect while facet is the
-    /// active app (i.e. `--active`). In passive `--view=tree` the
+    /// active app (i.e. `--active`). In passive `--view tree` the
     /// panel is a non-activating background accessory, and macOS lets
     /// only the active app own the cursor — `NSCursor.set()` here is a
     /// harmless no-op then. Passive affordance is carried by the
@@ -608,7 +608,7 @@ public final class SidebarView: NSView {
 
     // MARK: - Draw
 
-    /// Loading placeholder shown via `facet --view=tree --loading`.
+    /// Loading placeholder shown via `facet --view tree --loading`.
     /// Mirrors the real layout's rhythm (caption + two window rows
     /// per section) with muted, theme-aware rounded bars.
     private func drawSkeleton() {

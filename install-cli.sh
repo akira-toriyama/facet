@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Put a `facet` command on your PATH. facet then acts as a thin client
-# for the running GUI: `facet --view=NAME` / `--hide=NAME` /
-# `--toggle=NAME` / `--theme=NAME` / `--quit` / `--reload` post a
+# for the running GUI: `facet --view NAME` / `--hide NAME` /
+# `--toggle NAME` / `--theme NAME` / `--quit` / `--reload` post a
 # distributed notification and exit (no GUI, no Accessibility needed
 # for the client itself). Launch the GUI via run.sh or `open Facet.app`.
 #
@@ -50,6 +50,6 @@ case ":$PATH:" in
   *":$DIR:"*) : ;;
   *) echo "note: add $DIR to PATH (e.g. in ~/.zshrc)";;
 esac
-echo "usage: facet --view=NAME | --hide=NAME | --toggle=NAME | --quit | --reload"
-echo "       facet --view=grid"
-echo "       facet --theme=cute   # terminal | cute | system"
+echo "usage: facet --view NAME | --hide NAME | --toggle NAME | --quit | --reload"
+echo "       facet --view grid"
+echo "       facet --theme cute   # terminal | cute | system"

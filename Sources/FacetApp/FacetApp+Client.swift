@@ -11,6 +11,22 @@ import AppKit
 import FacetCore
 import FacetView
 
+extension ArgCursor {
+    /// Consume the next token as `flag`'s required value, or loud-exit(2)
+    /// with a "missing argument" usage error when the args are exhausted
+    /// (#227). Strict consumption: the token is taken verbatim — even a
+    /// `--`-looking one — and the per-flag validator decides whether it's
+    /// acceptable, so a negative coordinate or a literal `0` reads fine
+    /// while a dropped value surfaces as a loud usage error rather than a
+    /// silent mis-parse.
+    mutating func value(for flag: String) -> String {
+        guard let v = next() else {
+            FacetApp.die("\(flag): missing argument")
+        }
+        return v
+    }
+}
+
 extension FacetApp {
 
     // MARK: - Client mode posting
@@ -31,9 +47,6 @@ extension FacetApp {
     static func postStyle(_ name: String) -> Never {
         postControl("style:" + name)
     }
-
-    /// Default skeleton duration (ms) for a bare ``--loading``.
-    static let defaultLoadingMs = 500
 
     /// Post ``view:NAME[+active][+loading:MS][+geom:X,Y,W,H][+edge:E]``.
     /// Name must already be canonical. Geom + loading are optional and
@@ -185,41 +198,34 @@ extension FacetApp {
         }
     }
 
-    /// Parse ``workspace --focus=VALUE``. VALUE is a relative keyword
-    /// (`next` / `prev` / `recent`), an absolute 1-based index, or a
-    /// workspace **name**. Returns the canonical control payload:
+    /// Parse the value of ``workspace --focus VALUE``. VALUE is a relative
+    /// keyword (`next` / `prev` / `recent`), an absolute 1-based index, or
+    /// a workspace **name**. Returns the canonical control payload:
     /// `next|prev|recent`, the index as a string, or `name:NAME`
     /// (case preserved). Numeric values are always indices — name a
     /// workspace non-numerically to reference it by name (yabai-style).
-    static func parseWorkspaceFocus(_ arg: String) -> String {
-        let raw = String(arg.dropFirst("--focus=".count))
-        switch raw.lowercased() {
+    static func parseWorkspaceFocus(_ value: String) -> String {
+        switch value.lowercased() {
         case "next", "prev", "recent":
-            return raw.lowercased()
+            return value.lowercased()
         default:
-            if let n = Int(raw), n > 0 { return String(n) }   // index
-            guard !raw.isEmpty else {
-                die("workspace --focus expects an index, name, or "
-                    + "next/prev/recent")
-            }
-            return "name:" + raw                              // name
+            if let n = Int(value), n > 0 { return String(n) }   // index
+            return "name:" + validateWorkspaceName(
+                value, flag: "workspace --focus")               // name
         }
     }
 
-    /// Parse ``--move-to=N`` (positive integer, 1-indexed).
-    /// Same shape as ``parseWorkspaceInt``; both target a workspace
-    /// index from the user's 1-based perspective.
-    static func parseMoveToInt(_ arg: String) -> Int {
-        parsePositiveInt(arg, prefix: "--move-to=", flag: "--move-to")
+    /// Parse the value of ``--move-to N`` (positive integer, 1-indexed).
+    static func parseMoveToInt(_ value: String) -> Int {
+        parsePositiveInt(value, flag: "--move-to")
     }
 
     /// Generic 1-indexed positive-integer parser. Reused by every
-    /// ``--…=N`` flag whose value names a workspace slot.
-    private static func parsePositiveInt(_ arg: String,
-                                         prefix: String,
+    /// ``--… N`` flag whose value names a workspace slot. Takes the
+    /// already-extracted value token (the cursor consumed it).
+    private static func parsePositiveInt(_ value: String,
                                          flag: String) -> Int {
-        let raw = String(arg.dropFirst(prefix.count))
-        switch FacetCore.parseGeomInt(raw, requirePositive: true) {
+        switch FacetCore.parseGeomInt(value, requirePositive: true) {
         case .success(let n):
             return n
         case .failure(.notAnInteger(let v)):
@@ -231,10 +237,12 @@ extension FacetApp {
         }
     }
 
-    /// `facet status` — print the server's current view of the
+    /// `facet query` — print the server's current view of the
     /// world: backend identity, hide method, workspaces with
     /// active marker + window counts, last error (if any),
-    /// snapshot timestamp.
+    /// snapshot timestamp. (#227: the read verb, renamed from the
+    /// former `facet status`; identical snapshot output. A richer
+    /// `facet query --windows` JSON payload is tracked separately.)
     ///
     /// Reads `/tmp/facet-status.json` written atomically by the
     /// running server (Controller.writeStatus). Three exit codes:
@@ -242,7 +250,7 @@ extension FacetApp {
     ///   0 — printed
     ///   3 — file missing (server not running, or never reconciled)
     ///   4 — file present but malformed (server bug — restart)
-    static func runStatus() -> Never {
+    static func runQuery() -> Never {
         do {
             let snap = try StatusSnapshot.read()
             print(snap.render())
@@ -250,13 +258,13 @@ extension FacetApp {
         } catch let CocoaError as CocoaError
             where CocoaError.code == .fileReadNoSuchFile
         {
-            let msg = "facet: no status file at "
+            let msg = "facet: no query data at "
                 + "\(StatusSnapshot.defaultPath) — server not running?\n"
                 + "       start with `./run.sh` (or `facet` for server mode)\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(3)
         } catch {
-            let msg = "facet: status file malformed — \(error)\n"
+            let msg = "facet: query data malformed — \(error)\n"
                 + "       restart the server with `./stop.sh && ./run.sh`\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(4)
@@ -266,9 +274,10 @@ extension FacetApp {
     /// Sub-command parser for ``facet workspace <flag>``. Subject-verb
     /// mirror of ``facet window``: one action per invocation, loud
     /// reject on zero / multiple / unknown. Verbs:
-    ///   --focus=N|next|prev|recent  switch workspace (absolute or relative)
-    ///   --layout=NAME               set the active workspace's layout mode
-    ///   --retile                    re-apply the active workspace's layout
+    ///   --focus TARGET   switch workspace (index | next | prev | recent | name)
+    ///   --layout NAME    set the active workspace's layout mode
+    ///   --remove TARGET  remove a workspace (`current` | index)
+    ///   --retile         re-apply the active workspace's layout
     static func runWorkspaceCommand(_ args: [String]) -> Never {
         var focusArg: String?
         var layoutArg: String?
@@ -277,39 +286,34 @@ extension FacetApp {
         var rotateArg: Int?
         var mirrorArg: String?
         var addFlag = false
-        var removeArg: String?      // "" = active, else 1-based index
+        var removeArg: String?      // "" = active (current), else 1-based index
         var renameArg: String?
         var moveArg: Int?
-        var i = 0
-        while i < args.count {
-            defer { i += 1 }
-            let a = args[i]
-            switch true {
-            case a.hasPrefix("--focus="):
-                focusArg = parseWorkspaceFocus(a)
-            case a.hasPrefix("--layout="):
-                layoutArg = canonicalLayoutMode(
-                    String(a.dropFirst("--layout=".count)))
-            case a == "--retile":
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--focus":
+                focusArg = parseWorkspaceFocus(cursor.value(for: "workspace --focus"))
+            case "--layout":
+                layoutArg = canonicalLayoutMode(cursor.value(for: "workspace --layout"))
+            case "--retile":
                 retileFlag = true
-            case a == "--balance":
+            case "--balance":
                 balanceFlag = true
-            case a.hasPrefix("--rotate="):
-                rotateArg = parseRotateDegrees(a)
-            case a.hasPrefix("--mirror="):
-                mirrorArg = parseMirrorAxis(a)
-            case a == "--add":
+            case "--rotate":
+                rotateArg = parseRotateDegrees(cursor.value(for: "workspace --rotate"))
+            case "--mirror":
+                mirrorArg = parseMirrorAxis(cursor.value(for: "workspace --mirror"))
+            case "--add":
                 addFlag = true
-            case a == "--remove":
-                removeArg = ""                       // active workspace
-            case a.hasPrefix("--remove="):
-                removeArg = String(parsePositiveInt(
-                    a, prefix: "--remove=", flag: "workspace --remove"))
-            case a.hasPrefix("--rename="):
-                renameArg = String(a.dropFirst("--rename=".count))
-            case a.hasPrefix("--move="):
+            case "--remove":
+                removeArg = parseWorkspaceRemoveTarget(cursor.value(for: "workspace --remove"))
+            case "--rename":
+                renameArg = validateWorkspaceName(
+                    cursor.value(for: "workspace --rename"), flag: "workspace --rename")
+            case "--move":
                 moveArg = parsePositiveInt(
-                    a, prefix: "--move=", flag: "workspace --move")
+                    cursor.value(for: "workspace --move"), flag: "workspace --move")
             default:
                 die("unknown `workspace` flag \"\(a)\" — "
                     + "see `facet --help`")
@@ -345,24 +349,22 @@ extension FacetApp {
     /// Sub-command parser for ``facet lens <flag>`` (M11-3 tag mode).
     /// Subject-verb mirror of ``facet workspace``: one action per
     /// invocation, loud reject on zero / multiple / unknown. Verbs:
-    ///   --only=NAME    show exactly tag NAME
-    ///   --toggle=NAME  flip tag NAME in/out of the current lens union
+    ///   --only NAME    show exactly tag NAME
+    ///   --toggle NAME  flip tag NAME in/out of the current lens union
     ///   --all          show every tag
     /// Tag-mode only — under `by = "workspace"` the server no-ops.
     static func runLensCommand(_ args: [String]) -> Never {
         var onlyArg: String?
         var toggleArg: String?
         var allFlag = false
-        var i = 0
-        while i < args.count {
-            defer { i += 1 }
-            let a = args[i]
-            switch true {
-            case a.hasPrefix("--only="):
-                onlyArg = String(a.dropFirst("--only=".count))
-            case a.hasPrefix("--toggle="):
-                toggleArg = String(a.dropFirst("--toggle=".count))
-            case a == "--all":
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--only":
+                onlyArg = cursor.value(for: "lens --only")
+            case "--toggle":
+                toggleArg = cursor.value(for: "lens --toggle")
+            case "--all":
                 allFlag = true
             default:
                 die("unknown `lens` flag \"\(a)\" — see `facet --help`")
@@ -380,10 +382,10 @@ extension FacetApp {
         // Reject an empty NAME (a shell var that expanded to nothing)
         // loudly rather than posting a no-such-tag the server ignores.
         if let n = onlyArg, n.isEmpty {
-            die("facet lens --only=NAME: expected a non-empty tag name")
+            die("facet lens --only: expected a non-empty tag name")
         }
         if let n = toggleArg, n.isEmpty {
-            die("facet lens --toggle=NAME: expected a non-empty tag name")
+            die("facet lens --toggle: expected a non-empty tag name")
         }
         requireGrouping(.tag, subject: "lens")
         requireServerAlive()
@@ -398,27 +400,32 @@ extension FacetApp {
     /// ``facet window --tag``). Subject-verb mirror of ``facet
     /// workspace``: one action per invocation, loud reject on zero /
     /// multiple / unknown. Verbs:
-    ///   --add=NAME        declare tag NAME (no window touched; idempotent)
-    ///   --remove=NAME     delete NAME — strips it from every window; its
+    ///   --add NAME        declare tag NAME (no window touched; idempotent)
+    ///   --remove NAME     delete NAME — strips it from every window; its
     ///                     bit is freed for reuse
-    ///   --rename=OLD:NEW  rename OLD to NEW in place (bit kept); rejects
+    ///   --rename OLD NEW  rename OLD to NEW in place (bit kept); rejects
     ///                     an unknown OLD or an already-defined NEW
     /// Tag-mode only — `requireGrouping(.tag)`.
     static func runTagCommand(_ args: [String]) -> Never {
         var addArg: String?
         var removeArg: String?
         var renameArg: (String, String)?
-        var i = 0
-        while i < args.count {
-            defer { i += 1 }
-            let a = args[i]
-            switch true {
-            case a.hasPrefix("--add="):
-                addArg = parseTagName(a, prefix: "--add=")
-            case a.hasPrefix("--remove="):
-                removeArg = parseTagName(a, prefix: "--remove=")
-            case a.hasPrefix("--rename="):
-                renameArg = parseTagRename(a)
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--add":
+                addArg = parseTagName(cursor.value(for: "tag --add"), flag: "tag --add")
+            case "--remove":
+                removeArg = parseTagName(cursor.value(for: "tag --remove"), flag: "tag --remove")
+            case "--rename":
+                // Positional-2: OLD then NEW (#227). Each value is consumed
+                // unconditionally; a flag-looking NEW (e.g. `--add`) fails
+                // the name policy → loud reject (never a silent mis-rename).
+                let old = validateTagName(
+                    cursor.value(for: "tag --rename OLD"), flag: "tag --rename OLD")
+                let new = validateTagName(
+                    cursor.value(for: "tag --rename NEW"), flag: "tag --rename NEW")
+                renameArg = (old, new)
             default:
                 die("unknown `tag` flag \"\(a)\" — see `facet --help`")
             }
@@ -463,49 +470,51 @@ extension FacetApp {
         var decMaster = false
         var focusDirArg: String?
         var moveDirArg: String?
-        var i = 0
-        while i < args.count {
-            defer { i += 1 }
-            let a = args[i]
-            switch true {
-            case a.hasPrefix("--move-to="):
-                moveToArg = parseMoveToInt(a)
-            case a == "--follow":
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--move-to":
+                moveToArg = parseMoveToInt(cursor.value(for: "window --move-to"))
+            case "--follow":
                 follow = true
-            case a.hasPrefix("--mark="):
-                markArg = parseMarkName(a, prefix: "--mark=")
-            case a.hasPrefix("--focus-mark="):
-                focusMarkArg = parseMarkName(a, prefix: "--focus-mark=")
-            case a.hasPrefix("--unmark="):
-                unmarkArg = parseMarkName(a, prefix: "--unmark=")
-            case a.hasPrefix("--tag="):
-                tagArg = parseTagName(a, prefix: "--tag=")
-            case a.hasPrefix("--untag="):
-                untagArg = parseTagName(a, prefix: "--untag=")
-            case a.hasPrefix("--toggle-tag="):
-                toggleTagArg = parseTagName(a, prefix: "--toggle-tag=")
-            case a == "--toggle-float":
+            case "--mark":
+                markArg = parseMarkName(cursor.value(for: "window --mark"),
+                                        flag: "window --mark")
+            case "--focus-mark":
+                focusMarkArg = parseMarkName(cursor.value(for: "window --focus-mark"),
+                                             flag: "window --focus-mark")
+            case "--unmark":
+                unmarkArg = parseMarkName(cursor.value(for: "window --unmark"),
+                                          flag: "window --unmark")
+            case "--tag":
+                tagArg = parseTagName(cursor.value(for: "window --tag"),
+                                      flag: "window --tag")
+            case "--untag":
+                untagArg = parseTagName(cursor.value(for: "window --untag"),
+                                        flag: "window --untag")
+            case "--toggle-tag":
+                toggleTagArg = parseTagName(cursor.value(for: "window --toggle-tag"),
+                                            flag: "window --toggle-tag")
+            case "--toggle-float":
                 toggleFloat = true
-            case a == "--toggle-sticky":
+            case "--toggle-sticky":
                 toggleSticky = true
-            case a == "--toggle-orientation":
+            case "--toggle-orientation":
                 toggleOrientation = true
-            case a.hasPrefix("--cycle-stack="):
-                cycleStackDir = parseCycleStack(a)
-            case a == "--grow-master":
+            case "--cycle-stack":
+                cycleStackDir = parseCycleStack(cursor.value(for: "window --cycle-stack"))
+            case "--grow-master":
                 growMaster = true
-            case a == "--shrink-master":
+            case "--shrink-master":
                 shrinkMaster = true
-            case a == "--inc-master":
+            case "--inc-master":
                 incMaster = true
-            case a == "--dec-master":
+            case "--dec-master":
                 decMaster = true
-            case a.hasPrefix("--focus="):
-                focusDirArg = canonicalDirection(
-                    String(a.dropFirst("--focus=".count)))
-            case a.hasPrefix("--move="):
-                moveDirArg = canonicalDirection(
-                    String(a.dropFirst("--move=".count)))
+            case "--focus":
+                focusDirArg = canonicalDirection(cursor.value(for: "window --focus"))
+            case "--move":
+                moveDirArg = canonicalDirection(cursor.value(for: "window --move"))
             default:
                 die("unknown `window` flag \"\(a)\" — "
                     + "see `facet --help`")
@@ -544,7 +553,7 @@ extension FacetApp {
         // action: move the window *and* switch to its new workspace.
         // Loud reject when used without a destination.
         if follow && moveToArg == nil {
-            die("facet window: --follow only applies with --move-to=N — "
+            die("facet window: --follow only applies with --move-to N — "
                 + "see `facet --help`")
         }
         // Tag verbs are tag-mode only (like `lens`); reject loudly in
@@ -576,28 +585,29 @@ extension FacetApp {
     }
 
     /// Sub-command parser for ``facet scratchpad <flag>``. A named
-    /// hidden shelf: ``--stash=NAME`` parks the focused window onto the
-    /// shelf, ``--toggle=NAME`` summons it onto the current workspace
-    /// (or re-parks it if already visible there), ``--release=NAME``
+    /// hidden shelf: ``--stash NAME`` parks the focused window onto the
+    /// shelf, ``--toggle NAME`` summons it onto the current workspace
+    /// (or re-parks it if already visible there), ``--release NAME``
     /// drops it from the shelf as a normal tiled window. One action per
     /// invocation, same shape as ``runWindowCommand``.
     static func runScratchpadCommand(_ args: [String]) -> Never {
         var stashArg: String?
         var toggleArg: String?
         var releaseArg: String?
-        var i = 0
-        while i < args.count {
-            defer { i += 1 }
-            let a = args[i]
-            switch true {
-            case a.hasPrefix("--stash="):
-                stashArg = parseMarkName(a, prefix: "--stash=",
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--stash":
+                stashArg = parseMarkName(cursor.value(for: "scratchpad --stash"),
+                                         flag: "scratchpad --stash",
                                          noun: "scratchpad name")
-            case a.hasPrefix("--toggle="):
-                toggleArg = parseMarkName(a, prefix: "--toggle=",
+            case "--toggle":
+                toggleArg = parseMarkName(cursor.value(for: "scratchpad --toggle"),
+                                          flag: "scratchpad --toggle",
                                           noun: "scratchpad name")
-            case a.hasPrefix("--release="):
-                releaseArg = parseMarkName(a, prefix: "--release=",
+            case "--release":
+                releaseArg = parseMarkName(cursor.value(for: "scratchpad --release"),
+                                           flag: "scratchpad --release",
                                            noun: "scratchpad name")
             default:
                 die("unknown `scratchpad` flag \"\(a)\" — "
@@ -623,97 +633,104 @@ extension FacetApp {
         die("facet scratchpad: dispatch fell through (bug)")
     }
 
-    /// Parse a name from a `--flag=NAME` argument (marks, scratchpad
-    /// shelves). Any non-empty string is accepted (single letter for
-    /// hotkeys or a memorable word); an empty name is a loud reject
-    /// (exit 2). `noun` tailors the message (`"mark name"` by default,
-    /// `"scratchpad name"` for shelves).
-    static func parseMarkName(_ arg: String, prefix: String,
+    /// Validate a mark / scratchpad-shelf name (the already-extracted
+    /// value token). Routed through the shared `CLIName.sanitized` so it
+    /// obeys the same policy as tag names (#227): non-empty, no internal
+    /// whitespace, no leading `-`, none of the `:` `=` `,` delimiters.
+    /// Loud reject (exit 2) on a violation. `noun` tailors the message
+    /// (`"mark name"` by default, `"scratchpad name"` for shelves).
+    static func parseMarkName(_ value: String, flag: String,
                               noun: String = "mark name") -> String {
-        let raw = String(arg.dropFirst(prefix.count))
-        guard !raw.isEmpty else {
-            die("\(prefix.dropLast()): expected a non-empty \(noun)")
-        }
-        return raw
-    }
-
-    /// Parse a tag name from a `--flag=NAME` argument
-    /// (`window --tag=` / `--untag=` / `--toggle-tag=`). Delegates to
-    /// `validateTagName` → `TagName.sanitized` (strip a leading `#`, trim
-    /// surrounding whitespace, then loud-reject (exit 2): empty, a leading
-    /// `_` (reserved for the `_default` floor), or any of `=` `,` `:` (the
-    /// CLI / DNC delimiters); case-preserved). Separate from
-    /// `parseMarkName` because tag names carry stricter rules than mark
-    /// labels.
-    static func parseTagName(_ arg: String, prefix: String) -> String {
-        let flag = String(prefix.dropLast())   // "--tag" etc. (drop the `=`)
-        return validateTagName(String(arg.dropFirst(prefix.count)), flag: flag)
-    }
-
-    /// Shared tag-name validation (used by `parseTagName` and the
-    /// `--rename=OLD:NEW` halves). Delegates the rule to the
-    /// backend-neutral `TagName.sanitized` (strip a leading `#`, trim,
-    /// reject empty / leading `_` / `=`,`,`,`:`; case-preserved) and
-    /// loud-rejects (exit 2) on failure — the GUI tag input shares the
-    /// same helper but silently ignores a bad name. `flag` tailors the
-    /// message (e.g. `"--tag"`, `"--rename OLD"`).
-    static func validateTagName(_ s: String, flag: String) -> String {
-        // Shared rule with the GUI tag input (`TagName.sanitized`): strip
-        // a leading '#', trim, reject empty / leading '_' (reserved) /
-        // '=,:' (delimiters). The CLI fails loud where the GUI ignores.
-        guard let name = TagName.sanitized(s) else {
-            die("\(flag)=\(s): invalid tag name — must be non-empty, not "
-                + "start with '_' (reserved), and not contain '=', ',' or ':'")
+        guard let name = CLIName.sanitized(value) else {
+            die("\(flag): invalid \(noun) — must be non-empty, must not "
+                + "start with '-', and must not contain spaces or "
+                + "'=' ',' ':'")
         }
         return name
     }
 
-    /// Parse ``tag --rename=OLD:NEW`` into its two names. Both go
-    /// through `validateTagName`; splitting on `:` is unambiguous
-    /// because tag names can't contain it. Loud reject (exit 2) on a
-    /// missing half / an extra `:` (≠ 2 parts) or an invalid name.
-    static func parseTagRename(_ arg: String) -> (String, String) {
-        let raw = String(arg.dropFirst("--rename=".count))
-        let parts = raw.split(separator: ":",
-                              omittingEmptySubsequences: false).map(String.init)
-        guard parts.count == 2 else {
-            die("--rename expects OLD:NEW (two tag names joined by ':') — "
-                + "got \"\(raw)\"")
-        }
-        let old = validateTagName(parts[0], flag: "--rename OLD")
-        let new = validateTagName(parts[1], flag: "--rename NEW")
-        return (old, new)
+    /// Validate a tag name (the already-extracted value token of
+    /// `window --tag` / `--untag` / `--toggle-tag`, `tag --add` /
+    /// `--remove`). Delegates to `validateTagName`. Separate from
+    /// `parseMarkName` because tag names carry the extra `_`-floor /
+    /// `#`-strip rules.
+    static func parseTagName(_ value: String, flag: String) -> String {
+        validateTagName(value, flag: flag)
     }
 
-    /// Parse `--rotate=90|180|270`. Loud reject on anything else
-    /// (exit 2), matching the typo-fails-loudly rule.
-    static func parseRotateDegrees(_ arg: String) -> Int {
-        let raw = String(arg.dropFirst("--rotate=".count))
-        guard let n = Int(raw), [90, 180, 270].contains(n) else {
-            die("--rotate: expected 90 | 180 | 270, got \"\(raw)\"")
+    /// Shared tag-name validation (used by `parseTagName` and the
+    /// `tag --rename OLD NEW` halves). Delegates the rule to the
+    /// backend-neutral `TagName.sanitized` (strip a leading `#`, trim,
+    /// reject empty / leading `_` / leading `-` / internal space /
+    /// `=`,`,`,`:`; case-preserved) and loud-rejects (exit 2) on failure
+    /// — the GUI tag input shares the same policy but normalizes spaces.
+    /// `flag` tailors the message (e.g. `"window --tag"`,
+    /// `"tag --rename OLD"`).
+    static func validateTagName(_ s: String, flag: String) -> String {
+        guard let name = TagName.sanitized(s) else {
+            die("\(flag) \(s): invalid tag name — must be non-empty, must "
+                + "not start with '_' (reserved) or '-', and must not "
+                + "contain spaces or '=' ',' ':'")
+        }
+        return name
+    }
+
+    /// Validate a workspace name (the value of `workspace --rename` or the
+    /// name form of `workspace --focus`). Uses the shared `CLIName` policy
+    /// (no `#`-strip / `_`-floor — those are tag-specific). Loud reject
+    /// (exit 2) on a violation.
+    static func validateWorkspaceName(_ value: String, flag: String) -> String {
+        guard let name = CLIName.sanitized(value) else {
+            die("\(flag): invalid workspace name — must be non-empty, must "
+                + "not start with '-', and must not contain spaces or "
+                + "'=' ',' ':'")
+        }
+        return name
+    }
+
+    /// Parse the value of `workspace --remove TARGET` (#227). TARGET is
+    /// `current` (the active workspace — the old optional-value bare
+    /// `--remove`) or a 1-based index. Maps to the existing
+    /// `workspace-remove:` wire form — empty string = active — so the
+    /// server / catalog stay untouched (DNC byte-identical). Relative
+    /// targets (next/prev/recent/name) would need server resolution and
+    /// are out of scope for the grammar migration.
+    static func parseWorkspaceRemoveTarget(_ value: String) -> String {
+        if value.lowercased() == "current" { return "" }    // active WS
+        if let n = Int(value), n > 0 { return String(n) }   // 1-based index
+        die("workspace --remove: expected `current` or a workspace index "
+            + "(1-based), got \"\(value)\"")
+    }
+
+    /// Parse the value of `workspace --rotate 90|180|270`. Loud reject on
+    /// anything else (exit 2), matching the typo-fails-loudly rule.
+    static func parseRotateDegrees(_ value: String) -> Int {
+        guard let n = Int(value), [90, 180, 270].contains(n) else {
+            die("workspace --rotate: expected 90 | 180 | 270, "
+                + "got \"\(value)\"")
         }
         return n
     }
 
-    /// Parse `--mirror=horizontal|vertical`. Loud reject on anything
-    /// else (exit 2). horizontal = swap left↔right, vertical = top↔bottom.
-    static func parseMirrorAxis(_ arg: String) -> String {
-        let raw = String(arg.dropFirst("--mirror=".count))
-        let lower = raw.lowercased()
+    /// Parse the value of `workspace --mirror horizontal|vertical`. Loud
+    /// reject on anything else. horizontal = swap left↔right, vertical =
+    /// top↔bottom.
+    static func parseMirrorAxis(_ value: String) -> String {
+        let lower = value.lowercased()
         guard ["horizontal", "vertical"].contains(lower) else {
-            die("--mirror: expected horizontal | vertical, got \"\(raw)\"")
+            die("workspace --mirror: expected horizontal | vertical, "
+                + "got \"\(value)\"")
         }
         return lower
     }
 
-    /// Parse `--cycle-stack=next|prev`. Loud reject on anything
-    /// else (same pattern as `canonicalView` / `canonicalStyle`).
-    static func parseCycleStack(_ arg: String) -> String {
-        let raw = String(arg.dropFirst("--cycle-stack=".count))
-        let lower = raw.lowercased()
+    /// Parse the value of `window --cycle-stack next|prev`. Loud reject on
+    /// anything else (same pattern as `canonicalView` / `canonicalStyle`).
+    static func parseCycleStack(_ value: String) -> String {
+        let lower = value.lowercased()
         guard ["next", "prev"].contains(lower) else {
-            die("--cycle-stack: expected next | prev, got "
-                + "\"\(raw)\"")
+            die("window --cycle-stack: expected next | prev, got "
+                + "\"\(value)\"")
         }
         return lower
     }
@@ -732,7 +749,7 @@ extension FacetApp {
         }
     }
 
-    /// The four edges a rail can dock against (`--edge=`).
+    /// The four edges a rail can dock against (`--edge`).
     static let canonicalEdges = ["top", "bottom", "left", "right"]
 
     /// Validate + canonicalise a rail edge. Loud reject on typo
@@ -748,15 +765,15 @@ extension FacetApp {
         }
     }
 
-    /// Parse a geometry integer flag (``--pos-x=100`` etc). Loud
-    /// reject on non-integer / out-of-range so the user doesn't
-    /// end up with a panel they can't see.
-    static func parseGeomInt(_ arg: String,
-                             _ prefix: String,
+    /// Parse a geometry integer flag value (``--pos-x 100``,
+    /// ``--pos-y -1440`` etc). Negative coordinates are valid (strict
+    /// consumption took the token verbatim); width / height pass
+    /// `requirePositive`. Loud reject on non-integer / out-of-range so the
+    /// user doesn't end up with a panel they can't see.
+    static func parseGeomInt(_ value: String,
+                             flag: String,
                              requirePositive: Bool = false) -> Int {
-        let raw = String(arg.dropFirst(prefix.count))
-        let flag = String(prefix.dropLast())   // "--pos-x"
-        switch FacetCore.parseGeomInt(raw,
+        switch FacetCore.parseGeomInt(value,
                                       requirePositive: requirePositive) {
         case .success(let n):
             return n

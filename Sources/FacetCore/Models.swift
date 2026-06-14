@@ -85,8 +85,8 @@ public struct Window: Sendable {
     /// `false` for floating windows and layouts without a master.
     public let isMaster: Bool
     /// User-assigned mark (vim-style label) for this window, or `nil`
-    /// when unmarked. A mark is a 1:1 handle: `facet window --mark=a`
-    /// tags the focused window, `--focus-mark=a` jumps focus to it
+    /// when unmarked. A mark is a 1:1 handle: `facet window --mark a`
+    /// tags the focused window, `--focus-mark a` jumps focus to it
     /// (switching workspace if needed). Session-only, per-mac-desktop.
     /// Views surface it as a small badge.
     public let mark: String?
@@ -99,12 +99,12 @@ public struct Window: Sendable {
     public let isSticky: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
     /// `nil` when it isn't a scratchpad window. A scratchpad is a
-    /// named hidden shelf (`facet scratchpad --stash=NAME`): the
-    /// window parks off-screen until summoned (`--toggle=NAME`) onto
+    /// named hidden shelf (`facet scratchpad --stash NAME`): the
+    /// window parks off-screen until summoned (`--toggle NAME`) onto
     /// the current workspace as a floating overlay. Only *settled*
     /// (summoned, on-screen) scratchpad windows reach the snapshot and
     /// carry this name; *stashed* ones are filtered out entirely and
-    /// surface only in `facet status`. Session-only, per-mac-desktop;
+    /// surface only in `facet query`. Session-only, per-mac-desktop;
     /// orthogonal to `mark`, mutually exclusive with `isSticky`.
     /// Views surface it as a small `scratchpad:NAME` badge.
     public let scratchpad: String?

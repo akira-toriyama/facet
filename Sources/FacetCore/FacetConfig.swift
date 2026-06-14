@@ -236,7 +236,7 @@ public struct FacetConfig: Sendable {
     }
 
     /// Which edge the rail docks against. Unknown / unset → `.bottom`
-    /// (the original bottom bar). Case-insensitive. A CLI `--edge=`
+    /// (the original bottom bar). Case-insensitive. A CLI `--edge`
     /// overrides this at show time.
     public var effectiveRailEdge: RailEdge {
         RailEdge(rawValue: (railEdge ?? "bottom").lowercased()) ?? .bottom
@@ -688,15 +688,20 @@ public struct FacetConfig: Sendable {
     }
 
     /// Build the ordered `[[tag]]` name list from the raw TOML text.
-    /// Each table is `name = "…"`; tables without a non-empty name are
-    /// dropped. Duplicate names are dropped (first wins) so the bit
-    /// mapping stays 1:1. Declaration order is preserved.
+    /// Each table is `name = "…"`; the name is normalized through
+    /// `TagName.normalized` (space→`-`, `#`-strip, policy check) so a
+    /// config tag like `name = "my tag"` becomes `my-tag` and is
+    /// reachable from the CLI (#227). Names that fail the policy entirely
+    /// (empty, or carrying a forbidden `:` / `=`) are dropped. Duplicate
+    /// normalized names are dropped (first wins) so the bit mapping stays
+    /// 1:1. Declaration order is preserved.
     public static func tagDefs(fromTOML text: String) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
         for t in parseTOMLArrayOfTables(text, table: "tag") {
-            guard case .string(let name)? = t["name"],
-                  !name.isEmpty, !seen.contains(name) else { continue }
+            guard case .string(let raw)? = t["name"],
+                  let name = TagName.normalized(raw),
+                  !seen.contains(name) else { continue }
             seen.insert(name)
             out.append(name)
         }

@@ -25,7 +25,7 @@ extension Controller {
         guard let scr = NSScreen.main else { return }
         // No snapshot yet (cold start, never queried): trigger an
         // async fetch and re-enter once it lands. Keeps the UX
-        // consistent — pressing --view=grid always either shows or
+        // consistent — pressing --view grid always either shows or
         // no-ops, never shows an empty grid.
         if lastWorkspaces.isEmpty {
             let bk = backend
@@ -234,7 +234,7 @@ extension Controller {
     /// Dismiss the grid overlay. `immediate` tears it down
     /// synchronously (no fade): used when switching to another view,
     /// where the grid must be gone *this turn* — both so it doesn't
-    /// ride a mac-desktop slide (the `--view=tree` chord binding
+    /// ride a mac-desktop slide (the `--view tree` chord binding
     /// fires right before the switch) and so `isGridVisible` is false
     /// by the time the caller's `showLoading` / panel logic runs. The
     /// caller owns what shows next, so the immediate path skips the

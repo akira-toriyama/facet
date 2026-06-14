@@ -1,4 +1,4 @@
-// Pure geometry for the workspace rail (`--view=rail`).
+// Pure geometry for the workspace rail (`--view rail`).
 //
 // The rail docks a STRIP of every-workspace mini-screens against one
 // screen edge and fills the rest with a large HERO of the browsed

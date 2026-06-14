@@ -11,7 +11,7 @@
 import CoreGraphics
 
 /// One of the four directions a focus / move steps toward. Raw values
-/// match the CLI tokens (`window --focus=up` …).
+/// match the CLI tokens (`window --focus up` …).
 public enum Direction: String, Sendable, Equatable, CaseIterable {
     case up, down, left, right
 }

@@ -1,5 +1,5 @@
 // A "zoom a captured cell up to fill the view, then commit" transition,
-// shared by the full-screen overviews (`--view=grid` / `--view=rail`).
+// shared by the full-screen overviews (`--view grid` / `--view rail`).
 //
 // When the user commits a workspace switch (Return on the focal cell),
 // the overview captures that cell's current rendering and hands it here.

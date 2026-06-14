@@ -15,7 +15,7 @@ public enum AXPermission {
     /// keep the no-op fast path obvious.
     ///
     /// Intentionally **not** prompt-based: the adapter
-    /// reports passively (via `facet status`'s lastError) so the
+    /// reports passively (via `facet query`'s lastError) so the
     /// user can find it after the fact. Use `AX.ensureTrusted()`
     /// when you want the system permission dialog.
     public static func errorMessageIfMissing() -> String? {

@@ -14,11 +14,11 @@
 // Indexing convention
 //
 //   The catalog speaks 1-based indexes everywhere it borders the
-//   user-facing CLI (`facet workspace --focus=N` is 1-indexed). The
+//   user-facing CLI (`facet workspace --focus N` is 1-indexed). The
 //   `WindowBackend` protocol is 0-based on the wire, so
 //   `NativeAdapter` translates at the seam (`index + 1` on entry,
 //   `index - 1` on snapshot emit). Keeping the catalog 1-based
-//   internally matches what the user sees in `facet status` and
+//   internally matches what the user sees in `facet query` and
 //   `config.toml`'s `[desktop.N]` tables.
 //
 // Why `WindowSlot` carries `pid` alongside `workspace`
@@ -116,7 +116,7 @@ struct WorkspaceCatalog {
 
     /// 1-based index of the workspace that was active immediately
     /// before the current one, or nil before the first switch. Powers
-    /// `workspace --focus=recent`. Updated by `setActive` on every
+    /// `workspace --focus recent`. Updated by `setActive` on every
     /// real transition; cleared to nil only at init.
     private(set) var previousActiveIndex: Int?
 
@@ -209,7 +209,7 @@ struct WorkspaceCatalog {
     /// focus to a now-missing window.
     var lastFocusedOnLeave: [Int: WindowID] = [:]
 
-    /// User-assigned window marks (`facet window --mark=NAME`), a 1:1
+    /// User-assigned window marks (`facet window --mark NAME`), a 1:1
     /// bijection between mark name and window: each name maps to one
     /// window and each window carries at most one name. Setting a name
     /// reassigns it (the old window loses it) and clears any prior mark
@@ -235,7 +235,7 @@ struct WorkspaceCatalog {
     /// (a window can carry both).
     var everywhereWindows: Set<WindowID> = []
 
-    /// Named scratchpad shelves (`facet scratchpad --stash=NAME`): a
+    /// Named scratchpad shelves (`facet scratchpad --stash NAME`): a
     /// 1:1 bijection name ⇄ window, like `marks`, but the window is
     /// parked off-screen (anchor sliver) while *stashed*. Summoning
     /// re-homes it onto the current WS as a floating overlay (settle).
@@ -638,7 +638,7 @@ struct WorkspaceCatalog {
         // Stashed scratchpad windows stay in `windowMap` (so their WS
         // assignment + shelf survive) but must be invisible to the
         // views: drop them here so they appear in neither the tree nor
-        // a WS's window count. They surface only via `facet status`'s
+        // a WS's window count. They surface only via `facet query`'s
         // `stashed:` line. A *settled* (summoned) scratchpad window is
         // NOT in `stashedWindows`, so it stays and carries its badge.
         let tracked = live.filter {

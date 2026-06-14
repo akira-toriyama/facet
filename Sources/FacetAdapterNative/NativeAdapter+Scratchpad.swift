@@ -18,12 +18,12 @@ extension NativeAdapter {
 
     public func stashScratchpad(_ name: String) -> Bool {
         guard let id = focusedWindow() else {
-            Log.debug("native: scratchpad --stash=\"\(name)\" — no focus")
+            Log.debug("native: scratchpad --stash \"\(name)\" — no focus")
             return false
         }
         let rect = activeDisplayRect()
         guard catalog.stashWindow(name, id: id) else {
-            Log.debug("native: scratchpad --stash=\"\(name)\" — "
+            Log.debug("native: scratchpad --stash \"\(name)\" — "
                 + "\(id.serverID) not managed")
             return false
         }
@@ -32,7 +32,7 @@ extension NativeAdapter {
         if let slot = catalog.windowMap[id] {
             parkAnchor(WindowRef(id: id, pid: slot.pid))
         }
-        Log.debug("native: scratchpad --stash=\"\(name)\" -> \(id.serverID)")
+        Log.debug("native: scratchpad --stash \"\(name)\" -> \(id.serverID)")
         reflowActive(rect: rect)
         eventContinuation.yield(.refreshNeeded)
         return true
@@ -41,7 +41,7 @@ extension NativeAdapter {
     public func toggleScratchpad(_ name: String) -> Bool {
         guard let id = catalog.window(forScratchpad: name),
               let slot = catalog.windowMap[id] else {
-            Log.debug("native: scratchpad --toggle=\"\(name)\" — unset / gone")
+            Log.debug("native: scratchpad --toggle \"\(name)\" — unset / gone")
             return false
         }
         let rect = activeDisplayRect()
@@ -59,7 +59,7 @@ extension NativeAdapter {
                 Focus.assert(win, backend: self)   // focus doesn't auto-jump
             }
         }
-        Log.debug("native: scratchpad --toggle=\"\(name)\" -> "
+        Log.debug("native: scratchpad --toggle \"\(name)\" -> "
             + "\(id.serverID) stashed=\(catalog.isStashed(id))")
         reflowActive(rect: rect)
         eventContinuation.yield(.refreshNeeded)
@@ -69,7 +69,7 @@ extension NativeAdapter {
     public func releaseScratchpad(_ name: String) -> Bool {
         guard let id = catalog.window(forScratchpad: name),
               let slot = catalog.windowMap[id] else {
-            Log.debug("native: scratchpad --release=\"\(name)\" — no such shelf")
+            Log.debug("native: scratchpad --release \"\(name)\" — no such shelf")
             return false
         }
         let rect = activeDisplayRect()
@@ -85,7 +85,7 @@ extension NativeAdapter {
         } else {
             catalog.clearParkedState(of: id)
         }
-        Log.debug("native: scratchpad --release=\"\(name)\" -> \(id.serverID)")
+        Log.debug("native: scratchpad --release \"\(name)\" -> \(id.serverID)")
         reflowActive(rect: rect)
         eventContinuation.yield(.refreshNeeded)
         return true
@@ -254,7 +254,7 @@ extension NativeAdapter {
         // pid comes from `catalog.windowMap[id]` — recorded at
         // reconcile time, so no fresh CGWindowList sweep is needed.
         // Failures here all surface in the errors stream so
-        // `facet status` lastError tells the user *why* the
+        // `facet query` lastError tells the user *why* the
         // right-click "Close window" appeared to do nothing —
         // a debug-log-only failure would be invisible.
         guard let pid = catalog.pid(for: id) else {
@@ -416,7 +416,7 @@ extension NativeAdapter {
         case .toggleOrientation:
             // bsp-only: rotate the focused window's parent split. The
             // master engines pick their edge directly via
-            // `--layout=master-EDGE` (M9-2), so there's no orientation
+            // `--layout master-EDGE` (M9-2), so there's no orientation
             // knob left to flip here.
             guard catalog.mode(of: catalog.activeIndex) == "bsp",
                   let id = focusedWindow() else { return }

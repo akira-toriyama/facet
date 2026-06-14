@@ -1,8 +1,8 @@
-// `facet status` data path.
+// `facet query` data path.
 //
 // The server (Controller) keeps `/tmp/facet-status.json` in sync
 // with its live state — written once at startup and again after
-// every reconcile. The client (`facet status`) just reads the
+// every reconcile. The client (`facet query`) just reads the
 // file, decodes the JSON, and renders the human-readable summary.
 //
 // Why a file instead of DNC round-trip: facet's existing IPC is
@@ -23,7 +23,7 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
     public let active: Bool
     public let windowCount: Int
     /// How many of `windowCount` are sticky (pinned across every WS).
-    /// Surfaced by `facet status` as a "N sticky" suffix.
+    /// Surfaced by `facet query` as a "N sticky" suffix.
     public let stickyCount: Int
 
     public init(index: Int, name: String,
@@ -39,7 +39,7 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
     // Tolerate a status file written before `stickyCount` existed: a
     // stale `/tmp/facet-status.json` from an old server lingering across
     // an in-place upgrade would otherwise throw `keyNotFound` and make
-    // `facet status` fail until the next reconcile rewrites the file.
+    // `facet query` fail until the next reconcile rewrites the file.
     // A missing key decodes to 0. (`Encodable` stays synthesized.)
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -51,7 +51,7 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
     }
 }
 
-/// Everything `facet status` shows in one shot. Encoded as JSON
+/// Everything `facet query` shows in one shot. Encoded as JSON
 /// so the file is also greppable / inspectable by other tools.
 public struct StatusSnapshot: Codable, Sendable, Equatable {
     public let backend: String           // e.g. "native"
@@ -60,7 +60,7 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
     public let workspaces: [WorkspaceStatusEntry]
     /// Names of currently *stashed* scratchpad shelves — hidden,
     /// off-screen windows summonable with `facet scratchpad
-    /// --toggle=NAME`. A *settled* (summoned) scratchpad window
+    /// --toggle NAME`. A *settled* (summoned) scratchpad window
     /// instead appears in the tree under its workspace, so it's
     /// absent here. Mac-desktop-global (the shelf isn't per-WS), so it's a
     /// top-level field rather than a per-`WorkspaceStatusEntry` count.

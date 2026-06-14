@@ -101,7 +101,7 @@ extension Controller {
                     let name = String(s.dropFirst("window-mark:".count))
                     if !self.backend.markFocusedWindow(name) {
                         self.setError(
-                            "window --mark=\(name): no focused window")
+                            "window --mark \(name): no focused window")
                     }
                     self.scheduleReconcile(after: 0.05)
 
@@ -110,7 +110,7 @@ extension Controller {
                         s.dropFirst("window-focus-mark:".count))
                     if !self.backend.focusMark(name) {
                         self.setError(
-                            "window --focus-mark=\(name): no such mark")
+                            "window --focus-mark \(name): no such mark")
                     } else {
                         self.scheduleReconcile(after: 0.05)
                     }
@@ -119,7 +119,7 @@ extension Controller {
                     let name = String(s.dropFirst("window-unmark:".count))
                     if !self.backend.unmark(name) {
                         self.setError(
-                            "window --unmark=\(name): no such mark")
+                            "window --unmark \(name): no such mark")
                     }
                     self.scheduleReconcile(after: 0.05)
 
@@ -127,7 +127,7 @@ extension Controller {
                     let name = String(
                         s.dropFirst("window-toggle-tag:".count))
                     if !self.backend.toggleTagOnFocusedWindow(name) {
-                        self.setError("window --toggle-tag=\(name): "
+                        self.setError("window --toggle-tag \(name): "
                             + "no focused window / not tag mode")
                     }
                     self.scheduleReconcile(after: 0.05)
@@ -135,7 +135,7 @@ extension Controller {
                 case let s where s.hasPrefix("window-tag:"):
                     let name = String(s.dropFirst("window-tag:".count))
                     if !self.backend.addTagToFocusedWindow(name) {
-                        self.setError("window --tag=\(name): "
+                        self.setError("window --tag \(name): "
                             + "no focused window / not tag mode")
                     }
                     self.scheduleReconcile(after: 0.05)
@@ -143,7 +143,7 @@ extension Controller {
                 case let s where s.hasPrefix("window-untag:"):
                     let name = String(s.dropFirst("window-untag:".count))
                     if !self.backend.removeTagFromFocusedWindow(name) {
-                        self.setError("window --untag=\(name): "
+                        self.setError("window --untag \(name): "
                             + "no such tag / no focused window")
                     }
                     self.scheduleReconcile(after: 0.05)
@@ -151,7 +151,7 @@ extension Controller {
                 case let s where s.hasPrefix("tag-add:"):
                     let name = String(s.dropFirst("tag-add:".count))
                     if !self.backend.addTag(name) {
-                        self.setError("tag --add=\(name): not tag mode, "
+                        self.setError("tag --add \(name): not tag mode, "
                             + "or vocabulary full (63 tags)")
                     }
                     self.scheduleReconcile(after: 0.05)
@@ -159,7 +159,7 @@ extension Controller {
                 case let s where s.hasPrefix("tag-remove:"):
                     let name = String(s.dropFirst("tag-remove:".count))
                     if !self.backend.removeTag(name) {
-                        self.setError("tag --remove=\(name): no such tag, "
+                        self.setError("tag --remove \(name): no such tag, "
                             + "or not tag mode")
                     }
                     self.scheduleReconcile(after: 0.05)
@@ -175,7 +175,8 @@ extension Controller {
                         .map(String.init)
                     if parts.count != 2
                         || !self.backend.renameTag(parts[0], to: parts[1]) {
-                        self.setError("tag --rename=\(body): no such tag, "
+                        let shown = body.replacingOccurrences(of: ":", with: " ")
+                        self.setError("tag --rename \(shown): no such tag, "
                             + "or the new name is already in use")
                     }
                     self.scheduleReconcile(after: 0.05)
@@ -184,7 +185,7 @@ extension Controller {
                     let name = String(s.dropFirst("scratchpad-stash:".count))
                     if !self.backend.stashScratchpad(name) {
                         self.setError(
-                            "scratchpad --stash=\(name): no focused window")
+                            "scratchpad --stash \(name): no focused window")
                     }
                     self.scheduleReconcile(after: 0.05)
 
@@ -192,7 +193,7 @@ extension Controller {
                     let name = String(s.dropFirst("scratchpad-toggle:".count))
                     if !self.backend.toggleScratchpad(name) {
                         self.setError(
-                            "scratchpad --toggle=\(name): no such shelf")
+                            "scratchpad --toggle \(name): no such shelf")
                     }
                     self.scheduleReconcile(after: 0.05)
 
@@ -200,7 +201,7 @@ extension Controller {
                     let name = String(s.dropFirst("scratchpad-release:".count))
                     if !self.backend.releaseScratchpad(name) {
                         self.setError(
-                            "scratchpad --release=\(name): no such shelf")
+                            "scratchpad --release \(name): no such shelf")
                     }
                     self.scheduleReconcile(after: 0.05)
 
@@ -288,7 +289,7 @@ extension Controller {
 
     // MARK: - Symmetric view dispatch
 
-    /// CLI `facet --view=tree --loading[=MS]`: paint the tree
+    /// CLI `facet --view tree --loading MS`: paint the tree
     /// skeleton now and hold it for `durationMs`, then repaint real
     /// content. An external tool (e.g. chord) fires this just before
     /// triggering a mac-desktop switch, so the shared
@@ -323,7 +324,7 @@ extension Controller {
 
     /// grid / rail are workspace-only surfaces; under `[grouping]
     /// by="tag"` they must never appear (tag mode shows only the
-    /// tree). The CLI rejects `--view/--hide/--toggle=grid|rail`
+    /// tree). The CLI rejects `--view/--hide/--toggle grid|rail`
     /// (exit 2) and `fatalConfigErrors` rejects a `default-view="grid"`
     /// startup, so a grid/rail op only reaches a dispatch method here
     /// via a stale chord or a hand-rolled DNC post that slipped past
@@ -347,7 +348,7 @@ extension Controller {
         // Views are mutually exclusive: requesting any non-grid view
         // drops the full-screen grid overlay first. This is also how
         // the grid closes on a mac-desktop switch — the chord ctrl+→
-        // binding fires `--view=tree --loading` just *before* the
+        // binding fires `--view tree --loading` just *before* the
         // switch, so the grid is gone before the OS slide. (Keeping it
         // open across the slide only ever flickers: macOS composites
         // no app window during the ~0.7s mac-desktop animation, regardless
@@ -376,7 +377,7 @@ extension Controller {
             showGrid()
         case "rail":
             // ``+active`` / geom are no-ops — the rail is a passive
-            // overview bar (never key). ``+edge`` (CLI ``--edge=``)
+            // overview bar (never key). ``+edge`` (CLI ``--edge``)
             // picks which screen edge it docks against; nil falls back
             // to the ``[rail] edge`` config default.
             showRail(edge: edge ?? config.effectiveRailEdge)
@@ -462,7 +463,7 @@ extension Controller {
                 + "(\(rangeHint(count: count)))")
             return
         }
-        // CLI `workspace --focus=N`: no explicit window pick, so let
+        // CLI `workspace --focus N`: no explicit window pick, so let
         // the backend auto-focus the last-touched window of the
         // destination (or activate Finder if empty). See memory
         // [[facet-ws-switch-focus-management]].
@@ -478,12 +479,12 @@ extension Controller {
     private func dispatchWindowMove(_ n: Int, follow: Bool = false) {
         let count = backend.workspaces().count
         guard n >= 1, n <= count else {
-            setError("window --move-to=\(n) out of range "
+            setError("window --move-to \(n) out of range "
                 + "(\(rangeHint(count: count)))")
             return
         }
         guard let id = backend.focusedWindow() else {
-            setError("window --move-to=\(n): no focused window")
+            setError("window --move-to \(n): no focused window")
             return
         }
         backend.moveWindow(id, toWorkspaceIndex: n - 1)
@@ -516,7 +517,7 @@ extension Controller {
     private func dispatchSetLayout(_ name: String) {
         guard let active = lastWorkspaces.first(where: \.isActive)
         else {
-            setError("set-layout=\(name): no active workspace")
+            setError("workspace --layout \(name): no active workspace")
             return
         }
         backend.setLayoutMode(workspaceIndex: active.index,
@@ -543,11 +544,11 @@ extension Controller {
         scheduleReconcile(after: 0.05)
     }
 
-    /// Live re-theme from `facet --theme=...`. Runtime-only — the change
+    /// Live re-theme from `facet --theme ...`. Runtime-only — the change
     /// does NOT persist across restarts, and it OVERRIDES the per-view
     /// `[tree]/[grid]/[rail].theme` keys (every surface shows `name`) until
     /// the user edits a theme key in config (then config wins) or issues
-    /// another `--theme=`. config.toml is the single source of truth; to
+    /// another `--theme`. config.toml is the single source of truth; to
     /// make a pick stick, edit ``[theme] name`` in the user's config.
     func applyStyle(_ name: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
