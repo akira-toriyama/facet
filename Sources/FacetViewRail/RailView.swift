@@ -485,8 +485,7 @@ public final class RailView: NSView {
             guard r.width >= 2, r.height >= 2 else { continue }
             out.append(MiniWindowHit(pid: win.pid, id: win.id,
                               isFocused: win.isFocused, rect: r,
-                              mark: win.mark,
-                              tags: Array(win.tags.dropFirst())))
+                              mark: win.mark))
         }
         return out
     }
@@ -755,7 +754,6 @@ public final class RailView: NSView {
         }
         stroke.setStroke(); p.lineWidth = 0.5; p.stroke()
         if let mark = w.mark { drawMiniMarkBadge(mark, in: w.rect, pal: pal) }
-        drawMiniTagDots(w.tags.count, in: w.rect, pal: pal)
     }
 
     // MARK: - Hover

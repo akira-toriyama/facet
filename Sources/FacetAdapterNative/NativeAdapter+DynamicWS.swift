@@ -503,8 +503,10 @@ extension NativeAdapter {
             return false
         }
         Log.debug("native: tag --add \"\(name)\"")
-        // No window changed, but the (interim) grouped tree gains an
-        // empty header for the new tag — repaint.
+        // No window changed and the flat tree only lists windows (a tag
+        // with no window has no row), so the repaint is a no-op for the
+        // tree today — kept so any future vocabulary-aware surface (lens
+        // picker, etc.) refreshes on a new tag.
         eventContinuation.yield(.refreshNeeded)
         return true
     }

@@ -589,8 +589,9 @@ public struct FacetConfig: Sendable {
     }
 
     /// Effective tag vocabulary (empty `TagModel` when none defined).
-    /// Declaration order is preserved — it drives header order and the
-    /// primary tag.
+    /// Declaration order is preserved — it fixes each tag's bit, the
+    /// startup lens (`firstBit`), and the order a window's `#tag` chips
+    /// list on its flat tree row (`names(in:)`).
     public var effectiveTagModel: TagModel {
         TagModel(tagDefs ?? [])
     }

@@ -796,7 +796,8 @@ final class Controller: NSObject {
         let macDesktopOrdinal = activeMacDesktopID == 0
             ? nil : MacDesktops.ordinal(for: activeMacDesktopID)
         let contentH = sidebarView.update(wss, titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+                                          macDesktop: macDesktopOrdinal,
+                                          tagMode: config.effectiveGrouping == .tag)
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }

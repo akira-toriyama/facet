@@ -338,4 +338,50 @@ final class TagCatalogTests: XCTestCase {
         XCTAssertEqual(c.renameTagName("work", to: "web"), .collision)
         XCTAssertEqual(c.renameTagName("ghost", to: "x"), .unknownOld)
     }
+
+    // MARK: - tagSnapshot (flat render, #191 PR-6)
+
+    func testTagSnapshotIsOneFlatActiveWorkspace() {
+        var c = tagCatalog(lens: 0b001)
+        taggedAll(&c, [(10, 0b001), (20, 0b010), (30, 0b101)])
+        let snap = c.tagSnapshot(live: [window(10), window(20), window(30)],
+                                 focused: wid(10), activeRect: .zero)
+        // Exactly ONE synthetic, always-active workspace (index 0) holding
+        // every tracked window once, in stable serverID order.
+        XCTAssertEqual(snap.count, 1)
+        XCTAssertEqual(snap[0].index, 0)
+        XCTAssertTrue(snap[0].isActive)
+        XCTAssertEqual(snap[0].windows.map(\.id), [wid(10), wid(20), wid(30)])
+        XCTAssertEqual(snap[0].windows.first { $0.id == wid(10) }?.isFocused,
+                       true)
+    }
+
+    func testTagSnapshotRowCarriesEveryTagNameNotTheFloor() {
+        var c = tagCatalog(lens: 0b001)
+        taggedAll(&c, [(10, 0b101)])   // work + media (+ floor bit 63)
+        let snap = c.tagSnapshot(live: [window(10)],
+                                 focused: nil, activeRect: .zero)
+        // All user tags as chips, declaration order; the _default floor is
+        // never surfaced (it isn't in `tagModel.names`).
+        XCTAssertEqual(snap[0].windows.first?.tags, ["work", "media"])
+    }
+
+    func testTagSnapshotEmptyWhenNoTrackedWindows() {
+        // Live windows that were never reconciled into the map are
+        // untracked → flat snapshot is empty → the panel hides.
+        let c = tagCatalog(lens: 0b001)
+        XCTAssertTrue(c.tagSnapshot(live: [window(10)],
+                                    focused: nil, activeRect: .zero).isEmpty)
+    }
+
+    func testTagSnapshotIncludesParkedOutOfLensWindows() {
+        var c = tagCatalog(lens: 0b001)   // lens = work
+        taggedAll(&c, [(10, 0b001),       // work → in the lens
+                       (20, 0b010)])      // web  → out of the lens (parked)
+        let snap = c.tagSnapshot(live: [window(10), window(20)],
+                                 focused: nil, activeRect: .zero)
+        // The flat list is the full tag world — parked (out-of-lens)
+        // windows still appear, independent of the lens.
+        XCTAssertEqual(snap[0].windows.map(\.id), [wid(10), wid(20)])
+    }
 }

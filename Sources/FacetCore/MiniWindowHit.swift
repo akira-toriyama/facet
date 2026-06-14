@@ -12,16 +12,14 @@ public struct MiniWindowHit: Sendable {
     public let isFocused: Bool
     public let rect: CGRect
     public let mark: String?      // user mark (M9-5 #3 corner badge)
-    public let tags: [String]     // secondary tag names (M11-3 PR3b dots)
 
     public init(pid: Int, id: WindowID, isFocused: Bool, rect: CGRect,
-                mark: String?, tags: [String]) {
+                mark: String?) {
         self.pid = pid
         self.id = id
         self.isFocused = isFocused
         self.rect = rect
         self.mark = mark
-        self.tags = tags
     }
 }
 

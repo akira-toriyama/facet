@@ -33,13 +33,6 @@ final class TagModelTests: XCTestCase {
         XCTAssertNil(TagModel([]).firstBit)
     }
 
-    func testPrimaryNameIsLowestSetBit() {
-        XCTAssertEqual(model.primaryName(of: 0b110), "web")   // web < media
-        XCTAssertEqual(model.primaryName(of: 0b100), "media")
-        XCTAssertEqual(model.primaryName(of: 0b111), "work")
-        XCTAssertNil(model.primaryName(of: 0))
-    }
-
     func testNamesInMaskAreDeclarationOrder() {
         XCTAssertEqual(model.names(in: 0b101), ["work", "media"])
         XCTAssertEqual(model.names(in: 0b111), ["work", "web", "media"])
@@ -50,7 +43,7 @@ final class TagModelTests: XCTestCase {
         let m = TagModel([])
         XCTAssertTrue(m.isEmpty)
         XCTAssertEqual(m.count, 0)
-        XCTAssertNil(m.primaryName(of: 0b1))
+        XCTAssertNil(m.firstBit)
     }
 
     func testReservesTopBitForDefaultFloor() {
@@ -128,12 +121,11 @@ final class TagModelTests: XCTestCase {
         XCTAssertEqual(m.names, ["work", "web"])  // unchanged by the rejects
     }
 
-    func testHoleAtBitZeroShiftsFirstBitAndPrimary() {
+    func testHoleAtBitZeroShiftsFirstBit() {
         var m = TagModel(["work", "web", "media"])
         _ = m.remove("work")                   // free bit 0 (the lowest)
         XCTAssertEqual(m.firstBit, 0b010)      // lowest DEFINED is now web
-        XCTAssertNil(m.primaryName(of: 0b001)) // bit 0 is a hole → nil
-        XCTAssertEqual(m.primaryName(of: 0b110), "web")
+        XCTAssertNil(m.bit(for: "work"))       // bit 0 is a freed hole
         XCTAssertEqual(m.names(in: 0b111), ["web", "media"])  // hole dropped
     }
 

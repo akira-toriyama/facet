@@ -8,7 +8,7 @@ final class MiniWindowHitTests: XCTestCase {
 
     private func hit(_ serverID: Int, _ rect: CGRect) -> MiniWindowHit {
         MiniWindowHit(pid: 1, id: WindowID(serverID: serverID),
-                      isFocused: false, rect: rect, mark: nil, tags: [])
+                      isFocused: false, rect: rect, mark: nil)
     }
 
     func testEmptyAndSinglePassThrough() {
