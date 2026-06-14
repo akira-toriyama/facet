@@ -53,14 +53,18 @@ final class TagModelTests: XCTestCase {
         XCTAssertNil(m.primaryName(of: 0b1))
     }
 
-    func testCapsAtSixtyFourTags() {
+    func testReservesTopBitForDefaultFloor() {
+        XCTAssertEqual(TagModel.defaultBit, UInt64(1) << 63)
+        XCTAssertEqual(TagModel.maxUserTags, 63)
         let many = (0..<100).map { "t\($0)" }
         let m = TagModel(many)
-        XCTAssertEqual(m.count, 64)
+        XCTAssertEqual(m.count, 63)                 // bit 63 reserved
         XCTAssertEqual(m.bit(for: "t0"), 1)
-        XCTAssertEqual(m.bit(for: "t63"), UInt64(1) << 63)
-        XCTAssertNil(m.bit(for: "t64"))            // dropped
-        XCTAssertEqual(m.allMask, UInt64.max)
+        XCTAssertEqual(m.bit(for: "t62"), UInt64(1) << 62)
+        XCTAssertNil(m.bit(for: "t63"))             // dropped (reserved)
+        // allMask is the user-tag union (bits 0...62) — never the floor.
+        XCTAssertEqual(m.allMask, TagModel.defaultBit - 1)
+        XCTAssertEqual(m.allMask & TagModel.defaultBit, 0)
     }
 
     // MARK: - AssignRules
