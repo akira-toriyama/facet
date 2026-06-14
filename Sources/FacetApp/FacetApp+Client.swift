@@ -403,6 +403,9 @@ extension FacetApp {
         var markArg: String?
         var focusMarkArg: String?
         var unmarkArg: String?
+        var tagArg: String?
+        var untagArg: String?
+        var toggleTagArg: String?
         var toggleFloat = false
         var toggleSticky = false
         var toggleOrientation = false
@@ -428,6 +431,12 @@ extension FacetApp {
                 focusMarkArg = parseMarkName(a, prefix: "--focus-mark=")
             case a.hasPrefix("--unmark="):
                 unmarkArg = parseMarkName(a, prefix: "--unmark=")
+            case a.hasPrefix("--tag="):
+                tagArg = parseTagName(a, prefix: "--tag=")
+            case a.hasPrefix("--untag="):
+                untagArg = parseTagName(a, prefix: "--untag=")
+            case a.hasPrefix("--toggle-tag="):
+                toggleTagArg = parseTagName(a, prefix: "--toggle-tag=")
             case a == "--toggle-float":
                 toggleFloat = true
             case a == "--toggle-sticky":
@@ -463,6 +472,9 @@ extension FacetApp {
             + (markArg != nil ? 1 : 0)
             + (focusMarkArg != nil ? 1 : 0)
             + (unmarkArg != nil ? 1 : 0)
+            + (tagArg != nil ? 1 : 0)
+            + (untagArg != nil ? 1 : 0)
+            + (toggleTagArg != nil ? 1 : 0)
             + (toggleFloat ? 1 : 0)
             + (toggleSticky ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
@@ -488,12 +500,20 @@ extension FacetApp {
             die("facet window: --follow only applies with --move-to=N — "
                 + "see `facet --help`")
         }
+        // Tag verbs are tag-mode only (like `lens`); reject loudly in
+        // workspace mode (exit 2) before touching the server.
+        if tagArg != nil || untagArg != nil || toggleTagArg != nil {
+            requireGrouping(.tag, subject: "window --tag/--untag/--toggle-tag")
+        }
         requireServerAlive()
         if let n = moveToArg { follow ? postWindowMoveFollow(n)
                                       : postWindowMove(n) }
         if let m = markArg { postControl("window-mark:" + m) }
         if let m = focusMarkArg { postControl("window-focus-mark:" + m) }
         if let m = unmarkArg { postControl("window-unmark:" + m) }
+        if let n = tagArg { postControl("window-tag:" + n) }
+        if let n = untagArg { postControl("window-untag:" + n) }
+        if let n = toggleTagArg { postControl("window-toggle-tag:" + n) }
         if toggleFloat { postWindowToggleFloat() }
         if toggleSticky { postWindowToggleSticky() }
         if toggleOrientation { postWindowToggleOrientation() }
@@ -566,6 +586,29 @@ extension FacetApp {
         let raw = String(arg.dropFirst(prefix.count))
         guard !raw.isEmpty else {
             die("\(prefix.dropLast()): expected a non-empty \(noun)")
+        }
+        return raw
+    }
+
+    /// Parse a tag name from a `--flag=NAME` argument
+    /// (`window --tag=` / `--untag=` / `--toggle-tag=`). Strips a
+    /// leading `#` (`#190` → `190`; the display form re-adds it). Loud
+    /// reject (exit 2) on: empty, a leading `_` (reserved for the
+    /// `_default` floor), or any of `=` `,` `:` (the CLI / DNC
+    /// delimiters). Case-preserved. Separate from `parseMarkName`
+    /// because tag names carry stricter rules than mark labels.
+    static func parseTagName(_ arg: String, prefix: String) -> String {
+        var raw = String(arg.dropFirst(prefix.count))
+        if raw.hasPrefix("#") { raw = String(raw.dropFirst()) }
+        let flag = String(prefix.dropLast())   // "--tag" etc. (drop the `=`)
+        guard !raw.isEmpty else {
+            die("\(flag)=NAME: expected a non-empty tag name")
+        }
+        guard !raw.hasPrefix("_") else {
+            die("\(flag)=\(raw): tag names cannot start with '_' (reserved)")
+        }
+        guard !raw.contains(where: { "=,:".contains($0) }) else {
+            die("\(flag)=\(raw): tag names cannot contain '=', ',' or ':'")
         }
         return raw
     }

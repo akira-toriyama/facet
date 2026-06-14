@@ -427,4 +427,57 @@ extension NativeAdapter {
         eventContinuation.yield(.refreshNeeded)   // repaint — badge gone
         return true
     }
+
+    // MARK: - Runtime window tagging (#191, tag mode)
+
+    public func addTagToFocusedWindow(_ name: String) -> Bool {
+        applyWindowRetag("tag", name) { $0.addTagToWindow($1, name: name) }
+    }
+
+    public func removeTagFromFocusedWindow(_ name: String) -> Bool {
+        applyWindowRetag("untag", name) { $0.removeTagFromWindow($1, name: name) }
+    }
+
+    public func toggleTagOnFocusedWindow(_ name: String) -> Bool {
+        applyWindowRetag("toggle-tag", name) {
+            $0.toggleTagOnWindow($1, name: name)
+        }
+    }
+
+    /// Shared body for the three runtime-retag verbs. Guards tag mode +
+    /// a managed focused window, runs the catalog mutator, then — like
+    /// `setLens`, on a single window — parks / restores it if its lens
+    /// visibility flipped and re-tiles the active union, finally
+    /// repainting. Returns `false` when there is no managed focused
+    /// window or the mutator rejected the name (unknown on `--untag` /
+    /// vocabulary full) so the Controller can surface the error.
+    private func applyWindowRetag(
+        _ verb: String, _ name: String,
+        _ mutate: (inout WorkspaceCatalog, WindowID)
+            -> WorkspaceCatalog.RetagVisibility?
+    ) -> Bool {
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
+              catalog.grouping == .tag else {
+            Log.debug("native: \(verb) \"\(name)\" — not tag mode / unmanaged")
+            return false
+        }
+        guard let id = focusedWindow() else {
+            Log.debug("native: \(verb) \"\(name)\" — no focused window")
+            return false
+        }
+        guard let vis = mutate(&catalog, id) else {
+            Log.debug("native: \(verb) \"\(name)\" — rejected (unknown / full)")
+            return false
+        }
+        cancelSlideForRetarget()
+        if vis != .unchanged, let pid = catalog.windowMap[id]?.pid {
+            let ref = WindowRef(id: id, pid: pid)
+            applyHide(toPark: vis == .park ? [ref] : [],
+                      toRestore: vis == .restore ? [ref] : [])
+        }
+        applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
+        Log.debug("native: \(verb) \"\(name)\" -> \(id.serverID) [\(vis)]")
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
 }

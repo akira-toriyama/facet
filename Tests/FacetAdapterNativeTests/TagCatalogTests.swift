@@ -182,4 +182,88 @@ final class TagCatalogTests: XCTestCase {
         let c = tagCatalog(lens: 0b011)   // work | web
         XCTAssertEqual(c.lensToggled("web"), 0b001)   // web cleared
     }
+
+    // MARK: - Runtime window tagging (#191 PR-2)
+
+    /// A window seeded into the map with a tag mask (incl. the floor).
+    private func tagged(_ c: inout WorkspaceCatalog,
+                        _ n: Int, _ mask: UInt64) {
+        _ = c.reconcile(live: [window(n)],
+                        tags: [wid(n): mask | TagModel.defaultBit])
+    }
+
+    func testAddTagSetsBitAndKeepsFloor() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)                       // work
+        XCTAssertNotNil(c.addTagToWindow(wid(10), name: "web"))
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b011 | TagModel.defaultBit)  // work + web + floor
+    }
+
+    func testAddTagAutoVivifiesUnknownName() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)
+        XCTAssertNil(c.tagModel.bit(for: "scratch"))     // not yet defined
+        XCTAssertNotNil(c.addTagToWindow(wid(10), name: "scratch"))
+        XCTAssertEqual(c.tagModel.bit(for: "scratch"), 0b1000)  // next free bit
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b1001 | TagModel.defaultBit)    // work + scratch + floor
+    }
+
+    func testAddTagNeverParks() {
+        // Adding only sets bits → visibility can't shrink.
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)
+        XCTAssertEqual(c.addTagToWindow(wid(10), name: "web"), .unchanged)
+    }
+
+    func testRemoveTagKeepsFloorAndParks() {
+        var c = tagCatalog(lens: 0b001)   // lens = work
+        tagged(&c, 10, 0b001)             // work only → shown
+        // Removing the only lens-intersecting tag parks the window.
+        XCTAssertEqual(c.removeTagFromWindow(wid(10), name: "work"), .park)
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, TagModel.defaultBit)  // floor stays
+    }
+
+    func testRemoveUnknownOrReservedTagRejected() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)
+        XCTAssertNil(c.removeTagFromWindow(wid(10), name: "ghost"))     // unknown
+        XCTAssertNil(c.removeTagFromWindow(wid(10), name: "_default"))  // reserved
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b001 | TagModel.defaultBit)     // untouched
+    }
+
+    func testToggleTagFlips() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)
+        _ = c.toggleTagOnWindow(wid(10), name: "web")   // add
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, 0b011 | TagModel.defaultBit)
+        _ = c.toggleTagOnWindow(wid(10), name: "web")   // remove
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, 0b001 | TagModel.defaultBit)
+    }
+
+    func testToggleAddingLensTagRestores() {
+        var c = tagCatalog(lens: 0b010)   // lens = web
+        tagged(&c, 10, 0b001)             // work only → hidden under web lens
+        // Toggling web on brings it into the lens.
+        XCTAssertEqual(c.toggleTagOnWindow(wid(10), name: "web"), .restore)
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, 0b011 | TagModel.defaultBit)
+    }
+
+    func testRetagUntrackedWindowReturnsNil() {
+        var c = tagCatalog(lens: 0b001)
+        XCTAssertNil(c.addTagToWindow(wid(99), name: "web"))
+        XCTAssertNil(c.removeTagFromWindow(wid(99), name: "work"))
+        XCTAssertNil(c.toggleTagOnWindow(wid(99), name: "web"))
+    }
+
+    func testAddTagNameVivifyDedupeAndReserved() {
+        var c = tagCatalog(lens: 0b001)
+        XCTAssertEqual(c.addTagName("work"), 0b001)   // existing → its bit
+        XCTAssertEqual(c.addTagName("new"), 0b1000)   // next free bit (idx 3)
+        XCTAssertEqual(c.tagModel.count, 4)
+        XCTAssertNil(c.addTagName("_default"))        // reserved → nil
+        XCTAssertEqual(c.tagModel.count, 4)           // unchanged
+    }
 }

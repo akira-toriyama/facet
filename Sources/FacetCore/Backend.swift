@@ -287,6 +287,26 @@ public protocol WindowBackend: Sendable {
     /// `false` when the name wasn't set (caller surfaces the error).
     func unmark(_ name: String) -> Bool
 
+    /// Add tag `name` to the focused window (`facet window --tag=NAME`,
+    /// tag mode). Auto-vivifies an unknown name: creates it in the
+    /// session tag vocabulary, then assigns. Returns `false` when there
+    /// is no managed focused window, the run isn't in tag mode, or the
+    /// vocabulary is full (63 user tags). Caller surfaces the error.
+    func addTagToFocusedWindow(_ name: String) -> Bool
+
+    /// Remove tag `name` from the focused window
+    /// (`facet window --untag=NAME`, tag mode). Strict: rejects an
+    /// unknown name. The `_default` floor is never removed. Returns
+    /// `false` when there is no focused window, the run isn't in tag
+    /// mode, or `name` isn't a defined tag.
+    func removeTagFromFocusedWindow(_ name: String) -> Bool
+
+    /// Toggle tag `name` on the focused window
+    /// (`facet window --toggle-tag=NAME`, tag mode). Auto-vivifies an
+    /// unknown name (then sets it). Returns `false` for the same
+    /// reasons as `addTagToFocusedWindow`.
+    func toggleTagOnFocusedWindow(_ name: String) -> Bool
+
     /// Stash the focused window onto scratchpad shelf `name`, parking
     /// it off-screen (`facet scratchpad --stash=NAME`). A named hidden
     /// shelf, 1:1 like marks; clears any sticky (XOR), force-floats and
@@ -366,6 +386,9 @@ public extension WindowBackend {
     func markFocusedWindow(_ name: String) -> Bool { false }
     func focusMark(_ name: String) -> Bool { false }
     func unmark(_ name: String) -> Bool { false }
+    func addTagToFocusedWindow(_ name: String) -> Bool { false }
+    func removeTagFromFocusedWindow(_ name: String) -> Bool { false }
+    func toggleTagOnFocusedWindow(_ name: String) -> Bool { false }
     func stashScratchpad(_ name: String) -> Bool { false }
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }
