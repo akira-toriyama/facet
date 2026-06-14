@@ -82,4 +82,56 @@ final class TagConfigTests: XCTestCase {
                           "layout=\(bad)")
         }
     }
+
+    // MARK: - grid/rail are workspace-only views (PR-5 gate)
+
+    func testTagModeWithGridDefaultViewIsFatal() {
+        // The grid VIEW is workspace-only. NB tagConfig() already sets the
+        // `grid` *layout* (valid) — this proves the gate keys off the
+        // default-view, not the layout, which share the word "grid".
+        var c = tagConfig(layout: "grid")
+        c.defaultView = "grid"
+        XCTAssertTrue(c.fatalConfigErrors().contains {
+            $0.contains("default-view") && $0.contains("workspace-only")
+        })
+    }
+
+    func testTagModeTreeDefaultViewIsClean() {
+        var c = tagConfig()
+        c.defaultView = "tree"
+        XCTAssertTrue(c.fatalConfigErrors().isEmpty)
+    }
+
+    func testGridDefaultViewIsFineInWorkspaceMode() {
+        // The grid view is workspace-only, so in workspace mode it's valid.
+        var c = FacetConfig()
+        c.defaultView = "grid"
+        XCTAssertTrue(c.fatalConfigErrors().isEmpty)
+    }
+
+    func testTagModeAccumulatesBothLayoutAndViewErrors() {
+        // fatalConfigErrors is Fail Fast: it surfaces EVERY problem at once,
+        // never short-circuits after the first. A bsp layout (incompatible)
+        // AND a grid default-view (workspace-only) must yield two distinct
+        // errors — guards against a future early-return / substring-dedupe
+        // regression (both messages share "workspace-only").
+        var c = tagConfig(layout: "bsp")
+        c.defaultView = "grid"
+        let errs = c.fatalConfigErrors()
+        XCTAssertEqual(errs.count, 2)
+        XCTAssertTrue(errs.contains { $0.contains("not compatible") })
+        XCTAssertTrue(errs.contains { $0.contains("default-view") })
+    }
+
+    func testTagModeRailDefaultViewClampsToAgentOnly() {
+        // Prong 3 only flags grid because `effectiveDefaultView` clamps an
+        // unknown/rail value to nil (→ agent-only), so rail can never reach
+        // a workspace-only-view-at-startup state. Pin that assumption: if a
+        // future change adds "rail" to the effectiveDefaultView allowlist,
+        // this fails and forces a deliberate prong-3 update.
+        var c = tagConfig()
+        c.defaultView = "rail"
+        XCTAssertNil(c.effectiveDefaultView)
+        XCTAssertTrue(c.fatalConfigErrors().isEmpty)
+    }
 }

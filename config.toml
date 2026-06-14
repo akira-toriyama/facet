@@ -472,6 +472,10 @@ action = "ignore"
 # carry multiple tags, and `facet lens` picks which tag set is shown
 # (windows outside the lens are anchor-parked, same as a hidden
 # workspace). Default: workspace. Unknown value clamps to workspace.
+# In tag mode the tree is the only view — grid / rail are workspace-only
+# (`--view`/`--hide`/`--toggle`=grid|rail and `default-view="grid"` exit 2).
+# Note this is the grid *view*; the grid *layout* (`[layout] default`) is
+# still fine in tag mode.
 # -----------------------------------------------------------------
 # [grouping]
 # by = "tag"
