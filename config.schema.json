@@ -1,0 +1,488 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "additionalProperties" : false,
+  "properties" : {
+    "animation" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "curve" : {
+          "default" : "cubic",
+          "description" : "Easing curve.",
+          "enum" : [
+            "cubic",
+            "spring",
+            "silky",
+            "snappy",
+            "random"
+          ],
+          "type" : "string"
+        },
+        "duration-ms" : {
+          "description" : "Slide duration (ms). Unset = per-curve default.",
+          "maximum" : 800,
+          "minimum" : 80,
+          "type" : "integer"
+        },
+        "enabled" : {
+          "default" : false,
+          "description" : "Animate window-geometry transitions (opt-in).",
+          "type" : "boolean"
+        },
+        "event-driven" : {
+          "default" : true,
+          "description" : "Also animate window open/close reflow.",
+          "type" : "boolean"
+        }
+      },
+      "type" : "object"
+    },
+    "assign" : {
+      "items" : {
+        "additionalProperties" : false,
+        "description" : "Match a window and give it tags (M11-3).",
+        "properties" : {
+          "app" : {
+            "type" : "string"
+          },
+          "max-height" : {
+            "type" : "integer"
+          },
+          "max-width" : {
+            "type" : "integer"
+          },
+          "role" : {
+            "type" : "string"
+          },
+          "subrole" : {
+            "type" : "string"
+          },
+          "tag" : {
+            "description" : "Single tag to assign.",
+            "type" : "string"
+          },
+          "tags" : {
+            "description" : "Multiple tags to assign.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "title" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "type" : "array"
+    },
+    "border" : {
+      "additionalProperties" : false,
+      "description" : "Tree-panel border effect.",
+      "properties" : {
+        "color-cycle-ms" : {
+          "description" : "Border animation period (ms).",
+          "maximum" : 120000,
+          "minimum" : 1000,
+          "type" : "integer"
+        },
+        "effect" : {
+          "default" : "off",
+          "enum" : [
+            "neon",
+            "cyber",
+            "vapor",
+            "kawaii",
+            "rainbow",
+            "chomp",
+            "random",
+            "off"
+          ],
+          "type" : "string"
+        },
+        "glow" : {
+          "default" : true,
+          "description" : "Neon bloom under the stroke.",
+          "type" : "boolean"
+        },
+        "max-width" : {
+          "description" : "Width-breathing ceil.",
+          "type" : "integer"
+        },
+        "min-width" : {
+          "description" : "Width-breathing floor (set with max-width).",
+          "type" : "integer"
+        },
+        "width" : {
+          "default" : 1.5,
+          "maximum" : 30,
+          "minimum" : 0.5,
+          "type" : "number"
+        }
+      },
+      "type" : "object"
+    },
+    "default-view" : {
+      "description" : "Panel shown at launch; unset = agent-only (no panel).",
+      "enum" : [
+        "tree",
+        "grid"
+      ],
+      "type" : "string"
+    },
+    "desktop" : {
+      "additionalProperties" : true,
+      "description" : "`[desktop.N]` per-mac-desktop workspace seeds: `K = { name = \"Dev\", layout = \"bsp\" }` (N = Mission Control ordinal, K = facet WS index).",
+      "type" : "object"
+    },
+    "exclude" : {
+      "items" : {
+        "additionalProperties" : false,
+        "description" : "Windows matching a rule are floated/ignored, not tiled.",
+        "properties" : {
+          "action" : {
+            "default" : "float",
+            "enum" : [
+              "float",
+              "ignore",
+              "manage"
+            ],
+            "type" : "string"
+          },
+          "app" : {
+            "description" : "App-name regex (substring unless anchored).",
+            "type" : "string"
+          },
+          "max-height" : {
+            "type" : "integer"
+          },
+          "max-width" : {
+            "type" : "integer"
+          },
+          "role" : {
+            "description" : "AX role (exact).",
+            "type" : "string"
+          },
+          "subrole" : {
+            "description" : "AX subrole (exact).",
+            "type" : "string"
+          },
+          "title" : {
+            "description" : "Title regex.",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "type" : "array"
+    },
+    "grid" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "cols" : {
+          "default" : 4,
+          "maximum" : 12,
+          "minimum" : 1,
+          "type" : "integer"
+        },
+        "label-position" : {
+          "default" : "up",
+          "enum" : [
+            "up",
+            "down"
+          ],
+          "type" : "string"
+        },
+        "theme" : {
+          "default" : "",
+          "description" : "Per-view theme; `\"\"` inherits `[theme].name`.",
+          "enum" : [
+            "terminal",
+            "chomp",
+            "rainbow",
+            "cobalt2",
+            "shades-of-purple",
+            "tokyo-hack",
+            "github-dark",
+            "dracula",
+            "catppuccin-mocha",
+            "gruvbox",
+            "github-light",
+            "catppuccin-latte",
+            "system",
+            "random",
+            ""
+          ],
+          "type" : "string"
+        },
+        "thumbnail-refresh-seconds" : {
+          "default" : 4,
+          "description" : "Background thumbnail capture interval; 0 disables.",
+          "maximum" : 60,
+          "minimum" : 0,
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "grouping" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "by" : {
+          "default" : "workspace",
+          "description" : "Window grouping paradigm.",
+          "enum" : [
+            "workspace",
+            "tag"
+          ],
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "layout" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "default" : {
+          "default" : "float",
+          "description" : "Startup layout: float | bsp | stack | a registered engine.",
+          "type" : "string"
+        },
+        "inner-gap" : {
+          "default" : 0,
+          "description" : "Gap between adjacent tiled windows (px).",
+          "maximum" : 1000,
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "outer-gap" : {
+          "default" : 0,
+          "description" : "Inset from screen edges (px); per-edge keys override.",
+          "maximum" : 1000,
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "outer-gap-bottom" : {
+          "maximum" : 1000,
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "outer-gap-left" : {
+          "maximum" : 1000,
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "outer-gap-right" : {
+          "maximum" : 1000,
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "outer-gap-top" : {
+          "maximum" : 1000,
+          "minimum" : 0,
+          "type" : "integer"
+        },
+        "smart-gaps" : {
+          "default" : false,
+          "description" : "Drop the outer gap for a lone tiled window.",
+          "type" : "boolean"
+        }
+      },
+      "type" : "object"
+    },
+    "rail" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "cells" : {
+          "default" : 7,
+          "description" : "Max strip cells shown at once.",
+          "maximum" : 20,
+          "minimum" : 1,
+          "type" : "integer"
+        },
+        "edge" : {
+          "default" : "bottom",
+          "description" : "Screen edge the rail docks against.",
+          "enum" : [
+            "top",
+            "bottom",
+            "left",
+            "right"
+          ],
+          "type" : "string"
+        },
+        "strip" : {
+          "default" : 30,
+          "description" : "Strip band size, % of the short screen edge.",
+          "maximum" : 50,
+          "minimum" : 8,
+          "type" : "integer"
+        },
+        "theme" : {
+          "default" : "",
+          "description" : "Per-view theme; `\"\"` inherits `[theme].name`.",
+          "enum" : [
+            "terminal",
+            "chomp",
+            "rainbow",
+            "cobalt2",
+            "shades-of-purple",
+            "tokyo-hack",
+            "github-dark",
+            "dracula",
+            "catppuccin-mocha",
+            "gruvbox",
+            "github-light",
+            "catppuccin-latte",
+            "system",
+            "random",
+            ""
+          ],
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "tag" : {
+      "items" : {
+        "additionalProperties" : false,
+        "description" : "Declared tag names (M11-3).",
+        "properties" : {
+          "name" : {
+            "description" : "Tag name (required).",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "type" : "array"
+    },
+    "theme" : {
+      "additionalProperties" : false,
+      "description" : "App-default palette.",
+      "properties" : {
+        "color-cycle-ms" : {
+          "description" : "Accent-rotation period for animated themes (ms). Unset = static.",
+          "maximum" : 120000,
+          "minimum" : 1000,
+          "type" : "integer"
+        },
+        "name" : {
+          "default" : "terminal",
+          "description" : "Theme name (sill catalog); `random` picks one per launch.",
+          "enum" : [
+            "terminal",
+            "chomp",
+            "rainbow",
+            "cobalt2",
+            "shades-of-purple",
+            "tokyo-hack",
+            "github-dark",
+            "dracula",
+            "catppuccin-mocha",
+            "gruvbox",
+            "github-light",
+            "catppuccin-latte",
+            "system",
+            "random"
+          ],
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
+    "tree" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "height" : {
+          "description" : "Panel seed height (px).",
+          "type" : "integer"
+        },
+        "line-pets" : {
+          "description" : "Arcade pets walking the panel border; `[]` = off.",
+          "items" : {
+            "enum" : [
+              "chomp",
+              "ghost"
+            ],
+            "type" : "string"
+          },
+          "type" : "array"
+        },
+        "pet-lap-seconds" : {
+          "default" : 8,
+          "description" : "Seconds for a pet to circle a row once.",
+          "minimum" : 0.5,
+          "type" : "number"
+        },
+        "pet-scale" : {
+          "default" : 0.90000000000000002,
+          "description" : "Pet size multiplier.",
+          "minimum" : 0.10000000000000001,
+          "type" : "number"
+        },
+        "pos-x" : {
+          "description" : "Panel seed X (top-left origin, px). All four needed.",
+          "type" : "integer"
+        },
+        "pos-y" : {
+          "description" : "Panel seed Y (top-left origin, px).",
+          "type" : "integer"
+        },
+        "preview-mode" : {
+          "default" : "popover",
+          "description" : "How the hover preview is sized/placed.",
+          "enum" : [
+            "popover",
+            "mirror"
+          ],
+          "type" : "string"
+        },
+        "theme" : {
+          "default" : "",
+          "description" : "Per-view theme; `\"\"` inherits `[theme].name`.",
+          "enum" : [
+            "terminal",
+            "chomp",
+            "rainbow",
+            "cobalt2",
+            "shades-of-purple",
+            "tokyo-hack",
+            "github-dark",
+            "dracula",
+            "catppuccin-mocha",
+            "gruvbox",
+            "github-light",
+            "catppuccin-latte",
+            "system",
+            "random",
+            ""
+          ],
+          "type" : "string"
+        },
+        "width" : {
+          "description" : "Panel seed width (px).",
+          "type" : "integer"
+        }
+      },
+      "type" : "object"
+    },
+    "window" : {
+      "additionalProperties" : false,
+      "properties" : {
+        "raise-on-open" : {
+          "default" : "raise",
+          "description" : "How a freshly-opened floating window is surfaced.",
+          "enum" : [
+            "raise",
+            "activate",
+            "off"
+          ],
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    }
+  },
+  "title" : "facet config.toml",
+  "type" : "object"
+}

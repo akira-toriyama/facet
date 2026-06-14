@@ -391,6 +391,16 @@ enum FacetApp {
         // identity and restarts the daemon, in one step.
         if argv.contains("--resign") { runResign() }
 
+        // `--emit-schema` is a one-shot: print the `config.toml` JSON
+        // Schema (Draft-07) to stdout and exit. Generated from the same
+        // declarative `configSpec` that decodes the config, so the two
+        // can't drift. The repo regenerates `config.schema.json` with
+        // `facet --emit-schema > config.schema.json`.
+        if argv.contains("--emit-schema") {
+            print(FacetConfig.jsonSchema, terminator: "")
+            exit(0)
+        }
+
         // Sub-command dispatch: `facet window <flag>` opens a
         // window-scoped flag namespace so window ops don't share
         // surface area with workspace / view flags. Keeps the door
@@ -553,6 +563,12 @@ enum FacetApp {
         if let t = toggleArg         { postToggle(t) }
 
         // Server mode. Reached only when no client flag matched.
+
+        // Refresh the taplo schema sidecar next to the user config so
+        // editor completion/validation just works (idempotent; writes
+        // only on change, and the watcher tracks config.toml not this
+        // sibling, so no reload churn). Best-effort — never blocks start.
+        FacetConfig.installSchema()
 
         let cfg = FacetConfig.load()
         // Fail Fast (M11-3): refuse to start on an incoherent config

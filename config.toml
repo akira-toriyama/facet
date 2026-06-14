@@ -1,5 +1,11 @@
+#:schema ./config.schema.json
 # facet — user configuration
 # https://github.com/akira-toriyama/facet
+#
+# The `#:schema` line above gives editors (taplo / Even Better TOML) key
+# + value completion and inline validation. facet writes this schema next
+# to your config on launch, and it's generated from facet's own config
+# parser (`facet --emit-schema`) — so it always matches the binary.
 #
 # This file is the **single source of truth** for facet's settings.
 # Drop it (or your edited copy) at ~/.config/facet/config.toml:
