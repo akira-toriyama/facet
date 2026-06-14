@@ -92,8 +92,13 @@ extension WorkspaceCatalog {
             let mask = windowMap[w.id]?.tags ?? 0
             return tagModel.primaryName(of: mask) ?? fallbackTag
         }
-        return tagModel.names.enumerated().map { (i, tagName) in
-            let bit = UInt64(1) << UInt64(i)
+        // Iterate defined tags with their real bit (a `names` index is
+        // no longer a bit once a `tag --remove` opens a hole). `index`
+        // is the contiguous display order (0…count-1), not the sparse
+        // bit, so it stays a safe handle for the header-row machinery;
+        // `isActive` keys off the actual bit.
+        return tagModel.bitNames.enumerated().map { (i, entry) in
+            let (bit, tagName) = entry
             let isActive = (bit & lens) != 0
             let wins = (byTag[tagName] ?? []).map { w -> Window in
                 let mask = windowMap[w.id]?.tags ?? 0
@@ -154,19 +159,17 @@ extension WorkspaceCatalog {
         case restore    // was out of the lens union, now in
     }
 
-    /// Append `name` to the session tag vocabulary if absent and return
+    /// Add `name` to the session tag vocabulary if absent and return
     /// its bit; returns the existing bit when already defined. `nil`
     /// when the vocabulary is full (63 user tags) or `name` is the
-    /// reserved `_default`. The auto-vivify primitive shared by
-    /// `window --tag`/`--toggle-tag` (and later `tag --add`). The CLI
-    /// parser already rejects malformed names.
+    /// reserved `_default`. Reuses a freed bit (a hole left by a
+    /// `tag --remove`) before appending — the free-list lives in
+    /// `TagModel.add`. The auto-vivify primitive shared by
+    /// `window --tag`/`--toggle-tag` and `tag --add`. The CLI parser
+    /// already rejects malformed names.
     @discardableResult
     mutating func addTagName(_ name: String) -> UInt64? {
-        if let bit = tagModel.bit(for: name) { return bit }     // defined
-        guard name != TagModel.defaultName else { return nil }  // reserved
-        guard tagModel.count < TagModel.maxUserTags else { return nil } // full
-        tagModel = TagModel(tagModel.names + [name])
-        return tagModel.bit(for: name)
+        tagModel.add(name)
     }
 
     /// Add tag `name` to window `id`, auto-vivifying an unknown name.
@@ -209,6 +212,60 @@ extension WorkspaceCatalog {
         slot.tags = (old ^ bit) | TagModel.defaultBit
         windowMap[id] = slot
         return retagVisibility(id, old: old, new: slot.tags)
+    }
+
+    // MARK: - Runtime tag vocabulary (#191, tag mode — `facet tag`)
+
+    /// Remove tag `name` from the vocabulary AND strip its bit from
+    /// every window (`facet tag --remove`). The freed bit becomes
+    /// reusable (the hole stays in `tagModel` until a later `add`
+    /// reclaims it); each window keeps the `_default` floor. The bit is
+    /// also cleared from the current lens so a future tag reusing it
+    /// doesn't inherit stale visibility; if that empties the lens it
+    /// falls back to the floor (show-all) so windows don't vanish
+    /// wholesale. Returns the park/restore plan for windows whose lens
+    /// visibility flipped (the mask + lens change combined), or `nil`
+    /// when not in tag mode or `name` is unknown / reserved.
+    mutating func removeTagName(_ name: String) -> LensPlan? {
+        guard grouping == .tag, let bit = tagModel.remove(name) else {
+            return nil
+        }
+        let oldLens = lens
+        let wasShown = windowMap.mapValues { ($0.tags & oldLens) != 0 }
+        windowMap = windowMap.mapValues { slot in
+            guard (slot.tags & bit) != 0 else { return slot }
+            var s = slot
+            s.tags = (s.tags & ~bit) | TagModel.defaultBit
+            return s
+        }
+        var newLens = oldLens & ~bit
+        if newLens == 0 { newLens = TagModel.defaultBit }
+        lens = newLens
+        var toPark: [WindowRef] = []
+        var toRestore: [WindowRef] = []
+        for (id, slot) in windowMap {
+            if everywhereWindows.contains(id)
+                || stashedWindows.contains(id) { continue }
+            let was = wasShown[id] ?? false
+            let now = (slot.tags & newLens) != 0
+            if was && !now {
+                toPark.append(WindowRef(id: id, pid: slot.pid))
+            } else if !was && now {
+                toRestore.append(WindowRef(id: id, pid: slot.pid))
+            }
+        }
+        return LensPlan(oldLens: oldLens, newLens: newLens,
+                        toPark: toPark, toRestore: toRestore)
+    }
+
+    /// Rename tag `old` to `new` in place (`facet tag --rename`) — the
+    /// bit is unchanged, so no window mask or lens edit is needed (pure
+    /// vocabulary change). Returns the outcome so the adapter can
+    /// surface a precise reject.
+    mutating func renameTagName(_ old: String,
+                                to new: String) -> TagModel.RenameOutcome {
+        guard grouping == .tag else { return .unknownOld }
+        return tagModel.rename(old, to: new)
     }
 
     /// The lens-visibility transition between two tag masks for one

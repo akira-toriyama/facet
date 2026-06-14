@@ -518,7 +518,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// floating / sticky — never parked) so a `--toggle` that only adds
     /// a tag doesn't yank focus; otherwise focus the first window of the
     /// new visible union, or defocus to Finder when the union is empty.
-    private func applyLensAutoFocus(newLens: UInt64) {
+    /// Internal (not `private`) so the `tag --remove` path in
+    /// `NativeAdapter+DynamicWS` can reuse it — its lens edit needs the
+    /// same auto-focus as `setLens`.
+    func applyLensAutoFocus(newLens: UInt64) {
         if let cur = focusedWindow(), let slot = catalog.windowMap[cur] {
             let staysVisible = (slot.tags & newLens) != 0
                 || catalog.floatingWindows.contains(cur)

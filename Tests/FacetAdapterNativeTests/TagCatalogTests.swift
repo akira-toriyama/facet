@@ -192,6 +192,17 @@ final class TagCatalogTests: XCTestCase {
                         tags: [wid(n): mask | TagModel.defaultBit])
     }
 
+    /// Seed SEVERAL windows in ONE reconcile (each mask gets the floor).
+    /// Must be a single call: reconcile drops any window absent from the
+    /// live list, so two `tagged` calls would forget the first window.
+    private func taggedAll(_ c: inout WorkspaceCatalog,
+                           _ entries: [(Int, UInt64)]) {
+        _ = c.reconcile(
+            live: entries.map { window($0.0) },
+            tags: Dictionary(uniqueKeysWithValues:
+                entries.map { (wid($0.0), $0.1 | TagModel.defaultBit) }))
+    }
+
     func testAddTagSetsBitAndKeepsFloor() {
         var c = tagCatalog(lens: 0b001)
         tagged(&c, 10, 0b001)                       // work
@@ -265,5 +276,76 @@ final class TagCatalogTests: XCTestCase {
         XCTAssertEqual(c.tagModel.count, 4)
         XCTAssertNil(c.addTagName("_default"))        // reserved → nil
         XCTAssertEqual(c.tagModel.count, 4)           // unchanged
+    }
+
+    // MARK: - Runtime tag vocabulary (#191 PR-3, `facet tag`)
+
+    func testRemoveTagNameStripsBitFromEveryWindowKeepsFloor() {
+        var c = tagCatalog(lens: 0b001)   // lens = work
+        taggedAll(&c, [(10, 0b011),       // work + web
+                       (20, 0b010)])      // web only
+        XCTAssertNotNil(c.removeTagName("web"))
+        XCTAssertNil(c.tagModel.bit(for: "web"))   // gone from the vocabulary
+        // web bit stripped from both; floor (+ other bits) preserved.
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, 0b001 | TagModel.defaultBit)
+        XCTAssertEqual(c.windowMap[wid(20)]?.tags, TagModel.defaultBit)
+    }
+
+    func testRemoveTagNameFreesBitForReuse() {
+        var c = tagCatalog(lens: 0b001)
+        _ = c.removeTagName("web")                 // free bit 1
+        XCTAssertEqual(c.addTagName("ext"), 0b010) // reuses bit 1 (not bit 3)
+        XCTAssertEqual(c.tagModel.bit(for: "media"), 0b100)  // media unmoved
+    }
+
+    func testRemoveTagParksWindowThatLosesVisibility() {
+        var c = tagCatalog(lens: 0b011)   // lens = work | web
+        taggedAll(&c, [(10, 0b001),       // work → shown
+                       (20, 0b010)])      // web  → shown
+        // Remove web: w20 loses its only user tag and the lens drops
+        // bit 1 → {work}. w20 (now floor-only) parks; w10 stays.
+        let plan = c.removeTagName("web")!
+        XCTAssertEqual(c.lens, 0b001)
+        XCTAssertEqual(Set(plan.toPark.map(\.id)), [wid(20)])
+        XCTAssertEqual(Set(plan.toRestore.map(\.id)), [])
+        XCTAssertEqual(c.windowMap[wid(20)]?.tags, TagModel.defaultBit)
+        // w10 kept its lensed tag → still visible, untouched.
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, 0b001 | TagModel.defaultBit)
+    }
+
+    func testRemoveSoleLensTagFallsBackToFloorShowAll() {
+        var c = tagCatalog(lens: 0b010)   // lens = web only
+        tagged(&c, 10, 0b010)             // web → shown
+        let plan = c.removeTagName("web")!
+        // Emptied lens → floor (show-all); the now floor-only window
+        // stays visible, so nothing parks.
+        XCTAssertEqual(c.lens, TagModel.defaultBit)
+        XCTAssertEqual(Set(plan.toPark.map(\.id)), [])
+        XCTAssertEqual(Set(plan.toRestore.map(\.id)), [])
+    }
+
+    func testRemoveTagNameRejectsUnknownReservedAndWorkspaceMode() {
+        var c = tagCatalog(lens: 0b001)
+        XCTAssertNil(c.removeTagName("ghost"))      // unknown
+        XCTAssertNil(c.removeTagName("_default"))   // reserved
+        var ws = WorkspaceCatalog()
+        ws.seed(configs: [(index: 1, config: WorkspaceConfig(name: ""))])
+        XCTAssertNil(ws.removeTagName("work"))      // not tag mode
+    }
+
+    func testRenameTagNameKeepsWindowMembership() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b010)             // web
+        XCTAssertEqual(c.renameTagName("web", to: "social"), .renamed(0b010))
+        // Bit unchanged → the window's mask is untouched.
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags, 0b010 | TagModel.defaultBit)
+        XCTAssertEqual(c.tagModel.bit(for: "social"), 0b010)
+        XCTAssertNil(c.tagModel.bit(for: "web"))
+    }
+
+    func testRenameTagNameRejects() {
+        var c = tagCatalog(lens: 0b001)
+        XCTAssertEqual(c.renameTagName("work", to: "web"), .collision)
+        XCTAssertEqual(c.renameTagName("ghost", to: "x"), .unknownOld)
     }
 }
