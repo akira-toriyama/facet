@@ -55,13 +55,13 @@ let package = Package(
         // Shared theming foundation (plan atelier). Pinned to a SemVer
         // tag for release/CI reproducibility; `.upToNextMinor` keeps it
         // on a single pre-1.0 minor (a pre-1.0 minor can break, so don't
-        // auto-jump). Floor 0.7.1 = the `Toml` module (the family's ONE
-        // hand-rolled TOML subset parser; facet's in-tree parser folded
-        // into it in atelier Phase 1.6) + its escape-aware comment fix.
+        // auto-jump). Floor 0.9.0 = the `ConfigSchema` module (one
+        // declarative `Spec` drives BOTH the config.toml decode and the
+        // JSON Schema emitted for taplo completion — `facet --emit-schema`).
         // For local, atomic sill↔facet editing, temporarily swap this
         // line for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "0.8.0")),
+                 .upToNextMinor(from: "0.9.0")),
     ],
     targets: [
         // FacetCore links sill's PURE `Palette` module (AppKit-free, so it
@@ -71,6 +71,10 @@ let package = Package(
         .target(name: "FacetCore", dependencies: [
             .product(name: "Palette", package: "sill"),
             .product(name: "Toml", package: "sill"),
+            // ConfigSchema: one declarative `Spec` drives BOTH the
+            // config.toml decode and the JSON Schema emitted for taplo
+            // completion (`facet --emit-schema`) — so the two never drift.
+            .product(name: "ConfigSchema", package: "sill"),
         ]),
         .target(name: "FacetAccessibility", dependencies: ["FacetCore"]),
         .target(name: "FacetAdapterNative",

@@ -560,145 +560,19 @@ public struct FacetConfig: Sendable {
 
     // MARK: - Construction from parsed TOML
 
+    /// Build from the FLAT `[section: [key: value]]` map (the literal-
+    /// header dict from `Toml.parseFlat`). The uniform `[block]` keys are
+    /// driven by the single declarative `configSpec` (which ALSO emits the
+    /// JSON Schema — see `FacetConfig+Spec.swift`); the dynamic
+    /// `[desktop.N]` sections are decoded by their own helper. The
+    /// `[[exclude]]/[[tag]]/[[assign]]` arrays-of-tables are filled by
+    /// `load` from the raw text (they don't live in this flat map).
     public static func from(toml: [String: [String: TOMLValue]])
         -> FacetConfig
     {
         var c = FacetConfig()
-        // Top-level
-        if case .string(let s)? = toml[""]?["default-view"] {
-            c.defaultView = s
-        }
-        // [theme] — app-default palette + cycle (the old top-level
-        // bare keys are retired: no flat top-level keys, per the
-        // family reference style).
-        if case .string(let s)? = toml["theme"]?["name"] {
-            c.theme = s
-        }
-        if let n = toml["theme"]?["color-cycle-ms"]?.asInt {
-            c.themeColorCycleMs = n
-        }
-        // [grouping]
-        if case .string(let s)? = toml["grouping"]?["by"] { c.grouping = s }
-        // [window]
-        if case .string(let s)? = toml["window"]?["raise-on-open"] {
-            c.raiseOnOpen = s
-        }
-        // [grid]
-        if let n = toml["grid"]?["cols"]?.asInt { c.gridCols = n }
-        if case .string(let s)? = toml["grid"]?["label-position"] {
-            c.gridLabelPosition = s
-        }
-        if let n = toml["grid"]?["thumbnail-refresh-seconds"]?.asInt {
-            c.thumbnailRefreshSeconds = n
-        }
-        if case .string(let s)? = toml["grid"]?["theme"] { c.gridTheme = s }
-        // [rail]
-        if case .string(let s)? = toml["rail"]?["edge"] { c.railEdge = s }
-        if let n = toml["rail"]?["cells"]?.asInt { c.railCells = n }
-        if let n = toml["rail"]?["strip"]?.asInt { c.railStrip = n }
-        if case .string(let s)? = toml["rail"]?["theme"] { c.railTheme = s }
-        // [tree]
-        if case .string(let s)? = toml["tree"]?["preview-mode"] {
-            c.treePreviewMode = s
-        }
-        if case .string(let s)? = toml["tree"]?["theme"] { c.treeTheme = s }
-        if let n = toml["tree"]?["pos-x"]?.asInt { c.treePosX = n }
-        if let n = toml["tree"]?["pos-y"]?.asInt { c.treePosY = n }
-        if let n = toml["tree"]?["width"]?.asInt { c.treeWidth = n }
-        if let n = toml["tree"]?["height"]?.asInt { c.treeHeight = n }
-        // line-pets: a TOML array only (`["chomp", "ghost"]` — the
-        // family grammar; the old lenient comma-string form is gone).
-        if let a = toml["tree"]?["line-pets"]?.asStringArray {
-            c.treeLinePets = a
-        }
-        if let v = toml["tree"]?["pet-scale"]?.asDouble {
-            c.treePetScale = v
-        }
-        if let v = toml["tree"]?["pet-lap-seconds"]?.asDouble {
-            c.treePetLapSeconds = v
-        }
-        // [layout]
-        if case .string(let s)? = toml["layout"]?["default"] {
-            c.defaultLayout = s
-        }
-        if let n = toml["layout"]?["inner-gap"]?.asInt {
-            c.innerGap = CGFloat(n)
-        }
-        if let n = toml["layout"]?["outer-gap"]?.asInt {
-            c.outerGap = CGFloat(n)
-        }
-        if let n = toml["layout"]?["outer-gap-top"]?.asInt {
-            c.outerGapTop = CGFloat(n)
-        }
-        if let n = toml["layout"]?["outer-gap-bottom"]?.asInt {
-            c.outerGapBottom = CGFloat(n)
-        }
-        if let n = toml["layout"]?["outer-gap-left"]?.asInt {
-            c.outerGapLeft = CGFloat(n)
-        }
-        if let n = toml["layout"]?["outer-gap-right"]?.asInt {
-            c.outerGapRight = CGFloat(n)
-        }
-        if case .bool(let b)? = toml["layout"]?["smart-gaps"] {
-            c.smartGaps = b
-        }
-        // [animation]
-        if case .bool(let b)? = toml["animation"]?["enabled"] {
-            c.animationsEnabled = b
-        }
-        if let n = toml["animation"]?["duration-ms"]?.asInt {
-            c.animationDurationMs = n
-        }
-        if case .string(let s)? = toml["animation"]?["curve"] {
-            c.animationCurve = s
-        }
-        if case .bool(let b)? = toml["animation"]?["event-driven"] {
-            c.animationEventDriven = b
-        }
-        // [border]
-        if case .string(let s)? = toml["border"]?["effect"] {
-            c.borderEffect = s
-        }
-        if case .bool(let b)? = toml["border"]?["glow"] {
-            c.borderGlow = b
-        }
-        if let v = toml["border"]?["width"]?.asDouble {
-            c.borderWidth = CGFloat(v)      // accepts `2` or `1.5`
-        }
-        if let n = toml["border"]?["color-cycle-ms"]?.asInt {
-            c.borderColorCycleMs = n
-        }
-        if let n = toml["border"]?["min-width"]?.asInt {
-            c.borderMinWidth = n
-        }
-        if let n = toml["border"]?["max-width"]?.asInt {
-            c.borderMaxWidth = n
-        }
-        // [desktop.N] per-mac-desktop workspace configs. The TOML
-        // parser flattens `[desktop.1]` to the section name
-        // "desktop.1"; N is the mac desktop ordinal (Mission Control
-        // order). Each int key is a WS index whose value is an inline
-        // table:
-        //   1 = { name = "Dev", layout = "bsp" }
-        // `layout` is optional; a missing / mistyped value is left
-        // to the catalog's seed step to clamp to the global default.
-        // A non-table value (typo) is silently dropped.
-        for (sectionName, section) in toml
-        where sectionName.hasPrefix("desktop.") {
-            guard let ordinal = Int(sectionName.dropFirst("desktop.".count)),
-                  ordinal >= 1 else { continue }
-            var configs: [Int: WorkspaceConfig] = [:]
-            for (key, value) in section {
-                guard let idx = Int(key), idx >= 1,
-                      case .table(let t) = value,
-                      case .string(let name)? = t["name"]
-                else { continue }
-                var layout: String? = nil
-                if case .string(let l)? = t["layout"] { layout = l }
-                configs[idx] = WorkspaceConfig(name: name, layout: layout)
-            }
-            if !configs.isEmpty { c.macDesktopWorkspaceConfigs[ordinal] = configs }
-        }
+        configSpec.decode(toml, into: &c)
+        decodeDesktopSections(toml, into: &c)
         return c
     }
 
