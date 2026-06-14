@@ -460,7 +460,11 @@ workspaces（active マーカー + 窓数）/ last error / timestamp の greppab
 スナップショットを stdout に出す。server が `/tmp/facet-status.json` を
 atomically 書き、client が読む（[[DNC (Distributed Notification)]] と同じ
 post-and-exit 系の IPC）。#227 で旧 `facet status` を吸収・改名（出力は同一）。
-- コード: `runQuery`（`FacetApp`）/ `StatusSnapshot`（`FacetCore`）
+`facet query --windows`（#223）は全 mac desktop の全窓を flat JSON 配列で吐く
+（raw プロパティ + 窓ごとの `facet` 状態 / 管理外は `null`・yabai `-m query` 相当・
+`jq` で絞る）。server は `/tmp/facet-query.json` を reconcile 毎に atomic 書き込み。
+- コード: `runQuery`/`runQueryWindows`（`FacetApp`）/ `StatusSnapshot`・
+  `WindowQueryEntry`/`WindowQuery`（`FacetCore`）/ `queryEntries()`（backend）
 - **Don't call it:** status, facet status, state dump, info コマンド
 
 ### CLI 文法（`--flag VALUE`）

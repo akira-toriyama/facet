@@ -366,6 +366,25 @@ public protocol WindowBackend: Sendable {
     /// show in the tree under their workspace. Empty when none.
     func stashedScratchpads() -> [String]
 
+    /// Per-window facet management state for `facet query --windows`
+    /// (#223), keyed by window id, across the active + parked catalogs.
+    /// Reads the in-memory catalog structs, so the Controller calls it on
+    /// the **main actor** (where the DNC dispatch also mutates them — a
+    /// quick read there, same risk class as `stashedScratchpads()`), then
+    /// hands the immutable result to ``queryEntries(facetStates:)``.
+    /// Empty when nothing is managed.
+    func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState]
+
+    /// Every window the window server reports, flattened for
+    /// `facet query --windows` (#223): raw properties + the facet state
+    /// from `facetStates` (or `nil` when unmanaged), across ALL mac
+    /// desktops (visited or not). Read-only / SIP-on; no side-effects.
+    /// Heavy (a full `CGWindowList` + SkyLight + AX-title sweep) and
+    /// touches **no** catalog state — the Controller calls it off-main on
+    /// `cliQueue`. Empty when the backend has nothing to report.
+    func queryEntries(facetStates:
+        [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry]
+
     /// Stream of backend state-change notifications.
     ///
     /// Consumed once at app start by the controller — typically as
@@ -432,4 +451,7 @@ public extension WindowBackend {
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }
     func stashedScratchpads() -> [String] { [] }
+    func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
+    func queryEntries(facetStates:
+        [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }
 }

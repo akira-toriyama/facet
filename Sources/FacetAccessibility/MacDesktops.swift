@@ -133,6 +133,34 @@ public enum MacDesktops {
         return Int(level)
     }
 
+    /// Map of every **user** mac desktop's SkyLight `id64` → its 1-based
+    /// Mission-Control ordinal (fullscreen Spaces, `type != 0`, excluded).
+    /// One `SLSCopyManagedDisplaySpaces` call; pair with
+    /// ``ids(forWindow:)`` to resolve a window's desktop ordinal without
+    /// re-enumerating per window (`facet query --windows`, #223). Empty
+    /// when SkyLight is unavailable. Same enumeration as ``ordinal(for:)``,
+    /// returning the whole map instead of one lookup.
+    public static func ordinalMap() -> [UInt64: Int] {
+        guard let cid = mainConnectionID, let copy = copyManagedSpacesFn,
+              let displays = copy(cid)?.takeRetainedValue()
+                as? [[String: Any]]
+        else { return [:] }
+        var map: [UInt64: Int] = [:]
+        var ordinal = 0
+        for display in displays {
+            let spaces = display["Spaces"] as? [[String: Any]] ?? []
+            for sp in spaces {
+                let type = (sp["type"] as? NSNumber)?.intValue ?? 0
+                guard type == 0 else { continue }   // skip fullscreen
+                ordinal += 1
+                if let id = (sp["id64"] as? NSNumber)?.uint64Value {
+                    map[id] = ordinal
+                }
+            }
+        }
+        return map
+    }
+
     /// 1-based position of `activeID` among **user** mac desktops
     /// (`type == 0`, i.e. excluding fullscreen Spaces), in Mission
     /// Control order across displays. This is the ordinal the user

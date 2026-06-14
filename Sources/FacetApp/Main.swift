@@ -257,6 +257,15 @@ enum FacetApp {
                                              /tmp/facet-status.json
                                              (server writes atomically).
                                              Greppable line format.
+          facet query --windows              print EVERY window as a flat
+                                             JSON array — raw props +
+                                             per-window facet state (or
+                                             null when unmanaged), across
+                                             all mac desktops. Pipe to jq:
+                                               facet query --windows \\
+                                                 | jq '.[]
+                                                   | select(.facet.tags[]?
+                                                            == "190")'
 
         SERVER CONTROLS
           facet --theme NAME                 13 themes: terminal, chomp,
@@ -465,13 +474,14 @@ enum FacetApp {
         if argv.first == "tag" {
             runTagCommand(Array(argv.dropFirst()))
         }
-        // Read-only query sub-command. Plain noun (no `--`)
-        // because it returns data rather than triggering a verb.
-        // (#227: renamed from `status`; the former verb is gone —
-        // a bare `facet status` now falls through to the loud
-        // unknown-flag reject below.)
-        if argv == ["query"] {
-            runQuery()
+        // Read-only query sub-command. Plain noun (no `--`) because it
+        // returns data rather than triggering a verb. (#227: renamed
+        // from `status`; the former verb is gone — a bare `facet status`
+        // now falls through to the loud unknown-flag reject below.)
+        // Bare `facet query` prints the human-readable status snapshot;
+        // `facet query --windows` prints the full per-window JSON (#223).
+        if argv.first == "query" {
+            runQuery(Array(argv.dropFirst()))
         }
 
         // Space-separated grammar (#227): each value-bearing flag
