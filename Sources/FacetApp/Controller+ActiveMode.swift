@@ -71,6 +71,19 @@ extension Controller {
         // exit-active here.
         if PopupMenu.shared.isOpen { return false }
 
+        // -- GUI tag-input sub-mode (#191 PR-7) --
+        // The tag-name box (search-bar widget) is open. Like search,
+        // pass everything to the NSTextField except Return (commit the
+        // tag) / Esc (cancel); while the IME is composing, pass those too.
+        if tagInputTarget != nil {
+            if panelHost.searchBar.isComposing { return false }
+            switch e.keyCode {
+            case 53:      cancelTagInput();  return true   // Esc
+            case 36, 76:  commitTagInput();  return true   // Return / Enter
+            default:      return false                     // → field (type / IME / ⌫)
+            }
+        }
+
         // -- Type-to-filter sub-mode --
         // Nav/commit keys consumed here; everything else returns
         // false so the event reaches the NSTextField (text + IME
@@ -154,5 +167,112 @@ extension Controller {
         panelHost.resignKey()
         panelHost.layout(contentHeight: sidebarView.contentHeight,
                          searching: sidebarView.searching)
+    }
+
+    // MARK: - GUI tag input (#191 PR-7)
+
+    /// Open the tag-name input box for `id` (the "Tag…" context-menu
+    /// item). Reuses the search-bar widget in a tag-input sub-mode (no
+    /// list filtering): becomes key so the field takes keystrokes + IME,
+    /// shows the bar with a "tag name…" prompt, and focuses the field.
+    func beginTagInput(forWindow id: WindowID) {
+        // Re-open while the box is already up (e.g. right-click another
+        // row, pick "Tag…" again): just retarget. Do NOT re-evaluate
+        // `tagInputEnteredActive` — kbNav is already true from the first
+        // open, so it would flip to false and teardown would forget we
+        // flipped to `.regular`, leaving the app stuck there.
+        if tagInputTarget != nil {
+            tagInputTarget = id
+            panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
+            return
+        }
+        // The field needs key focus + an active app to receive typing /
+        // IME (a passive `.nonactivatingPanel` can't be key). When the
+        // panel is passive (right-click path) enterActive becomes key + a
+        // .regular app and stores prevApp; when already in `--active` (the
+        // `m` path) we leave that session as-is. Record which so teardown
+        // can undo exactly what we did.
+        tagInputEnteredActive = !sidebarView.kbNav
+        if tagInputEnteredActive { enterActive() }
+        tagInputTarget = id
+        panelHost.searchBar.stringValue = ""
+        panelHost.searchBar.setPlaceholder("tag name…")
+        panelHost.inputBarVisible = true
+        panelHost.layout(contentHeight: sidebarView.contentHeight,
+                         searching: sidebarView.searching)
+        panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
+    }
+
+    /// Return in the tag-input box: add the typed name (auto-vivify) to
+    /// the target window, then tear the box down. An empty / invalid name
+    /// (`TagName.sanitized` → nil) just closes the box without tagging.
+    func commitTagInput() {
+        let id = tagInputTarget
+        let raw = panelHost.searchBar.stringValue
+        endTagInput()
+        guard let id, let name = TagName.sanitized(raw) else { return }
+        let bk = backend
+        cliQueue.async { _ = bk.addTag(name, toWindow: id) }
+        scheduleReconcile(after: 0.05)
+    }
+
+    /// Esc in the tag-input box: close it without tagging.
+    func cancelTagInput() { endTagInput() }
+
+    /// Tear down the tag-input box when the panel lost key EXTERNALLY
+    /// (handlePanelKeyChange's `isKey:false` branch — the user clicked
+    /// another app). That branch already cleared kbNav and does NOT run
+    /// `_exitActiveImpl`, so if `beginTagInput` flipped us to `.regular`
+    /// we must revert the activation policy here (else the LSUIElement app
+    /// stays a Dock-icon `.regular` app forever). prevApp is dropped, not
+    /// reactivated — the user already chose another app.
+    func abandonTagInput() {
+        guard tagInputTarget != nil else { return }
+        let selfEntered = tagInputEnteredActive
+        clearTagInputState()
+        if selfEntered {
+            panelHost.resignKey()                 // wantsKey = false
+            NSApp.setActivationPolicy(.accessory)
+            prevApp = nil
+        }
+        panelHost.layout(contentHeight: sidebarView.contentHeight,
+                         searching: sidebarView.searching)
+    }
+
+    /// "Untag #NAME" context-menu item: strip `name` from window `id`.
+    func removeTagFromWindow(_ name: String, windowID id: WindowID) {
+        let bk = backend
+        cliQueue.async { _ = bk.removeTag(name, fromWindow: id) }
+        scheduleReconcile(after: 0.05)
+    }
+
+    /// Tear down the tag-input box on commit / cancel. If `beginTagInput`
+    /// entered `--active` just for the box, fully exit it (revert
+    /// `.regular`, restore prevApp). If we were ALREADY in `--active` (the
+    /// `m` path), stay there — drop the bar and hand key focus back to the
+    /// panel so keyboard nav resumes (the `m` menu's "stays --active"
+    /// contract).
+    private func endTagInput() {
+        guard tagInputTarget != nil else { return }
+        let selfEntered = tagInputEnteredActive
+        clearTagInputState()
+        if selfEntered {
+            // _exitActiveImpl re-lays out (bar now hidden) + resigns key +
+            // restores prevApp + reverts to .accessory.
+            _exitActiveImpl(restore: true)
+        } else {
+            panelHost.panel.makeFirstResponder(nil)   // off the hidden field
+            panelHost.layout(contentHeight: sidebarView.contentHeight,
+                             searching: sidebarView.searching)
+        }
+    }
+
+    /// Common box-state reset (target, flag, bar, field text, prompt).
+    private func clearTagInputState() {
+        tagInputTarget = nil
+        tagInputEnteredActive = false
+        panelHost.inputBarVisible = false
+        panelHost.searchBar.stringValue = ""
+        panelHost.searchBar.resetPlaceholder()
     }
 }

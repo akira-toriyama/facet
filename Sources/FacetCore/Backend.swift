@@ -307,6 +307,21 @@ public protocol WindowBackend: Sendable {
     /// reasons as `addTagToFocusedWindow`.
     func toggleTagOnFocusedWindow(_ name: String) -> Bool
 
+    /// Add tag `name` to a SPECIFIC window `id` (the GUI tag menu's
+    /// "Tag…" item, tag mode). Like `addTagToFocusedWindow` but targets
+    /// an explicit window — the right-clicked row, which need not be
+    /// focused — so it never changes focus. Auto-vivifies an unknown
+    /// name. Returns `false` when `id` isn't a managed window, the run
+    /// isn't in tag mode, or the vocabulary is full.
+    func addTag(_ name: String, toWindow id: WindowID) -> Bool
+
+    /// Remove tag `name` from a SPECIFIC window `id` (the GUI tag menu's
+    /// "Untag #NAME" item, tag mode). Strict — rejects an unknown or
+    /// reserved name; the `_default` floor is never removed. Returns
+    /// `false` when `id` isn't managed, not tag mode, or `name` isn't a
+    /// defined tag on that window's vocabulary.
+    func removeTag(_ name: String, fromWindow id: WindowID) -> Bool
+
     /// Define tag `name` in the session vocabulary without attaching it
     /// to any window (`facet tag --add=NAME`, tag mode). Idempotent — a
     /// defined name is a no-op success. Returns `false` only when not in
@@ -408,6 +423,8 @@ public extension WindowBackend {
     func addTagToFocusedWindow(_ name: String) -> Bool { false }
     func removeTagFromFocusedWindow(_ name: String) -> Bool { false }
     func toggleTagOnFocusedWindow(_ name: String) -> Bool { false }
+    func addTag(_ name: String, toWindow id: WindowID) -> Bool { false }
+    func removeTag(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func addTag(_ name: String) -> Bool { false }
     func removeTag(_ name: String) -> Bool { false }
     func renameTag(_ old: String, to new: String) -> Bool { false }

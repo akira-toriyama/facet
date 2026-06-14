@@ -59,4 +59,14 @@ public protocol TreeController: AnyObject, Sendable {
     func runWindowOps(_ ops: [WindowAction],
                       on window: Window,
                       workspaceIndex: Int)
+
+    /// Open the tag-name input box (the search-bar widget, in a tag-input
+    /// sub-mode) for `id` — the GUI "Tag…" menu item (#191 PR-7, tag
+    /// mode). On commit the typed name is auto-vivified and added to that
+    /// specific window. Controller owns the input UI + key focus.
+    func beginTagInput(forWindow id: WindowID)
+
+    /// Remove tag `name` from window `id` — the GUI "Untag #NAME" menu
+    /// item (#191 PR-7). Runs the by-id retag on the backend queue.
+    func removeTagFromWindow(_ name: String, windowID id: WindowID)
 }

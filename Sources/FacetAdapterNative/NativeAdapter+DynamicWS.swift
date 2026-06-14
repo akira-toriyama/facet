@@ -431,33 +431,53 @@ extension NativeAdapter {
     // MARK: - Runtime window tagging (#191, tag mode)
 
     public func addTagToFocusedWindow(_ name: String) -> Bool {
-        applyWindowRetag("tag", name) { $0.addTagToWindow($1, name: name) }
+        applyWindowRetag("tag", name, window: nil) {
+            $0.addTagToWindow($1, name: name)
+        }
     }
 
     public func removeTagFromFocusedWindow(_ name: String) -> Bool {
-        applyWindowRetag("untag", name) { $0.removeTagFromWindow($1, name: name) }
+        applyWindowRetag("untag", name, window: nil) {
+            $0.removeTagFromWindow($1, name: name)
+        }
     }
 
     public func toggleTagOnFocusedWindow(_ name: String) -> Bool {
-        applyWindowRetag("toggle-tag", name) {
+        applyWindowRetag("toggle-tag", name, window: nil) {
             $0.toggleTagOnWindow($1, name: name)
         }
     }
 
-    /// Shared body for the three runtime-retag verbs. Guards tag mode +
-    /// a managed focused window, runs the catalog mutator, then — like
-    /// `setLens`, on a single window — parks / restores it if its lens
-    /// visibility flipped and re-tiles the active union, finally
-    /// repainting. Returns `false` when there is no managed focused
-    /// window or the mutator rejected the name (unknown on `--untag` /
+    // GUI tag menu (#191 PR-7) — retag a SPECIFIC window (the
+    // right-clicked row), not the focused one. Same park/restore + retile
+    // path as the focused verbs, just with an explicit target.
+
+    public func addTag(_ name: String, toWindow id: WindowID) -> Bool {
+        applyWindowRetag("tag", name, window: id) {
+            $0.addTagToWindow($1, name: name)
+        }
+    }
+
+    public func removeTag(_ name: String, fromWindow id: WindowID) -> Bool {
+        applyWindowRetag("untag", name, window: id) {
+            $0.removeTagFromWindow($1, name: name)
+        }
+    }
+
+    /// Shared body for the runtime-retag verbs. Guards tag mode, resolves
+    /// the target window (`explicitID`, else the focused window), runs the
+    /// catalog mutator, then — like `setLens`, on a single window — parks /
+    /// restores it if its lens visibility flipped and re-tiles the active
+    /// union, finally repainting. Returns `false` when there is no target
+    /// window or the mutator rejected the name (unknown on `untag` /
     /// vocabulary full) so the Controller can surface the error.
     private func applyWindowRetag(
-        _ verb: String, _ name: String,
+        _ verb: String, _ name: String, window explicitID: WindowID?,
         _ mutate: (inout WorkspaceCatalog, WindowID)
             -> WorkspaceCatalog.RetagVisibility?
     ) -> Bool {
         guard tagVocabReady(verb, name) else { return false }
-        guard let id = focusedWindow() else {
+        guard let id = explicitID ?? focusedWindow() else {
             Log.debug("native: \(verb) \"\(name)\" — no focused window")
             return false
         }

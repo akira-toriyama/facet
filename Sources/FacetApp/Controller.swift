@@ -184,6 +184,16 @@ final class Controller: NSObject {
     /// ``exitActive(restore: true)`` can hand focus back.
     var prevApp: NSRunningApplication?
     private let searchDelegate = SearchFieldDelegate()
+    /// Target window of an in-progress GUI tag-input (#191 PR-7), or nil
+    /// when the tag-input box isn't open. Set by `beginTagInput`; the
+    /// search field's text is committed to this window on Return.
+    var tagInputTarget: WindowID?
+    /// Whether `beginTagInput` itself entered `--active` (the panel was
+    /// passive — right-click path) vs. found it already active (the `m`
+    /// path). Drives teardown: only the former fully exits `--active` (and
+    /// reverts the `.regular` activation policy); the latter stays in the
+    /// keyboard-nav session the user came from.
+    var tagInputEnteredActive = false
 
     // MARK: - Subscription / polling
 
@@ -224,7 +234,11 @@ final class Controller: NSObject {
         if #available(macOS 14.0, *) { winPreview = WindowPreview() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
-                self?.sidebarView.setQuery(q)
+                guard let self else { return }
+                // Tag-input sub-mode (#191 PR-7) reuses the same field but
+                // must NOT filter the list — the text is committed on Return.
+                guard self.tagInputTarget == nil else { return }
+                self.sidebarView.setQuery(q)
             }
         }
         panelHost.searchBar.field.delegate = searchDelegate
@@ -291,6 +305,12 @@ final class Controller: NSObject {
             // _exitActiveImpl path, exitKbNav has already run and
             // this is a harmless idempotent call.
             if sidebarView.kbNav { sidebarView.exitKbNav() }
+            // Abandon an open tag-input box (#191 PR-7) if focus left the
+            // panel externally — otherwise its stale target would catch
+            // the next key when the panel regains key. The normal
+            // commit/cancel path clears `tagInputTarget` before resigning,
+            // so this only fires on an external focus loss.
+            if tagInputTarget != nil { abandonTagInput() }
         }
     }
 

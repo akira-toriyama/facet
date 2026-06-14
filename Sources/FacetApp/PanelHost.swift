@@ -79,6 +79,10 @@ final class PanelHost: NSObject {
 
     private let screenMargin: CGFloat = 8
     private let searchRowH: CGFloat = 38           // band when searching
+    /// While true the search-bar band is shown even when the view isn't
+    /// in search mode — the controller flips it for the PR-7 tag-input
+    /// box, which reuses the same field without filtering the list.
+    var inputBarVisible = false
     private let minWidth: CGFloat = 160
     private let minHeight: CGFloat = 140
     private let cornerRadius: CGFloat = 12
@@ -387,8 +391,10 @@ final class PanelHost: NSObject {
     private func applySubviewLayout(searching: Bool, contentH: CGFloat) {
         let f = effect.bounds
         bgView.frame = f
-        let sh: CGFloat = searching ? searchRowH : 0
-        searchBar.isHidden = !searching
+        // The bar shows for search OR the tag-input sub-mode (PR-7).
+        let barShown = searching || inputBarVisible
+        let sh: CGFloat = barShown ? searchRowH : 0
+        searchBar.isHidden = !barShown
         // 8pt top inset (matching the side insets) keeps the box clear
         // of the panel's radius-12 accent-border curve — at 4pt the two
         // borders crowded into one blob at the top corners (#186).

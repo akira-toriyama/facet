@@ -45,6 +45,9 @@ public enum ViewContextMenu {
         windowID id: WindowID,
         title: String,
         palette: ResolvedPalette,
+        tagMode: Bool = false,
+        onAddTag: ((WindowID) -> Void)? = nil,
+        onRemoveTag: ((WindowID, String) -> Void)? = nil,
         runOps: @escaping (_ ops: [WindowAction], _ window: Window, _ ws: Int) -> Void
     ) {
         let wsModel = workspaces.first { $0.index == ws }
@@ -59,19 +62,41 @@ public enum ViewContextMenu {
                                       isMaster: isMaster,
                                       windowCount: windowCount,
                                       isSticky: isSticky)
+        // Tag mode (#191 PR-7): after the window ops, append a "Tag…" item
+        // (opens the tag-name input → auto-vivify + add) and one
+        // "Untag #NAME" per tag the window already carries. The closures
+        // route to the controller's tag-input box / by-id retag. Grid /
+        // rail are workspace-only in tag mode, so they never set `tagMode`
+        // and these items never appear there.
+        let winTags = tagMode ? (win?.tags ?? []) : []
+        var labels = menu.map(\.label)
+        if tagMode {
+            labels.append("Tag…")
+            labels.append(contentsOf: winTags.map { "Untag #\($0)" })
+        }
         PopupMenu.shared.show(at: scr,
                               header: "Window",
-                              items: menu.map(\.label),
+                              items: labels,
                               checkedIndex: nil,
                               palette: palette) { i in
-            let item = menu[i]
-            if item.isClose {
-                cliQueue.async { backend.closeWindow(id) }
+            if i < menu.count {
+                let item = menu[i]
+                if item.isClose {
+                    cliQueue.async { backend.closeWindow(id) }
+                } else {
+                    let window = Window(id: id, pid: pid, appName: "",
+                                        title: title, isFocused: false,
+                                        isFloating: floating, frame: nil)
+                    runOps(item.ops, window, ws)
+                }
             } else {
-                let window = Window(id: id, pid: pid, appName: "",
-                                    title: title, isFocused: false,
-                                    isFloating: floating, frame: nil)
-                runOps(item.ops, window, ws)
+                // Tag section: index 0 = "Tag…", then one per existing tag.
+                let ti = i - menu.count
+                if ti == 0 {
+                    onAddTag?(id)
+                } else {
+                    onRemoveTag?(id, winTags[ti - 1])
+                }
             }
         }
     }
