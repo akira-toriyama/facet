@@ -23,6 +23,28 @@ public func layoutBadgeLabel(_ mode: String) -> String {
     return "m-" + String(mode.dropFirst("master-".count))
 }
 
+/// `IconResolver` spec (`SF:<name>`) for a layout mode — shown on the
+/// tree's layout-mode badge and beside each mode in the layout picker
+/// (item 7). The master-EDGE engines map to the matching half-filled
+/// rectangle so the glyph mirrors where the master pane sits; bsp / grid
+/// / stack / float / spiral get a representative split. Unknown modes
+/// return "" (no icon — `IconResolver` collapses it gracefully).
+public func layoutModeIcon(_ mode: String) -> String {
+    switch mode {
+    case "bsp":           return "SF:square.split.2x2"
+    case "stack":         return "SF:square.stack"
+    case "float":         return "SF:macwindow"
+    case "grid":          return "SF:square.grid.2x2"
+    case "spiral":        return "SF:square.split.bottomrightquarter"
+    case "master-left":   return "SF:rectangle.lefthalf.filled"
+    case "master-right":  return "SF:rectangle.righthalf.filled"
+    case "master-top":    return "SF:rectangle.tophalf.filled"
+    case "master-bottom": return "SF:rectangle.bottomhalf.filled"
+    case "master-center": return "SF:rectangle.center.inset.filled"
+    default:              return ""
+    }
+}
+
 /// Draw one text line into `rect` with the theme font (`uiFont`).
 /// Shared by the grid + rail workspace-header captions, which both
 /// drew an identical single attributed line.

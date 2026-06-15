@@ -3,12 +3,75 @@
 // a window (ops menu). Each view supplies its own snapshot + hit point;
 // the backend round-trip + menu data are identical, so they live here in
 // the shared FacetView layer rather than duplicated three times.
+//
+// Every menu is built from grouped `Entry` rows via `present(...)`, which
+// inserts a dim SECTION HEADER each time the section name changes — even a
+// single group gets a header (item 4) — and attaches a per-row SF Symbol
+// icon (item 7). Section headers + icons are skipped on the `filterable`
+// (`m`-key) path, where the type-to-filter box does the organising.
 
 import AppKit
 import FacetCore
 
 @MainActor
 public enum ViewContextMenu {
+
+    // MARK: - Sectioned menu plumbing
+
+    /// One logical menu row before sectioning. `section` groups rows under
+    /// a dim header; `icon` is an `IconResolver` spec (`SF:<name>`, "" =
+    /// none). `checked` marks the current value (the ✓ row). `run` fires
+    /// on pick.
+    private struct Entry {
+        let label: String
+        let icon: String
+        let section: String
+        var checked: Bool = false
+        let run: () -> Void
+    }
+
+    /// Build a `PopupMenu` payload from grouped `entries` and show it.
+    /// Inserts a section-label row whenever the section name changes (a
+    /// blank section name = a bare row, no header); tracks those rows in
+    /// `headerRows` so the menu draws them dim + skips them in nav. Maps
+    /// the popup's pick index back to the entry's `run`. On the
+    /// `filterable` path the headers are omitted (the filter box replaces
+    /// grouping), so the rows stay a flat, fully-pickable list.
+    private static func present(at scr: NSPoint, header: String,
+                                palette: ResolvedPalette,
+                                filterable: Bool = false,
+                                entries: [Entry]) {
+        var items: [String] = []
+        var icons: [String] = []
+        var headerRows: Set<Int> = []
+        var checked: Int?
+        var runByIndex: [Int: () -> Void] = [:]
+        var last: String?
+        for e in entries {
+            if !filterable, e.section != last, !e.section.isEmpty {
+                headerRows.insert(items.count)
+                items.append(e.section)        // PopupMenu uppercases headers
+                icons.append("")
+            }
+            last = e.section
+            if e.checked { checked = items.count }
+            runByIndex[items.count] = e.run
+            items.append(e.label)
+            icons.append(e.icon)
+        }
+        PopupMenu.shared.show(at: scr,
+                              header: header,
+                              items: items,
+                              checkedIndex: checked,
+                              palette: palette,
+                              filterable: filterable,
+                              headerRows: headerRows,
+                              icons: icons) { i in
+            runByIndex[i]?()
+        }
+    }
+
+    // MARK: - Builders
 
     /// Layout-engine picker for a workspace header. `ws` is the 0-based
     /// workspace index; `workspaces` the view's current snapshot (for the
@@ -31,16 +94,15 @@ public enum ViewContextMenu {
                 LayoutGrouping.isCompatible(mode: $0, with: .tag) }
             : backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
-        let idx = modes.firstIndex(of: cur ?? "")
-        let header = tagMode ? "Tag-world layout" : "WS\(ws + 1) layout"
-        PopupMenu.shared.show(at: scr,
-                              header: header,
-                              items: modes,
-                              checkedIndex: idx,
-                              palette: palette,
-                              filterable: filterable) { i in
-            cliQueue.async { backend.setLayoutMode(workspaceIndex: ws, mode: modes[i]) }
+        let header = tagMode ? "Tag-world" : "WS\(ws + 1)"
+        let entries = modes.map { mode in
+            Entry(label: mode, icon: layoutModeIcon(mode),
+                  section: "Layout", checked: mode == cur) {
+                cliQueue.async { backend.setLayoutMode(workspaceIndex: ws, mode: mode) }
+            }
         }
+        present(at: scr, header: header, palette: palette,
+                filterable: filterable, entries: entries)
     }
 
     /// Panel-level menu for the pinned "Desktop N" band — the third
@@ -58,54 +120,59 @@ public enum ViewContextMenu {
         onSearch: @escaping () -> Void,
         onTagManage: @escaping () -> Void
     ) {
-        var items = ["Search"]
-        if tagManage { items.append("Manage tags") }
-        PopupMenu.shared.show(at: scr,
-                              header: "Desktop",
-                              items: items,
-                              checkedIndex: nil,
-                              palette: palette) { i in
-            if i == 0 { onSearch() } else { onTagManage() }
+        var entries: [Entry] = [
+            Entry(label: "Search", icon: "SF:magnifyingglass",
+                  section: "Find", run: onSearch),
+        ]
+        if tagManage {
+            entries.append(Entry(label: "Manage tags", icon: "SF:tag",
+                                 section: "Tags", run: onTagManage))
         }
+        present(at: scr, header: "Desktop", palette: palette, entries: entries)
     }
 
-    /// Tag-world header menu (tag mode) — one menu, two sections so neither
-    /// needs an extra click:
+    /// Tag-world header menu (tag mode). One menu, grouped sections so no
+    /// extra click is needed:
     ///
-    ///     LAYOUT          ← section label
+    ///     LAYOUT          ← section
     ///     float · grid · master-… (the tag-compatible modes, current ✓)
-    ///     TAGS            ← section label
+    ///     TAGS            ← section
     ///     Select tags     → opens the lens checklist
+    ///     All windows     → lens = every tag (show all, all checked)
+    ///     Clear           → lens = floor (show all, nothing checked)
+    ///     FIND            ← section
+    ///     Search          → enters the tree's `s` search mode (item 1)
     ///
-    /// `layoutModes` is already filtered to tag-compatible engines; picking
-    /// one applies it (`onPickLayout`), and `Select tags` opens the lens
-    /// selector (`onSelectTags`). The workspace-header menu stays the bare
-    /// layout picker (no lens in workspace mode).
+    /// `layoutModes` is already filtered to tag-compatible engines. The
+    /// workspace-header menu (`showLayout`) stays the bare layout picker
+    /// (no lens in workspace mode).
     public static func showTagWorld(
         at scr: NSPoint,
         layoutModes: [String],
         currentLayout: String?,
         palette: ResolvedPalette,
         onPickLayout: @escaping (String) -> Void,
-        onSelectTags: @escaping () -> Void
+        onSelectTags: @escaping () -> Void,
+        onAllWindows: @escaping () -> Void,
+        onClear: @escaping () -> Void,
+        onSearch: @escaping () -> Void
     ) {
-        var items = ["Layout"]
-        items.append(contentsOf: layoutModes)
-        let tagsHeader = items.count
-        items.append("Tags")
-        items.append("Select tags")
-        let selectTagsIndex = items.count - 1
-        let headerRows: Set<Int> = [0, tagsHeader]
-        let checked = currentLayout.flatMap { items.firstIndex(of: $0) }
-        PopupMenu.shared.show(at: scr,
-                              header: "Tag-world",
-                              items: items,
-                              checkedIndex: checked,
-                              palette: palette,
-                              headerRows: headerRows) { i in
-            if i == selectTagsIndex { onSelectTags() }
-            else { onPickLayout(items[i]) }
+        var entries = layoutModes.map { mode in
+            Entry(label: mode, icon: layoutModeIcon(mode),
+                  section: "Layout", checked: mode == currentLayout) {
+                onPickLayout(mode)
+            }
         }
+        entries.append(Entry(label: "Select tags",
+                             icon: "SF:line.3.horizontal.decrease.circle",
+                             section: "Tags", run: onSelectTags))
+        entries.append(Entry(label: "All windows", icon: "SF:rectangle.stack",
+                             section: "Tags", run: onAllWindows))
+        entries.append(Entry(label: "Clear", icon: "SF:xmark.circle",
+                             section: "Tags", run: onClear))
+        entries.append(Entry(label: "Search", icon: "SF:magnifyingglass",
+                             section: "Find", run: onSearch))
+        present(at: scr, header: "Tag-world", palette: palette, entries: entries)
     }
 
     /// Window-ops menu for a window (close / float / master / stack /
@@ -140,23 +207,10 @@ public enum ViewContextMenu {
                                       isMaster: isMaster,
                                       windowCount: windowCount,
                                       isSticky: isSticky)
-        // Tag mode (#4): after the window ops, append a single "Tag" item
-        // that opens the per-window tag-edit checklist (`TagEditPanel`). The
-        // closure routes to the controller, which owns the panel + key
-        // focus. Grid / rail are workspace-only in tag mode, so they never
-        // set `tagMode` and this item never appears there. (The old
-        // "Untag #NAME" group is gone — un-tagging now happens inside the
-        // checklist by unchecking the row.)
-        var labels = menu.map(\.label)
-        if tagMode { labels.append("Tag") }
-        PopupMenu.shared.show(at: scr,
-                              header: "Window",
-                              items: labels,
-                              checkedIndex: nil,
-                              palette: palette,
-                              filterable: filterable) { i in
-            if i < menu.count {
-                let item = menu[i]
+        // Each backend item carries its own icon + section (item 4 + 7), so
+        // the ops group under LAYOUT / WINDOW headers automatically.
+        var entries: [Entry] = menu.map { item in
+            Entry(label: item.label, icon: item.icon, section: item.section) {
                 if item.isClose {
                     cliQueue.async { backend.closeWindow(id) }
                 } else {
@@ -165,11 +219,20 @@ public enum ViewContextMenu {
                                         isFloating: floating, frame: nil)
                     runOps(item.ops, window, ws)
                 }
-            } else {
-                // The lone tag item: open the checklist for this window.
-                onOpenTagEditor?(id, pid, win?.appName ?? "",
-                                 win?.title ?? title, win?.tags ?? [], scr)
             }
         }
+        // Tag mode (#4): a single "Tag" item under its own TAGS section that
+        // opens the per-window tag-edit checklist (`TagEditPanel`). Grid /
+        // rail are workspace-only in tag mode, so they never set `tagMode`
+        // and this item never appears there.
+        if tagMode {
+            entries.append(Entry(label: "Tag", icon: "SF:tag",
+                                 section: "Tags") {
+                onOpenTagEditor?(id, pid, win?.appName ?? "",
+                                 win?.title ?? title, win?.tags ?? [], scr)
+            })
+        }
+        present(at: scr, header: "Window", palette: palette,
+                filterable: filterable, entries: entries)
     }
 }

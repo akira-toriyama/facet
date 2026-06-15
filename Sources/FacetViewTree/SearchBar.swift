@@ -96,13 +96,15 @@ public final class SearchBar: NSView {
 
     public override func draw(_ dirty: NSRect) {
         super.draw(dirty)
-        let a: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15),
-            .foregroundColor: pal.muted,
-        ]
-        let g = "⌕" as NSString
-        let s = g.size(withAttributes: a)
-        g.draw(at: NSPoint(x: 9, y: (bounds.height - s.height) / 2),
-               withAttributes: a)
+        // SF `magnifyingglass` instead of the old `⌕` (U+2315) glyph —
+        // the APL symbol read as ambiguous at small sizes; the SF Symbol
+        // is the universally-recognised search affordance. Tinted muted
+        // and centred in the glyph gutter (`fx = 30` leaves the room).
+        if let icon = IconResolver.resolve(
+            "SF:magnifyingglass", pointSize: 14, color: pal.muted) {
+            let isz = icon.size
+            icon.draw(in: NSRect(x: 10, y: (bounds.height - isz.height) / 2,
+                                 width: isz.width, height: isz.height))
+        }
     }
 }

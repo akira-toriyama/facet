@@ -543,29 +543,39 @@ extension NativeAdapter {
         // actual state so master vs non-master (and a lone stack
         // window) get the right menu — no dead items. Floating windows
         // only get Unfloat + Close (tiling actions don't apply).
+        // `icon` / `section` (item 4 + 7): tiling ops group under "Layout",
+        // window-state ops under "Window". The section names drive the dim
+        // group headers the popup menu now inserts.
         var items: [WindowMenuItem] = []
         if mode == "bsp", !floating {
-            items.append(.init("Toggle orientation",
-                               [.toggleOrientation]))
+            items.append(.init("Toggle orientation", [.toggleOrientation],
+                               icon: "SF:arrow.triangle.2.circlepath",
+                               section: "Layout"))
         }
         // Cycling needs at least two windows to rotate between.
         if mode == "stack", !floating, windowCount >= 2 {
-            items.append(.init("Next stack window",
-                               [.cycleStackNext]))
-            items.append(.init("Previous stack window",
-                               [.cycleStackPrev]))
+            items.append(.init("Next stack window", [.cycleStackNext],
+                               icon: "SF:chevron.down", section: "Layout"))
+            items.append(.init("Previous stack window", [.cycleStackPrev],
+                               icon: "SF:chevron.up", section: "Layout"))
         }
         if LayoutRegistry.engine(named: mode)?.hasMaster == true, !floating {
             // "Promote to master" is meaningless for the window that
             // already holds the master slot.
             if !isMaster {
-                items.append(.init("Promote to master",
-                                   [.promoteToMaster]))
+                items.append(.init("Promote to master", [.promoteToMaster],
+                                   icon: "SF:crown", section: "Layout"))
             }
-            items.append(.init("Wider master", [.growMaster]))
-            items.append(.init("Narrower master", [.shrinkMaster]))
-            items.append(.init("More masters", [.incMaster]))
-            items.append(.init("Fewer masters", [.decMaster]))
+            items.append(.init("Wider master", [.growMaster],
+                               icon: "SF:arrow.left.and.right",
+                               section: "Layout"))
+            items.append(.init("Narrower master", [.shrinkMaster],
+                               icon: "SF:arrow.right.and.line.vertical.and.arrow.left",
+                               section: "Layout"))
+            items.append(.init("More masters", [.incMaster],
+                               icon: "SF:plus", section: "Layout"))
+            items.append(.init("Fewer masters", [.decMaster],
+                               icon: "SF:minus", section: "Layout"))
         }
         // A sticky window is always floating, and float-exit =
         // sticky-exit, so "Unfloat" and "Unstick" would do the same
@@ -573,13 +583,17 @@ extension NativeAdapter {
         // (it already is). Any other window gets Float/Unfloat plus a
         // "Sticky" entry (setSticky force-floats a tiled window).
         if isSticky {
-            items.append(.init("Unstick", [.toggleSticky]))
+            items.append(.init("Unstick", [.toggleSticky],
+                               icon: "SF:pin.slash", section: "Window"))
         } else {
-            items.append(.init(floating ? "Unfloat" : "Float",
-                               [.toggleFloat]))
-            items.append(.init("Sticky", [.toggleSticky]))
+            items.append(.init(floating ? "Unfloat" : "Float", [.toggleFloat],
+                               icon: floating ? "SF:pip.exit" : "SF:macwindow",
+                               section: "Window"))
+            items.append(.init("Sticky", [.toggleSticky],
+                               icon: "SF:pin", section: "Window"))
         }
-        items.append(.init("Close window", [], close: true))
+        items.append(.init("Close window", [], close: true,
+                           icon: "SF:xmark", section: "Window"))
         return items
     }
 }

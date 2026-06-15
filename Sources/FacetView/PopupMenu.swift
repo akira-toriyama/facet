@@ -22,6 +22,20 @@ public final class PopupMenuView: NSView {
     /// Only honored in the non-filterable path. Empty = a flat menu.
     public var headerRows: Set<Int> = []
 
+    /// Per-row icon specs (`SF:<name>` etc., resolved by `IconResolver`),
+    /// PARALLEL to the FULL item list (`allItems`) — looked up by the
+    /// original index so filtering keeps them aligned. Empty / all-empty =
+    /// a text-only menu (the icon column collapses, preserving the old
+    /// layout). Section-label rows ignore their slot. (item 7)
+    public var icons: [String] = []
+
+    /// Reserved icon-column width — non-zero only when at least one row
+    /// carries an icon, so text-only menus keep their original indent.
+    private var iconColW: CGFloat { icons.contains { !$0.isEmpty } ? 22 : 0 }
+    /// Left edge of the label text: checkmark gutter (+18) then the icon
+    /// column when present.
+    private var textIndent: CGFloat { Self.padX + 18 + iconColW }
+
     /// Palette the menu is drawn in (PR-B). Set by `PopupMenu.show` to
     /// the INVOKING surface's palette, so a menu popped from the tree /
     /// grid / rail matches that surface's per-view theme.
@@ -97,7 +111,7 @@ public final class PopupMenuView: NSView {
             w = max(w, ("Filter…" as NSString)
                 .size(withAttributes: [.font: rf]).width + 20)
         }
-        let width = min(max(w + Self.padX * 2 + 26, 170), 340)
+        let width = min(max(w + Self.padX * 2 + 26 + iconColW, 170), 340)
         // Reserve a row for the "no match" hint so the box never collapses.
         let rowCount = filterable ? max(items.count, 1) : items.count
         let h = Self.padV + Self.headerH + fieldBand + Self.sepH
@@ -141,10 +155,13 @@ public final class PopupMenuView: NSView {
             let path = NSBezierPath(roundedRect: fb, xRadius: 7, yRadius: 7)
             (bg.blended(withFraction: 0.06, of: .white) ?? bg).setFill(); path.fill()
             palette.border.setStroke(); path.lineWidth = 1; path.stroke()
-            ("⌕" as NSString).draw(
-                at: NSPoint(x: fb.minX + 8, y: fb.minY + 7),
-                withAttributes: [.font: NSFont.systemFont(ofSize: 13),
-                                 .foregroundColor: palette.muted])
+            if let icon = IconResolver.resolve(
+                "SF:magnifyingglass", pointSize: 13, color: palette.muted) {
+                let isz = icon.size
+                icon.draw(in: NSRect(x: fb.minX + 8,
+                                     y: fb.minY + (fb.height - isz.height) / 2,
+                                     width: isz.width, height: isz.height))
+            }
             let textX = fb.minX + 28
             let textRect = NSRect(x: textX, y: fb.minY + 6,
                                   width: fb.maxX - textX - 8, height: fb.height - 12)
@@ -213,13 +230,25 @@ public final class PopupMenuView: NSView {
                 o.lineWidth = 1.5; o.stroke()
             }
             let isCur = (origIndex(i) == checkedIndex)
+            let fg = isCur ? palette.primary : palette.foreground
+            // Leading icon (item 7) — drawn in the reserved column between
+            // the checkmark gutter and the label, tinted to match the row.
+            let iconSpec = origIndex(i) < icons.count ? icons[origIndex(i)] : ""
+            if iconColW > 0, !iconSpec.isEmpty,
+               let icon = IconResolver.resolve(iconSpec, fontSize: 13, color: fg) {
+                let isz = icon.size
+                icon.draw(in: NSRect(
+                    x: Self.padX + 18 + (iconColW - isz.width) / 2,
+                    y: r.minY + (Self.rowH - isz.height) / 2,
+                    width: isz.width, height: isz.height))
+            }
             (m as NSString).draw(
-                in: NSRect(x: Self.padX + 18, y: r.minY + 5,
-                           width: r.width - Self.padX * 2 - 18,
+                in: NSRect(x: textIndent, y: r.minY + 5,
+                           width: r.width - textIndent - Self.padX,
                            height: r.height - 6),
                 withAttributes: [
                     .font: uiFont(13, isCur ? .semibold : .regular),
-                    .foregroundColor: isCur ? palette.primary : palette.foreground,
+                    .foregroundColor: fg,
                     .paragraphStyle: para,
                 ])
             if isCur {
@@ -287,6 +316,7 @@ public final class PopupMenu {
                      palette: ResolvedPalette,
                      filterable: Bool = false,
                      headerRows: Set<Int> = [],
+                     icons: [String] = [],
                      onPick: @escaping (Int) -> Void) {
         close()
         self.filterable = filterable
@@ -298,6 +328,7 @@ public final class PopupMenu {
         v.items = items
         v.filterable = filterable
         v.headerRows = headerRows
+        v.icons = icons
         v.allItems = items
         v.rowMap = Array(items.indices)
         v.checkedIndex = checkedIndex

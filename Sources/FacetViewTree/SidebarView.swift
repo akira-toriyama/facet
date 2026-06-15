@@ -304,12 +304,17 @@ public final class SidebarView: NSView {
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (ws, wins) in shown {
-            let nm = (ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name).uppercased()
+            // Tag mode keeps the `#web` lens label as-is; workspace mode
+            // uppercases the WS name (matches the header draw at the Cell).
+            let baseNm = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
+            let nm = tagModeActive ? baseNm : baseNm.uppercased()
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
             let modeW = ws.layoutMode.isEmpty ? 0
                 : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
                     withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+                    // leading layout icon (~14pt + 5 gap) when one exists
+                    + (layoutModeIcon(ws.layoutMode).isEmpty ? 0 : 19)
             naturalW = max(naturalW,
                            rowPadX + gripSpace + ceil(max(nameW, modeW)) + rowPadX)
             for win in wins {
@@ -397,7 +402,7 @@ public final class SidebarView: NSView {
             let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
             cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                               firstHeader: firstHeader, pid: 0, app: "",
-                              title: "", text: t.uppercased(),
+                              title: "", text: tagModeActive ? t : t.uppercased(),
                               mode: ws.layoutMode,
                               isMaster: false, isFloating: false,
                               isSticky: false, mark: nil, isHidden: false,
@@ -744,15 +749,29 @@ public final class SidebarView: NSView {
                 // collides with the primary accent used by the
                 // active WS-name on line 1.
                 if !c.mode.isEmpty {
-                    // Layout mode: plain text, no fill — same weight
-                    // (bold) as the WS name above it so the two-line
-                    // caption reads as one unit. secondary on the active
-                    // WS, dim when inactive so non-focused rows recede.
+                    // Layout mode: a leading SF icon (item 7 — the tree is
+                    // text-heavy, so the glyph lets the layout register at a
+                    // glance) + the abbreviated label. Plain, no fill — same
+                    // weight (bold) as the WS name above it so the two-line
+                    // caption reads as one unit. secondary on the active WS,
+                    // dim when inactive so non-focused rows recede.
                     let modeColor = c.hot ? pal.secondary : pal.muted
+                    let mx = rowPadX + gripSpace
+                    let modeY = capY + nameH + 4
+                    var modeTextX = mx
+                    let modeIconSpec = layoutModeIcon(c.mode)
+                    if !modeIconSpec.isEmpty,
+                       let icon = IconResolver.resolve(
+                        modeIconSpec, fontSize: fs, color: modeColor) {
+                        let isz = icon.size
+                        icon.draw(in: NSRect(
+                            x: mx, y: modeY + (18 - isz.height) / 2,
+                            width: isz.width, height: isz.height))
+                        modeTextX = mx + isz.width + 5
+                    }
                     (layoutBadgeLabel(c.mode) as NSString).draw(
-                        in: NSRect(x: rowPadX + gripSpace,
-                                   y: capY + nameH + 4,
-                                   width: bounds.width - rowPadX * 2 - gripSpace,
+                        in: NSRect(x: modeTextX, y: modeY,
+                                   width: bounds.width - rowPadX - modeTextX,
                                    height: 18),
                         withAttributes: [
                             .font: uiFont(fs, .bold),
@@ -1795,7 +1814,14 @@ public final class SidebarView: NSView {
                 cliQueue.async { bk.setLayoutMode(workspaceIndex: ws, mode: mode) }
             },
             onSelectTags: { [weak self] in
-                self?.controller?.openLensSelector(at: scr) })
+                self?.controller?.openLensSelector(at: scr) },
+            // Quick lens shortcuts (item 6). `autoFocus: false` keeps the
+            // tree from losing key to a window in the new union. "All
+            // windows" = every tag (everything shown, all checked); "Clear"
+            // = floor lens (everything shown, nothing checked / no filter).
+            onAllWindows: { cliQueue.async { bk.setLens(.all, autoFocus: false) } },
+            onClear: { cliQueue.async { bk.setLens(.only([]), autoFocus: false) } },
+            onSearch: { [weak self] in self?.controller?.enterSearchFromMenu() })
     }
 
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,

@@ -253,10 +253,17 @@ final class TagEditContainerView: NSView {
         let fb = NSBezierPath(roundedRect: fieldBox, xRadius: 7, yRadius: 7)
         (bg.blended(withFraction: 0.06, of: .white) ?? bg).setFill(); fb.fill()
         palette.border.setStroke(); fb.lineWidth = 1; fb.stroke()
-        ((renaming ? "✎" : "⌕") as NSString).draw(
-            at: NSPoint(x: Self.padX + 8, y: fieldTop + 7),
-            withAttributes: [.font: NSFont.systemFont(ofSize: 13),
-                             .foregroundColor: palette.muted])
+        // SF `pencil` during an inline rename, else `magnifyingglass` —
+        // the search/filter affordance (replaces the old `✎` / `⌕`
+        // glyphs, matching the tree's SearchBar + the PopupMenu filter).
+        if let icon = IconResolver.resolve(
+            renaming ? "SF:pencil" : "SF:magnifyingglass",
+            pointSize: 13, color: palette.muted) {
+            let isz = icon.size
+            icon.draw(in: NSRect(x: Self.padX + 8,
+                                 y: fieldTop + (Self.fieldH - isz.height) / 2,
+                                 width: isz.width, height: isz.height))
+        }
         if let hint, !hint.isEmpty {
             let hp = NSMutableParagraphStyle()
             hp.alignment = .right

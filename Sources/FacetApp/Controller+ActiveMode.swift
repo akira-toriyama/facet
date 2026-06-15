@@ -254,9 +254,10 @@ extension Controller {
     /// checked rows are the current lens; toggling adds / removes that tag
     /// from the lens (`setLens`). Same activation-policy dance + close
     /// handling as `openTagEditor` (shares `tagEditorSelfActivated` /
-    /// `finishTagEditor`). NOTE: `setLens` re-tiles + auto-focuses the new
-    /// union, so a toggle can hand focus to a window — the panel stays open
-    /// (it only closes on outside-click / Esc), so further picks still work.
+    /// `finishTagEditor`). Toggles call `setLens(_:autoFocus: false)` so the
+    /// re-tile does NOT hand key to a window in the new union — the panel
+    /// keeps focus so the user can keep picking (item 3 fix); it closes only
+    /// on outside-click / Esc.
     func openLensSelector(at screenPt: CGPoint) {
         let bk = backend
         tagEditorSelfActivated = !sidebarView.kbNav
@@ -272,7 +273,13 @@ extension Controller {
             checkedTags: current,
             palette: treePaletteBox.pal,
             onToggle: { [weak self] name, on in
-                cliQueue.async { bk.setLens(on ? .add([name]) : .remove([name])) }
+                // autoFocus: false — keep key on the lens panel so the
+                // user can keep toggling tags without focus jumping to a
+                // window in the new union (item 3 fix).
+                cliQueue.async {
+                    bk.setLens(on ? .add([name]) : .remove([name]),
+                               autoFocus: false)
+                }
                 self?.scheduleReconcile(after: 0.05)
             },
             onClose: { [weak self] in self?.finishTagEditor() }
