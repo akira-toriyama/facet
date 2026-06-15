@@ -136,6 +136,8 @@ extension Controller {
         case "h":            sidebarView.kbJumpWS(-1);   return true
         case "m":            sidebarView.kbContextMenu(); return true
         case "s":            enterSearch();              return true
+        case "t" where config.effectiveGrouping == .tag:
+                             enterTagManage();           return true
         default:             return false
         }
     }
@@ -206,13 +208,50 @@ extension Controller {
         )
     }
 
-    /// Called once on EVERY tag-editor close path (Esc / ✕ / outside-click /
-    /// click on another row). Undoes exactly the activation change
-    /// `openTagEditor` made — if we flipped to `.regular`, revert to
-    /// `.accessory` and hand focus back to the user's previous app; if we
-    /// were already `--active`, re-key the tree panel so keyboard nav
-    /// resumes (the tree resigned key when the editor took it, but the
-    /// `handlePanelKeyChange` guard kept kbNav alive).
+    /// Open the tag-manage mode panel (`t`) — vocabulary editing (add /
+    /// rename / delete) not tied to a window. Shares `TagEditPanel.shared`
+    /// with the per-window checklist and the same activation-policy dance
+    /// (`tagEditorSelfActivated` + `finishTagEditor`), so the
+    /// `handlePanelKeyChange` self-destruct guard covers it too. Anchored
+    /// beside the tree panel (it's a tree-panel-level mode, the `s` twin).
+    /// Tag mode only — gated by the caller (`handleKbKey`).
+    func enterTagManage() {
+        let bk = backend
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        let f = panelHost.panel.frame
+        TagEditPanel.shared.showManage(
+            at: NSPoint(x: f.maxX + 8, y: f.maxY),
+            allTags: bk.definedTagNames(),
+            palette: treePaletteBox.pal,
+            onCreate: { [weak self] name in
+                cliQueue.async { _ = bk.addTag(name) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onRename: { [weak self] old, new in
+                cliQueue.async { _ = bk.renameTag(old, to: new) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onDelete: { [weak self] name in
+                cliQueue.async { _ = bk.removeTag(name) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onClose: { [weak self] in self?.finishTagEditor() }
+        )
+    }
+
+    /// Called once on EVERY tag-panel close path (Esc / outside-click / click
+    /// on another row) for both the per-window checklist and tag-manage mode.
+    /// Undoes exactly the activation change `openTagEditor` / `enterTagManage`
+    /// made — if we flipped to `.regular`, revert to `.accessory` and hand
+    /// focus back to the user's previous app; if we were already `--active`,
+    /// re-key the tree panel so keyboard nav resumes (the tree resigned key
+    /// when the panel took it, but the `handlePanelKeyChange` guard kept kbNav
+    /// alive).
     func finishTagEditor() {
         if tagEditorSelfActivated {
             NSApp.setActivationPolicy(.accessory)
