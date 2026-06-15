@@ -87,6 +87,24 @@ public enum LensSpec: Sendable, Equatable {
     case all
 }
 
+/// Outcome of `facet window --retag OLD NEW` (#228, tag mode). A 4-way
+/// result rather than a `Bool` so the dispatch layer surfaces a precise
+/// error — `Bool` would conflate "no focused window" with "no such tag
+/// OLD" and "vocabulary full".
+public enum WindowRetagResult: Sendable, Equatable {
+    /// Retagged: OLD replaced with NEW on the focused window (a window
+    /// lacking OLD degrades to a bare add of NEW; `OLD == NEW` is a no-op
+    /// success).
+    case retagged
+    /// No managed focused window (or not tag mode / unmanaged desktop).
+    case noFocus
+    /// OLD isn't a defined tag — Strict-A reject (consistent with
+    /// `--untag`), never a silent degrade.
+    case oldUndefined
+    /// NEW would auto-vivify but the vocabulary is full (63 user tags).
+    case vocabFull
+}
+
 /// The only surface the rest of the app knows about. The backend
 /// adapter (`FacetAdapterNative`) implements it; the UI, AX focus
 /// glue, themes and DnD are all backend-agnostic.
@@ -307,6 +325,12 @@ public protocol WindowBackend: Sendable {
     /// reasons as `addTagToFocusedWindow`.
     func toggleTagOnFocusedWindow(_ name: String) -> Bool
 
+    /// Retag the focused window: replace tag `old` with `new` in a single
+    /// atomic mask write (`facet window --retag OLD NEW`, tag mode).
+    /// `old` must be DEFINED (Strict-A); `new` auto-vivifies. See
+    /// `WindowRetagResult` for the precise outcomes the caller messages.
+    func retagFocusedWindow(old: String, new: String) -> WindowRetagResult
+
     /// Add tag `name` to a SPECIFIC window `id` (the GUI tag menu's
     /// "Tag…" item, tag mode). Like `addTagToFocusedWindow` but targets
     /// an explicit window — the right-clicked row, which need not be
@@ -453,6 +477,9 @@ public extension WindowBackend {
     func addTagToFocusedWindow(_ name: String) -> Bool { false }
     func removeTagFromFocusedWindow(_ name: String) -> Bool { false }
     func toggleTagOnFocusedWindow(_ name: String) -> Bool { false }
+    func retagFocusedWindow(old: String, new: String) -> WindowRetagResult {
+        .noFocus
+    }
     func addTag(_ name: String, toWindow id: WindowID) -> Bool { false }
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func addTag(_ name: String) -> Bool { false }

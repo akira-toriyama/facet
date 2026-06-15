@@ -210,6 +210,10 @@ enum FacetApp {
           facet window --toggle-tag NAME     add / remove tag NAME
                                              (creates NAME if new)
                                              (requires [grouping] by="tag")
+          facet window --retag OLD NEW       replace tag OLD with NEW in
+                                             one step (OLD must exist;
+                                             creates NEW; OLD==NEW is a
+                                             no-op)
           facet window --toggle-float        flip its float flag
           facet window --toggle-sticky       pin it across every workspace
                                              (PiP / timer / chat); flip off
