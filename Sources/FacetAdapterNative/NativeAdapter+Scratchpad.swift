@@ -543,9 +543,10 @@ extension NativeAdapter {
         // actual state so master vs non-master (and a lone stack
         // window) get the right menu — no dead items. Floating windows
         // only get Unfloat + Close (tiling actions don't apply).
-        // `icon` / `section` (item 4 + 7): tiling ops group under "Layout",
-        // window-state ops under "Window". The section names drive the dim
-        // group headers the popup menu now inserts.
+        // `icon` / `section` (item 4 + 7 + 12): tiling ops group under
+        // "Layout", window-state + destructive ops under "Action" (the view
+        // slots the per-window "Tag" between them). The section names drive
+        // the dim group headers the popup menu inserts.
         var items: [WindowMenuItem] = []
         if mode == "bsp", !floating {
             items.append(.init("Toggle orientation", [.toggleOrientation],
@@ -584,16 +585,16 @@ extension NativeAdapter {
         // "Sticky" entry (setSticky force-floats a tiled window).
         if isSticky {
             items.append(.init("Unstick", [.toggleSticky],
-                               icon: "SF:pin.slash", section: "Window"))
+                               icon: "SF:pin.slash", section: "Action"))
         } else {
             items.append(.init(floating ? "Unfloat" : "Float", [.toggleFloat],
                                icon: floating ? "SF:pip.exit" : "SF:macwindow",
-                               section: "Window"))
+                               section: "Action"))
             items.append(.init("Sticky", [.toggleSticky],
-                               icon: "SF:pin", section: "Window"))
+                               icon: "SF:pin", section: "Action"))
         }
         items.append(.init("Close window", [], close: true,
-                           icon: "SF:xmark", section: "Window"))
+                           icon: "SF:xmark", section: "Action"))
         return items
     }
 }

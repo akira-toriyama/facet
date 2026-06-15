@@ -727,15 +727,22 @@ public final class SidebarView: NSView {
                 drawGrip(in: NSRect(x: rowPadX, y: capY,
                                     width: headerGripW, height: capH),
                          hot: c.hot || hoverIdx == i)
-                // Line 1: WS name (accent when active).
+                // Line 1: WS name / lens label (accent when active). In tag
+                // mode this is the lens (a tag concept) → `secondary` to
+                // match the tag colour scheme (item 14/17); workspace names
+                // stay `primary`. Line 2 (layout) is `primary` either way, so
+                // the two lines never collide on the same accent.
                 let nameH: CGFloat = 18
+                let nameColor = c.hot
+                    ? (tagModeActive ? pal.secondary : pal.primary)
+                    : pal.muted
                 (c.text as NSString).draw(
                     in: NSRect(x: rowPadX + gripSpace, y: capY,
                                width: bounds.width - rowPadX * 2 - gripSpace,
                                height: nameH),
                     withAttributes: [
                         .font: uiFont(fs, .bold),
-                        .foregroundColor: c.hot ? pal.primary : pal.muted,
+                        .foregroundColor: nameColor,
                         .kern: 0.6, .paragraphStyle: hp])
                 // Line 2: layout-mode text — secondary semibold on the
                 // active WS, `pal.muted` semibold when the WS isn't
@@ -1763,13 +1770,10 @@ public final class SidebarView: NSView {
             },
             onSelectTags: { [weak self] in
                 self?.controller?.openLensSelector(at: scr) },
-            // Quick lens shortcuts (item 6). `autoFocus: false` keeps the
-            // tree from losing key to a window in the new union. "All
-            // windows" = every tag (everything shown, all checked); "Clear"
-            // = floor lens (everything shown, nothing checked / no filter).
-            onAllWindows: { cliQueue.async { bk.setLens(.all, autoFocus: false) } },
-            onClear: { cliQueue.async { bk.setLens(.only([]), autoFocus: false) } },
-            onSearch: { [weak self] in self?.controller?.enterSearchFromMenu() })
+            // "All tags" (item 15/16): lens = every tag = show everything.
+            // `autoFocus: false` keeps the tree from losing key to a window
+            // in the new union.
+            onAllTags: { cliQueue.async { bk.setLens(.all, autoFocus: false) } })
     }
 
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,

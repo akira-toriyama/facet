@@ -16,10 +16,11 @@ public final class PopupMenuView: NSView {
     public var onPick: ((Int) -> Void)?
     public var sel: Int?                       // highlighted item (mouse + keyboard)
 
-    /// Indices in `items` that are non-pickable SECTION LABELS (drawn dim,
-    /// skipped by keyboard nav + clicks). Lets one menu group items under
-    /// inline headers (the tag-world menu's `Layout` / `Tags` sections).
-    /// Only honored in the non-filterable path. Empty = a flat menu.
+    /// Indices into `allItems` (the FULL list) that are non-pickable
+    /// SECTION LABELS (drawn dim, skipped by keyboard nav + clicks). Looked
+    /// up via `origIndex`, so sections survive filtering: a header row shows
+    /// only while ≥1 of its children matches the query (see `applyFilter`).
+    /// Empty = a flat menu.
     public var headerRows: Set<Int> = []
 
     /// Per-row icon specs (`SF:<name>` etc., resolved by `IconResolver`),
@@ -56,7 +57,7 @@ public final class PopupMenuView: NSView {
         let dir = d >= 0 ? 1 : -1
         var i = sel ?? (dir > 0 ? -1 : items.count)
         repeat { i += dir } while i >= 0 && i < items.count
-            && headerRows.contains(i)
+            && headerRows.contains(origIndex(i))
         if i >= 0, i < items.count { sel = i; needsDisplay = true }
     }
 
@@ -69,13 +70,18 @@ public final class PopupMenuView: NSView {
         pick?(origIndex(s))
     }
 
-    static let padX: CGFloat = 14
-    static let headerH: CGFloat = 26
-    static let sepH: CGFloat = 9
-    static let rowH: CGFloat = 26
-    static let padV: CGFloat = 6
-    static let fieldH: CGFloat = 30
-    static let fieldGap: CGFloat = 6
+    // Roomier metrics (item 18): a touch more padding + a larger row so the
+    // `.large` icons clear the card border, the filter divider and the
+    // selection pill instead of crowding them.
+    static let padX: CGFloat = 16
+    static let headerH: CGFloat = 28
+    static let sepH: CGFloat = 12
+    static let rowH: CGFloat = 30
+    static let padV: CGFloat = 8
+    static let fieldH: CGFloat = 32
+    static let fieldGap: CGFloat = 8
+    /// Menu text point size (item 18 — slightly larger overall).
+    static let labelPt: CGFloat = 14
 
     /// Filter box (the `m` / keyboard path): when on, a `⌕` box sits between
     /// the header and the rows and the menu becomes type-to-filter, matching
@@ -94,11 +100,15 @@ public final class PopupMenuView: NSView {
 
     public override var isFlipped: Bool { true }
 
+    /// Title band height — collapses to 0 when there's no `header` text
+    /// (item 13: the tag-world menu drops its title and relies on the
+    /// section labels), so the rows / filter box ride up to the top.
+    private var headerBand: CGFloat { header.isEmpty ? 0 : Self.headerH }
     /// Extra vertical band the filter box claims (0 when not filterable).
     private var fieldBand: CGFloat { filterable ? Self.fieldGap + Self.fieldH : 0 }
     /// Y of the first item row — below the header, the filter band and the
     /// divider. Collapses to the original layout when not filterable.
-    private var rowsTop: CGFloat { Self.padV + Self.headerH + fieldBand + Self.sepH }
+    private var rowsTop: CGFloat { Self.padV + headerBand + fieldBand + Self.sepH }
     /// Map a shown-row index to the original `allItems` index (`onPick`'s
     /// contract). Identity when `rowMap` is empty (non-filterable menus).
     private func origIndex(_ shown: Int) -> Int {
@@ -106,8 +116,8 @@ public final class PopupMenuView: NSView {
     }
 
     public func contentSize() -> NSSize {
-        let hf = uiFont(12, .bold)
-        let rf = uiFont(13, .regular)
+        let hf = uiFont(13, .bold)
+        let rf = uiFont(Self.labelPt, .regular)
         var w = (header as NSString)
             .size(withAttributes: [.font: hf]).width
         // Width keys off the FULL list (so it doesn't jitter as you filter)
@@ -119,10 +129,10 @@ public final class PopupMenuView: NSView {
             w = max(w, ("Filter…" as NSString)
                 .size(withAttributes: [.font: rf]).width + 20)
         }
-        let width = min(max(w + Self.padX * 2 + 26 + iconColW, 170), 340)
+        let width = min(max(w + Self.padX * 2 + 28 + iconColW, 180), 360)
         // Reserve a row for the "no match" hint so the box never collapses.
         let rowCount = filterable ? max(items.count, 1) : items.count
-        let h = Self.padV + Self.headerH + fieldBand + Self.sepH
+        let h = Self.padV + headerBand + fieldBand + Self.sepH
             + CGFloat(rowCount) * Self.rowH + Self.padV
         return NSSize(width: width, height: h)
     }
@@ -131,7 +141,8 @@ public final class PopupMenuView: NSView {
         let top = rowsTop
         guard p.y >= top else { return nil }
         let i = Int((p.y - top) / Self.rowH)
-        return (i >= 0 && i < items.count && !headerRows.contains(i)) ? i : nil
+        return (i >= 0 && i < items.count
+                && !headerRows.contains(origIndex(i))) ? i : nil
     }
 
     public override func draw(_ dirty: NSRect) {
@@ -145,48 +156,50 @@ public final class PopupMenuView: NSView {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
 
-        (header as NSString).draw(
-            in: NSRect(x: Self.padX, y: Self.padV + 5,
-                       width: bounds.width - Self.padX * 2,
-                       height: Self.headerH),
-            withAttributes: [.font: uiFont(12, .bold),
-                             .foregroundColor: palette.primary,
-                             .paragraphStyle: para])
+        if !header.isEmpty {
+            (header as NSString).draw(
+                in: NSRect(x: Self.padX, y: Self.padV + 5,
+                           width: bounds.width - Self.padX * 2,
+                           height: Self.headerH),
+                withAttributes: [.font: uiFont(13, .bold),
+                                 .foregroundColor: palette.primary,
+                                 .paragraphStyle: para])
+        }
 
         // Filter box (mirrors the `t` panel's ⌕ field) — drawn, not a real
         // NSTextField; `filter` is fed by PopupMenu's key monitor.
         if filterable {
             let fb = NSRect(x: Self.padX,
-                            y: Self.padV + Self.headerH + Self.fieldGap,
+                            y: Self.padV + headerBand + Self.fieldGap,
                             width: bounds.width - Self.padX * 2,
                             height: Self.fieldH)
             let path = NSBezierPath(roundedRect: fb, xRadius: 7, yRadius: 7)
             (bg.blended(withFraction: 0.06, of: .white) ?? bg).setFill(); path.fill()
             palette.border.setStroke(); path.lineWidth = 1; path.stroke()
             if let icon = IconResolver.resolve(
-                "SF:magnifyingglass", pointSize: 13, color: palette.muted) {
+                "SF:magnifyingglass", pointSize: 14, color: palette.muted) {
                 let isz = icon.size
-                icon.draw(in: NSRect(x: fb.minX + 8,
+                icon.draw(in: NSRect(x: fb.minX + 9,
                                      y: fb.minY + (fb.height - isz.height) / 2,
                                      width: isz.width, height: isz.height))
             }
-            let textX = fb.minX + 28
+            let textX = fb.minX + 31
             let textRect = NSRect(x: textX, y: fb.minY + 6,
                                   width: fb.maxX - textX - 8, height: fb.height - 12)
             if filter.isEmpty {
                 ("Filter…" as NSString).draw(
                     in: textRect,
-                    withAttributes: [.font: uiFont(13, .regular),
+                    withAttributes: [.font: uiFont(Self.labelPt, .regular),
                                      .foregroundColor: palette.muted,
                                      .paragraphStyle: para])
             } else {
                 let attrs: [NSAttributedString.Key: Any] = [
-                    .font: uiFont(13, .regular),
+                    .font: uiFont(Self.labelPt, .regular),
                     .foregroundColor: palette.foreground,
                     .paragraphStyle: para]
                 (filter as NSString).draw(in: textRect, withAttributes: attrs)
                 let tw = (filter as NSString)
-                    .size(withAttributes: [.font: uiFont(13, .regular)]).width
+                    .size(withAttributes: [.font: uiFont(Self.labelPt, .regular)]).width
                 let caretX = min(textX + tw + 1.5, textRect.maxX)
                 palette.primary.setStroke()
                 let caret = NSBezierPath()
@@ -204,32 +217,36 @@ public final class PopupMenuView: NSView {
         sp.stroke()
 
         let top = rowsTop
+        // Vertically-centred text rect inside a row (rowH grew in item 18).
+        func textRect(in r: NSRect) -> NSRect {
+            NSRect(x: textIndent, y: r.minY + (Self.rowH - 18) / 2,
+                   width: r.width - textIndent - Self.padX, height: 18)
+        }
         // Filtered to nothing: a quiet hint instead of a blank gap.
         if filterable, items.isEmpty {
             ("No match" as NSString).draw(
-                in: NSRect(x: Self.padX + 18, y: top + 5,
-                           width: bounds.width - Self.padX * 2 - 18,
-                           height: Self.rowH - 6),
-                withAttributes: [.font: uiFont(13, .regular),
+                in: NSRect(x: textIndent, y: top + (Self.rowH - 18) / 2,
+                           width: bounds.width - textIndent - Self.padX,
+                           height: 18),
+                withAttributes: [.font: uiFont(Self.labelPt, .regular),
                                  .foregroundColor: palette.muted,
                                  .paragraphStyle: para])
         }
         for (i, m) in items.enumerated() {
             let r = NSRect(x: 0, y: top + CGFloat(i) * Self.rowH,
                            width: bounds.width, height: Self.rowH)
-            if headerRows.contains(i) {
+            if headerRows.contains(origIndex(i)) {
                 // Section label: dim + bold, no fill / checkmark / indent.
                 (m.uppercased() as NSString).draw(
-                    in: NSRect(x: Self.padX, y: r.minY + 7,
-                               width: r.width - Self.padX * 2,
-                               height: r.height - 7),
-                    withAttributes: [.font: uiFont(10, .bold),
+                    in: NSRect(x: Self.padX, y: r.minY + (Self.rowH - 14) / 2,
+                               width: r.width - Self.padX * 2, height: 14),
+                    withAttributes: [.font: uiFont(11, .bold),
                                      .foregroundColor: palette.muted,
                                      .paragraphStyle: para])
                 continue
             }
             if sel == i {
-                let pill = r.insetBy(dx: 5, dy: 2)
+                let pill = r.insetBy(dx: 5, dy: 3)
                 palette.selection.setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
                 palette.primary.setStroke()
@@ -254,19 +271,17 @@ public final class PopupMenuView: NSView {
                     width: isz.width, height: isz.height))
             }
             (m as NSString).draw(
-                in: NSRect(x: textIndent, y: r.minY + 5,
-                           width: r.width - textIndent - Self.padX,
-                           height: r.height - 6),
+                in: textRect(in: r),
                 withAttributes: [
-                    .font: uiFont(13, isCur ? .semibold : .regular),
+                    .font: uiFont(Self.labelPt, isCur ? .semibold : .regular),
                     .foregroundColor: fg,
                     .paragraphStyle: para,
                 ])
             if isCur {
                 ("✓" as NSString).draw(
-                    in: NSRect(x: Self.padX, y: r.minY + 5,
-                               width: 16, height: r.height - 6),
-                    withAttributes: [.font: uiFont(12, .bold),
+                    in: NSRect(x: Self.padX, y: r.minY + (Self.rowH - 16) / 2,
+                               width: 16, height: 16),
+                    withAttributes: [.font: uiFont(13, .bold),
                                      .foregroundColor: palette.primary])
             }
         }
@@ -449,18 +464,27 @@ public final class PopupMenu {
             v.items = allItems
             v.rowMap = Array(allItems.indices)
         } else {
+            // Section-aware: keep a section header only while ≥1 of its
+            // children matches, so a filtered menu still reads grouped
+            // (items 11 / 12 — sections coexist with the filter box).
             var shown: [String] = []
             var map: [Int] = []
-            for (i, label) in allItems.enumerated()
-            where label.localizedCaseInsensitiveContains(q) {
+            var pendingHeader: Int?
+            for (i, label) in allItems.enumerated() {
+                if v.headerRows.contains(i) { pendingHeader = i; continue }
+                guard label.localizedCaseInsensitiveContains(q) else { continue }
+                if let h = pendingHeader {
+                    shown.append(allItems[h]); map.append(h)
+                    pendingHeader = nil
+                }
                 shown.append(label); map.append(i)
             }
             v.items = shown; v.rowMap = map
         }
         v.filter = filter
-        // Highlight the top match so type → Return picks it (command-menu
-        // convention); empty result clears the selection.
-        v.sel = v.items.isEmpty ? nil : 0
+        // Highlight the first non-header match so type → Return picks it
+        // (command-menu convention); empty result clears the selection.
+        v.sel = v.items.indices.first { !v.headerRows.contains(v.rowMap[$0]) }
         resizeKeepingTop()
         v.needsDisplay = true
     }

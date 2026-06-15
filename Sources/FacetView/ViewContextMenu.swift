@@ -65,7 +65,10 @@ public enum ViewContextMenu {
         var runByIndex: [Int: () -> Void] = [:]
         var last: String?
         for e in entries {
-            if !filterable, e.section != last, !e.section.isEmpty {
+            // Section header whenever the section changes — shown even on the
+            // filterable path now (PopupMenu keeps headers whose group has a
+            // match), so grouped menus stay grouped while filtering.
+            if e.section != last, !e.section.isEmpty {
                 headerRows.insert(items.count)
                 items.append(e.section)        // PopupMenu uppercases headers
                 icons.append("")
@@ -151,17 +154,15 @@ public enum ViewContextMenu {
         present(at: scr, header: "Desktop", palette: palette, entries: entries)
     }
 
-    /// Tag-world header menu (tag mode). One menu, grouped sections so no
-    /// extra click is needed:
+    /// Tag-world header menu (tag mode). Title-less (item 13 — the section
+    /// labels carry the context) and type-to-filter like the other context
+    /// menus (item 11). Grouped sections:
     ///
-    ///     LAYOUT          ← section
+    ///     LAYOUT          ← section (primary accent)
     ///     float · grid · master-… (the tag-compatible modes, current ✓)
-    ///     TAGS            ← section
+    ///     TAGS            ← section (secondary accent)
     ///     Select tags     → opens the lens checklist
-    ///     All windows     → lens = every tag (show all, all checked)
-    ///     Clear           → lens = floor (show all, nothing checked)
-    ///     FIND            ← section
-    ///     Search          → enters the tree's `s` search mode (item 1)
+    ///     All tags        → lens = every tag (show everything; item 15/16)
     ///
     /// `layoutModes` is already filtered to tag-compatible engines. The
     /// workspace-header menu (`showLayout`) stays the bare layout picker
@@ -173,9 +174,7 @@ public enum ViewContextMenu {
         palette: ResolvedPalette,
         onPickLayout: @escaping (String) -> Void,
         onSelectTags: @escaping () -> Void,
-        onAllWindows: @escaping () -> Void,
-        onClear: @escaping () -> Void,
-        onSearch: @escaping () -> Void
+        onAllTags: @escaping () -> Void
     ) {
         var entries = layoutModes.map { mode in
             Entry(label: mode, icon: layoutModeIcon(mode),
@@ -186,13 +185,10 @@ public enum ViewContextMenu {
         entries.append(Entry(label: "Select tags",
                              icon: "SF:line.3.horizontal.decrease.circle",
                              section: "Tags", run: onSelectTags))
-        entries.append(Entry(label: "All windows", icon: "SF:rectangle.stack",
-                             section: "Tags", run: onAllWindows))
-        entries.append(Entry(label: "Clear", icon: "SF:xmark.circle",
-                             section: "Tags", run: onClear))
-        entries.append(Entry(label: "Search", icon: "SF:magnifyingglass",
-                             section: "Find", run: onSearch))
-        present(at: scr, header: "Tag-world", palette: palette, entries: entries)
+        entries.append(Entry(label: "All tags", icon: "SF:tag",
+                             section: "Tags", run: onAllTags))
+        present(at: scr, header: "", palette: palette,
+                filterable: true, entries: entries)
     }
 
     /// Window-ops menu for a window (close / float / master / stack /
@@ -227,11 +223,12 @@ public enum ViewContextMenu {
                                       isMaster: isMaster,
                                       windowCount: windowCount,
                                       isSticky: isSticky)
-        // Each backend item carries its own icon + section (item 4 + 7), so
-        // the ops group under LAYOUT / WINDOW headers automatically.
-        var entries: [Entry] = menu.map { item in
-            // Close is destructive → `error` (red) accent (item 10's scheme
-            // leaves the Window section neutral, so the danger reads).
+        // Each backend item carries its own icon + section. Order the menu
+        // LAYOUT → TAG → ACTION (item 12): tiling ops first, the per-window
+        // Tag in the middle, then the window-state / destructive actions.
+        func makeEntry(_ item: WindowMenuItem) -> Entry {
+            // Close is destructive → `error` (red) accent (item 10: the
+            // Action section is otherwise neutral, so the danger reads).
             Entry(label: item.label, icon: item.icon, section: item.section,
                   tint: item.isClose ? palette.error : nil) {
                 if item.isClose {
@@ -244,6 +241,7 @@ public enum ViewContextMenu {
                 }
             }
         }
+        var entries = menu.filter { $0.section == "Layout" }.map(makeEntry)
         // Tag mode (#4): a single "Tag" item under its own TAGS section that
         // opens the per-window tag-edit checklist (`TagEditPanel`). Grid /
         // rail are workspace-only in tag mode, so they never set `tagMode`
@@ -255,6 +253,7 @@ public enum ViewContextMenu {
                                  win?.title ?? title, win?.tags ?? [], scr)
             })
         }
+        entries += menu.filter { $0.section != "Layout" }.map(makeEntry)
         present(at: scr, header: "Window", palette: palette,
                 filterable: filterable, entries: entries)
     }

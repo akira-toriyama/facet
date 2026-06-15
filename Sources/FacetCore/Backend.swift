@@ -46,7 +46,7 @@ public struct WindowMenuItem: Sendable {
     public let section: String
 
     public init(_ label: String, _ ops: [WindowAction], close: Bool = false,
-                icon: String = "", section: String = "Window") {
+                icon: String = "", section: String = "Action") {
         self.label = label
         self.ops = ops
         self.isClose = close
