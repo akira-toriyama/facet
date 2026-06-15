@@ -89,25 +89,31 @@ public enum AX {
             activate(pid: window.pid)
             return false
         }
-        // Precise focus, public AX only: mark the target main, raise it,
-        // then activate the owning app. Works for same-app / same-WS
-        // focus because facet's tree panel never grabs key on a click
-        // (KeyablePanel.canBecomeKey is gated to explicit kb-nav entry) —
-        // if it held key, no public-AX call could re-key another app's
-        // window; that was the same-app focus bug. AeroSpace works the
-        // same way and has no key-grabbing panel.
+        // Precise focus, public API only: mark the target main, raise
+        // it, then hand activation to the owning app. Works for same-app
+        // / same-WS focus because facet's tree panel never grabs key on a
+        // click (KeyablePanel.canBecomeKey is gated to explicit kb-nav
+        // entry) — if it held key, no public call could re-key another
+        // app's window; that was the same-app focus bug. AeroSpace works
+        // the same way and has no key-grabbing panel.
+        //
+        // Cross-app focus uses `activateFront` (cooperative
+        // `activate(from:)`, macOS 14+) instead of the deprecated
+        // `.activateIgnoringOtherApps`, which macOS 15 ignores for a
+        // background app — that was the "tree click on another app's
+        // window doesn't focus it" bug. facet stays non-active throughout.
         //
         // KNOWN LIMITATION (deferred): after a workspace switch the
         // keyboard focus can stay "pending" until the next real HID
         // event — the user nudging the mouse commits it. Synthetic
-        // mouse-moves don't commit (only a click does), and we keep this
-        // path public-AX-only by choice, so cross-WS focus may need a
-        // tiny mouse move to start typing. Revisit separately.
+        // mouse-moves don't commit (only a click does), so cross-WS focus
+        // may need a tiny mouse move to start typing. Revisit separately.
         AXUIElementSetAttributeValue(
             w, kAXMainAttribute as CFString, kCFBooleanTrue)
         AXUIElementPerformAction(w, kAXRaiseAction as CFString)
-        NSRunningApplication(processIdentifier: pid_t(window.pid))?
-            .activate(options: [.activateIgnoringOtherApps])
+        // Cross-app hand-off (cooperative activation; see activateFront).
+        // Off-main here, so hop to the main actor for NSApp / NSWorkspace.
+        Task { @MainActor in activateFront(pid: window.pid) }
         Log.debug("focus applied main+raise+activate "
             + "pid=\(window.pid) wsid=\(window.id.serverID)")
         return true
@@ -181,9 +187,43 @@ public enum AX {
     }
 
     private static func activate(pid: Int) {
-        Task { @MainActor in
-            NSRunningApplication(processIdentifier: pid_t(pid))?
-                .activate(options: [.activateIgnoringOtherApps])
+        Task { @MainActor in activateFront(pid: pid) }
+    }
+
+    /// Bring another app frontmost from accessory facet — the cross-app
+    /// half of a tree click. macOS 14 (Sonoma) deprecated
+    /// `.activateIgnoringOtherApps` for a *cooperative* model: a
+    /// background (non-active) app can no longer force another app
+    /// frontmost, so facet's old
+    /// `NSRunningApplication.activate(options:.activateIgnoringOtherApps)`
+    /// became a silent no-op on macOS 15 and a tree click on a
+    /// *different* app's window stopped focusing it. (Same-app still
+    /// works — it needs no activation, just `kAXMain`+`kAXRaise`.)
+    ///
+    /// `NSRunningApplication.activate(from:)` (macOS 14+) is the
+    /// cooperative replacement: it transfers activation from the current
+    /// front app to the target. Verified to work while facet itself
+    /// stays NON-active — facet never becomes the active app, so the
+    /// never-steal-focus / nonactivating contract holds and there's no
+    /// Dock-icon flicker. Public API only; no private SkyLight write.
+    ///
+    /// Idempotent: the `Focus` retry loops call this repeatedly per
+    /// focus; once the target is frontmost the `!isActive` guard makes
+    /// every later call a no-op. Main-actor (`NSApp` / `NSWorkspace`).
+    @MainActor
+    public static func activateFront(pid: Int) {
+        guard let target = NSRunningApplication(
+                processIdentifier: pid_t(pid)),
+              !target.isActive else { return }
+        if #available(macOS 14.0, *) {
+            if let from = NSWorkspace.shared.frontmostApplication,
+               from.processIdentifier != target.processIdentifier,
+               target.activate(from: from) {
+                return
+            }
+            target.activate()       // no front app / refused hand-off
+        } else {
+            target.activate(options: [.activateIgnoringOtherApps])
         }
     }
 }

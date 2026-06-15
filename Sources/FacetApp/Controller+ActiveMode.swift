@@ -158,6 +158,32 @@ extension Controller {
                          searching: sidebarView.searching)
     }
 
+    /// Open search from the "Desktop N" right-click menu when facet is
+    /// passive. The `s`-key path (`handleKbKey` → `enterSearch`) assumes
+    /// facet is already key — the local keyDown monitor only fires when
+    /// facet is active — so a menu pick must self-activate first, then open
+    /// search. No window is focused here, so this neither trips #66 nor
+    /// steals focus unprompted; `exitSearch`'s resignKey returns focus on
+    /// close, matching the `--active` path.
+    func enterSearchFromMenu() {
+        if !sidebarView.kbNav { enterActive() }
+        enterSearch()
+    }
+
+    /// Build + show the panel-level ("Desktop N") right-click menu — the
+    /// third context-menu surface (panel ▸ workspace ▸ window). Search is
+    /// always offered; Manage tags only under tag grouping, mirroring the
+    /// `t`-key gate in `handleKbKey`. Each entry self-activates facet via
+    /// its callback.
+    func showDesktopMenu(at scr: NSPoint) {
+        ViewContextMenu.showDesktop(
+            at: scr,
+            palette: treePaletteBox.pal,
+            tagManage: config.effectiveGrouping == .tag,
+            onSearch: { [weak self] in self?.enterSearchFromMenu() },
+            onTagManage: { [weak self] in self?.enterTagManage() })
+    }
+
     // MARK: - GUI tag-edit checklist (#4)
 
     /// Open the per-window tag-edit checklist (`TagEditPanel`) for `id` —

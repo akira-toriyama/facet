@@ -227,6 +227,9 @@ final class Controller: NSObject {
         panelHost.handleBar.onResetGeometry = { [weak self] in
             self?.resetPanelGeometry()
         }
+        panelHost.handleBar.onContextMenu = { [weak self] scr in
+            self?.showDesktopMenu(at: scr)
+        }
         if #available(macOS 14.0, *) { winPreview = WindowPreview() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {

@@ -26,6 +26,13 @@ public final class HandleBar: NSView {
     /// Wired by the Controller (PanelHost has no `config`/reset logic).
     public var onResetGeometry: (() -> Void)?
 
+    /// Right-click → the panel-level ("Desktop N") context menu, the third
+    /// right-click surface alongside the workspace-header and window-row
+    /// menus. HandleBar only reports the screen-space click point; the
+    /// Controller builds + shows the themed menu (it owns config / palette
+    /// / the search + tag-manage entries). Wired by the Controller.
+    public var onContextMenu: ((NSPoint) -> Void)?
+
     /// Height the band reserves at the panel top; PanelHost insets the
     /// scroll view below it. Matches the old scrolling handle-row height.
     public static let height: CGFloat = handleRowH
@@ -66,6 +73,12 @@ public final class HandleBar: NSView {
         // motion just returns).
         if e.clickCount == 2 { onResetGeometry?(); return }
         window?.performDrag(with: e)
+    }
+
+    public override func rightMouseDown(with e: NSEvent) {
+        guard let scr = window?.convertPoint(toScreen: e.locationInWindow)
+        else { return }
+        onContextMenu?(scr)
     }
 
     public override func draw(_ dirty: NSRect) {
