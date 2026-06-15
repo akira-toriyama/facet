@@ -235,30 +235,38 @@ public final class PopupMenuView: NSView {
         for (i, m) in items.enumerated() {
             let r = NSRect(x: 0, y: top + CGFloat(i) * Self.rowH,
                            width: bounds.width, height: Self.rowH)
-            if headerRows.contains(origIndex(i)) {
-                // Section label: dim + bold, no fill / checkmark / indent.
+            // Per-row tint (item 10: layout→primary, tag→secondary,
+            // destructive→error). Drives the label, the icon, the section
+            // header AND the selection highlight, so tag-related rows are
+            // secondary through-and-through (text + highlight).
+            let oi = origIndex(i)
+            let rowTint = oi < rowTints.count ? rowTints[oi] : nil
+            if headerRows.contains(oi) {
+                // Section label: bold, no fill / checkmark / indent. Coloured
+                // by its section tint (TAGS→secondary, LAYOUT→primary), else
+                // the menu's dim header colour.
                 (m.uppercased() as NSString).draw(
                     in: NSRect(x: Self.padX, y: r.minY + (Self.rowH - 14) / 2,
                                width: r.width - Self.padX * 2, height: 14),
                     withAttributes: [.font: uiFont(11, .bold),
-                                     .foregroundColor: palette.muted,
+                                     .foregroundColor: rowTint ?? palette.muted,
                                      .paragraphStyle: para])
                 continue
             }
             if sel == i {
+                // Highlight in the row's own accent so a tag row's selection
+                // reads secondary (item: tag highlights → secondary), a
+                // layout row's primary; neutral rows keep the plain fill.
                 let pill = r.insetBy(dx: 5, dy: 3)
-                palette.selection.setFill()
+                (rowTint?.withAlphaComponent(0.16) ?? palette.selection).setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
-                palette.primary.setStroke()
+                (rowTint ?? palette.primary).setStroke()
                 let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
                                      xRadius: 6, yRadius: 6)
                 o.lineWidth = 1.5; o.stroke()
             }
             let isCur = (origIndex(i) == checkedIndex)
-            // Per-row tint (item 10: layout→primary, tag→secondary,
-            // destructive→error) overrides the default current/normal rule.
-            let tint = origIndex(i) < rowTints.count ? rowTints[origIndex(i)] : nil
-            let fg = tint ?? (isCur ? palette.primary : palette.foreground)
+            let fg = rowTint ?? (isCur ? palette.primary : palette.foreground)
             // Leading icon (item 7) — drawn in the reserved column between
             // the checkmark gutter and the label, tinted to match the row.
             let iconSpec = origIndex(i) < icons.count ? icons[origIndex(i)] : ""

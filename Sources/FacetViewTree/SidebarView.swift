@@ -768,9 +768,13 @@ public final class SidebarView: NSView {
                     let modeY = capY + nameH + 4
                     var modeTextX = mx
                     let modeIconSpec = layoutModeIcon(c.mode)
+                    // `.medium` scale (not the menu's `.large`): the compact
+                    // header line is only 18pt tall, so a large glyph would
+                    // bleed into the kbNav outline / the line above.
                     if !modeIconSpec.isEmpty,
                        let icon = IconResolver.resolve(
-                        modeIconSpec, fontSize: fs, color: modeColor) {
+                        modeIconSpec, fontSize: fs, color: modeColor,
+                        scale: .medium) {
                         let isz = icon.size
                         icon.draw(in: NSRect(
                             x: mx, y: modeY + (18 - isz.height) / 2,
@@ -1072,9 +1076,11 @@ public final class SidebarView: NSView {
             .size(withAttributes: [.font: font]).width))
         let padX: CGFloat = 8
         let pillH: CGFloat = 22
+        // `.medium` scale keeps the glyph inside the 22pt pill (the menu's
+        // `.large` would touch the pill stroke).
         let iconImg = icon.isEmpty ? nil
             : IconResolver.resolve(icon, fontSize: windowFontSize,
-                                   color: textColor)
+                                   color: textColor, scale: .medium)
         let iconW = iconImg?.size.width ?? 0
         let iconGap: CGFloat = iconImg == nil ? 0 : 4
         let pillW = textW + iconW + iconGap + padX * 2

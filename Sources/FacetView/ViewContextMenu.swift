@@ -72,7 +72,10 @@ public enum ViewContextMenu {
                 headerRows.insert(items.count)
                 items.append(e.section)        // PopupMenu uppercases headers
                 icons.append("")
-                tints.append(nil)
+                // Tint the section LABEL by its scheme too (TAGS→secondary,
+                // LAYOUT→primary) so tag-related text reads secondary; other
+                // sections fall back to the menu's dim header colour.
+                tints.append(sectionTint(e.section, palette))
             }
             last = e.section
             if e.checked { checked = items.count }

@@ -94,7 +94,7 @@ final class TagEditListView: NSView {
                 // the menus' TAGS section, so "tag-related" reads one colour
                 // (item 14/17). Layout stays `primary`.
                 let pill = r.insetBy(dx: 4, dy: 2)
-                palette.selection.setFill()
+                palette.secondary.withAlphaComponent(0.16).setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
                 palette.secondary.setStroke()
                 let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
