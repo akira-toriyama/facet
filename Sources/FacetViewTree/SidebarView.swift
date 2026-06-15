@@ -753,9 +753,10 @@ public final class SidebarView: NSView {
                     // text-heavy, so the glyph lets the layout register at a
                     // glance) + the abbreviated label. Plain, no fill — same
                     // weight (bold) as the WS name above it so the two-line
-                    // caption reads as one unit. secondary on the active WS,
-                    // dim when inactive so non-focused rows recede.
-                    let modeColor = c.hot ? pal.secondary : pal.muted
+                    // caption reads as one unit. `primary` on the active WS
+                    // (item 10: layout = primary accent), dim when inactive
+                    // so non-focused rows recede.
+                    let modeColor = c.hot ? pal.primary : pal.muted
                     let mx = rowPadX + gripSpace
                     let modeY = capY + nameH + 4
                     var modeTextX = mx
@@ -955,157 +956,52 @@ public final class SidebarView: NSView {
                         // Sticky badge: a float-style pill (primary border,
                         // tertiary text — the SAME theme as the `float`
                         // badge) but with the glyphs SLANTED via
-                        // `.obliqueness` so sticky ≠ float at a glance. The
-                        // shear works on EVERY font (incl. the mono themes,
-                        // which have no true italic face). Text, not a 📌.
-                        let stFont = uiFont(windowFontSize, .semibold)
-                        let txt = "sticky"
-                        let stPara = NSMutableParagraphStyle()
-                        stPara.alignment = .center
-                        stPara.lineBreakMode = .byTruncatingTail
-                        let stAttrs: [NSAttributedString.Key: Any] = [
-                            .font: stFont,
-                            .foregroundColor: pal.tertiary,
-                            .paragraphStyle: stPara,
-                            .obliqueness: 0.2,   // synthetic slant
-                        ]
-                        let stSize = (txt as NSString).size(withAttributes: stAttrs)
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22
-                        let pillW = ceil(stSize.width) + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let stStroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)
-                        stStroke.lineWidth = 1
-                        pal.primary.setStroke()
-                        stStroke.stroke()
-                        (txt as NSString).draw(
-                            in: NSRect(
-                                x: lx,
-                                y: labelY - 1 + (pillH - stSize.height) / 2 - 1.0,
-                                width: pillW, height: stSize.height),
-                            withAttributes: stAttrs)
-                        lx += pillW + 6
+                        // `.obliqueness` so sticky ≠ float at a glance, plus
+                        // a leading `pin` icon (item 7).
+                        lx = drawStatusPill("sticky", icon: "SF:pin",
+                                            stroke: pal.primary,
+                                            textColor: pal.tertiary,
+                                            oblique: 0.2,
+                                            at: lx, labelY: labelY)
                     }
                     if let sp = c.scratchpad {
                         // Scratchpad shelf badge: a dim outlined pill
-                        // `scratchpad:NAME`. Dim (not the mark's accent
-                        // green) so the shelf handle reads as secondary,
-                        // and labelled in full so it can't be mistaken
-                        // for a user mark. Sticky ⊻ scratchpad, so the
-                        // sticky badge above and this never both appear.
-                        let spText = "scratchpad:\(sp)"
-                        let spFont = uiFont(windowFontSize, .semibold)
-                        let maxTextW: CGFloat = 130  // long → tail-truncate
-                        let textW = min(maxTextW, ceil((spText as NSString)
-                            .size(withAttributes: [.font: spFont]).width))
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22
-                        let pillW = textW + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let spStroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)
-                        spStroke.lineWidth = 1
-                        pal.muted.setStroke()
-                        spStroke.stroke()
-                        let spPara = NSMutableParagraphStyle()
-                        spPara.alignment = .center
-                        spPara.lineBreakMode = .byTruncatingTail
-                        let spAttrs: [NSAttributedString.Key: Any] = [
-                            .font: spFont,
-                            .foregroundColor: pal.muted,
-                            .paragraphStyle: spPara,
-                        ]
-                        let textH = (spText as NSString)
-                            .size(withAttributes: spAttrs).height
-                        (spText as NSString).draw(
-                            in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - textH) / 2 - 1.0,
-                                       width: pillW, height: textH),
-                            withAttributes: spAttrs)
-                        lx += pillW + 6
+                        // `scratchpad:NAME` with a leading `tray` icon. Dim
+                        // (not the mark's accent green) so the shelf handle
+                        // reads as secondary, labelled in full so it can't
+                        // be mistaken for a user mark. Sticky ⊻ scratchpad,
+                        // so the sticky badge above + this never both appear.
+                        lx = drawStatusPill("scratchpad:\(sp)", icon: "SF:tray",
+                                            stroke: pal.muted,
+                                            textColor: pal.muted,
+                                            at: lx, labelY: labelY)
                     }
                     if let labelText {
-                        // master / float as an outlined pill — same badge
-                        // shape as the mark (stroke, no fill). All use the
-                        // `primary` border; the TEXT hue distinguishes the
-                        // kind:
-                        //   master → `primary` (border + text)
-                        //   float  → `primary` border + `tertiary` text
-                        //            (the `sticky` pill below shares float's)
-                        let lblColor = c.isMaster ? pal.primary : pal.tertiary
-                        let lblFont = uiFont(windowFontSize, .semibold)
-                        let textW = ceil((labelText as NSString).size(
-                            withAttributes: [.font: lblFont]).width)
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22   // inner padding around text
-                        let pillW = textW + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let stroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)   // rounded rect, not capsule
-                        stroke.lineWidth = 1
-                        pal.primary.setStroke()
-                        stroke.stroke()
-                        let lblPara = NSMutableParagraphStyle()
-                        lblPara.alignment = .center
-                        lblPara.lineBreakMode = .byTruncatingTail
-                        let lblAttrs: [NSAttributedString.Key: Any] = [
-                            .font: lblFont,
-                            .foregroundColor: lblColor,
-                            .paragraphStyle: lblPara,
-                        ]
-                        let lblH = (labelText as NSString).size(
-                            withAttributes: lblAttrs).height
-                        (labelText as NSString).draw(
-                            in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
-                                       width: pillW, height: lblH),
-                            withAttributes: lblAttrs)
+                        // master / float as an outlined `primary`-bordered
+                        // pill. A leading icon + text hue distinguish the
+                        // kind (item 7 / 10 — layout state in the primary
+                        // accent):
+                        //   master → `crown`, `primary` text
+                        //   float  → `macwindow`, `tertiary` text
+                        //            (the `sticky` pill above shares float's)
+                        lx = drawStatusPill(
+                            labelText,
+                            icon: c.isMaster ? "SF:crown" : "SF:macwindow",
+                            stroke: pal.primary,
+                            textColor: c.isMaster ? pal.primary : pal.tertiary,
+                            at: lx, labelY: labelY)
                     }
                     if c.isHidden {
-                        // Hidden (Cmd+H / minimized): an outlined pill in
-                        // the muted `dim` hue — distinct from the accent
-                        // mark and secondary master/float — confirming the
-                        // dimmed row is hidden, not gone. Click restores
-                        // it. (A hidden window is never master/float/sticky
-                        // — those are excluded from hide-reclaim — so this
-                        // is the only status pill on its row.)
-                        let lblFont = uiFont(windowFontSize, .semibold)
-                        let txt = "hidden"
-                        let textW = ceil((txt as NSString).size(
-                            withAttributes: [.font: lblFont]).width)
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22
-                        let pillW = textW + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let stroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)
-                        stroke.lineWidth = 1
-                        pal.muted.setStroke()
-                        stroke.stroke()
-                        let lblPara = NSMutableParagraphStyle()
-                        lblPara.alignment = .center
-                        lblPara.lineBreakMode = .byTruncatingTail
-                        let lblAttrs: [NSAttributedString.Key: Any] = [
-                            .font: lblFont,
-                            .foregroundColor: pal.muted,
-                            .paragraphStyle: lblPara,
-                        ]
-                        let lblH = (txt as NSString).size(
-                            withAttributes: lblAttrs).height
-                        (txt as NSString).draw(
-                            in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
-                                       width: pillW, height: lblH),
-                            withAttributes: lblAttrs)
+                        // Hidden (Cmd+H / minimized): a muted outlined pill
+                        // with a leading `eye.slash` icon — confirming the
+                        // dimmed row is hidden, not gone. Click restores it.
+                        // (A hidden window is never master/float/sticky —
+                        // those are excluded from hide-reclaim — so this is
+                        // the only status pill on its row.)
+                        lx = drawStatusPill("hidden", icon: "SF:eye.slash",
+                                            stroke: pal.muted,
+                                            textColor: pal.muted,
+                                            at: lx, labelY: labelY)
                     }
                 }
             }
@@ -1144,6 +1040,58 @@ public final class SidebarView: NSView {
             }
         }
 
+    }
+
+    /// Draw an outlined status badge — an optional leading SF icon then
+    /// centred text — at `lx` on a window row's third line, returning the
+    /// advanced x. Shared by the master / float / sticky / hidden /
+    /// scratchpad badges so they read uniformly alongside the rest of the
+    /// icon-bearing UI (item 7 — the text-heavy tree gets icon support).
+    /// `stroke` outlines the pill; `textColor` tints BOTH the label and
+    /// the icon; `oblique` slants the glyphs (sticky); `maxTextW`
+    /// tail-truncates long names (e.g. `scratchpad:NAME`).
+    private func drawStatusPill(_ text: String, icon: String,
+                                stroke: NSColor, textColor: NSColor,
+                                oblique: CGFloat = 0, maxTextW: CGFloat = 130,
+                                at lx: CGFloat, labelY: CGFloat) -> CGFloat {
+        let font = uiFont(windowFontSize, .semibold)
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        para.lineBreakMode = .byTruncatingTail
+        var attrs: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: textColor, .paragraphStyle: para]
+        if oblique != 0 { attrs[.obliqueness] = oblique }
+        let textW = min(maxTextW, ceil((text as NSString)
+            .size(withAttributes: [.font: font]).width))
+        let padX: CGFloat = 8
+        let pillH: CGFloat = 22
+        let iconImg = icon.isEmpty ? nil
+            : IconResolver.resolve(icon, fontSize: windowFontSize,
+                                   color: textColor)
+        let iconW = iconImg?.size.width ?? 0
+        let iconGap: CGFloat = iconImg == nil ? 0 : 4
+        let pillW = textW + iconW + iconGap + padX * 2
+        let pill = NSBezierPath(
+            roundedRect: NSRect(x: lx, y: labelY - 1,
+                                width: pillW, height: pillH)
+                .insetBy(dx: 0.5, dy: 0.5),
+            xRadius: 5, yRadius: 5)
+        pill.lineWidth = 1
+        stroke.setStroke(); pill.stroke()
+        var cx = lx + padX
+        if let iconImg {
+            let isz = iconImg.size
+            iconImg.draw(in: NSRect(
+                x: cx, y: labelY - 1 + (pillH - isz.height) / 2,
+                width: isz.width, height: isz.height))
+            cx += iconW + iconGap
+        }
+        let textH = (text as NSString).size(withAttributes: attrs).height
+        (text as NSString).draw(
+            in: NSRect(x: cx, y: labelY - 1 + (pillH - textH) / 2 - 1.0,
+                       width: textW, height: textH),
+            withAttributes: attrs)
+        return lx + pillW + 6
     }
 
     /// Unified drag/lift context for `draw`: the source workspace,

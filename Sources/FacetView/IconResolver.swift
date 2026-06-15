@@ -21,10 +21,13 @@ import FacetCore
 @MainActor
 public enum IconResolver {
 
-    /// Baseline (font-size 13) icon edge in points. Sized so an SF Symbol
-    /// reads at roughly the cap-height of 13pt menu text — big enough to
-    /// be legible next to the label without crowding it.
-    public static let baselinePt: CGFloat = 15
+    /// Baseline (font-size 13) icon edge in points. Sized a touch above
+    /// the 13pt menu text so an SF Symbol reads clearly beside the label.
+    /// Paired with `.large` symbol scale (the resolve default) so
+    /// whitespace-heavy glyphs (gear / folder / macwindow) optically fill
+    /// their box and match tight ones (crown / pin) rather than reading
+    /// small — the same calibration wand's tome uses.
+    public static let baselinePt: CGFloat = 16
 
     /// Scale `baselinePt` to a caller's live font size so the icon column
     /// grows with the row (the tree's badge font vs the menu font differ).
@@ -45,7 +48,7 @@ public enum IconResolver {
                                pointSize pt: CGFloat,
                                color: NSColor,
                                weight: NSFont.Weight = .medium,
-                               scale: NSImage.SymbolScale = .medium) -> NSImage? {
+                               scale: NSImage.SymbolScale = .large) -> NSImage? {
         guard !spec.isEmpty else { return nil }
         if spec.hasPrefix("SF:") {
             let name = String(spec.dropFirst(3))
@@ -69,7 +72,7 @@ public enum IconResolver {
                                fontSize: CGFloat,
                                color: NSColor,
                                weight: NSFont.Weight = .medium,
-                               scale: NSImage.SymbolScale = .medium) -> NSImage? {
+                               scale: NSImage.SymbolScale = .large) -> NSImage? {
         resolve(spec, pointSize: pt(forFontSize: fontSize),
                 color: color, weight: weight, scale: scale)
     }

@@ -29,9 +29,17 @@ public final class PopupMenuView: NSView {
     /// layout). Section-label rows ignore their slot. (item 7)
     public var icons: [String] = []
 
+    /// Per-row icon + text tint (PARALLEL to `allItems`; `nil` = the
+    /// default `primary`-if-current / `foreground` rule). Drives the
+    /// layout→primary / tag→secondary colour scheme (item 10) and the
+    /// destructive→error accent, computed by the menu builder.
+    public var rowTints: [NSColor?] = []
+
     /// Reserved icon-column width — non-zero only when at least one row
     /// carries an icon, so text-only menus keep their original indent.
-    private var iconColW: CGFloat { icons.contains { !$0.isEmpty } ? 22 : 0 }
+    /// Wide enough for a `.large`-scale SF Symbol (~20pt) plus breathing
+    /// room.
+    private var iconColW: CGFloat { icons.contains { !$0.isEmpty } ? 26 : 0 }
     /// Left edge of the label text: checkmark gutter (+18) then the icon
     /// column when present.
     private var textIndent: CGFloat { Self.padX + 18 + iconColW }
@@ -230,7 +238,10 @@ public final class PopupMenuView: NSView {
                 o.lineWidth = 1.5; o.stroke()
             }
             let isCur = (origIndex(i) == checkedIndex)
-            let fg = isCur ? palette.primary : palette.foreground
+            // Per-row tint (item 10: layout→primary, tag→secondary,
+            // destructive→error) overrides the default current/normal rule.
+            let tint = origIndex(i) < rowTints.count ? rowTints[origIndex(i)] : nil
+            let fg = tint ?? (isCur ? palette.primary : palette.foreground)
             // Leading icon (item 7) — drawn in the reserved column between
             // the checkmark gutter and the label, tinted to match the row.
             let iconSpec = origIndex(i) < icons.count ? icons[origIndex(i)] : ""
@@ -317,6 +328,7 @@ public final class PopupMenu {
                      filterable: Bool = false,
                      headerRows: Set<Int> = [],
                      icons: [String] = [],
+                     rowTints: [NSColor?] = [],
                      onPick: @escaping (Int) -> Void) {
         close()
         self.filterable = filterable
@@ -329,6 +341,7 @@ public final class PopupMenu {
         v.filterable = filterable
         v.headerRows = headerRows
         v.icons = icons
+        v.rowTints = rowTints
         v.allItems = items
         v.rowMap = Array(items.indices)
         v.checkedIndex = checkedIndex

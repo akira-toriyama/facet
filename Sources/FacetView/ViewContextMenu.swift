@@ -27,7 +27,23 @@ public enum ViewContextMenu {
         let icon: String
         let section: String
         var checked: Bool = false
+        /// Explicit tint override (e.g. destructive Close → `error`).
+        /// `nil` = take the section default (item 10: layout→primary,
+        /// tag→secondary, else neutral).
+        var tint: NSColor? = nil
         let run: () -> Void
+    }
+
+    /// item 10 colour scheme: layout rows draw in the `primary` accent,
+    /// tag rows in `secondary`; every other section stays neutral (the
+    /// menu's default current/foreground rule). An `Entry.tint` overrides.
+    private static func sectionTint(_ section: String,
+                                    _ palette: ResolvedPalette) -> NSColor? {
+        switch section {
+        case "Layout": return palette.primary
+        case "Tags":   return palette.secondary
+        default:       return nil
+        }
     }
 
     /// Build a `PopupMenu` payload from grouped `entries` and show it.
@@ -43,6 +59,7 @@ public enum ViewContextMenu {
                                 entries: [Entry]) {
         var items: [String] = []
         var icons: [String] = []
+        var tints: [NSColor?] = []
         var headerRows: Set<Int> = []
         var checked: Int?
         var runByIndex: [Int: () -> Void] = [:]
@@ -52,12 +69,14 @@ public enum ViewContextMenu {
                 headerRows.insert(items.count)
                 items.append(e.section)        // PopupMenu uppercases headers
                 icons.append("")
+                tints.append(nil)
             }
             last = e.section
             if e.checked { checked = items.count }
             runByIndex[items.count] = e.run
             items.append(e.label)
             icons.append(e.icon)
+            tints.append(e.tint ?? sectionTint(e.section, palette))
         }
         PopupMenu.shared.show(at: scr,
                               header: header,
@@ -66,7 +85,8 @@ public enum ViewContextMenu {
                               palette: palette,
                               filterable: filterable,
                               headerRows: headerRows,
-                              icons: icons) { i in
+                              icons: icons,
+                              rowTints: tints) { i in
             runByIndex[i]?()
         }
     }
@@ -210,7 +230,10 @@ public enum ViewContextMenu {
         // Each backend item carries its own icon + section (item 4 + 7), so
         // the ops group under LAYOUT / WINDOW headers automatically.
         var entries: [Entry] = menu.map { item in
-            Entry(label: item.label, icon: item.icon, section: item.section) {
+            // Close is destructive → `error` (red) accent (item 10's scheme
+            // leaves the Window section neutral, so the danger reads).
+            Entry(label: item.label, icon: item.icon, section: item.section,
+                  tint: item.isClose ? palette.error : nil) {
                 if item.isClose {
                     cliQueue.async { backend.closeWindow(id) }
                 } else {
