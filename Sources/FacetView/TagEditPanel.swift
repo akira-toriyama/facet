@@ -293,6 +293,10 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
 
     // Shared list state.
     private var manage = false
+    /// Whether the filter field offers a "+ Create" row + placeholder.
+    /// On for window / manage modes; OFF for lens (creating vocab is the
+    /// `t` Manage-tags job — the lens only PICKS existing tags).
+    private var allowCreate = true
     private var allTags: [String] = []
     private var checked: Set<String> = []       // window mode only
     private var palette: ResolvedPalette = resolve(.terminal)
@@ -330,6 +334,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
                      onClose: @escaping () -> Void) {
         close()
         manage = false
+        allowCreate = true
         self.allTags = allTags
         self.checked = checkedTags
         self.palette = palette
@@ -351,6 +356,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
                            onClose: @escaping () -> Void) {
         close()
         manage = true
+        allowCreate = true
         self.allTags = allTags
         self.checked = []
         self.palette = palette
@@ -360,6 +366,31 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         self.onDelete = onDelete
         self.onCloseCB = onClose
         present(at: screenPt, appName: "", title: "", pid: 0)
+    }
+
+    /// LENS mode (tag-world layout UI): pick which tags are SHOWN — the
+    /// lens. Same checklist UI as window mode (checkboxes + toggle), but
+    /// toggling sets the lens (not a window's tags) and the header names
+    /// the tag-world, not a window. `onCreate` auto-vivifies a new vocab
+    /// tag so it becomes selectable, matching window mode.
+    public func showLens(at screenPt: NSPoint,
+                         allTags: [String],
+                         checkedTags: Set<String>,
+                         palette: ResolvedPalette,
+                         onToggle: @escaping (String, Bool) -> Void,
+                         onClose: @escaping () -> Void) {
+        close()
+        manage = false
+        allowCreate = false      // lens PICKS existing tags; no vocab create
+        self.allTags = allTags
+        self.checked = checkedTags
+        self.palette = palette
+        self.onToggle = onToggle
+        self.onCreate = nil
+        self.onRename = nil
+        self.onDelete = nil
+        self.onCloseCB = onClose
+        present(at: screenPt, appName: "Select tags", title: "", pid: 0)
     }
 
     /// Build + present the panel from the already-set instance state. `onClose`
@@ -406,7 +437,8 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         cont.manage = manage
         cont.appName = appName
         cont.title = title
-        cont.icon = manage ? nil : AppIcons.icon(forPID: pid)
+        // No app icon for manage / lens headers (pid 0 = no window target).
+        cont.icon = (manage || pid == 0) ? nil : AppIcons.icon(forPID: pid)
         cont.palette = palette
 
         let f = NSTextField(frame: NSRect(
@@ -423,7 +455,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         f.font = uiFont(13, .regular)
         f.textColor = palette.foreground
         f.placeholderAttributedString = NSAttributedString(
-            string: "Filter or create…",
+            string: allowCreate ? "Filter or create…" : "Filter…",
             attributes: [.foregroundColor: palette.muted,
                          .font: uiFont(13, .regular)])
         f.delegate = self
@@ -510,7 +542,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         var rows: [TagEditRow] = visible.map {
             .tag(name: $0, checked: checked.contains($0))
         }
-        if !trimmed.isEmpty, let norm = TagName.normalized(raw),
+        if allowCreate, !trimmed.isEmpty, let norm = TagName.normalized(raw),
            !allTags.contains(norm) {
             rows.append(.create(name: norm))
         }

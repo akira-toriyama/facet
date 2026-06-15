@@ -383,26 +383,27 @@ public final class SidebarView: NSView {
         var firstHeader = true
         for (ws, wins) in shown {
             let start = y
-            // Tag mode renders a flat, header-less window list — the
-            // synthetic workspace has no meaningful name / layout / swap
-            // target, and the per-row `#tag` chips carry the grouping.
-            // Workspace mode emits the section header as before.
-            if !tagModeActive {
-                let hh = firstHeader ? headerFirstRowH : headerRowH
-                let hr = NSRect(x: 0, y: y, width: w, height: hh)
-                rows.append(TreeRow(rect: hr,
-                                    kind: .header(workspaceIndex: ws.index)))
-                let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
-                cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
-                                  firstHeader: firstHeader, pid: 0, app: "",
-                                  title: "", text: t.uppercased(),
-                                  mode: ws.layoutMode,
-                                  isMaster: false, isFloating: false,
-                                  isSticky: false, mark: nil, isHidden: false,
-                                  scratchpad: nil, tags: []))
-                firstHeader = false
-                y += hh
-            }
+            // Section header. Workspace mode: one per workspace ("WS N" /
+            // name) — click switches, right-click / `m` picks the layout.
+            // Tag mode: ONE tag-world header — `ws.name` is the active lens
+            // label (the shown tags, else `all`); the per-row `#tag` chips
+            // still carry the grouping. Click is a no-op (one tag-world);
+            // right-click / `m` picks the tag-world's single global layout.
+            // (Tag mode was header-less before the layout-picker UI landed.)
+            let hh = firstHeader ? headerFirstRowH : headerRowH
+            let hr = NSRect(x: 0, y: y, width: w, height: hh)
+            rows.append(TreeRow(rect: hr,
+                                kind: .header(workspaceIndex: ws.index)))
+            let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
+            cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
+                              firstHeader: firstHeader, pid: 0, app: "",
+                              title: "", text: t.uppercased(),
+                              mode: ws.layoutMode,
+                              isMaster: false, isFloating: false,
+                              isSticky: false, mark: nil, isHidden: false,
+                              scratchpad: nil, tags: []))
+            firstHeader = false
+            y += hh
             for win in wins {
                 appendWindowRow(win, wsIndex: ws.index)
             }
@@ -932,34 +933,42 @@ public final class SidebarView: NSView {
                         lx += pillW + 6
                     }
                     if c.isSticky {
-                        // Sticky badge: the word "sticky" — no pill, no
-                        // underline — SLANTED via `.obliqueness` in
-                        // secondary. obliqueness shears the glyphs, so it
-                        // slants on EVERY font (incl. the mono themes,
-                        // which have no true italic face). Text, not a 📌
-                        // glyph, to match the other status badges; baseline
-                        // matches the neighbouring pills (same 22pt slot).
+                        // Sticky badge: a float-style pill (primary border,
+                        // tertiary text — the SAME theme as the `float`
+                        // badge) but with the glyphs SLANTED via
+                        // `.obliqueness` so sticky ≠ float at a glance. The
+                        // shear works on EVERY font (incl. the mono themes,
+                        // which have no true italic face). Text, not a 📌.
                         let stFont = uiFont(windowFontSize, .semibold)
                         let txt = "sticky"
-                        let pillH: CGFloat = 22
                         let stPara = NSMutableParagraphStyle()
+                        stPara.alignment = .center
                         stPara.lineBreakMode = .byTruncatingTail
                         let stAttrs: [NSAttributedString.Key: Any] = [
                             .font: stFont,
-                            .foregroundColor: pal.secondary,
+                            .foregroundColor: pal.tertiary,
                             .paragraphStyle: stPara,
                             .obliqueness: 0.2,   // synthetic slant
                         ]
                         let stSize = (txt as NSString).size(withAttributes: stAttrs)
-                        // +4 so the shear's top-right overhang isn't clipped.
-                        let stW = ceil(stSize.width)
+                        let padX: CGFloat = 8
+                        let pillH: CGFloat = 22
+                        let pillW = ceil(stSize.width) + padX * 2
+                        let pillRect = NSRect(x: lx, y: labelY - 1,
+                                              width: pillW, height: pillH)
+                        let stStroke = NSBezierPath(
+                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
+                            xRadius: 5, yRadius: 5)
+                        stStroke.lineWidth = 1
+                        pal.primary.setStroke()
+                        stStroke.stroke()
                         (txt as NSString).draw(
                             in: NSRect(
                                 x: lx,
                                 y: labelY - 1 + (pillH - stSize.height) / 2 - 1.0,
-                                width: stW + 4, height: stSize.height),
+                                width: pillW, height: stSize.height),
                             withAttributes: stAttrs)
-                        lx += stW + 8
+                        lx += pillW + 6
                     }
                     if let sp = c.scratchpad {
                         // Scratchpad shelf badge: a dim outlined pill
@@ -1003,8 +1012,13 @@ public final class SidebarView: NSView {
                     }
                     if let labelText {
                         // master / float as an outlined pill — same badge
-                        // shape as the mark, lighter (stroke, no fill) so
-                        // the solid mark stays the primary handle.
+                        // shape as the mark (stroke, no fill). All use the
+                        // `primary` border; the TEXT hue distinguishes the
+                        // kind:
+                        //   master → `primary` (border + text)
+                        //   float  → `primary` border + `tertiary` text
+                        //            (the `sticky` pill below shares float's)
+                        let lblColor = c.isMaster ? pal.primary : pal.tertiary
                         let lblFont = uiFont(windowFontSize, .semibold)
                         let textW = ceil((labelText as NSString).size(
                             withAttributes: [.font: lblFont]).width)
@@ -1017,14 +1031,14 @@ public final class SidebarView: NSView {
                             roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
                             xRadius: 5, yRadius: 5)   // rounded rect, not capsule
                         stroke.lineWidth = 1
-                        pal.secondary.setStroke()
+                        pal.primary.setStroke()
                         stroke.stroke()
                         let lblPara = NSMutableParagraphStyle()
                         lblPara.alignment = .center
                         lblPara.lineBreakMode = .byTruncatingTail
                         let lblAttrs: [NSAttributedString.Key: Any] = [
                             .font: lblFont,
-                            .foregroundColor: pal.secondary,
+                            .foregroundColor: lblColor,
                             .paragraphStyle: lblPara,
                         ]
                         let lblH = (labelText as NSString).size(
@@ -1433,6 +1447,10 @@ public final class SidebarView: NSView {
         case .search:
             break
         case .header(let i):
+            // Tag-world header (tag mode): one tag-world, nothing to switch
+            // to — the layout picker is on right-click / `m`. Plain click /
+            // Enter is a no-op (no spurious WS switch on the synthetic WS).
+            if tagModeActive { return }
             // Move highlight to that workspace immediately: its
             // last-focused window, else its lowest window id (empty
             // → none). Without this the old workspace's window
@@ -1704,7 +1722,7 @@ public final class SidebarView: NSView {
         // PopupMenu's key monitor receives the typed query).
         switch rows[i].kind {
         case .header(let ws):
-            showLayoutMenu(at: scr, workspaceIndex: ws, filterable: true)
+            headerMenu(at: scr, workspaceIndex: ws, filterable: true)
         case .window(let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title, filterable: true)
@@ -1738,7 +1756,7 @@ public final class SidebarView: NSView {
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         switch row.kind {
         case .header(let ws):
-            showLayoutMenu(at: scr, workspaceIndex: ws)
+            headerMenu(at: scr, workspaceIndex: ws)
         case .window(let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title)
@@ -1750,11 +1768,42 @@ public final class SidebarView: NSView {
     // The header (layout) + window (ops) menus are shared with grid /
     // rail via `ViewContextMenu` (FacetView) so all three views show the
     // identical themed popup (③).
+    /// Header right-click / `m` menu. Workspace mode → the layout picker
+    /// directly. Tag mode → a two-facet menu (Layout + Select tags), since
+    /// a tag-world also owns a lens (which tags are shown).
+    private func headerMenu(at scr: NSPoint, workspaceIndex ws: Int,
+                            filterable: Bool = false) {
+        if tagModeActive {
+            // Tag mode: one sectioned menu (Layout + Select tags). Not
+            // filterable — the layout list is short and `Select tags` opens
+            // its own filterable checklist.
+            showTagWorldMenu(at: scr, workspaceIndex: ws)
+        } else {
+            showLayoutMenu(at: scr, workspaceIndex: ws, filterable: filterable)
+        }
+    }
+
+    private func showTagWorldMenu(at scr: NSPoint, workspaceIndex ws: Int) {
+        let modes = backend.layoutModes.filter {
+            LayoutGrouping.isCompatible(mode: $0, with: .tag)
+        }
+        let cur = lastWorkspaces.first { $0.index == ws }?.layoutMode
+        let bk = backend
+        ViewContextMenu.showTagWorld(
+            at: scr, layoutModes: modes, currentLayout: cur, palette: pal,
+            onPickLayout: { mode in
+                cliQueue.async { bk.setLayoutMode(workspaceIndex: ws, mode: mode) }
+            },
+            onSelectTags: { [weak self] in
+                self?.controller?.openLensSelector(at: scr) })
+    }
+
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,
                                 filterable: Bool = false) {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
-                                   palette: pal, filterable: filterable)
+                                   palette: pal, filterable: filterable,
+                                   tagMode: tagModeActive)
     }
 
     private func showWindowMenu(at scr: NSPoint,

@@ -16,16 +16,26 @@ public final class PopupMenuView: NSView {
     public var onPick: ((Int) -> Void)?
     public var sel: Int?                       // highlighted item (mouse + keyboard)
 
+    /// Indices in `items` that are non-pickable SECTION LABELS (drawn dim,
+    /// skipped by keyboard nav + clicks). Lets one menu group items under
+    /// inline headers (the tag-world menu's `Layout` / `Tags` sections).
+    /// Only honored in the non-filterable path. Empty = a flat menu.
+    public var headerRows: Set<Int> = []
+
     /// Palette the menu is drawn in (PR-B). Set by `PopupMenu.show` to
     /// the INVOKING surface's palette, so a menu popped from the tree /
     /// grid / rail matches that surface's per-view theme.
     public var palette: ResolvedPalette = resolve(.terminal)
 
-    /// Move the keyboard selection (clamped to [0, items.count - 1]).
+    /// Move the keyboard selection one step in `d`'s direction, skipping
+    /// section-label rows (`headerRows`) and stopping at the ends.
     public func move(_ d: Int) {
         guard !items.isEmpty else { return }
-        sel = min(max((sel ?? 0) + d, 0), items.count - 1)
-        needsDisplay = true
+        let dir = d >= 0 ? 1 : -1
+        var i = sel ?? (dir > 0 ? -1 : items.count)
+        repeat { i += dir } while i >= 0 && i < items.count
+            && headerRows.contains(i)
+        if i >= 0, i < items.count { sel = i; needsDisplay = true }
     }
 
     /// Activate the keyboard-selected item (closes the menu first,
@@ -99,7 +109,7 @@ public final class PopupMenuView: NSView {
         let top = rowsTop
         guard p.y >= top else { return nil }
         let i = Int((p.y - top) / Self.rowH)
-        return (i >= 0 && i < items.count) ? i : nil
+        return (i >= 0 && i < items.count && !headerRows.contains(i)) ? i : nil
     }
 
     public override func draw(_ dirty: NSRect) {
@@ -182,6 +192,17 @@ public final class PopupMenuView: NSView {
         for (i, m) in items.enumerated() {
             let r = NSRect(x: 0, y: top + CGFloat(i) * Self.rowH,
                            width: bounds.width, height: Self.rowH)
+            if headerRows.contains(i) {
+                // Section label: dim + bold, no fill / checkmark / indent.
+                (m.uppercased() as NSString).draw(
+                    in: NSRect(x: Self.padX, y: r.minY + 7,
+                               width: r.width - Self.padX * 2,
+                               height: r.height - 7),
+                    withAttributes: [.font: uiFont(10, .bold),
+                                     .foregroundColor: palette.muted,
+                                     .paragraphStyle: para])
+                continue
+            }
             if sel == i {
                 let pill = r.insetBy(dx: 5, dy: 2)
                 palette.selection.setFill()
@@ -265,6 +286,7 @@ public final class PopupMenu {
                      checkedIndex: Int?,
                      palette: ResolvedPalette,
                      filterable: Bool = false,
+                     headerRows: Set<Int> = [],
                      onPick: @escaping (Int) -> Void) {
         close()
         self.filterable = filterable
@@ -275,11 +297,14 @@ public final class PopupMenu {
         v.header = header
         v.items = items
         v.filterable = filterable
+        v.headerRows = headerRows
         v.allItems = items
         v.rowMap = Array(items.indices)
         v.checkedIndex = checkedIndex
         v.onPick = onPick
-        v.sel = checkedIndex ?? (items.isEmpty ? nil : 0)  // kb start point
+        // kb start point: the checked row, else the first non-section row.
+        v.sel = checkedIndex
+            ?? items.indices.first { !headerRows.contains($0) }
         menuView = v
         let size = v.contentSize()
 

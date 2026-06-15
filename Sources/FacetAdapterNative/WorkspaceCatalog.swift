@@ -167,6 +167,18 @@ struct WorkspaceCatalog {
     /// stored state; behaviour lives in WorkspaceCatalog+Layout.swift.)
     var defaultMode: String = "float"
 
+    /// Tag mode's single global layout for the lens union (tag mode has
+    /// no per-workspace tree — one layout for the whole tag-world). `nil`
+    /// follows `defaultMode`; the tree's tag-world header layout picker
+    /// sets it at runtime. Only tag-compatible modes (`float` + stateless
+    /// engines; never `bsp` / `stack`) are ever stored. Session-only like
+    /// `layoutModes`. Read through `effectiveTagLayout`.
+    var tagLayoutMode: String?
+
+    /// The layout the tag-world's lens union tiles with — the runtime
+    /// override if set, else `defaultMode` (config `[layout] default`).
+    var effectiveTagLayout: String { tagLayoutMode ?? defaultMode }
+
     /// Per-WS BSP tree. Only present for WSs in `"bsp"` mode;
     /// other modes have no entry. Tree IDs are kept in sync with
     /// `windowMap` by `reconcile` / `moveWindow` / `drop` and by

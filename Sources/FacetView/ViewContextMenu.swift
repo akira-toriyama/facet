@@ -19,13 +19,22 @@ public enum ViewContextMenu {
         workspaceIndex ws: Int,
         workspaces: [Workspace],
         palette: ResolvedPalette,
-        filterable: Bool = false
+        filterable: Bool = false,
+        tagMode: Bool = false
     ) {
-        let modes = backend.layoutModes
+        // Tag mode shows ONE global layout for the tag-world's lens union;
+        // only tag-compatible modes apply (float + stateless engines —
+        // bsp / stack are workspace-only). Filter them out so the picker
+        // never offers a mode `setLayoutMode` would reject.
+        let modes = tagMode
+            ? backend.layoutModes.filter {
+                LayoutGrouping.isCompatible(mode: $0, with: .tag) }
+            : backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
         let idx = modes.firstIndex(of: cur ?? "")
+        let header = tagMode ? "Tag-world layout" : "WS\(ws + 1) layout"
         PopupMenu.shared.show(at: scr,
-                              header: "WS\(ws + 1) layout",
+                              header: header,
                               items: modes,
                               checkedIndex: idx,
                               palette: palette,
@@ -57,6 +66,45 @@ public enum ViewContextMenu {
                               checkedIndex: nil,
                               palette: palette) { i in
             if i == 0 { onSearch() } else { onTagManage() }
+        }
+    }
+
+    /// Tag-world header menu (tag mode) — one menu, two sections so neither
+    /// needs an extra click:
+    ///
+    ///     LAYOUT          ← section label
+    ///     float · grid · master-… (the tag-compatible modes, current ✓)
+    ///     TAGS            ← section label
+    ///     Select tags     → opens the lens checklist
+    ///
+    /// `layoutModes` is already filtered to tag-compatible engines; picking
+    /// one applies it (`onPickLayout`), and `Select tags` opens the lens
+    /// selector (`onSelectTags`). The workspace-header menu stays the bare
+    /// layout picker (no lens in workspace mode).
+    public static func showTagWorld(
+        at scr: NSPoint,
+        layoutModes: [String],
+        currentLayout: String?,
+        palette: ResolvedPalette,
+        onPickLayout: @escaping (String) -> Void,
+        onSelectTags: @escaping () -> Void
+    ) {
+        var items = ["Layout"]
+        items.append(contentsOf: layoutModes)
+        let tagsHeader = items.count
+        items.append("Tags")
+        items.append("Select tags")
+        let selectTagsIndex = items.count - 1
+        let headerRows: Set<Int> = [0, tagsHeader]
+        let checked = currentLayout.flatMap { items.firstIndex(of: $0) }
+        PopupMenu.shared.show(at: scr,
+                              header: "Tag-world",
+                              items: items,
+                              checkedIndex: checked,
+                              palette: palette,
+                              headerRows: headerRows) { i in
+            if i == selectTagsIndex { onSelectTags() }
+            else { onPickLayout(items[i]) }
         }
     }
 

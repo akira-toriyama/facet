@@ -69,4 +69,11 @@ public protocol TreeController: AnyObject, Sendable {
     /// policy dance.
     func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
                        title: String, currentTags: [String], at screenPt: CGPoint)
+
+    /// Open the lens selector (`TagEditPanel` lens variant) — the tag-world
+    /// header's "Select tags" item (tag mode). A checklist of the tag
+    /// vocabulary whose checked rows are the current lens; toggling a row
+    /// adds / removes that tag from the lens (`setLens`). The Controller
+    /// owns the floating panel, key focus + the activation-policy dance.
+    func openLensSelector(at screenPt: CGPoint)
 }
