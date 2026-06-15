@@ -892,10 +892,12 @@ public final class SidebarView: NSView {
                     }
                     // Tag chips (#tag): EVERY tag this window carries (the
                     // tag-mode list is flat — there is no primary-tag header
-                    // to hide one under). A faint filled chip — distinct from
-                    // the outlined status pills — in `dim`, prefixed `#` so it
-                    // can't be mistaken for a mark / scratchpad. Stops before
-                    // a chip would overrun the row's right edge.
+                    // to hide one under). A filled chip in `secondary` (a
+                    // distinct accent — readable, but not the `primary`
+                    // selection color — vs the outlined status pills),
+                    // prefixed `#` so it can't be mistaken for a mark /
+                    // scratchpad. Stops before a chip would overrun the
+                    // row's right edge.
                     for tag in c.tags {
                         let chipText = "#\(tag)"
                         let chipFont = uiFont(windowFontSize - 1, .medium)
@@ -910,14 +912,14 @@ public final class SidebarView: NSView {
                             roundedRect: NSRect(x: lx, y: labelY - 1,
                                                 width: pillW, height: pillH),
                             xRadius: 5, yRadius: 5)
-                        pal.muted.withAlphaComponent(0.15).setFill()
+                        pal.secondary.withAlphaComponent(0.15).setFill()
                         chip.fill()
                         let chipPara = NSMutableParagraphStyle()
                         chipPara.alignment = .center
                         chipPara.lineBreakMode = .byTruncatingTail
                         let chipAttrs: [NSAttributedString.Key: Any] = [
                             .font: chipFont,
-                            .foregroundColor: pal.muted,
+                            .foregroundColor: pal.secondary,
                             .paragraphStyle: chipPara,
                         ]
                         let chipH = (chipText as NSString)

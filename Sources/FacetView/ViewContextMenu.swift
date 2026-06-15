@@ -62,7 +62,7 @@ public enum ViewContextMenu {
                                       isMaster: isMaster,
                                       windowCount: windowCount,
                                       isSticky: isSticky)
-        // Tag mode (#191 PR-7): after the window ops, append a "Tag…" item
+        // Tag mode (#191 PR-7): after the window ops, append a "Tag" item
         // (opens the tag-name input → auto-vivify + add) and one
         // "Untag #NAME" per tag the window already carries. The closures
         // route to the controller's tag-input box / by-id retag. Grid /
@@ -71,7 +71,7 @@ public enum ViewContextMenu {
         let winTags = tagMode ? (win?.tags ?? []) : []
         var labels = menu.map(\.label)
         if tagMode {
-            labels.append("Tag…")
+            labels.append("Tag")
             labels.append(contentsOf: winTags.map { "Untag #\($0)" })
         }
         PopupMenu.shared.show(at: scr,
@@ -90,7 +90,7 @@ public enum ViewContextMenu {
                     runOps(item.ops, window, ws)
                 }
             } else {
-                // Tag section: index 0 = "Tag…", then one per existing tag.
+                // Tag section: index 0 = "Tag", then one per existing tag.
                 let ti = i - menu.count
                 if ti == 0 {
                     onAddTag?(id)
