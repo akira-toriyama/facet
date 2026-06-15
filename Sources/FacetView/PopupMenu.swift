@@ -14,8 +14,7 @@ public final class PopupMenuView: NSView {
     public var items: [String] = []
     public var checkedIndex: Int?
     public var onPick: ((Int) -> Void)?
-    private var hover: Int?
-    public var sel: Int?                       // keyboard-highlighted item
+    public var sel: Int?                       // highlighted item (mouse + keyboard)
 
     /// Palette the menu is drawn in (PR-B). Set by `PopupMenu.show` to
     /// the INVOKING surface's palette, so a menu popped from the tree /
@@ -104,10 +103,6 @@ public final class PopupMenuView: NSView {
                 let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
                                      xRadius: 6, yRadius: 6)
                 o.lineWidth = 1.5; o.stroke()
-            } else if hover == i {
-                palette.hover.setFill()
-                NSBezierPath(roundedRect: r.insetBy(dx: 5, dy: 2),
-                             xRadius: 6, yRadius: 6).fill()
             }
             let isCur = (i == checkedIndex)
             (m as NSString).draw(
@@ -140,12 +135,13 @@ public final class PopupMenuView: NSView {
     }
 
     public override func mouseMoved(with e: NSEvent) {
-        let i = rowIndex(at: convert(e.locationInWindow, from: nil))
-        if i != hover { hover = i; needsDisplay = true }
-    }
-
-    public override func mouseExited(with e: NSEvent) {
-        if hover != nil { hover = nil; needsDisplay = true }
+        // Mouse hover and keyboard selection are ONE highlight in a
+        // pick-one menu (NSMenu / VS Code model): moving the pointer over
+        // a row makes it THE selection, so Enter/click act on the same
+        // row the eye is on. Don't clear when the pointer slips off a row
+        // — keep the last highlighted item (no flicker, kb nav survives).
+        if let i = rowIndex(at: convert(e.locationInWindow, from: nil)),
+           i != sel { sel = i; needsDisplay = true }
     }
 
     public override func mouseUp(with e: NSEvent) {
