@@ -215,7 +215,7 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
 | 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 (session 限り — 固定は `[tree]` geometry を config に書く) |
 | パネルヘッダをダブルクリック (tree) | 位置・サイズを `[tree]` config geometry (未設定なら既定) にリセット |
-| 右クリック (tree) | コンテキストメニュー — window アクション / layout 切替 |
+| 右クリック (tree) | 対象別コンテキストメニュー: window 行 → アクション ・ workspace header → layout 切替 ・「Desktop N」バンド → Search / Manage tags (`s` / `t` モード・`--active` 不要) |
 | window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |

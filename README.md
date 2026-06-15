@@ -229,7 +229,7 @@ and change **how many** windows share it (`--inc-master` /
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
 | Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel (session-only — set `[tree]` geometry in config to pin it) |
 | Double-click the panel header (tree) | reset position + size to the `[tree]` config geometry (or the built-in default) |
-| Right-click (tree) | context menu — window actions / workspace layout picker |
+| Right-click (tree) | context menu, by target: window row → actions · workspace header → layout picker · `Desktop N` band → Search / Manage tags (the `s` / `t` modes, no `--active` needed) |
 | Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
