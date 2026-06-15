@@ -50,20 +50,9 @@ public final class SearchBar: NSView {
 
     public required init?(coder: NSCoder) { nil }
 
-    /// Default empty-field prompt (search / filter mode).
-    public static let defaultPlaceholder = "type to filter…"
-    /// Empty-field prompt; the controller swaps it to "tag name…" for the
-    /// PR-7 tag-input sub-mode and back via `resetPlaceholder()`. Drives
+    /// Empty-field prompt (search / filter mode). Drives
     /// `placeholderAttributedString` (re-themed in `applyTheme`).
-    private var placeholderText = SearchBar.defaultPlaceholder
-
-    /// Set the empty-field prompt and re-render it in the current palette.
-    public func setPlaceholder(_ text: String) {
-        placeholderText = text
-        applyPlaceholder()
-    }
-    /// Restore the default search/filter prompt.
-    public func resetPlaceholder() { setPlaceholder(Self.defaultPlaceholder) }
+    private let placeholderText = "type to filter…"
 
     private func applyPlaceholder() {
         let f = field.font ?? uiFont(13, .regular)

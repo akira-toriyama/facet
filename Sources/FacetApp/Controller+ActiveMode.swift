@@ -71,19 +71,6 @@ extension Controller {
         // exit-active here.
         if PopupMenu.shared.isOpen { return false }
 
-        // -- GUI tag-input sub-mode (#191 PR-7) --
-        // The tag-name box (search-bar widget) is open. Like search,
-        // pass everything to the NSTextField except Return (commit the
-        // tag) / Esc (cancel); while the IME is composing, pass those too.
-        if tagInputTarget != nil {
-            if panelHost.searchBar.isComposing { return false }
-            switch e.keyCode {
-            case 53:      cancelTagInput();  return true   // Esc
-            case 36, 76:  commitTagInput();  return true   // Return / Enter
-            default:      return false                     // → field (type / IME / ⌫)
-            }
-        }
-
         // -- Type-to-filter sub-mode --
         // Nav/commit keys consumed here; everything else returns
         // false so the event reaches the NSTextField (text + IME
@@ -169,122 +156,71 @@ extension Controller {
                          searching: sidebarView.searching)
     }
 
-    // MARK: - GUI tag input (#191 PR-7)
+    // MARK: - GUI tag-edit checklist (#4)
 
-    /// Open the tag-name input box for `id` (the "Tag…" context-menu
-    /// item). Reuses the search-bar widget in a tag-input sub-mode (no
-    /// list filtering): becomes key so the field takes keystrokes + IME,
-    /// shows the bar with a "tag name…" prompt, and focuses the field.
-    func beginTagInput(forWindow id: WindowID) {
-        // Re-open while the box is already up (e.g. right-click another
-        // row, pick "Tag…" again): just retarget. Do NOT re-evaluate
-        // `tagInputEnteredActive` — kbNav is already true from the first
-        // open, so it would flip to false and teardown would forget we
-        // flipped to `.regular`, leaving the app stuck there.
-        if tagInputTarget != nil {
-            tagInputTarget = id
-            panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
-            return
-        }
-        // The field needs key focus + an active app to receive typing /
-        // IME (a passive `.nonactivatingPanel` can't be key). When the
-        // panel is passive (right-click path) enterActive becomes key + a
-        // .regular app and stores prevApp; when already in `--active` (the
-        // `m` path) we leave that session as-is. Record which so teardown
-        // can undo exactly what we did.
-        tagInputEnteredActive = !sidebarView.kbNav
-        if tagInputEnteredActive { enterActive() }
-        tagInputTarget = id
-        panelHost.searchBar.stringValue = ""
-        panelHost.searchBar.setPlaceholder("tag name…")
-        panelHost.inputBarVisible = true
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
-        panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
-    }
-
-    /// Return in the tag-input box: add the typed name (auto-vivify) to
-    /// the target window, then tear the box down. Internal spaces are
-    /// normalized to `-` (`TagName.normalized`, so "my tag" → "my-tag",
-    /// #227). An empty Return cancels (closes the box); a genuinely
-    /// invalid name (carries `:` / `=` / `,`, or a leading `_` / `-`) is
-    /// NOT silently swallowed — the box stays open with an error hint so
-    /// the user can fix it.
-    func commitTagInput() {
-        guard let id = tagInputTarget else { endTagInput(); return }
-        let raw = panelHost.searchBar.stringValue
-        guard !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
-            endTagInput(); return                       // empty = cancel
-        }
-        guard let name = TagName.normalized(raw) else {
-            panelHost.searchBar.stringValue = ""
-            panelHost.searchBar.setPlaceholder("invalid tag name…")
-            panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
-            return
-        }
-        endTagInput()
+    /// Open the per-window tag-edit checklist (`TagEditPanel`) for `id` —
+    /// the "Tag" ops-menu item. The panel is a separate key-focusable
+    /// floating window; like the old tag-input box it needs the app to be
+    /// regular + active so its filter field takes keystrokes + IME. When the
+    /// tree panel is already `--active` (the `m` path) that's already set up,
+    /// so we leave it; otherwise (right-click path) we flip it ourselves and
+    /// record so `finishTagEditor` reverts exactly what we did.
+    ///
+    /// The checklist mutates optimistically; toggling a row adds / removes
+    /// the tag on `id` (auto-vivifying for a brand-new name) and a tree
+    /// reconcile refreshes the chips. The panel handles its own keyboard /
+    /// outside-click closing and calls back `finishTagEditor` on every close
+    /// path (the activation-policy revert lives there so it can't be missed).
+    func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
+                       title: String, currentTags: [String], at screenPt: CGPoint) {
         let bk = backend
-        cliQueue.async { _ = bk.addTag(name, toWindow: id) }
-        scheduleReconcile(after: 0.05)
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        TagEditPanel.shared.show(
+            at: screenPt,
+            appName: appName,
+            title: title,
+            pid: pid,
+            allTags: bk.definedTagNames(),
+            checkedTags: Set(currentTags),
+            palette: treePaletteBox.pal,
+            onToggle: { [weak self] name, on in
+                guard let self else { return }
+                cliQueue.async {
+                    if on { _ = bk.addTag(name, toWindow: id) }
+                    else  { _ = bk.removeTag(name, fromWindow: id) }
+                }
+                self.scheduleReconcile(after: 0.05)
+            },
+            onCreate: { [weak self] name in
+                guard let self else { return }
+                // addTag(_:toWindow:) auto-vivifies, so create == add.
+                cliQueue.async { _ = bk.addTag(name, toWindow: id) }
+                self.scheduleReconcile(after: 0.05)
+            },
+            onClose: { [weak self] in self?.finishTagEditor() }
+        )
     }
 
-    /// Esc in the tag-input box: close it without tagging.
-    func cancelTagInput() { endTagInput() }
-
-    /// Tear down the tag-input box when the panel lost key EXTERNALLY
-    /// (handlePanelKeyChange's `isKey:false` branch — the user clicked
-    /// another app). That branch already cleared kbNav and does NOT run
-    /// `_exitActiveImpl`, so if `beginTagInput` flipped us to `.regular`
-    /// we must revert the activation policy here (else the LSUIElement app
-    /// stays a Dock-icon `.regular` app forever). prevApp is dropped, not
-    /// reactivated — the user already chose another app.
-    func abandonTagInput() {
-        guard tagInputTarget != nil else { return }
-        let selfEntered = tagInputEnteredActive
-        clearTagInputState()
-        if selfEntered {
-            panelHost.resignKey()                 // wantsKey = false
+    /// Called once on EVERY tag-editor close path (Esc / ✕ / outside-click /
+    /// click on another row). Undoes exactly the activation change
+    /// `openTagEditor` made — if we flipped to `.regular`, revert to
+    /// `.accessory` and hand focus back to the user's previous app; if we
+    /// were already `--active`, re-key the tree panel so keyboard nav
+    /// resumes (the tree resigned key when the editor took it, but the
+    /// `handlePanelKeyChange` guard kept kbNav alive).
+    func finishTagEditor() {
+        if tagEditorSelfActivated {
             NSApp.setActivationPolicy(.accessory)
+            if let p = prevApp { p.activate() }
             prevApp = nil
-        }
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
-    }
-
-    /// "Untag #NAME" context-menu item: strip `name` from window `id`.
-    func removeTagFromWindow(_ name: String, windowID id: WindowID) {
-        let bk = backend
-        cliQueue.async { _ = bk.removeTag(name, fromWindow: id) }
-        scheduleReconcile(after: 0.05)
-    }
-
-    /// Tear down the tag-input box on commit / cancel. If `beginTagInput`
-    /// entered `--active` just for the box, fully exit it (revert
-    /// `.regular`, restore prevApp). If we were ALREADY in `--active` (the
-    /// `m` path), stay there — drop the bar and hand key focus back to the
-    /// panel so keyboard nav resumes (the `m` menu's "stays --active"
-    /// contract).
-    private func endTagInput() {
-        guard tagInputTarget != nil else { return }
-        let selfEntered = tagInputEnteredActive
-        clearTagInputState()
-        if selfEntered {
-            // _exitActiveImpl re-lays out (bar now hidden) + resigns key +
-            // restores prevApp + reverts to .accessory.
-            _exitActiveImpl(restore: true)
         } else {
-            panelHost.panel.makeFirstResponder(nil)   // off the hidden field
-            panelHost.layout(contentHeight: sidebarView.contentHeight,
-                             searching: sidebarView.searching)
+            panelHost.makeKey()
         }
-    }
-
-    /// Common box-state reset (target, flag, bar, field text, prompt).
-    private func clearTagInputState() {
-        tagInputTarget = nil
-        tagInputEnteredActive = false
-        panelHost.inputBarVisible = false
-        panelHost.searchBar.stringValue = ""
-        panelHost.searchBar.resetPlaceholder()
+        tagEditorSelfActivated = false
     }
 }

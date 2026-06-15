@@ -46,8 +46,9 @@ public enum ViewContextMenu {
         title: String,
         palette: ResolvedPalette,
         tagMode: Bool = false,
-        onAddTag: ((WindowID) -> Void)? = nil,
-        onRemoveTag: ((WindowID, String) -> Void)? = nil,
+        onOpenTagEditor: ((_ id: WindowID, _ pid: Int, _ appName: String,
+                           _ title: String, _ currentTags: [String],
+                           _ anchor: NSPoint) -> Void)? = nil,
         runOps: @escaping (_ ops: [WindowAction], _ window: Window, _ ws: Int) -> Void
     ) {
         let wsModel = workspaces.first { $0.index == ws }
@@ -62,18 +63,15 @@ public enum ViewContextMenu {
                                       isMaster: isMaster,
                                       windowCount: windowCount,
                                       isSticky: isSticky)
-        // Tag mode (#191 PR-7): after the window ops, append a "Tag" item
-        // (opens the tag-name input → auto-vivify + add) and one
-        // "Untag #NAME" per tag the window already carries. The closures
-        // route to the controller's tag-input box / by-id retag. Grid /
-        // rail are workspace-only in tag mode, so they never set `tagMode`
-        // and these items never appear there.
-        let winTags = tagMode ? (win?.tags ?? []) : []
+        // Tag mode (#4): after the window ops, append a single "Tag" item
+        // that opens the per-window tag-edit checklist (`TagEditPanel`). The
+        // closure routes to the controller, which owns the panel + key
+        // focus. Grid / rail are workspace-only in tag mode, so they never
+        // set `tagMode` and this item never appears there. (The old
+        // "Untag #NAME" group is gone — un-tagging now happens inside the
+        // checklist by unchecking the row.)
         var labels = menu.map(\.label)
-        if tagMode {
-            labels.append("Tag")
-            labels.append(contentsOf: winTags.map { "Untag #\($0)" })
-        }
+        if tagMode { labels.append("Tag") }
         PopupMenu.shared.show(at: scr,
                               header: "Window",
                               items: labels,
@@ -90,13 +88,9 @@ public enum ViewContextMenu {
                     runOps(item.ops, window, ws)
                 }
             } else {
-                // Tag section: index 0 = "Tag", then one per existing tag.
-                let ti = i - menu.count
-                if ti == 0 {
-                    onAddTag?(id)
-                } else {
-                    onRemoveTag?(id, winTags[ti - 1])
-                }
+                // The lone tag item: open the checklist for this window.
+                onOpenTagEditor?(id, pid, win?.appName ?? "",
+                                 win?.title ?? title, win?.tags ?? [], scr)
             }
         }
     }
