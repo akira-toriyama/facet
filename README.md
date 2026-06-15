@@ -241,18 +241,21 @@ the CLI — see [CLI](#cli) below.
 
 ### Keyboard navigation
 
-The tree panel responds to keys whenever it has focus. Two ways
-to get focus:
+The tree panel responds to keys only while it holds key focus,
+which facet takes only when you explicitly ask — a plain click on
+a row just focuses that window, it does **not** enter keyboard nav.
+Two ways in:
 
-- **Click the panel** — passive `facet --view tree` stays out of
-  your way until you actually click it; the click both promotes
-  the panel to key and enables keyboard nav. Releasing focus
-  (clicking another app) drops nav cleanly, no key leak.
 - **`--active` flag** — `facet --view tree --active` takes focus
-  *immediately* (one shortcut from your hotkey tool, no extra
-  click). Trade-off: facet briefly becomes the active app
-  (Dock + Cmd-Tab) while you're in nav; `Esc` exits and restores
-  whatever was frontmost before.
+  *immediately* (one shortcut from your hotkey tool). Trade-off:
+  facet briefly becomes the active app (Dock + Cmd-Tab) while
+  you're in nav; `Esc` exits and restores whatever was frontmost
+  before.
+- **Right-click the `Desktop N` header** — opens a menu with
+  **Search** (`s`) and, under tag grouping, **Manage tags** (`t`);
+  picking one enters that mode without `--active`. (macOS won't let
+  a click both focus a window *and* leave facet able to catch the
+  next keystroke, so the keyboard modes live behind this menu.)
 
 | Key | Action |
 |---|---|
@@ -444,8 +447,9 @@ facet window --grow-master|--shrink-master   # master width ±0.05 (master-* eng
 facet window --inc-master|--dec-master       # master window count ±1 (master-* engines)
 
 # --active is a modifier — only meaningful with --view tree.
-# Without it the tree panel still gains keyboard nav as soon as
-# you click it; --active just takes focus immediately so a hotkey
+# A plain click only focuses/selects; keyboard nav + search (s) +
+# tag-manage (t) are entered via --active or by right-clicking the
+# "Desktop N" header. --active takes focus immediately so a hotkey
 # invocation jumps straight into nav (Spotlight-style). With
 # --view grid it's silently ignored; the overlay is always
 # key/active by construction.

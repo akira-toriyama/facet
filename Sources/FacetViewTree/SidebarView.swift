@@ -1443,9 +1443,11 @@ public final class SidebarView: NSView {
                 ?? WindowID(serverID: -1)
             setOptimistic(windowID: pred, workspaceIndex: i)
             // Carry the kb-nav cursor with the click so the
-            // outline (drawn when `kbNav` is on, which a panel
-            // click enables) doesn't strand on the previously
-            // selected row beside the new sel fill.
+            // outline (drawn only while `kbNav` is on) doesn't
+            // strand on the previously selected row beside the new
+            // sel fill. A plain click does NOT turn kbNav on (since
+            // #66 the panel takes key only via --active / the
+            // Desktop-header menu); this just pre-syncs the cursor.
             kbSel = .hdr(workspaceIndex: i)
             let bk = backend
             // Header click = no explicit window pick. The backend's
@@ -1462,10 +1464,11 @@ public final class SidebarView: NSView {
             // workspace.
             let needSwitch = (i != activeWS)
             setOptimistic(windowID: id, workspaceIndex: i)
-            // Keep the kb-nav cursor (drawn whenever `kbNav` is
-            // on — a panel click flips that on passively) in sync
-            // with the click target, otherwise the outline strands
-            // on the previous selection beside the new sel fill.
+            // Keep the kb-nav cursor (drawn only while `kbNav` is
+            // on) in sync with the click target, otherwise the
+            // outline strands on the previous selection beside the
+            // new sel fill. (A plain click doesn't enable kbNav —
+            // see the header case above.)
             kbSel = .win(id)
             // A *hidden* row (Cmd+H'd / minimized window — hide-reclaim
             // pulled its tile slot, `isOnscreen == false`) is restored

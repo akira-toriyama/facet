@@ -227,16 +227,17 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 
 ### キーボードナビ
 
-tree パネルは focus を持っている間、 キー入力に反応する。 focus 取得
-方法は 2 通り:
+tree パネルは key focus を持っている間だけキー入力に反応する。 facet が
+key を取るのは明示的に要求した時だけ — ロウのクリックはその窓に focus する
+だけで、 キーボードナビには入らない。 入り方は 2 通り:
 
-- **パネルクリック** — `facet --view tree` 単体は passive (= 邪魔
-  しない)、 ユーザがクリックした瞬間にキーボードナビ ON。 他 app に
-  focus 移すと OFF、 キー漏れなし。
 - **`--active` フラグ** — `facet --view tree --active` は即 focus 取得
-  (= hotkey から 1 発でナビ突入、 クリック不要)。 代償: ナビ中 facet
-  が active app になる (Dock + Cmd-Tab に表示)、 `Esc` で抜ければ元の
-  app に focus 戻る。
+  (= hotkey から 1 発でナビ突入)。 代償: ナビ中 facet が active app に
+  なる (Dock + Cmd-Tab に表示)、 `Esc` で抜ければ元の app に focus 戻る。
+- **「Desktop N」ヘッダを右クリック** — **Search** (`s`)、 tag grouping
+  なら **Manage tags** (`t`) のメニューが開き、 選ぶとそのモードに入る
+  (`--active` 不要)。 (macOS は「窓に focus しつつ次のキーも facet が拾う」
+  を許さないため、 キーボードモードはこのメニュー経由にしている。)
 
 | キー | アクション |
 |---|---|
