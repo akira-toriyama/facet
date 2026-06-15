@@ -512,7 +512,7 @@ extension NativeAdapter {
 
     // MARK: - Runtime tag vocabulary (#191, tag mode — `facet tag`)
 
-    /// `facet tag --add=NAME`: declare a tag in the session vocabulary
+    /// `facet tag --add NAME`: declare a tag in the session vocabulary
     /// without touching any window. Idempotent (a defined name is a
     /// no-op success). `false` only when not in tag mode / unmanaged or
     /// the vocabulary is full (63 user tags).
@@ -531,7 +531,7 @@ extension NativeAdapter {
         return true
     }
 
-    /// `facet tag --remove=NAME`: delete a tag, stripping its bit from
+    /// `facet tag --remove NAME`: delete a tag, stripping its bit from
     /// every window and freeing it for reuse. Parks / restores windows
     /// whose lens visibility flipped and re-tiles the union — the
     /// vocabulary analog of `setLens`. `false` when not in tag mode /
@@ -553,7 +553,7 @@ extension NativeAdapter {
         return true
     }
 
-    /// `facet tag --rename=OLD:NEW`: rename a tag in place (bit kept, so
+    /// `facet tag --rename OLD NEW`: rename a tag in place (bit kept, so
     /// no window mask / lens edit). `false` when not in tag mode /
     /// unmanaged, `old` is unknown, or `new` is already defined.
     public func renameTag(_ old: String, to new: String) -> Bool {

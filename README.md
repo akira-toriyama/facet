@@ -28,7 +28,7 @@ via [`config.toml`](config.toml), plus the on-demand rail overview:
 - **Grid** — a full-screen overview with one cell per workspace,
   real ScreenCaptureKit thumbnails, and DnD between cells: drag a
   window thumb to move it, drag a cell's header to swap whole cells.
-  The grid is summoned on demand (`facet --view=grid`) and dismissed
+  The grid is summoned on demand (`facet --view grid`) and dismissed
   with Esc / backdrop click.
 - **Rail** — a full-screen Mission-Control-style workspace switcher: an
   active-centred **carousel** of window-thumbnail mini-screens in a
@@ -38,13 +38,13 @@ via [`config.toml`](config.toml), plus the on-demand rail overview:
   rail, ↑/↓ on a left/right one) **rotate the strip** to bring another
   workspace to the centre, Return or a click switches to the centred one,
   Esc dismisses. Drag a window between workspaces or a header to swap.
-  Dock the strip with `--edge=top|bottom|left|right` (default bottom).
+  Dock the strip with `--edge top|bottom|left|right` (default bottom).
   The thumbnails are justified to fill the strip with even gaps; `[rail]
   strip` caps their size (a percentage of the short screen edge — the
   hero fills the rest), so the split stays balanced in any orientation or
   on any display size. `[rail] cells` caps how many show at once; past
   that, workspaces rotate through (peeking at both ends). Summoned with
-  `facet --view=rail`.
+  `facet --view rail`.
 
 Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a
@@ -59,7 +59,7 @@ catppuccin-mocha, … plus `random` — live toggleable).
 ## Layouts
 
 Each workspace runs a layout, set at runtime with
-`facet workspace --layout=NAME` (per-WS, never persisted — set a
+`facet workspace --layout NAME` (per-WS, never persisted — set a
 per-mac-desktop startup layout via `[desktop.N]` in
 [`config.toml`](config.toml), e.g. `1 = { name = "Dev", layout =
 "bsp" }`). facet
@@ -68,7 +68,7 @@ focused window is always raised. Diagrams use four windows; **1** is
 the master / focus where that matters.
 
 The master sits on any of five edges — pick one directly with
-`--layout=master-EDGE`. They share one geometry (opposite edges are
+`--layout master-EDGE`. They share one geometry (opposite edges are
 mirror images), differing only in where the master docks.
 
 ### `master-left` — master on the left
@@ -177,7 +177,7 @@ split.
 
 ### `stack` — full-screen focus
 One window fills the screen; the rest are parked off-screen.
-`--cycle-stack=next|prev` rotates which one is on top.
+`--cycle-stack next|prev` rotates which one is on top.
 
 ```
 ┌─────────────────────────┐    others (2, 3, 4) parked
@@ -244,11 +244,11 @@ the CLI — see [CLI](#cli) below.
 The tree panel responds to keys whenever it has focus. Two ways
 to get focus:
 
-- **Click the panel** — passive `facet --view=tree` stays out of
+- **Click the panel** — passive `facet --view tree` stays out of
   your way until you actually click it; the click both promotes
   the panel to key and enables keyboard nav. Releasing focus
   (clicking another app) drops nav cleanly, no key leak.
-- **`--active` flag** — `facet --view=tree --active` takes focus
+- **`--active` flag** — `facet --view tree --active` takes focus
   *immediately* (one shortcut from your hotkey tool, no extra
   click). Trade-off: facet briefly becomes the active app
   (Dock + Cmd-Tab) while you're in nav; `Esc` exits and restores
@@ -326,7 +326,7 @@ for each option.
 facet reads `~/.config/facet/config.toml` (single source of truth)
 and never writes to it. See [config.toml](config.toml) at the repo
 root for every option + inline docs. Runtime CLI overrides
-(`facet --theme=dracula` etc.) apply for the current session only;
+(`facet --theme dracula` etc.) apply for the current session only;
 edit the file to make a change stick.
 
 Frequently-touched keys:
@@ -342,7 +342,7 @@ Frequently-touched keys:
   points, **top-left origin**: 0,0 = top-left of the main screen, y
   down; all four needed). Authoritative each launch / `--reload`;
   drags / CLI geom are session-only, so set it here to pin the panel.
-  Same coords as `facet --view=tree --pos-x/...`. Also `line-pets` —
+  Same coords as `facet --view tree --pos-x/...`. Also `line-pets` —
   opt-in arcade sprites (`chomp` / `ghost`) that walk the **tree panel's
   outer border** (riding a transparent overlay just in front of the
   frame); a shared decoration from the sill theming library (the same
@@ -422,66 +422,66 @@ Hammerspoon, macOS Shortcuts, …). Full cheatsheet:
 
 ```sh
 # Per-view ops — NAME ∈ tree | grid | rail, required for every op.
-facet --view=NAME [--active]      # open NAME (idempotent)
-facet --view=rail --edge=left     # dock the rail strip (top|bottom|left|right)
-facet --hide=NAME                 # close NAME
-facet --toggle=NAME               # toggle NAME
+facet --view NAME [--active]      # open NAME (idempotent)
+facet --view rail --edge left     # dock the rail strip (top|bottom|left|right)
+facet --hide NAME                 # close NAME
+facet --toggle NAME               # toggle NAME
 
 # Tiling (M5 Phase γ)
-facet workspace --layout=NAME     # bsp | stack | master-left | master-right | master-top | master-bottom | master-center | grid | spiral | float
+facet workspace --layout NAME     # bsp | stack | master-left | master-right | master-top | master-bottom | master-center | grid | spiral | float
 facet workspace --retile          # re-apply active WS's layout (any tiling mode)
 facet workspace --balance         # reset master ratio / count to the even baseline
-facet workspace --rotate=90|180|270        # rotate the bsp tree clockwise (bsp only)
-facet workspace --mirror=horizontal|vertical # flip the bsp tree left↔right / top↔bottom
+facet workspace --rotate 90|180|270        # rotate the bsp tree clockwise (bsp only)
+facet workspace --mirror horizontal|vertical # flip the bsp tree left↔right / top↔bottom
 facet window --toggle-float          # flip focused window float flag
 facet window --toggle-sticky         # pin it across every workspace (PiP / timer /
                                      # chat); flip off → drops it as a tiled window
                                      # of the workspace you're on. session-only,
                                      # per mac desktop.
 facet window --toggle-orientation    # bsp: rotate the focused window's parent split
-facet window --cycle-stack=next|prev # rotate stack to next / previous member
+facet window --cycle-stack next|prev # rotate stack to next / previous member
 facet window --grow-master|--shrink-master   # master width ±0.05 (master-* engines)
 facet window --inc-master|--dec-master       # master window count ±1 (master-* engines)
 
-# --active is a modifier — only meaningful with --view=tree.
+# --active is a modifier — only meaningful with --view tree.
 # Without it the tree panel still gains keyboard nav as soon as
 # you click it; --active just takes focus immediately so a hotkey
 # invocation jumps straight into nav (Spotlight-style). With
-# --view=grid it's silently ignored; the overlay is always
+# --view grid it's silently ignored; the overlay is always
 # key/active by construction.
 
 # Workspace ops
-facet workspace --focus=N               # switch to workspace N (1-indexed)
-facet workspace --focus=NAME            # switch by name (stable across reorder)
-facet workspace --focus=next|prev|recent # step (wraps) / return to previous
+facet workspace --focus N               # switch to workspace N (1-indexed)
+facet workspace --focus NAME            # switch by name (stable across reorder)
+facet workspace --focus next|prev|recent # step (wraps) / return to previous
 facet workspace --add                   # append a new workspace
-facet workspace --remove[=N]            # remove WS N (or active); windows → neighbour
-facet workspace --rename=NAME           # rename the active workspace
-facet workspace --move=N                # move active workspace to position N
-facet window --move-to=N          # move focused window to workspace N
-facet window --move-to=N --follow # …and switch to N too (send-and-follow)
-facet window --mark=NAME          # tag the focused window with a mark
-facet window --focus-mark=NAME    # jump focus to that window (switches WS)
-facet window --unmark=NAME        # remove a mark
+facet workspace --remove TARGET         # remove WS (current | index N); windows → neighbour
+facet workspace --rename NAME           # rename the active workspace
+facet workspace --move N                # move active workspace to position N
+facet window --move-to N          # move focused window to workspace N
+facet window --move-to N --follow # …and switch to N too (send-and-follow)
+facet window --mark NAME          # tag the focused window with a mark
+facet window --focus-mark NAME    # jump focus to that window (switches WS)
+facet window --unmark NAME        # remove a mark
                                   # 1:1 — a window holds one mark; reassigning
                                   # a name moves it off the old window.
                                   # session-only, per mac desktop.
 
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
-facet scratchpad --stash=NAME     # park the focused window onto a named
+facet scratchpad --stash NAME     # park the focused window onto a named
                                   # shelf (hides it off-screen)
-facet scratchpad --toggle=NAME    # summon it onto the current workspace as
+facet scratchpad --toggle NAME    # summon it onto the current workspace as
                                   # a floating overlay — or re-park it to the
                                   # shelf if it's already visible here
-facet scratchpad --release=NAME   # drop it off the shelf as a normal tiled
+facet scratchpad --release NAME   # drop it off the shelf as a normal tiled
                                   # window of the workspace you're on
                                   # no spawn (existing windows only); 1:1
                                   # name↔window; session-only, per mac desktop.
-facet status                      # snapshot: backend, theme, workspaces,
+facet query                       # snapshot: backend, theme, workspaces,
                                   # stashed shelves, lastError, timestamp
 
 # Server controls
-facet --theme=NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)
+facet --theme NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)
 facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode)
 facet --quit                      # terminate the running server
@@ -507,29 +507,29 @@ hexagonal Swift shape as facet; one config file, no GUI.
 [[bindings]]
 name   = "facet workspace 1"
 input  = "ctrl + alt - 1"
-action-shell = "/opt/homebrew/bin/facet workspace --focus=1"
+action-shell = "/opt/homebrew/bin/facet workspace --focus 1"
 
 [[bindings]]
 name   = "move focused window to workspace 1"
 input  = "ctrl + shift + alt - 1"
-action-shell = "/opt/homebrew/bin/facet window --move-to=1"
+action-shell = "/opt/homebrew/bin/facet window --move-to 1"
 ```
 
 **skhd** (`~/.config/skhd/skhdrc`):
 
 ```
-ctrl + alt - 1          : facet workspace --focus=1
-ctrl + alt - 2          : facet workspace --focus=2
-ctrl + shift + alt - 1  : facet window --move-to=1
-ctrl + shift + alt - 2  : facet window --move-to=2
+ctrl + alt - 1          : facet workspace --focus 1
+ctrl + alt - 2          : facet workspace --focus 2
+ctrl + shift + alt - 1  : facet window --move-to 1
+ctrl + shift + alt - 2  : facet window --move-to 2
 ```
 
 **Karabiner-Elements**: bind shell commands via the *Complex
 Modifications* JSON (`shell_command`: `/opt/homebrew/bin/facet
-workspace --focus=1`).
+workspace --focus 1`).
 
 **Hammerspoon**: `hs.hotkey.bind({"ctrl","alt"}, "1", function()
-hs.execute("/opt/homebrew/bin/facet workspace --focus=1") end)`.
+hs.execute("/opt/homebrew/bin/facet workspace --focus 1") end)`.
 
 #### Bonus: a loading skeleton for mac-desktop switches
 
@@ -540,7 +540,7 @@ mac desktop flashes the previous mac desktop's tree for a frame. Not the
 fix we'd frame and hang on the wall.
 
 But if that single-frame blink nags at you the way it nagged at us:
-have your hotkey tool fire `facet --view=tree --loading=2000` *right
+have your hotkey tool fire `facet --view tree --loading 2000` *right
 before* the mac-desktop-switch keys. facet lays a skeleton over the tree,
 holds it through the slide, and lifts it the instant the new mac
 desktop's workspaces load (or at 2 s — whichever comes first). With
@@ -551,9 +551,17 @@ runs first and `action-keys` forwards the real keystroke through:
 [[bindings]]
 name         = "space-left + facet tree"
 input        = "ctrl + fn - left"
-action-shell = "facet --view=tree --loading=2000"
+action-shell = "facet --view tree --loading 2000"
 action-keys  = "ctrl + fn - left"
 ```
+
+> **Upgrading from a pre-2.x grammar?** facet now takes space-separated
+> values (`--flag VALUE`), and the old `--flag=VALUE` form is a hard
+> error (`exit 2`). A chord / skhd `action-shell` swallows that exit
+> code silently, so a stale `facet --view=tree --loading=2000` binding
+> would quietly stop painting the skeleton with no visible failure.
+> Re-check your bindings against the new grammar — see
+> [docs/cli-migration.md](docs/cli-migration.md).
 
 A hack? Absolutely. A tiny love letter to everyone who notices
 single frames? Also that. 💙

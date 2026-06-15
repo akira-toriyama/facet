@@ -24,7 +24,7 @@ extension Controller {
         Log.debug("enterActive")
         setHidden(false)                           // ensure visible
         // kbMonitor was already installed by setHidden(false) so
-        // `s` works even in passive (--view=tree without --active)
+        // `s` works even in passive (--view tree without --active)
         // when the panel has focus; enterActive only flips kbNav on
         // to unlock the full nav set (↑↓/Enter/Esc/etc).
         prevApp = NSWorkspace.shared.frontmostApplication
@@ -204,13 +204,25 @@ extension Controller {
     }
 
     /// Return in the tag-input box: add the typed name (auto-vivify) to
-    /// the target window, then tear the box down. An empty / invalid name
-    /// (`TagName.sanitized` → nil) just closes the box without tagging.
+    /// the target window, then tear the box down. Internal spaces are
+    /// normalized to `-` (`TagName.normalized`, so "my tag" → "my-tag",
+    /// #227). An empty Return cancels (closes the box); a genuinely
+    /// invalid name (carries `:` / `=` / `,`, or a leading `_` / `-`) is
+    /// NOT silently swallowed — the box stays open with an error hint so
+    /// the user can fix it.
     func commitTagInput() {
-        let id = tagInputTarget
+        guard let id = tagInputTarget else { endTagInput(); return }
         let raw = panelHost.searchBar.stringValue
+        guard !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
+            endTagInput(); return                       // empty = cancel
+        }
+        guard let name = TagName.normalized(raw) else {
+            panelHost.searchBar.stringValue = ""
+            panelHost.searchBar.setPlaceholder("invalid tag name…")
+            panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
+            return
+        }
         endTagInput()
-        guard let id, let name = TagName.sanitized(raw) else { return }
         let bk = backend
         cliQueue.async { _ = bk.addTag(name, toWindow: id) }
         scheduleReconcile(after: 0.05)

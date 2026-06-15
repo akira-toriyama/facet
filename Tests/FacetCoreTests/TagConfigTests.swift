@@ -41,6 +41,22 @@ final class TagConfigTests: XCTestCase {
         XCTAssertEqual(names, ["work", "web"])   // order kept, dup/empty dropped
     }
 
+    /// #227: config tag names are normalized through `TagName.normalized`
+    /// — an internal space becomes `-` so the tag is reachable from the
+    /// space-separated CLI, and a name carrying a forbidden delimiter is
+    /// dropped (like an empty one).
+    func testTagDefsNormalizesSpacesAndDropsInvalid() {
+        let names = FacetConfig.tagDefs(fromTOML: """
+        [[tag]]
+        name = "my tag"
+        [[tag]]
+        name = "a:b"
+        [[tag]]
+        name = "  spaced  out  "
+        """)
+        XCTAssertEqual(names, ["my-tag", "spaced-out"])  // colon-name dropped
+    }
+
     func testEffectiveTagModelEmptyWhenNone() {
         XCTAssertTrue(FacetConfig().effectiveTagModel.isEmpty)
     }

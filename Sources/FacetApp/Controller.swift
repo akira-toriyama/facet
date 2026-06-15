@@ -66,7 +66,7 @@ final class Controller: NSObject {
     /// config keys `[tree]/[grid]/[rail].theme` (`""` / unset = inherit
     /// `[theme]`). The box is the shared, mutable handle so that surface's
     /// whole chrome reads one palette and updates together on a re-theme
-    /// (hot-reload, `--theme=`) or a 30 Hz animator tick.
+    /// (hot-reload, `--theme`) or a 30 Hz animator tick.
     let treePaletteBox = PaletteBox(resolve(.terminal))
     let gridPaletteBox = PaletteBox(resolve(.terminal))
     let railPaletteBox = PaletteBox(resolve(.terminal))
@@ -76,16 +76,16 @@ final class Controller: NSObject {
     var gridThemeName = "terminal"
     var railThemeName = "terminal"
     /// The pre-random-roll SOURCE each surface last resolved from (the
-    /// `--theme=` override, or its per-view effective theme). A hot-reload
+    /// `--theme` override, or its per-view effective theme). A hot-reload
     /// re-resolves only the surfaces whose source changed, so saving an
     /// unrelated key never re-rolls a `random` surface or snaps a running
     /// color-cycle back to phase 0.
     var treeSource = ""
     var gridSource = ""
     var railSource = ""
-    /// Active `facet --theme=` session override (nil = follow config).
+    /// Active `facet --theme` session override (nil = follow config).
     /// Persists across hot-reloads until the user edits a theme key (then
-    /// config wins) or issues another `--theme=`.
+    /// config wins) or issues another `--theme`.
     var themeOverride: String?
     private var themeFXTimer: Timer?
     /// Per-surface theme-cycle phase (0…1). Only animatable surfaces
@@ -108,7 +108,7 @@ final class Controller: NSObject {
     /// layout pass can't stomp the panel height the next mouseDragged
     /// is about to read (memory: grid-branch-grip-intermittent).
     private var refreshPending = false
-    /// `--view=tree --loading[=MS]` skeleton hold timer (see
+    /// `--view tree --loading MS` skeleton hold timer (see
     /// `showLoading` in Controller+CLIDispatch.swift). Lives here —
     /// extensions can't hold stored properties.
     var loadingTimer: Timer?
@@ -329,7 +329,7 @@ final class Controller: NSObject {
                 await MainActor.run { self.requestRefresh() }
             }
         }
-        // Adapter error stream → lastError slot in facet status.
+        // Adapter error stream → lastError slot in facet query.
         // De-dupe against the *Controller's current* lastError so:
         //  - a long stream of identical recurring-fault messages
         //    still collapses (they all match the live slot, skip).
@@ -360,7 +360,7 @@ final class Controller: NSObject {
         }
         rescheduleThumbnailTimer()
         installCLIControl()
-        writeStatus([])     // touch the file so `facet status` works
+        writeStatus([])     // touch the file so `facet query` works
                             // even before the first backend reply
         installConfigWatcher()
         installDisplayObserver()
@@ -411,7 +411,7 @@ final class Controller: NSObject {
         let oldTheme = config.effectiveTheme
         let oldPrev = config.effectiveTreePreviewMode
         // PR-B: snapshot the per-view effective themes so we can tell a
-        // deliberate theme edit (→ a live `--theme=` override yields to
+        // deliberate theme edit (→ a live `--theme` override yields to
         // config) from an unrelated save (→ the override survives).
         let oldThemes = [config.effectiveTreeTheme,
                          config.effectiveGridTheme,
@@ -428,14 +428,14 @@ final class Controller: NSObject {
         // PR-B: re-resolve all three surface palettes. resolveSurfacePalettes
         // re-rolls only the surfaces whose source changed, so an unrelated
         // save won't jump a running color-cycle. A theme-key edit drops any
-        // live `--theme=` override (config becomes source of truth again).
+        // live `--theme` override (config becomes source of truth again).
         let newThemes = [config.effectiveTreeTheme,
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
         if themeOverride != nil, newThemes != oldThemes { themeOverride = nil }
         applyThemesFromConfig()
         // Always refresh the snapshot — [workspaces] changes need
-        // to surface in `facet status` without waiting for the
+        // to surface in `facet query` without waiting for the
         // next backend event.
         writeStatus(lastWorkspaces)
     }
@@ -453,11 +453,11 @@ final class Controller: NSObject {
     // MARK: - Per-surface palette resolution (PR-B)
 
     /// Resolve all three surface palettes into their boxes. Called at
-    /// startup + on hot-reload + after a `--theme=` override (via
+    /// startup + on hot-reload + after a `--theme` override (via
     /// `applyStyle`). Honors the active `themeOverride` (forces every
     /// surface) else the per-view `[tree]/[grid]/[rail].theme` keys.
     ///
-    /// `random` semantics: an APP-WIDE random — a single `--theme=random`,
+    /// `random` semantics: an APP-WIDE random — a single `--theme random`,
     /// or an inherited `[theme].name = random` — rolls ONE concrete theme
     /// shared by every surface that inherits it (matches the pre-PR-B
     /// single-`pal` behavior). A surface whose OWN key is literally
@@ -480,7 +480,7 @@ final class Controller: NSObject {
             // Reload fast-path: an unchanged source keeps the surface's
             // current concrete theme (no random re-roll) AND its cycle
             // phase. The override path always re-resolves so a re-issued
-            // `--theme=` (incl. a fresh `--theme=random` roll) still lands.
+            // `--theme` (incl. a fresh `--theme random` roll) still lands.
             if override == nil, src == source { return }
             let concrete: String
             if src == "random" {
@@ -517,7 +517,7 @@ final class Controller: NSObject {
     }
 
     /// Re-theme every surface + chrome and re-gate the animator. Shared by
-    /// the live `--theme=` override (`applyStyle`) and the hot-reload path.
+    /// the live `--theme` override (`applyStyle`) and the hot-reload path.
     func reapplyThemes() {
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
@@ -527,7 +527,7 @@ final class Controller: NSObject {
     }
 
     /// Re-resolve every surface's palette from fresh config (hot-reload).
-    /// Honors a live `--theme=` override if still active (the caller clears
+    /// Honors a live `--theme` override if still active (the caller clears
     /// it when a theme key changed); otherwise follows the per-view keys.
     func applyThemesFromConfig() {
         resolveSurfacePalettes()
@@ -669,7 +669,7 @@ final class Controller: NSObject {
     func apply(_ wss: [Workspace],
                _ titles: [WindowID: String] = [:]) {
         // First non-empty snapshot? Warm the thumbnail cache one-shot
-        // so the very first `--view=grid` (especially right after
+        // so the very first `--view grid` (especially right after
         // launch) shows screenshots instead of falling back to app
         // icons. The background timer's first tick is `interval` s
         // away — too late if the user opens the grid immediately.
@@ -825,7 +825,7 @@ final class Controller: NSObject {
     }
 
     /// Snapshot the current workspace state to
-    /// `/tmp/facet-status.json` so `facet status` (client mode)
+    /// `/tmp/facet-status.json` so `facet query` (client mode)
     /// has something to read. Atomic write — partial-file races
     /// are impossible.
     ///
@@ -856,7 +856,7 @@ final class Controller: NSObject {
     }
 
     /// Record an operational error so the next `writeStatus()` —
-    /// and therefore `facet status` — surfaces it. Single-slot
+    /// and therefore `facet query` — surfaces it. Single-slot
     /// (newest overwrites): the status file shows the most recent
     /// thing that went wrong, not a history. Re-snapshots
     /// immediately so the file reflects the new error without

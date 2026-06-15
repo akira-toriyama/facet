@@ -91,7 +91,7 @@ public enum LensSpec: Sendable, Equatable {
 /// adapter (`FacetAdapterNative`) implements it; the UI, AX focus
 /// glue, themes and DnD are all backend-agnostic.
 public protocol WindowBackend: Sendable {
-    /// Short identifier shown in `facet status` and debug logs
+    /// Short identifier shown in `facet query` and debug logs
     /// (e.g. `"native"`). Lower-case, no spaces.
     var name: String { get }
 
@@ -200,13 +200,13 @@ public protocol WindowBackend: Sendable {
     func balanceActiveWorkspace()
 
     /// Rotate the active workspace's bsp tree clockwise by `degrees`
-    /// (90 / 180 / 270) — `facet workspace --rotate=N`. No-op outside
+    /// (90 / 180 / 270) — `facet workspace --rotate N`. No-op outside
     /// bsp mode (the tree is the only rotatable layout state) and for
     /// backends without one.
     func rotateActiveWorkspace(degrees: Int)
 
     /// Mirror the active workspace's bsp tree across `axis`
-    /// (`facet workspace --mirror=horizontal|vertical`). Same bsp-only
+    /// (`facet workspace --mirror horizontal|vertical`). Same bsp-only
     /// no-op contract as `rotateActiveWorkspace`.
     func mirrorActiveWorkspace(_ axis: MirrorAxis)
 
@@ -272,22 +272,22 @@ public protocol WindowBackend: Sendable {
                        zone: IntentZone) -> DropPrediction
 
     /// Assign mark `name` (vim-style label) to the focused window
-    /// (`facet window --mark=NAME`). 1:1: the name's old window and the
+    /// (`facet window --mark NAME`). 1:1: the name's old window and the
     /// focused window's old mark are both cleared. Returns `false` when
     /// there is no focused window (caller surfaces the error).
     func markFocusedWindow(_ name: String) -> Bool
 
     /// Jump focus to the window holding mark `name`
-    /// (`facet window --focus-mark=NAME`), switching workspace if it
+    /// (`facet window --focus-mark NAME`), switching workspace if it
     /// lives on another one. Returns `false` when the mark is unset or
     /// its window has since closed (caller surfaces the error).
     func focusMark(_ name: String) -> Bool
 
-    /// Remove mark `name` (`facet window --unmark=NAME`). Returns
+    /// Remove mark `name` (`facet window --unmark NAME`). Returns
     /// `false` when the name wasn't set (caller surfaces the error).
     func unmark(_ name: String) -> Bool
 
-    /// Add tag `name` to the focused window (`facet window --tag=NAME`,
+    /// Add tag `name` to the focused window (`facet window --tag NAME`,
     /// tag mode). Auto-vivifies an unknown name: creates it in the
     /// session tag vocabulary, then assigns. Returns `false` when there
     /// is no managed focused window, the run isn't in tag mode, or the
@@ -295,14 +295,14 @@ public protocol WindowBackend: Sendable {
     func addTagToFocusedWindow(_ name: String) -> Bool
 
     /// Remove tag `name` from the focused window
-    /// (`facet window --untag=NAME`, tag mode). Strict: rejects an
+    /// (`facet window --untag NAME`, tag mode). Strict: rejects an
     /// unknown name. The `_default` floor is never removed. Returns
     /// `false` when there is no focused window, the run isn't in tag
     /// mode, or `name` isn't a defined tag.
     func removeTagFromFocusedWindow(_ name: String) -> Bool
 
     /// Toggle tag `name` on the focused window
-    /// (`facet window --toggle-tag=NAME`, tag mode). Auto-vivifies an
+    /// (`facet window --toggle-tag NAME`, tag mode). Auto-vivifies an
     /// unknown name (then sets it). Returns `false` for the same
     /// reasons as `addTagToFocusedWindow`.
     func toggleTagOnFocusedWindow(_ name: String) -> Bool
@@ -323,46 +323,46 @@ public protocol WindowBackend: Sendable {
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool
 
     /// Define tag `name` in the session vocabulary without attaching it
-    /// to any window (`facet tag --add=NAME`, tag mode). Idempotent — a
+    /// to any window (`facet tag --add NAME`, tag mode). Idempotent — a
     /// defined name is a no-op success. Returns `false` only when not in
     /// tag mode / unmanaged, or the vocabulary is full (63 user tags).
     func addTag(_ name: String) -> Bool
 
     /// Remove tag `name` from the vocabulary, stripping its bit from
-    /// every window (`facet tag --remove=NAME`, tag mode). The freed bit
+    /// every window (`facet tag --remove NAME`, tag mode). The freed bit
     /// becomes reusable by a later add; windows keep the `_default`
     /// floor. Returns `false` when not in tag mode / unmanaged, or
     /// `name` is unknown / reserved.
     func removeTag(_ name: String) -> Bool
 
-    /// Rename tag `old` to `new` in place (`facet tag --rename=OLD:NEW`,
+    /// Rename tag `old` to `new` in place (`facet tag --rename OLD NEW`,
     /// tag mode) — the bit is unchanged, so windows keep their tag
     /// membership. Returns `false` when not in tag mode / unmanaged,
     /// `old` is unknown, or `new` is already a defined tag.
     func renameTag(_ old: String, to new: String) -> Bool
 
     /// Stash the focused window onto scratchpad shelf `name`, parking
-    /// it off-screen (`facet scratchpad --stash=NAME`). A named hidden
+    /// it off-screen (`facet scratchpad --stash NAME`). A named hidden
     /// shelf, 1:1 like marks; clears any sticky (XOR), force-floats and
     /// detaches the window. Returns `false` when there is no managed
     /// focused window (caller surfaces the error).
     func stashScratchpad(_ name: String) -> Bool
 
-    /// Toggle scratchpad shelf `name` (`facet scratchpad --toggle=NAME`):
+    /// Toggle scratchpad shelf `name` (`facet scratchpad --toggle NAME`):
     /// if its window is *visible on the current workspace*, re-park it to
     /// the shelf; otherwise (stashed, or settled on another WS) summon it
     /// onto the current workspace as a floating overlay. Returns `false`
     /// when the shelf is unset / its window has closed.
     func toggleScratchpad(_ name: String) -> Bool
 
-    /// Release shelf `name` (`facet scratchpad --release=NAME`): drop it
+    /// Release shelf `name` (`facet scratchpad --release NAME`): drop it
     /// from the shelf and re-home the window as a normal tiled window of
     /// the current workspace (same landing as un-sticky). Returns `false`
     /// when the shelf is unset.
     func releaseScratchpad(_ name: String) -> Bool
 
     /// Names of currently *stashed* scratchpad shelves (for
-    /// `facet status`). Settled (summoned) shelves are excluded — they
+    /// `facet query`). Settled (summoned) shelves are excluded — they
     /// show in the tree under their workspace. Empty when none.
     func stashedScratchpads() -> [String]
 
@@ -379,7 +379,7 @@ public protocol WindowBackend: Sendable {
     /// Stream of human-readable operational errors the adapter
     /// surfaced (e.g. an AX call failed, or Accessibility permission
     /// is missing). The Controller subscribes and routes each
-    /// message into `facet status`'s lastError slot.
+    /// message into `facet query`'s lastError slot.
     ///
     /// Single-subscriber, same lifetime as `events`. Adapters
     /// only push messages a *user* could act on — internal

@@ -3,7 +3,7 @@
 //   • a solid black BACKDROP hides the desktop behind it
 //   • a HERO cell shows the active (centred) workspace large
 //   • a STRIP of workspace thumbnails docked against one screen
-//     EDGE (--edge=top|bottom|left|right, config [rail] edge): an
+//     EDGE (--edge top|bottom|left|right, config [rail] edge): an
 //     active-centred CAROUSEL of a capped subset ([rail] cells),
 //     the rest rotating through with a both-ends peek
 //
@@ -56,7 +56,7 @@ public final class RailView: NSView {
     /// to the view bounds.
     public var screenFrame: CGRect = .zero
     /// Which edge the strip docks against (M9-3). Set by the Controller
-    /// from the CLI `--edge=` / `[rail] edge` config; drives the strip
+    /// from the CLI `--edge` / `[rail] edge` config; drives the strip
     /// orientation and which arrow keys browse it.
     public var edge: RailEdge = .bottom
     /// Upper bound on how many strip cells the viewport shows at once

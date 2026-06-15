@@ -11,9 +11,38 @@ public enum CLIParseError: Error, Equatable, Sendable {
     case unknownValue(value: String, expected: [String])
 }
 
-/// Parse an integer flag value (the part after ``=``).
-/// `requirePositive` rejects ``0`` and negatives — use for width /
-/// height where a 0-sized panel is meaningless.
+/// Cursor over the argv tail for the space-separated flag grammar (#227,
+/// yabai-style `--flag VALUE`). ``next()`` consumes one token
+/// unconditionally — lookahead-zero / *strict consumption* — so a flag's
+/// declared value token is taken verbatim even when it starts with `-`
+/// (a negative coordinate `-1440`, a literal `0`); per-flag validators
+/// decide whether the consumed value is acceptable. Pure (no `exit` /
+/// stderr) so it is unit-testable; FacetApp adds a `value(for:)`
+/// convenience that loud-exits on underflow.
+public struct ArgCursor {
+    private let args: [String]
+    private var idx: Int = 0
+
+    public init(_ args: [String]) { self.args = args }
+
+    /// True once every token has been consumed.
+    public var isAtEnd: Bool { idx >= args.count }
+
+    /// The next token without consuming it (`nil` when exhausted).
+    public func peek() -> String? { idx < args.count ? args[idx] : nil }
+
+    /// Consume and return the next token, or `nil` when exhausted.
+    public mutating func next() -> String? {
+        guard idx < args.count else { return nil }
+        defer { idx += 1 }
+        return args[idx]
+    }
+}
+
+/// Parse an integer flag value (the token the cursor consumed for this
+/// flag — #227 space-separated grammar). `requirePositive` rejects ``0``
+/// and negatives — use for width / height where a 0-sized panel is
+/// meaningless.
 public func parseGeomInt(_ raw: String,
                          requirePositive: Bool = false)
         -> Result<Int, CLIParseError> {

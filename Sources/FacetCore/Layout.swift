@@ -22,7 +22,7 @@ import CoreGraphics
 /// Engines read only the knobs they care about — grid / spiral read
 /// none. The master *edge* is not a knob: it is encoded by which engine
 /// runs (`MasterLeftLayout` … `MasterCenterLayout`), picked directly
-/// with `--layout=master-EDGE`.
+/// with `--layout master-EDGE`.
 public struct LayoutParams: Sendable, Equatable {
     /// Fraction of the rect the master area receives (clamped 0.05…0.95).
     public var masterRatio: CGFloat
@@ -39,7 +39,7 @@ public struct LayoutParams: Sendable, Equatable {
 /// list to per-window frames within `rect`.
 public protocol LayoutEngine: Sendable {
     /// Canonical mode name — lower-case, kebab-case if multi-word.
-    /// Used by `--layout=NAME` and `Workspace.layoutMode`.
+    /// Used by `--layout NAME` and `Workspace.layoutMode`.
     var name: String { get }
 
     /// Map each id in `order` to a frame inside `rect`. `order` is the
@@ -186,7 +186,7 @@ private func masterSlice(_ ids: [WindowID], in rect: CGRect,
 /// column. ≤ `masterCount` windows → master fills the rect. `order[0]`
 /// is the primary master (`promoteToMaster` reorders). Mirror of
 /// `MasterRightLayout`; 90° twin of `MasterTopLayout`. Pick with
-/// `--layout=master-left`.
+/// `--layout master-left`.
 public struct MasterLeftLayout: LayoutEngine {
     public let name = "master-left"
     public init() {}
@@ -200,7 +200,7 @@ public struct MasterLeftLayout: LayoutEngine {
 /// Master-right — `MasterLeftLayout` mirrored across X: the master
 /// column docks on the *right* (`masterRatio` of the width) as
 /// equal-height rows, the stack fills the left column. Pick with
-/// `--layout=master-right`.
+/// `--layout master-right`.
 public struct MasterRightLayout: LayoutEngine {
     public let name = "master-right"
     public init() {}
@@ -214,7 +214,7 @@ public struct MasterRightLayout: LayoutEngine {
 /// Master-top (the old `wide` — `MasterLeftLayout` rotated 90°). The
 /// first `masterCount` windows fill the top master row (`masterRatio`
 /// of the height) as equal-width columns; the rest fill a bottom row of
-/// columns. Pick with `--layout=master-top`.
+/// columns. Pick with `--layout master-top`.
 public struct MasterTopLayout: LayoutEngine {
     public let name = "master-top"
     public init() {}
@@ -228,7 +228,7 @@ public struct MasterTopLayout: LayoutEngine {
 /// Master-bottom — `MasterTopLayout` mirrored across Y: the master row
 /// docks on the *bottom* (`masterRatio` of the height) as equal-width
 /// columns, the stack fills the top row. Pick with
-/// `--layout=master-bottom`.
+/// `--layout master-bottom`.
 public struct MasterBottomLayout: LayoutEngine {
     public let name = "master-bottom"
     public init() {}

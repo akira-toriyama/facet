@@ -18,7 +18,7 @@ public final class WindowPreview {
     // 5 s TTL covers both single-window hover (instant cache hit on
     // re-hover) and grid view's background refresh loop (Controller
     // re-requests on a ~4 s timer so the cache is always within TTL
-    // when --view=grid opens, eliminating the icon-fallback flash
+    // when --view grid opens, eliminating the icon-fallback flash
     // that would otherwise show for the first 50-200 ms of each
     // show).
     private let ttl: TimeInterval = 5.0

@@ -15,31 +15,32 @@
 // the act of importing the executable spawning a panel. **Don't
 // reintroduce main.swift.**
 //
-// CLI surface (canonical-only — no aliases). See `printHelp()`
-// for the user-facing reference; the categories below are the
-// quick orientation:
+// CLI surface (canonical-only — no aliases). Grammar is yabai-style
+// space-separated values: `--flag VALUE`, never `--flag=VALUE` (#227).
+// See `printHelp()` for the user-facing reference; the categories
+// below are the quick orientation:
 //
-//   Views   : --view=NAME [--active] / --hide=NAME / --toggle=NAME
-//   Theme   : --theme=NAME
+//   Views   : --view NAME [--active] / --hide NAME / --toggle NAME
+//   Theme   : --theme NAME
 //   Server  : --quit / --reload / --resign / --help
-//   Status  : facet status (read-only, no `--`)
-//   Workspace : facet workspace --focus=N|NAME|next|prev|recent / --layout=NAME
-//               / --retile / --balance / --rotate=90|180|270
-//               / --mirror=horizontal|vertical / --add / --remove[=N]
-//               / --rename=NAME / --move=N
-//   Window    : facet window --move-to=N[ --follow] / --mark=NAME
-//               / --focus-mark=NAME / --unmark=NAME / --toggle-float /
+//   Query   : facet query (read-only, no `--`)
+//   Workspace : facet workspace --focus N|NAME|next|prev|recent / --layout NAME
+//               / --retile / --balance / --rotate 90|180|270
+//               / --mirror horizontal|vertical / --add / --remove TARGET
+//               / --rename NAME / --move N
+//   Window    : facet window --move-to N [--follow] / --mark NAME
+//               / --focus-mark NAME / --unmark NAME / --toggle-float /
 //               --toggle-sticky / --toggle-orientation /
-//               --cycle-stack=next|prev / --grow-master / --shrink-master
+//               --cycle-stack next|prev / --grow-master / --shrink-master
 //               / --inc-master / --dec-master
-//               / --focus=up|down|left|right / --move=up|down|left|right
-//               / --tag=NAME / --untag=NAME / --toggle-tag=NAME
+//               / --focus up|down|left|right / --move up|down|left|right
+//               / --tag NAME / --untag NAME / --toggle-tag NAME
 //                 (tag mode only — [grouping] by="tag")
-//   Scratchpad: facet scratchpad --stash=NAME / --toggle=NAME
-//               / --release=NAME
-//   Lens      : facet lens --only=NAME / --toggle=NAME / --all
+//   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
+//               / --release NAME
+//   Lens      : facet lens --only NAME / --toggle NAME / --all
 //               (tag mode only — [grouping] by="tag")
-//   Tag       : facet tag --add=NAME / --remove=NAME / --rename=OLD:NEW
+//   Tag       : facet tag --add NAME / --remove NAME / --rename OLD NEW
 //               (tag mode only — edits the tag vocabulary)
 //
 // ``--active`` is a modifier; ``facet --active`` standalone is
@@ -67,8 +68,8 @@ enum FacetApp {
 
     // MARK: - Canonical names
 
-    /// Views the user can address with ``--view=`` / ``--hide=`` /
-    /// ``--toggle=``. Adding a new view (dock, palette, …) only
+    /// Views the user can address with ``--view`` / ``--hide`` /
+    /// ``--toggle``. Adding a new view (dock, palette, …) only
     /// requires extending this list + the server-side
     /// ``Controller.dispatchView/Hide/Toggle`` switches.
     static let canonicalViews = ["tree", "grid", "rail"]
@@ -95,62 +96,63 @@ enum FacetApp {
           facet                              server mode (start the app)
 
         VIEW OPERATIONS                      NAME ∈ tree | grid | rail
-          facet --view=NAME [--active]       open NAME (idempotent)
-          facet --hide=NAME                  close NAME
-          facet --toggle=NAME                toggle NAME
+          facet --view NAME [--active]       open NAME (idempotent)
+          facet --hide NAME                  close NAME
+          facet --toggle NAME                toggle NAME
 
           In tag mode ([grouping] by="tag") the tree is the only view —
           grid / rail aren't available, so --view / --hide / --toggle
-          = grid|rail exit 2.
+          with grid|rail exit 2.
 
-          --active is a modifier — meaningful only with --view=tree.
+          --active is a modifier — meaningful only with --view tree.
           Tree alone enables keyboard nav as soon as you click the
           panel; --active just takes focus immediately so a hotkey
-          can jump straight in (Spotlight-style). --view=grid
+          can jump straight in (Spotlight-style). --view grid
           silently ignores; the overlay is always key/active.
 
-          --edge=top|bottom|left|right is a --view=rail modifier:
+          --edge top|bottom|left|right is a --view rail modifier:
           dock the rail's workspace strip against that screen edge
           (default bottom, or [rail] edge in config). Top/bottom
           browse with ←/→, left/right with ↑/↓. Example:
-            facet --view=rail --edge=left
+            facet --view rail --edge left
 
-          --loading[=MS] is a --view=tree modifier: paint a loading
+          --loading MS is a --view tree modifier: paint a loading
           skeleton over the tree, cleared as soon as new content
-          loads OR after MS milliseconds (default 500), whichever
-          comes first — so MS is just a safety cap. Fire it just
-          BEFORE a mac-desktop switch (bind it ahead of your switch
-          hotkey) so the panel shows a placeholder during the switch
-          instead of the previous mac desktop's tree. Only valid with
-          --view=tree; grid / rail exit 2.
+          loads OR after MS milliseconds (0 = off), whichever comes
+          first — so MS is just a safety cap. Fire it just BEFORE a
+          mac-desktop switch (bind it ahead of your switch hotkey) so
+          the panel shows a placeholder during the switch instead of
+          the previous mac desktop's tree. Only valid with
+          --view tree; grid / rail exit 2.
           Example:
-            facet --view=tree --loading=2000
+            facet --view tree --loading 2000
 
-          GEOMETRY MODIFIERS (--view=tree only; grid ignores)
-            --pos-x=N --pos-y=N --width=N --height=N
+          GEOMETRY MODIFIERS (--view tree only; grid ignores)
+            --pos-x N --pos-y N --width N --height N
               Place the tree panel at exact screen coords with explicit
               size. TOP-LEFT origin: (0,0) = top-left of the main
-              screen, x right, y DOWN. All four are required together
-              (none / all). Use case: screenshot automation,
-              deterministic UI tests. (Persist via `[tree]` config.)
+              screen, x right, y DOWN. Coords may be negative (an off-
+              main screen). All four are required together (none / all).
+              Use case: screenshot automation, deterministic UI tests.
+              (Persist via `[tree]` config.)
               Example (8 px in from the top-left):
-                facet --view=tree --pos-x=8 --pos-y=8 \\
-                       --width=400 --height=600
+                facet --view tree --pos-x 8 --pos-y 8 \\
+                       --width 400 --height 600
 
           NAME is required for every view op (no implicit "tree").
           Shell aliases handle shorthand if you want it:
-            alias fa='facet --view=tree --active'
-            alias fg='facet --view=grid'
+            alias fa='facet --view tree --active'
+            alias fg='facet --view grid'
 
         WORKSPACE                            (active / target workspace)
-          facet workspace --focus=N          switch to workspace N
+          facet workspace --focus N          switch to workspace N
                                              (1-indexed; idempotent)
-          facet workspace --focus=NAME       switch by name (stable
+          facet workspace --focus NAME       switch by name (stable
                                              across reorder)
-          facet workspace --focus=next       step to next / previous
-          facet workspace --focus=prev       workspace (wraps)
-          facet workspace --focus=recent     return to the previous one
-          facet workspace --layout=NAME      set the workspace's layout
+          facet workspace --focus next       step to next / previous
+          facet workspace --focus prev       workspace (wraps)
+          facet workspace --focus recent     return to the previous one
+          facet workspace --layout NAME      set the workspace's layout
                                              (bsp | stack | master-left |
                                              master-right | master-top |
                                              master-bottom | master-center |
@@ -159,68 +161,69 @@ enum FacetApp {
                                              (no-op when float)
           facet workspace --balance          reset master ratio / count
                                              to the even baseline
-          facet workspace --rotate=90|180|270  rotate the bsp tree
+          facet workspace --rotate 90|180|270  rotate the bsp tree
                                              clockwise (bsp only)
-          facet workspace --mirror=horizontal|vertical  flip the bsp
+          facet workspace --mirror horizontal|vertical  flip the bsp
                                              tree left↔right / top↔bottom
           facet workspace --add              append a new workspace
-          facet workspace --remove[=N]       remove workspace N (or the
-                                             active one); its windows
-                                             move to a neighbour
-          facet workspace --rename=NAME      rename the active workspace
-          facet workspace --move=N           move the active workspace to
+          facet workspace --remove TARGET    remove a workspace — TARGET is
+                                             `current` (the active one) or a
+                                             1-based index; its windows move
+                                             to a neighbour
+          facet workspace --rename NAME      rename the active workspace
+          facet workspace --move N           move the active workspace to
                                              position N (reorder)
 
         LENS                                 (tag mode: which tags show)
-          facet lens --only=NAME             show exactly tag NAME
-          facet lens --toggle=NAME           add / remove tag NAME from
+          facet lens --only NAME             show exactly tag NAME
+          facet lens --toggle NAME           add / remove tag NAME from
                                              the shown union
           facet lens --all                   show every tag
                                              (requires [grouping] by="tag";
                                              no-op under by="workspace")
 
         TAG                                  (tag mode: the tag vocabulary)
-          facet tag --add=NAME               declare tag NAME (no window
+          facet tag --add NAME               declare tag NAME (no window
                                              touched; idempotent)
-          facet tag --remove=NAME            delete NAME — strips it from
+          facet tag --remove NAME            delete NAME — strips it from
                                              every window; its bit is freed
                                              for a later tag to reuse
-          facet tag --rename=OLD:NEW         rename OLD to NEW in place
+          facet tag --rename OLD NEW         rename OLD to NEW in place
                                              (windows keep the tag); rejects
                                              an unknown OLD or an NEW that
                                              already exists
                                              (requires [grouping] by="tag")
 
         WINDOW                               (focused window)
-          facet window --move-to=N           move it to workspace N
-          facet window --move-to=N --follow  …and switch there too
-          facet window --mark=NAME           tag it with a mark (label;
+          facet window --move-to N           move it to workspace N
+          facet window --move-to N --follow  …and switch there too
+          facet window --mark NAME           tag it with a mark (label;
                                              1:1 — one mark per window)
-          facet window --focus-mark=NAME     jump focus to the marked
+          facet window --focus-mark NAME     jump focus to the marked
                                              window (switches WS if needed)
-          facet window --unmark=NAME         remove a mark
-          facet window --tag=NAME            add tag NAME (tag mode;
+          facet window --unmark NAME         remove a mark
+          facet window --tag NAME            add tag NAME (tag mode;
                                              creates NAME if new; #-prefix
-                                             ok, e.g. --tag=#190)
-          facet window --untag=NAME          remove tag NAME (rejects an
+                                             ok, e.g. --tag #190)
+          facet window --untag NAME          remove tag NAME (rejects an
                                              unknown tag)
-          facet window --toggle-tag=NAME     add / remove tag NAME
+          facet window --toggle-tag NAME     add / remove tag NAME
                                              (creates NAME if new)
                                              (requires [grouping] by="tag")
           facet window --toggle-float        flip its float flag
           facet window --toggle-sticky       pin it across every workspace
                                              (PiP / timer / chat); flip off
                                              to drop it as a tiled window
-          facet window --focus=DIR           move focus to the tiled
+          facet window --focus DIR           move focus to the tiled
                                              neighbour up|down|left|right
                                              (no-op at an edge)
-          facet window --move=DIR            swap the focused window with
+          facet window --move DIR            swap the focused window with
                                              that neighbour (up|down|
                                              left|right)
           facet window --toggle-orientation  bsp: rotate the focused
                                              window's parent split
-          facet window --cycle-stack=next    rotate stack to next member
-          facet window --cycle-stack=prev    rotate stack to previous
+          facet window --cycle-stack next    rotate stack to next member
+          facet window --cycle-stack prev    rotate stack to previous
                                              member (stack only)
           facet window --grow-master         widen the master area +0.05
           facet window --shrink-master       narrow the master area -0.05
@@ -229,24 +232,24 @@ enum FacetApp {
                                              (master-* engines only)
 
         SCRATCHPAD                           (named hidden shelves)
-          facet scratchpad --stash=NAME      park the focused window onto
+          facet scratchpad --stash NAME      park the focused window onto
                                              a named shelf (hides it)
-          facet scratchpad --toggle=NAME     summon it onto the current
+          facet scratchpad --toggle NAME     summon it onto the current
                                              workspace, or re-park it if
                                              already visible here
-          facet scratchpad --release=NAME    drop it off the shelf as a
+          facet scratchpad --release NAME    drop it off the shelf as a
                                              tiled window of this workspace
 
           facet doesn't bind keyboard shortcuts. Wire one up with
           your shortcut tool of choice (skhd, Karabiner-Elements,
           hammerspoon, …):
             # ~/.config/skhd/skhdrc
-            ctrl + alt - 1 : facet workspace --focus=1
-            ctrl + alt - 2 : facet workspace --focus=2
-            ctrl + shift + alt - 1 : facet window --move-to=1
+            ctrl + alt - 1 : facet workspace --focus 1
+            ctrl + alt - 2 : facet workspace --focus 2
+            ctrl + shift + alt - 1 : facet window --move-to 1
 
-        STATUS
-          facet status                       print server's view of the
+        QUERY
+          facet query                        print server's view of the
                                              world: backend, theme,
                                              workspaces (active marker +
                                              window counts), last error,
@@ -256,7 +259,7 @@ enum FacetApp {
                                              Greppable line format.
 
         SERVER CONTROLS
-          facet --theme=NAME                 13 themes: terminal, chomp,
+          facet --theme NAME                 13 themes: terminal, chomp,
                                              rainbow, cobalt2,
                                              shades-of-purple, tokyo-hack,
                                              github-dark, dracula,
@@ -285,14 +288,15 @@ enum FacetApp {
           facet --help                       this help
 
         EXIT CODES
-          0   success (DNC posted, server started, or status printed)
+          0   success (DNC posted, server started, or query printed)
           1   `--resign` codesign failed (see stderr)
-          2   unknown flag / view / theme name (stderr lists expected
-              values)
+          2   unknown flag / view / theme name, a bad value, a missing
+              argument, or a dropped legacy `--flag=VALUE` form (stderr
+              lists what was expected)
           3   no server running for the requested client-mode action
-              (start one with ./run.sh); also: `facet status` when
-              the status file is missing
-          4   status file present but malformed (server bug —
+              (start one with ./run.sh); also: `facet query` when
+              the data file is missing
+          4   query data present but malformed (server bug —
               `./stop.sh && ./run.sh`)
 
         CONFIG
@@ -395,14 +399,14 @@ enum FacetApp {
         }
 
         // Two-pass: collect all flags first so the dispatch below
-        // is order-independent (``--view=tree --active`` and
-        // ``--active --view=tree`` both work).
+        // is order-independent (``--view tree --active`` and
+        // ``--active --view tree`` both work).
         var viewArg: String?
         var hideArg: String?
         var toggleArg: String?
         var styleArg: String?
         var activeFlag = false
-        var edgeArg: String?            // rail dock edge (--edge=); nil = config default
+        var edgeArg: String?            // rail dock edge (--edge ); nil = config default
         var loadingArg: Int?            // nil = not requested; ms otherwise
         var quitFlag = false
         var reloadFlag = false
@@ -463,55 +467,59 @@ enum FacetApp {
         }
         // Read-only query sub-command. Plain noun (no `--`)
         // because it returns data rather than triggering a verb.
-        if argv == ["status"] {
-            runStatus()
+        // (#227: renamed from `status`; the former verb is gone —
+        // a bare `facet status` now falls through to the loud
+        // unknown-flag reject below.)
+        if argv == ["query"] {
+            runQuery()
         }
 
-        var i = 0
-        while i < argv.count {
-            defer { i += 1 }
-            let a = argv[i]
-            switch true {
-            case a == "--quit":              quitFlag = true
-            case a == "--reload":            reloadFlag = true
-            case a == "--active":            activeFlag = true
-            case a == "--loading":           loadingArg = defaultLoadingMs
-            case a.hasPrefix("--loading="):
-                let raw = String(a.dropFirst("--loading=".count))
+        // Space-separated grammar (#227): each value-bearing flag
+        // consumes its next token via the cursor (strict consumption —
+        // a negative coord / a `0` reads fine). Names are canonicalised
+        // + validated at parse time (not post time) so typos exit 2
+        // BEFORE the server-alive check — a fundamental error should
+        // win over a transient one.
+        var cursor = ArgCursor(argv)
+        while let a = cursor.next() {
+            switch a {
+            case "--quit":              quitFlag = true
+            case "--reload":            reloadFlag = true
+            case "--active":            activeFlag = true
+            case "--loading":
+                let raw = cursor.value(for: "--loading")
                 guard let ms = Int(raw), ms >= 0 else {
-                    die("--loading=MS needs a non-negative integer "
-                        + "(milliseconds) — got \"\(raw)\"")
+                    die("--loading expects a non-negative integer "
+                        + "(milliseconds; 0 = off) — got \"\(raw)\"")
                 }
                 loadingArg = ms
-            case a == "--resign":            break          // handled above
-            // Names are canonicalised + validated at parse time
-            // (not at post time) so typos exit 2 BEFORE the server-
-            // alive check runs — a fundamental error should win
-            // over a transient one.
-            case a.hasPrefix("--view="):
-                viewArg = canonicalView(String(a.dropFirst("--view=".count)))
-            case a.hasPrefix("--hide="):
-                hideArg = canonicalView(String(a.dropFirst("--hide=".count)))
-            case a.hasPrefix("--toggle="):
-                toggleArg = canonicalView(String(a.dropFirst("--toggle=".count)))
-            case a.hasPrefix("--edge="):
-                edgeArg = canonicalEdge(String(a.dropFirst("--edge=".count)))
-            case a.hasPrefix("--theme="):
-                styleArg = canonicalStyle(String(a.dropFirst("--theme=".count)))
-            case a.hasPrefix("--pos-x="):
-                posX = parseGeomInt(a, "--pos-x=")
-            case a.hasPrefix("--pos-y="):
-                posY = parseGeomInt(a, "--pos-y=")
-            case a.hasPrefix("--width="):
-                width = parseGeomInt(a, "--width=", requirePositive: true)
-            case a.hasPrefix("--height="):
-                height = parseGeomInt(a, "--height=", requirePositive: true)
+            case "--resign", "--emit-schema":
+                break                                       // handled above
+            case "--view":
+                viewArg = canonicalView(cursor.value(for: "--view"))
+            case "--hide":
+                hideArg = canonicalView(cursor.value(for: "--hide"))
+            case "--toggle":
+                toggleArg = canonicalView(cursor.value(for: "--toggle"))
+            case "--edge":
+                edgeArg = canonicalEdge(cursor.value(for: "--edge"))
+            case "--theme":
+                styleArg = canonicalStyle(cursor.value(for: "--theme"))
+            case "--pos-x":
+                posX = parseGeomInt(cursor.value(for: "--pos-x"), flag: "--pos-x")
+            case "--pos-y":
+                posY = parseGeomInt(cursor.value(for: "--pos-y"), flag: "--pos-y")
+            case "--width":
+                width = parseGeomInt(cursor.value(for: "--width"), flag: "--width",
+                                     requirePositive: true)
+            case "--height":
+                height = parseGeomInt(cursor.value(for: "--height"), flag: "--height",
+                                      requirePositive: true)
             default:
-                // Loud reject — typos / dropped legacy flags
-                // (``--show`` / ``--hide`` / ``--toggle`` /
-                // ``--style=...``) hit here. Server mode falling
-                // through silently would launch a second instance
-                // by accident.
+                // Loud reject — typos / dropped legacy spellings
+                // (``--show``, the old `--flag=VALUE` form, a bare
+                // `status`) hit here. Server mode falling through
+                // silently would launch a second instance by accident.
                 let msg = "facet: unknown flag \"\(a)\" — see "
                     + "`facet --help`\n"
                 FileHandle.standardError.write(Data(msg.utf8))
@@ -522,39 +530,39 @@ enum FacetApp {
         // ``--active`` is a modifier only — standalone is rejected
         // (would be ambiguous about which view to activate).
         if activeFlag && viewArg == nil {
-            let msg = "facet: --active requires --view=NAME — "
+            let msg = "facet: --active requires --view NAME — "
                 + "see `facet --help`\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
         }
 
         // ``--edge`` only means something for the rail (it picks the
-        // strip's screen edge); requiring ``--view=rail`` keeps a stray
+        // strip's screen edge); requiring ``--view rail`` keeps a stray
         // ``--edge`` from silently doing nothing on tree / grid. A
-        // ``--toggle=rail`` gets a clearer hint — the rail was targeted,
-        // but ``--edge`` rides the show (``--view=rail``), not toggle.
+        // ``--toggle rail`` gets a clearer hint — the rail was targeted,
+        // but ``--edge`` rides the show (``--view rail``), not toggle.
         if edgeArg != nil && viewArg != "rail" {
             let hint = toggleArg == "rail"
-                ? "--edge applies to --view=rail (show), not --toggle=rail"
-                : "--edge requires --view=rail"
+                ? "--edge applies to --view rail (show), not --toggle rail"
+                : "--edge requires --view rail"
             let msg = "facet: \(hint) — see `facet --help`\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
         }
 
-        // ``--loading`` is a modifier on ``--view=tree`` only — the
+        // ``--loading`` is a modifier on ``--view tree`` only — the
         // skeleton lives in ``SidebarView``; grid / rail can't paint
         // it, so a stray ``--loading`` on another view exits 2 rather
         // than silently doing nothing.
         if loadingArg != nil && viewArg != "tree" {
-            let msg = "facet: --loading requires --view=tree — "
+            let msg = "facet: --loading requires --view tree — "
                 + "see `facet --help`\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(2)
         }
 
         // Geom flags are all-or-nothing modifiers; only meaningful
-        // with --view=tree (grid silently ignores, same as --active).
+        // with --view tree (grid silently ignores, same as --active).
         // Partial sets (e.g. only --width) are rejected loudly so
         // the user doesn't end up with a half-applied frame.
         var geom: (Int, Int, Int, Int)? = nil
@@ -564,7 +572,7 @@ enum FacetApp {
             break
         case .complete(let x, let y, let w, let h):
             if viewArg == nil {
-                die("geometry flags require --view=NAME — "
+                die("geometry flags require --view NAME — "
                     + "see `facet --help`")
             }
             geom = (x, y, w, h)
@@ -585,7 +593,7 @@ enum FacetApp {
         for (flag, value) in [("--view", viewArg), ("--hide", hideArg),
                               ("--toggle", toggleArg)] {
             if let v = value, v == "grid" || v == "rail" {
-                requireGrouping(.workspace, subject: "\(flag)=\(v)")
+                requireGrouping(.workspace, subject: "\(flag) \(v)")
             }
         }
 
@@ -635,7 +643,7 @@ enum FacetApp {
             exit(2)
         }
         // config.toml is the single source of truth for theme. Runtime
-        // `--theme=...` overrides it for the session only (no UserDefaults
+        // `--theme ...` overrides it for the session only (no UserDefaults
         // persist); to make a theme stick, edit config.toml. PR-B: the
         // theme is resolved PER SURFACE into the Controller's palette
         // boxes (`[tree]/[grid]/[rail].theme`), not the legacy module-level
@@ -668,7 +676,7 @@ enum FacetApp {
 
         // Apply config's default-view. nil → agent-only mode (no
         // panel, no overlay); facet stays running and waits for a
-        // ``facet --view=tree`` / ``facet --view=grid`` to bring
+        // ``facet --view tree`` / ``facet --view grid`` to bring
         // something on screen. See memory config-default-behavior.
         switch cfg.effectiveDefaultView {
         case "grid":

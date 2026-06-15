@@ -12,7 +12,7 @@
 //
 // The value is an open vocabulary on purpose — a future grouping
 // paradigm (e.g. scrollable columns) is one more case, mirroring the
-// `--view=NAME` symmetric pattern. An unknown `by` is a loud config
+// `--view NAME` symmetric pattern. An unknown `by` is a loud config
 // error, never a silent fallback.
 
 /// How facet groups windows. Chosen at startup (`[grouping] by`),

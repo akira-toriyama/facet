@@ -8,7 +8,7 @@
 #
 # Matching is by EXECUTABLE PATH (ps comm), never by command-line
 # string. A shell whose command line merely *mentions* a facet
-# path — `./run.sh && .build/release/facet status` — must neither
+# path — `./run.sh && .build/release/facet query` — must neither
 # be killed nor counted as a survivor (issue #214: the old
 # `ps aux | grep` confirmation false-matched the calling shell,
 # so run.sh's `set -e` aborted between the kill and the relaunch,

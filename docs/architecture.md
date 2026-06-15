@@ -68,7 +68,7 @@ matches how rift / aerospace operate today.
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (mac desktop × facet workspace), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus=N` (α 期の flag は `--workspace=N`、Theme C #81/#82 で subject-verb 化). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (mac desktop × facet workspace), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus N` (α 期の flag は `--workspace=N`、Theme C #81/#82 で subject-verb 化). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow. **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
@@ -96,7 +96,7 @@ Canonical: `facet-future-roadmap` memory.
 | **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | ✅ shipped (#72) |
 | **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。命名整理は #108 (monocle→stack 統合・centered-master→centered) 経て **M9-2 で master 5 辺化に確定**: `master-left` / `master-right` / `master-top` / `master-bottom` / `master-center` + grid / spiral (tall/wide/centered は破壊的リネーム・`--toggle-orientation` の master flip 廃止)。scrolling columns (niri 風) は未実装 (M11-4) |
 | **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
-| **D. New view types** | 当初候補 (i) 自由配置 canvas Google Maps 風 / (ii) WS DnD reorder Mission Control 風 はいずれも却下 → 別案 **rail view** (全画面 WS overview バー) を採用 | ✅ shipped as `facet --view=rail` (#109) |
+| **D. New view types** | 当初候補 (i) 自由配置 canvas Google Maps 風 / (ii) WS DnD reorder Mission Control 風 はいずれも却下 → 別案 **rail view** (全画面 WS overview バー) を採用 | ✅ shipped as `facet --view rail` (#109) |
 
 着手前 invariants: `facet-buddha-palm-principle` (OS 尊重) を壊さない / `facet-scope-exclusions` (15 not-do) と矛盾しない / `WindowBackend` protocol 経由設計を維持 (unit-test stub seam を壊さない)。
 
@@ -140,11 +140,24 @@ is the index. **Do not relitigate** without explicit grill round.
   restores via `WindowBackend.revealWindow`). facet's own anchor park
   keeps `isOnscreen` true, so only user hides trigger this (#131 /
   #132 / #133; memory `facet-hide-reclaim-decisions`).
-- **CLI surface**: `facet workspace --focus=N` switch, `facet window
-  --move-to=N` move, `--reload` explicit + auto FSEvents watcher,
-  `status` for state dump. Subject-verb form since Theme C (#81/#82);
-  the α-era top-level `--workspace=N` was deleted. TOML atomic write
-  enforced in shipped templates.
+- **CLI surface**: `facet workspace --focus N` switch, `facet window
+  --move-to N` move, `--reload` explicit + auto FSEvents watcher,
+  `facet query` for state dump. Subject-verb form since Theme C
+  (#81/#82); the α-era top-level `--workspace=N` was deleted. TOML
+  atomic write enforced in shipped templates.
+  - **Grammar is an isolated seam (#227)**: the CLI uses yabai-style
+    space-separated values (`--flag VALUE`, never `--flag=VALUE`).
+    Parsing lives entirely in the FacetApp client layer (`Main.swift`
+    + `FacetApp+Client.swift`, via the pure `ArgCursor` with per-flag
+    *strict consumption*). It translates argv into the canonical DNC
+    control strings (`view:tree+active`, `tag-rename:OLD:NEW`, …) that
+    `FacetCore` / the adapter consume — so the grammar can change
+    without touching the core (the DNC payloads stayed byte-identical
+    across the `=`→space migration). `facet query` likewise absorbed
+    the former `facet status` verb with no change to the on-disk
+    snapshot. The CLI parser is to the grammar what `WindowBackend`
+    is to the backend: a port that keeps the hexagon's interior
+    stable while the outside world changes.
 - **Shortcut**: out of scope. README recommends skhd / Karabiner /
   hammerspoon (compose-friendly, like yabai + skhd).
 - **New window detection**: per-app AX subscription via
@@ -217,13 +230,13 @@ not relitigate** without explicit grill round.
   re-inserts members in focus order via auto-balance. **Default
   mode for a new WS = `"float"`** (not `"bsp"`) so existing
   users see no surprise behaviour; opt-in per WS via
-  `facet workspace --layout=bsp` (subject-verb since Theme C #81/#82).
+  `facet workspace --layout bsp` (subject-verb since Theme C #81/#82).
 - **CLI surface (5 new verbs)** (reshaped to subject-verb by Theme C #81/#82):
-  - `facet workspace --layout=NAME` — active WS mode (`bsp` / `stack` / `float`)
+  - `facet workspace --layout NAME` — active WS mode (`bsp` / `stack` / `float`)
   - `facet workspace --retile` — recompute + re-apply the active WS layout
   - `facet window --toggle-float`
   - `facet window --toggle-orientation`
-  - `facet window --cycle-stack=next|prev`
+  - `facet window --cycle-stack next|prev`
 - **Phasing**: ships as three PRs.
   - **γ.1 BSP core (shipped)** — `LayoutTree`, per-WS mode
     field, BSP auto-tile, manual `toggleFloat`,
@@ -409,7 +422,7 @@ windows or hosts.
 - **App-based rules engine** ("Chrome → WS 2", etc.) — out of
   scope. facet operates window-by-window. New windows land in the
   current active WS; user moves them with `facet window
-  --move-to=N`.
+  --move-to N`.
 - **Persistence of workspace state across restart** — out of
   scope for facet itself. WS names persist via `[desktop.N]`
   config (read-only seed); runtime layout / catalog mutations

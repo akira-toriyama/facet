@@ -61,7 +61,7 @@ extension NativeAdapter {
         // default`). Layout mode is otherwise session-only, so without
         // this every restart / per-mac-desktop catalog resets to the
         // hardcoded "float" and the user's windows stop tiling until
-        // they re-issue `facet workspace --layout=…`. Set every refresh
+        // they re-issue `facet workspace --layout …`. Set every refresh
         // (cheap, value-type field) so a config hot-reload takes too.
         catalog.defaultMode = config.effectiveDefaultLayout
         // Seed the live workspace set from config the first time this

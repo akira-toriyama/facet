@@ -8,7 +8,7 @@
 //
 // A `PaletteBox` is the shared, mutable handle that ties one surface's
 // chrome together: the view plus its border / scrollers / overlays /
-// popup all hold the SAME box, so a re-theme (hot-reload, `--theme=`) or
+// popup all hold the SAME box, so a re-theme (hot-reload, `--theme`) or
 // a 30 Hz animator tick updates `box.pal` in ONE place and every reader
 // of that surface sees it at once.
 //

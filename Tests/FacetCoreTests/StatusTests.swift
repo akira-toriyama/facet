@@ -54,7 +54,7 @@ final class StatusTests: XCTestCase {
     func testEntryDecodesMissingStickyCountAsZero() throws {
         // A status file written by a pre-sticky server (no stickyCount
         // key) must decode to 0, not throw `keyNotFound` — otherwise
-        // `facet status` would fail across an in-place upgrade until the
+        // `facet query` would fail across an in-place upgrade until the
         // next reconcile rewrote the file.
         let json = Data("""
         {"index":1,"name":"dev","active":true,"windowCount":3}
@@ -142,7 +142,7 @@ final class StatusTests: XCTestCase {
 
     func testSnapshotDecodesMissingStashedAsEmpty() throws {
         // A status file written by a pre-scratchpad server (no `stashed`
-        // key) must decode to [] rather than throw, so `facet status`
+        // key) must decode to [] rather than throw, so `facet query`
         // survives an in-place upgrade until the next reconcile.
         let json = Data("""
         {"backend":"native","theme":"terminal","defaultView":"tree",
