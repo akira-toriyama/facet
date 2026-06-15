@@ -1755,11 +1755,10 @@ public final class SidebarView: NSView {
             workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
             palette: pal,
             tagMode: tagModeActive,
-            onAddTag: { [weak self] wid in
-                self?.controller?.beginTagInput(forWindow: wid)
-            },
-            onRemoveTag: { [weak self] wid, tag in
-                self?.controller?.removeTagFromWindow(tag, windowID: wid)
+            onOpenTagEditor: { [weak self] wid, pid, app, title, tags, anchor in
+                self?.controller?.openTagEditor(
+                    forWindow: wid, pid: pid, appName: app, title: title,
+                    currentTags: tags, at: anchor)
             }
         ) { [weak self] ops, window, ws in
             self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)

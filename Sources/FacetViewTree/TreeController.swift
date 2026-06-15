@@ -60,13 +60,13 @@ public protocol TreeController: AnyObject, Sendable {
                       on window: Window,
                       workspaceIndex: Int)
 
-    /// Open the tag-name input box (the search-bar widget, in a tag-input
-    /// sub-mode) for `id` — the GUI "Tag…" menu item (#191 PR-7, tag
-    /// mode). On commit the typed name is auto-vivified and added to that
-    /// specific window. Controller owns the input UI + key focus.
-    func beginTagInput(forWindow id: WindowID)
-
-    /// Remove tag `name` from window `id` — the GUI "Untag #NAME" menu
-    /// item (#191 PR-7). Runs the by-id retag on the backend queue.
-    func removeTagFromWindow(_ name: String, windowID id: WindowID)
+    /// Open the per-window tag-edit checklist (`TagEditPanel`) for `id` —
+    /// the GUI "Tag" menu item (#4, tag mode). The header mirrors the tree's
+    /// window row: `pid` resolves the app icon, `appName` / `title` are its
+    /// two text lines. `currentTags` seeds the checked rows; `screenPt` is
+    /// where the ops menu was raised (the panel anchors there). The
+    /// Controller owns the floating panel, its key focus + the activation
+    /// policy dance.
+    func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
+                       title: String, currentTags: [String], at screenPt: CGPoint)
 }
