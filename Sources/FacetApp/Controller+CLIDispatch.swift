@@ -451,31 +451,17 @@ extension Controller {
         }
     }
 
-    /// Route a `lens:` payload (M11-3 tag mode). The payload is
-    /// `only:NAME` / `toggle:NAME` / `all`. The backend resolves the
-    /// tag name and surfaces an unknown-tag error itself, so this just
-    /// dispatches and schedules a repaint.
+    /// Route a `lens:` payload (M11-3 tag mode; #228 multi-tag). Parsing
+    /// the `all` / `VERB:CSV` wire form lives in the pure, unit-tested
+    /// `LensSpec.parse`; the backend resolves the names strictly and
+    /// surfaces an unknown-tag error itself, so this just dispatches and
+    /// schedules a repaint.
     private func dispatchLensTarget(_ arg: String) {
-        if arg == "all" {
-            backend.setLens(.all)
-        } else if arg.hasPrefix("only:") {
-            let name = String(arg.dropFirst("only:".count))
-            guard !name.isEmpty else {
-                Log.debug("dispatchLensTarget empty only: name — ignored")
-                return
-            }
-            backend.setLens(.only(name))
-        } else if arg.hasPrefix("toggle:") {
-            let name = String(arg.dropFirst("toggle:".count))
-            guard !name.isEmpty else {
-                Log.debug("dispatchLensTarget empty toggle: name — ignored")
-                return
-            }
-            backend.setLens(.toggle(name))
-        } else {
-            Log.debug("dispatchLensTarget unknown=\(arg) — ignored")
+        guard let spec = LensSpec.parse(arg) else {
+            Log.debug("dispatchLensTarget malformed=\(arg) — ignored")
             return
         }
+        backend.setLens(spec)
         scheduleReconcile(after: 0.05)
     }
 

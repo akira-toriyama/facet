@@ -161,16 +161,89 @@ final class TagCatalogTests: XCTestCase {
 
     func testLensResolvers() {
         let c = tagCatalog(lens: 0b001)
-        XCTAssertEqual(c.lensOnly("web"), 0b010)
-        XCTAssertNil(c.lensOnly("ghost"))
-        XCTAssertEqual(c.lensToggled("web"), 0b011)   // work + web
+        XCTAssertEqual(c.lensOnly(["web"]), 0b010)
+        XCTAssertNil(c.lensOnly(["ghost"]))
+        XCTAssertEqual(c.lensToggled(["web"]), 0b011)   // work + web
         // --all = every user tag PLUS the _default floor.
         XCTAssertEqual(c.lensAll, 0b111 | TagModel.defaultBit)
     }
 
     func testLensToggledOff() {
         let c = tagCatalog(lens: 0b011)   // work | web
-        XCTAssertEqual(c.lensToggled("web"), 0b001)   // web cleared
+        XCTAssertEqual(c.lensToggled(["web"]), 0b001)   // web cleared
+    }
+
+    // MARK: - Multi-tag lens resolvers (#228, comma-joined)
+
+    func testLensOnlyMultipleTagsIsStrictUnion() {
+        let c = tagCatalog(lens: 0b001)
+        // only = exact replacement: the union of the named user bits.
+        XCTAssertEqual(c.lensOnly(["web", "media"]), 0b110)
+        // Strict: one undefined name rejects the WHOLE set (no silent
+        // drop of just the bad name).
+        XCTAssertNil(c.lensOnly(["web", "ghost"]))
+    }
+
+    func testLensAddedUnionsAndStripsFloor() {
+        let c = tagCatalog(lens: 0b001)   // work
+        XCTAssertEqual(c.lensAdded(["web", "media"]), 0b111)  // work|web|media
+        XCTAssertNil(c.lensAdded(["web", "ghost"]))           // strict
+    }
+
+    func testLensAddedFromFloorOnlyLensYieldsExactlyTheAddedTags() {
+        // From the floor-only (untagged-baseline) lens, --add code = {code}
+        // — the floor is the empty sentinel, not a real member, so it's
+        // stripped (issue #228: `--add code` from empty = exactly {code}).
+        let c = tagCatalog(lens: TagModel.defaultBit)
+        XCTAssertEqual(c.lensAdded(["web"]), 0b010)
+    }
+
+    func testLensRemovedStripsTagsAndFloor() {
+        let c = tagCatalog(lens: 0b011)   // work | web
+        XCTAssertEqual(c.lensRemoved(["web"]), 0b001)   // work
+        // Removing the last user tag yields a 0 user mask (setLens then
+        // floor-guards it back to the untagged baseline).
+        let c2 = tagCatalog(lens: 0b010)   // web only
+        XCTAssertEqual(c2.lensRemoved(["web"]), 0)
+        XCTAssertNil(c.lensRemoved(["ghost"]))          // strict
+    }
+
+    func testLensToggledMultipleTags() {
+        let c = tagCatalog(lens: 0b001)   // work
+        // XOR each: work stays? no — work not in set; web/media flip on.
+        XCTAssertEqual(c.lensToggled(["web", "media"]), 0b111)  // work|web|media
+        let c2 = tagCatalog(lens: 0b011)   // work | web
+        XCTAssertEqual(c2.lensToggled(["web", "media"]), 0b101) // web off, media on
+        XCTAssertNil(c.lensToggled(["web", "ghost"]))           // strict
+    }
+
+    // MARK: - setLens floor guard (#228 rider — shipped latent bug)
+
+    func testSetLensEmptyMaskFallsBackToFloor() {
+        // The shipped bug: setLens(0) parked every window (nothing
+        // intersects a 0 mask). The guard falls back to the floor so the
+        // untagged baseline shows instead of a blank desktop.
+        var c = tagCatalog(lens: 0b001)   // lens = work
+        taggedAll(&c, [(10, 0b001),       // work → shown under work lens
+                       (20, 0b010)])      // web  → hidden under work lens
+        let plan = c.setLens(0)
+        XCTAssertNotNil(plan)
+        XCTAssertEqual(c.lens, TagModel.defaultBit)        // floor, not 0
+        XCTAssertEqual(plan!.newLens, TagModel.defaultBit) // plan carries normalized mask
+        // Load-bearing: the park/restore delta is computed against the
+        // NORMALIZED floor mask, not raw 0. Every window carries the
+        // floor, so under it w10 stays shown (no park) and w20 (was
+        // hidden) re-enters. The bug computed the delta against 0 →
+        // toPark=[w10], toRestore=[] (a blank desktop).
+        XCTAssertEqual(Set(plan!.toPark.map(\.id)), [])
+        XCTAssertEqual(Set(plan!.toRestore.map(\.id)), [wid(20)])
+    }
+
+    func testSetLensEmptyMaskIsNoOpWhenAlreadyFloor() {
+        // Already on the floor → setLens(0) normalizes to the floor and
+        // the unchanged-guard returns nil (no spurious retile).
+        var c = tagCatalog(lens: TagModel.defaultBit)
+        XCTAssertNil(c.setLens(0))
     }
 
     // MARK: - Runtime window tagging (#191 PR-2)

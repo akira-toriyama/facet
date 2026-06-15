@@ -38,7 +38,7 @@
 //                 (tag mode only — [grouping] by="tag")
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
-//   Lens      : facet lens --only NAME / --toggle NAME / --all
+//   Lens      : facet lens --only/--add/--remove/--toggle A[,B,…] / --all
 //               (tag mode only — [grouping] by="tag")
 //   Tag       : facet tag --add NAME / --remove NAME / --rename OLD NEW
 //               (tag mode only — edits the tag vocabulary)
@@ -175,11 +175,17 @@ enum FacetApp {
                                              position N (reorder)
 
         LENS                                 (tag mode: which tags show)
-          facet lens --only NAME             show exactly tag NAME
-          facet lens --toggle NAME           add / remove tag NAME from
-                                             the shown union
+          facet lens --only A[,B,…]          show exactly these tags
+                                             (replace the shown set)
+          facet lens --add A[,B,…]           union these into the shown set
+          facet lens --remove A[,B,…]        drop these from the shown set
+          facet lens --toggle A[,B,…]        flip each tag in / out
           facet lens --all                   show every tag
-                                             (requires [grouping] by="tag";
+                                             (multiple tags = comma-joined;
+                                             one unknown name rejects the
+                                             whole command; emptying the
+                                             lens shows untagged windows;
+                                             requires [grouping] by="tag";
                                              no-op under by="workspace")
 
         TAG                                  (tag mode: the tag vocabulary)
