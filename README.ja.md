@@ -453,6 +453,11 @@ facet query --windows            # 全窓を flat JSON で (全 mac desktop)。
                                   # (管理外は null)。jq で絞る:
                                   #   facet query --windows \
                                   #     | jq '.[] | select(.facet.tags[]? == "190")'
+facet query --tags               # 定義済みタグ語彙を JSON 配列で
+                                  # (宣言順)。workspace モードでは []
+facet query --lens               # 現 lens を JSON で {"tags":[…],
+                                  # "showsAll":bool}。tag モード外は null
+                                  # (showsAll = 全窓表示の lens なら true)
 
 # Server 制御
 facet --theme NAME                # 全13テーマ + random (terminal, chomp, …, catppuccin-latte; config.toml 参照)

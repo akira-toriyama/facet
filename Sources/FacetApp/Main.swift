@@ -266,6 +266,16 @@ enum FacetApp {
                                                  | jq '.[]
                                                    | select(.facet.tags[]?
                                                             == "190")'
+          facet query --tags                 print the defined tag
+                                             vocabulary as a JSON array
+                                             (declaration order); [] in
+                                             workspace mode.
+          facet query --lens                 print the current lens as
+                                             JSON {"tags":[…],
+                                             "showsAll":bool}; null in
+                                             workspace mode. showsAll is
+                                             true for a show-everything
+                                             lens (floor-only or --all).
 
         SERVER CONTROLS
           facet --theme NAME                 13 themes: terminal, chomp,

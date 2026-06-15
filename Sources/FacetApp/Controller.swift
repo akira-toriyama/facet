@@ -850,6 +850,8 @@ final class Controller: NSObject {
             defaultView: config.effectiveDefaultView,
             workspaces: entries,
             stashed: backend.stashedScratchpads(),
+            tags: backend.definedTagNames(),
+            lens: backend.currentLens(),
             lastError: lastError,
             timestamp: ISO8601DateFormatter().string(from: Date()))
         do { try snap.write() } catch {

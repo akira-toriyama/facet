@@ -485,6 +485,11 @@ facet query --windows             # every window as flat JSON (all mac
                                   # Filter with jq:
                                   #   facet query --windows \
                                   #     | jq '.[] | select(.facet.tags[]? == "190")'
+facet query --tags                # defined tag vocabulary as a JSON array
+                                  # (declaration order); [] in workspace mode
+facet query --lens                # current lens as JSON {"tags":[…],
+                                  # "showsAll":bool}; null in workspace mode
+                                  # (showsAll = true for a show-everything lens)
 
 # Server controls
 facet --theme NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)

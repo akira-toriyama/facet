@@ -366,6 +366,17 @@ public protocol WindowBackend: Sendable {
     /// show in the tree under their workspace. Empty when none.
     func stashedScratchpads() -> [String]
 
+    /// The defined tag VOCABULARY in declaration order (`facet query
+    /// --tags`, #228). `[]` outside tag mode. A cheap main-actor catalog
+    /// read, same risk class as `stashedScratchpads()` — the Controller
+    /// folds it into the status snapshot on reconcile.
+    func definedTagNames() -> [String]
+
+    /// The current lens (`facet query --lens`, #228). `nil` outside tag
+    /// mode (the lens is a tag-mode concept). Same cheap main-actor
+    /// read as `definedTagNames()`.
+    func currentLens() -> LensStatus?
+
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
     /// Reads the in-memory catalog structs, so the Controller calls it on
@@ -451,6 +462,8 @@ public extension WindowBackend {
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }
     func stashedScratchpads() -> [String] { [] }
+    func definedTagNames() -> [String] { [] }
+    func currentLens() -> LensStatus? { nil }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }

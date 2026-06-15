@@ -27,6 +27,22 @@ import FacetAccessibility
 
 extension NativeAdapter {
 
+    /// The active catalog's tag vocabulary (`facet query --tags`, #228).
+    /// `[]` in workspace mode — the vocabulary only seeds in tag mode.
+    /// A cheap main-actor read, same risk class as `queryFacetStates()`.
+    public func definedTagNames() -> [String] {
+        catalog.tagModel.names
+    }
+
+    /// The active catalog's lens (`facet query --lens`, #228). `nil`
+    /// outside tag mode (the lens is a tag-mode concept). Pure
+    /// resolution in `LensStatus.resolve` (unit-tested) — `showsAll` is
+    /// derived from the floor bit. Cheap main-actor read.
+    public func currentLens() -> LensStatus? {
+        guard catalog.grouping == .tag else { return nil }
+        return LensStatus.resolve(lens: catalog.lens, model: catalog.tagModel)
+    }
+
     public func queryFacetStates()
         -> [WindowID: WindowQueryEntry.FacetWindowState]
     {
