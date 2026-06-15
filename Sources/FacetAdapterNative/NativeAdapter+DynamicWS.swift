@@ -485,6 +485,20 @@ extension NativeAdapter {
             Log.debug("native: \(verb) \"\(name)\" — rejected (unknown / full)")
             return false
         }
+        settleWindowRetag(id, vis,
+                          logDetail: "\(verb) \"\(name)\" -> \(id.serverID)")
+        return true
+    }
+
+    /// Apply a single-window retag's lens-visibility transition — park /
+    /// restore the one window if it flipped (like `setLens` on one
+    /// window) — then re-tile the active union and repaint. Shared by the
+    /// `window --tag/--untag/--toggle-tag` verbs (`applyWindowRetag`) and
+    /// `window --retag` (#228). `logDetail` is the verb-specific debug
+    /// suffix (the `[vis]` marker is appended here).
+    private func settleWindowRetag(_ id: WindowID,
+                                   _ vis: WorkspaceCatalog.RetagVisibility,
+                                   logDetail: String) {
         cancelSlideForRetarget()
         if vis != .unchanged, let pid = catalog.windowMap[id]?.pid {
             let ref = WindowRef(id: id, pid: pid)
@@ -492,9 +506,37 @@ extension NativeAdapter {
                       toRestore: vis == .restore ? [ref] : [])
         }
         applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
-        Log.debug("native: \(verb) \"\(name)\" -> \(id.serverID) [\(vis)]")
+        Log.debug("native: \(logDetail) [\(vis)]")
         eventContinuation.yield(.refreshNeeded)
-        return true
+    }
+
+    /// `facet window --retag OLD NEW` (#228): replace tag OLD with NEW on
+    /// the focused window in a SINGLE atomic catalog write, then settle
+    /// its lens visibility + retile. Maps the catalog's `RetagOutcome` to
+    /// the backend-facing `WindowRetagResult` so the dispatch layer
+    /// surfaces a precise error (no-focus vs. unknown-OLD vs. vocab-full).
+    public func retagFocusedWindow(old: String,
+                                   new: String) -> WindowRetagResult {
+        guard tagVocabReady("retag", "\(old):\(new)") else { return .noFocus }
+        guard let id = focusedWindow() else {
+            Log.debug("native: retag \"\(old)\"->\"\(new)\" — no focused window")
+            return .noFocus
+        }
+        switch catalog.retagWindow(id, old: old, new: new) {
+        case .retagged(let vis):
+            settleWindowRetag(id, vis,
+                logDetail: "retag \"\(old)\"->\"\(new)\" -> \(id.serverID)")
+            return .retagged
+        case .noWindow:
+            Log.debug("native: retag — focused window \(id.serverID) unmanaged")
+            return .noFocus
+        case .oldUndefined:
+            Log.debug("native: retag \"\(old)\" — no such tag")
+            return .oldUndefined
+        case .vocabFull:
+            Log.debug("native: retag -> \"\(new)\" — vocabulary full")
+            return .vocabFull
+        }
     }
 
     /// Tag-mode + managed-desktop gate shared by every runtime tag verb
