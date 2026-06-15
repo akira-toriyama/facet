@@ -88,10 +88,15 @@ final class TagEditListView: NSView {
             let r = NSRect(x: 0, y: CGFloat(i) * Self.rowH,
                            width: bounds.width, height: Self.rowH)
             if i == sel {
+                // Tag UI uses the `secondary` accent throughout (the
+                // selection outline, the checked box / text, the Create row
+                // — every panel variant), matching the tree's tag chips +
+                // the menus' TAGS section, so "tag-related" reads one colour
+                // (item 14/17). Layout stays `primary`.
                 let pill = r.insetBy(dx: 4, dy: 2)
                 palette.selection.setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
-                palette.primary.setStroke()
+                palette.secondary.setStroke()
                 let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
                                      xRadius: 6, yRadius: 6)
                 o.lineWidth = 1.5; o.stroke()
@@ -108,7 +113,7 @@ final class TagEditListView: NSView {
                     let box = NSBezierPath(roundedRect: boxRect,
                                            xRadius: 3, yRadius: 3)
                     if checked {
-                        palette.primary.setFill(); box.fill()
+                        palette.secondary.setFill(); box.fill()
                         ("✓" as NSString).draw(
                             in: boxRect.offsetBy(dx: 2.5, dy: 0.5),
                             withAttributes: [.font: uiFont(11, .bold),
@@ -122,19 +127,19 @@ final class TagEditListView: NSView {
                     in: textRect,
                     withAttributes: [
                         .font: uiFont(13, emph ? .semibold : .regular),
-                        .foregroundColor: emph ? palette.primary : palette.foreground,
+                        .foregroundColor: emph ? palette.secondary : palette.foreground,
                         .paragraphStyle: para,
                     ])
             case let .create(name):
                 ("+" as NSString).draw(
                     in: boxRect.offsetBy(dx: 2, dy: -1),
                     withAttributes: [.font: uiFont(15, .bold),
-                                     .foregroundColor: palette.primary])
+                                     .foregroundColor: palette.secondary])
                 ("Create \"#\(name)\"" as NSString).draw(
                     in: textRect,
                     withAttributes: [
                         .font: uiFont(13, .semibold),
-                        .foregroundColor: palette.primary,
+                        .foregroundColor: palette.secondary,
                         .paragraphStyle: para,
                     ])
             }
@@ -220,7 +225,7 @@ final class TagEditContainerView: NSView {
                 in: NSRect(x: Self.padX, y: Self.padV + 2,
                            width: bounds.width - Self.padX * 2, height: 20),
                 withAttributes: [.font: uiFont(13, .bold),
-                                 .foregroundColor: palette.primary,
+                                 .foregroundColor: palette.secondary,
                                  .paragraphStyle: para])
         } else {
             // Mirror the tree window row: app icon + app name / title.
