@@ -479,6 +479,12 @@ facet scratchpad --release NAME   # drop it off the shelf as a normal tiled
                                   # name↔window; session-only, per mac desktop.
 facet query                       # snapshot: backend, theme, workspaces,
                                   # stashed shelves, lastError, timestamp
+facet query --windows             # every window as flat JSON (all mac
+                                  # desktops) — raw props + per-window
+                                  # facet state, or null when unmanaged.
+                                  # Filter with jq:
+                                  #   facet query --windows \
+                                  #     | jq '.[] | select(.facet.tags[]? == "190")'
 
 # Server controls
 facet --theme NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)

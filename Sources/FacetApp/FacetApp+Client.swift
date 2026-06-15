@@ -237,12 +237,28 @@ extension FacetApp {
         }
     }
 
+    /// `facet query [--windows]` dispatcher. Bare → the human-readable
+    /// status snapshot (`runQueryStatus`); `--windows` → the full
+    /// per-window JSON array (`runQueryWindows`, #223).
+    static func runQuery(_ args: [String]) -> Never {
+        var windows = false
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--windows": windows = true
+            default:
+                die("unknown `query` flag \"\(a)\" — see `facet --help`")
+            }
+        }
+        if windows { runQueryWindows() }
+        runQueryStatus()
+    }
+
     /// `facet query` — print the server's current view of the
     /// world: backend identity, hide method, workspaces with
     /// active marker + window counts, last error (if any),
     /// snapshot timestamp. (#227: the read verb, renamed from the
-    /// former `facet status`; identical snapshot output. A richer
-    /// `facet query --windows` JSON payload is tracked separately.)
+    /// former `facet status`; identical snapshot output.)
     ///
     /// Reads `/tmp/facet-status.json` written atomically by the
     /// running server (Controller.writeStatus). Three exit codes:
@@ -250,7 +266,7 @@ extension FacetApp {
     ///   0 — printed
     ///   3 — file missing (server not running, or never reconciled)
     ///   4 — file present but malformed (server bug — restart)
-    static func runQuery() -> Never {
+    static func runQueryStatus() -> Never {
         do {
             let snap = try StatusSnapshot.read()
             print(snap.render())
@@ -260,6 +276,37 @@ extension FacetApp {
         {
             let msg = "facet: no query data at "
                 + "\(StatusSnapshot.defaultPath) — server not running?\n"
+                + "       start with `./run.sh` (or `facet` for server mode)\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(3)
+        } catch {
+            let msg = "facet: query data malformed — \(error)\n"
+                + "       restart the server with `./stop.sh && ./run.sh`\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(4)
+        }
+    }
+
+    /// `facet query --windows` — print the full per-window JSON array
+    /// (#223), a flat list of every window across every mac desktop with
+    /// raw props + facet's `facet` block (or `null` when unmanaged).
+    /// Filter with `jq`. Reads `/tmp/facet-query.json` (server writes it
+    /// atomically on reconcile + startup). Same 0/3/4 exit-code contract
+    /// as the status read; prints the file's bytes verbatim after a
+    /// validating decode so the output is byte-stable.
+    static func runQueryWindows() -> Never {
+        do {
+            let data = try Data(contentsOf:
+                URL(fileURLWithPath: WindowQuery.defaultPath))
+            _ = try JSONDecoder().decode([WindowQueryEntry].self, from: data)
+            FileHandle.standardOutput.write(data)
+            FileHandle.standardOutput.write(Data("\n".utf8))
+            exit(0)
+        } catch let CocoaError as CocoaError
+            where CocoaError.code == .fileReadNoSuchFile
+        {
+            let msg = "facet: no query data at "
+                + "\(WindowQuery.defaultPath) — server not running?\n"
                 + "       start with `./run.sh` (or `facet` for server mode)\n"
             FileHandle.standardError.write(Data(msg.utf8))
             exit(3)
