@@ -86,7 +86,7 @@ extension Controller {
             switch e.keyCode {
             case 53:                                            // Esc
                 if panelHost.searchBar.stringValue.isEmpty {
-                    exitSearch()
+                    leaveSearchKeepingNav()   // back to nav, stay in tree
                 } else {
                     panelHost.searchBar.stringValue = ""
                     sidebarView.setQuery("")
@@ -117,8 +117,13 @@ extension Controller {
         // the drop target (kbMove/kbJumpWS redirect internally),
         // Return/Space commits, Esc cancels the lift before exiting.
         switch e.keyCode {
-        case 53:      if sidebarView.kbCancelLift() { return true }
-                      _exitActiveImpl(restore: true);    return true
+        case 53:      // ESC backs out of a sub-mode but never leaves the
+                      // tree: cancel an in-progress lift, otherwise stay in
+                      // nav. (You leave nav by clicking another app or
+                      // pressing Enter on a window — both resign key, and
+                      // handlePanelKeyChange reverts the activation policy.)
+                      _ = sidebarView.kbCancelLift()
+                      return true
         case 36, 76:  if sidebarView.kbCommitLift() { return true }
                       sidebarView.kbActivate();          return true
         case 125:     sidebarView.kbMove(1);             return true
@@ -154,9 +159,14 @@ extension Controller {
         panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
     }
 
-    private func exitSearch() {
+    /// ESC out of search back to normal nav WITHOUT leaving the tree:
+    /// end the filter and drop the field's first responder, but keep the
+    /// panel key so kbNav continues. ESC never exits the tree — you leave
+    /// by clicking another app or pressing Enter on a window, which resign
+    /// key and let `handlePanelKeyChange` revert the activation policy.
+    private func leaveSearchKeepingNav() {
         sidebarView.endSearch()
-        panelHost.resignKey()
+        panelHost.panel.makeFirstResponder(nil)
         panelHost.layout(contentHeight: sidebarView.contentHeight,
                          searching: sidebarView.searching)
     }
@@ -166,8 +176,10 @@ extension Controller {
     /// facet is already key — the local keyDown monitor only fires when
     /// facet is active — so a menu pick must self-activate first, then open
     /// search. No window is focused here, so this neither trips #66 nor
-    /// steals focus unprompted; `exitSearch`'s resignKey returns focus on
-    /// close, matching the `--active` path.
+    /// steals focus unprompted. ESC backs search out to normal nav (it no
+    /// longer leaves the tree); you leave by clicking another app or
+    /// activating a window, which reverts the activation policy via
+    /// `handlePanelKeyChange`.
     func enterSearchFromMenu() {
         if !sidebarView.kbNav { enterActive() }
         enterSearch()
