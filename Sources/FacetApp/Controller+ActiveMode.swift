@@ -41,10 +41,13 @@ extension Controller {
 
     func _exitActiveImpl(restore: Bool) {
         Log.debug("exitActive restore=\(restore) wasKbNav=\(sidebarView.kbNav)")
-        // Don't remove kbMonitor here — passive `s` opens search after
-        // the panel is clicked, which we want to keep. The monitor's
-        // own `panel.isKeyWindow` guard means it's idempotent /
-        // harmless while the panel isn't focused.
+        // Don't remove kbMonitor here — it stays installed for the whole
+        // session so `s` / nav fire the moment facet is key again (via
+        // --active or the Desktop-header menu's enterSearchFromMenu). Its
+        // own `panel.isKeyWindow` guard makes it a no-op while the panel
+        // isn't key, so leaving it installed is harmless. (A plain click
+        // does NOT make the panel key — #66 — so there is no "passive `s`
+        // after a click".)
         guard sidebarView.kbNav else { return }
         sidebarView.exitKbNav()                    // also clears `searching`
         panelHost.resignKey()

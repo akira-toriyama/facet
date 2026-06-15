@@ -202,12 +202,20 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 - **``--active`` is a modifier**, not a verb. Only meaningful
   combined with ``--view=tree`` (becomes ``view:tree+active`` on
   the DNC). For grid it's silently ignored — the overlay is
-  always key/active by construction. Without ``--active`` the
-  tree panel still enables keyboard nav as soon as the user
-  clicks it (PanelHost's onKeyChanged → Controller's enterKbNav);
-  ``--active`` only differs by taking key focus *immediately*
-  (+ flipping activation policy so the local keyDown monitor can
-  fire before the user has clicked).
+  always key/active by construction. A plain click on the tree
+  only focuses / selects a row — it does **NOT** enter keyboard
+  nav: since #66 the panel's ``canBecomeKey`` is gated to explicit
+  entry (``wantsKey``), so a click no longer grabs key (that would
+  re-break same-app focus). Keyboard nav + search (``s``) +
+  tag-manage (``t``) are entered via ``--active`` **or** by
+  right-clicking the ``Desktop N`` header (Search / Manage tags,
+  which self-activate facet — ``ViewContextMenu.showDesktop`` →
+  ``enterSearchFromMenu`` / ``enterTagManage``). ``--active`` flips
+  activation policy + takes key *immediately* so a hotkey jumps
+  straight in. ("Click a window row, then ``s``" is impossible on
+  macOS: the row click hands the system key window to the target
+  app, so facet can't receive ``s`` — hence the Desktop-header
+  menu. Memory: [[tree-click-crossapp-focus-broken-sequoia]].)
 - **``--edge=top|bottom|left|right`` is a modifier too** (M9-3),
   only meaningful with ``--view=rail`` (becomes ``view:rail+edge:NAME``
   on the DNC); ``--edge`` without ``--view=rail`` is a loud

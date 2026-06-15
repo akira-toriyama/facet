@@ -105,10 +105,13 @@ enum FacetApp {
           with grid|rail exit 2.
 
           --active is a modifier — meaningful only with --view tree.
-          Tree alone enables keyboard nav as soon as you click the
-          panel; --active just takes focus immediately so a hotkey
-          can jump straight in (Spotlight-style). --view grid
-          silently ignores; the overlay is always key/active.
+          A plain click on the tree only focuses/selects a row; it
+          does NOT enter keyboard nav. Nav + search (s) + tag-manage
+          (t) are entered via --active, or by right-clicking the
+          "Desktop N" header (Search / Manage tags). --active takes
+          key focus immediately so a hotkey can jump straight in
+          (Spotlight-style). --view grid silently ignores; the
+          overlay is always key/active.
 
           --edge top|bottom|left|right is a --view rail modifier:
           dock the rail's workspace strip against that screen edge
