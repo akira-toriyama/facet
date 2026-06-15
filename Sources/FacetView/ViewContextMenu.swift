@@ -18,7 +18,8 @@ public enum ViewContextMenu {
         backend: any WindowBackend,
         workspaceIndex ws: Int,
         workspaces: [Workspace],
-        palette: ResolvedPalette
+        palette: ResolvedPalette,
+        filterable: Bool = false
     ) {
         let modes = backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
@@ -27,7 +28,8 @@ public enum ViewContextMenu {
                               header: "WS\(ws + 1) layout",
                               items: modes,
                               checkedIndex: idx,
-                              palette: palette) { i in
+                              palette: palette,
+                              filterable: filterable) { i in
             cliQueue.async { backend.setLayoutMode(workspaceIndex: ws, mode: modes[i]) }
         }
     }
@@ -72,6 +74,7 @@ public enum ViewContextMenu {
         title: String,
         palette: ResolvedPalette,
         tagMode: Bool = false,
+        filterable: Bool = false,
         onOpenTagEditor: ((_ id: WindowID, _ pid: Int, _ appName: String,
                            _ title: String, _ currentTags: [String],
                            _ anchor: NSPoint) -> Void)? = nil,
@@ -102,7 +105,8 @@ public enum ViewContextMenu {
                               header: "Window",
                               items: labels,
                               checkedIndex: nil,
-                              palette: palette) { i in
+                              palette: palette,
+                              filterable: filterable) { i in
             if i < menu.count {
                 let item = menu[i]
                 if item.isClose {

@@ -1682,21 +1682,29 @@ public final class SidebarView: NSView {
     }
 
     /// `m` in --active: open the selected row's context menu — the
-    /// same menu right-click shows (window actions / workspace
-    /// layout), anchored at that row. (Space is the lift gesture in
-    /// Theme A.) facet stays --active; pick with the mouse or Esc.
+    /// same menu right-click shows (window actions / workspace layout).
+    /// Anchored OUTSIDE the tree, just past the panel's right edge
+    /// (`f.maxX + 8`, the same placement as the `t` tag-manage panel)
+    /// and level with the selected row's top — so the menu sits *beside*
+    /// the target window instead of covering it (dropping it inside the
+    /// tree hid the very row the user is acting on). (Space is the lift
+    /// gesture in Theme A.) facet stays --active; pick with the mouse or
+    /// Esc.
     public func kbContextMenu() {
         guard let s = kbSel, let i = kbIndex(of: s),
               let win = window else { return }
         let r = rows[i].rect
-        let scr = win.convertPoint(toScreen:
-            convert(NSPoint(x: r.minX + 24, y: r.minY), to: nil))
+        let rowTop = win.convertPoint(toScreen:
+            convert(NSPoint(x: r.minX, y: r.minY), to: nil))
+        let scr = NSPoint(x: win.frame.maxX + 8, y: rowTop.y)
+        // Keyboard path → type-to-filter menu (the tree panel keeps key, so
+        // PopupMenu's key monitor receives the typed query).
         switch rows[i].kind {
         case .header(let ws):
-            showLayoutMenu(at: scr, workspaceIndex: ws)
+            showLayoutMenu(at: scr, workspaceIndex: ws, filterable: true)
         case .window(let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
-                           pid: pid, windowID: id, title: title)
+                           pid: pid, windowID: id, title: title, filterable: true)
         default:
             break
         }
@@ -1739,22 +1747,25 @@ public final class SidebarView: NSView {
     // The header (layout) + window (ops) menus are shared with grid /
     // rail via `ViewContextMenu` (FacetView) so all three views show the
     // identical themed popup (③).
-    private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int) {
+    private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,
+                                filterable: Bool = false) {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
-                                   palette: pal)
+                                   palette: pal, filterable: filterable)
     }
 
     private func showWindowMenu(at scr: NSPoint,
                                 workspaceIndex ws: Int,
                                 pid: Int,
                                 windowID id: WindowID,
-                                title: String) {
+                                title: String,
+                                filterable: Bool = false) {
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
             workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
             palette: pal,
             tagMode: tagModeActive,
+            filterable: filterable,
             onOpenTagEditor: { [weak self] wid, pid, app, title, tags, anchor in
                 self?.controller?.openTagEditor(
                     forWindow: wid, pid: pid, appName: app, title: title,
