@@ -117,6 +117,24 @@ extension NativeAdapter {
         let target = index + 1
         let rect = activeDisplayRect()
         cancelSlideForRetarget()
+        if catalog.grouping == .tag {
+            // Tag mode: one global layout for the lens union (there's no
+            // per-workspace tree). Reject modes that can't represent a tag
+            // union — bsp / stack are workspace-only (loud, mirroring the
+            // CLI's incompatible-layout rejection). `index` is ignored.
+            guard LayoutGrouping.isCompatible(mode: mode, with: .tag) else {
+                errorContinuation.yield(
+                    "layout \(mode): not available in tag mode "
+                    + "(bsp / stack are workspace-only)")
+                return
+            }
+            catalog.tagLayoutMode = mode.lowercased()
+            Log.debug("native: setLayoutMode tag-world -> "
+                + "\(catalog.tagLayoutMode ?? "")")
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
+            eventContinuation.yield(.refreshNeeded)
+            return
+        }
         // BSP → Stack migration parks all but the focused window
         // at the anchor sliver. The catalog's setMode discards
         // layoutTrees / stackOrders entries, so we rely on

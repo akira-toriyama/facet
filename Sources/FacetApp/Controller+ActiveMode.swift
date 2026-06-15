@@ -249,6 +249,36 @@ extension Controller {
         )
     }
 
+    /// Open the lens selector — the tag-world header's "Select tags" item.
+    /// A `TagEditPanel` lens-variant checklist of the tag vocabulary whose
+    /// checked rows are the current lens; toggling adds / removes that tag
+    /// from the lens (`setLens`). Same activation-policy dance + close
+    /// handling as `openTagEditor` (shares `tagEditorSelfActivated` /
+    /// `finishTagEditor`). NOTE: `setLens` re-tiles + auto-focuses the new
+    /// union, so a toggle can hand focus to a window — the panel stays open
+    /// (it only closes on outside-click / Esc), so further picks still work.
+    func openLensSelector(at screenPt: CGPoint) {
+        let bk = backend
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        let current = Set(bk.currentLens()?.tags ?? [])
+        TagEditPanel.shared.showLens(
+            at: screenPt,
+            allTags: bk.definedTagNames(),
+            checkedTags: current,
+            palette: treePaletteBox.pal,
+            onToggle: { [weak self] name, on in
+                cliQueue.async { bk.setLens(on ? .add([name]) : .remove([name])) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onClose: { [weak self] in self?.finishTagEditor() }
+        )
+    }
+
     /// Open the tag-manage mode panel (`t`) — vocabulary editing (add /
     /// rename / delete) not tied to a window. Shares `TagEditPanel.shared`
     /// with the per-window checklist and the same activation-policy dance

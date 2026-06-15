@@ -68,7 +68,7 @@ extension WorkspaceCatalog {
     /// workspace-only `bsp`/`stack` (forbidden in tag mode by config
     /// validation, but be defensive) all fall through to empty.
     func tagUnionFrames(in rect: CGRect) -> [WindowID: CGRect] {
-        guard let engine = LayoutRegistry.engine(named: defaultMode)
+        guard let engine = LayoutRegistry.engine(named: effectiveTagLayout)
         else { return [:] }
         return engine.frames(order: visibleNonFloatingMembers(),
                              focused: nil, params: LayoutParams(), in: rect)
@@ -91,6 +91,13 @@ extension WorkspaceCatalog {
         }
         guard !tracked.isEmpty else { return [] }
         let unionFrames = tagUnionFrames(in: activeRect)
+        // Master badge parity with workspace mode: when the tag-world's
+        // engine has a master slot, the master is the first tiled member
+        // (same rule as WorkspaceCatalog.snapshot). nil for float / non-
+        // master engines so a `[master]` chip is never a lie.
+        let masterID: WindowID? =
+            (LayoutRegistry.engine(named: effectiveTagLayout)?.hasMaster ?? false)
+            ? visibleNonFloatingMembers().first : nil
         let wins = tracked
             .sorted { $0.id.serverID < $1.id.serverID }
             .map { w -> Window in
@@ -116,7 +123,7 @@ extension WorkspaceCatalog {
                               isFloating: floating,
                               frame: frame,
                               isOnscreen: w.isOnscreen,
-                              isMaster: false,
+                              isMaster: w.id == masterID,
                               mark: mark(forWindow: w.id),
                               isSticky: everywhereWindows.contains(w.id),
                               scratchpad: scratchpad(forWindow: w.id),
@@ -124,11 +131,15 @@ extension WorkspaceCatalog {
             }
         // One synthetic, always-active workspace (index 0). `isActive`
         // keeps the lone "workspace" current so a row click never fires a
-        // spurious workspace switch; `layoutMode` is the union engine,
-        // which feeds the window context menu's mode-gating. The name is
-        // unused — the view's `tagMode` flag renders the list header-less.
-        return [Workspace(index: 0, name: "", isActive: true,
-                          layoutMode: defaultMode, windows: wins)]
+        // spurious workspace switch; `layoutMode` is the tag-world's global
+        // engine (`effectiveTagLayout`) — feeds the tree's tag-world header
+        // layout picker (checkmark) + the window context menu's mode-gating.
+        // `name` is the active lens label (the currently shown tags, else
+        // `all` for the floor / empty lens) — the tag-world header text.
+        let lensNames = tagModel.names(in: lens)
+        let label = lensNames.isEmpty ? "all" : lensNames.joined(separator: " · ")
+        return [Workspace(index: 0, name: label, isActive: true,
+                          layoutMode: effectiveTagLayout, windows: wins)]
     }
 
     // Lens-command resolvers (pure: names → new mask, #228 multi-tag).
