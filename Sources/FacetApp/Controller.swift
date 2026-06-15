@@ -305,7 +305,18 @@ final class Controller: NSObject {
             // Drop kbNav. If we got here via --active's
             // _exitActiveImpl path, exitKbNav has already run and
             // this is a harmless idempotent call.
-            if sidebarView.kbNav { sidebarView.exitKbNav() }
+            if sidebarView.kbNav {
+                sidebarView.exitKbNav()
+                // You leave nav by losing key — clicking another app or
+                // pressing Enter on a window (ESC no longer exits; it stays
+                // in the tree). So this is now the sole revert path for that
+                // case: drop facet back to .accessory so no Dock icon /
+                // Cmd-Tab entry lingers after a click-away / window-activate.
+                if NSApp.activationPolicy() == .regular {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+                prevApp = nil
+            }
         }
     }
 

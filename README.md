@@ -249,8 +249,10 @@ Two ways in:
 - **`--active` flag** — `facet --view tree --active` takes focus
   *immediately* (one shortcut from your hotkey tool). Trade-off:
   facet briefly becomes the active app (Dock + Cmd-Tab) while
-  you're in nav; `Esc` exits and restores whatever was frontmost
-  before.
+  you're in nav. `Esc` backs out of search / the context menu but
+  **stays in the tree**; you leave nav by clicking another app or
+  pressing `Return` on a window (facet then drops back to the
+  background).
 - **Right-click the `Desktop N` header** — opens a menu with
   **Search** (`s`) and, under tag grouping, **Manage tags** (`t`);
   picking one enters that mode without `--active`. (macOS won't let
@@ -265,7 +267,7 @@ Two ways in:
 | `Space` | lift the selected row for drag-and-drop — a window row moves, a workspace header swaps; then arrows aim the target workspace, `Return`/`Space` commits, `Esc` cancels |
 | `m` | open the selected row's context menu (keyboard-navigable: `↑↓`/`Return`/`Esc`) |
 | `Return` | commit a lift, or (not lifting) switch + focus like a click |
-| `Esc` | cancel a lift → clear filter → leave keyboard mode (panel stays visible) |
+| `Esc` | back out one level — cancel a lift, else clear the filter, else exit search to nav; never leaves the tree (click away / `Return` on a window to leave nav) |
 
 Window titles are resolved via Accessibility (`kAXTitle`, matched
 by CGWindowID, short-TTL cached). Rows without a resolvable title

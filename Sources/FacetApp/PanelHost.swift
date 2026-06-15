@@ -363,8 +363,8 @@ final class PanelHost: NSObject {
     }
 
     /// Single source of truth for panel + subview frames. Called
-    /// from `show`, `enterSearch` / `exitSearch`, and the refresh
-    /// tick. (Live OS resize is handled by autoresizingMask + the
+    /// from `show`, `enterSearch` / `leaveSearchKeepingNav`, and the
+    /// refresh tick. (Live OS resize is handled by autoresizingMask + the
     /// `windowDidResize` callback, not by re-running layout per
     /// drag event.)
     func layout(contentHeight contentH: CGFloat, searching: Bool) {
