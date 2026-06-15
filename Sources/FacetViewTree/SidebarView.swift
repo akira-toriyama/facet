@@ -768,18 +768,22 @@ public final class SidebarView: NSView {
                     let modeY = capY + nameH + 4
                     var modeTextX = mx
                     let modeIconSpec = layoutModeIcon(c.mode)
-                    // `.medium` scale (not the menu's `.large`): the compact
-                    // header line is only 18pt tall, so a large glyph would
-                    // bleed into the kbNav outline / the line above.
+                    // Explicit ~14pt glyph (not the menu's `.large`): the
+                    // header line is only 18pt tall, so the icon is sized to
+                    // sit centred with ≥2pt clearance from the kbNav outline
+                    // and the line above (fixes the reported icon↔border
+                    // overlap). Height-clamped so a stray large render can't
+                    // bleed past the line.
                     if !modeIconSpec.isEmpty,
                        let icon = IconResolver.resolve(
-                        modeIconSpec, fontSize: fs, color: modeColor,
+                        modeIconSpec, pointSize: 13, color: modeColor,
                         scale: .medium) {
-                        let isz = icon.size
+                        let ih = min(icon.size.height, 14)
+                        let iw = icon.size.width * (ih / max(icon.size.height, 1))
                         icon.draw(in: NSRect(
-                            x: mx, y: modeY + (18 - isz.height) / 2,
-                            width: isz.width, height: isz.height))
-                        modeTextX = mx + isz.width + 5
+                            x: mx, y: modeY + (18 - ih) / 2,
+                            width: iw, height: ih))
+                        modeTextX = mx + iw + 5
                     }
                     (layoutBadgeLabel(c.mode) as NSString).draw(
                         in: NSRect(x: modeTextX, y: modeY,
@@ -1076,12 +1080,14 @@ public final class SidebarView: NSView {
             .size(withAttributes: [.font: font]).width))
         let padX: CGFloat = 8
         let pillH: CGFloat = 22
-        // `.medium` scale keeps the glyph inside the 22pt pill (the menu's
-        // `.large` would touch the pill stroke).
+        // Explicit ~15pt glyph, height-clamped so it sits inside the 22pt
+        // pill with clear margin from the stroke (the menu's `.large` would
+        // touch the border — the reported icon↔border overlap).
         let iconImg = icon.isEmpty ? nil
-            : IconResolver.resolve(icon, fontSize: windowFontSize,
+            : IconResolver.resolve(icon, pointSize: 14,
                                    color: textColor, scale: .medium)
-        let iconW = iconImg?.size.width ?? 0
+        let iconH = iconImg.map { min($0.size.height, 15) } ?? 0
+        let iconW = iconImg.map { $0.size.width * (iconH / max($0.size.height, 1)) } ?? 0
         let iconGap: CGFloat = iconImg == nil ? 0 : 4
         let pillW = textW + iconW + iconGap + padX * 2
         let pill = NSBezierPath(
@@ -1093,10 +1099,9 @@ public final class SidebarView: NSView {
         stroke.setStroke(); pill.stroke()
         var cx = lx + padX
         if let iconImg {
-            let isz = iconImg.size
             iconImg.draw(in: NSRect(
-                x: cx, y: labelY - 1 + (pillH - isz.height) / 2,
-                width: isz.width, height: isz.height))
+                x: cx, y: labelY - 1 + (pillH - iconH) / 2,
+                width: iconW, height: iconH))
             cx += iconW + iconGap
         }
         let textH = (text as NSString).size(withAttributes: attrs).height
