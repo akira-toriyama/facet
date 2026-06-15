@@ -211,6 +211,49 @@ extension WorkspaceCatalog {
         return retagVisibility(id, old: old, new: slot.tags)
     }
 
+    /// Outcome of a single-window `retag` (`facet window --retag OLD NEW`,
+    /// #228). A 4-way result rather than a `Bool` so the adapter can
+    /// surface a precise error — `RenameOutcome` is the sibling pattern
+    /// for the vocabulary `rename`.
+    enum RetagOutcome: Equatable, Sendable {
+        /// Retagged — carries the lens-visibility transition to apply.
+        case retagged(RetagVisibility)
+        /// `id` isn't tracked (no focused / managed window).
+        case noWindow
+        /// `old` isn't a defined tag — Strict-A reject (consistent with
+        /// `--untag`), so a typo never silently degrades to a bare add.
+        case oldUndefined
+        /// `new` would auto-vivify but the vocabulary is full (63 tags).
+        case vocabFull
+    }
+
+    /// Retag window `id`: replace tag `old` with `new` in a SINGLE atomic
+    /// mask write — `(tags & ~oldBit) | newBit | floor` (`facet window
+    /// --retag`, #228). One `windowMap[id] = slot` (not untag-then-tag,
+    /// which would flash park→restore and retile twice). Semantics:
+    ///   - `old` must be DEFINED — Strict-A (`.oldUndefined` otherwise),
+    ///     so `bit(for: old)` is read BEFORE `addTagName(new)` and a
+    ///     rejected retag never pollutes the vocabulary with `new`.
+    ///   - a window that lacks `old` (but `old` is defined) degrades to a
+    ///     bare add of `new` (the `& ~oldBit` is a no-op on its mask).
+    ///   - `new` auto-vivifies (`.vocabFull` at the 63-tag cap).
+    ///   - `old == new` is a success: ensures the bit is set (a no-op
+    ///     when already present), mirroring `rename`'s `old == new`.
+    /// The floor is always kept, so the window is never `0` / lost.
+    mutating func retagWindow(_ id: WindowID,
+                              old: String, new: String) -> RetagOutcome {
+        guard var slot = windowMap[id] else { return .noWindow }
+        // Guard order is load-bearing: the pure `bit(for: old)` read must
+        // precede the mutating `addTagName(new)`, so a Strict-A reject of
+        // an undefined `old` leaves the vocabulary untouched.
+        guard let oldBit = tagModel.bit(for: old) else { return .oldUndefined }
+        guard let newBit = addTagName(new) else { return .vocabFull }
+        let prev = slot.tags
+        slot.tags = (prev & ~oldBit) | newBit | TagModel.defaultBit
+        windowMap[id] = slot
+        return .retagged(retagVisibility(id, old: prev, new: slot.tags))
+    }
+
     // MARK: - Runtime tag vocabulary (#191, tag mode — `facet tag`)
 
     /// Remove tag `name` from the vocabulary AND strip its bit from

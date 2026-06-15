@@ -268,6 +268,96 @@ final class TagCatalogTests: XCTestCase {
         XCTAssertEqual(c.tagModel.count, 4)           // unchanged
     }
 
+    // MARK: - Single-window retag (#228, `facet window --retag OLD NEW`)
+
+    func testRetagReplacesOldWithNewAtomically() {
+        var c = tagCatalog(lens: 0b001)   // lens = work
+        tagged(&c, 10, 0b011)             // work + web
+        // retag web -> media: web cleared, media set, work + floor kept,
+        // in one write. Still has work → stays in the lens (.unchanged).
+        XCTAssertEqual(c.retagWindow(wid(10), old: "web", new: "media"),
+                       .retagged(.unchanged))
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b101 | TagModel.defaultBit)   // work + media + floor
+    }
+
+    func testRetagStrictAUndefinedOldRejectsWithoutVivifyingNew() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)             // work
+        // Strict-A: undefined OLD rejects. Guard order means NEW is NOT
+        // vivified (the pure bit(for:old) read precedes addTagName(new)),
+        // so a rejected retag never pollutes the vocabulary.
+        XCTAssertEqual(c.retagWindow(wid(10), old: "ghost", new: "fresh"),
+                       .oldUndefined)
+        XCTAssertNil(c.tagModel.bit(for: "fresh"))   // vocabulary untouched
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b001 | TagModel.defaultBit)   // mask untouched
+    }
+
+    func testRetagNewAutoVivifiesAndParksWhenLeavingLens() {
+        var c = tagCatalog(lens: 0b001)   // lens = work
+        tagged(&c, 10, 0b001)             // work only → shown
+        XCTAssertNil(c.tagModel.bit(for: "scratch"))
+        let out = c.retagWindow(wid(10), old: "work", new: "scratch")
+        XCTAssertEqual(c.tagModel.bit(for: "scratch"), 0b1000)  // vivified, bit 3
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b1000 | TagModel.defaultBit)  // work gone, scratch set
+        // Lost its only lens tag (work) → parks.
+        XCTAssertEqual(out, .retagged(.park))
+    }
+
+    func testRetagDegradesToAddWhenWindowLacksOld() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)             // work only (lacks web)
+        // Window lacks web but web is defined → the & ~webBit is a no-op,
+        // so this degrades to a bare add of media (work + floor kept). It
+        // keeps work (the lens tag) → still visible (.unchanged).
+        XCTAssertEqual(c.retagWindow(wid(10), old: "web", new: "media"),
+                       .retagged(.unchanged))
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b101 | TagModel.defaultBit)   // work + media + floor
+    }
+
+    func testRetagSameNameIsNoOpWhenPresent() {
+        var c = tagCatalog(lens: 0b001)
+        tagged(&c, 10, 0b001)             // work
+        // OLD == NEW, window already has it → genuine no-op success.
+        XCTAssertEqual(c.retagWindow(wid(10), old: "work", new: "work"),
+                       .retagged(.unchanged))
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b001 | TagModel.defaultBit)
+    }
+
+    func testRetagRestoresWindowEnteringLens() {
+        var c = tagCatalog(lens: 0b010)   // lens = web
+        tagged(&c, 10, 0b001)             // work only → hidden under web lens
+        // retag work -> web: window gains web → enters the lens → restore.
+        XCTAssertEqual(c.retagWindow(wid(10), old: "work", new: "web"),
+                       .retagged(.restore))
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b010 | TagModel.defaultBit)
+    }
+
+    func testRetagUntrackedWindowReturnsNoWindow() {
+        var c = tagCatalog(lens: 0b001)
+        XCTAssertEqual(c.retagWindow(wid(99), old: "work", new: "web"),
+                       .noWindow)
+    }
+
+    func testRetagVocabFullRejectsNewVivifyAndLeavesMaskUntouched() {
+        // A full vocabulary (63 user tags) can't vivify a 64th NEW name.
+        var c = WorkspaceCatalog()
+        c.seed(configs: [(index: 1, config: WorkspaceConfig(name: ""))])
+        let names = (0..<63).map { "t\($0)" }
+        c.seedTags(grouping: .tag, model: TagModel(names), lens: 0b1)
+        tagged(&c, 10, 0b1)               // has t0
+        XCTAssertEqual(c.retagWindow(wid(10), old: "t0", new: "t63"),
+                       .vocabFull)
+        XCTAssertNil(c.tagModel.bit(for: "t63"))     // not created
+        XCTAssertEqual(c.windowMap[wid(10)]?.tags,
+                       0b1 | TagModel.defaultBit)     // mask untouched
+    }
+
     // MARK: - Runtime tag vocabulary (#191 PR-3, `facet tag`)
 
     func testRemoveTagNameStripsBitFromEveryWindowKeepsFloor() {

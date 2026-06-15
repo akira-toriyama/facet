@@ -582,6 +582,7 @@ extension FacetApp {
         var tagArg: String?
         var untagArg: String?
         var toggleTagArg: String?
+        var retagArg: (String, String)?
         var toggleFloat = false
         var toggleSticky = false
         var toggleOrientation = false
@@ -617,6 +618,16 @@ extension FacetApp {
             case "--toggle-tag":
                 toggleTagArg = parseTagName(cursor.value(for: "window --toggle-tag"),
                                             flag: "window --toggle-tag")
+            case "--retag":
+                // Positional-2: OLD then NEW (#228, same shape as
+                // `tag --rename`). Each value is consumed unconditionally
+                // and validated; a flag-looking NEW fails the name policy
+                // → loud reject (never a silent mis-retag).
+                let old = validateTagName(
+                    cursor.value(for: "window --retag OLD"), flag: "window --retag OLD")
+                let new = validateTagName(
+                    cursor.value(for: "window --retag NEW"), flag: "window --retag NEW")
+                retagArg = (old, new)
             case "--toggle-float":
                 toggleFloat = true
             case "--toggle-sticky":
@@ -653,6 +664,7 @@ extension FacetApp {
             + (tagArg != nil ? 1 : 0)
             + (untagArg != nil ? 1 : 0)
             + (toggleTagArg != nil ? 1 : 0)
+            + (retagArg != nil ? 1 : 0)
             + (toggleFloat ? 1 : 0)
             + (toggleSticky ? 1 : 0)
             + (toggleOrientation ? 1 : 0)
@@ -680,8 +692,10 @@ extension FacetApp {
         }
         // Tag verbs are tag-mode only (like `lens`); reject loudly in
         // workspace mode (exit 2) before touching the server.
-        if tagArg != nil || untagArg != nil || toggleTagArg != nil {
-            requireGrouping(.tag, subject: "window --tag/--untag/--toggle-tag")
+        if tagArg != nil || untagArg != nil || toggleTagArg != nil
+            || retagArg != nil {
+            requireGrouping(.tag,
+                            subject: "window --tag/--untag/--toggle-tag/--retag")
         }
         requireServerAlive()
         if let n = moveToArg { follow ? postWindowMoveFollow(n)
@@ -692,6 +706,7 @@ extension FacetApp {
         if let n = tagArg { postControl("window-tag:" + n) }
         if let n = untagArg { postControl("window-untag:" + n) }
         if let n = toggleTagArg { postControl("window-toggle-tag:" + n) }
+        if let r = retagArg { postControl("window-retag:\(r.0):\(r.1)") }
         if toggleFloat { postWindowToggleFloat() }
         if toggleSticky { postWindowToggleSticky() }
         if toggleOrientation { postWindowToggleOrientation() }

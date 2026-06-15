@@ -398,11 +398,15 @@ API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
 OptionSet 的・多重所属）。可視性述語 = `window.tags ∩ [[lens]] ≠ ∅`（dwm `tags & viewmask` 直写し）。
 `config.toml` の `[[tag]]` は **起動時の語彙 seed のみ**（記載順がタグ順＝bit 順・行ごとのチップ表示順。
 tag モードの [[tree]] はタグで grouping せず **flat な窓リスト**で、各行に全タグを `#tag` チップ表示）。**割当は runtime**：
-新規窓は現 [[lens]] の primary タグ（lens 最下位 bit）を継ぐだけで、`facet window --tag/--untag/--toggle-tag` と
+新規窓は現 [[lens]] の primary タグ（lens 最下位 bit）を継ぐだけで、`facet window --tag/--untag/--toggle-tag/--retag` と
 `facet tag --add/--remove/--rename` で窓・語彙を動的編集（session-only）。GUI でも flat [[tree]] 行の右クリック /
 `m` メニューに「Tag…」（名前入力 auto-vivify）と「Untag #NAME」が出る（#191 PR-7）。**静的 `[[assign]]` は #191 で廃止**
 （runtime タグ付けが置換）。**M11-3 (#176) で実装・#191 で runtime 動的化**。
 memory `[[facet-tag-model-decisions]]`。
+- **3 つの「add a tag」を混同しない**（用語規則）：`facet tag --add` = **語彙**にタグを定義（窓は触らない）／
+  `facet window --tag` = **窓**にタグを付ける（未定義なら auto-vivify）／`facet lens --only/--toggle` = **表示集合**を変える
+  （窓も語彙も不変）。`facet window --retag OLD NEW`（#228）は **窓**の OLD を NEW に**原子的に置換**
+  （`(tags & ~oldBit) | newBit | floor` を 1 回書き込み・OLD は Strict-A で要定義・NEW は auto-vivify・`OLD==NEW` は no-op）。
 - **`_default`（システム予約）**: 全 tag モード窓が常に持つ floor bit（bit63）。`tags==0`（迷子）を無くすための
   内部マーカーで、`[[tag]]` 名にできず・チップ非表示・`lens --all` の user-tag union にも入らない（floor は別途 OR）。
 - **Don't call it:** label, category, workspace（tag は多重所属、workspace は 1 窓 1 個）, group, ラベル, カテゴリ

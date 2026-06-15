@@ -148,6 +148,37 @@ extension Controller {
                     }
                     self.scheduleReconcile(after: 0.05)
 
+                case let s where s.hasPrefix("window-retag:"):
+                    // Payload OLD:NEW — neither half can contain ':'
+                    // (parseTagName forbids it), so one split is
+                    // unambiguous (same wire form as tag-rename). The
+                    // 4-way result drives a precise error (#228).
+                    let body = String(s.dropFirst("window-retag:".count))
+                    let parts = body
+                        .split(separator: ":", maxSplits: 1,
+                               omittingEmptySubsequences: false)
+                        .map(String.init)
+                    let shown = body.replacingOccurrences(of: ":", with: " ")
+                    if parts.count != 2 {
+                        self.setError("window --retag \(shown): malformed")
+                    } else {
+                        switch self.backend.retagFocusedWindow(
+                            old: parts[0], new: parts[1]) {
+                        case .retagged:
+                            break
+                        case .noFocus:
+                            self.setError("window --retag \(shown): "
+                                + "no focused window / not tag mode")
+                        case .oldUndefined:
+                            self.setError("window --retag \(shown): "
+                                + "no such tag \(parts[0])")
+                        case .vocabFull:
+                            self.setError("window --retag \(shown): "
+                                + "vocabulary full (63 tags)")
+                        }
+                    }
+                    self.scheduleReconcile(after: 0.05)
+
                 case let s where s.hasPrefix("tag-add:"):
                     let name = String(s.dropFirst("tag-add:".count))
                     if !self.backend.addTag(name) {
