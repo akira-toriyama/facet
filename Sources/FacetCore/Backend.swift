@@ -78,13 +78,44 @@ public enum InsertEdge: Sendable, Equatable {
 }
 
 /// A lens command (M11-3 tag mode). The lens is the set of tags
-/// currently shown; these change it. `only` shows exactly one tag,
-/// `toggle` flips one tag in/out of the current union, `all` shows
-/// every tag. Tag-mode only — a no-op under `by = "workspace"`.
+/// currently shown; these change it. Each verb takes one OR MORE tag
+/// names (#228, comma-joined on the CLI): `only` shows exactly that set
+/// (replace), `add` unions them in, `remove` strips them out, `toggle`
+/// XORs each, `all` shows every tag. Names are resolved STRICTLY — one
+/// undefined name rejects the whole command (no silent drop). User verbs
+/// touch user bits only; emptying the lens falls back to the `_default`
+/// floor (show untagged). Tag-mode only — a no-op under `by =
+/// "workspace"`.
 public enum LensSpec: Sendable, Equatable {
-    case only(String)
-    case toggle(String)
+    case only([String])
+    case add([String])
+    case remove([String])
+    case toggle([String])
     case all
+
+    /// Parse a `lens:` DNC payload (#228) into a spec. The payload is
+    /// `all` or `VERB:CSV` where VERB ∈ only/add/remove/toggle and CSV is
+    /// a comma-joined tag list. Tag names can't contain `,` or `:` (the
+    /// CLI's `parseTagList` forbids them), so both splits are
+    /// unambiguous. Returns `nil` for a malformed payload (unknown verb,
+    /// empty CSV) — the dispatcher ignores it. Pure, so the wire-format
+    /// round-trip is unit-testable without the server.
+    public static func parse(_ payload: String) -> LensSpec? {
+        if payload == "all" { return .all }
+        let parts = payload
+            .split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+            .map(String.init)
+        guard parts.count == 2 else { return nil }
+        let names = parts[1].split(separator: ",").map(String.init)
+        guard !names.isEmpty else { return nil }
+        switch parts[0] {
+        case "only":   return .only(names)
+        case "add":    return .add(names)
+        case "remove": return .remove(names)
+        case "toggle": return .toggle(names)
+        default:       return nil
+        }
+    }
 }
 
 /// Outcome of `facet window --retag OLD NEW` (#228, tag mode). A 4-way

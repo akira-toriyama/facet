@@ -85,8 +85,10 @@ extension FacetApp {
     }
 
     /// Post ``lens:TARGET`` (M11-3 tag mode) where TARGET is
-    /// `only:NAME` / `toggle:NAME` / `all`. The server resolves the tag
-    /// name and surfaces an unknown-tag error.
+    /// `only:CSV` / `add:CSV` / `remove:CSV` / `toggle:CSV` / `all`, with
+    /// CSV a comma-joined tag list (#228). The server resolves the names
+    /// STRICTLY — any unknown name leaves the lens unchanged and surfaces
+    /// a "no such tag" error.
     static func postLens(_ target: String) -> Never {
         postControl("lens:" + target)
     }
@@ -468,32 +470,48 @@ extension FacetApp {
         die("facet workspace: dispatch fell through (bug)")
     }
 
-    /// Sub-command parser for ``facet lens <flag>`` (M11-3 tag mode).
-    /// Subject-verb mirror of ``facet workspace``: one action per
-    /// invocation, loud reject on zero / multiple / unknown. Verbs:
-    ///   --only NAME    show exactly tag NAME
-    ///   --toggle NAME  flip tag NAME in/out of the current lens union
-    ///   --all          show every tag
+    /// Sub-command parser for ``facet lens <flag>`` (M11-3 tag mode;
+    /// #228 multi-tag). Subject-verb mirror of ``facet workspace``: one
+    /// action per invocation, loud reject on zero / multiple / unknown.
+    /// Each value-bearing verb takes one OR MORE comma-joined tag names
+    /// (`A[,B,…]`). Verbs:
+    ///   --only A[,B,…]    show exactly these tags (replace the set)
+    ///   --add A[,B,…]     union these into the shown set
+    ///   --remove A[,B,…]  drop these from the shown set
+    ///   --toggle A[,B,…]  flip each tag in / out of the shown set
+    ///   --all             show every tag
+    /// Names are validated for SHAPE here (`parseTagList`); the server
+    /// resolves them strictly (one unknown name → unchanged + error).
     /// Tag-mode only — under `by = "workspace"` the server no-ops.
     static func runLensCommand(_ args: [String]) -> Never {
         var onlyArg: String?
+        var addArg: String?
+        var removeArg: String?
         var toggleArg: String?
         var allFlag = false
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
             case "--only":
-                onlyArg = cursor.value(for: "lens --only")
+                onlyArg = parseTagList(cursor.value(for: "lens --only"),
+                                       flag: "lens --only")
+            case "--add":
+                addArg = parseTagList(cursor.value(for: "lens --add"),
+                                      flag: "lens --add")
+            case "--remove":
+                removeArg = parseTagList(cursor.value(for: "lens --remove"),
+                                         flag: "lens --remove")
             case "--toggle":
-                toggleArg = cursor.value(for: "lens --toggle")
+                toggleArg = parseTagList(cursor.value(for: "lens --toggle"),
+                                         flag: "lens --toggle")
             case "--all":
                 allFlag = true
             default:
                 die("unknown `lens` flag \"\(a)\" — see `facet --help`")
             }
         }
-        let count = [onlyArg != nil, toggleArg != nil, allFlag]
-            .filter { $0 }.count
+        let count = [onlyArg != nil, addArg != nil, removeArg != nil,
+                     toggleArg != nil, allFlag].filter { $0 }.count
         guard count > 0 else {
             die("facet lens: no action specified — see `facet --help`")
         }
@@ -501,17 +519,11 @@ extension FacetApp {
             die("facet lens: pick one action per invocation — "
                 + "see `facet --help`")
         }
-        // Reject an empty NAME (a shell var that expanded to nothing)
-        // loudly rather than posting a no-such-tag the server ignores.
-        if let n = onlyArg, n.isEmpty {
-            die("facet lens --only: expected a non-empty tag name")
-        }
-        if let n = toggleArg, n.isEmpty {
-            die("facet lens --toggle: expected a non-empty tag name")
-        }
         requireGrouping(.tag, subject: "lens")
         requireServerAlive()
         if let n = onlyArg   { postLens("only:" + n) }
+        if let n = addArg    { postLens("add:" + n) }
+        if let n = removeArg { postLens("remove:" + n) }
         if let n = toggleArg { postLens("toggle:" + n) }
         if allFlag           { postLens("all") }
         die("facet lens: dispatch fell through (bug)")
@@ -810,6 +822,27 @@ extension FacetApp {
                 + "contain spaces or '=' ',' ':'")
         }
         return name
+    }
+
+    /// Parse a comma-joined tag list for the `lens` verbs (#228:
+    /// `--only/--add/--remove/--toggle web,code`). Splits on ',',
+    /// validates each piece with `validateTagName` (an empty element, a
+    /// leading '-', or a stray space / `=` / `:` loud-exits), and returns
+    /// the canonical comma-joined form for the DNC payload. A single name
+    /// is the degenerate arity-1 case (no comma needed); the empty string
+    /// is rejected. Comma-join (not space-variadic) keeps the parser's
+    /// per-flag arity at 1 and `,`/`:` out of names makes the wire form
+    /// unambiguous (#227 grammar).
+    static func parseTagList(_ value: String, flag: String) -> String {
+        let pieces = value
+            .split(separator: ",", omittingEmptySubsequences: false)
+            .map(String.init)
+        guard !pieces.contains(where: { $0.isEmpty }) else {
+            die("\(flag): empty tag name in \"\(value)\" — comma-separate "
+                + "non-empty names (e.g. web,code)")
+        }
+        return pieces.map { validateTagName($0, flag: flag) }
+            .joined(separator: ",")
     }
 
     /// Validate a workspace name (the value of `workspace --rename` or the

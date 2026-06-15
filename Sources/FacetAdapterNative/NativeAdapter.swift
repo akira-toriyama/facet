@@ -489,17 +489,24 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         cancelSlideForRetarget()
         let resolved: UInt64?
         switch spec {
-        case .only(let name):   resolved = catalog.lensOnly(name)
-        case .toggle(let name): resolved = catalog.lensToggled(name)
-        case .all:              resolved = catalog.lensAll
+        case .only(let names):   resolved = catalog.lensOnly(names)
+        case .add(let names):    resolved = catalog.lensAdded(names)
+        case .remove(let names): resolved = catalog.lensRemoved(names)
+        case .toggle(let names): resolved = catalog.lensToggled(names)
+        case .all:               resolved = catalog.lensAll
         }
         guard let mask = resolved else {
-            let name: String
+            // Strict resolution failed: at least one name is undefined.
+            // Surface the whole requested set so the user sees what they
+            // asked for (the lens is unchanged — no silent drop).
+            let names: [String]
             switch spec {
-            case .only(let n), .toggle(let n): name = n
-            case .all:                         name = ""
+            case .only(let n), .add(let n),
+                 .remove(let n), .toggle(let n): names = n
+            case .all:                           names = []
             }
-            errorContinuation.yield("lens \"\(name)\": no such tag")
+            errorContinuation.yield(
+                "lens \(names.joined(separator: ",")): no such tag")
             return
         }
         guard let plan = catalog.setLens(mask) else { return }   // unchanged

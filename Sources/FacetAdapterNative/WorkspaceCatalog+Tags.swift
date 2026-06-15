@@ -131,13 +131,38 @@ extension WorkspaceCatalog {
                           layoutMode: defaultMode, windows: wins)]
     }
 
-    // Lens-command resolvers (pure: name → new mask). `nil` = unknown
-    // tag name (caller surfaces lastError, makes no change).
-    func lensOnly(_ name: String) -> UInt64? { tagModel.bit(for: name) }
-    func lensToggled(_ name: String) -> UInt64? {
-        guard let b = tagModel.bit(for: name) else { return nil }
-        return lens ^ b
+    // Lens-command resolvers (pure: names → new mask, #228 multi-tag).
+    // `nil` = at least one undefined name — STRICT, the whole command
+    // rejects (caller surfaces lastError, makes no change; no silent
+    // drop). User verbs operate on USER bits only: the `_default` floor
+    // is stripped here and re-introduced by `setLens` as the empty-lens
+    // sentinel, so it never leaks into a user-chosen lens (`--add code`
+    // from the floor-only lens = exactly `{code}`).
+    func lensOnly(_ names: [String]) -> UInt64? { lensMaskStrict(names) }
+    func lensAdded(_ names: [String]) -> UInt64? {
+        lensMaskStrict(names).map { (lens | $0) & ~TagModel.defaultBit }
     }
+    func lensRemoved(_ names: [String]) -> UInt64? {
+        lensMaskStrict(names).map { (lens & ~$0) & ~TagModel.defaultBit }
+    }
+    func lensToggled(_ names: [String]) -> UInt64? {
+        lensMaskStrict(names).map { (lens ^ $0) & ~TagModel.defaultBit }
+    }
+
+    /// Strict union of the bits for `names` (user tags only) — `nil` when
+    /// ANY name is undefined, so a lens command with one typo changes
+    /// nothing rather than silently dropping the bad name. `bit(for:)`
+    /// never returns the floor (it isn't in the vocabulary), so the
+    /// result carries user bits only.
+    private func lensMaskStrict(_ names: [String]) -> UInt64? {
+        var mask: UInt64 = 0
+        for n in names {
+            guard let b = tagModel.bit(for: n) else { return nil }
+            mask |= b
+        }
+        return mask
+    }
+
     /// `lens --all` — every user tag PLUS the `_default` floor, so the
     /// "show everything" lens also reveals windows that carry only the
     /// floor (no user tag). User-only `allMask` would park those (#191).
@@ -341,25 +366,33 @@ extension WorkspaceCatalog {
     /// are excluded from both lists, exactly like `setActive`.
     @discardableResult
     mutating func setLens(_ newLens: UInt64) -> LensPlan? {
-        guard grouping == .tag, newLens != lens else { return nil }
+        guard grouping == .tag else { return nil }
+        // Floor guard (#228): an empty lens would park EVERY window
+        // (nothing intersects a 0 mask). Fall back to the `_default`
+        // floor — every window carries it — so emptying the lens (a
+        // `--toggle` / `--remove` that clears the last user tag) shows the
+        // untagged baseline instead of a blank desktop. Without this a
+        // user verb that lands on 0 silently hides everything.
+        let target = newLens == 0 ? TagModel.defaultBit : newLens
+        guard target != lens else { return nil }
         let old = lens
-        lens = newLens
+        lens = target
         func shows(_ mask: UInt64, _ tags: UInt64) -> Bool {
             (tags & mask) != 0
         }
         let toPark = windowMap
             .filter { shows(old, $0.value.tags)
-                && !shows(newLens, $0.value.tags)
+                && !shows(target, $0.value.tags)
                 && !everywhereWindows.contains($0.key)
                 && !stashedWindows.contains($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         let toRestore = windowMap
-            .filter { shows(newLens, $0.value.tags)
+            .filter { shows(target, $0.value.tags)
                 && !shows(old, $0.value.tags)
                 && !everywhereWindows.contains($0.key)
                 && !stashedWindows.contains($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
-        return LensPlan(oldLens: old, newLens: newLens,
+        return LensPlan(oldLens: old, newLens: target,
                         toPark: toPark, toRestore: toRestore)
     }
 
