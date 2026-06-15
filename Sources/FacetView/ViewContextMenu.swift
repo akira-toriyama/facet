@@ -32,6 +32,32 @@ public enum ViewContextMenu {
         }
     }
 
+    /// Panel-level menu for the pinned "Desktop N" band — the third
+    /// right-click surface (scope hierarchy: panel ▸ workspace ▸ window).
+    /// Exposes the tree-wide keyboard modes that are otherwise reachable
+    /// only by entering `--active`: Search (the `s` key) always, and Manage
+    /// tags (the `t` key) only under tag grouping. Picking an item runs its
+    /// callback, which self-activates facet — no window is focused, so the
+    /// #66 same-app-focus invariant and the never-steal-focus contract both
+    /// hold (contrast a window-row click, which must NOT grab key).
+    public static func showDesktop(
+        at scr: NSPoint,
+        palette: ResolvedPalette,
+        tagManage: Bool,
+        onSearch: @escaping () -> Void,
+        onTagManage: @escaping () -> Void
+    ) {
+        var items = ["Search"]
+        if tagManage { items.append("Manage tags") }
+        PopupMenu.shared.show(at: scr,
+                              header: "Desktop",
+                              items: items,
+                              checkedIndex: nil,
+                              palette: palette) { i in
+            if i == 0 { onSearch() } else { onTagManage() }
+        }
+    }
+
     /// Window-ops menu for a window (close / float / master / stack /
     /// sticky, gated by the window's state). `runOps` runs the chosen
     /// non-close ops against the window — the caller threads it to the
