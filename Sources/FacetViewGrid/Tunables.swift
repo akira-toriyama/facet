@@ -29,7 +29,7 @@ let gridHeaderModeMinFont: CGFloat = 9
 let gridHeaderModeMaxFont: CGFloat = 16
 let gridGhostLabelSize: CGFloat = 30    // centred label on an empty-WS swap ghost
 
-// Public so FacetApp's Controller can configure the GridOverlay
+// Public so FacetApp's Controller can configure the OverviewPanel
 // fade timing without redefining the numbers.
 public let gridBackdropAlpha: CGFloat = 1.0    // overlay opacity (solid black)
 public let gridFadeIn: TimeInterval = 0.12     // overlay fade-in

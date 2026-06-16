@@ -1150,12 +1150,9 @@ public final class GridView: NSView {
               let sel = kbSelectedWS,
               let cell = cells.first(where: { $0.wsIndex == sel })
         else { return }
-        let n = cell.windows.count
-        let slots = n + 1                       // header + windows
-        let cur = max(-1, min(n - 1, kbSelectedWindowIdx)) + 1
-        let next = forward ? (cur + 1) % slots
-                           : (cur - 1 + slots) % slots
-        kbSelectedWindowIdx = next - 1          // back to -1…n-1
+        kbSelectedWindowIdx = cycleSlotIndex(
+            current: kbSelectedWindowIdx,
+            windowCount: cell.windows.count, forward: forward)
         needsDisplay = true
     }
 

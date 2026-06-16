@@ -47,7 +47,7 @@ extension Controller {
         // Full-screen takeover: a near-black backdrop hides the desktop,
         // the active workspace shows large in the centre, every
         // workspace lines the bottom as a small mini-screen.
-        let overlay = RailOverlay(
+        let overlay = OverviewPanel(
             contentRect: scr.frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)
