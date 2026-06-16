@@ -299,8 +299,9 @@ not relitigate** without explicit grill round.
 - **Architecture**: `Sources/FacetAccessibility/DisplayChangeObserver.swift`
   mirrors `WindowEventObserver` (same `init(onChange:)` /
   `start()` / `stop()` shape). Pure geometry helpers in
-  `Sources/FacetAccessibility/DisplayGeometry.swift`
-  (`orphanedPoints`, `nearestDisplay`, `isVisible`).
+  `Sources/FacetCore/DisplayGeometry.swift`
+  (`orphanedPoints`, `nearestDisplay`, `isVisible`) — pure CGRect
+  maths, so they live in FacetCore, not the AX module.
   Controller and NativeAdapter each own their own observer
   instance — backend doesn't notify the controller, each
   handles its own concern (separation maintained).

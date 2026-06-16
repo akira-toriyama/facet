@@ -3,14 +3,16 @@
 // without NSScreen / AX / AppKit — they take rectangles in,
 // answer geometric questions, return rectangles or points out.
 //
-// Why a separate module from `Displays` (the NSScreen wrapper):
+// Why this lives in FacetCore, separate from `Displays`:
 //
-//   `Displays.containing` / `visibleFrame` go to AppKit /
-//   CoreGraphics to ask "what does the OS think the displays
-//   look like right now?" — those are inherently side-effectful
-//   and not test-isolated. `DisplayGeometry` operates purely on
-//   the `[CGRect]` answer that `Displays` returns. The split
-//   keeps the testable half testable.
+//   `Displays` (the NSScreen wrapper in FacetAccessibility) goes
+//   to AppKit / CoreGraphics to ask "what does the OS think the
+//   displays look like right now?" — inherently side-effectful and
+//   not test-isolated, so it stays in the AX / OS module.
+//   `DisplayGeometry` is pure CGRect maths over the `[CGRect]`
+//   answer `Displays` returns — no AppKit, no AX — so it belongs in
+//   FacetCore (CoreGraphics is allowed there). The split keeps the
+//   testable half testable.
 //
 // Phase δ frozen decisions (memory: facet-phase-delta-decisions):
 //
