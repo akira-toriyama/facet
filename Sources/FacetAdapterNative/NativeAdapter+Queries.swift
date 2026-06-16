@@ -60,31 +60,7 @@ extension NativeAdapter {
             workspaceList = []
             return
         }
-        // Seed the per-WS default layout mode from config (`[layout]
-        // default`). Layout mode is otherwise session-only, so without
-        // this every restart / per-mac-desktop catalog resets to the
-        // hardcoded "float" and the user's windows stop tiling until
-        // they re-issue `facet workspace --layout …`. Set every refresh
-        // (cheap, value-type field) so a config hot-reload takes too.
-        catalog.defaultMode = config.effectiveDefaultLayout
-        // Seed the live workspace set from config the first time this
-        // (per-mac-desktop) catalog is used. Idempotent — once seeded, the
-        // catalog's set is authoritative and runtime add/remove/rename/
-        // move own it (config stays the read-only seed).
-        catalog.seed(configs: config.effectiveWorkspaceList(
-            forMacDesktopOrdinal: activeMacDesktopOrdinal))
-        // Tag mode (M11-3): seed the tag vocabulary + initial lens once.
-        // The initial lens is the `_default` floor (show-all, nothing
-        // pre-selected) — there is no static window→tag assignment
-        // (`[[assign]]` retired in #191; runtime `facet window --tag` /
-        // `facet tag` own tagging). `seedTags` is idempotent — it only
-        // takes on the first call, so a later refresh won't reset the
-        // user's lens.
-        if config.effectiveGrouping == .tag {
-            catalog.seedTags(grouping: .tag,
-                             model: config.effectiveTagModel,
-                             lens: TagModel.defaultBit)
-        }
+        seedCatalogFromConfig()
         let live = enumerateCGWindows()
         // raise-on-open bookkeeping: flag genuinely-new windows by their
         // FIRST appearance in this `.optionAll` enumeration (see
@@ -142,57 +118,9 @@ extension NativeAdapter {
                 + (macDesktopSwapped ? " (desktop-swap)" : ""))
         }
         if result.removed > 0 { recentCloseAt = Date() }
-        // Heal (mac-desktop drift): a window can leak into this
-        // catalog's WS when it was swept in during a native macOS
-        // mac-desktop switch (the destination mac desktop's windows flip
-        // `isOnscreen=true` before `swapCatalogIfMacDesktopChanged` sees
-        // the new active-mac-desktop id, so the two-tick gate adds them to
-        // the wrong catalog). Prevention is racy and トミー accepts the
-        // leak; instead we recompute hard here. Read each managed
-        // window's TRUE mac desktop (read-only SkyLight) and evict any
-        // that isn't on the active mac desktop — it'll be re-adopted by its
-        // real mac desktop's catalog on visit. Only runs when SkyLight is
-        // live (`activeMacDesktopID != 0`); an empty query result leaves the
-        // window untouched, so a transient SkyLight miss can't evict a
-        // real window. Must run BEFORE applyLayout / snapshot so both
-        // the tiling and the tree reflect the cleaned membership.
-        if activeMacDesktopID != 0 {
-            // Cache each window's mac-desktop query for this reconcile (the
-            // sanity gate + the eviction filter would otherwise double-
-            // query the on-screen windows).
-            var macDesktopCache: [WindowID: [UInt64]] = [:]
-            func windowMacDesktops(_ id: WindowID) -> [UInt64] {
-                if let c = macDesktopCache[id] { return c }
-                let s = MacDesktops.ids(forWindow: id.serverID)
-                macDesktopCache[id] = s
-                return s
-            }
-            // Sanity gate: an on-screen managed window is, by
-            // definition, on the active mac desktop right now — so if the
-            // SLS query is sound, at least one must report it. If NONE
-            // do, the query is untrustworthy (selector / id-format
-            // drift across an OS update) and evicting on its word could
-            // wrongly remove every real window. Bail in that case —
-            // a no-op heal is harmless; a false mass-eviction is not.
-            let trustworthy = live.contains { w in
-                w.isOnscreen && catalog.windowMap[w.id] != nil
-                    && windowMacDesktops(w.id).contains(activeMacDesktopID)
-            }
-            if trustworthy {
-                let foreign = catalog.windowMap.keys.filter { id in
-                    let s = windowMacDesktops(id)
-                    return !s.isEmpty && !s.contains(activeMacDesktopID)
-                }
-                for id in foreign { catalog.drop(id) }
-                if !foreign.isEmpty {
-                    Log.debug("native: heal evicted \(foreign.count) "
-                        + "off-desktop window(s) from desktop=\(activeMacDesktopID)")
-                }
-            } else if !catalog.windowMap.isEmpty {
-                Log.debug("native: heal skipped "
-                    + "(SLS desktop query untrustworthy, desktop=\(activeMacDesktopID))")
-            }
-        }
+        // Heal mac-desktop drift BEFORE the reflow / snapshot below so
+        // both the tiling and the tree reflect the cleaned membership.
+        healOffDesktopDrift(live: live)
         // Hide-reclaim: a managed window the user Cmd+H'd / minimized
         // reads `isOnscreen=false` (facet's own anchor-sliver park stays
         // on-screen), so reclaim its tile slot — detach from the layout,
@@ -209,60 +137,16 @@ extension NativeAdapter {
                 + "hidden=\(hideResult.hidden.count) "
                 + "revealed=\(hideResult.revealed.count)")
         }
-        // D (event-driven re-tile): re-tile the active WS on every
-        // refresh, not only when windows were added/removed. Cheap
-        // when nothing drifted (applyFrames' frame-match skip reads
-        // only, no AX write) and self-heals geometry after a native
-        // WS switch / resize / external nudge that the old lazy
-        // retile (add/remove only) missed. float WS is a no-op (no
-        // engine). Supersedes the Phase γ lazy-retile invariant.
-        //
-        // Task 4 PR2 — open / close reflow animation: when a real
-        // add or remove happened on the current mac desktop (NOT a
-        // catalog-swap shockwave from a mac-desktop switch) and the user
-        // opted in, route through `animateRetile` so the existing
-        // tiled windows glide to their new sizes. Newly-added
-        // windows skip animation — they snap to their tile slot to
-        // avoid the "glide from the app's wild initial position"
-        // jank (Q4.3 = b). In-flight slides retarget via the
-        // existing `cancelSlideForRetarget`. Fall through to the
-        // instant `applyLayout` whenever animation isn't applicable
-        // (master off, sub-key off, reduce-motion, no diff, or the
-        // pass coincided with a mac-desktop swap).
-        let shouldAnimateOpenClose = config.effectiveAnimationEventDriven
-            && !macDesktopSwapped
-            && (!result.addedIDs.isEmpty || !result.removedIDs.isEmpty
-                || !hideResult.hidden.isEmpty || !hideResult.revealed.isEmpty)
-        if shouldAnimateOpenClose {
-            // A revealed window snaps into its tile like a newly-opened
-            // one (no glide from its off-screen resting frame); the
-            // windows reflowing to fill a hidden window's freed slot
-            // glide normally.
-            let snapNew = Set(result.addedIDs).union(hideResult.revealed)
-            if !animateRetile(workspace: catalog.activeIndex, rect: rect,
-                              skipAnimation: snapNew) {
-                applyLayout(workspace: catalog.activeIndex, rect: rect)
-            }
-        } else {
-            applyLayout(workspace: catalog.activeIndex, rect: rect)
-        }
-        // Tag mode (M11-3): applyLayout above tiled the visible lens
-        // union; park the managed windows whose tags DON'T intersect
-        // the lens so they don't float over it. `parkAnchor` is guarded
-        // (`shouldParkAnchor`) so re-running every refresh is a no-op
-        // for already-parked windows. Sticky / stashed / hidden / float
-        // windows are exempt. The restore half (un-park on lens entry)
-        // rides the lens-switch plan in PR2b step2.
-        if catalog.grouping == .tag {
-            for (id, slot) in catalog.windowMap
-            where (slot.tags & catalog.lens) == 0
-                && !catalog.floatingWindows.contains(id)
-                && !catalog.hiddenMembers.contains(id)
-                && !catalog.stashedWindows.contains(id)
-                && catalog.shouldParkAnchor(id) {
-                parkAnchor(WindowRef(id: id, pid: slot.pid))
-            }
-        }
+        // Event-driven re-tile of the active WS (with open/close reflow
+        // animation when applicable). See `retileAfterReconcile`.
+        retileAfterReconcile(addedIDs: result.addedIDs,
+                             removedIDs: result.removedIDs,
+                             hidden: hideResult.hidden,
+                             revealed: hideResult.revealed,
+                             macDesktopSwapped: macDesktopSwapped, rect: rect)
+        // Tag mode (M11-3): park the managed windows whose tags don't
+        // intersect the active lens so they don't float over it.
+        parkOutOfLensWindows()
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
         // z-ordered window of the same app, which often sits in a
@@ -290,53 +174,206 @@ extension NativeAdapter {
             catalog.markPreExisting(
                 live.lazy.filter { !$0.isOnscreen }.map(\.id))
         }
-        // raise-on-open: surface a genuinely freshly-opened floating
-        // window once. Gate = `freshlyOpenedIDs` (first appeared in the
-        // enumeration this session) ∩ this cycle's float commits
-        // (`addedIDs ∩ autoFloat`). NOT `addedIDs` alone: a PRE-EXISTING
-        // float merely adopted on a first mac-desktop visit or at startup
-        // also joins `addedIDs`, but was enumerated long before (so it's
-        // not in `freshlyOpenedIDs`) and is left untouched — no raise on a
-        // bare desktop switch. Unlike the `kAXWindowCreated` hint, this
-        // catches a freshly-LAUNCHED app's first float (no observer race,
-        // no TTL). A window commits once, and is dropped from the pending
-        // set on commit, so this fires exactly once per real open —
-        // immediately for a trusted (kAXWindowCreated) / already-adopting
-        // window, or +1 poll (~2 s) for a non-trusted new window the
-        // two-tick confirm gate holds (it surfaces then, not on the very
-        // first sight). Runs LAST in the pass — after `redirectedFocus` —
-        // so a same-cycle
-        // close→focus-redirect can't re-bury the new float. `probedAX`
-        // holds its AX element from this cycle's classify probe (no extra
-        // round-trip); `liveByID` is the map built above.
-        if raiseMode != .off {
-            var activated: Set<Int> = []
-            for id in result.addedIDs
-            where autoFloat.contains(id) && freshlyOpenedIDs.contains(id) {
-                guard let ax = probedAX[id] else { continue }
-                let w = liveByID[id]
-                switch raiseMode {
-                case .raise:
-                    AX.raise(ax)
-                    Log.debug("native: raise-on-open(raise) "
-                        + "wsid=\(id.serverID) app=\(w?.appName ?? "-")")
-                case .activate:
-                    if let pid = w?.pid, activated.insert(pid).inserted {
-                        AX.activateApp(pid: pid)
-                        Log.debug("native: raise-on-open(activate) "
-                            + "pid=\(pid) app=\(w?.appName ?? "-")")
-                    }
-                case .off:
-                    break
-                }
-            }
-            // Drop ids we're done with so the pending set stays small:
-            // committed windows (raised if float, else just tracked) and
-            // `ignore` verdicts (raised-level overlays / config ignore —
-            // they never commit, so they'd otherwise linger until close).
-            freshlyOpenedIDs.subtract(result.addedIDs)
-            freshlyOpenedIDs.subtract(ignore)
+        // raise-on-open: surface a genuinely freshly-opened float once.
+        // Runs LAST in the pass — after `redirectedFocus` — so a same-cycle
+        // close→focus-redirect can't re-bury the new float.
+        surfaceFreshlyOpenedFloats(addedIDs: result.addedIDs,
+                                   autoFloat: autoFloat, probedAX: probedAX,
+                                   liveByID: liveByID, ignore: ignore,
+                                   raiseMode: raiseMode)
+    }
+
+    // MARK: - refreshCatalog stages
+    //
+    // Cohesive stages hoisted out of `refreshCatalog` (P8-4). Each is
+    // called only from there, so — like every catalog touch — it runs on
+    // `cliQueue`; the `dispatchPrecondition` guard stays on the public
+    // entry path (`refreshCatalog`), NOT duplicated onto these internal
+    // helpers. Behaviour is unchanged from the inlined blocks.
+
+    /// Seed the per-WS default layout mode + the workspace set + (tag
+    /// mode) the tag vocabulary / initial lens from config. Called every
+    /// refresh: `defaultMode` is a cheap value-type set so a config
+    /// hot-reload takes; `seed` / `seedTags` are idempotent (first-call
+    /// only), so the catalog's runtime set / lens stay authoritative.
+    private func seedCatalogFromConfig() {
+        // Seed the per-WS default layout mode from config (`[layout]
+        // default`). Layout mode is otherwise session-only, so without
+        // this every restart / per-mac-desktop catalog resets to the
+        // hardcoded "float" and the user's windows stop tiling until
+        // they re-issue `facet workspace --layout …`. Set every refresh
+        // (cheap, value-type field) so a config hot-reload takes too.
+        catalog.defaultMode = config.effectiveDefaultLayout
+        // Seed the live workspace set from config the first time this
+        // (per-mac-desktop) catalog is used. Idempotent — once seeded, the
+        // catalog's set is authoritative and runtime add/remove/rename/
+        // move own it (config stays the read-only seed).
+        catalog.seed(configs: config.effectiveWorkspaceList(
+            forMacDesktopOrdinal: activeMacDesktopOrdinal))
+        // Tag mode (M11-3): seed the tag vocabulary + initial lens once.
+        // The initial lens is the `_default` floor (show-all, nothing
+        // pre-selected) — there is no static window→tag assignment
+        // (`[[assign]]` retired in #191; runtime `facet window --tag` /
+        // `facet tag` own tagging). `seedTags` is idempotent — it only
+        // takes on the first call, so a later refresh won't reset the
+        // user's lens.
+        if config.effectiveGrouping == .tag {
+            catalog.seedTags(grouping: .tag,
+                             model: config.effectiveTagModel,
+                             lens: TagModel.defaultBit)
         }
+    }
+
+    /// Heal (mac-desktop drift): a window can leak into this catalog's WS
+    /// when it was swept in during a native macOS mac-desktop switch (the
+    /// destination mac desktop's windows flip `isOnscreen=true` before
+    /// `swapCatalogIfMacDesktopChanged` sees the new active-mac-desktop id,
+    /// so the two-tick gate adds them to the wrong catalog). Prevention is
+    /// racy and トミー accepts the leak; instead we recompute hard here.
+    /// Read each managed window's TRUE mac desktop (read-only SkyLight) and
+    /// evict any that isn't on the active mac desktop — it'll be re-adopted
+    /// by its real mac desktop's catalog on visit. Only runs when SkyLight
+    /// is live (`activeMacDesktopID != 0`); an empty query result leaves the
+    /// window untouched, so a transient SkyLight miss can't evict a real
+    /// window. Must run BEFORE applyLayout / snapshot so both the tiling and
+    /// the tree reflect the cleaned membership.
+    private func healOffDesktopDrift(live: [Window]) {
+        guard activeMacDesktopID != 0 else { return }
+        // Cache each window's mac-desktop query for this reconcile (the
+        // sanity gate + the eviction filter would otherwise double-
+        // query the on-screen windows).
+        var macDesktopCache: [WindowID: [UInt64]] = [:]
+        func windowMacDesktops(_ id: WindowID) -> [UInt64] {
+            if let c = macDesktopCache[id] { return c }
+            let s = MacDesktops.ids(forWindow: id.serverID)
+            macDesktopCache[id] = s
+            return s
+        }
+        // Sanity gate: an on-screen managed window is, by definition, on
+        // the active mac desktop right now — so if the SLS query is sound,
+        // at least one must report it. If NONE do, the query is
+        // untrustworthy (selector / id-format drift across an OS update)
+        // and evicting on its word could wrongly remove every real window.
+        // Bail in that case — a no-op heal is harmless; a false
+        // mass-eviction is not.
+        let trustworthy = live.contains { w in
+            w.isOnscreen && catalog.windowMap[w.id] != nil
+                && windowMacDesktops(w.id).contains(activeMacDesktopID)
+        }
+        if trustworthy {
+            let foreign = catalog.windowMap.keys.filter { id in
+                let s = windowMacDesktops(id)
+                return !s.isEmpty && !s.contains(activeMacDesktopID)
+            }
+            for id in foreign { catalog.drop(id) }
+            if !foreign.isEmpty {
+                Log.debug("native: heal evicted \(foreign.count) "
+                    + "off-desktop window(s) from desktop=\(activeMacDesktopID)")
+            }
+        } else if !catalog.windowMap.isEmpty {
+            Log.debug("native: heal skipped "
+                + "(SLS desktop query untrustworthy, desktop=\(activeMacDesktopID))")
+        }
+    }
+
+    /// Re-tile the active WS after reconcile. Event-driven (D): re-tile on
+    /// every refresh, not only on add/remove — cheap when nothing drifted
+    /// (`applyFrames`' frame-match skip reads only), self-heals geometry
+    /// after a native WS switch / resize / external nudge the old lazy
+    /// retile missed. float WS is a no-op. Task 4 PR2 — open / close reflow
+    /// animation: when a real add / remove / hide / reveal happened on the
+    /// current mac desktop (NOT a catalog-swap shockwave from a mac-desktop
+    /// switch) and the user opted in, glide the tiled windows to their new
+    /// sizes via `animateRetile`; newly-added / revealed windows snap (skip
+    /// the glide from a wild initial position). Falls through to the instant
+    /// `applyLayout` whenever animation isn't applicable.
+    private func retileAfterReconcile(addedIDs: [WindowID],
+                                      removedIDs: [WindowID],
+                                      hidden: [WindowID], revealed: [WindowID],
+                                      macDesktopSwapped: Bool, rect: CGRect) {
+        let shouldAnimateOpenClose = config.effectiveAnimationEventDriven
+            && !macDesktopSwapped
+            && (!addedIDs.isEmpty || !removedIDs.isEmpty
+                || !hidden.isEmpty || !revealed.isEmpty)
+        if shouldAnimateOpenClose {
+            // A revealed window snaps into its tile like a newly-opened
+            // one (no glide from its off-screen resting frame); the
+            // windows reflowing to fill a hidden window's freed slot
+            // glide normally.
+            let snapNew = Set(addedIDs).union(revealed)
+            if !animateRetile(workspace: catalog.activeIndex, rect: rect,
+                              skipAnimation: snapNew) {
+                applyLayout(workspace: catalog.activeIndex, rect: rect)
+            }
+        } else {
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
+        }
+    }
+
+    /// Tag mode (M11-3): applyLayout tiled the visible lens union; park the
+    /// managed windows whose tags DON'T intersect the lens so they don't
+    /// float over it. `parkAnchor` is guarded (`shouldParkAnchor`) so
+    /// re-running every refresh is a no-op for already-parked windows.
+    /// Sticky / stashed / hidden / float windows are exempt. The restore
+    /// half (un-park on lens entry) rides the lens-switch plan.
+    private func parkOutOfLensWindows() {
+        guard catalog.grouping == .tag else { return }
+        for (id, slot) in catalog.windowMap
+        where (slot.tags & catalog.lens) == 0
+            && !catalog.floatingWindows.contains(id)
+            && !catalog.hiddenMembers.contains(id)
+            && !catalog.stashedWindows.contains(id)
+            && catalog.shouldParkAnchor(id) {
+            parkAnchor(WindowRef(id: id, pid: slot.pid))
+        }
+    }
+
+    /// raise-on-open: surface a genuinely freshly-opened floating window
+    /// once. Gate = `freshlyOpenedIDs` (first appeared in the enumeration
+    /// this session) ∩ this cycle's float commits (`addedIDs ∩ autoFloat`).
+    /// NOT `addedIDs` alone: a PRE-EXISTING float merely adopted on a first
+    /// mac-desktop visit or at startup also joins `addedIDs`, but was
+    /// enumerated long before (so it's not in `freshlyOpenedIDs`) and is
+    /// left untouched — no raise on a bare desktop switch. Unlike the
+    /// `kAXWindowCreated` hint, this catches a freshly-LAUNCHED app's first
+    /// float (no observer race, no TTL). A window commits once and is
+    /// dropped from the pending set on commit, so this fires exactly once
+    /// per real open. `probedAX` holds the AX element from this cycle's
+    /// classify probe (no extra round-trip); `liveByID` is the map built in
+    /// the caller.
+    private func surfaceFreshlyOpenedFloats(addedIDs: [WindowID],
+                                            autoFloat: Set<WindowID>,
+                                            probedAX: [WindowID: AXUIElement],
+                                            liveByID: [WindowID: Window],
+                                            ignore: Set<WindowID>,
+                                            raiseMode: RaiseOnOpen) {
+        guard raiseMode != .off else { return }
+        var activated: Set<Int> = []
+        for id in addedIDs
+        where autoFloat.contains(id) && freshlyOpenedIDs.contains(id) {
+            guard let ax = probedAX[id] else { continue }
+            let w = liveByID[id]
+            switch raiseMode {
+            case .raise:
+                AX.raise(ax)
+                Log.debug("native: raise-on-open(raise) "
+                    + "wsid=\(id.serverID) app=\(w?.appName ?? "-")")
+            case .activate:
+                if let pid = w?.pid, activated.insert(pid).inserted {
+                    AX.activateApp(pid: pid)
+                    Log.debug("native: raise-on-open(activate) "
+                        + "pid=\(pid) app=\(w?.appName ?? "-")")
+                }
+            case .off:
+                break
+            }
+        }
+        // Drop ids we're done with so the pending set stays small:
+        // committed windows (raised if float, else just tracked) and
+        // `ignore` verdicts (raised-level overlays / config ignore —
+        // they never commit, so they'd otherwise linger until close).
+        freshlyOpenedIDs.subtract(addedIDs)
+        freshlyOpenedIDs.subtract(ignore)
     }
 
     /// Park the active mac desktop's catalog and swap in the destination
