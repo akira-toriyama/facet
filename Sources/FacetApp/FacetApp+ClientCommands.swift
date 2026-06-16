@@ -518,33 +518,55 @@ extension FacetApp {
         return lower
     }
 
-    /// Validate + canonicalise a view name. Loud reject on typo
-    /// (``exit(2)``) so a fundamental error wins over later
-    /// transient checks (e.g. server-not-running).
-    static func canonicalView(_ name: String) -> String {
-        switch canonicalize(name, allowed: canonicalViews) {
+    /// Validate + canonicalise `name` against `allowed`, or loudly reject
+    /// a typo with ``exit(2)`` so a fundamental error wins over later
+    /// transient checks (e.g. server-not-running). `kind` names the value
+    /// class in the error ("view" / "edge" / …); `suggest` adds an
+    /// optional "did you mean" hint (only `theme` uses it today).
+    static func canonicalOrDie(_ name: String, allowed: [String],
+                               kind: String,
+                               suggest: ((String) -> String?)? = nil) -> String {
+        switch canonicalize(name, allowed: allowed) {
         case .success(let n): return n
         case .failure(.unknownValue(let v, let expected)):
-            die("unknown view \"\(v)\" — expected one of: "
-                + expected.joined(separator: ", "))
+            let hint = suggest?(v).map { " — did you mean \"\($0)\"?" } ?? ""
+            die("unknown \(kind) \"\(v)\" — expected one of: "
+                + expected.joined(separator: ", ") + hint)
         case .failure:
-            die("unknown view \"\(name)\"")
+            die("unknown \(kind) \"\(name)\"")
         }
+    }
+
+    /// Validate + canonicalise a view name.
+    static func canonicalView(_ name: String) -> String {
+        canonicalOrDie(name, allowed: canonicalViews, kind: "view")
     }
 
     /// The four edges a rail can dock against (`--edge`).
     static let canonicalEdges = ["top", "bottom", "left", "right"]
 
-    /// Validate + canonicalise a rail edge. Loud reject on typo
-    /// (``exit(2)``) — same contract as ``canonicalView``.
+    /// Validate + canonicalise a rail edge.
     static func canonicalEdge(_ name: String) -> String {
-        switch canonicalize(name, allowed: canonicalEdges) {
-        case .success(let n): return n
-        case .failure(.unknownValue(let v, let expected)):
-            die("unknown edge \"\(v)\" — expected one of: "
-                + expected.joined(separator: ", "))
+        canonicalOrDie(name, allowed: canonicalEdges, kind: "edge")
+    }
+
+    /// Shared integer-flag parser over `FacetCore.parseGeomInt`. Loud
+    /// reject on non-integer / out-of-range. `positiveHint` is spliced into
+    /// the ">0" message (e.g. `"1-indexed, "` for slot flags); empty for
+    /// geometry flags. Wrapped by ``parseGeomInt`` / ``parsePositiveInt``
+    /// which fix the two distinct UX wordings.
+    static func parseIntFlag(_ value: String, flag: String,
+                             requirePositive: Bool = false,
+                             positiveHint: String = "") -> Int {
+        switch FacetCore.parseGeomInt(value, requirePositive: requirePositive) {
+        case .success(let n):
+            return n
+        case .failure(.notAnInteger(let v)):
+            die("\(flag) expects an integer (got \"\(v)\")")
+        case .failure(.notPositive(let n)):
+            die("\(flag) must be > 0 (\(positiveHint)got \(n))")
         case .failure:
-            die("unknown edge \"\(name)\"")
+            die("\(flag) parse error")
         }
     }
 
@@ -556,29 +578,12 @@ extension FacetApp {
     static func parseGeomInt(_ value: String,
                              flag: String,
                              requirePositive: Bool = false) -> Int {
-        switch FacetCore.parseGeomInt(value,
-                                      requirePositive: requirePositive) {
-        case .success(let n):
-            return n
-        case .failure(.notAnInteger(let v)):
-            die("\(flag) expects an integer (got \"\(v)\")")
-        case .failure(.notPositive(let n)):
-            die("\(flag) must be > 0 (got \(n))")
-        case .failure:
-            die("\(flag) parse error")
-        }
+        parseIntFlag(value, flag: flag, requirePositive: requirePositive)
     }
 
-    /// Validate + canonicalise a theme name.
+    /// Validate + canonicalise a theme name (with a "did you mean" hint).
     static func canonicalTheme(_ name: String) -> String {
-        switch canonicalize(name, allowed: canonicalThemeNames) {
-        case .success(let n): return n
-        case .failure(.unknownValue(let v, let expected)):
-            let hint = suggest(v).map { " — did you mean \"\($0)\"?" } ?? ""
-            die("unknown theme \"\(v)\" — expected one of: "
-                + expected.joined(separator: ", ") + hint)
-        case .failure:
-            die("unknown theme \"\(name)\"")
-        }
+        canonicalOrDie(name, allowed: canonicalThemeNames, kind: "theme",
+                       suggest: suggest)
     }
 }
