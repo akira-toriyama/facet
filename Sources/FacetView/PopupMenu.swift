@@ -11,6 +11,9 @@ import AppKit
 
 public final class PopupMenuView: NSView {
     public var header = ""
+    /// Title colour; `nil` = `primary`. Set to `secondary` for tag menus
+    /// (the Rename/Delete tag menu) so the whole menu reads tag-coloured.
+    public var headerTint: NSColor?
     public var items: [String] = []
     public var checkedIndex: Int?
     public var onPick: ((Int) -> Void)?
@@ -162,7 +165,7 @@ public final class PopupMenuView: NSView {
                            width: bounds.width - Self.padX * 2,
                            height: Self.headerH),
                 withAttributes: [.font: uiFont(13, .bold),
-                                 .foregroundColor: palette.primary,
+                                 .foregroundColor: headerTint ?? palette.primary,
                                  .paragraphStyle: para])
         }
 
@@ -352,6 +355,7 @@ public final class PopupMenu {
                      headerRows: Set<Int> = [],
                      icons: [String] = [],
                      rowTints: [NSColor?] = [],
+                     headerTint: NSColor? = nil,
                      onPick: @escaping (Int) -> Void) {
         close()
         self.filterable = filterable
@@ -360,6 +364,7 @@ public final class PopupMenu {
         let v = PopupMenuView()
         v.palette = palette
         v.header = header
+        v.headerTint = headerTint
         v.items = items
         v.filterable = filterable
         v.headerRows = headerRows

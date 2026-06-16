@@ -658,11 +658,15 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         let rowTop = NSPoint(x: 24, y: CGFloat(i) * TagEditListView.rowH)
         let inWindow = list.convert(rowTop, to: nil)
         let scr = list.window?.convertPoint(toScreen: inWindow) ?? inWindow
+        // Tag menu → secondary throughout: header, both rows' text, and the
+        // selection highlight (it operates on a tag).
         PopupMenu.shared.show(at: scr,
                               header: "#\(name)",
                               items: ["Rename", "Delete"],
                               checkedIndex: nil,
-                              palette: palette) { [weak self] idx in
+                              palette: palette,
+                              rowTints: [palette.secondary, palette.secondary],
+                              headerTint: palette.secondary) { [weak self] idx in
             guard let self else { return }
             if idx == 0 { self.beginRename(name) } else { self.deleteTag(name) }
         }
