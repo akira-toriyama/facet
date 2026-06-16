@@ -152,13 +152,13 @@ public final class PopupMenuView: NSView {
         let bg = palette.background ?? NSColor.windowBackgroundColor
         // Accent border (1.5pt) matching the main panel's `pal.primary`
         // outline, so these small sub-windows read as facet panels rather
-        // than borderless popovers. A tag menu (`headerTint == secondary`)
-        // borders in its own colour for consistency with its contents.
+        // than borderless popovers. Always `primary` (the border is panel
+        // chrome — only the contents follow the tag/layout colour scheme).
         let card = NSBezierPath(
             roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75),
             xRadius: 9, yRadius: 9)
         bg.setFill(); card.fill()
-        (headerTint ?? palette.primary).setStroke()
+        palette.primary.setStroke()
         card.lineWidth = 1.5; card.stroke()
 
         let para = NSMutableParagraphStyle()
