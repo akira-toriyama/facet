@@ -42,10 +42,10 @@ extension FacetApp {
         exit(0)
     }
 
-    /// Post ``style:NAME``. Name must already be canonical
-    /// (validated by ``canonicalStyle`` at parse time).
-    static func postStyle(_ name: String) -> Never {
-        postControl("style:" + name)
+    /// Post ``theme:NAME``. Name must already be canonical
+    /// (validated by ``canonicalTheme`` at parse time).
+    static func postTheme(_ name: String) -> Never {
+        postControl("theme:" + name)
     }
 
     /// Post ``view:NAME[+active][+loading:MS][+geom:X,Y,W,H][+edge:E]``.
@@ -185,7 +185,7 @@ extension FacetApp {
 
     /// Validate + canonicalise a layout-mode name. Loud reject on
     /// typo (`exit(2)`) — same pattern as `canonicalView` /
-    /// `canonicalStyle`.
+    /// `canonicalTheme`.
     static let canonicalLayoutModes = LayoutRegistry.allModeNames
 
     static func canonicalLayoutMode(_ name: String) -> String {
@@ -894,7 +894,7 @@ extension FacetApp {
     }
 
     /// Parse the value of `window --cycle-stack next|prev`. Loud reject on
-    /// anything else (same pattern as `canonicalView` / `canonicalStyle`).
+    /// anything else (same pattern as `canonicalView` / `canonicalTheme`).
     static func parseCycleStack(_ value: String) -> String {
         let lower = value.lowercased()
         guard ["next", "prev"].contains(lower) else {
@@ -956,7 +956,7 @@ extension FacetApp {
     }
 
     /// Validate + canonicalise a theme name.
-    static func canonicalStyle(_ name: String) -> String {
+    static func canonicalTheme(_ name: String) -> String {
         switch canonicalize(name, allowed: canonicalThemeNames) {
         case .success(let n): return n
         case .failure(.unknownValue(let v, let expected)):

@@ -1,7 +1,7 @@
 // CLI ↔ GUI IPC + the symmetric view / workspace / window dispatch
 // family — the DNC observer (``installCLIControl``) that receives
 // `facet` client-mode commands, the `dispatch*` routing it fans out
-// to, and runtime re-theming (``applyStyle``). Extracted unchanged
+// to, and runtime re-theming (``applyThemeOverride``). Extracted unchanged
 // from Controller.swift (#182 phase 3) — same-module extension, no
 // logic change. Stored state stays on the primary declaration
 // (Controller.swift).
@@ -29,9 +29,9 @@ extension Controller {
                 switch cmd {
                 case "quit":     NSApp.terminate(nil)
                 case "reload":   self.reloadConfig()
-                case let s where s.hasPrefix("style:"):
-                    self.applyStyle(
-                        String(s.dropFirst("style:".count)))
+                case let s where s.hasPrefix("theme:"):
+                    self.applyThemeOverride(
+                        String(s.dropFirst("theme:".count)))
 
                 // Symmetric view ops — canonical-only, no aliases.
                 case let s where s.hasPrefix("view:"):
@@ -567,10 +567,10 @@ extension Controller {
     /// the user edits a theme key in config (then config wins) or issues
     /// another `--theme`. config.toml is the single source of truth; to
     /// make a pick stick, edit ``[theme] name`` in the user's config.
-    func applyStyle(_ name: String) {
+    func applyThemeOverride(_ name: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
-        Log.debug("applyStyle name=\(key)")
+        Log.debug("applyThemeOverride name=\(key)")
         themeOverride = key
         resolveSurfacePalettes()
         reapplyThemes()
