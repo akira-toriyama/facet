@@ -41,20 +41,8 @@ extension Controller {
             return
         }
 
-        // -- Build overlay --
-        let overlay = OverviewPanel(
-            contentRect: scr.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered, defer: false)
-        overlay.isFloatingPanel = true
-        overlay.level = NSWindow.Level(
-            rawValue: NSWindow.Level.statusBar.rawValue + 2)   // above tree
-        overlay.backgroundColor = .clear
-        overlay.isOpaque = false
-        overlay.hasShadow = false
-        overlay.hidesOnDeactivate = false
-        overlay.collectionBehavior = [.canJoinAllSpaces, .stationary,
-                                      .fullScreenAuxiliary]
+        // -- Build overlay (shared full-screen panel) --
+        let overlay = OverviewPanel.fullScreen(scr.frame)
 
         // Solid near-black backdrop (no vibrancy). The slight
         // transparency keeps a hint of desktop visible during the
@@ -66,63 +54,13 @@ extension Controller {
             .withAlphaComponent(gridBackdropAlpha).cgColor
 
         let gv = GridView(frame: host.bounds)
-        gv.paletteBox = gridPaletteBox          // PR-B: grid's own [grid].theme
-        gv.autoresizingMask = [.width, .height]
-        gv.workspaces = lastWorkspaces
-        gv.activeIndex = lastWorkspaces.first(where: {
-            $0.isActive
-        })?.index
-        gv.screenFrame = scr.frame
+        seedOverviewCommon(gv, paletteBox: gridPaletteBox,
+                           screenFrame: scr.frame,
+                           onDismiss: { [weak self] in self?.hideGrid() })
+        // -- Grid-specific inputs --
         gv.config = GridConfig(
             cols: config.effectiveGridCols,
             labelPosition: config.effectiveGridLabelPosition)
-        gv.onDismiss = { [weak self] in self?.hideGrid() }
-        // ③ Context menu: header layout picker + window-ops menu.
-        gv.backend = backend
-        gv.onRunWindowOps = { [weak self] ops, window, ws in
-            self?.runWindowOps(ops, on: window, workspaceIndex: ws)
-        }
-        gv.onDrop = { [weak self, bk = backend] src, dst, _, id in
-            guard src != dst else { return }
-            cliQueue.async {
-                bk.moveWindow(id, toWorkspaceIndex: dst)
-                let wss = bk.workspaces()
-                let titles = AXTitles.resolve(wss)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        self?.apply(wss, titles)
-                        self?.refreshGridThumbnails(
-                            forWSIndices: [src, dst], in: wss)
-                    }
-                }
-            }
-        }
-        gv.onSwap = { [weak self, bk = backend] src, dst, srcIDs, dstIDs in
-            // Workspace-swap: trade contents of src ↔ dst. WM's
-            // workspace index is left alone so each cell's grid
-            // position (= user's bound hotkey) stays put — only
-            // windows move. N+M moveWindow calls in sequence
-            // off-main, then a single apply at the end so the grid
-            // re-lays out in one pass.
-            guard src != dst else { return }
-            cliQueue.async {
-                for id in srcIDs {
-                    bk.moveWindow(id, toWorkspaceIndex: dst)
-                }
-                for id in dstIDs {
-                    bk.moveWindow(id, toWorkspaceIndex: src)
-                }
-                let wss = bk.workspaces()
-                let titles = AXTitles.resolve(wss)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        self?.apply(wss, titles)
-                        self?.refreshGridThumbnails(
-                            forWSIndices: [src, dst], in: wss)
-                    }
-                }
-            }
-        }
         gv.onPick = { [weak self, bk = backend] pick in
             // Dispatch the WM action off-main and dismiss in
             // parallel so the overlay clears immediately — the
@@ -160,13 +98,7 @@ extension Controller {
         if panelHost.isVisible { panelHost.hide() }
 
         // -- Present + fade in --
-        overlay.alphaValue = 0
-        overlay.makeKeyAndOrderFront(nil)
-        gv.layoutCells()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = gridFadeIn
-            overlay.animator().alphaValue = 1
-        }
+        presentOverview(overlay, view: gv)
 
         // Initial keyboard selection: active workspace if visible,
         // else first cell.
@@ -174,32 +106,24 @@ extension Controller {
             $0.isActive
         })?.index ?? lastWorkspaces.first?.index
 
-        // -- Local key monitor for grid kb input --
+        // -- Local key monitor: the shared overview verbs (Esc / Return
+        // / Space / Tab / 'm') + the grid's own 2-D arrow nav. The
+        // PopupMenu-open guard stays here (it passes the event through).
         gridKbMonitor = NSEvent.addLocalMonitorForEvents(
             matching: .keyDown
         ) { [weak self] e in
-            guard let gv = self?.gridView else { return e }
+            guard let self, let gv = self.gridView else { return e }
             // A context menu ('m') is up: let its own monitor handle keys
             // (Esc closes JUST the menu, ↑↓/Enter navigate it) — don't run
             // grid nav or let Esc close the whole overlay (③).
             if PopupMenu.shared.isOpen { return e }
             let shift = e.modifierFlags.contains(.shift)
+            if self.overviewCommonKey(e.keyCode, shift: shift, on: gv) { return nil }
             switch e.keyCode {
-            case 53:  gv.kbEscape();                       return nil
-            case 36, 76:
-                gv.kbCommit();                             return nil
-            case 49:
-                // Space lifts the selection — a window (move) or the
-                // header slot (whole-WS swap). Theme A: no Shift; Tab
-                // moves between the header and the windows.
-                gv.kbSpaceLift();                          return nil
-            case 48:
-                gv.kbCycleWindow(forward: !shift);         return nil
             case 123: gv.kbMoveSelection(dx: -1, dy: 0);   return nil
             case 124: gv.kbMoveSelection(dx:  1, dy: 0);   return nil
             case 126: gv.kbMoveSelection(dx: 0, dy: -1);   return nil
             case 125: gv.kbMoveSelection(dx: 0, dy:  1);   return nil
-            case 46:  gv.kbContextMenu();                  return nil  // 'm' (③)
             default:  return e
             }
         }
@@ -211,24 +135,10 @@ extension Controller {
         applyBorderFromConfig()
         gv.flashBorder()
 
-        // Kick off captures for every window in every workspace.
-        // Each capture is async + independent — cells paint with
-        // app icons first and progressively swap to real thumbnails
-        // as captures land. Snapshot-on-show: no refresh during
-        // display.
-        if let wp = winPreview {
-            for ws in lastWorkspaces {
-                for win in ws.windows {
-                    let id = win.id
-                    wp.request(id) { [weak self] cg, frame, gotID in
-                        MainActor.assumeIsolated {
-                            self?.gridView?.setThumbnail(
-                                Self.nsThumb(cg, frame), for: gotID)
-                        }
-                    }
-                }
-            }
-        }
+        // Kick off captures (snapshot-on-show). Cells paint app icons
+        // first and progressively swap to real thumbnails as the async,
+        // independent captures land; no refresh during display.
+        startOverviewCaptures()
     }
 
     /// Dismiss the grid overlay. `immediate` tears it down
@@ -254,7 +164,7 @@ extension Controller {
             return
         }
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = gridFadeOut
+            ctx.duration = overviewFadeOut
             overlay.animator().alphaValue = 0
         }) { [weak self] in
             guard let self else { return }

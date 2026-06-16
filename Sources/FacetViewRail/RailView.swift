@@ -192,11 +192,16 @@ public final class RailView: NSView {
 
     // MARK: - Layout
 
+    /// `OverviewView` no-arg layout — the common (non-forced) rebuild.
+    /// A distinct method (not a defaulted parameter) so it can witness
+    /// the protocol requirement; the forced path keeps `layoutCells(force:)`.
+    public func layoutCells() { layoutCells(force: false) }
+
     /// Rebuild the carousel cells + hero. `force` rebuilds even while a
     /// drag freezes the layout — used by the keyboard-lift rotation,
     /// where the strip must spin under the (hidden) lifted ghost; a mouse
     /// drag never forces, so its cells stay put under the cursor.
-    public func layoutCells(force: Bool = false) {
+    public func layoutCells(force: Bool) {
         // Drag landing gate (runs before suppression so a landed
         // move/swap releases it + rebuilds). While a drop is in flight
         // we keep the old cells so the source thumb doesn't shift under
@@ -1124,3 +1129,14 @@ public final class RailView: NSView {
         }
     }
 }
+
+// MARK: - OverviewView conformance
+//
+// Every requirement is satisfied by members declared above (the
+// snapshot inputs, the run-ops / move / swap callbacks, the no-arg
+// layoutCells / setThumbnail / clearThumbnails, the BorderFX trio, and
+// the common keyboard verbs). The rail-specific surface —
+// `onPick(Int)` / `onPickWindow`, `edge` / `cellsTarget` /
+// `stripPercent` / `selectedWS`, the 1-D `kbMoveSelection(dx:)`,
+// `scrollRotate`, the carousel + hero — stays off the shared protocol.
+extension RailView: OverviewView {}

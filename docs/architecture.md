@@ -410,10 +410,11 @@ Clean Architecture / MVVM patterns usually put a ViewModel
 between the View and the Use Case. facet's views are `NSView`
 subclasses (AppKit), not SwiftUI — the natural seam between
 view-state and command dispatch is the `TreeController` /
-GridView-callbacks protocol, which is doing the ViewModel's job
-without the boilerplate of a separate type. Same YAGNI logic
-applies; revisit when a view needs to be shared across multiple
-windows or hosts.
+`OverviewView` callback protocol (the grid + rail both conform to
+the latter — snapshot inputs + move/swap/pick callbacks + the common
+keyboard verbs; P8-1), which is doing the ViewModel's job without the
+boilerplate of a separate type. Same YAGNI logic applies; revisit
+when a view needs to be shared across multiple windows or hosts.
 
 ## Threading model (catalog serialization, P6)
 

@@ -8,7 +8,6 @@ import AppKit
 import FacetCore
 import FacetAccessibility
 import FacetView
-import FacetViewGrid
 import FacetViewRail
 
 extension Controller {
@@ -47,35 +46,17 @@ extension Controller {
         // Full-screen takeover: a near-black backdrop hides the desktop,
         // the active workspace shows large in the centre, every
         // workspace lines the bottom as a small mini-screen.
-        let overlay = OverviewPanel(
-            contentRect: scr.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered, defer: false)
-        overlay.isFloatingPanel = true
-        overlay.level = NSWindow.Level(
-            rawValue: NSWindow.Level.statusBar.rawValue + 2)   // above tree
-        overlay.backgroundColor = .clear
-        overlay.isOpaque = false
-        overlay.hasShadow = false
-        overlay.hidesOnDeactivate = false
-        overlay.collectionBehavior = [.canJoinAllSpaces, .stationary,
-                                      .fullScreenAuxiliary]
+        let overlay = OverviewPanel.fullScreen(scr.frame)
 
         let rv = RailView(frame: NSRect(origin: .zero, size: scr.frame.size))
-        rv.paletteBox = railPaletteBox          // PR-B: rail's own [rail].theme
-        rv.autoresizingMask = [.width, .height]
-        rv.screenFrame = scr.frame
+        seedOverviewCommon(rv, paletteBox: railPaletteBox,
+                           screenFrame: scr.frame,
+                           onDismiss: { [weak self] in self?.hideRail() })
+        // -- Rail-specific inputs --
         rv.edge = edge                              // M9-3: docked edge
         rv.cellsTarget = config.effectiveRailCells  // upper bound on visible cells
         rv.stripPercent = config.effectiveRailStrip // strip band size (% short edge)
-        rv.workspaces = lastWorkspaces
-        rv.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS
-        // ③ Context menu: header layout picker + window-ops menu.
-        rv.backend = backend
-        rv.onRunWindowOps = { [weak self] ops, window, ws in
-            self?.runWindowOps(ops, on: window, workspaceIndex: ws)
-        }
         rv.onPick = { [weak self] ws in
             guard let self else { return }
             // Commit-on-click (grid-like): dispatch the switch off-main
@@ -87,7 +68,6 @@ extension Controller {
             }
             self.hideRail()
         }
-        rv.onDismiss = { [weak self] in self?.hideRail() }
         // Click a specific window thumbnail → switch to its WS AND focus
         // THAT window (grid parity). Unlike onPick (which uses
         // autoFocus = the WS's last-touched window), this omits
@@ -104,40 +84,6 @@ extension Controller {
             }
             self.hideRail()
         }
-        // Drag a window onto another WS cell → move it there. The
-        // overlay STAYS OPEN (no hideRail) so the user sees the result.
-        // Reuses the grid's onDrop body shape.
-        rv.onMoveWindow = { [weak self, bk = backend] src, dst, _, id in
-            guard src != dst else { return }
-            cliQueue.async {
-                bk.moveWindow(id, toWorkspaceIndex: dst)
-                let wss = bk.workspaces()
-                let titles = AXTitles.resolve(wss)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        self?.apply(wss, titles)
-                        self?.refreshRailThumbnails(forWSIndices: [src, dst], in: wss)
-                    }
-                }
-            }
-        }
-        // Drag a header onto another cell → swap the two WS' contents
-        // (N+M moveWindow calls; the WM indices stay put).
-        rv.onSwap = { [weak self, bk = backend] src, dst, srcIDs, dstIDs in
-            guard src != dst else { return }
-            cliQueue.async {
-                for id in srcIDs { bk.moveWindow(id, toWorkspaceIndex: dst) }
-                for id in dstIDs { bk.moveWindow(id, toWorkspaceIndex: src) }
-                let wss = bk.workspaces()
-                let titles = AXTitles.resolve(wss)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        self?.apply(wss, titles)
-                        self?.refreshRailThumbnails(forWSIndices: [src, dst], in: wss)
-                    }
-                }
-            }
-        }
         overlay.contentView = rv
 
         // Hide the tree panel while the rail is up (it would otherwise
@@ -145,38 +91,29 @@ extension Controller {
         treeWasHidden = userHidden
         if panelHost.isVisible { panelHost.hide() }
 
-        overlay.alphaValue = 0
-        overlay.makeKeyAndOrderFront(nil)
-        rv.layoutCells()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = gridFadeIn
-            overlay.animator().alphaValue = 1
-        }
+        presentOverview(overlay, view: rv)
 
-        // Keyboard: browse along the strip's axis (←/→ for a top/bottom
-        // rail, ↑/↓ for left/right), Return commits, Esc dismisses (the
-        // overlay is key, so a local monitor fires). The cross-axis
-        // arrows pass through (inert) so they don't fight the browse.
+        // Keyboard: the shared overview verbs (Esc / Return / Space /
+        // Tab / 'm') + the rail's browse along the strip's axis (←/→ for
+        // a top/bottom rail, ↑/↓ for left/right). The cross-axis arrows
+        // pass through (inert) so they don't fight the browse. The
+        // overlay is key, so this local monitor fires.
         railKbMonitor = NSEvent.addLocalMonitorForEvents(
             matching: .keyDown
         ) { [weak self] e in
-            guard let rv = self?.railView else { return e }
+            guard let self, let rv = self.railView else { return e }
             // A context menu ('m') is up: let its own monitor handle keys
             // (Esc closes JUST the menu) — don't run rail nav or close the
             // whole overlay (③).
             if PopupMenu.shared.isOpen { return e }
             let shift = e.modifierFlags.contains(.shift)
+            if self.overviewCommonKey(e.keyCode, shift: shift, on: rv) { return nil }
             let horizontal = rv.edge.axis == .horizontal
             switch e.keyCode {
-            case 53:     rv.kbEscape();                     return nil  // Esc → cancel/close
-            case 36, 76: rv.kbCommit();                     return nil  // Return → commit
-            case 49:     rv.kbSpaceLift();                  return nil  // Space → lift
-            case 48:     rv.kbCycleWindow(forward: !shift); return nil  // Tab / Shift-Tab
             case 123 where horizontal: rv.kbMoveSelection(dx: -1); return nil  // ← prev
             case 124 where horizontal: rv.kbMoveSelection(dx:  1); return nil  // → next
             case 126 where !horizontal: rv.kbMoveSelection(dx: -1); return nil  // ↑ prev
             case 125 where !horizontal: rv.kbMoveSelection(dx:  1); return nil  // ↓ next
-            case 46:     rv.kbContextMenu();                return nil  // 'm' (③)
             default:     return e
             }
         }
@@ -206,19 +143,7 @@ extension Controller {
         // The rail is a full-screen modal that HIDES the tree, so the
         // tree's `bump()` can't cancel these in-flight captures while
         // it's up (no separate instance needed). Snapshot-on-show.
-        if let wp = winPreview {
-            for ws in lastWorkspaces {
-                for win in ws.windows {
-                    let id = win.id
-                    wp.request(id) { [weak self] cg, frame, gotID in
-                        MainActor.assumeIsolated {
-                            self?.railView?.setThumbnail(
-                                Self.nsThumb(cg, frame), for: gotID)
-                        }
-                    }
-                }
-            }
-        }
+        startOverviewCaptures()
     }
 
     func hideRail() {
@@ -239,7 +164,7 @@ extension Controller {
         railOverlay = nil
         railView = nil
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = gridFadeOut
+            ctx.duration = overviewFadeOut
             overlay.animator().alphaValue = 0
         }) { [weak self] in
             overlay.orderOut(nil)

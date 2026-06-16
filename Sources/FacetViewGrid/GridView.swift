@@ -2,7 +2,7 @@
 // `cols × rows`. Each cell mirrors the screen aspect so window
 // mini-rects map cleanly. The view stays controller-free:
 // orchestration plugs in via the four callback closures
-// (``onDismiss`` / ``onPick`` / ``onDrop`` / ``onSwap``).
+// (``onDismiss`` / ``onPick`` / ``onMoveWindow`` / ``onSwap``).
 // Controller decides what those mean.
 
 import AppKit
@@ -53,9 +53,11 @@ public final class GridView: NSView {
     public var onRunWindowOps: ((_ ops: [WindowAction],
                                  _ window: Window, _ ws: Int) -> Void)?
     /// Drop-commit callback (window-move). Controller owns the
-    /// backend round-trip and the subsequent re-query.
-    public var onDrop: ((_ src: Int, _ dst: Int,
-                         _ pid: Int, _ id: WindowID) -> Void)?
+    /// backend round-trip and the subsequent re-query. Same name +
+    /// signature as `RailView.onMoveWindow` — both are the
+    /// `OverviewView` move callback.
+    public var onMoveWindow: ((_ src: Int, _ dst: Int,
+                               _ pid: Int, _ id: WindowID) -> Void)?
     /// Workspace-swap commit callback (Phase 1f-4). Controller
     /// fires N+M ``moveWindow`` calls (srcIDs → dstWS, then
     /// dstIDs → srcWS) followed by an apply. The backend's
@@ -974,7 +976,7 @@ public final class GridView: NSView {
         // slides to the dropped thumb's real new rect, then
         // disappears. `drag` stays set so the source thumb is
         // hidden until ack.
-        onDrop?(sourceWS, dstCell.wsIndex, pid, id)
+        onMoveWindow?(sourceWS, dstCell.wsIndex, pid, id)
     }
 
     private func commitContentSwap(sourceWS: Int,
@@ -1231,3 +1233,13 @@ public final class GridView: NSView {
         }
     }
 }
+
+// MARK: - OverviewView conformance
+//
+// Every requirement is satisfied by members declared above (the
+// snapshot inputs, the run-ops / move / swap callbacks, layoutCells /
+// setThumbnail / clearThumbnails, the BorderFX trio, and the common
+// keyboard verbs). The grid-specific surface — `onPick(GridPick)`,
+// `config`, the 2-D `kbMoveSelection(dx:dy:)`, FLIP reorder — stays off
+// the shared protocol.
+extension GridView: OverviewView {}

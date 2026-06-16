@@ -48,67 +48,10 @@ extension Controller {
         }
     }
 
-    /// Force a re-capture for every window in the listed workspace
-    /// indices. Called after a DnD or workspace-swap so the cached
-    /// thumbnails (which may be old size / old crop after a BSP /
-    /// stack reflow) refresh instead of waiting for the 5 s TTL.
-    func refreshGridThumbnails(forWSIndices indices: [Int],
-                               in wss: [Workspace]) {
-        guard let wp = winPreview, gridView != nil else { return }
-        let want = Set(indices)
-        let ids: [WindowID] = wss
-            .filter { want.contains($0.index) }
-            .flatMap { $0.windows.map(\.id) }
-        // Invalidate first so any refresh tick firing before the
-        // delay below can't paint with the stale cache.
-        for id in ids { wp.invalidate(id) }
-        // 50 ms is the empirical floor where the WM's reflow has
-        // committed but the user still feels the refresh as "right
-        // after" the drop. Under 30 ms tends to grab the pre-move
-        // frame on BSP layouts.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            [weak self] in
-            guard self != nil else { return }
-            for id in ids {
-                wp.request(id) { [weak self] cg, frame, gotID in
-                    MainActor.assumeIsolated {
-                        self?.gridView?.setThumbnail(
-                            Self.nsThumb(cg, frame), for: gotID)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Re-capture the windows of the listed workspaces and feed them to
-    /// the rail. After a move/swap the affected windows' frames change,
-    /// so the snapshot-on-show cache is stale. Same shape as
-    /// ``refreshGridThumbnails`` (rail uses the shared ``winPreview``).
-    func refreshRailThumbnails(forWSIndices indices: [Int],
-                               in wss: [Workspace]) {
-        guard let wp = winPreview, railView != nil else { return }
-        let want = Set(indices)
-        let ids: [WindowID] = wss
-            .filter { want.contains($0.index) }
-            .flatMap { $0.windows.map(\.id) }
-        for id in ids { wp.invalidate(id) }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard self != nil else { return }
-            for id in ids {
-                wp.request(id) { [weak self] cg, frame, gotID in
-                    MainActor.assumeIsolated {
-                        self?.railView?.setThumbnail(
-                            Self.nsThumb(cg, frame), for: gotID)
-                    }
-                }
-            }
-        }
-    }
-
     /// Re-capture the given windows and push the fresh image into
-    /// whichever overview is open. Unlike ``refreshGridThumbnails`` /
-    /// ``refreshRailThumbnails`` (single-shot DnD/swap call sites), this
-    /// does NOT pre-invalidate — the event-driven caller already dropped
+    /// whichever overview is open. Unlike ``refreshOverviewThumbnails``
+    /// (the single-shot DnD/swap call site), this does NOT
+    /// pre-invalidate — the event-driven caller already dropped
     /// the truly-stale entries, so ``request``'s 5 s TTL / inflight
     /// guards can short-circuit a burst of reconcile passes into one
     /// capture per window. No-op when neither overview is on screen (the
