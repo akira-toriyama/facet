@@ -22,7 +22,7 @@ extension Controller {
     /// background capture; cells fall back to icons momentarily on
     /// each grid open).
     func rescheduleThumbnailTimer() {
-        guard #available(macOS 14.0, *) else { return }
+        guard winPreview != nil else { return }   // no capturer (macOS 13) → no timer
         let want = config.effectiveThumbnailRefreshInterval
         if thumbnailTimerInterval == want { return }
         thumbnailTimer?.invalidate()
@@ -36,12 +36,11 @@ extension Controller {
         }
     }
 
-    /// Touch the WindowPreview cache for every known window so
-    /// captures stay fresh in the background. Cheap when within
-    /// TTL (one dict lookup per window, no capture work).
-    @available(macOS 14.0, *)
+    /// Touch the capture cache for every known window so captures stay
+    /// fresh in the background. Cheap when within TTL (one dict lookup per
+    /// window, no capture work). No-op when there's no capturer (macOS 13).
     func refreshThumbnailCache() {
-        guard let wp = winPreview as? WindowPreview else { return }
+        guard let wp = winPreview else { return }
         for ws in lastWorkspaces {
             for win in ws.windows {
                 wp.request(win.id) { _, _, _ in /* warm only */ }
@@ -55,10 +54,7 @@ extension Controller {
     /// stack reflow) refresh instead of waiting for the 5 s TTL.
     func refreshGridThumbnails(forWSIndices indices: [Int],
                                in wss: [Workspace]) {
-        guard #available(macOS 14.0, *),
-              let wp = winPreview as? WindowPreview,
-              gridView != nil
-        else { return }
+        guard let wp = winPreview, gridView != nil else { return }
         let want = Set(indices)
         let ids: [WindowID] = wss
             .filter { want.contains($0.index) }
@@ -74,9 +70,10 @@ extension Controller {
             [weak self] in
             guard self != nil else { return }
             for id in ids {
-                wp.request(id) { [weak self] img, _, gotID in
+                wp.request(id) { [weak self] cg, frame, gotID in
                     MainActor.assumeIsolated {
-                        self?.gridView?.setThumbnail(img, for: gotID)
+                        self?.gridView?.setThumbnail(
+                            Self.nsThumb(cg, frame), for: gotID)
                     }
                 }
             }
@@ -89,10 +86,7 @@ extension Controller {
     /// ``refreshGridThumbnails`` (rail uses the shared ``winPreview``).
     func refreshRailThumbnails(forWSIndices indices: [Int],
                                in wss: [Workspace]) {
-        guard #available(macOS 14.0, *),
-              let wp = winPreview as? WindowPreview,
-              railView != nil
-        else { return }
+        guard let wp = winPreview, railView != nil else { return }
         let want = Set(indices)
         let ids: [WindowID] = wss
             .filter { want.contains($0.index) }
@@ -101,9 +95,10 @@ extension Controller {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard self != nil else { return }
             for id in ids {
-                wp.request(id) { [weak self] img, _, gotID in
+                wp.request(id) { [weak self] cg, frame, gotID in
                     MainActor.assumeIsolated {
-                        self?.railView?.setThumbnail(img, for: gotID)
+                        self?.railView?.setThumbnail(
+                            Self.nsThumb(cg, frame), for: gotID)
                     }
                 }
             }
@@ -119,14 +114,14 @@ extension Controller {
     /// capture per window. No-op when neither overview is on screen (the
     /// tree refreshes lazily on the next hover off the invalidated
     /// cache, so it needs no push).
-    @available(macOS 14.0, *)
-    func pushFreshThumbnails(_ ids: [WindowID], _ wp: WindowPreview) {
+    func pushFreshThumbnails(_ ids: [WindowID], _ wp: any WindowCapturing) {
         guard gridView != nil || railView != nil, !ids.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard self != nil else { return }
             for id in ids {
-                wp.request(id) { [weak self] img, _, gotID in
+                wp.request(id) { [weak self] cg, frame, gotID in
                     MainActor.assumeIsolated {
+                        let img = Self.nsThumb(cg, frame)
                         self?.gridView?.setThumbnail(img, for: gotID)
                         self?.railView?.setThumbnail(img, for: gotID)
                     }
@@ -141,9 +136,7 @@ extension Controller {
     /// the sidebar's hover / kb-selection currently points at.
     func _previewTargetChangedImpl() {
         previewTimer?.invalidate()
-        guard #available(macOS 14.0, *),
-              let wp = winPreview as? WindowPreview
-        else { return }
+        guard let wp = winPreview else { return }
         let targets = sidebarView.previewTargets()
         let ids = Set(targets.map(\.window))
         if ids.isEmpty {
@@ -168,13 +161,14 @@ extension Controller {
                 guard nowIDs == ids else { return }
                 let mode = self.config.effectiveTreePreviewMode
                 for t in now {
-                    wp.request(t.window) { [weak self] img, _, gotID in
+                    wp.request(t.window) { [weak self] cg, capFrame, gotID in
                         MainActor.assumeIsolated {
                             guard let self else { return }
                             let cur = self.sidebarView.previewTargets()
                             guard let nt = cur.first(where: {
                                 $0.window == gotID
                             }) else { return }
+                            let img = Self.nsThumb(cg, capFrame)
                             let frame: NSRect
                             if mode == "mirror", let wf = nt.windowFrame {
                                 frame = Self.cgFrameToAppKit(wf)
@@ -196,6 +190,15 @@ extension Controller {
                 }
             }
         }
+    }
+
+    /// Wrap a captured `CGImage` (from the `WindowCapturing` port) in an
+    /// `NSImage` sized to the window's logical frame — the view layer's
+    /// thumbnail / preview type. The size matters for the hover popover's
+    /// aspect (`popoverFrame` reads `image.size`); cell thumbnails draw
+    /// scaled to their rect so it's cosmetic there.
+    static func nsThumb(_ cg: CGImage, _ frame: CGRect) -> NSImage {
+        NSImage(cgImage: cg, size: frame.size)
     }
 
     /// Mirror-mode: convert a Quartz (top-left origin) backend

@@ -21,20 +21,30 @@ stub seam.
               │   FacetCore     │  pure logic:
               │                 │   - Workspace / Window state
               │                 │   - focus rules, layout engines
-              │                 │   - backend protocol + event types
+              │                 │   - WindowBackend + WindowCapturing
+              │                 │     ports + event types
               │                 │  GUI / OS / backend non-依存
-              └────────┬────────┘
-                       │
-              ┌────────┴──────────┐
-              │ FacetAdapterNative│  adapter
-              │  (AX / CGS / dlsym private symbols) │
-              └───────────────────┘
+              └───┬─────────┬───┘
+                  │         │
+   ┌──────────────┴───┐  ┌──┴───────────────────┐
+   │ FacetAdapterNative│  │    FacetCapture      │  adapters
+   │ (AX / CGS / dlsym)│  │  (ScreenCaptureKit)  │
+   │ → WindowBackend   │  │  → WindowCapturing   │
+   └───────────────────┘  └──────────────────────┘
 ```
 
-`FacetCore` defines a `WindowBackend` protocol (workspaces, move,
-focus, switch, layout, display, event stream, …) — single
-implementation today (`FacetAdapterNative`); the protocol seam
-is preserved for unit-test stubs (`StubBackend` in `BackendTests`).
+`FacetCore` defines two adapter ports: `WindowBackend` (workspaces,
+move, focus, switch, layout, display, event stream, …) — single
+implementation today (`FacetAdapterNative`), seam preserved for
+unit-test stubs (`StubBackend` in `BackendTests`) — and
+`WindowCapturing` (per-window image capture for the overview
+thumbnails + tree hover preview), implemented by `SCKWindowCapture`
+(ScreenCaptureKit, macOS 14+) in the `FacetCapture` adapter. Capture
+is a distinct backend axis (different OS framework, separate Screen
+Recording grant, optional / version-gated), so it lives in its own
+module rather than folded into `FacetAdapterNative`. Returning a
+`CGImage` (not `NSImage`) keeps the port AppKit-free; the view layer
+wraps it for drawing — so `FacetView` imports no OS capture backend.
 
 ## Why three layers, not two
 
@@ -365,15 +375,15 @@ two vocabularies don't drift apart:
 
 | Pattern | facet implementation |
 |---|---|
-| **Clean Architecture — Domain** (Entity + Repository protocol) | `FacetCore` (`Workspace`, `Window`, `WindowID`, `WindowAction`, `WindowBackend` protocol) |
-| **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterNative` (`NativeAdapter`, `WorkspaceCatalog`, `LayoutTree`) + `FacetAccessibility` (AX helpers) |
+| **Clean Architecture — Domain** (Entity + Repository protocol) | `FacetCore` (`Workspace`, `Window`, `WindowID`, `WindowAction`, `WindowBackend` + `WindowCapturing` protocols) |
+| **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterNative` (`NativeAdapter`, `WorkspaceCatalog`, `LayoutTree`) + `FacetAccessibility` (AX helpers) + `FacetCapture` (`SCKWindowCapture`, ScreenCaptureKit, behind `WindowCapturing`) |
 | **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid`, `FacetViewRail` (AppKit-bound) |
 | **Clean Architecture — Application** (DI + Coordinator) | `FacetApp` (`Controller` + `Main`) |
 | **Clean Architecture — Use Case (Interactor)** | *NOT a separate layer* — see below |
 | **DDD — Entity** | `Workspace`, `Window` |
 | **DDD — Value Object** | `WindowID`, `Palette`, `FontKind`, `CGRect`, `GridConfig` |
 | **DDD — Aggregate Root** | `Workspace` (owns its `windows`) |
-| **DDD — Repository** | `WindowBackend` protocol |
+| **DDD — Repository** | `WindowBackend` protocol (window management) + `WindowCapturing` protocol (image capture) |
 | **DDD — Domain Service** | `Focus.assert` / `Focus.withRetry`, `AXTitles.resolve`, `WorkspaceCatalog` reconciliation, `DisplayGeometry` queries, `gridScaledWindowRect` |
 | **DDD — Domain Event** | `BackendEvent` (consumed via `AsyncStream`) |
 | **DDD — Bounded Context** | one binary = one context, no inter-context translation needed |

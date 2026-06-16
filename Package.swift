@@ -88,12 +88,17 @@ let package = Package(
         .target(name: "FacetViewTree", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
+        // Capture adapter: the sole ScreenCaptureKit consumer, behind
+        // FacetCore's `WindowCapturing` port (so FacetView stays free of
+        // OS-backend imports). Same role as FacetAdapterNative for AX/CGS.
+        .target(name: "FacetCapture", dependencies: ["FacetCore"]),
         .executableTarget(
             name: "FacetApp",
             dependencies: [
                 "FacetCore",
                 "FacetAccessibility",
                 "FacetAdapterNative",
+                "FacetCapture",
                 "FacetView",
                 "FacetViewTree",
                 "FacetViewGrid",

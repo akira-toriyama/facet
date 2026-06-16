@@ -547,10 +547,12 @@ scientific debugging, bisection.*
   ``.nonactivatingPanel`` design trace here.
 - [ScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit)
   *(reviewed 2026-05-21)* — macOS 14+ window capture API used
-  by ``WindowPreview`` (sidebar hover preview + grid
-  thumbnails). The Screen Recording permission rationale and
-  the ``SCStreamConfiguration`` / ``SCContentFilter`` usage in
-  ``Sources/FacetView/WindowPreview.swift`` follow the docs
+  by ``SCKWindowCapture`` (sidebar hover preview + grid
+  thumbnails), the sole ScreenCaptureKit consumer, behind
+  FacetCore's ``WindowCapturing`` port (P7). The Screen Recording
+  permission rationale and the ``SCStreamConfiguration`` /
+  ``SCContentFilter`` usage in
+  ``Sources/FacetCapture/SCKWindowCapture.swift`` follow the docs
   here.
 - [Hardened Runtime / Code Signing](https://developer.apple.com/documentation/security/hardened_runtime)
   *(reviewed 2026-05-21)* — why ``setup-signing-cert.sh``

@@ -206,13 +206,14 @@ extension Controller {
         // The rail is a full-screen modal that HIDES the tree, so the
         // tree's `bump()` can't cancel these in-flight captures while
         // it's up (no separate instance needed). Snapshot-on-show.
-        if #available(macOS 14.0, *), let wp = winPreview as? WindowPreview {
+        if let wp = winPreview {
             for ws in lastWorkspaces {
                 for win in ws.windows {
                     let id = win.id
-                    wp.request(id) { [weak self] img, _, gotID in
+                    wp.request(id) { [weak self] cg, frame, gotID in
                         MainActor.assumeIsolated {
-                            self?.railView?.setThumbnail(img, for: gotID)
+                            self?.railView?.setThumbnail(
+                                Self.nsThumb(cg, frame), for: gotID)
                         }
                     }
                 }

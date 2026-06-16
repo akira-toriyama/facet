@@ -18,6 +18,7 @@
 import AppKit
 import FacetCore
 import FacetAccessibility
+import FacetCapture
 import FacetView
 import FacetViewTree
 import FacetViewGrid
@@ -116,10 +117,11 @@ final class Controller: NSObject {
     // MARK: - Preview (hover overlay + grid thumbnails)
 
     let previewPool = PreviewOverlayPool()
-    /// Held as ``Any`` so the class compiles on macOS 13 (the
-    /// ``WindowPreview`` type is gated on macOS 14+). Cast at use
-    /// site.
-    var winPreview: Any?
+    /// The capture port (`WindowCapturing`, FacetCore). `nil` on macOS 13
+    /// — the sole implementation (`SCKWindowCapture`, ScreenCaptureKit) is
+    /// macOS 14+, so it simply stays unset there and every capture call
+    /// site short-circuits on the `nil` check.
+    var winPreview: (any WindowCapturing)?
     var previewTimer: Timer?
     var thumbnailTimer: Timer?
     var thumbnailTimerInterval: TimeInterval?
@@ -230,7 +232,7 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
-        if #available(macOS 14.0, *) { winPreview = WindowPreview() }
+        if #available(macOS 14.0, *) { winPreview = SCKWindowCapture() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
                 self?.sidebarView.setQuery(q)
@@ -700,7 +702,7 @@ final class Controller: NSObject {
         var prevActiveFrames: [WindowID: CGRect] = [:]
         var prevWSofWindow: [WindowID: Int] = [:]
         var prevOnscreen: [WindowID: Bool] = [:]
-        if #available(macOS 14.0, *), winPreview != nil {
+        if winPreview != nil {
             let oldActiveIdx = lastWorkspaces.first(where: { $0.isActive })?.index
             for ws in lastWorkspaces {
                 let active = ws.index == oldActiveIdx
@@ -750,8 +752,8 @@ final class Controller: NSObject {
             }
             rv.layoutCells()      // refresh open rail on backend events
         }
-        if firstRealApply, #available(macOS 14.0, *) {
-            refreshThumbnailCache()
+        if firstRealApply {
+            refreshThumbnailCache()    // no-op without a capturer (macOS 13)
         }
         // Event-driven preview refresh — the geometry / visibility half
         // that the ~4 s background timer (content freshness) can't react
@@ -778,7 +780,7 @@ final class Controller: NSObject {
         // Invalidate drops the stale cache for every surface (tree
         // re-captures lazily on the next hover); the open grid / rail
         // then gets a fresh capture pushed via `pushFreshThumbnails`.
-        if #available(macOS 14.0, *), let wp = winPreview as? WindowPreview {
+        if let wp = winPreview {
             let newActive = wss.first(where: { $0.isActive })
             var stale: [WindowID] = []
             if newActive?.index != prevActive {                  // (1) switch
