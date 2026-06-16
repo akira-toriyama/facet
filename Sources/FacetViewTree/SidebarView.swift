@@ -95,9 +95,8 @@ public final class SidebarView: NSView {
     var skeletonBaseSig = ""
     public private(set) var activeWS: Int?    // REAL active WS (skip-switch)
 
-    // Optimistic selection: on click we move the highlight
-    // immediately and hold briefly; the next real query reconciles
-    // (reverts if the backend's focus actually failed).
+    // Last workspace snapshot pushed via update(); reused by internal
+    // relayouts and by drag / menu / preview lookups.
     var lastWorkspaces: [Workspace] = []
     // Mac desktop ordinal (Mission Control order) for the
     // top handle band's "Desktop N" label. nil = SkyLight
@@ -112,6 +111,9 @@ public final class SidebarView: NSView {
     // AX-resolved titles for windows the backend left blank; kept
     // across internal relayouts that don't re-resolve.
     var titleOverride: [WindowID: String] = [:]
+    // Optimistic selection: on click we move the highlight
+    // immediately and hold briefly; the next real query reconciles
+    // (reverts if the backend's focus actually failed).
     var optWindowID: WindowID?
     var optActiveWS: Int?
     var optUntil: Date?

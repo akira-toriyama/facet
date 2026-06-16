@@ -18,10 +18,6 @@ public struct WindowID: Hashable, Sendable {
     public init(serverID: Int) { self.serverID = serverID }
 }
 
-/// One window in a workspace.
-///
-/// `pid` and `title` are kept on the model because AX focus needs
-/// both alongside `serverID` to disambiguate same-id race conditions.
 public extension Sequence where Element == Window {
     /// Auto-pick a sensible focus target within this window list:
     /// the already-focused window first, then the oldest by
@@ -40,6 +36,10 @@ public extension Sequence where Element == Window {
     }
 }
 
+/// One window in a workspace.
+///
+/// `pid` and `title` are kept on the model because AX focus needs
+/// both alongside `serverID` to disambiguate same-id race conditions.
 public struct Window: Sendable {
     public let id: WindowID
     public let pid: Int

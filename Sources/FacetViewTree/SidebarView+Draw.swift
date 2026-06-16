@@ -494,14 +494,6 @@ extension SidebarView {
 
     }
 
-    /// Draw an outlined status badge — an optional leading SF icon then
-    /// centred text — at `lx` on a window row's third line, returning the
-    /// advanced x. Shared by the master / float / sticky / hidden /
-    /// scratchpad badges so they read uniformly alongside the rest of the
-    /// icon-bearing UI (item 7 — the text-heavy tree gets icon support).
-    /// `stroke` outlines the pill; `textColor` tints BOTH the label and
-    /// the icon; `oblique` slants the glyphs (sticky); `maxTextW`
-    /// tail-truncates long names (e.g. `scratchpad:NAME`).
     /// Draw a window-state badge — an optional leading SF icon then text — at
     /// `lx` on a window row's third line, returning the advanced x. Borderless
     /// + horizontal (no pill outline, no slant): the glyph + `color` carry the

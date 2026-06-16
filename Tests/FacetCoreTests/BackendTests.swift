@@ -8,8 +8,8 @@ import XCTest
 ///
 /// `@unchecked Sendable` is OK here because every test method touches
 /// this instance from a single thread (XCTest's test runner) — no
-/// real cross-actor sharing. Production conformers (`FacetAdapterRift`
-/// et al.) earn their Sendable conformance via internal serialization.
+/// real cross-actor sharing. The production conformer (`NativeAdapter`)
+/// earns its Sendable conformance via internal serialization.
 private final class StubBackend: WindowBackend, @unchecked Sendable {
     let name = "stub"
     let layoutModes = ["bsp", "stack"]

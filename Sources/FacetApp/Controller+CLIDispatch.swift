@@ -426,14 +426,6 @@ extension Controller {
         }
     }
 
-    /// Switch to the Nth workspace (1-indexed from the user; the
-    /// backend takes 0-indexed). Out-of-range silently no-ops (with
-    /// a debug log) — the DNC receiver shouldn't exit the server
-    /// just because a stale hotkey points past the current WS count.
-    /// Idempotent: switching to the current WS is a backend no-op.
-    /// Route a `workspace:` control payload — either an absolute
-    /// 1-based index (`"2"`) or a relative target (`next` / `prev` /
-    /// `recent`).
     /// P6: run a catalog-touching backend command on the serial `cliQueue`
     /// — the single catalog serialization point — then surface any error +
     /// schedule a reconcile back on main. `body` runs on cliQueue and
@@ -457,6 +449,9 @@ extension Controller {
         }
     }
 
+    /// Route a `workspace:` control payload — either an absolute
+    /// 1-based index (`"2"`) or a relative target (`next` / `prev` /
+    /// `recent`).
     private func dispatchWorkspaceTarget(_ arg: String) {
         switch arg {
         case "next":   dispatchWorkspaceRelative(.next)
@@ -496,6 +491,11 @@ extension Controller {
         }
     }
 
+    /// Switch to the Nth workspace (1-indexed from the user; the
+    /// backend takes 0-indexed). Out-of-range silently no-ops (with
+    /// a debug log) — the DNC receiver shouldn't exit the server
+    /// just because a stale hotkey points past the current WS count.
+    /// Idempotent: switching to the current WS is a backend no-op.
     private func dispatchWorkspace(_ n: Int) {
         // P6: the range check reads `workspaces()` (which runs the catalog
         // reconcile) and the switch mutates it — both must happen in ONE
@@ -605,9 +605,4 @@ extension Controller {
         resolveSurfacePalettes()
         reapplyThemes()
     }
-
-    /// Human-readable range hint for out-of-range error messages.
-    /// `(1..15)` for the normal case; `no workspaces available` when
-    /// the backend returned an empty list (= backend not yet ready,
-    /// startup race, etc.) — much clearer than the cryptic `(1..0)`.
 }

@@ -2,8 +2,9 @@ import CoreGraphics
 import XCTest
 @testable import FacetCore
 
-/// Pure geometry tests for the rail's edge-neutral band split and
-/// scroll maths (M9-3 / M9-4). A clean 1600×1000 bounds keeps the
+/// Pure geometry tests for the rail's edge-neutral band split,
+/// active-centred carousel offsets (2-b), and responsive
+/// (short-edge-scaled) pads. A clean 1600×1000 bounds keeps the
 /// arithmetic exact: thickness 300, outerPad 40, heroGap 16.
 final class RailGeometryTests: XCTestCase {
 

@@ -540,10 +540,10 @@ public final class GridView: NSView {
             // Keyboard selection cursor — outline the currently
             // selected cell while NOT lifted (during a lift the
             // drop-target highlight already shows where the ghost
-            // will land). Accent-colored to match the rail
-            // (RailView.swift:642/646): the active WS gets the primary
-            // accent, a browse target (selected but not active) gets
-            // the secondary accent.
+            // will land). Accent-colored to match the rail (see
+            // RailView.drawCell's hero/active/browse-target border
+            // block): the active WS gets the primary accent, a browse
+            // target (selected but not active) gets the secondary accent.
             if drag == nil, kbSelectedWS == cell.wsIndex {
                 (cell.isActive ? pal.primary : pal.secondary).setStroke()
                 let kc = NSBezierPath(

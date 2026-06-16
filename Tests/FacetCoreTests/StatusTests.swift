@@ -8,7 +8,7 @@ final class StatusTests: XCTestCase {
 
     func testSnapshotRoundTripsThroughJSON() throws {
         let snap = StatusSnapshot(
-            backend: "rift",
+            backend: "native",
             theme: "terminal",
             defaultView: "tree",
             workspaces: [
@@ -69,14 +69,14 @@ final class StatusTests: XCTestCase {
 
     func testRenderIncludesAllHeaderFields() {
         let snap = StatusSnapshot(
-            backend: "rift",
+            backend: "native",
             theme: "terminal",
             defaultView: "tree",
             workspaces: [],
             lastError: nil,
             timestamp: "2026-05-25T12:00:00Z")
         let out = snap.render()
-        XCTAssertTrue(out.contains("backend: rift"))
+        XCTAssertTrue(out.contains("backend: native"))
         XCTAssertTrue(out.contains("theme: terminal"))
         XCTAssertTrue(out.contains("default-view: tree"))
         XCTAssertTrue(out.contains("last error: (none)"))
@@ -86,7 +86,7 @@ final class StatusTests: XCTestCase {
 
     func testRenderAgentModeWhenDefaultViewNil() {
         let snap = StatusSnapshot(
-            backend: "rift",
+            backend: "native",
             theme: "system",
             defaultView: nil,
             workspaces: [],
@@ -98,7 +98,7 @@ final class StatusTests: XCTestCase {
 
     func testRenderMarksActiveAndPluralisesWindowCount() {
         let snap = StatusSnapshot(
-            backend: "rift",
+            backend: "native",
             theme: "terminal",
             defaultView: "grid",
             workspaces: [
@@ -170,7 +170,7 @@ final class StatusTests: XCTestCase {
 
     func testRenderSurfacesLastError() {
         let snap = StatusSnapshot(
-            backend: "rift",
+            backend: "native",
             theme: "terminal",
             defaultView: "tree",
             workspaces: [],
