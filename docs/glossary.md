@@ -276,6 +276,26 @@ orientation` での flip は廃止（辺を直接指定するため）。
 - **Don't call it:** tall, wide, centered（M9-2 で改名・旧称）, 縦/横
   分割, master_stack
 
+### layout mode（per-workspace の layout engine 選択軸）
+**1 つの [[facet workspace]] の tiled 窓をどう並べるかを選ぶ軸**。コードの
+`layoutMode` / `setLayoutMode` / `--layout NAME` がこの軸＝[[grouping]]（窓の
+**束ね方**）とは直交する別概念。**正準名**＝`float`（既定・タイルしない）/ `bsp`
+/ `stack` / `master-left` … `master-center`（[[master-stack layouts]]）/ `grid`
+/ `spiral`。session 限り（`[layout] default` が起動時シード）。
+- ⚠ **`grid` の二義に注意**：ここでの `grid` は **layout**（`GridLayout`・
+  `--layout grid` の値＝窓を格子タイル）。同名の **grid [[facet view]]**（`--view grid`
+  の俯瞰サーフェス）とは別物。
+- コード: `LayoutRegistry`（stateless 群）+ `bsp`/`stack`/`float`（stateful）。
+- **Don't call it:** grouping（束ね方は [[grouping]]）
+
+### mark
+**window に付く名前付きラベル兼ジャンプ先**。`facet window --mark NAME` で
+focus 中の窓に付け、`--focus-mark NAME` でその窓へ一気に focus 移動（必要なら
+WS も切替）、`--unmark NAME` で外す。**1:1 双射**（1 窓 1 mark・`WorkspaceCatalog.marks`）。
+tree では窓行に **primary 枠線の丸角ピル**で `NAME` を表示。`sticky` / `scratchpad`
+/ `tag` とは直交（mark は識別ハンドル、他は可視性/配置）。session 限り。
+- **Don't call it:** bookmark, label, tag（[[tag]] は可視性ラベルで別概念）, ジャンプ先, しおり
+
 ### sticky window
 1 つの window を **現在の mac desktop 内・全 facet workspace のメンバー**
 にして出っぱなしにする（PiP / タイマー / チャット / 音楽）。実装は既存
@@ -410,7 +430,8 @@ API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
 - layout は grouping で互換 filter（master-left/master-right/master-top/master-bottom/master-center/grid/spiral/float = 両対応 / bsp・stack = workspace のみ・
   非互換は起動時 `exit 2`）。M11-3 (#176) で実装済・`by` はオープン enum（将来の編成パラダイムを 1 値で拡張）。
   memory `[[facet-tag-model-decisions]]`。
-- **Don't call it:** mode, layout mode, grouping policy, 編成モード, グルーピング
+- **Don't call it:** mode, layout mode（＝[[layout mode（per-workspace の layout engine 選択軸）]]＝
+  別軸。grouping を「layout mode」と呼ばない）, grouping policy, 編成モード, グルーピング
 
 ### tag
 **window に付く可視性ラベル**（[[grouping]] `by=tag` 時のみ）。1 window = タグの集合（bitmask /
