@@ -67,48 +67,19 @@ public final class GridView: NSView {
 
     // MARK: - Per-cell snapshot
 
-    /// One layout-pass snapshot per workspace cell. Holds everything
-    /// `draw` and hit-testing need to agree on (no recomputation
-    /// drift between paint and click).
-    struct Cell {
-        let wsIndex: Int
-        let rect: NSRect
-        // Label/header band (above or below the cell per config). The
-        // drag handle for a workspace-content swap: drag = swap,
-        // click = switch (Theme A — same model as the tree header).
-        let headerRect: NSRect
-        let isActive: Bool
-        let label: String
-        let mode: String          // layout engine (bsp / stack), shown in header
-        let windows: [MiniWindowHit]
-    }
-    private var cells: [Cell] = []
+    /// One layout-pass snapshot per workspace cell — the shared
+    /// `OverviewCell` (FacetCore). `isHero` is always `false` for the
+    /// grid (rail-only). Holds everything `draw` and hit-testing need to
+    /// agree on (no recomputation drift between paint and click).
+    private var cells: [OverviewCell] = []
 
     // MARK: - Drag state
 
-    /// `.window` — dragging a window thumb moves that window to
-    /// another WS. `.workspace` — dragging a cell's HEADER swaps the
-    /// SOURCE workspace's entire contents with the destination
-    /// cell's. The backend's workspace index never changes; only the
-    /// windows inside trade places. Theme A: the grabbed target (not
-    /// a modifier key) decides which gesture runs.
-    enum DragKind { case window, workspace }
-
-    /// Drag-and-drop state. Captured on mouseDown over a window thumb
-    /// or a cell header; promoted from a pending-click to a real drag
-    /// once the cursor moves past `pointerDragThreshold`. `kind` is decided
-    /// at promotion time by which target was grabbed (header =
-    /// `.workspace`, thumb = `.window`).
-    struct Drag {
-        let sourceWS: Int
-        let kind: DragKind
-        let pid: Int                    // .window: real; .workspace: -1
-        let id: WindowID                // .window: real; .workspace: -1
-        let sourceRect: NSRect          // .window: thumb; .workspace: cell
-        let srcIDs: [WindowID]          // .workspace: all in source; .window: []
-        var current: NSPoint            // cursor in view coords
-        var dropTargetWS: Int?          // cell != sourceWS under cursor
-    }
+    // `OverviewDrag` / `OverviewDragKind` (FacetCore) carry the active
+    // gesture: `.window` moves a thumb to another WS, `.workspace` drags a
+    // cell's HEADER to swap its whole contents with the destination cell.
+    // The backend's workspace index never changes; only the windows
+    // trade. Theme A: the grabbed target (not a modifier key) decides.
     private var pendingDown: (point: NSPoint, hit: MiniWindowHit, ws: Int)?
     // Header band pressed: a workspace drag-or-switch candidate
     // (Theme A). Promoted to a `.workspace` swap drag past threshold,
@@ -120,7 +91,7 @@ public final class GridView: NSView {
     // Workspace whose cell (anywhere) the pointer is over — outlines it
     // with a faint stroke, matching the rail's cell-hover (M9-5 #5).
     private var hoverWS: Int?
-    private var drag: Drag?
+    private var drag: OverviewDrag?
     private var dragGhost: NSView?
 
     /// While dragging we suppress `layoutCells` callers from outside
@@ -139,33 +110,19 @@ public final class GridView: NSView {
     private var reordering: [WindowID: ReorderTween] = [:]
     private var reorderTimer: Timer?
 
-    /// Set by ``commitDrop``; consumed by the next ``layoutCells``
-    /// pass that can confirm the move landed (dropped id now lives
-    /// in dstWS). Makes the dropped thumb hand off from "ghost at
-    /// release point" to its real new rect, and gates the source
-    /// thumb's reveal on the move being reflected by the backend
-    /// (otherwise refresh ticks racing the round-trip would briefly
-    /// show a residual thumb in the source cell — 残像).
-    struct PendingDrop {
-        let id: WindowID
-        let dstWS: Int
-        let releaseRect: NSRect
-        let committedAt: Date
-    }
-    private var lastDrop: PendingDrop?
+    /// Tracks the in-flight window move (`OverviewPendingDrop`,
+    /// FacetCore): consumed by the next ``layoutCells`` pass that can
+    /// confirm the move landed (dropped id now lives in dstWS), gating
+    /// the source thumb's reveal on the backend reflecting it (otherwise
+    /// refresh ticks racing the round-trip briefly show a residual thumb
+    /// in the source cell — 残像).
+    private var lastDrop: OverviewPendingDrop?
 
-    /// Workspace-swap analogue of ``lastDrop``. Holds the expected
-    /// post-swap window membership so ``layoutCells`` can gate the
-    /// "clear drag + reveal cells" hand-off on the backend actually
-    /// reporting both halves of the swap.
-    struct PendingSwap {
-        let srcWS: Int
-        let dstWS: Int
-        let srcIDs: [WindowID]    // started in srcWS → should land in dstWS
-        let dstIDs: [WindowID]    // started in dstWS → should land in srcWS
-        let committedAt: Date
-    }
-    private var lastSwap: PendingSwap?
+    /// Workspace-swap analogue of ``lastDrop`` (`OverviewPendingSwap`,
+    /// FacetCore): the expected post-swap window membership so
+    /// ``layoutCells`` can gate the "clear drag + reveal cells" hand-off
+    /// on the backend actually reporting both halves of the swap.
+    private var lastSwap: OverviewPendingSwap?
 
     /// Max time we keep ``drag`` set waiting for the drop's apply.
     /// If the backend never reports the move (it could fail
@@ -176,7 +133,7 @@ public final class GridView: NSView {
     // MARK: - ScreenCaptureKit thumbnails
 
     /// `WindowID → captured image`. Populated by the Controller as
-    /// captures land during a grid show; ``drawWindowThumb``
+    /// captures land during a grid show; the shared `drawMiniThumb`
     /// consults this first and falls back to the app icon when
     /// missing (capture not yet done, or Screen Recording denied).
     /// Cleared on ``clearThumbnails`` to release memory.
@@ -405,7 +362,7 @@ public final class GridView: NSView {
                 : cellRect.minY - labelH - gridLabelGap + 2
             let headerRect = NSRect(x: cellRect.minX, y: headerY,
                                     width: cellRect.width, height: labelH)
-            cells.append(Cell(
+            cells.append(OverviewCell(
                 wsIndex: ws.index,
                 rect: cellRect,
                 headerRect: headerRect,
@@ -610,9 +567,11 @@ public final class GridView: NSView {
                     if w.id == dragSourceID { continue }    // ghost stands in
                     if isSwapSource { continue }
                     if reordering[w.id] != nil { continue } // drawn unclipped below
-                    drawWindowThumb(w, at: w.rect,
-                                    fill: w.isFocused ? winFocused : winFill,
-                                    stroke: winStroke)
+                    drawMiniThumb(w, at: w.rect,
+                                  fill: w.isFocused ? winFocused : winFill,
+                                  stroke: winStroke,
+                                  thumbnails: thumbnails, iconFallback: true,
+                                  pal: pal)
                 }
                 // Window-level cursor: outline the keyboard-
                 // selected window inside the selected cell so the
@@ -726,50 +685,14 @@ public final class GridView: NSView {
                 for w in cell.windows where w.id != dragSourceID {
                     guard let r = interpolatedRect(for: w.id)
                     else { continue }
-                    drawWindowThumb(w, at: r,
-                                    fill: w.isFocused ? winFocused : winFill,
-                                    stroke: winStroke)
+                    drawMiniThumb(w, at: r,
+                                  fill: w.isFocused ? winFocused : winFill,
+                                  stroke: winStroke,
+                                  thumbnails: thumbnails, iconFallback: true,
+                                  pal: pal)
                 }
             }
         }
-    }
-
-    /// Shared window-thumb painter — same look whether drawn
-    /// statically inside the cell clip or as an in-flight FLIP
-    /// tween outside it. Falls back to app icon when no
-    /// ScreenCaptureKit thumbnail is cached yet.
-    private func drawWindowThumb(_ w: MiniWindowHit, at r: NSRect,
-                                 fill: NSColor, stroke: NSColor) {
-        let wp = NSBezierPath(roundedRect: r, xRadius: 3, yRadius: 3)
-        fill.setFill(); wp.fill()
-        NSGraphicsContext.saveGraphicsState()
-        wp.addClip()
-        if let img = thumbnails[w.id] {
-            img.draw(in: r, from: .zero,
-                     operation: .sourceOver, fraction: 1.0,
-                     respectFlipped: true, hints: nil)
-        } else {
-            let iconSide = max(12, min(min(r.width, r.height) - 8, 48))
-            if iconSide >= 12, let icon = AppIcons.icon(forPID: w.pid) {
-                let iconRect = NSRect(
-                    x: r.midX - iconSide / 2,
-                    y: r.midY - iconSide / 2,
-                    width: iconSide, height: iconSide)
-                // GridView is flipped (Y-down); the default
-                // NSImage.draw paints upside-down — use the
-                // respect-flipped overload.
-                icon.draw(in: iconRect, from: .zero,
-                          operation: .sourceOver, fraction: 0.95,
-                          respectFlipped: true, hints: nil)
-            }
-        }
-        NSGraphicsContext.restoreGraphicsState()
-        // Stroke on top so the border isn't covered by the image.
-        stroke.setStroke()
-        wp.lineWidth = 0.5
-        wp.stroke()
-        // Mark badge — same corner pill / dot as the rail (M9-5 #3).
-        if let mark = w.mark { drawMiniMarkBadge(mark, in: r, pal: pal) }
     }
 
     // MARK: - Hover (header highlight)
@@ -891,7 +814,7 @@ public final class GridView: NSView {
                 guard let srcCell = cells.first(where: {
                     $0.wsIndex == ph.ws
                 }) else { return }
-                drag = Drag(
+                drag = OverviewDrag(
                     sourceWS: ph.ws,
                     kind: .workspace,
                     pid: -1, id: WindowID(serverID: -1),
@@ -907,7 +830,7 @@ public final class GridView: NSView {
                 if (dx * dx + dy * dy) < pointerDragThreshold * pointerDragThreshold {
                     return
                 }
-                drag = Drag(
+                drag = OverviewDrag(
                     sourceWS: pd.ws,
                     kind: .window,
                     pid: pd.hit.pid, id: pd.hit.id,
@@ -980,7 +903,7 @@ public final class GridView: NSView {
 
     // Construction is the shared FacetView helper (DragGhost.swift),
     // fed the grid's tunables (`gridGhostStyle`). These wrappers map
-    // the grid's `Cell` / thumbnail cache into the helper args —
+    // the grid's `OverviewCell` / thumbnail cache into the helper args —
     // including the app-icon fallback when no thumbnail is cached
     // (capture in flight / SR denied) — and keep `dragGhost` + the
     // shadow fade local.
@@ -998,7 +921,7 @@ public final class GridView: NSView {
         liftShadow(g, style: gridGhostStyle)
     }
 
-    private func installWorkspaceGhost(for cell: Cell) {
+    private func installWorkspaceGhost(for cell: OverviewCell) {
         let thumbs = cell.windows.map { hit -> MiniThumbSpec in
             let localRect = NSRect(
                 x: hit.rect.minX - cell.rect.minX,
@@ -1033,17 +956,17 @@ public final class GridView: NSView {
     // MARK: - Commit / cancel
 
     private func commitDrop(sourceWS: Int, pid: Int, id: WindowID,
-                            dstCell: Cell) {
-        // Ghost disappears at release point and the FLIP reorder
-        // slides the new thumb FROM that release rect TO its
-        // backend-decided final spot. Source cell never animates —
-        // the user's gesture ended where their cursor was, not at
-        // the old home.
-        if let g = dragGhost {
-            lastDrop = PendingDrop(
+                            dstCell: OverviewCell) {
+        // Record the in-flight move so the next `layoutCells` pass can
+        // gate the source-thumb reveal on the backend acking it. The
+        // ghost stays at the release point as a placeholder; the FLIP
+        // reorder (driven by old→new rects in `layoutCells`) slides the
+        // new thumb to its backend-decided final spot. Source cell never
+        // animates — the gesture ended where the cursor was.
+        if dragGhost != nil {
+            lastDrop = OverviewPendingDrop(
                 id: id,
                 dstWS: dstCell.wsIndex,
-                releaseRect: g.frame,
                 committedAt: Date())
         }
         // Ghost STAYS visible at the release point as a placeholder.
@@ -1056,9 +979,9 @@ public final class GridView: NSView {
 
     private func commitContentSwap(sourceWS: Int,
                                    srcIDs: [WindowID],
-                                   dstCell: Cell) {
+                                   dstCell: OverviewCell) {
         let dstIDs = dstCell.windows.map(\.id)
-        lastSwap = PendingSwap(
+        lastSwap = OverviewPendingSwap(
             srcWS: sourceWS,
             dstWS: dstCell.wsIndex,
             srcIDs: srcIDs,
@@ -1157,7 +1080,7 @@ public final class GridView: NSView {
     }
 
 
-    private func kbSelectedWindow() -> (cell: Cell, hit: MiniWindowHit)? {
+    private func kbSelectedWindow() -> (cell: OverviewCell, hit: MiniWindowHit)? {
         guard let sel = kbSelectedWS,
               kbSelectedWindowIdx >= 0,
               let cell = cells.first(where: { $0.wsIndex == sel }),
@@ -1197,7 +1120,7 @@ public final class GridView: NSView {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
         guard drag == nil, let s = kbSelectedWindow() else { return }
         let at = NSPoint(x: s.cell.rect.midX, y: s.cell.rect.midY)
-        drag = Drag(
+        drag = OverviewDrag(
             sourceWS: s.cell.wsIndex,
             kind: .window,
             pid: s.hit.pid, id: s.hit.id,
@@ -1221,7 +1144,7 @@ public final class GridView: NSView {
               let cell = cells.first(where: { $0.wsIndex == sel })
         else { return }
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
-        drag = Drag(
+        drag = OverviewDrag(
             sourceWS: cell.wsIndex,
             kind: .workspace,
             pid: -1, id: WindowID(serverID: -1),
