@@ -127,11 +127,6 @@ public final class GridView: NSView {
     private var lastSwap: OverviewPendingSwap?
 
     /// Max time we keep ``drag`` set waiting for the drop's apply.
-    /// If the backend never reports the move (it could fail
-    /// silently), we give up and reveal the source thumb so the UI
-    /// doesn't stay frozen.
-    private static let dropAckTimeout: TimeInterval = 1.0
-
     // MARK: - ScreenCaptureKit thumbnails
 
     /// `WindowID → captured image`. Populated by the Controller as
@@ -226,13 +221,10 @@ public final class GridView: NSView {
         // - lastDrop set + landed → release suppression, proceed
         var droppedLanded = false
         if let ld = lastDrop {
-            let landed = workspaces.contains { ws in
-                ws.index == ld.dstWS
-                    && ws.windows.contains { $0.id == ld.id }
-            }
+            let landed = ld.landed(in: workspaces)
             if !landed {
                 if Date().timeIntervalSince(ld.committedAt)
-                    > Self.dropAckTimeout {
+                    > overviewDropAckTimeout {
                     dragGhost?.removeFromSuperview(); dragGhost = nil
                     lastDrop = nil; drag = nil
                     layoutSuppressed = false
@@ -246,21 +238,13 @@ public final class GridView: NSView {
         }
         // Workspace-swap analogue: gate the hand-off on the backend
         // reporting all of `srcIDs` in `dstWS` AND all of `dstIDs`
-        // in `srcWS`. Same dropAckTimeout safety net.
+        // in `srcWS`. Same overviewDropAckTimeout safety net.
         var swapLanded = false
         if let ls = lastSwap {
-            let srcCell = workspaces.first(where: { $0.index == ls.srcWS })
-            let dstCell = workspaces.first(where: { $0.index == ls.dstWS })
-            let landed: Bool = {
-                guard let s = srcCell, let d = dstCell else { return false }
-                let srcNow = Set(s.windows.map(\.id))
-                let dstNow = Set(d.windows.map(\.id))
-                return ls.srcIDs.allSatisfy(dstNow.contains)
-                    && ls.dstIDs.allSatisfy(srcNow.contains)
-            }()
+            let landed = ls.landed(in: workspaces)
             if !landed {
                 if Date().timeIntervalSince(ls.committedAt)
-                    > Self.dropAckTimeout {
+                    > overviewDropAckTimeout {
                     dragGhost?.removeFromSuperview(); dragGhost = nil
                     lastSwap = nil; drag = nil
                     layoutSuppressed = false

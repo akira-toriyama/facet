@@ -98,6 +98,14 @@ public struct OverviewPendingDrop {
         self.dstWS = dstWS
         self.committedAt = committedAt
     }
+
+    /// True once the backend reflects the move: the dropped `id` now
+    /// lives in `dstWS`. Shared by the grid + rail landing gates.
+    public func landed(in workspaces: [Workspace]) -> Bool {
+        workspaces.contains { ws in
+            ws.index == dstWS && ws.windows.contains { $0.id == id }
+        }
+    }
 }
 
 /// Workspace-swap analogue of `OverviewPendingDrop`. Holds the expected
@@ -118,5 +126,18 @@ public struct OverviewPendingSwap {
         self.srcIDs = srcIDs
         self.dstIDs = dstIDs
         self.committedAt = committedAt
+    }
+
+    /// True once the backend reports both halves of the swap: every
+    /// `srcID` now in `dstWS` and every `dstID` now in `srcWS`. Shared by
+    /// the grid + rail landing gates.
+    public func landed(in workspaces: [Workspace]) -> Bool {
+        guard let s = workspaces.first(where: { $0.index == srcWS }),
+              let d = workspaces.first(where: { $0.index == dstWS })
+        else { return false }
+        let srcNow = Set(s.windows.map(\.id))
+        let dstNow = Set(d.windows.map(\.id))
+        return srcIDs.allSatisfy(dstNow.contains)
+            && dstIDs.allSatisfy(srcNow.contains)
     }
 }

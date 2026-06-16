@@ -87,7 +87,7 @@ extension RailView {
     /// at the deadline so the timeout is honoured. Harmless if the gate
     /// already cleared (no pending drop → a plain relayout).
     private func scheduleAckDeadline() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.railDropAckTimeout) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + overviewDropAckTimeout) {
             [weak self] in self?.layoutCells()
         }
     }

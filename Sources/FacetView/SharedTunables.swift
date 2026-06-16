@@ -24,3 +24,9 @@ public let overviewCommitZoomDuration: TimeInterval = 0.20
 /// them too.)
 public let overviewFadeIn: TimeInterval = 0.12
 public let overviewFadeOut: TimeInterval = 0.10
+
+/// Landing-gate safety-net timeout (s) shared by grid + rail: give up
+/// waiting for a move / swap to land, reveal the source, and clear the
+/// drag so the UI can't freeze on a silent backend failure. (Was
+/// `dropAckTimeout` in grid and `railDropAckTimeout` in rail.)
+public let overviewDropAckTimeout: TimeInterval = 1.0
