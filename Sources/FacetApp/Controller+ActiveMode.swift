@@ -39,7 +39,7 @@ extension Controller {
         sidebarView.enterKbNav()
     }
 
-    func _exitActiveImpl(restore: Bool) {
+    func exitActive(restore: Bool) {
         Log.debug("exitActive restore=\(restore) wasKbNav=\(sidebarView.kbNav)")
         // Don't remove kbMonitor here — it stays installed for the whole
         // session so `s` / nav fire the moment facet is key again (via

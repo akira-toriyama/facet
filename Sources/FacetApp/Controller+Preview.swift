@@ -48,6 +48,21 @@ extension Controller {
         }
     }
 
+    /// Capture window `id` and push the resulting thumbnail into whichever
+    /// overview is open (the other ref is `nil` → skipped). The request
+    /// callback may fire off-main, so the body re-enters the main actor.
+    /// Shared by `startOverviewCaptures` / `refreshOverviewThumbnails` /
+    /// `pushFreshThumbnails`.
+    func captureAndPushToOverview(_ id: WindowID, _ wp: any WindowCapturing) {
+        wp.request(id) { [weak self] cg, frame, gotID in
+            MainActor.assumeIsolated {
+                let img = Self.nsThumb(cg, frame)
+                self?.gridView?.setThumbnail(img, for: gotID)
+                self?.railView?.setThumbnail(img, for: gotID)
+            }
+        }
+    }
+
     /// Re-capture the given windows and push the fresh image into
     /// whichever overview is open. Unlike ``refreshOverviewThumbnails``
     /// (the single-shot DnD/swap call site), this does NOT
@@ -60,16 +75,8 @@ extension Controller {
     func pushFreshThumbnails(_ ids: [WindowID], _ wp: any WindowCapturing) {
         guard gridView != nil || railView != nil, !ids.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard self != nil else { return }
-            for id in ids {
-                wp.request(id) { [weak self] cg, frame, gotID in
-                    MainActor.assumeIsolated {
-                        let img = Self.nsThumb(cg, frame)
-                        self?.gridView?.setThumbnail(img, for: gotID)
-                        self?.railView?.setThumbnail(img, for: gotID)
-                    }
-                }
-            }
+            guard let self else { return }
+            for id in ids { self.captureAndPushToOverview(id, wp) }
         }
     }
 
@@ -77,7 +84,7 @@ extension Controller {
 
     /// Debounced reconciliation of `PreviewOverlay`s with whatever
     /// the sidebar's hover / kb-selection currently points at.
-    func _previewTargetChangedImpl() {
+    func previewTargetChanged() {
         previewTimer?.invalidate()
         guard let wp = winPreview else { return }
         let targets = sidebarView.previewTargets()
