@@ -403,10 +403,10 @@ final class Controller: NSObject {
     /// Re-read config.toml and apply whatever changed. Idempotent:
     /// calling it when nothing has changed is harmless (the
     /// effective-accessor values are equal, the conditional
-    /// applyStyle / writeStatus calls become no-ops).
+    /// applyThemeOverride / writeStatus calls become no-ops).
     ///
     /// Reload-on (memory facet-cli-surface N11):
-    ///   - theme           → applyStyle live
+    ///   - theme           → applyThemeOverride live
     ///   - preview-mode    → next hover-preview reads the new value
     ///   - [workspaces]    → reflected in writeStatus (the live
     ///                       data-model overlay onto facet
@@ -461,7 +461,7 @@ final class Controller: NSObject {
 
     /// Resolve all three surface palettes into their boxes. Called at
     /// startup + on hot-reload + after a `--theme` override (via
-    /// `applyStyle`). Honors the active `themeOverride` (forces every
+    /// `applyThemeOverride`). Honors the active `themeOverride` (forces every
     /// surface) else the per-view `[tree]/[grid]/[rail].theme` keys.
     ///
     /// `random` semantics: an APP-WIDE random — a single `--theme random`,
@@ -524,7 +524,7 @@ final class Controller: NSObject {
     }
 
     /// Re-theme every surface + chrome and re-gate the animator. Shared by
-    /// the live `--theme` override (`applyStyle`) and the hot-reload path.
+    /// the live `--theme` override (`applyThemeOverride`) and the hot-reload path.
     func reapplyThemes() {
         panelHost.applyTheme()
         sidebarView.needsDisplay = true

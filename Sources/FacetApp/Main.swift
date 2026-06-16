@@ -437,7 +437,7 @@ enum FacetApp {
         var viewArg: String?
         var hideArg: String?
         var toggleArg: String?
-        var styleArg: String?
+        var themeArg: String?
         var activeFlag = false
         var edgeArg: String?            // rail dock edge (--edge ); nil = config default
         var loadingArg: Int?            // nil = not requested; ms otherwise
@@ -538,7 +538,7 @@ enum FacetApp {
             case "--edge":
                 edgeArg = canonicalEdge(cursor.value(for: "--edge"))
             case "--theme":
-                styleArg = canonicalStyle(cursor.value(for: "--theme"))
+                themeArg = canonicalTheme(cursor.value(for: "--theme"))
             case "--pos-x":
                 posX = parseGeomInt(cursor.value(for: "--pos-x"), flag: "--pos-x")
             case "--pos-y":
@@ -637,7 +637,7 @@ enum FacetApp {
         // leaving a dead-hotkey mystery. Server mode (no client
         // flag at all) is unaffected; this process is the one
         // about to become the server.
-        let anyClientAction = styleArg != nil || quitFlag || reloadFlag
+        let anyClientAction = themeArg != nil || quitFlag || reloadFlag
             || viewArg != nil || hideArg != nil || toggleArg != nil
         if anyClientAction { requireServerAlive() }
 
@@ -647,7 +647,7 @@ enum FacetApp {
         // expectation: ``--theme`` / ``--quit`` are tried first,
         // then view ops. To combine (e.g. theme + view in one
         // call), the user issues two separate invocations.
-        if let s = styleArg          { postStyle(s) }
+        if let s = themeArg          { postTheme(s) }
         if quitFlag                  { postControl("quit") }
         if reloadFlag                { postControl("reload") }
 
