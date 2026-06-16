@@ -385,13 +385,7 @@ public final class PopupMenu {
         menuView = v
         let size = v.contentSize()
 
-        var origin = NSPoint(x: screenPt.x, y: screenPt.y - size.height)
-        if let vis = NSScreen.main?.visibleFrame {
-            origin.x = min(max(origin.x, vis.minX + 4),
-                           vis.maxX - size.width - 4)
-            if origin.y < vis.minY + 4 { origin.y = screenPt.y }  // flip up
-            origin.y = min(origin.y, vis.maxY - size.height - 4)
-        }
+        let origin = placePopupOrigin(anchor: screenPt, size: size)
         let pnl = NSPanel(
             contentRect: NSRect(origin: origin, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -517,11 +511,7 @@ public final class PopupMenu {
         let top = pnl.frame.maxY
         var f = pnl.frame
         f.size.height = size.height
-        f.origin.y = top - size.height
-        if let vis = NSScreen.main?.visibleFrame {
-            f.origin.y = max(f.origin.y, vis.minY + 4)
-            f.origin.y = min(f.origin.y, vis.maxY - size.height - 4)
-        }
+        f.origin.y = clampTopPinnedY(top: top, height: size.height)
         pnl.setFrame(f, display: true)
         v.frame = NSRect(origin: .zero, size: f.size)
     }

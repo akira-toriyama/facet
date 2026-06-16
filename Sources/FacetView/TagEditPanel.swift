@@ -460,12 +460,8 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
             + TagEditContainerView.fieldGap
         let height = listTop + listH + TagEditContainerView.padV
 
-        var origin = NSPoint(x: screenPt.x, y: screenPt.y - height)
-        if let vis = NSScreen.main?.visibleFrame {
-            origin.x = min(max(origin.x, vis.minX + 4), vis.maxX - width - 4)
-            if origin.y < vis.minY + 4 { origin.y = screenPt.y }   // flip up
-            origin.y = min(origin.y, vis.maxY - height - 4)
-        }
+        let origin = placePopupOrigin(anchor: screenPt,
+                                      size: NSSize(width: width, height: height))
 
         let pnl = KeyablePanel(
             contentRect: NSRect(origin: origin,
@@ -621,11 +617,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
             let top = panel.frame.maxY
             var f = panel.frame
             f.size.height = newHeight
-            f.origin.y = top - newHeight
-            if let vis = NSScreen.main?.visibleFrame {
-                f.origin.y = max(f.origin.y, vis.minY + 4)
-                f.origin.y = min(f.origin.y, vis.maxY - newHeight - 4)
-            }
+            f.origin.y = clampTopPinnedY(top: top, height: newHeight)
             panel.setFrame(f, display: true)
         }
         // The list clip tracks the (possibly new) body height; the field +
