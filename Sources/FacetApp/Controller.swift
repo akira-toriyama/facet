@@ -1016,18 +1016,21 @@ extension Controller: TreeController {
     func runWindowOps(_ ops: [WindowAction],
                       on window: Window,
                       workspaceIndex ws: Int) {
-        // Switch to the target workspace if needed, focus, give the
-        // WM ~140 ms to register, then run the ops in sequence with
-        // ~120 ms between them so each one's effect is visible
-        // before the next lands.
+        // Switch to the target workspace if needed, then run the ops in
+        // sequence with ~120 ms between them so each one's effect is
+        // visible before the next lands. The ops act on the FOCUSED
+        // window (WindowAction contract, Backend.swift), so CONFIRM focus
+        // landed on `window` before running them — `Focus.assertBlocking`
+        // re-asserts until the backend agrees, beating the WM's
+        // post-switch default-focus race that a single focus + fixed
+        // sleep would lose (ops would then hit the wrong window).
         let needSwitch = (ws != lastWorkspaces.first(where: {
             $0.isActive
         })?.index)
         let bk = backend
         cliQueue.async {
             if needSwitch { bk.switchWorkspace(toIndex: ws) }
-            _ = AX.focus(window)
-            usleep(140_000)
+            Focus.assertBlocking(window, backend: bk)
             for a in ops { bk.perform(a); usleep(120_000) }
         }
     }
