@@ -42,7 +42,7 @@ extension Controller {
         }
 
         // -- Build overlay --
-        let overlay = GridOverlay(
+        let overlay = OverviewPanel(
             contentRect: scr.frame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)

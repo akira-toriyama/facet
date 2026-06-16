@@ -1052,10 +1052,9 @@ public final class RailView: NSView {
     /// move-lift target.
     public func kbCycleWindow(forward: Bool) {
         guard drag == nil, let h = hero else { return }
-        let slots = h.wins.count + 1                        // whole-WS(-1) + windows
-        let cur = max(-1, min(h.wins.count - 1, kbSelectedWindowIdx)) + 1
-        let next = forward ? (cur + 1) % slots : (cur - 1 + slots) % slots
-        kbSelectedWindowIdx = next - 1
+        kbSelectedWindowIdx = cycleSlotIndex(
+            current: kbSelectedWindowIdx,
+            windowCount: h.wins.count, forward: forward)
         needsDisplay = true
     }
 

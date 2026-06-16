@@ -156,7 +156,7 @@ final class Controller: NSObject {
 
     // MARK: - Grid overview
 
-    var gridOverlay: GridOverlay?
+    var gridOverlay: OverviewPanel?
     var gridView: GridView?
     var gridBackdrop: NSView?
     var gridKbMonitor: Any?
@@ -167,7 +167,7 @@ final class Controller: NSObject {
 
     // MARK: - Workspace rail (bottom overview bar)
 
-    var railOverlay: RailOverlay?
+    var railOverlay: OverviewPanel?
     var railView: RailView?
     /// Local key monitor for the rail's Escape-to-dismiss while it's up.
     var railKbMonitor: Any?
