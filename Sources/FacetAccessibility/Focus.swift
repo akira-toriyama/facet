@@ -40,6 +40,32 @@ public enum Focus {
         }
     }
 
+    /// Synchronous twin of `assert` for callers that must run follow-up
+    /// work *after* focus is confirmed — e.g. window-ops that act on the
+    /// FOCUSED window (`Controller.runWindowOps`): the ops can't run until
+    /// the target actually holds focus, and the async `assert` returns
+    /// immediately (self-reschedules), so it can't gate a synchronous
+    /// sequence. Blocks the CURRENT thread, re-asserting AX focus each
+    /// pass until the backend agrees (closed loop on ground truth) or the
+    /// cap (~1.5 s) is hit — deterministically beating the WM's
+    /// post-switch default focus, where a single focus + fixed sleep loses.
+    ///
+    /// MUST be called off-main (it sleeps): today only `runWindowOps` on
+    /// `cliQueue`. Returns whether focus was confirmed before the cap.
+    @discardableResult
+    public static func assertBlocking(_ window: Window,
+                                      backend: any WindowBackend,
+                                      attempts: Int = assertAttempts) -> Bool {
+        var left = attempts
+        while left > 0 {
+            AX.focus(window)
+            if backend.focusedWindow() == window.id { return true }
+            usleep(useconds_t(interval * 1_000_000))
+            left -= 1
+        }
+        return false
+    }
+
     /// Persistent assertion. Keeps re-asserting AX focus until the
     /// backend's *own* focused-window state agrees (closed loop on
     /// ground truth), or we hit the attempt cap. Deterministically
