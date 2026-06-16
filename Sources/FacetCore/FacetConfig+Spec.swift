@@ -296,9 +296,4 @@ private extension ConfigSchema.Field where Root == FacetConfig {
         .init(key: key, kind: .scalar(scalar), apply: { _, _ in },
               domain: domain, def: def, doc: doc)
     }
-    /// Schema-only string array for an `[[array-of-tables]]` row.
-    static func descArray(_ key: String, item: [String]? = nil,
-                          doc: String? = nil) -> Self {
-        .init(key: key, kind: .stringArray(item: item), apply: { _, _ in }, doc: doc)
-    }
 }

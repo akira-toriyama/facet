@@ -96,7 +96,7 @@ public final class GridView: NSView {
 
     /// Drag-and-drop state. Captured on mouseDown over a window thumb
     /// or a cell header; promoted from a pending-click to a real drag
-    /// once the cursor moves past `dragThreshold`. `kind` is decided
+    /// once the cursor moves past `pointerDragThreshold`. `kind` is decided
     /// at promotion time by which target was grabbed (header =
     /// `.workspace`, thumb = `.window`).
     struct Drag {
@@ -196,7 +196,7 @@ public final class GridView: NSView {
     /// Return commit; input is gated on `commitZoom.isActive` until it
     /// finishes (then the backend switch + close fire). Shared with the
     /// rail (`CommitZoom` in FacetView).
-    private let commitZoom = CommitZoom(duration: gridCommitZoomDuration)
+    private let commitZoom = CommitZoom(duration: overviewCommitZoomDuration)
 
     public override var isFlipped: Bool { true }
     public override var isOpaque: Bool { false }
@@ -885,7 +885,7 @@ public final class GridView: NSView {
             // drag moves that window. No modifier keys.
             if let ph = pendingHeaderDown {
                 let dx = p.x - ph.point.x, dy = p.y - ph.point.y
-                if (dx * dx + dy * dy) < dragThreshold * dragThreshold {
+                if (dx * dx + dy * dy) < pointerDragThreshold * pointerDragThreshold {
                     return
                 }
                 guard let srcCell = cells.first(where: {
@@ -904,7 +904,7 @@ public final class GridView: NSView {
                 NSCursor.closedHand.set()
             } else if let pd = pendingDown {
                 let dx = p.x - pd.point.x, dy = p.y - pd.point.y
-                if (dx * dx + dy * dy) < dragThreshold * dragThreshold {
+                if (dx * dx + dy * dy) < pointerDragThreshold * pointerDragThreshold {
                     return
                 }
                 drag = Drag(

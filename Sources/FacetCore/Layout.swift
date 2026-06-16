@@ -410,6 +410,18 @@ public enum LayoutRegistry {
     /// Advertised stateless-engine names — joins bsp/stack in the
     /// backend's `layoutModes` and the CLI's accepted layout set.
     public static var names: [String] { all.map(\.name) }
+
+    /// The stateful engines keep their own adapter paths and aren't in
+    /// `all`; this is their canonical prefix.
+    public static let statefulModeNames = ["bsp", "stack", "float"]
+
+    /// Every valid layout-mode name = the stateful prefix + the
+    /// registered stateless engines. The SINGLE source the backend's
+    /// `layoutModes`, the CLI validator (`canonicalLayoutModes`), and the
+    /// config validator (`effectiveDefaultLayout`) all read — this union
+    /// was previously triplicated across those three layers (once
+    /// reordered). Order is irrelevant to every caller (membership tests).
+    public static var allModeNames: [String] { statefulModeNames + names }
 }
 
 /// Apply an inner gap to a computed frame map: shrink each frame by

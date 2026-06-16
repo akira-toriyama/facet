@@ -40,9 +40,7 @@ let railSlideDuration: TimeInterval = 0.17
 /// Cap the accumulated slide on rapid presses so a key-mash doesn't
 /// fling the strip many slots before it eases back.
 let railSlideMaxSlots: CGFloat = 3
-/// Ease-out duration of the commit "hero zoom → full screen" transition
-/// (Return / click switches; the backend switch fires as it finishes).
-let railCommitZoomDuration: TimeInterval = 0.20
+// (commit zoom-out duration is FacetView's shared `overviewCommitZoomDuration`.)
 
 // -- Responsive layout (orientation- & display-size-aware) --
 // The strip / hero proportions and the gaps are derived from the
@@ -81,30 +79,18 @@ let railHeaderModeMaxFont: CGFloat = 12
 /// fall back to a single name line.
 let railHeaderTwoLineMinH: CGFloat = 26
 
-// Pointer distance (px) before a mouseDown becomes a drag (Phase R2/R3
-// — drag a window thumbnail / a header between cells). Same value as
-// the grid / tree tunables; kept module-local.
-let railDragThreshold: CGFloat = 5
+// (drag threshold is FacetView's shared `pointerDragThreshold`.)
 
 // Scroll-wheel delta (points) accumulated per carousel step (⑦). Lower
 // = more sensitive (fewer points to advance one workspace). Tune to taste.
 let railScrollStep: CGFloat = 30
 
-// -- Drag "lift" feedback (copy of the grid's values): the ghost is
-//    installed already at lifted size + a soft shadow fades in. --
-let railLiftScale: CGFloat = 1.06
-let railLiftDuration: TimeInterval = 0.14
-let railLiftShadowRadius: CGFloat = 14
-let railLiftShadowOpacity: Float = 0.45
 /// Centred label size on an empty-WS swap ghost.
 let railGhostLabelSize: CGFloat = 22
 
-/// The rail's tunables bundled for the shared FacetView drag-ghost
-/// construction (DragGhost.swift).
-let railGhostStyle = DragGhostStyle(
-    liftScale: railLiftScale,
-    shadowRadius: railLiftShadowRadius,
-    shadowOpacity: railLiftShadowOpacity,
-    liftDuration: railLiftDuration,
+/// The rail's drag-ghost style: the shared dnd-kit "lift" feedback
+/// (DragGhostStyle.overview — values formerly copied from the grid),
+/// specialised with the rail's cell corner radius + empty-WS label size.
+let railGhostStyle = DragGhostStyle.overview(
     cellCornerRadius: railCellRadius,
     ghostLabelSize: railGhostLabelSize)

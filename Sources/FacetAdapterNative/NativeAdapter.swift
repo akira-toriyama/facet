@@ -41,7 +41,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// geometry but still tracks them / parks on mac-desktop switch). The
     /// CLI's `canonicalLayoutModes` already lists it; advertise it
     /// here too so it appears in the right-click picker.
-    public let layoutModes = ["bsp", "stack", "float"] + LayoutRegistry.names
+    public let layoutModes = LayoutRegistry.allModeNames
 
     // MARK: - State (delegated to catalog)
 

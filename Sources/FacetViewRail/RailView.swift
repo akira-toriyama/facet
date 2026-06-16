@@ -126,7 +126,6 @@ public final class RailView: NSView {
         let isActive: Bool
         let name: String
         let mode: String
-        let count: Int
         let wins: [MiniWindowHit]
         let isHero: Bool
     }
@@ -213,7 +212,7 @@ public final class RailView: NSView {
     /// Plays the "hero zoom to full screen" transition on a switch
     /// commit; input is gated on `commitZoom.isActive` until it finishes
     /// (then the backend switch + close fire). Shared with the grid.
-    private let commitZoom = CommitZoom(duration: railCommitZoomDuration)
+    private let commitZoom = CommitZoom(duration: overviewCommitZoomDuration)
 
     public override var isFlipped: Bool { true }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -389,7 +388,6 @@ public final class RailView: NSView {
             cells.append(Cell(wsIndex: ws.index, rect: cellRect,
                               headerRect: headerRect, isActive: ws.isActive,
                               name: ws.name, mode: ws.layoutMode,
-                              count: ws.windows.count,
                               wins: scaledWins(ws, cellRect, useScreen),
                               isHero: false))
         }
@@ -445,7 +443,6 @@ public final class RailView: NSView {
             hero = Cell(wsIndex: act.index, rect: hCellRect,
                         headerRect: .zero, isActive: act.isActive,
                         name: act.name, mode: act.layoutMode,
-                        count: act.windows.count,
                         wins: scaledWins(act, hCellRect, useScreen),
                         isHero: true)
         }
@@ -925,7 +922,7 @@ public final class RailView: NSView {
             // drag moves that window.
             if let ph = pendingHeaderDown {
                 let dx = p.x - ph.point.x, dy = p.y - ph.point.y
-                if dx * dx + dy * dy < railDragThreshold * railDragThreshold { return }
+                if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
                 guard let src = cells.first(where: { $0.wsIndex == ph.ws }) else { return }
                 // Source the swap's window set from the LIVE workspace,
                 // not the render-filtered cell thumbs — a frameless /
@@ -940,7 +937,7 @@ public final class RailView: NSView {
                 NSCursor.closedHand.set()
             } else if let pd = pendingDown {
                 let dx = p.x - pd.point.x, dy = p.y - pd.point.y
-                if dx * dx + dy * dy < railDragThreshold * railDragThreshold { return }
+                if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
                 drag = Drag(sourceWS: pd.ws, kind: .window, pid: pd.hit.pid,
                             id: pd.hit.id, sourceRect: pd.hit.rect, srcIDs: [],
                             current: p, dropTargetWS: nil)

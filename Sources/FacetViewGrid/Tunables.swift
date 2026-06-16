@@ -35,22 +35,12 @@ public let gridBackdropAlpha: CGFloat = 1.0    // overlay opacity (solid black)
 public let gridFadeIn: TimeInterval = 0.12     // overlay fade-in
 public let gridFadeOut: TimeInterval = 0.10    // overlay fade-out
 
-// dnd-kit-style "lift" feedback when a drag starts: ghost grows
-// slightly + soft shadow drops in so the user *feels* the thumb
-// being picked up. Cursor-follow path is paused for the duration so
-// the animation isn't yanked mid-frame.
-let gridLiftScale: CGFloat = 1.06
-let gridLiftDuration: TimeInterval = 0.14
-let gridLiftShadowRadius: CGFloat = 14
-let gridLiftShadowOpacity: Float = 0.45
-
-/// The grid's tunables bundled for the shared FacetView drag-ghost
-/// construction (DragGhost.swift).
-let gridGhostStyle = DragGhostStyle(
-    liftScale: gridLiftScale,
-    shadowRadius: gridLiftShadowRadius,
-    shadowOpacity: gridLiftShadowOpacity,
-    liftDuration: gridLiftDuration,
+/// The grid's drag-ghost style: the shared dnd-kit "lift" feedback
+/// (ghost grows 1.06× + soft shadow fades in over 0.14s — see
+/// `DragGhostStyle.overview`), specialised with the grid's cell corner
+/// radius + empty-WS label size. The lift values were duplicated
+/// verbatim in the rail Tunables; they now live in FacetView.
+let gridGhostStyle = DragGhostStyle.overview(
     cellCornerRadius: gridCellCornerRadius,
     ghostLabelSize: gridGhostLabelSize)
 
@@ -58,13 +48,3 @@ let gridGhostStyle = DragGhostStyle(
 // window thumb whose rect changed slides from its old rect to its
 // new rect over this duration with an ease-out curve (FLIP).
 let gridReorderDuration: TimeInterval = 0.15
-
-// Pointer distance (px) before a mouseDown becomes a drag. Same
-// value as FacetViewTree's tunable — kept module-local in both
-// places to avoid a cross-module import for one constant.
-let dragThreshold: CGFloat = 5
-
-// Ease-out duration of the commit "cell zoom → full screen" transition
-// (Return on the selected cell; the backend switch fires as it ends).
-// Mirrors the rail's `railCommitZoomDuration`.
-let gridCommitZoomDuration: TimeInterval = 0.20

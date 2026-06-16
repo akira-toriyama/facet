@@ -1222,7 +1222,7 @@ public final class SidebarView: NSView {
                 break loop
             case .leftMouseDragged:
                 if mode == 0,
-                   hypot(cp.x - start.x, cp.y - start.y) >= dragThreshold {
+                   hypot(cp.x - start.x, cp.y - start.y) >= pointerDragThreshold {
                     // ⌘+drag is always a panel-move; so is ANY drag in tag
                     // mode, where the flat list has no workspace to drop a
                     // window / swap a header onto (DnD retag is off — #191

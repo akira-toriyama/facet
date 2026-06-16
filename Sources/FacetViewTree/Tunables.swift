@@ -39,9 +39,7 @@ let rowPadX: CGFloat = 12
 // glyph box; the WS name is shifted right by grip + gap.
 let headerGripW: CGFloat = 9
 
-// Pointer distance (px) required before a mouseDown becomes a drag.
-// Below this, the gesture stays a click.
-let dragThreshold: CGFloat = 5
+// (drag threshold is FacetView's shared `pointerDragThreshold`.)
 
 // Opacity of the lifted DnD snapshot card (⑨) — translucent so the
 // drop-target band shows through (dnd-kit style). 0…1.

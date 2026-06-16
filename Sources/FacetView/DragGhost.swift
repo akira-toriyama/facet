@@ -37,6 +37,18 @@ public struct DragGhostStyle: Sendable {
         self.cellCornerRadius = cellCornerRadius
         self.ghostLabelSize = ghostLabelSize
     }
+
+    /// Shared "lift" feedback for the grid / rail overview ghosts
+    /// (dnd-kit style: ghost grows 1.06× and a soft shadow fades in over
+    /// 0.14s). The two overviews differ ONLY in cell corner radius + the
+    /// empty-WS ghost label size, so they pass just those — the lift
+    /// values were duplicated identically across both Tunables files.
+    public static func overview(cellCornerRadius: CGFloat,
+                                ghostLabelSize: CGFloat) -> DragGhostStyle {
+        DragGhostStyle(liftScale: 1.06, shadowRadius: 14, shadowOpacity: 0.45,
+                       liftDuration: 0.14, cellCornerRadius: cellCornerRadius,
+                       ghostLabelSize: ghostLabelSize)
+    }
 }
 
 /// Content of one mini-thumbnail inside a workspace ghost. Mapped
