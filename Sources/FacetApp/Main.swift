@@ -410,6 +410,19 @@ enum FacetApp {
         }
     }
 
+    /// Enforce exactly-one-action for a subject-verb subcommand. `count`
+    /// = number of set action flags; loud-rejects (exit 2) on zero or
+    /// multiple, byte-identically to the per-runner guards it replaces.
+    static func requireExactlyOneAction(_ count: Int, subject: String) {
+        guard count > 0 else {
+            die("facet \(subject): no action specified — see `facet --help`")
+        }
+        guard count == 1 else {
+            die("facet \(subject): pick one action per invocation — "
+                + "see `facet --help`")
+        }
+    }
+
     /// stderr message + exit(2). Always prefixes with ``facet:``.
     static func die(_ msg: String) -> Never {
         FileHandle.standardError.write(Data("facet: \(msg)\n".utf8))

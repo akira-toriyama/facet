@@ -80,7 +80,7 @@ extension NativeAdapter {
         // intermediate jump to the recorded position). A float-mode WS
         // doesn't tile, so restore it to its pre-stash position on-screen.
         _ = catalog.releaseScratchpad(name, focused: id, in: rect)
-        if catalog.mode(of: catalog.activeIndex) == "float" {
+        if catalog.mode(of: catalog.activeIndex) == StatefulMode.float {
             restoreAnchor(ref)
         } else {
             catalog.clearParkedState(of: id)
@@ -418,7 +418,7 @@ extension NativeAdapter {
             // master engines pick their edge directly via
             // `--layout master-EDGE` (M9-2), so there's no orientation
             // knob left to flip here.
-            guard catalog.mode(of: catalog.activeIndex) == "bsp",
+            guard catalog.mode(of: catalog.activeIndex) == StatefulMode.bsp,
                   let id = focusedWindow() else { return }
             catalog.toggleOrientation(of: id)
             Log.debug("native: perform toggleOrientation "
@@ -523,9 +523,9 @@ extension NativeAdapter {
         }
         let mode = catalog.mode(of: n1Based)
         switch mode {
-        case "bsp":   applyTile(workspace: n1Based, rect: rect, skip: skip,
+        case StatefulMode.bsp:   applyTile(workspace: n1Based, rect: rect, skip: skip,
                                 cached: cached)
-        case "stack": applyStack(workspace: n1Based, rect: rect)
+        case StatefulMode.stack: applyStack(workspace: n1Based, rect: rect)
         default:
             if LayoutRegistry.engine(named: mode) != nil {
                 applyEngine(workspace: n1Based, rect: rect, skip: skip,
@@ -547,13 +547,13 @@ extension NativeAdapter {
         // slots the per-window "Tag" between them). The section names drive
         // the dim group headers the popup menu inserts.
         var items: [WindowMenuItem] = []
-        if mode == "bsp", !floating {
+        if mode == StatefulMode.bsp, !floating {
             items.append(.init("Toggle orientation", [.toggleOrientation],
                                icon: "SF:arrow.triangle.2.circlepath",
                                section: "Layout"))
         }
         // Cycling needs at least two windows to rotate between.
-        if mode == "stack", !floating, windowCount >= 2 {
+        if mode == StatefulMode.stack, !floating, windowCount >= 2 {
             items.append(.init("Next stack window", [.cycleStackNext],
                                icon: "SF:chevron.down", section: "Layout"))
             items.append(.init("Previous stack window", [.cycleStackPrev],
