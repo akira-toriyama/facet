@@ -79,10 +79,19 @@ flowchart TB
 - **Don't call it:** domain layer, business logic, model layer, ドメイン層
 
 ### FacetAdapterNative
-**唯一の backend adapter**（v2.0.0 で `rift` 廃止）。AX / CGS / SkyLight
-プライベート API への入口。バックエンド固有の型は **この中に閉じ込める**。
+**window 管理の唯一の backend adapter**（v2.0.0 で `rift` 廃止。画像 capture は
+別軸の [[FacetCapture]]）。AX / CGS / SkyLight プライベート API への入口。
+[[WindowBackend]] を実装。バックエンド固有の型は **この中に閉じ込める**。
 - 場所: [`Sources/FacetAdapterNative/`](../Sources/FacetAdapterNative/)
 - **Don't call it:** native backend, ax adapter, アダプタレイヤー（一般化したい時のみ）
+
+### FacetCapture
+**画像 capture adapter**（P7）。`ScreenCaptureKit` の唯一の consumer で、
+FacetCore の [[WindowCapturing]] port を実装（`SCKWindowCapture`、macOS 14+）。
+window 管理（AX/CGS）とは別軸の backend なので [[FacetAdapterNative]] に畳まず
+独立モジュールにする。`FacetView` は capture backend を import しない。
+- 場所: [`Sources/FacetCapture/`](../Sources/FacetCapture/)
+- **Don't call it:** preview module, screenshot adapter, WindowPreview（旧 FacetView 内の型名・P7 で改名移設）
 
 ### FacetAccessibility
 M5 で抽出した **AX ヘルパ群**。`AXFocus`, `AXTitles`, `Focus.assert /
@@ -99,10 +108,20 @@ backend 固有でない限りここへ。
 - **Don't call it:** ui layer, presentation layer, ビュー層
 
 ### WindowBackend (port)
-Core と Adapter の間の **唯一の seam**（hexagonal port）。Controller / View
-が見るのはこの protocol のみ。
+Core と **window 管理 adapter** の間の seam（hexagonal port）。workspaces /
+move / focus / switch / layout / display / event stream を抽象化。Controller /
+View が見るのはこの protocol のみ。capture は別 port（[[WindowCapturing]]）。
 - 定義: [`Sources/FacetCore/`](../Sources/FacetCore/) 内
 - **Don't call it:** adapter protocol, backend interface, バックエンド契約
+
+### WindowCapturing (port)
+Core と **capture adapter** の間の seam（hexagonal port・P7）。per-window 画像
+capture（overview サムネ + tree hover preview）を抽象化。[[WindowBackend]] とは
+直交する別軸（window 管理 ではなく描画用 asset の取得）。`CGImage` を返す
+（FacetCore は AppKit-free）＝view 側が `NSImage` に包む。唯一の実装は
+[[FacetCapture]] の `SCKWindowCapture`（ScreenCaptureKit、macOS 14+）。
+- 定義: [`Sources/FacetCore/WindowCapturing.swift`](../Sources/FacetCore/WindowCapturing.swift)
+- **Don't call it:** preview protocol, screenshot interface, WindowPreview（旧型名）
 
 ---
 

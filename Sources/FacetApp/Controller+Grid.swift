@@ -216,14 +216,14 @@ extension Controller {
         // app icons first and progressively swap to real thumbnails
         // as captures land. Snapshot-on-show: no refresh during
         // display.
-        if #available(macOS 14.0, *),
-           let wp = winPreview as? WindowPreview {
+        if let wp = winPreview {
             for ws in lastWorkspaces {
                 for win in ws.windows {
                     let id = win.id
-                    wp.request(id) { [weak self] img, _, gotID in
+                    wp.request(id) { [weak self] cg, frame, gotID in
                         MainActor.assumeIsolated {
-                            self?.gridView?.setThumbnail(img, for: gotID)
+                            self?.gridView?.setThumbnail(
+                                Self.nsThumb(cg, frame), for: gotID)
                         }
                     }
                 }

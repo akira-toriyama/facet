@@ -50,7 +50,7 @@ Win11 タスクビュー型）。Grid と同じく一時的に画面へ重ねて
 | 必要 | 流用部品 |
 |------|----------|
 | ホバー→中央プレビュー（WS の全 window をまとめて表示） | `PreviewOverlayPool` + `PreviewOverlay` |
-| window 画像キャプチャ（TTL キャッシュ） | `WindowPreview`（ScreenCaptureKit） |
+| window 画像キャプチャ（TTL キャッシュ） | `SCKWindowCapture`（`FacetCapture`・FacetCore の `WindowCapturing` port 経由） |
 | focus を奪わない召喚パネル | `KeyablePanel` |
 | 配色 / テーマ | `Theme` / `Palette` |
 
