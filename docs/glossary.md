@@ -39,7 +39,6 @@ facet は **ヘキサゴナル 3 層分割**（[docs/architecture.md](architectu
 flowchart TB
   subgraph CORE["FacetCore — pure logic (CoreGraphics OK / NO AppKit / NO AX)"]
     MODELS["Models / WindowBackend (port)"]
-    CTRL["Controller"]
     CONFIG["FacetConfig"]
     LOG["Log"]
   end
@@ -51,10 +50,11 @@ flowchart TB
     PANELHOST["PanelHost"]
     SIDEBAR["SidebarView (tree)"]
     GRID["Grid overlay"]
-    THEME["Theme.pal (palette)"]
+    THEME["pal (palette)"]
   end
   subgraph APP["FacetApp — @main + CLI"]
     MAIN["FacetApp.Main"]
+    CTRL["Controller (application coordinator)"]
     DNC["Distributed<br/>Notification"]
   end
   MAIN -->|argv| CTRL
@@ -75,7 +75,9 @@ flowchart TB
 **純ロジック層**。CoreGraphics の値型は OK だが AppKit / AX / バックエンド型
 は持ち込まない。XCTest で単体検証可能であることが層境界の根拠。
 - 場所: [`Sources/FacetCore/`](../Sources/FacetCore/)
-- 含むもの: `Models`, `WindowBackend` protocol, `Controller`, `FacetConfig`, `Log`
+- 含むもの: `Models`, `WindowBackend` protocol, `FacetConfig`, `Log`
+  （`Controller` は AppKit に依存する Application coordinator なので
+  [[FacetApp]] 側。architecture.md の Application 層に一致）
 - **Don't call it:** domain layer, business logic, model layer, ドメイン層
 
 ### FacetAdapterNative
@@ -574,8 +576,10 @@ exit 2）。query は read-only なので **mode 寛容**（tag verb と違い `
 全コマンドが **yabai 式の空白区切り**（`--flag VALUE`）。`--flag=VALUE`（`=`）は
 #227 で全廃（hard cutover・後方互換なし）。各 flag は arity を宣言し、値トークンを
 無条件に食う（**strict consumption**・lookahead ゼロ）ので負座標 `--pos-x -1440` も
-そのまま読める。文法は CLI パーサー層（`Main.swift` / `FacetApp+Client.swift` の
-`ArgCursor`）に隔離され、コアへ渡る DNC 制御文字列（`view:tree+active` 等）は不変。
+そのまま読める。パース用の純粋型 `ArgCursor` は [[FacetCore]]
+（`Sources/FacetCore/CLIParse.swift`・AppKit 非依存で単体テスト可）にあり、
+FacetApp の client 層（`Main.swift` / `FacetApp+Client*.swift`）がそれを駆動して
+exit / stderr など副作用を担う。コアへ渡る DNC 制御文字列（`view:tree+active` 等）は不変。
 - **Don't call it:** equals syntax, `--flag=value`, GNU-style options
 
 ---
