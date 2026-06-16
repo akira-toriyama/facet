@@ -88,7 +88,8 @@ extension NativeAdapter {
         let axTitles: [WindowID: String] = needTitle.isEmpty
             ? [:]
             : AXTitles.resolve([Workspace(index: 0, name: "",
-                                          isActive: true, layoutMode: "float",
+                                          isActive: true,
+                                          layoutMode: StatefulMode.float,
                                           windows: needTitle)])
 
         var entries: [WindowQueryEntry] = live.map { w in

@@ -388,6 +388,21 @@ public struct SpiralLayout: LayoutEngine {
 /// stack are intentionally absent — they keep their stateful adapter
 /// paths; this is the seam stateless layouts register into, so adding
 /// one is a value type plus a line in `all`.
+/// Canonical string keys for the three STATEFUL layout modes — the ones
+/// that keep their own adapter paths (BSP tree / stack order / float)
+/// rather than a registry-resolved stateless engine. The catalog branches
+/// on these at ~25 sites; use these constants instead of raw literals so a
+/// typo (`"stak"`) is a compile error, not a silent float fallthrough.
+///
+/// A string namespace, NOT an enum: the catalog stores the mode as `String`
+/// throughout (`defaultMode` / `layoutModes` / `Workspace.layoutMode`), so a
+/// real enum would only add `init?(rawMode:)` churn at every comparison.
+public enum StatefulMode {
+    public static let bsp = "bsp"
+    public static let stack = "stack"
+    public static let float = "float"
+}
+
 public enum LayoutRegistry {
     public static let all: [any LayoutEngine] = [
         MasterLeftLayout(),
@@ -413,7 +428,8 @@ public enum LayoutRegistry {
 
     /// The stateful engines keep their own adapter paths and aren't in
     /// `all`; this is their canonical prefix.
-    public static let statefulModeNames = ["bsp", "stack", "float"]
+    public static let statefulModeNames =
+        [StatefulMode.bsp, StatefulMode.stack, StatefulMode.float]
 
     /// Every valid layout-mode name = the stateful prefix + the
     /// registered stateless engines. The SINGLE source the backend's

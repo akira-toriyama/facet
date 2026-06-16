@@ -86,9 +86,7 @@ extension WorkspaceCatalog {
     /// rather than show an empty frame.
     func tagSnapshot(live: [Window], focused: WindowID?,
                              activeRect: CGRect) -> [Workspace] {
-        let tracked = live.filter {
-            windowMap[$0.id] != nil && !stashedWindows.contains($0.id)
-        }
+        let tracked = trackedWindows(in: live)
         guard !tracked.isEmpty else { return [] }
         let unionFrames = tagUnionFrames(in: activeRect)
         // Master badge parity with workspace mode: when the tag-world's
@@ -335,8 +333,7 @@ extension WorkspaceCatalog {
         var toPark: [WindowRef] = []
         var toRestore: [WindowRef] = []
         for (id, slot) in windowMap {
-            if everywhereWindows.contains(id)
-                || stashedWindows.contains(id) { continue }
+            if !isParkEligible(id) { continue }
             let was = wasShown[id] ?? false
             let now = (slot.tags & newLens) != 0
             if was && !now {
@@ -364,9 +361,7 @@ extension WorkspaceCatalog {
     /// stashed windows are never parked).
     private func retagVisibility(_ id: WindowID,
                                  old: UInt64, new: UInt64) -> RetagVisibility {
-        if everywhereWindows.contains(id) || stashedWindows.contains(id) {
-            return .unchanged
-        }
+        if !isParkEligible(id) { return .unchanged }
         let wasShown = (old & lens) != 0
         let nowShown = (new & lens) != 0
         if wasShown && !nowShown { return .park }
@@ -409,14 +404,12 @@ extension WorkspaceCatalog {
         let toPark = windowMap
             .filter { shows(old, $0.value.tags)
                 && !shows(target, $0.value.tags)
-                && !everywhereWindows.contains($0.key)
-                && !stashedWindows.contains($0.key) }
+                && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         let toRestore = windowMap
             .filter { shows(target, $0.value.tags)
                 && !shows(old, $0.value.tags)
-                && !everywhereWindows.contains($0.key)
-                && !stashedWindows.contains($0.key) }
+                && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         return LensPlan(oldLens: old, newLens: target,
                         toPark: toPark, toRestore: toRestore)

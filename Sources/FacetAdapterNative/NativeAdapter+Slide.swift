@@ -44,9 +44,9 @@ extension NativeAdapter {
     {
         let mode = catalog.mode(of: n1Based)
         switch mode {
-        case "bsp":
+        case StatefulMode.bsp:
             return catalog.tiledFrames(for: n1Based, in: rect)
-        case "stack":
+        case StatefulMode.stack:
             guard let top = catalog.stackOrder(of: n1Based).first
             else { return [:] }
             return [top: rect]

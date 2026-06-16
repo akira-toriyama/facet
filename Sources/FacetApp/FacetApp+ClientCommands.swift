@@ -60,14 +60,7 @@ extension FacetApp {
                      balanceFlag, rotateArg != nil, mirrorArg != nil,
                      addFlag, removeArg != nil, renameArg != nil,
                      moveArg != nil].filter { $0 }.count
-        guard count > 0 else {
-            die("facet workspace: no action specified — "
-                + "see `facet --help`")
-        }
-        guard count == 1 else {
-            die("facet workspace: pick one action per invocation — "
-                + "see `facet --help`")
-        }
+        requireExactlyOneAction(count, subject: "workspace")
         requireGrouping(.workspace, subject: "workspace")
         requireServerAlive()
         if let f = focusArg  { postWorkspaceFocus(f) }
@@ -125,13 +118,7 @@ extension FacetApp {
         }
         let count = [onlyArg != nil, addArg != nil, removeArg != nil,
                      toggleArg != nil, allFlag].filter { $0 }.count
-        guard count > 0 else {
-            die("facet lens: no action specified — see `facet --help`")
-        }
-        guard count == 1 else {
-            die("facet lens: pick one action per invocation — "
-                + "see `facet --help`")
-        }
+        requireExactlyOneAction(count, subject: "lens")
         requireGrouping(.tag, subject: "lens")
         requireServerAlive()
         if let n = onlyArg   { postLens("only:" + n) }
@@ -179,13 +166,7 @@ extension FacetApp {
         }
         let count = [addArg != nil, removeArg != nil, renameArg != nil]
             .filter { $0 }.count
-        guard count > 0 else {
-            die("facet tag: no action specified — see `facet --help`")
-        }
-        guard count == 1 else {
-            die("facet tag: pick one action per invocation — "
-                + "see `facet --help`")
-        }
+        requireExactlyOneAction(count, subject: "tag")
         requireGrouping(.tag, subject: "tag")
         requireServerAlive()
         if let n = addArg    { postControl("tag-add:" + n) }
@@ -300,14 +281,7 @@ extension FacetApp {
             + (decMaster ? 1 : 0)
             + (focusDirArg != nil ? 1 : 0)
             + (moveDirArg != nil ? 1 : 0)
-        guard count > 0 else {
-            die("facet window: no action specified — "
-                + "see `facet --help`")
-        }
-        guard count == 1 else {
-            die("facet window: pick one action per invocation — "
-                + "see `facet --help`")
-        }
+        requireExactlyOneAction(count, subject: "window")
         // `--follow` is a modifier on `--move-to`, not a standalone
         // action: move the window *and* switch to its new workspace.
         // Loud reject when used without a destination.
@@ -379,14 +353,7 @@ extension FacetApp {
         let count = (stashArg != nil ? 1 : 0)
             + (toggleArg != nil ? 1 : 0)
             + (releaseArg != nil ? 1 : 0)
-        guard count > 0 else {
-            die("facet scratchpad: no action specified — "
-                + "see `facet --help`")
-        }
-        guard count == 1 else {
-            die("facet scratchpad: pick one action per invocation — "
-                + "see `facet --help`")
-        }
+        requireExactlyOneAction(count, subject: "scratchpad")
         requireServerAlive()
         if let n = stashArg   { postControl("scratchpad-stash:" + n) }
         if let n = toggleArg  { postControl("scratchpad-toggle:" + n) }

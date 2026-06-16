@@ -28,7 +28,7 @@ extension WorkspaceCatalog {
     @discardableResult
     mutating func rotateTree(workspace n1Based: Int,
                                     degrees: Int) -> Bool {
-        guard mode(of: n1Based) == "bsp",
+        guard mode(of: n1Based) == StatefulMode.bsp,
               var tree = layoutTrees[n1Based] else { return false }
         let before = tree
         tree.rotate(degrees: degrees)
@@ -42,7 +42,7 @@ extension WorkspaceCatalog {
     @discardableResult
     mutating func mirrorTree(workspace n1Based: Int,
                                     axis: LayoutTree.Axis) -> Bool {
-        guard mode(of: n1Based) == "bsp",
+        guard mode(of: n1Based) == StatefulMode.bsp,
               var tree = layoutTrees[n1Based] else { return false }
         let before = tree
         tree.mirror(axis)
@@ -62,7 +62,7 @@ extension WorkspaceCatalog {
     @discardableResult
     mutating func swapWindows(_ a: WindowID, _ b: WindowID,
                               workspace n1Based: Int) -> Bool {
-        if mode(of: n1Based) == "bsp" {
+        if mode(of: n1Based) == StatefulMode.bsp {
             guard var tree = layoutTrees[n1Based] else { return false }
             let before = tree
             tree.swap(a, b)
@@ -85,7 +85,7 @@ extension WorkspaceCatalog {
     mutating func insertWindow(_ moved: WindowID, beside target: WindowID,
                                edge: InsertEdge,
                                workspace n1Based: Int) -> Bool {
-        if mode(of: n1Based) == "bsp" {
+        if mode(of: n1Based) == StatefulMode.bsp {
             guard var tree = layoutTrees[n1Based] else { return false }
             let before = tree
             tree.insert(moved, beside: target, edge: edge)
@@ -107,7 +107,7 @@ extension WorkspaceCatalog {
     /// engines). bsp uses a tree (handled separately); float keeps none.
     private func hasManagedOrder(_ n1Based: Int) -> Bool {
         let m = mode(of: n1Based)
-        return m == "stack" || LayoutRegistry.engine(named: m) != nil
+        return m == StatefulMode.stack || LayoutRegistry.engine(named: m) != nil
     }
 
     // MARK: - Resize (real-window edge drag, 枠C 機能2)
@@ -128,7 +128,7 @@ extension WorkspaceCatalog {
                               workspace n1Based: Int, in rect: CGRect,
                               innerGap: CGFloat = 0) -> Set<WindowID>? {
         let m = mode(of: n1Based)
-        if m == "bsp" {
+        if m == StatefulMode.bsp {
             guard var tree = layoutTrees[n1Based],
                   let cur = tree.frames(in: rect)[id] else { return nil }
             // The live frame is gap-inset; the tree works in un-gapped
@@ -218,7 +218,7 @@ extension WorkspaceCatalog {
     /// mode or has no tree.
     func tiledFrames(for n1Based: Int,
                             in rect: CGRect) -> [WindowID: CGRect] {
-        guard mode(of: n1Based) == "bsp",
+        guard mode(of: n1Based) == StatefulMode.bsp,
               let tree = layoutTrees[n1Based] else { return [:] }
         return tree.frames(in: rect)
     }
