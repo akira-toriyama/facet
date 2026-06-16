@@ -50,10 +50,13 @@
 // view op must specify NAME explicitly. Shell aliases handle
 // shorthand if the user wants it.
 //
-// Same-module extension files (#182): the client-mode posting /
-// subcommand runners / parse helpers live in FacetApp+Client.swift,
-// ``--resign`` in FacetApp+Resign.swift. This file keeps help /
-// version, server liveness, and the ``main()`` entry.
+// Same-module extension files (#182, split further in P8-3): the
+// client-mode `post*` primitives + canonical / parse helpers live in
+// FacetApp+Client.swift, the read-only `facet query` projections in
+// FacetApp+ClientQuery.swift, the `facet <subject> <verb>` subcommand
+// runners in FacetApp+ClientCommands.swift, and ``--resign`` in
+// FacetApp+Resign.swift. This file keeps help / version, server
+// liveness, and the ``main()`` entry.
 
 import AppKit
 import FacetCore
