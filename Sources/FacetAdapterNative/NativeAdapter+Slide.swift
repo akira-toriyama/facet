@@ -80,8 +80,14 @@ extension NativeAdapter {
     /// carries no park bookkeeping, so just drop it — the windows stay
     /// where they are mid-slide and the new animation redirects from
     /// their current positions (no jump to the old target). A switch
-    /// must still settle (its outgoing windows have to be recorded
-    /// parked before the catalog mutates again).
+    /// settles its (now AX-only) finish so its outgoing windows land at
+    /// their anchor sliver before the new slide starts.
+    ///
+    /// P6: called ONLY from `startSlide` (main), which sets
+    /// `slideInProgress = true` immediately after — so the drop branch
+    /// deliberately doesn't reset that flag (it would be re-set on the
+    /// next line). Never call this from a cliQueue command body; the
+    /// slide clock is main-confined.
     func cancelSlideForRetarget() {
         guard slideFinish != nil else { return }
         if slideIsRetile {
@@ -190,8 +196,10 @@ extension NativeAdapter {
                                oldActive: Int, newActive: Int,
                                directionHint: CGFloat?,
                                rect: CGRect, autoFocus: Bool) -> Bool {
-        // Honour the system "Reduce motion" setting — fall back to the
-        // instant path so motion-sensitive users aren't animated at.
+        // P6: runs on `cliQueue` (the command body). The catalog is
+        // committed HERE; the animation that follows is a purely cosmetic
+        // tween that never touches catalog again. Honour "Reduce motion" —
+        // fall back to the caller's instant path.
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             return false
         }
@@ -207,7 +215,9 @@ extension NativeAdapter {
                   let ax = axWin(ref), let sz = AXGeom.size(ax) else { continue }
             targets[ref.id] = CGRect(origin: orig, size: sz)
         }
-        slideAnims = []
+        // Build the visual plan as a LOCAL value + commit catalog HERE
+        // (clearParkedState for incoming, markAnchorParked for outgoing).
+        var anims: [(ax: AXUIElement, slide: WindowSlide)] = []
         for (id, raw) in targets {
             guard let ax = axWin(id: id) else { continue }
             let f = raw.roundedToPhysicalPixels(scale: scale)
@@ -219,46 +229,79 @@ extension NativeAdapter {
             let start = CGRect(x: f.origin.x + enterDx, y: f.origin.y,
                                width: f.width, height: f.height)
             AXGeom.setPosition(ax, start.origin)
-            slideAnims.append((ax, WindowSlide(id: id, from: start, to: f)))
+            anims.append((ax, WindowSlide(id: id, from: start, to: f)))
         }
 
-        // Outgoing: capture true current frame, slide off the far edge.
-        var outOrigin: [WindowID: CGPoint] = [:]
+        // Outgoing: capture true current frame, slide off the far edge, and
+        // record the final anchor-sliver snap for the AX-only settle. Park
+        // bookkeeping (markAnchorParked) is committed NOW with the real
+        // pre-slide origin, so a later switch-back restores correctly.
+        var parkSnaps: [(ax: AXUIElement, at: CGPoint)] = []
         for ref in toPark {
             guard catalog.shouldParkAnchor(ref.id), let ax = axWin(ref),
                   let p = AXGeom.position(ax), let sz = AXGeom.size(ax) else { continue }
-            outOrigin[ref.id] = p
             let from = CGRect(origin: p, size: sz)
             let to = CGRect(x: p.x - enterDx, y: p.y, width: sz.width, height: sz.height)
-            slideAnims.append((ax, WindowSlide(id: ref.id, from: from, to: to)))
+            anims.append((ax, WindowSlide(id: ref.id, from: from, to: to)))
+            catalog.markAnchorParked(ref.id, originalPosition: p)
+            let scr = Displays.containing(p)
+            parkSnaps.append((ax, CGPoint(x: scr.maxX - 1, y: scr.maxY - 1)))
         }
 
-        guard !slideAnims.isEmpty else { return false }
+        guard !anims.isEmpty else { return false }
 
-        // Settle: authoritative final state + park bookkeeping. Runs once
-        // (on completion or interrupt). Uses the *captured* outgoing
-        // origins so a later switch-back restores to the real position,
-        // not the slid-off-screen one.
-        let settle: () -> Void = { [weak self] in
+        // Focus the destination now — the animation is purely cosmetic from
+        // here, so there's no reason to defer focus to the settle.
+        if autoFocus { applyAutoFocus(newActiveWS: newActive) }
+
+        let count = anims.count
+        // Hand the value plan to the main-confined driver. The AX elements
+        // inside are thread-safe per element (we vouch, as `slideTick`
+        // does), and the cliQueue side never touches `anims`/`parkSnaps`
+        // after this send.
+        nonisolated(unsafe) let plan = anims
+        nonisolated(unsafe) let snaps = parkSnaps
+        DispatchQueue.main.async { [weak self] in
+            self?.startSlide(anims: plan, parkSnaps: snaps, isRetile: false)
+        }
+        Log.debug("native: animateSwitch \(oldActive)->\(newActive) "
+            + "anims=\(count) dir=\(Int(dir))")
+        return true
+    }
+
+    /// P6: the main-confined half of every slide. Hopped (once) from the
+    /// cliQueue command after it committed the catalog, it stops any prior
+    /// slide, records the *value* plan, and drives the per-frame tween. The
+    /// settle is AX-ONLY: it snaps parked windows to their anchor sliver
+    /// (`parkSnaps`) and any window needing an exact final frame
+    /// (`frameSnaps`), clears the in-progress flag, and yields a refresh —
+    /// it never touches the catalog (already committed on cliQueue). The
+    /// slide clock (anims / start / timer / link / finish / isRetile /
+    /// inProgress) is touched ONLY here, in `slideTick`, and in the settle,
+    /// all on the main runloop. Like `startSlideDriver` / `slideTick` it is
+    /// a plain (nonisolated) method invoked ON main via `DispatchQueue.main`
+    /// — the convention, not the type system, keeps it main-confined.
+    func startSlide(anims: [(ax: AXUIElement, slide: WindowSlide)],
+                    parkSnaps: [(ax: AXUIElement, at: CGPoint)] = [],
+                    frameSnaps: [(ax: AXUIElement, frame: CGRect)] = [],
+                    isRetile: Bool) {
+        // Land (switch) or drop (retile) any in-flight slide first. Its
+        // settle is AX-only now, so running it here on main is safe.
+        cancelSlideForRetarget()
+        slideAnims = anims
+        slideIsRetile = isRetile
+        slideInProgress = true
+        startSlideDriver { [weak self] in
             guard let self else { return }
             self.slideAnims = []
-            self.applyLayout(workspace: newActive, rect: rect)
-            for ref in toPark {
-                guard let orig = outOrigin[ref.id], let ax = self.axWin(ref)
-                else { continue }
-                let scr = Displays.containing(orig)
-                self.catalog.markAnchorParked(ref.id, originalPosition: orig)
-                AXGeom.setPosition(ax, CGPoint(x: scr.maxX - 1, y: scr.maxY - 1))
+            for (ax, at) in parkSnaps { AXGeom.setPosition(ax, at) }
+            for (ax, fr) in frameSnaps {
+                AXGeom.setPosition(ax, fr.origin)
+                AXGeom.setSize(ax, fr.size)
             }
-            if autoFocus { self.applyAutoFocus(newActiveWS: newActive) }
+            self.slideInProgress = false
             self.eventContinuation.yield(.refreshNeeded)
         }
-
-        slideIsRetile = false
-        startSlideDriver(settle)
-        Log.debug("native: animateSwitch \(oldActive)->\(newActive) "
-            + "anims=\(slideAnims.count) dir=\(Int(dir))")
-        return true
     }
 
     /// Phase 2 of 枠 E: animate a same-mode re-tile / layout change as an
@@ -286,7 +329,10 @@ extension NativeAdapter {
         }
         let scale = activeScale(near: rect)
         let targets = targetFrames(for: n1Based, in: rect)
-        slideAnims = []
+        // P6: build the plan as a LOCAL value — no catalog mutation here
+        // (the caller already committed the layout/mode change). The tween
+        // lands each window exactly at its `to`; the settle is AX-only.
+        var anims: [(ax: AXUIElement, slide: WindowSlide)] = []
         func append(_ id: WindowID, _ to: CGRect) {
             guard let ax = axWin(id: id), let p = AXGeom.position(ax),
                   let sz = AXGeom.size(ax) else { return }
@@ -298,40 +344,39 @@ extension NativeAdapter {
                abs(from.height - snapped.height) < 1 {
                 return
             }
-            slideAnims.append((ax, WindowSlide(id: id, from: from, to: snapped)))
+            anims.append((ax, WindowSlide(id: id, from: from, to: snapped)))
         }
         for (id, raw) in targets where !skipAnimation.contains(id) {
             append(id, raw)
         }
         if let extra { append(extra.id, extra.target) }
-        guard !slideAnims.isEmpty else { return false }
-        let settle: () -> Void = { [weak self] in
-            guard let self else { return }
-            self.slideAnims = []
-            self.applyLayout(workspace: n1Based, rect: rect)
-            if let extra {
-                // Floating windows live outside the layout — settle their
-                // final frame explicitly so a missed mid-tween write can't
-                // leave them subtly off.
-                if let ax = self.axWin(id: extra.id) {
-                    AXGeom.setPosition(ax, extra.target.origin)
-                    AXGeom.setSize(ax, extra.target.size)
-                }
-            }
-            self.eventContinuation.yield(.refreshNeeded)
+        guard !anims.isEmpty else { return false }
+        // Floating windows live outside the layout — settle their final
+        // frame explicitly (AX-only) so a missed mid-tween write can't
+        // leave them subtly off.
+        var frameSnaps: [(ax: AXUIElement, frame: CGRect)] = []
+        if let extra, let ax = axWin(id: extra.id) {
+            frameSnaps.append((ax, extra.target))
         }
-        slideIsRetile = true
-        startSlideDriver(settle)
-        Log.debug("native: animateRetile WS \(n1Based) anims=\(slideAnims.count)"
-            + (extra != nil ? " (+extra)" : ""))
+        let count = anims.count
+        let hasExtra = extra != nil
+        nonisolated(unsafe) let plan = anims
+        nonisolated(unsafe) let snaps = frameSnaps
+        DispatchQueue.main.async { [weak self] in
+            self?.startSlide(anims: plan, frameSnaps: snaps, isRetile: true)
+        }
+        Log.debug("native: animateRetile WS \(n1Based) anims=\(count)"
+            + (hasExtra ? " (+extra)" : ""))
         return true
     }
 
     /// 枠 E: animate a stack cycle as a one-window slide — the old top
     /// exits one edge, the next window enters from the opposite edge
-    /// (the others stay parked); direction picks the axis. Always applies
-    /// the cycle; settles via applyStack (newTop fills, others park), and
-    /// falls back to an instant applyStack when it can't animate.
+    /// (the others stay parked); direction picks the axis. P6: the cycle's
+    /// catalog state (park old top / un-park new top) is committed HERE on
+    /// cliQueue; the AX-only settle snaps the demoted top to its sliver and
+    /// the new top to the exact rect. Falls back to an instant `applyStack`
+    /// when it can't animate.
     func animateStackCycle(direction: WorkspaceCatalog.CycleDirection,
                                    rect: CGRect) {
         let active = catalog.activeIndex
@@ -351,28 +396,33 @@ extension NativeAdapter {
         }
         let r = rect.roundedToPhysicalPixels(scale: activeScale(near: rect))
         let dx = (direction == .next ? 1 : -1) * rect.width
-        slideAnims = []
-        // Old top: slide off the near edge (size constant → translation).
-        slideAnims.append((oldAx, WindowSlide(
+        var anims: [(ax: AXUIElement, slide: WindowSlide)] = []
+        // Old top: slide off the near edge (size constant → translation),
+        // then park (catalog commit now; AX sliver snap in the settle).
+        anims.append((oldAx, WindowSlide(
             id: oldTop,
             from: CGRect(origin: oldPos, size: oldSize),
             to: CGRect(x: oldPos.x - dx, y: oldPos.y,
                        width: oldSize.width, height: oldSize.height))))
+        catalog.markAnchorParked(oldTop, originalPosition: oldPos)
+        let oldScr = Displays.containing(oldPos)
+        let parkSnaps = [(ax: oldAx,
+                          at: CGPoint(x: oldScr.maxX - 1, y: oldScr.maxY - 1))]
         // New top: un-park, place off the far edge at full size, slide in.
         catalog.clearParkedState(of: newTop)
         AXGeom.setSize(newAx, r.size)
         let start = CGRect(x: r.minX + dx, y: r.minY,
                            width: r.width, height: r.height)
         AXGeom.setPosition(newAx, start.origin)
-        slideAnims.append((newAx, WindowSlide(id: newTop, from: start, to: r)))
+        anims.append((newAx, WindowSlide(id: newTop, from: start, to: r)))
+        let frameSnaps = [(ax: newAx, frame: r)]
 
-        let settle: () -> Void = { [weak self] in
-            guard let self else { return }
-            self.slideAnims = []
-            self.applyStack(workspace: active, rect: rect)
-            self.eventContinuation.yield(.refreshNeeded)
+        nonisolated(unsafe) let plan = anims
+        nonisolated(unsafe) let pSnaps = parkSnaps
+        nonisolated(unsafe) let fSnaps = frameSnaps
+        DispatchQueue.main.async { [weak self] in
+            self?.startSlide(anims: plan, parkSnaps: pSnaps,
+                             frameSnaps: fSnaps, isRetile: false)
         }
-        slideIsRetile = false   // park bookkeeping in settle → settle on interrupt
-        startSlideDriver(settle)
     }
 }

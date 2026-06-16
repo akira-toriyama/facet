@@ -488,9 +488,19 @@ public protocol WindowBackend: Sendable {
     /// only push messages a *user* could act on — internal
     /// debugging chatter belongs in `Log.debug` instead.
     var errors: AsyncStream<String> { get }
+
+    /// True while a cosmetic slide animation is in flight (P6). The
+    /// Controller skips its poll-driven refresh while this holds so a
+    /// reconcile-triggered re-tile can't AX-fight the in-flight tween; the
+    /// slide's settle yields a fresh refresh when it lands. Read on the
+    /// main actor (set/cleared there too). Defaults to `false` for backends
+    /// without animation.
+    var isAnimating: Bool { get }
 }
 
 public extension WindowBackend {
+    var isAnimating: Bool { false }
+
     /// Convenience for callers that don't care about auto-focus
     /// (the majority). Keeps the call sites that already follow
     /// up with `Focus.assert` etc. terse.

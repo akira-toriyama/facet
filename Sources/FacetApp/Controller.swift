@@ -658,6 +658,13 @@ final class Controller: NSObject {
             Log.debug("refresh skipped (real-window drag in progress)")
             return
         }
+        // P6: don't reconcile mid-slide — a reconcile-triggered re-tile
+        // would AX-fight the in-flight cosmetic tween. The slide's settle
+        // yields a fresh refresh when it lands.
+        if backend.isAnimating {
+            Log.debug("refresh skipped (slide animation in progress)")
+            return
+        }
         Log.debug("refresh dispatch")
         let bk = backend
         cliQueue.async {
@@ -842,26 +849,39 @@ final class Controller: NSObject {
     /// event lands. Errors are swallowed: the status file is a
     /// debugging convenience, not a correctness path.
     private func writeStatus(_ wss: [Workspace]) {
-        let entries = wss.map { w in
-            WorkspaceStatusEntry(
-                index: w.index + 1,     // 1-indexed for the CLI surface
-                name: w.name,
-                active: w.isActive,
-                windowCount: w.windows.count,
-                stickyCount: w.windows.filter(\.isSticky).count)
-        }
-        let snap = StatusSnapshot(
-            backend: backend.name,
-            theme: config.effectiveTheme,
-            defaultView: config.effectiveDefaultView,
-            workspaces: entries,
-            stashed: backend.stashedScratchpads(),
-            tags: backend.definedTagNames(),
-            lens: backend.currentLens(),
-            lastError: lastError,
-            timestamp: ISO8601DateFormatter().string(from: Date()))
-        do { try snap.write() } catch {
-            Log.debug("writeStatus failed: \(error)")
+        // P6: the catalog reads (stashedScratchpads / definedTagNames /
+        // currentLens) run on `cliQueue` — the single catalog
+        // serialization point — alongside the file write. `wss` is an
+        // immutable value snapshot, so `entries` is catalog-free. The
+        // status file is a debugging convenience, so the tiny
+        // eventual-consistency window from deferring the catalog read is
+        // fine (it never tears against the cliQueue mutators).
+        let bk = backend
+        let theme = config.effectiveTheme
+        let defaultView = config.effectiveDefaultView
+        let lastError = self.lastError
+        cliQueue.async {
+            let entries = wss.map { w in
+                WorkspaceStatusEntry(
+                    index: w.index + 1,     // 1-indexed for the CLI surface
+                    name: w.name,
+                    active: w.isActive,
+                    windowCount: w.windows.count,
+                    stickyCount: w.windows.filter(\.isSticky).count)
+            }
+            let snap = StatusSnapshot(
+                backend: bk.name,
+                theme: theme,
+                defaultView: defaultView,
+                workspaces: entries,
+                stashed: bk.stashedScratchpads(),
+                tags: bk.definedTagNames(),
+                lens: bk.currentLens(),
+                lastError: lastError,
+                timestamp: ISO8601DateFormatter().string(from: Date()))
+            do { try snap.write() } catch {
+                Log.debug("writeStatus failed: \(error)")
+            }
         }
     }
 
@@ -886,12 +906,13 @@ final class Controller: NSObject {
         if let last = lastQueryWriteAt,
            now.timeIntervalSince(last) < Self.queryWriteThrottle { return }
         lastQueryWriteAt = now
-        // Read the catalog state HERE on the main actor (a quick read,
-        // same place the DNC dispatch mutates it — so no race), then do
-        // the heavy CGWindowList + SkyLight + AX sweep off-main with that
-        // immutable snapshot (which touches no catalog).
-        let states = backend.queryFacetStates()
+        // P6: read the catalog state (active + parked) AND run the heavy
+        // CGWindowList + SkyLight + AX sweep on `cliQueue` — the single
+        // catalog serialization point. `queryFacetStates()` is the only
+        // place `parkedCatalogs` is read; keeping it on cliQueue (not main)
+        // is what stops it tearing against the cliQueue mutators.
         cliQueue.async { [bk = backend] in
+            let states = bk.queryFacetStates()
             let entries = bk.queryEntries(facetStates: states)
             do { try WindowQuery.write(entries) }
             catch { Log.debug("writeQuery failed: \(error)") }

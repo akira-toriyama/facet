@@ -321,7 +321,6 @@ extension NativeAdapter {
     /// path — animate when on, else snap — and owns the refresh yield.
     func reflowActive(rect: CGRect,
                               extra: (id: WindowID, target: CGRect)? = nil) {
-        cancelSlideForRetarget()
         if config.effectiveAnimationsEnabled,
            animateRetile(workspace: catalog.activeIndex, rect: rect,
                          extra: extra) {
@@ -351,6 +350,7 @@ extension NativeAdapter {
     }
 
     public func perform(_ action: WindowAction) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         // BSP: toggleFloat, toggleOrientation. Stack:
         // cycleStackNext, cycleStackPrev. Everything else
         // (master_stack / scrolling / toggleStack /
@@ -430,7 +430,6 @@ extension NativeAdapter {
             // stack-order array, not via OS focus.
             let direction: WorkspaceCatalog.CycleDirection =
                 action == .cycleStackNext ? .next : .prev
-            cancelSlideForRetarget()
             if config.effectiveAnimationsEnabled {
                 // 枠 E: slide the old top out / next top in.
                 animateStackCycle(direction: direction, rect: rect)

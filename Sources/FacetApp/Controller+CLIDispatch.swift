@@ -68,25 +68,26 @@ extension Controller {
                         String(s.dropFirst("lens:".count)))
 
                 case "workspace-add":
-                    self.backend.addWorkspace()
-                    self.scheduleReconcile(after: 0.05)
+                    self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
                 case let s where s.hasPrefix("workspace-remove:"):
                     let raw = String(s.dropFirst("workspace-remove:".count))
-                    self.backend.removeWorkspace(
-                        at: raw.isEmpty ? nil : Int(raw))
-                    self.scheduleReconcile(after: 0.05)
+                    self.runBackendCommand { bk in
+                        bk.removeWorkspace(at: raw.isEmpty ? nil : Int(raw))
+                        return nil
+                    }
 
                 case let s where s.hasPrefix("workspace-rename:"):
-                    self.backend.renameWorkspace(
-                        at: nil,
-                        to: String(s.dropFirst("workspace-rename:".count)))
-                    self.scheduleReconcile(after: 0.05)
+                    let name = String(s.dropFirst("workspace-rename:".count))
+                    self.runBackendCommand { bk in
+                        bk.renameWorkspace(at: nil, to: name); return nil
+                    }
 
                 case let s where s.hasPrefix("workspace-move:"):
-                    self.backend.moveActiveWorkspace(
-                        to: Int(s.dropFirst("workspace-move:".count)) ?? 0)
-                    self.scheduleReconcile(after: 0.05)
+                    let to = Int(s.dropFirst("workspace-move:".count)) ?? 0
+                    self.runBackendCommand { bk in
+                        bk.moveActiveWorkspace(to: to); return nil
+                    }
 
                 case let s where s.hasPrefix("window-move:"):
                     let n = Int(s.dropFirst("window-move:".count)) ?? 0
@@ -99,54 +100,50 @@ extension Controller {
 
                 case let s where s.hasPrefix("window-mark:"):
                     let name = String(s.dropFirst("window-mark:".count))
-                    if !self.backend.markFocusedWindow(name) {
-                        self.setError(
-                            "window --mark \(name): no focused window")
+                    self.runBackendCommand { bk in
+                        bk.markFocusedWindow(name) ? nil
+                            : "window --mark \(name): no focused window"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("window-focus-mark:"):
                     let name = String(
                         s.dropFirst("window-focus-mark:".count))
-                    if !self.backend.focusMark(name) {
-                        self.setError(
-                            "window --focus-mark \(name): no such mark")
-                    } else {
-                        self.scheduleReconcile(after: 0.05)
+                    self.runBackendCommand { bk in
+                        bk.focusMark(name) ? nil
+                            : "window --focus-mark \(name): no such mark"
                     }
 
                 case let s where s.hasPrefix("window-unmark:"):
                     let name = String(s.dropFirst("window-unmark:".count))
-                    if !self.backend.unmark(name) {
-                        self.setError(
-                            "window --unmark \(name): no such mark")
+                    self.runBackendCommand { bk in
+                        bk.unmark(name) ? nil
+                            : "window --unmark \(name): no such mark"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("window-toggle-tag:"):
                     let name = String(
                         s.dropFirst("window-toggle-tag:".count))
-                    if !self.backend.toggleTagOnFocusedWindow(name) {
-                        self.setError("window --toggle-tag \(name): "
-                            + "no focused window / not tag mode")
+                    self.runBackendCommand { bk in
+                        bk.toggleTagOnFocusedWindow(name) ? nil
+                            : "window --toggle-tag \(name): "
+                                + "no focused window / not tag mode"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("window-tag:"):
                     let name = String(s.dropFirst("window-tag:".count))
-                    if !self.backend.addTagToFocusedWindow(name) {
-                        self.setError("window --tag \(name): "
-                            + "no focused window / not tag mode")
+                    self.runBackendCommand { bk in
+                        bk.addTagToFocusedWindow(name) ? nil
+                            : "window --tag \(name): "
+                                + "no focused window / not tag mode"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("window-untag:"):
                     let name = String(s.dropFirst("window-untag:".count))
-                    if !self.backend.removeTagFromFocusedWindow(name) {
-                        self.setError("window --untag \(name): "
-                            + "no such tag / no focused window")
+                    self.runBackendCommand { bk in
+                        bk.removeTagFromFocusedWindow(name) ? nil
+                            : "window --untag \(name): "
+                                + "no such tag / no focused window"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("window-retag:"):
                     // Payload OLD:NEW — neither half can contain ':'
@@ -161,39 +158,41 @@ extension Controller {
                     let shown = body.replacingOccurrences(of: ":", with: " ")
                     if parts.count != 2 {
                         self.setError("window --retag \(shown): malformed")
+                        self.scheduleReconcile(after: 0.05)
                     } else {
-                        switch self.backend.retagFocusedWindow(
-                            old: parts[0], new: parts[1]) {
-                        case .retagged:
-                            break
-                        case .noFocus:
-                            self.setError("window --retag \(shown): "
-                                + "no focused window / not tag mode")
-                        case .oldUndefined:
-                            self.setError("window --retag \(shown): "
-                                + "no such tag \(parts[0])")
-                        case .vocabFull:
-                            self.setError("window --retag \(shown): "
-                                + "vocabulary full (63 tags)")
+                        self.runBackendCommand { bk in
+                            switch bk.retagFocusedWindow(
+                                old: parts[0], new: parts[1]) {
+                            case .retagged:
+                                return nil
+                            case .noFocus:
+                                return "window --retag \(shown): "
+                                    + "no focused window / not tag mode"
+                            case .oldUndefined:
+                                return "window --retag \(shown): "
+                                    + "no such tag \(parts[0])"
+                            case .vocabFull:
+                                return "window --retag \(shown): "
+                                    + "vocabulary full (63 tags)"
+                            }
                         }
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("tag-add:"):
                     let name = String(s.dropFirst("tag-add:".count))
-                    if !self.backend.addTag(name) {
-                        self.setError("tag --add \(name): not tag mode, "
-                            + "or vocabulary full (63 tags)")
+                    self.runBackendCommand { bk in
+                        bk.addTag(name) ? nil
+                            : "tag --add \(name): not tag mode, "
+                                + "or vocabulary full (63 tags)"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("tag-remove:"):
                     let name = String(s.dropFirst("tag-remove:".count))
-                    if !self.backend.removeTag(name) {
-                        self.setError("tag --remove \(name): no such tag, "
-                            + "or not tag mode")
+                    self.runBackendCommand { bk in
+                        bk.removeTag(name) ? nil
+                            : "tag --remove \(name): no such tag, "
+                                + "or not tag mode"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("tag-rename:"):
                     // Payload OLD:NEW — neither half can contain ':'
@@ -204,37 +203,34 @@ extension Controller {
                         .split(separator: ":", maxSplits: 1,
                                omittingEmptySubsequences: false)
                         .map(String.init)
-                    if parts.count != 2
-                        || !self.backend.renameTag(parts[0], to: parts[1]) {
-                        let shown = body.replacingOccurrences(of: ":", with: " ")
-                        self.setError("tag --rename \(shown): no such tag, "
-                            + "or the new name is already in use")
+                    let shown = body.replacingOccurrences(of: ":", with: " ")
+                    self.runBackendCommand { bk in
+                        (parts.count == 2
+                            && bk.renameTag(parts[0], to: parts[1])) ? nil
+                            : "tag --rename \(shown): no such tag, "
+                                + "or the new name is already in use"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("scratchpad-stash:"):
                     let name = String(s.dropFirst("scratchpad-stash:".count))
-                    if !self.backend.stashScratchpad(name) {
-                        self.setError(
-                            "scratchpad --stash \(name): no focused window")
+                    self.runBackendCommand { bk in
+                        bk.stashScratchpad(name) ? nil
+                            : "scratchpad --stash \(name): no focused window"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("scratchpad-toggle:"):
                     let name = String(s.dropFirst("scratchpad-toggle:".count))
-                    if !self.backend.toggleScratchpad(name) {
-                        self.setError(
-                            "scratchpad --toggle \(name): no such shelf")
+                    self.runBackendCommand { bk in
+                        bk.toggleScratchpad(name) ? nil
+                            : "scratchpad --toggle \(name): no such shelf"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("scratchpad-release:"):
                     let name = String(s.dropFirst("scratchpad-release:".count))
-                    if !self.backend.releaseScratchpad(name) {
-                        self.setError(
-                            "scratchpad --release \(name): no such shelf")
+                    self.runBackendCommand { bk in
+                        bk.releaseScratchpad(name) ? nil
+                            : "scratchpad --release \(name): no such shelf"
                     }
-                    self.scheduleReconcile(after: 0.05)
 
                 case let s where s.hasPrefix("set-layout:"):
                     let name = String(s.dropFirst("set-layout:".count))
@@ -244,21 +240,24 @@ extension Controller {
                     self.dispatchRetile()
 
                 case "workspace-balance":
-                    self.backend.balanceActiveWorkspace()
-                    self.scheduleReconcile(after: 0.05)
+                    self.runBackendCommand { bk in
+                        bk.balanceActiveWorkspace(); return nil
+                    }
 
                 case let s where s.hasPrefix("workspace-rotate:"):
                     let deg = Int(
                         s.dropFirst("workspace-rotate:".count)) ?? 0
-                    self.backend.rotateActiveWorkspace(degrees: deg)
-                    self.scheduleReconcile(after: 0.05)
+                    self.runBackendCommand { bk in
+                        bk.rotateActiveWorkspace(degrees: deg); return nil
+                    }
 
                 case let s where s.hasPrefix("workspace-mirror:"):
                     let axis: MirrorAxis =
                         s.dropFirst("workspace-mirror:".count) == "vertical"
                         ? .vertical : .horizontal
-                    self.backend.mirrorActiveWorkspace(axis)
-                    self.scheduleReconcile(after: 0.05)
+                    self.runBackendCommand { bk in
+                        bk.mirrorActiveWorkspace(axis); return nil
+                    }
 
                 case "window-toggle-float":
                     self.dispatchWindowAction(.toggleFloat)
@@ -435,6 +434,29 @@ extension Controller {
     /// Route a `workspace:` control payload — either an absolute
     /// 1-based index (`"2"`) or a relative target (`next` / `prev` /
     /// `recent`).
+    /// P6: run a catalog-touching backend command on the serial `cliQueue`
+    /// — the single catalog serialization point — then surface any error +
+    /// schedule a reconcile back on main. `body` runs on cliQueue and
+    /// returns the error message to show (nil = success). This is the DNC
+    /// dispatch twin of the grid / rail / tag-panel paths, which already
+    /// wrap their backend calls in `cliQueue.async`; before P6 the DNC
+    /// switch was the one surface that mutated the catalog on the main
+    /// thread, racing the cliQueue reconcile.
+    func runBackendCommand(reconcileAfter: TimeInterval = 0.05,
+                           _ body: @escaping @Sendable (any WindowBackend) -> String?) {
+        let bk = backend
+        cliQueue.async {
+            let err = body(bk)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if let err { self.setError(err) }
+                    self.scheduleReconcile(after: reconcileAfter)
+                }
+            }
+        }
+    }
+
     private func dispatchWorkspaceTarget(_ arg: String) {
         switch arg {
         case "next":   dispatchWorkspaceRelative(.next)
@@ -444,9 +466,10 @@ extension Controller {
             // Focus by workspace name (stable across reorder). No
             // explicit window pick → auto-focus the destination's
             // last-touched window, same contract as the index path.
-            backend.switchWorkspace(
-                named: String(s.dropFirst("name:".count)), autoFocus: true)
-            scheduleReconcile(after: 0.05)
+            let wsName = String(s.dropFirst("name:".count))
+            runBackendCommand { bk in
+                bk.switchWorkspace(named: wsName, autoFocus: true); return nil
+            }
         default:       dispatchWorkspace(Int(arg) ?? 0)
         }
     }
@@ -461,31 +484,35 @@ extension Controller {
             Log.debug("dispatchLensTarget malformed=\(arg) — ignored")
             return
         }
-        backend.setLens(spec)
-        scheduleReconcile(after: 0.05)
+        runBackendCommand { bk in bk.setLens(spec); return nil }
     }
 
     private func dispatchWorkspaceRelative(_ target: RelativeWorkspace) {
         // Same focus contract as the absolute path: no explicit window
         // pick, so the backend auto-focuses the destination's
         // last-touched window (memory [[facet-ws-switch-focus-management]]).
-        backend.switchWorkspaceRelative(target, autoFocus: true)
-        scheduleReconcile(after: 0.05)
+        runBackendCommand { bk in
+            bk.switchWorkspaceRelative(target, autoFocus: true); return nil
+        }
     }
 
     private func dispatchWorkspace(_ n: Int) {
-        let count = backend.workspaces().count
-        guard n >= 1, n <= count else {
-            setError("workspace \(n) out of range "
-                + "(\(rangeHint(count: count)))")
-            return
+        // P6: the range check reads `workspaces()` (which runs the catalog
+        // reconcile) and the switch mutates it — both must happen in ONE
+        // cliQueue block so a poll reconcile can't interleave between them.
+        runBackendCommand { bk in
+            let count = bk.workspaces().count
+            guard n >= 1, n <= count else {
+                let hint = count > 0 ? "1..\(count)" : "no workspaces available"
+                return "workspace \(n) out of range (\(hint))"
+            }
+            // CLI `workspace --focus N`: no explicit window pick, so let
+            // the backend auto-focus the last-touched window of the
+            // destination (or activate Finder if empty). See memory
+            // [[facet-ws-switch-focus-management]].
+            bk.switchWorkspace(toIndex: n - 1, autoFocus: true)
+            return nil
         }
-        // CLI `workspace --focus N`: no explicit window pick, so let
-        // the backend auto-focus the last-touched window of the
-        // destination (or activate Finder if empty). See memory
-        // [[facet-ws-switch-focus-management]].
-        backend.switchWorkspace(toIndex: n - 1, autoFocus: true)
-        scheduleReconcile(after: 0.05)
     }
 
     /// Move the currently-focused window to the Nth workspace
@@ -494,26 +521,30 @@ extension Controller {
     /// of range — a stale hotkey on an empty mac desktop shouldn't
     /// take down the server.
     private func dispatchWindowMove(_ n: Int, follow: Bool = false) {
-        let count = backend.workspaces().count
-        guard n >= 1, n <= count else {
-            setError("window --move-to \(n) out of range "
-                + "(\(rangeHint(count: count)))")
-            return
+        // P6: range check + focused-window read + move (+ optional follow
+        // switch) all in ONE cliQueue block, so the id is read at the same
+        // serialization point the move consumes it and no reconcile slips
+        // between the two backend calls.
+        runBackendCommand { bk in
+            let count = bk.workspaces().count
+            guard n >= 1, n <= count else {
+                let hint = count > 0 ? "1..\(count)" : "no workspaces available"
+                return "window --move-to \(n) out of range (\(hint))"
+            }
+            guard let id = bk.focusedWindow() else {
+                return "window --move-to \(n): no focused window"
+            }
+            bk.moveWindow(id, toWorkspaceIndex: n - 1)
+            // send-and-follow: switch the active workspace to the
+            // destination so focus follows the window over. autoFocus
+            // lands on the just-moved window (now the last-touched
+            // member there). Without --follow the window departs and
+            // the user stays put.
+            if follow {
+                bk.switchWorkspace(toIndex: n - 1, autoFocus: true)
+            }
+            return nil
         }
-        guard let id = backend.focusedWindow() else {
-            setError("window --move-to \(n): no focused window")
-            return
-        }
-        backend.moveWindow(id, toWorkspaceIndex: n - 1)
-        // send-and-follow: switch the active workspace to the
-        // destination so focus follows the window over. autoFocus
-        // lands on the just-moved window (now the last-touched
-        // member there). Without --follow the window departs and
-        // the user stays put.
-        if follow {
-            backend.switchWorkspace(toIndex: n - 1, autoFocus: true)
-        }
-        scheduleReconcile(after: 0.05)
     }
 
     private func dispatchToggle(_ name: String) {
@@ -537,17 +568,17 @@ extension Controller {
             setError("workspace --layout \(name): no active workspace")
             return
         }
-        backend.setLayoutMode(workspaceIndex: active.index,
-                              mode: name)
-        scheduleReconcile(after: 0.05)
+        let idx = active.index
+        runBackendCommand { bk in
+            bk.setLayoutMode(workspaceIndex: idx, mode: name); return nil
+        }
     }
 
     /// `facet workspace --retile`: ask the backend to re-apply the active
     /// workspace's layout. A backend that delegates tiling to the OS
     /// would treat this as a no-op.
     private func dispatchRetile() {
-        backend.retileActiveWorkspace()
-        scheduleReconcile(after: 0.05)
+        runBackendCommand { bk in bk.retileActiveWorkspace(); return nil }
     }
 
     /// `facet window --toggle-float` / `--toggle-orientation`:
@@ -557,8 +588,7 @@ extension Controller {
     /// dispatch here for `FACET_DEBUG` tracing.
     private func dispatchWindowAction(_ action: WindowAction) {
         Log.debug("dispatchWindowAction \(action)")
-        backend.perform(action)
-        scheduleReconcile(after: 0.05)
+        runBackendCommand { bk in bk.perform(action); return nil }
     }
 
     /// Live re-theme from `facet --theme ...`. Runtime-only — the change
@@ -580,7 +610,4 @@ extension Controller {
     /// `(1..15)` for the normal case; `no workspaces available` when
     /// the backend returned an empty list (= backend not yet ready,
     /// startup race, etc.) — much clearer than the cryptic `(1..0)`.
-    private func rangeHint(count: Int) -> String {
-        count > 0 ? "1..\(count)" : "no workspaces available"
-    }
 }
