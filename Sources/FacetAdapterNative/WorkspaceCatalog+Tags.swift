@@ -137,7 +137,22 @@ extension WorkspaceCatalog {
         // `name` is the active lens label (the currently shown tags, else
         // `all` for the floor / empty lens) — the tag-world header text.
         let lensNames = tagModel.names(in: lens)
-        let label = lensNames.isEmpty ? "all" : lensNames.joined(separator: " · ")
+        // `#`-prefixed, lowercase, space-separated (item 14) — the canonical
+        // tag spelling used by the per-row chips + the TagEditPanel checklist,
+        // so the tag-world header reads as the same `#web` the rest of the UI
+        // shows. Both the empty (floor) lens AND the every-tag lens show
+        // everything, so both read `All tags` (item 15) rather than a bare
+        // `all` / the full tag list; a real subset shows its `#tag`s.
+        // The tree draws a leading `tag` glyph before this label, so the
+        // names are bare (no `#` prefix) and space-separated. Both the empty
+        // (floor) lens and the every-tag lens read "All tags".
+        let allUserNames = Set(tagModel.names(in: lensAll))
+        let label: String
+        if lensNames.isEmpty || Set(lensNames) == allUserNames {
+            label = "All tags"
+        } else {
+            label = lensNames.joined(separator: " ")
+        }
         return [Workspace(index: 0, name: label, isActive: true,
                           layoutMode: effectiveTagLayout, windows: wins)]
     }

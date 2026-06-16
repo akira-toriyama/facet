@@ -304,12 +304,21 @@ public final class SidebarView: NSView {
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (ws, wins) in shown {
-            let nm = (ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name).uppercased()
+            // Tag mode keeps the `#web` lens label as-is; workspace mode
+            // uppercases the WS name (matches the header draw at the Cell).
+            let baseNm = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
+            let nm = tagModeActive ? baseNm : baseNm.uppercased()
+            // One tag glyph per tag name (~14pt + gaps); "All tags" = 1 glyph.
+            let tagCount = !tagModeActive ? 0
+                : (nm == "All tags" ? 1 : max(1, nm.split(separator: " ").count))
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+                + CGFloat(tagCount) * 22
             let modeW = ws.layoutMode.isEmpty ? 0
                 : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
                     withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+                    // leading layout icon (~14pt + 5 gap) when one exists
+                    + (layoutModeIcon(ws.layoutMode).isEmpty ? 0 : 19)
             naturalW = max(naturalW,
                            rowPadX + gripSpace + ceil(max(nameW, modeW)) + rowPadX)
             for win in wins {
@@ -397,7 +406,7 @@ public final class SidebarView: NSView {
             let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
             cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                               firstHeader: firstHeader, pid: 0, app: "",
-                              title: "", text: t.uppercased(),
+                              title: "", text: tagModeActive ? t : t.uppercased(),
                               mode: ws.layoutMode,
                               isMaster: false, isFloating: false,
                               isSticky: false, mark: nil, isHidden: false,
@@ -722,16 +731,57 @@ public final class SidebarView: NSView {
                 drawGrip(in: NSRect(x: rowPadX, y: capY,
                                     width: headerGripW, height: capH),
                          hot: c.hot || hoverIdx == i)
-                // Line 1: WS name (accent when active).
+                // Line 1: WS name / lens label (accent when active). In tag
+                // mode this is the lens (a tag concept) → `secondary` to
+                // match the tag colour scheme (item 14/17); workspace names
+                // stay `primary`. Line 2 (layout) is `primary` either way, so
+                // the two lines never collide on the same accent.
                 let nameH: CGFloat = 18
-                (c.text as NSString).draw(
-                    in: NSRect(x: rowPadX + gripSpace, y: capY,
-                               width: bounds.width - rowPadX * 2 - gripSpace,
-                               height: nameH),
-                    withAttributes: [
-                        .font: uiFont(fs, .bold),
-                        .foregroundColor: c.hot ? pal.primary : pal.muted,
-                        .kern: 0.6, .paragraphStyle: hp])
+                let nameColor = c.hot
+                    ? (tagModeActive ? pal.secondary : pal.primary)
+                    : pal.muted
+                let nameX0 = rowPadX + gripSpace
+                let nameAttrs: [NSAttributedString.Key: Any] = [
+                    .font: uiFont(fs, .bold), .foregroundColor: nameColor,
+                    .kern: 0.6, .paragraphStyle: hp]
+                if tagModeActive {
+                    // Tag mode: a `tag` glyph PER tag name (2+ tags each get
+                    // their own icon), so "web chat" → 🏷 web 🏷 chat. The
+                    // "All tags" show-everything label is a single status
+                    // word → one leading glyph. (Tag names carry no spaces,
+                    // so the adapter's space-join splits cleanly.)
+                    let tags = c.text == "All tags"
+                        ? [c.text]
+                        : c.text.split(separator: " ").map(String.init)
+                    let rightEdge = bounds.width - rowPadX
+                    var x = nameX0
+                    for tag in tags where x < rightEdge {
+                        if let tagIcon = IconResolver.resolve(
+                            "SF:tag", pointSize: 13, color: nameColor,
+                            scale: .medium) {
+                            let ih = min(tagIcon.size.height, 14)
+                            let iw = tagIcon.size.width
+                                * (ih / max(tagIcon.size.height, 1))
+                            tagIcon.draw(in: NSRect(
+                                x: x, y: capY + (nameH - ih) / 2,
+                                width: iw, height: ih))
+                            x += iw + 4
+                        }
+                        let tw = ceil((tag as NSString)
+                            .size(withAttributes: nameAttrs).width)
+                        (tag as NSString).draw(
+                            in: NSRect(x: x, y: capY,
+                                       width: min(tw, rightEdge - x), height: nameH),
+                            withAttributes: nameAttrs)
+                        x += tw + 10        // gap before the next tag's glyph
+                    }
+                } else {
+                    (c.text as NSString).draw(
+                        in: NSRect(x: nameX0, y: capY,
+                                   width: bounds.width - rowPadX - nameX0,
+                                   height: nameH),
+                        withAttributes: nameAttrs)
+                }
                 // Line 2: layout-mode text — secondary semibold on the
                 // active WS, `pal.muted` semibold when the WS isn't
                 // active so non-focused rows recede. No pill
@@ -744,15 +794,38 @@ public final class SidebarView: NSView {
                 // collides with the primary accent used by the
                 // active WS-name on line 1.
                 if !c.mode.isEmpty {
-                    // Layout mode: plain text, no fill — same weight
-                    // (bold) as the WS name above it so the two-line
-                    // caption reads as one unit. secondary on the active
-                    // WS, dim when inactive so non-focused rows recede.
-                    let modeColor = c.hot ? pal.secondary : pal.muted
+                    // Layout mode: a leading SF icon (item 7 — the tree is
+                    // text-heavy, so the glyph lets the layout register at a
+                    // glance) + the abbreviated label. Plain, no fill — same
+                    // weight (bold) as the WS name above it so the two-line
+                    // caption reads as one unit. `primary` on the active WS
+                    // (item 10: layout = primary accent), dim when inactive
+                    // so non-focused rows recede.
+                    let modeColor = c.hot ? pal.primary : pal.muted
+                    let mx = rowPadX + gripSpace
+                    let modeY = capY + nameH + 4
+                    var modeTextX = mx
+                    let modeIconSpec = layoutModeIcon(c.mode)
+                    // Explicit ~14pt glyph (not the menu's `.large`): the
+                    // header line is only 18pt tall, so the icon is sized to
+                    // sit centred with ≥2pt clearance from the kbNav outline
+                    // and the line above (fixes the reported icon↔border
+                    // overlap). Height-clamped so a stray large render can't
+                    // bleed past the line.
+                    if !modeIconSpec.isEmpty,
+                       let icon = IconResolver.resolve(
+                        modeIconSpec, pointSize: 13, color: modeColor,
+                        scale: .medium) {
+                        let ih = min(icon.size.height, 14)
+                        let iw = icon.size.width * (ih / max(icon.size.height, 1))
+                        icon.draw(in: NSRect(
+                            x: mx, y: modeY + (18 - ih) / 2,
+                            width: iw, height: ih))
+                        modeTextX = mx + iw + 5
+                    }
                     (layoutBadgeLabel(c.mode) as NSString).draw(
-                        in: NSRect(x: rowPadX + gripSpace,
-                                   y: capY + nameH + 4,
-                                   width: bounds.width - rowPadX * 2 - gripSpace,
+                        in: NSRect(x: modeTextX, y: modeY,
+                                   width: bounds.width - rowPadX - modeTextX,
                                    height: 18),
                         withAttributes: [
                             .font: uiFont(fs, .bold),
@@ -891,202 +964,87 @@ public final class SidebarView: NSView {
                             withAttributes: pillAttrs)
                         lx += pillW + 6
                     }
-                    // Tag chips (#tag): EVERY tag this window carries (the
-                    // tag-mode list is flat — there is no primary-tag header
-                    // to hide one under). A filled chip in `secondary` (a
-                    // distinct accent — readable, but not the `primary`
-                    // selection color — vs the outlined status pills),
-                    // prefixed `#` so it can't be mistaken for a mark /
-                    // scratchpad. Stops before a chip would overrun the
-                    // row's right edge.
+                    // Tags (#tag): EVERY tag this window carries (the tag-mode
+                    // list is flat — there is no primary-tag header to hide
+                    // one under). A `tag` glyph (replacing the old `#`) + the
+                    // name in `secondary`, NO filled chip background (it read
+                    // as an unwanted highlight); the glyph + accent colour
+                    // already distinguish it from a mark / scratchpad. Stops
+                    // before a tag would overrun the row's right edge.
+                    let pillH: CGFloat = 22
                     for tag in c.tags {
-                        let chipText = "#\(tag)"
-                        let chipFont = uiFont(windowFontSize - 1, .medium)
+                        // Same font + icon size as the status badges
+                        // (master/float/sticky) so tags don't read smaller.
+                        let chipFont = uiFont(windowFontSize, .semibold)
                         let maxTextW: CGFloat = 90
-                        let textW = min(maxTextW, ceil((chipText as NSString)
+                        let textW = min(maxTextW, ceil((tag as NSString)
                             .size(withAttributes: [.font: chipFont]).width))
-                        let padX: CGFloat = 6
-                        let pillH: CGFloat = 22
-                        let pillW = textW + padX * 2
+                        let tagIcon = IconResolver.resolve(
+                            "SF:tag", pointSize: 14,
+                            color: pal.secondary, scale: .medium)
+                        let icH = tagIcon.map { min($0.size.height, 15) } ?? 0
+                        let icW = tagIcon.map {
+                            $0.size.width * (icH / max($0.size.height, 1)) } ?? 0
+                        let icGap: CGFloat = tagIcon == nil ? 0 : 3
+                        let pillW = icW + icGap + textW
                         if lx + pillW > tx + tw { break }   // no room → stop
-                        let chip = NSBezierPath(
-                            roundedRect: NSRect(x: lx, y: labelY - 1,
-                                                width: pillW, height: pillH),
-                            xRadius: 5, yRadius: 5)
-                        pal.secondary.withAlphaComponent(0.15).setFill()
-                        chip.fill()
+                        var cx = lx
+                        if let tagIcon {
+                            tagIcon.draw(in: NSRect(
+                                x: cx, y: labelY - 1 + (pillH - icH) / 2,
+                                width: icW, height: icH))
+                            cx += icW + icGap
+                        }
                         let chipPara = NSMutableParagraphStyle()
-                        chipPara.alignment = .center
                         chipPara.lineBreakMode = .byTruncatingTail
                         let chipAttrs: [NSAttributedString.Key: Any] = [
                             .font: chipFont,
                             .foregroundColor: pal.secondary,
                             .paragraphStyle: chipPara,
                         ]
-                        let chipH = (chipText as NSString)
+                        let chipH = (tag as NSString)
                             .size(withAttributes: chipAttrs).height
-                        (chipText as NSString).draw(
-                            in: NSRect(x: lx,
+                        (tag as NSString).draw(
+                            in: NSRect(x: cx,
                                        y: labelY - 1 + (pillH - chipH) / 2 - 1.0,
-                                       width: pillW, height: chipH),
+                                       width: textW, height: chipH),
                             withAttributes: chipAttrs)
                         lx += pillW + 6
                     }
                     if c.isSticky {
-                        // Sticky badge: a float-style pill (primary border,
-                        // tertiary text — the SAME theme as the `float`
-                        // badge) but with the glyphs SLANTED via
-                        // `.obliqueness` so sticky ≠ float at a glance. The
-                        // shear works on EVERY font (incl. the mono themes,
-                        // which have no true italic face). Text, not a 📌.
-                        let stFont = uiFont(windowFontSize, .semibold)
-                        let txt = "sticky"
-                        let stPara = NSMutableParagraphStyle()
-                        stPara.alignment = .center
-                        stPara.lineBreakMode = .byTruncatingTail
-                        let stAttrs: [NSAttributedString.Key: Any] = [
-                            .font: stFont,
-                            .foregroundColor: pal.tertiary,
-                            .paragraphStyle: stPara,
-                            .obliqueness: 0.2,   // synthetic slant
-                        ]
-                        let stSize = (txt as NSString).size(withAttributes: stAttrs)
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22
-                        let pillW = ceil(stSize.width) + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let stStroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)
-                        stStroke.lineWidth = 1
-                        pal.primary.setStroke()
-                        stStroke.stroke()
-                        (txt as NSString).draw(
-                            in: NSRect(
-                                x: lx,
-                                y: labelY - 1 + (pillH - stSize.height) / 2 - 1.0,
-                                width: pillW, height: stSize.height),
-                            withAttributes: stAttrs)
-                        lx += pillW + 6
+                        // Sticky: `pin` + horizontal text (no slant now — it
+                        // aligns with the other badges; the pin glyph already
+                        // sets it apart from float).
+                        lx = drawStatusPill("sticky", icon: "SF:pin",
+                                            color: pal.foreground,
+                                            at: lx, labelY: labelY)
                     }
                     if let sp = c.scratchpad {
-                        // Scratchpad shelf badge: a dim outlined pill
-                        // `scratchpad:NAME`. Dim (not the mark's accent
-                        // green) so the shelf handle reads as secondary,
-                        // and labelled in full so it can't be mistaken
-                        // for a user mark. Sticky ⊻ scratchpad, so the
-                        // sticky badge above and this never both appear.
-                        let spText = "scratchpad:\(sp)"
-                        let spFont = uiFont(windowFontSize, .semibold)
-                        let maxTextW: CGFloat = 130  // long → tail-truncate
-                        let textW = min(maxTextW, ceil((spText as NSString)
-                            .size(withAttributes: [.font: spFont]).width))
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22
-                        let pillW = textW + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let spStroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)
-                        spStroke.lineWidth = 1
-                        pal.muted.setStroke()
-                        spStroke.stroke()
-                        let spPara = NSMutableParagraphStyle()
-                        spPara.alignment = .center
-                        spPara.lineBreakMode = .byTruncatingTail
-                        let spAttrs: [NSAttributedString.Key: Any] = [
-                            .font: spFont,
-                            .foregroundColor: pal.muted,
-                            .paragraphStyle: spPara,
-                        ]
-                        let textH = (spText as NSString)
-                            .size(withAttributes: spAttrs).height
-                        (spText as NSString).draw(
-                            in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - textH) / 2 - 1.0,
-                                       width: pillW, height: textH),
-                            withAttributes: spAttrs)
-                        lx += pillW + 6
+                        // Scratchpad shelf: `tray` + `scratchpad:NAME`, dim
+                        // (not the mark's accent) so it reads as secondary;
+                        // labelled in full so it can't be mistaken for a mark.
+                        lx = drawStatusPill("scratchpad:\(sp)", icon: "SF:tray",
+                                            color: pal.muted,
+                                            at: lx, labelY: labelY)
                     }
                     if let labelText {
-                        // master / float as an outlined pill — same badge
-                        // shape as the mark (stroke, no fill). All use the
-                        // `primary` border; the TEXT hue distinguishes the
-                        // kind:
-                        //   master → `primary` (border + text)
-                        //   float  → `primary` border + `tertiary` text
-                        //            (the `sticky` pill below shares float's)
-                        let lblColor = c.isMaster ? pal.primary : pal.tertiary
-                        let lblFont = uiFont(windowFontSize, .semibold)
-                        let textW = ceil((labelText as NSString).size(
-                            withAttributes: [.font: lblFont]).width)
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22   // inner padding around text
-                        let pillW = textW + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let stroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)   // rounded rect, not capsule
-                        stroke.lineWidth = 1
-                        pal.primary.setStroke()
-                        stroke.stroke()
-                        let lblPara = NSMutableParagraphStyle()
-                        lblPara.alignment = .center
-                        lblPara.lineBreakMode = .byTruncatingTail
-                        let lblAttrs: [NSAttributedString.Key: Any] = [
-                            .font: lblFont,
-                            .foregroundColor: lblColor,
-                            .paragraphStyle: lblPara,
-                        ]
-                        let lblH = (labelText as NSString).size(
-                            withAttributes: lblAttrs).height
-                        (labelText as NSString).draw(
-                            in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
-                                       width: pillW, height: lblH),
-                            withAttributes: lblAttrs)
+                        // master / float — icon + text, no border. master →
+                        // `crown` + `primary`; float → `macwindow` +
+                        // `foreground` (matches the "Desktop N" band label).
+                        lx = drawStatusPill(
+                            labelText,
+                            icon: c.isMaster ? "SF:crown" : "SF:macwindow",
+                            color: c.isMaster ? pal.primary : pal.foreground,
+                            at: lx, labelY: labelY)
                     }
                     if c.isHidden {
-                        // Hidden (Cmd+H / minimized): an outlined pill in
-                        // the muted `dim` hue — distinct from the accent
-                        // mark and secondary master/float — confirming the
-                        // dimmed row is hidden, not gone. Click restores
-                        // it. (A hidden window is never master/float/sticky
-                        // — those are excluded from hide-reclaim — so this
-                        // is the only status pill on its row.)
-                        let lblFont = uiFont(windowFontSize, .semibold)
-                        let txt = "hidden"
-                        let textW = ceil((txt as NSString).size(
-                            withAttributes: [.font: lblFont]).width)
-                        let padX: CGFloat = 8
-                        let pillH: CGFloat = 22
-                        let pillW = textW + padX * 2
-                        let pillRect = NSRect(x: lx, y: labelY - 1,
-                                              width: pillW, height: pillH)
-                        let stroke = NSBezierPath(
-                            roundedRect: pillRect.insetBy(dx: 0.5, dy: 0.5),
-                            xRadius: 5, yRadius: 5)
-                        stroke.lineWidth = 1
-                        pal.muted.setStroke()
-                        stroke.stroke()
-                        let lblPara = NSMutableParagraphStyle()
-                        lblPara.alignment = .center
-                        lblPara.lineBreakMode = .byTruncatingTail
-                        let lblAttrs: [NSAttributedString.Key: Any] = [
-                            .font: lblFont,
-                            .foregroundColor: pal.muted,
-                            .paragraphStyle: lblPara,
-                        ]
-                        let lblH = (txt as NSString).size(
-                            withAttributes: lblAttrs).height
-                        (txt as NSString).draw(
-                            in: NSRect(x: lx,
-                                       y: labelY - 1 + (pillH - lblH) / 2 - 1.0,
-                                       width: pillW, height: lblH),
-                            withAttributes: lblAttrs)
+                        // Hidden (Cmd+H / minimized): `eye.slash` + dim text —
+                        // confirming the dimmed row is hidden, not gone. Click
+                        // restores it. (Never master/float/sticky, so it's the
+                        // only badge on its row.)
+                        lx = drawStatusPill("hidden", icon: "SF:eye.slash",
+                                            color: pal.muted,
+                                            at: lx, labelY: labelY)
                     }
                 }
             }
@@ -1125,6 +1083,51 @@ public final class SidebarView: NSView {
             }
         }
 
+    }
+
+    /// Draw an outlined status badge — an optional leading SF icon then
+    /// centred text — at `lx` on a window row's third line, returning the
+    /// advanced x. Shared by the master / float / sticky / hidden /
+    /// scratchpad badges so they read uniformly alongside the rest of the
+    /// icon-bearing UI (item 7 — the text-heavy tree gets icon support).
+    /// `stroke` outlines the pill; `textColor` tints BOTH the label and
+    /// the icon; `oblique` slants the glyphs (sticky); `maxTextW`
+    /// tail-truncates long names (e.g. `scratchpad:NAME`).
+    /// Draw a window-state badge — an optional leading SF icon then text — at
+    /// `lx` on a window row's third line, returning the advanced x. Borderless
+    /// + horizontal (no pill outline, no slant): the glyph + `color` carry the
+    /// meaning, matching the tag chips' clean icon+text look. Shared by the
+    /// master / float / sticky / hidden / scratchpad badges.
+    private func drawStatusPill(_ text: String, icon: String, color: NSColor,
+                                maxTextW: CGFloat = 130,
+                                at lx: CGFloat, labelY: CGFloat) -> CGFloat {
+        let font = uiFont(windowFontSize, .semibold)
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingTail
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: color, .paragraphStyle: para]
+        let textW = min(maxTextW, ceil((text as NSString)
+            .size(withAttributes: [.font: font]).width))
+        let pillH: CGFloat = 22
+        let iconImg = icon.isEmpty ? nil
+            : IconResolver.resolve(icon, pointSize: 14,
+                                   color: color, scale: .medium)
+        let iconH = iconImg.map { min($0.size.height, 15) } ?? 0
+        let iconW = iconImg.map { $0.size.width * (iconH / max($0.size.height, 1)) } ?? 0
+        let iconGap: CGFloat = iconImg == nil ? 0 : 4
+        var cx = lx
+        if let iconImg {
+            iconImg.draw(in: NSRect(
+                x: cx, y: labelY - 1 + (pillH - iconH) / 2,
+                width: iconW, height: iconH))
+            cx += iconW + iconGap
+        }
+        let textH = (text as NSString).size(withAttributes: attrs).height
+        (text as NSString).draw(
+            in: NSRect(x: cx, y: labelY - 1 + (pillH - textH) / 2 - 1.0,
+                       width: textW, height: textH),
+            withAttributes: attrs)
+        return cx + textW + 10   // past the text + a gap to the next badge
     }
 
     /// Unified drag/lift context for `draw`: the source workspace,
@@ -1795,7 +1798,11 @@ public final class SidebarView: NSView {
                 cliQueue.async { bk.setLayoutMode(workspaceIndex: ws, mode: mode) }
             },
             onSelectTags: { [weak self] in
-                self?.controller?.openLensSelector(at: scr) })
+                self?.controller?.openLensSelector(at: scr) },
+            // "All tags" (item 15/16): lens = every tag = show everything.
+            // `autoFocus: false` keeps the tree from losing key to a window
+            // in the new union.
+            onAllTags: { cliQueue.async { bk.setLens(.all, autoFocus: false) } })
     }
 
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,

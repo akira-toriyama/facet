@@ -36,11 +36,22 @@ public struct WindowMenuItem: Sendable {
     public let label: String
     public let ops: [WindowAction]
     public let isClose: Bool
+    /// `IconResolver` spec (`SF:<name>`) for the menu row, "" = no icon.
+    /// Supplied by the backend so the icon↔action mapping lives next to
+    /// the label that defines the op, not in a fragile view-side switch.
+    public let icon: String
+    /// Section label this op groups under in the popup menu (item 4):
+    /// e.g. "Layout" (tiling ops) vs "Window" (float / sticky / close).
+    /// The view inserts a dim section header when the section changes.
+    public let section: String
 
-    public init(_ label: String, _ ops: [WindowAction], close: Bool = false) {
+    public init(_ label: String, _ ops: [WindowAction], close: Bool = false,
+                icon: String = "", section: String = "Action") {
         self.label = label
         self.ops = ops
         self.isClose = close
+        self.icon = icon
+        self.section = section
     }
 }
 
@@ -185,7 +196,14 @@ public protocol WindowBackend: Sendable {
     /// are restored + re-tiled into the visible union. No-op under
     /// `by = "workspace"` or when the named tag is unknown (the backend
     /// surfaces the latter as an operational error).
-    func setLens(_ spec: LensSpec)
+    ///
+    /// `autoFocus` mirrors `switchWorkspace(toIndex:autoFocus:)`: the CLI
+    /// path (`lens:` DNC, from a hotkey) wants `true` so focus lands in
+    /// the new union, but the in-panel lens selector passes `false` — the
+    /// user is still configuring the view, so stealing key to a window
+    /// would drop the tree / lens panel out of keyboard focus mid-pick
+    /// (memory [[tree-click-crossapp-focus-broken-sequoia]]).
+    func setLens(_ spec: LensSpec, autoFocus: Bool)
 
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
@@ -480,11 +498,17 @@ public extension WindowBackend {
         switchWorkspace(toIndex: index, autoFocus: false)
     }
 
+    /// Convenience: lens change WITH auto-focus (the CLI default). The
+    /// in-panel selector calls the two-arg form with `autoFocus: false`.
+    func setLens(_ spec: LensSpec) {
+        setLens(spec, autoFocus: true)
+    }
+
     // Default no-ops so backends that don't support a dynamic
     // workspace set (and the unit-test stub) need not implement
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
-    func setLens(_ spec: LensSpec) {}
+    func setLens(_ spec: LensSpec, autoFocus: Bool) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 

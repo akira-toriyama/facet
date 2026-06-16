@@ -88,10 +88,15 @@ final class TagEditListView: NSView {
             let r = NSRect(x: 0, y: CGFloat(i) * Self.rowH,
                            width: bounds.width, height: Self.rowH)
             if i == sel {
+                // Tag UI uses the `secondary` accent throughout (the
+                // selection outline, the checked box / text, the Create row
+                // — every panel variant), matching the tree's tag chips +
+                // the menus' TAGS section, so "tag-related" reads one colour
+                // (item 14/17). Layout stays `primary`.
                 let pill = r.insetBy(dx: 4, dy: 2)
-                palette.selection.setFill()
+                palette.secondary.withAlphaComponent(0.16).setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
-                palette.primary.setStroke()
+                palette.secondary.setStroke()
                 let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
                                      xRadius: 6, yRadius: 6)
                 o.lineWidth = 1.5; o.stroke()
@@ -99,16 +104,21 @@ final class TagEditListView: NSView {
             let boxY = r.minY + (Self.rowH - boxSide) / 2
             let boxRect = NSRect(x: Self.padX, y: boxY,
                                  width: boxSide, height: boxSide)
-            let textRect = NSRect(x: Self.padX + boxSide + 8, y: r.minY + 5,
-                                  width: r.width - (Self.padX * 2 + boxSide + 8),
-                                  height: Self.rowH - 6)
+            // Text after the checkbox / `+` gutter, EXCEPT a manage-mode tag
+            // row (no checkbox) sits flush left at `padX`.
+            func textRect(from x: CGFloat) -> NSRect {
+                NSRect(x: x, y: r.minY + 5,
+                       width: r.width - x - Self.padX, height: Self.rowH - 6)
+            }
+            let gutterX = Self.padX + boxSide + 8
             switch row {
             case let .tag(name, checked):
+                let textRect = textRect(from: manage ? Self.padX : gutterX)
                 if !manage {
                     let box = NSBezierPath(roundedRect: boxRect,
                                            xRadius: 3, yRadius: 3)
                     if checked {
-                        palette.primary.setFill(); box.fill()
+                        palette.secondary.setFill(); box.fill()
                         ("✓" as NSString).draw(
                             in: boxRect.offsetBy(dx: 2.5, dy: 0.5),
                             withAttributes: [.font: uiFont(11, .bold),
@@ -117,24 +127,40 @@ final class TagEditListView: NSView {
                         palette.muted.setStroke(); box.lineWidth = 1; box.stroke()
                     }
                 }
+                // A `tag` glyph stands in for the `#` prefix, then the bare
+                // name. Always `secondary` (tags); checked adds weight + the
+                // filled box, not a colour change.
                 let emph = !manage && checked
-                ("#\(name)" as NSString).draw(
-                    in: textRect,
+                var nameX = textRect.minX
+                if let tagIcon = IconResolver.resolve(
+                    "SF:tag", pointSize: 12, color: palette.secondary,
+                    scale: .medium) {
+                    let ih = min(tagIcon.size.height, 13)
+                    let iw = tagIcon.size.width * (ih / max(tagIcon.size.height, 1))
+                    tagIcon.draw(in: NSRect(
+                        x: textRect.minX,
+                        y: textRect.minY + (textRect.height - ih) / 2,
+                        width: iw, height: ih))
+                    nameX = textRect.minX + iw + 5
+                }
+                (name as NSString).draw(
+                    in: NSRect(x: nameX, y: textRect.minY,
+                               width: textRect.maxX - nameX, height: textRect.height),
                     withAttributes: [
                         .font: uiFont(13, emph ? .semibold : .regular),
-                        .foregroundColor: emph ? palette.primary : palette.foreground,
+                        .foregroundColor: palette.secondary,
                         .paragraphStyle: para,
                     ])
             case let .create(name):
                 ("+" as NSString).draw(
                     in: boxRect.offsetBy(dx: 2, dy: -1),
                     withAttributes: [.font: uiFont(15, .bold),
-                                     .foregroundColor: palette.primary])
+                                     .foregroundColor: palette.secondary])
                 ("Create \"#\(name)\"" as NSString).draw(
-                    in: textRect,
+                    in: textRect(from: gutterX),
                     withAttributes: [
                         .font: uiFont(13, .semibold),
-                        .foregroundColor: palette.primary,
+                        .foregroundColor: palette.secondary,
                         .paragraphStyle: para,
                     ])
             }
@@ -192,9 +218,10 @@ final class TagEditContainerView: NSView {
     static let fieldH: CGFloat = 30
     static let fieldGap: CGFloat = 8
 
-    /// Header band height: a single "Tags" line in manage mode, the taller
-    /// icon + two-line block in window mode.
-    var headerH: CGFloat { manage ? 24 : 40 }
+    /// Header band height: a single compact title line when there's no app
+    /// icon (manage "Tags" / lens "Select tags"), the taller icon + two-line
+    /// block only in per-window mode (which carries an app icon).
+    var headerH: CGFloat { icon == nil ? 24 : 40 }
 
     override var isFlipped: Bool { true }
 
@@ -204,23 +231,32 @@ final class TagEditContainerView: NSView {
     var listTop: CGFloat { fieldTop + Self.fieldH + Self.fieldGap }
 
     override func draw(_ dirty: NSRect) {
-        // Card
+        // Card. Accent border (1.5pt) like the main panel — always `primary`
+        // (the frame is panel chrome; only the contents are secondary).
         let bg = palette.background ?? NSColor.windowBackgroundColor
         let card = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+            roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75),
             xRadius: 9, yRadius: 9)
         bg.setFill(); card.fill()
-        palette.border.setStroke(); card.lineWidth = 1; card.stroke()
+        palette.primary.setStroke(); card.lineWidth = 1.5; card.stroke()
 
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
 
-        if manage {
-            ("Tags" as NSString).draw(
-                in: NSRect(x: Self.padX, y: Self.padV + 2,
-                           width: bounds.width - Self.padX * 2, height: 20),
+        if manage || icon == nil {
+            // Compact panel TITLE — manage "Tags" / lens "Select tags". A
+            // single left-aligned `primary` line (panel chrome, like the menu
+            // titles); the tag CONTENT below stays secondary. No app-icon
+            // gutter, so it sits flush left.
+            // manage "Tags" → secondary (it names the tag vocabulary); the
+            // lens "Select tags" stays primary (an action title).
+            let titleText = manage ? "Tags" : appName
+            (titleText as NSString).draw(
+                in: NSRect(x: Self.padX, y: Self.padV + (headerH - 18) / 2,
+                           width: bounds.width - Self.padX * 2, height: 18),
                 withAttributes: [.font: uiFont(13, .bold),
-                                 .foregroundColor: palette.primary,
+                                 .foregroundColor: manage ? palette.secondary
+                                                          : palette.primary,
                                  .paragraphStyle: para])
         } else {
             // Mirror the tree window row: app icon + app name / title.
@@ -253,10 +289,17 @@ final class TagEditContainerView: NSView {
         let fb = NSBezierPath(roundedRect: fieldBox, xRadius: 7, yRadius: 7)
         (bg.blended(withFraction: 0.06, of: .white) ?? bg).setFill(); fb.fill()
         palette.border.setStroke(); fb.lineWidth = 1; fb.stroke()
-        ((renaming ? "✎" : "⌕") as NSString).draw(
-            at: NSPoint(x: Self.padX + 8, y: fieldTop + 7),
-            withAttributes: [.font: NSFont.systemFont(ofSize: 13),
-                             .foregroundColor: palette.muted])
+        // SF `pencil` during an inline rename, else `magnifyingglass` —
+        // the search/filter affordance (replaces the old `✎` / `⌕`
+        // glyphs, matching the tree's SearchBar + the PopupMenu filter).
+        if let icon = IconResolver.resolve(
+            renaming ? "SF:pencil" : "SF:magnifyingglass",
+            pointSize: 13, color: palette.muted) {
+            let isz = icon.size
+            icon.draw(in: NSRect(x: Self.padX + 8,
+                                 y: fieldTop + (Self.fieldH - isz.height) / 2,
+                                 width: isz.width, height: isz.height))
+        }
         if let hint, !hint.isEmpty {
             let hp = NSMutableParagraphStyle()
             hp.alignment = .right
@@ -405,7 +448,9 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         // Reserve one extra row so a "+ Create" row stays visible.
         let visibleRows = min(max(allTags.count, 1) + 1, Self.maxVisibleRows)
         let listH = CGFloat(visibleRows) * TagEditListView.rowH
-        let headerH: CGFloat = manage ? 24 : 40
+        // Compact header unless this is the per-window panel (has an icon);
+        // must match TagEditContainerView.headerH (icon == nil ? 24 : 40).
+        let headerH: CGFloat = (manage || pid == 0) ? 24 : 40
         let listTop = TagEditContainerView.padV + headerH
             + TagEditContainerView.fieldGap + TagEditContainerView.fieldH
             + TagEditContainerView.fieldGap
@@ -643,11 +688,15 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         let rowTop = NSPoint(x: 24, y: CGFloat(i) * TagEditListView.rowH)
         let inWindow = list.convert(rowTop, to: nil)
         let scr = list.window?.convertPoint(toScreen: inWindow) ?? inWindow
+        // Tag menu → secondary throughout: header, both rows' text, and the
+        // selection highlight (it operates on a tag).
         PopupMenu.shared.show(at: scr,
                               header: "#\(name)",
                               items: ["Rename", "Delete"],
                               checkedIndex: nil,
-                              palette: palette) { [weak self] idx in
+                              palette: palette,
+                              rowTints: [palette.secondary, palette.secondary],
+                              headerTint: palette.secondary) { [weak self] idx in
             guard let self else { return }
             if idx == 0 { self.beginRename(name) } else { self.deleteTag(name) }
         }

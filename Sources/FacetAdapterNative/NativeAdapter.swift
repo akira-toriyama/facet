@@ -483,7 +483,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// re-tile the ones entering, then auto-focus. No-op outside tag
     /// mode (the catalog's `setLens` returns nil) or on an unknown tag
     /// name (surfaced as an operational error).
-    public func setLens(_ spec: LensSpec) {
+    public func setLens(_ spec: LensSpec, autoFocus: Bool) {
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
               catalog.grouping == .tag else { return }
         cancelSlideForRetarget()
@@ -516,7 +516,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // applyLayout auto-routes to the tag-union branch (grouping ==
         // .tag), tiling the new visible union into `rect`.
         applyLayout(workspace: catalog.activeIndex, rect: rect)
-        applyLensAutoFocus(newLens: plan.newLens)
+        // The in-panel selector passes `autoFocus: false` so the tree /
+        // lens panel keeps key focus while the user keeps picking tags;
+        // the CLI path keeps the focus-the-new-union behaviour.
+        if autoFocus { applyLensAutoFocus(newLens: plan.newLens) }
         eventContinuation.yield(.refreshNeeded)
     }
 
