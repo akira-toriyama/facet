@@ -116,21 +116,12 @@ public final class RailView: NSView {
 
     // MARK: - Layout snapshot
 
-    /// One workspace mini-screen — used for both the bottom row and
-    /// the centre hero. Recomputed on every relayout so paint and
-    /// hit-testing can't drift.
-    struct Cell {
-        let wsIndex: Int
-        let rect: NSRect          // the mini-screen rect
-        let headerRect: NSRect    // grid-style header band (bottom cells); .zero for the hero
-        let isActive: Bool
-        let name: String
-        let mode: String
-        let wins: [MiniWindowHit]
-        let isHero: Bool
-    }
-    private(set) var cells: [Cell] = []     // bottom row (all workspaces)
-    private(set) var hero: Cell?            // centre (active workspace)
+    // Cells are the shared `OverviewCell` (FacetCore): one workspace
+    // mini-screen each, recomputed on every relayout so paint and
+    // hit-testing can't drift. `isHero` marks the centre hero (the rail's
+    // large active-WS cell); the bottom-row cells pass `false`.
+    private(set) var cells: [OverviewCell] = []     // bottom row (all workspaces)
+    private(set) var hero: OverviewCell?            // centre (active workspace)
 
     private var hoverWS: Int? {
         didSet { if hoverWS != oldValue { needsDisplay = true } }
@@ -142,42 +133,24 @@ public final class RailView: NSView {
 
     // MARK: - Drag state (window move + WS swap)
 
-    enum DragKind { case window, workspace }
-    /// Active drag — `.window` moves one window, `.workspace` swaps a
-    /// whole cell's contents. Decided at promotion by which target was
-    /// grabbed (window thumb vs header). NOT cleared on mouseUp — the
-    /// landing gate / cancel path clears it once the backend acks, so
-    /// the source thumb stays hidden through the round-trip (memory
-    /// grid-drag-state-lifecycle).
-    struct Drag {
-        let sourceWS: Int
-        let kind: DragKind
-        let pid: Int                  // .window: real; .workspace: -1
-        let id: WindowID              // .window: real; .workspace: -1
-        let sourceRect: NSRect
-        let srcIDs: [WindowID]        // .workspace: all in source; .window: []
-        var current: NSPoint
-        var dropTargetWS: Int?        // bottom cell != source, else nil
-    }
-    struct PendingDrop {
-        let id: WindowID; let dstWS: Int; let committedAt: Date
-    }
-    struct PendingSwap {
-        let srcWS: Int; let dstWS: Int
-        let srcIDs: [WindowID]; let dstIDs: [WindowID]; let committedAt: Date
-    }
+    // `OverviewDrag` / `OverviewDragKind` (FacetCore) carry the active
+    // gesture: `.window` moves one window, `.workspace` swaps a whole
+    // cell's contents. Decided at promotion by which target was grabbed
+    // (window thumb vs header). NOT cleared on mouseUp — the landing gate
+    // / cancel path clears it once the backend acks, so the source thumb
+    // stays hidden through the round-trip (memory grid-drag-state-lifecycle).
 
     // mouseDown candidates (resolved to a drag past threshold, else a
     // click on mouseUp).
     var pendingDown: (point: NSPoint, hit: MiniWindowHit, ws: Int)?
     var pendingHeaderDown: (point: NSPoint, ws: Int)?
-    var drag: Drag?
+    var drag: OverviewDrag?
     var dragGhost: NSView?
     /// Freeze `layoutCells` mid-gesture so the source cell can't shift
     /// under the cursor; released by the landing gate.
     var layoutSuppressed = false
-    var lastDrop: PendingDrop?
-    var lastSwap: PendingSwap?
+    var lastDrop: OverviewPendingDrop?
+    var lastSwap: OverviewPendingSwap?
     /// Give up waiting for a move/swap to land after this and reveal
     /// the source so the UI can't freeze on a silent backend failure.
     static let railDropAckTimeout: TimeInterval = 1.0
@@ -385,10 +358,10 @@ public final class RailView: NSView {
                                   width: thumbW, height: thumbH)
             let headerRect = NSRect(x: blockX.rounded(), y: headerY.rounded(),
                                     width: thumbW, height: headerH)
-            cells.append(Cell(wsIndex: ws.index, rect: cellRect,
+            cells.append(OverviewCell(wsIndex: ws.index, rect: cellRect,
                               headerRect: headerRect, isActive: ws.isActive,
-                              name: ws.name, mode: ws.layoutMode,
-                              wins: scaledWins(ws, cellRect, useScreen),
+                              label: ws.name, mode: ws.layoutMode,
+                              windows: scaledWins(ws, cellRect, useScreen),
                               isHero: false))
         }
         for (i, ws) in workspaces.enumerated() { placeCell(ws, offset: offsets[i]) }
@@ -440,10 +413,10 @@ public final class RailView: NSView {
             let hy = min(max(bounds.midY - hCellH / 2, heroBox.minY),
                          heroBox.maxY - hCellH).rounded()
             let hCellRect = NSRect(x: hx, y: hy, width: hCellW, height: hCellH)
-            hero = Cell(wsIndex: act.index, rect: hCellRect,
+            hero = OverviewCell(wsIndex: act.index, rect: hCellRect,
                         headerRect: .zero, isActive: act.isActive,
-                        name: act.name, mode: act.layoutMode,
-                        wins: scaledWins(act, hCellRect, useScreen),
+                        label: act.name, mode: act.layoutMode,
+                        windows: scaledWins(act, hCellRect, useScreen),
                         isHero: true)
         }
 
@@ -487,7 +460,7 @@ public final class RailView: NSView {
         return out
     }
 
-    private func stripCellAt(_ p: NSPoint) -> Cell? {
+    private func stripCellAt(_ p: NSPoint) -> OverviewCell? {
         // Only cells whose visible (clipped-to-strip) area is under the
         // pointer count — a cell rotated past the viewport edge never
         // matches even though it still exists in `cells` (every workspace
@@ -657,7 +630,7 @@ public final class RailView: NSView {
         }
     }
 
-    private func drawCell(_ c: Cell) {
+    private func drawCell(_ c: OverviewCell) {
         let path = NSBezierPath(roundedRect: c.rect,
                                xRadius: railCellRadius, yRadius: railCellRadius)
         // Mini-screen background.
@@ -674,9 +647,16 @@ public final class RailView: NSView {
         let winStroke = pal.foreground.withAlphaComponent(0.40)
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
-        for w in c.wins where w.id != dragSrcID {
-            drawThumb(w, fill: w.isFocused ? winFocused : winFill,
-                      stroke: winStroke)
+        for w in c.windows where w.id != dragSrcID {
+            // Capture-only (iconFallback: false) — the Controller's
+            // thumbnail timer keeps the cache warm, so an open paints
+            // real thumbnails; a not-yet-captured window shows just the
+            // subtle fill until its image lands.
+            drawMiniThumb(w, at: w.rect,
+                          fill: w.isFocused ? winFocused : winFill,
+                          stroke: winStroke,
+                          thumbnails: thumbnails, iconFallback: false,
+                          pal: pal)
         }
         NSGraphicsContext.restoreGraphicsState()
 
@@ -727,30 +707,12 @@ public final class RailView: NSView {
         // while lifted — the ghost carries the selection then).
         if drag == nil, let sel = kbSelectedWindow(),
            c.isHero || c.wsIndex == selectedWS,
-           let hit = c.wins.first(where: { $0.id == sel.id }) {
+           let hit = c.windows.first(where: { $0.id == sel.id }) {
             let ring = NSBezierPath(roundedRect: hit.rect.insetBy(dx: -1, dy: -1),
                                     xRadius: 3, yRadius: 3)
             pal.primary.withAlphaComponent(0.30).setFill(); ring.fill()
             pal.primary.setStroke(); ring.lineWidth = c.isHero ? 3 : 2; ring.stroke()
         }
-    }
-
-    private func drawThumb(_ w: MiniWindowHit, fill: NSColor, stroke: NSColor) {
-        let p = NSBezierPath(roundedRect: w.rect, xRadius: 3, yRadius: 3)
-        fill.setFill(); p.fill()
-        // Real capture only — the Controller's thumbnail timer keeps
-        // the cache warm in the background, so an open paints actual
-        // thumbnails. No app-icon fallback (a not-yet-captured window
-        // shows just the subtle fill until its image lands).
-        if let img = thumbnails[w.id] {
-            NSGraphicsContext.saveGraphicsState()
-            p.addClip()
-            img.draw(in: w.rect, from: .zero, operation: .sourceOver,
-                     fraction: 1, respectFlipped: true, hints: nil)
-            NSGraphicsContext.restoreGraphicsState()
-        }
-        stroke.setStroke(); p.lineWidth = 0.5; p.stroke()
-        if let mark = w.mark { drawMiniMarkBadge(mark, in: w.rect, pal: pal) }
     }
 
     // MARK: - Hover
@@ -787,7 +749,7 @@ public final class RailView: NSView {
     // MARK: - Mouse (click switch / drag move / drag swap / dismiss)
 
     private func heroWinAt(_ p: NSPoint) -> MiniWindowHit? {
-        hero?.wins.reversed().first { $0.rect.contains(p) }
+        hero?.windows.reversed().first { $0.rect.contains(p) }
     }
 
     /// Mouse-wheel / two-finger scroll rotates the carousel: scroll DOWN
@@ -844,7 +806,7 @@ public final class RailView: NSView {
             pendingDown = (p, w, h.wsIndex); return
         }
         if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }) {
-            if let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
+            if let w = cell.windows.reversed().first(where: { $0.rect.contains(p) }) {
                 pendingDown = (p, w, cell.wsIndex)
             } else {
                 // empty cell area → switch+close (zoom if it's the centre)
@@ -877,7 +839,7 @@ public final class RailView: NSView {
             railWinMenu(scr, backend: backend, ws: h.wsIndex, w: w); return
         }
         if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }),
-           let w = cell.wins.reversed().first(where: { $0.rect.contains(p) }) {
+           let w = cell.windows.reversed().first(where: { $0.rect.contains(p) }) {
             railWinMenu(scr, backend: backend, ws: cell.wsIndex, w: w)
         }
     }
@@ -894,8 +856,8 @@ public final class RailView: NSView {
                                        workspaceIndex: ws, workspaces: workspaces,
                                        palette: pal)
         } else if let h = hero, kbSelectedWindowIdx >= 0,
-                  kbSelectedWindowIdx < h.wins.count {
-            let w = h.wins[kbSelectedWindowIdx]
+                  kbSelectedWindowIdx < h.windows.count {
+            let w = h.windows[kbSelectedWindowIdx]
             let scr = win.convertPoint(toScreen:
                 convert(NSPoint(x: w.rect.minX + 12, y: w.rect.minY), to: nil))
             railWinMenu(scr, backend: backend, ws: ws, w: w)
@@ -928,8 +890,8 @@ public final class RailView: NSView {
                 // not the render-filtered cell thumbs — a frameless /
                 // sub-2pt window has no thumb but must still move.
                 let srcIDs = workspaces.first(where: { $0.index == ph.ws })?
-                    .windows.map(\.id) ?? src.wins.map(\.id)
-                drag = Drag(sourceWS: ph.ws, kind: .workspace, pid: -1,
+                    .windows.map(\.id) ?? src.windows.map(\.id)
+                drag = OverviewDrag(sourceWS: ph.ws, kind: .workspace, pid: -1,
                             id: WindowID(serverID: -1), sourceRect: src.rect,
                             srcIDs: srcIDs, current: p, dropTargetWS: nil)
                 layoutSuppressed = true
@@ -938,7 +900,7 @@ public final class RailView: NSView {
             } else if let pd = pendingDown {
                 let dx = p.x - pd.point.x, dy = p.y - pd.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                drag = Drag(sourceWS: pd.ws, kind: .window, pid: pd.hit.pid,
+                drag = OverviewDrag(sourceWS: pd.ws, kind: .window, pid: pd.hit.pid,
                             id: pd.hit.id, sourceRect: pd.hit.rect, srcIDs: [],
                             current: p, dropTargetWS: nil)
                 layoutSuppressed = true
@@ -1010,9 +972,9 @@ public final class RailView: NSView {
     /// shows the full window list large). The ring is drawn in BOTH
     /// tiers — the hero and the matching bottom cell — by window id.
     private func kbSelectedWindow() -> MiniWindowHit? {
-        guard kbSelectedWindowIdx >= 0, let h = hero, !h.wins.isEmpty
+        guard kbSelectedWindowIdx >= 0, let h = hero, !h.windows.isEmpty
         else { return nil }
-        let ordered = readingOrder(h.wins)
+        let ordered = readingOrder(h.windows)
         return ordered[max(0, min(ordered.count - 1, kbSelectedWindowIdx))]
     }
 
@@ -1054,7 +1016,7 @@ public final class RailView: NSView {
         guard drag == nil, let h = hero else { return }
         kbSelectedWindowIdx = cycleSlotIndex(
             current: kbSelectedWindowIdx,
-            windowCount: h.wins.count, forward: forward)
+            windowCount: h.windows.count, forward: forward)
         needsDisplay = true
     }
 
@@ -1073,9 +1035,9 @@ public final class RailView: NSView {
         // the rail's bottom-row size, not the big hero. Fall back to the
         // hero window if that window has no thumb in the bottom cell.
         let hit = cells.first(where: { $0.wsIndex == selectedWS })?
-            .wins.first(where: { $0.id == sel.id }) ?? sel
+            .windows.first(where: { $0.id == sel.id }) ?? sel
         let at = NSPoint(x: hit.rect.midX, y: hit.rect.midY)
-        drag = Drag(sourceWS: h.wsIndex, kind: .window,
+        drag = OverviewDrag(sourceWS: h.wsIndex, kind: .window,
                     pid: hit.pid, id: hit.id, sourceRect: hit.rect, srcIDs: [],
                     current: at, dropTargetWS: nil)
         layoutSuppressed = true
@@ -1089,9 +1051,9 @@ public final class RailView: NSView {
               let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
         // Live workspace windows (not the render-filtered thumbs).
         let srcIDs = workspaces.first(where: { $0.index == ws })?.windows.map(\.id)
-            ?? cell.wins.map(\.id)
+            ?? cell.windows.map(\.id)
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
-        drag = Drag(sourceWS: ws, kind: .workspace, pid: -1,
+        drag = OverviewDrag(sourceWS: ws, kind: .workspace, pid: -1,
                     id: WindowID(serverID: -1), sourceRect: cell.rect,
                     srcIDs: srcIDs, current: at, dropTargetWS: nil)
         layoutSuppressed = true
