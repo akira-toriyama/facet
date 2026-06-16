@@ -973,14 +973,16 @@ public final class SidebarView: NSView {
                     // before a tag would overrun the row's right edge.
                     let pillH: CGFloat = 22
                     for tag in c.tags {
-                        let chipFont = uiFont(windowFontSize - 1, .medium)
+                        // Same font + icon size as the status badges
+                        // (master/float/sticky) so tags don't read smaller.
+                        let chipFont = uiFont(windowFontSize, .semibold)
                         let maxTextW: CGFloat = 90
                         let textW = min(maxTextW, ceil((tag as NSString)
                             .size(withAttributes: [.font: chipFont]).width))
                         let tagIcon = IconResolver.resolve(
-                            "SF:tag", pointSize: windowFontSize - 1,
+                            "SF:tag", pointSize: 14,
                             color: pal.secondary, scale: .medium)
-                        let icH = tagIcon.map { min($0.size.height, 12) } ?? 0
+                        let icH = tagIcon.map { min($0.size.height, 15) } ?? 0
                         let icW = tagIcon.map {
                             $0.size.width * (icH / max($0.size.height, 1)) } ?? 0
                         let icGap: CGFloat = tagIcon == nil ? 0 : 3
@@ -1014,7 +1016,7 @@ public final class SidebarView: NSView {
                         // aligns with the other badges; the pin glyph already
                         // sets it apart from float).
                         lx = drawStatusPill("sticky", icon: "SF:pin",
-                                            color: pal.tertiary,
+                                            color: pal.foreground,
                                             at: lx, labelY: labelY)
                     }
                     if let sp = c.scratchpad {
