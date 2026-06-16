@@ -99,7 +99,7 @@ public final class HandleBar: NSView {
             in: NSRect(x: rowPadX + headerGripW + 7, y: (zoneH - th) / 2,
                        width: bounds.width - (rowPadX * 2 + headerGripW + 7),
                        height: th),
-            withAttributes: [.font: uiFont(13, .bold),
+            withAttributes: [.font: uiFont(desktopBandFontSize, .bold),
                              .foregroundColor: pal.foreground,
                              .kern: 0.5, .paragraphStyle: para])
         let lineY = bounds.height - dividerPadBelow
