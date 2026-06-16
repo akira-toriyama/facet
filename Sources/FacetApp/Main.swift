@@ -464,6 +464,9 @@ enum FacetApp {
         // declarative `configSpec` that decodes the config, so the two
         // can't drift. The repo regenerates `config.schema.json` with
         // `facet --emit-schema > config.schema.json`.
+        // Intentionally absent from `facet --help`: it's a repo/dev
+        // regeneration tool, not user surface (the sidecar is auto-written
+        // next to the user config at launch by `installSchema()`).
         if argv.contains("--emit-schema") {
             print(FacetConfig.jsonSchema, terminator: "")
             exit(0)
