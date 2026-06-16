@@ -7,8 +7,13 @@
 //     workspace. The historical model.
 //   - `tag`: one window carries a SET of tags; a `lens` (the current
 //     view mask) shows the union of windows whose tags intersect it
-//     (dwm-style `tags & viewmask`). Static: tags are defined in
-//     config and frozen at window appearance (no runtime re-tag).
+//     (dwm-style `tags & viewmask`). Tags are a RUNTIME-editable
+//     per-window set (#191, shipped): the config `[[tag]]` tables seed
+//     only the startup vocabulary, then re-tagging is live + session-
+//     only via `facet window --tag/--untag/--toggle-tag/--retag`,
+//     vocabulary edits via `facet tag --add/--remove/--rename`, and the
+//     lens is selected via `facet lens`. Nothing is frozen at window
+//     appearance and nothing persists across restart.
 //
 // The value is an open vocabulary on purpose — a future grouping
 // paradigm (e.g. scrollable columns) is one more case, mirroring the

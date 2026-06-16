@@ -17,7 +17,7 @@ This repo commits with **gitmoji + Conventional Commits**; from the messages
   (grep-friendly; not the emoji glyph). e.g. `:bug:`.
 - `<type>` … Conventional Commits type (`feat` `fix` `perf` `refactor` `docs`
   `test` `build` `ci` `chore` `style` `revert`). **semver is decided by this.**
-- `<scope>` … optional, **parenthesised only**: `(ui)` `(cli)` `(rift)`
+- `<scope>` … optional, **parenthesised only**: `(ui)` `(cli)` `(native)`
   `(packaging)` `(homebrew)` `(ci)` `(dist)` `(grid)` etc. For sub-scopes
   use dashes inside the parens (`(grid-1f-4)`, not `(grid)[1f-4]` — the
   bracketed form fails the CI lint pattern). Multi-word scopes go inside
@@ -29,8 +29,8 @@ This repo commits with **gitmoji + Conventional Commits**; from the messages
 
 ```
 :sparkles: feat(ui): right-click window menu (float / fullscreen / close)
-:bug: fix(rift): re-attach rift-cli subscribe after rift restart
-:zap: perf(cli): run rift-cli off the main thread
+:bug: fix(native): re-assert AX focus after a display reconfigure
+:zap: perf(cli): dispatch the DNC broadcast off the main thread
 :boom: feat!: rename product to facet (bundle id com.wstabs.app)
 :memo: docs: document the Homebrew tap flow
 :wrench: chore: strengthen .gitignore

@@ -3,8 +3,8 @@
 # https://github.com/akira-toriyama/facet
 #
 # The `#:schema` line above gives editors (taplo / Even Better TOML) key
-# + value completion and inline validation. facet writes this schema next
-# to your config on launch, and it's generated from facet's own config
+# + value completion and inline validation. It points at the generated
+# `config.schema.json` sidecar, which is derived from facet's own config
 # parser (`facet --emit-schema`) — so it always matches the binary.
 #
 # This file is the **single source of truth** for facet's settings.
@@ -13,7 +13,10 @@
 #   curl --create-dirs -o ~/.config/facet/config.toml \
 #     https://raw.githubusercontent.com/akira-toriyama/facet/main/config.toml
 #
-# facet only ever READS this file; runtime CLI overrides (e.g.
+# facet never writes config.toml — it only ever READS it. (It does
+# write/refresh the generated `config.schema.json` sidecar next to it
+# on launch, purely so editor completion stays in sync with the binary;
+# your settings file is left untouched.) Runtime CLI overrides (e.g.
 # `facet --theme dracula`) apply for the current session only. To
 # make a change stick, edit the value here and restart facet.
 #

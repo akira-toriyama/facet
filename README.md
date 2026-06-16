@@ -336,7 +336,7 @@ edit the file to make a change stick.
 
 Frequently-touched keys:
 
-- `theme` (top-level) — 13 themes: `terminal` (default) / `chomp` /
+- `[theme] name` — 13 themes: `terminal` (default) / `chomp` /
   `rainbow` / `cobalt2` / `shades-of-purple` / `tokyo-hack` /
   `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
   `github-light` / `catppuccin-latte` / `system`, plus `random`
@@ -403,9 +403,12 @@ Frequently-touched keys:
   (regex; `^$` = unnamed), `role` / `subrole` (exact AX), and/or
   `max-width` / `max-height` (points). Keys within a rule AND; rules
   OR (first match wins). `action = "float"` (default) keeps the window
-  tracked but untiled; `"ignore"` drops it entirely. The template
-  ships one default that floats tiny unnamed popups. (System sheets /
-  dialogs / palettes are auto-floated by AX role regardless.)
+  tracked but untiled; `"ignore"` drops it entirely; `"manage"`
+  force-tiles a window the allowlist floated / ignored (the escape
+  hatch for an app that mislabels a real window with a non-standard
+  subrole). The template ships one default that floats tiny unnamed
+  popups. (System sheets / dialogs / palettes are auto-floated by AX
+  role regardless.)
 - `[desktop.N]` table — per-mac-desktop workspace list. `N` is the
   mac desktop's Mission Control position; each entry is a 1-indexed inline
   table: `1 = { name = "Dev" }` (name only) or
@@ -416,6 +419,20 @@ Frequently-touched keys:
   `[desktop.N]` present → **opt-in**: facet manages only the mac desktops
   that have a section; a mac desktop without one is left untouched (windows
   as-is, panel hidden there).
+- `[grouping] by` — `workspace` (default) or `tag`. `tag` swaps the
+  per-mac-desktop workspace list for a dwm-style **tag world**: a window
+  can carry multiple tags, and the **lens** (`facet lens`) picks which
+  tag set is shown (windows outside the lens are anchor-parked, same as a
+  hidden workspace). Unknown values clamp to `workspace`. In tag mode the
+  tree is the only view — `grid` / `rail` and `default-view = "grid"`
+  exit `2` (the grid *layout* is still fine). See [Tag mode](#tag-mode).
+- `[[tag]]` tables (`name = "..."`) — the **startup** tag-vocabulary
+  seed for `by = "tag"` mode only (ignored in workspace mode). Declaration
+  order fixes each tag's chip order on a window's row. Tags are assigned
+  at **runtime** (session-only), not in config — there is no static
+  window→tag mapping; edit live with the `facet window --tag` / `facet
+  tag` / `facet lens` verbs ([Tag mode](#tag-mode)). Names starting with
+  `_` are reserved (`_default` is an internal floor every window carries).
 
 ## CLI
 
@@ -510,6 +527,41 @@ Unknown flag / view / theme names exit `2` with a stderr
 message — typos fail loudly rather than silently no-op. Shorthand
 (shell aliases / hotkey bindings) is your environment's job, not
 facet's.
+
+### Tag mode
+
+With `[grouping] by = "tag"` (see [Configuration](#configuration)),
+facet replaces the per-mac-desktop workspace list with a dwm-style
+**tag world**: a window can carry multiple tags, and the **lens**
+picks which tags are shown (windows outside the lens are
+anchor-parked, like a hidden workspace). Tags are assigned at
+runtime and are session-only; `[[tag]]` is just the startup
+vocabulary seed. The tree is the only view in tag mode.
+
+```sh
+# Tag the focused window (the vocabulary auto-grows if NAME is new)
+facet window --tag NAME           # add a tag to the focused window
+facet window --untag NAME         # remove a tag from the focused window
+facet window --toggle-tag NAME    # flip a tag on the focused window
+facet window --retag OLD NEW      # rename a tag on the focused window
+
+# Lens — which tags the tree shows
+facet lens --only A[,B]           # show exactly these tags
+facet lens --add A[,B]            # add tags to the shown set
+facet lens --remove A[,B]         # drop tags from the shown set
+facet lens --toggle A[,B]         # flip tags in the shown set
+facet lens --all                  # show every window (clear the lens)
+
+# Tag vocabulary — the named tags available to assign
+facet tag --add NAME              # define a new tag
+facet tag --remove NAME           # delete a tag (drops it off every window)
+facet tag --rename OLD NEW        # rename a tag across the vocabulary
+```
+
+These are workspace-mode no-ops; tag mode is on only under
+`[grouping] by = "tag"`. Inspect the live state with
+`facet query --tags` (vocabulary) and `facet query --lens` (current
+lens).
 
 ### Hotkey integration
 

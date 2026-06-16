@@ -317,7 +317,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 
 よく触る key:
 
-- `theme` (トップレベル) — 全13テーマ: `terminal` (default) / `chomp` /
+- `[theme] name` — 全13テーマ: `terminal` (default) / `chomp` /
   `rainbow` / `cobalt2` / `shades-of-purple` / `tokyo-hack` /
   `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
   `github-light` / `catppuccin-latte` / `system`、加えて `random`
@@ -377,9 +377,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `role` / `subrole` (AX 完全一致)、 `max-width` / `max-height` (pt) で
   マッチ。 1ルール内の key は AND、 複数ルールは OR (上から最初の一致が
   勝ち)。 `action = "float"` (デフォルト) は追跡継続のままタイルから除外、
-  `"ignore"` は完全に非管理。 テンプレには「極小の無名ポップアップを
-  float する」 デフォルトを 1 件同梱。 (システムの sheet / dialog /
-  palette は AX role で自動 float される。)
+  `"ignore"` は完全に非管理、 `"manage"` は allowlist が float / ignore
+  した窓を強制タイル (非標準 subrole で実窓を誤判定するアプリ向けの
+  escape hatch)。 テンプレには「極小の無名ポップアップを float する」
+  デフォルトを 1 件同梱。 (システムの sheet / dialog / palette は AX
+  role で自動 float される。)
 - `[desktop.N]` テーブル — mac desktop ごとの workspace 一覧。 `N` は
   Mission Control 順の位置。 各 entry は 1-indexed の inline table:
   `1 = { name = "Dev" }` (名前のみ) もしくは
@@ -389,6 +391,19 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   が自動でデフォルト workspace を持つ。 **1 つでもあれば opt-in**:
   セクションのある mac desktop だけ facet が管理し、 無い mac desktop は完全に
   ノータッチ（窓そのまま・パネル非表示）。
+- `[grouping] by` — `workspace` (デフォルト) か `tag`。 `tag` は
+  per-mac-desktop の workspace 一覧を dwm 流の **tag world** に差し替える:
+  1 窓が複数 tag を持て、 **lens** (`facet lens`) でどの tag セットを
+  表示するか選ぶ (lens 外の窓は anchor park — 隠れた workspace と同じ)。
+  不明値は `workspace` にクランプ。 tag mode では tree だけが view —
+  `grid` / `rail` と `default-view = "grid"` は exit `2` (grid *layout*
+  は引き続き使える)。 [Tag mode](#tag-mode) 参照。
+- `[[tag]]` テーブル (`name = "..."`) — `by = "tag"` モード**のみ**の
+  **起動時** tag 語彙シード (workspace モードでは無視)。 宣言順が窓の行に
+  並ぶ chip 順を決める。 tag は config ではなく **実行時** (session 限り)
+  に割り当てる — 静的な 窓→tag マッピングは無い。 `facet window --tag` /
+  `facet tag` / `facet lens` 系でライブ編集 ([Tag mode](#tag-mode))。
+  `_` 始まりの名前は予約 (`_default` は全窓が持つ内部フロア)。
 
 ## CLI
 
@@ -474,6 +489,39 @@ facet --help                      # 完全リファレンス
 不明な flag / view / theme 名は exit `2` + stderr メッセージ —
 typo は silent fail せず明示エラー。 短縮 (シェル alias / hotkey
 バインド) は各自の環境の領分で、 facet 側では扱わない。
+
+### Tag mode
+
+`[grouping] by = "tag"` ([設定](#設定) 参照) にすると、 facet は
+per-mac-desktop の workspace 一覧を dwm 流の **tag world** に差し替える:
+1 窓が複数 tag を持て、 **lens** で表示する tag を選ぶ (lens 外の窓は
+anchor park — 隠れた workspace と同じ)。 tag は実行時に割り当てる
+session 限りの状態で、 `[[tag]]` は起動時の語彙シードにすぎない。 tag
+mode では tree だけが view。
+
+```sh
+# focus 中の窓にタグ付け (NAME が新規なら語彙が自動で増える)
+facet window --tag NAME           # focus 中の窓に tag を付ける
+facet window --untag NAME         # focus 中の窓から tag を外す
+facet window --toggle-tag NAME    # focus 中の窓の tag を flip
+facet window --retag OLD NEW      # focus 中の窓の tag を改名
+
+# Lens — tree に表示する tag
+facet lens --only A[,B]           # この tag だけ表示
+facet lens --add A[,B]            # 表示セットに tag を足す
+facet lens --remove A[,B]         # 表示セットから tag を外す
+facet lens --toggle A[,B]         # 表示セットの tag を flip
+facet lens --all                  # 全窓表示 (lens クリア)
+
+# タグ語彙 — 割り当て可能な名前付き tag
+facet tag --add NAME              # 新しい tag を定義
+facet tag --remove NAME           # tag を削除 (全窓から外れる)
+facet tag --rename OLD NEW        # 語彙全体で tag を改名
+```
+
+これらは workspace モードでは no-op; tag mode は `[grouping] by =
+"tag"` の時だけ有効。 ライブ状態は `facet query --tags` (語彙) と
+`facet query --lens` (現 lens) で確認できる。
 
 ### ホットキー連携
 

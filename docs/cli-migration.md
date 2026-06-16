@@ -45,6 +45,9 @@ name is impossible (the shell already split it).
 
 ## Command translation
 
+The table below is **illustrative, not exhaustive** — *every*
+value-bearing flag migrated to the space form, not just the rows shown.
+
 | Old (`=` form) | New (space form) |
 |---|---|
 | `facet --view=tree --active` | `facet --view tree --active` |
