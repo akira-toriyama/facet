@@ -166,7 +166,7 @@ struct WorkspaceCatalog {
     /// fresh launch / per-mac-desktop catalog starts every WS in.
     /// (Moved up from the Layout-mode cluster — extensions can't hold
     /// stored state; behaviour lives in WorkspaceCatalog+Layout.swift.)
-    var defaultMode: String = "float"
+    var defaultMode: String = StatefulMode.float
 
     /// Tag mode's single global layout for the lens union (tag mode has
     /// no per-workspace tree — one layout for the whole tag-world). `nil`
@@ -663,10 +663,10 @@ struct WorkspaceCatalog {
         return workspaceEntries.map { entry in
             let isActive = entry.index == activeIndex
             let m = mode(of: entry.index)
-            let tileF = (m == "bsp")
+            let tileF = (m == StatefulMode.bsp)
                 ? tiledFrames(for: entry.index, in: activeRect)
                 : [:]
-            let stackSet: Set<WindowID> = (m == "stack")
+            let stackSet: Set<WindowID> = (m == StatefulMode.stack)
                 ? Set(stackOrders[entry.index] ?? [])
                 : []
             let engineF: [WindowID: CGRect] =
@@ -742,9 +742,9 @@ struct WorkspaceCatalog {
             return preParkFrame(for: w)
         }
         switch m {
-        case "bsp":
+        case StatefulMode.bsp:
             return tileFrames[w.id] ?? preParkFrame(for: w)
-        case "stack":
+        case StatefulMode.stack:
             return stackSet.contains(w.id)
                 ? activeRect : preParkFrame(for: w)
         default:

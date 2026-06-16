@@ -148,7 +148,7 @@ extension NativeAdapter {
             // 枠 E Phase 2: animate the reflow only between all-visible
             // layouts. stack parks members (windows appear / disappear),
             // which the slide engine doesn't handle yet — instant there.
-            let parks = oldMode == "stack" || applied == "stack"
+            let parks = oldMode == StatefulMode.stack || applied == StatefulMode.stack
             if config.effectiveAnimationsEnabled, !parks,
                animateRetile(workspace: target, rect: rect) {
                 return
@@ -239,7 +239,7 @@ extension NativeAdapter {
     /// (top fills, others park). No-op for float mode.
     public func retileActiveWorkspace() {
         let mode = catalog.mode(of: catalog.activeIndex)
-        guard mode == "bsp" || mode == "stack"
+        guard mode == StatefulMode.bsp || mode == StatefulMode.stack
                 || LayoutRegistry.engine(named: mode) != nil else {
             Log.debug("native: retile noop "
                 + "(WS \(catalog.activeIndex) is \(mode))")
@@ -406,7 +406,7 @@ extension NativeAdapter {
     private func computedTileFrames(_ cat: WorkspaceCatalog,
                                     in rect: CGRect) -> [WindowID: CGRect] {
         let ws = cat.activeIndex
-        let raw = cat.mode(of: ws) == "bsp"
+        let raw = cat.mode(of: ws) == StatefulMode.bsp
             ? cat.tiledFrames(for: ws, in: rect)
             : cat.engineFrames(for: ws, in: rect)
         return applyInnerGap(raw, in: rect, gap: config.effectiveInnerGap)

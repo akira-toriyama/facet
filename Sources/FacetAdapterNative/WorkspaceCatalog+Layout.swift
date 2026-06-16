@@ -40,11 +40,11 @@ extension WorkspaceCatalog {
                                          in rect: CGRect) {
         guard !floatingWindows.contains(id) else { return }
         let m = mode(of: n1Based)
-        if m == "bsp" {
+        if m == StatefulMode.bsp {
             var tree = layoutTrees[n1Based] ?? LayoutTree()
             tree.insert(id, focused: focused, in: rect)
             layoutTrees[n1Based] = tree
-        } else if m == "stack" {
+        } else if m == StatefulMode.stack {
             // Stack ("one at a time") shows order[0] and parks the rest
             // at the anchor sliver, so a joining window takes the TOP
             // (index 0) — you see what you just opened / moved in.
@@ -105,14 +105,14 @@ extension WorkspaceCatalog {
         layoutModes[n1Based] = normalised
         let members = nonFloatingMembers(of: n1Based)
         switch normalised {
-        case "bsp":
+        case StatefulMode.bsp:
             var tree = LayoutTree()
             for id in members {
                 tree.insert(id, focused: nil, in: rect)
             }
             layoutTrees[n1Based] = tree
             stackOrders.removeValue(forKey: n1Based)
-        case "stack":
+        case StatefulMode.stack:
             stackOrders[n1Based] = members
             layoutTrees.removeValue(forKey: n1Based)
         default:
