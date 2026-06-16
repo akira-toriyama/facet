@@ -500,14 +500,10 @@ struct WorkspaceCatalog {
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
         let toPark = windowMap
-            .filter { $0.value.workspace == old
-                && !everywhereWindows.contains($0.key)
-                && !stashedWindows.contains($0.key) }
+            .filter { $0.value.workspace == old && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         let toRestore = windowMap
-            .filter { $0.value.workspace == n1Based
-                && !everywhereWindows.contains($0.key)
-                && !stashedWindows.contains($0.key) }
+            .filter { $0.value.workspace == n1Based && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
@@ -632,6 +628,25 @@ struct WorkspaceCatalog {
     /// The returned `Workspace.index` is **0-based** to match the
     /// wire convention of the `WindowBackend` protocol — translation
     /// happens here at the seam.
+    /// Windows the views should see: present in `windowMap` (we accepted
+    /// them as entries) and not stashed (a settled/summoned scratchpad is
+    /// NOT in `stashedWindows`, so it stays). Shared by `snapshot` /
+    /// `tagSnapshot` so the two can't drift on what "tracked" means.
+    func trackedWindows(in live: [Window]) -> [Window] {
+        live.filter { windowMap[$0.id] != nil && !stashedWindows.contains($0.id) }
+    }
+
+    /// Whether `id` is eligible for park/restore on a visibility
+    /// transition (WS switch / lens change / retag): only if it isn't
+    /// pinned everywhere (sticky) and isn't already shelved (stashed
+    /// scratchpad). Shared by `setActive` / `setLens` / `removeTagName` /
+    /// `retagVisibility` so the exemption rule can't drift. (NOT
+    /// `moveWindow`'s `.rejected` guard — that's a different
+    /// move-incoherence check that happens to read the same two sets.)
+    func isParkEligible(_ id: WindowID) -> Bool {
+        !everywhereWindows.contains(id) && !stashedWindows.contains(id)
+    }
+
     func snapshot(live: [Window], focused: WindowID?,
                          activeRect: CGRect)
         -> [Workspace]
@@ -654,9 +669,7 @@ struct WorkspaceCatalog {
         // a WS's window count. They surface only via `facet query`'s
         // `stashed:` line. A *settled* (summoned) scratchpad window is
         // NOT in `stashedWindows`, so it stays and carries its badge.
-        let tracked = live.filter {
-            windowMap[$0.id] != nil && !stashedWindows.contains($0.id)
-        }
+        let tracked = trackedWindows(in: live)
         let byWS = Dictionary(grouping: tracked) { w in
             windowMap[w.id]!.workspace
         }
