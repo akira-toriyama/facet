@@ -1030,7 +1030,10 @@ extension Controller: TreeController {
         let bk = backend
         cliQueue.async {
             if needSwitch { bk.switchWorkspace(toIndex: ws) }
-            Focus.assertBlocking(window, backend: bk)
+            let ok = Focus.assertBlocking(window, backend: bk)
+            Log.debug("runWindowOps ws=\(ws) needSwitch=\(needSwitch) "
+                + "target=\(window.id.serverID) focusConfirmed=\(ok) "
+                + "ops=\(ops.count)")
             for a in ops { bk.perform(a); usleep(120_000) }
         }
     }
