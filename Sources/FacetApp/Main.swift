@@ -35,6 +35,7 @@
 //               / --inc-master / --dec-master
 //               / --focus up|down|left|right / --move up|down|left|right
 //               / --tag NAME / --untag NAME / --toggle-tag NAME
+//               / --retag OLD NEW
 //                 (tag mode only — [grouping] by="tag")
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME

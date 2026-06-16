@@ -20,7 +20,7 @@ Adding or renaming a term lands in the same PR as the code change.
 ## What this is
 
 `facet` — Swift workspace + window manager for macOS. Multiple
-views (`--view=tree|grid|rail`), native AX/CGS backend
+views (`--view tree|grid|rail`), native AX/CGS backend
 (`FacetAdapterNative`, sole backend since v2.0.0). SIP-on,
 public API + AX only. Swift 6, macOS 13+.
 
@@ -133,8 +133,8 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   events), β (anchor hide, closeWindow), γ (BSP + stack tiling,
   AX-role auto-float for
   sheets / dialogs / palettes; tiling CLI = `facet workspace
-  --layout=NAME` / `--retile` plus `facet window --toggle-float` /
-  `--toggle-orientation` / `--cycle-stack=next|prev` — reshaped to
+  --layout NAME` / `--retile` plus `facet window --toggle-float` /
+  `--toggle-orientation` / `--cycle-stack next|prev` — reshaped to
   the subject-verb form by Theme C #81/#82), δ (display
   reconfigure), ε (rift retire) all shipped. See `facet --help`
   and [docs/architecture.md](docs/architecture.md) for the contracts.
@@ -165,8 +165,8 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   adopt/park, empty `workspaces()` → Controller's empty-list guard
   hides the panel). No `[desktop.N]` at all → every mac desktop
   managed with the global default. `FacetConfig.isMacDesktopManaged`.
-- **Loading skeleton is CLI-triggered, not auto** (`facet --view=tree
-  --loading[=MS]`): macOS exposes no pre-mac-desktop-switch hook, so
+- **Loading skeleton is CLI-triggered, not auto** (`facet --view tree
+  --loading MS`): macOS exposes no pre-mac-desktop-switch hook, so
   facet can't detect a switch early enough to mask the flicker.
   Instead an external tool (chord) fires `--loading` *before* the
   switch keys; `Controller.showLoading` paints `SidebarView`'s
@@ -193,14 +193,14 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 
 ### CLI surface
 
-- **Symmetric per-view ops**: ``--view=NAME``,
-  ``--hide=NAME``, ``--toggle=NAME``. Adding a new view
+- **Symmetric per-view ops**: ``--view NAME``,
+  ``--hide NAME``, ``--toggle NAME``. Adding a new view
   (dock, palette, hover-bar, …) only needs an entry in
   ``Main.canonicalViews`` + matching cases in
   ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
   don't reintroduce per-view bespoke flags.
 - **``--active`` is a modifier**, not a verb. Only meaningful
-  combined with ``--view=tree`` (becomes ``view:tree+active`` on
+  combined with ``--view tree`` (becomes ``view:tree+active`` on
   the DNC). For grid it's silently ignored — the overlay is
   always key/active by construction. A plain click on the tree
   only focuses / selects a row — it does **NOT** enter keyboard
@@ -216,9 +216,9 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   macOS: the row click hands the system key window to the target
   app, so facet can't receive ``s`` — hence the Desktop-header
   menu. Memory: [[tree-click-crossapp-focus-broken-sequoia]].)
-- **``--edge=top|bottom|left|right`` is a modifier too** (M9-3),
-  only meaningful with ``--view=rail`` (becomes ``view:rail+edge:NAME``
-  on the DNC); ``--edge`` without ``--view=rail`` is a loud
+- **``--edge top|bottom|left|right`` is a modifier too** (M9-3),
+  only meaningful with ``--view rail`` (becomes ``view:rail+edge:NAME``
+  on the DNC); ``--edge`` without ``--view rail`` is a loud
   ``exit 2``. It picks which screen edge the rail's strip docks
   against (`mac desktop`-independent); the strip axis drives which
   arrows browse (top/bottom → ←/→, left/right → ↑/↓). Config seed
@@ -252,13 +252,13 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 - **No bare-flag tree aliases**. ``--show`` / ``--hide`` /
   ``--toggle`` / ``--active`` standalone were dropped — every
   view op specifies NAME explicitly. Keeps the canonical form
-  unambiguous (no "is ``--hide`` short for ``--hide=tree`` or
+  unambiguous (no "is ``--hide`` short for ``--hide tree`` or
   is it the legacy bare verb?" surface area). Shorthand is the
   user's shell-alias problem, not facet's. Reintroducing bare
   flags also means reintroducing per-view dispatch ambiguity
   when a new view (dock, palette, …) lands.
-- **``--view=NAME`` is idempotent (show)**, not toggle. To
-  toggle, use ``--toggle=NAME``. Do not regress to toggle-on-show.
+- **``--view NAME`` is idempotent (show)**, not toggle. To
+  toggle, use ``--toggle NAME``. Do not regress to toggle-on-show.
 - **Typo rejection is loud**: unknown view / theme names
   ``exit 2`` with a stderr message. Silent fallback is
   deliberately not offered — typos should fail visibly.
@@ -275,7 +275,7 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
     audience: scripts are run rarely + interactively, the app
     runs continuously.
 
-  The application CLI itself (``facet --view=*`` etc.) is
+  The application CLI itself (``facet --view *`` etc.) is
   idempotent / DNC-broadcast and doesn't need ``--dry-run``;
   its logging is ``FACET_DEBUG``-gated for the opposite reason
   (long-lived server, default-quiet stderr). This rule applies
@@ -311,9 +311,9 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   thing the user has to look at to know what facet will do.
   Memory: [[config-default-behavior]].
 - **Runtime CLI overrides are session-only**.
-  `facet --theme=cute` swaps the palette in memory but does NOT
+  `facet --theme cute` swaps the palette in memory but does NOT
   persist. To make it stick, edit `~/.config/facet/config.toml`.
-  Same goes for `--view=...` (toggles, doesn't change default).
+  Same goes for `--view ...` (toggles, doesn't change default).
 - **All TOML keys clamp out-of-range / unknown values to defaults**
   rather than rejecting. A typo can never break the layout — the
   user just gets the default for that one key. The `effective*`
@@ -627,7 +627,7 @@ scientific debugging, bisection.*
   *(reviewed 2026-05-27)* — Apple Virtualization.Framework-based
   macOS VM tool. facet uses it for clean-environment
   verification (v1→v2 upgrade smoke, fresh AX-permission grant
-  flow, destructive `facet workspace --layout=bsp` sweeps that would
+  flow, destructive `facet workspace --layout bsp` sweeps that would
   scramble the host's real windows, private-API spike
   isolation). Subcommands relied on: ``clone`` (APFS COW —
   fast, only differences claim space), ``run`` (with
