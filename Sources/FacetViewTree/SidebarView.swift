@@ -351,7 +351,6 @@ public final class SidebarView: NSView {
         func appendWindowRow(_ win: Window, wsIndex: Int) {
             let wt = eff(win)
             let hasLabel = win.isMaster || win.isFloating
-            let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
             // Third line under the title holds the mark pill (left) and
             // the master / float / hidden / scratchpad / tag-chip badges —
             // present when any of those conditions holds. In tag mode the
@@ -361,7 +360,7 @@ public final class SidebarView: NSView {
             let hasThird = hasLabel || (win.mark != nil)
                 || !win.isOnscreen || (win.scratchpad != nil)
                 || !win.tags.isEmpty
-            var rh: CGFloat = baseRH           // compact single line
+            var rh: CGFloat = windowRowH       // compact single line
             if !wt.isEmpty || hasThird {
                 rh = 34                        // top 8 + app 18 + bot 8
                 if !wt.isEmpty { rh += 20 }    // gap 4 + title 16

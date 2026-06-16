@@ -13,7 +13,6 @@ public let sidebarWidth: CGFloat = 248
 let headerRowH: CGFloat = 64             // workspace section heading (divider above) — 2-line caption (WS name + layout-mode chip) with breathing room between
 let headerFirstRowH: CGFloat = 50        // first workspace: no divider, tighter top, still 2-line caption
 let windowRowH: CGFloat = 28             // window row, no title (compact single line)
-let windowRowTallH: CGFloat = 44         // window row with title (app + title)
 let handleRowH: CGFloat = 42             // top drag-handle band (panel move + mac desktop label); taller so the divider has padding above/below
 
 // Typography — ONE ordered scale (14 ▸ 13 ▸ 12 ▸ 11). Every tree text

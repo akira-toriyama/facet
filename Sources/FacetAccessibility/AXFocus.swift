@@ -211,7 +211,7 @@ public enum AX {
     /// focus; once the target is frontmost the `!isActive` guard makes
     /// every later call a no-op. Main-actor (`NSApp` / `NSWorkspace`).
     @MainActor
-    public static func activateFront(pid: Int) {
+    static func activateFront(pid: Int) {
         guard let target = NSRunningApplication(
                 processIdentifier: pid_t(pid)),
               !target.isActive else { return }

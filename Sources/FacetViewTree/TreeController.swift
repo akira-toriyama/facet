@@ -30,11 +30,6 @@ public protocol TreeController: AnyObject, Sendable {
     /// launch).
     func syncPanelAfterDrag()
 
-    /// Double-click on the panel's top handle band — reset the panel to
-    /// its `[tree]` config geometry, or the built-in default when none
-    /// is configured.
-    func resetPanelGeometry()
-
     /// A row that owns a window preview has changed (hover moved,
     /// selection shifted). Controller debounces these into a single
     /// preview-overlay reconcile.
@@ -76,11 +71,4 @@ public protocol TreeController: AnyObject, Sendable {
     /// adds / removes that tag from the lens (`setLens`). The Controller
     /// owns the floating panel, key focus + the activation-policy dance.
     func openLensSelector(at screenPt: CGPoint)
-
-    /// Enter the tree's `s` search mode from a context-menu item (the
-    /// tag-world header's "Search" — item 1, and the Desktop band's
-    /// "Search"). Self-activates facet first (the menu path may open while
-    /// facet is passive), then begins search; same contract as the
-    /// Desktop-menu Search callback.
-    func enterSearchFromMenu()
 }

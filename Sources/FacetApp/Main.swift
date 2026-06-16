@@ -530,8 +530,6 @@ enum FacetApp {
                         + "(milliseconds; 0 = off) — got \"\(raw)\"")
                 }
                 loadingArg = ms
-            case "--resign", "--emit-schema":
-                break                                       // handled above
             case "--view":
                 viewArg = canonicalView(cursor.value(for: "--view"))
             case "--hide":
