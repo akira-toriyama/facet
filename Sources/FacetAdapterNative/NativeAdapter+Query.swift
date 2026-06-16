@@ -1,24 +1,24 @@
-// `facet query --windows` synthesis (#223), split across two phases so
-// catalog access stays off the heavy path:
+// `facet query --windows` synthesis (#223), split across two phases:
 //
 //   • `queryFacetStates()` — reads the catalog structs (active + parked)
-//     into an immutable `[WindowID: FacetWindowState]` map. The catalog
-//     is mutated by the DNC dispatch handlers on the MAIN actor (no
-//     cliQueue hop), so this read MUST also run on main — the Controller
-//     calls it on main, a quick read in the same risk class as
-//     `stashedScratchpads()`. It touches none of the heavy OS APIs.
+//     into an immutable `[WindowID: FacetWindowState]` map. P6: the catalog
+//     is cliQueue-confined, so this read runs on `cliQueue` — `Controller`'s
+//     `writeQuery` calls it inside `cliQueue.async` (it used to read on
+//     main, which raced once the command mutators moved off main). It
+//     touches none of the heavy OS APIs and is the only `parkedCatalogs`
+//     read in the codebase.
 //
 //   • `queryEntries(facetStates:)` — the heavy, catalog-FREE sweep:
 //     `enumerateCGWindows()` (CGWindowList .optionAll → every real window
 //     on every space), `MacDesktops.ordinalMap()` + `ids(forWindow:)` for
 //     the desktop ordinal (`nil` when SkyLight is down / unresolvable),
 //     and `AXTitles.resolve` for on-screen windows missing a title
-//     (off-screen → "", to bound AX traffic). The Controller runs it
-//     off-main on `cliQueue` (AXTitles is cliQueue-only by contract);
-//     it merges the passed-in facet map by window id.
+//     (off-screen → "", to bound AX traffic). Runs on the same `cliQueue`
+//     pass (AXTitles is cliQueue-only by contract); merges the passed-in
+//     facet map by window id.
 //
-// Keeping the catalog read on main + the heavy sweep catalog-free means
-// the off-main work never races the main-thread catalog mutators.
+// Both phases on the one cliQueue serialization point: the catalog read
+// never races the cliQueue mutators, and the heavy sweep stays off main.
 // Read-only / SIP-on throughout.
 
 import AppKit
@@ -29,7 +29,8 @@ extension NativeAdapter {
 
     /// The active catalog's tag vocabulary (`facet query --tags`, #228).
     /// `[]` in workspace mode — the vocabulary only seeds in tag mode.
-    /// A cheap main-actor read, same risk class as `queryFacetStates()`.
+    /// A cheap catalog read; P6 → callers invoke it on `cliQueue`
+    /// (`writeStatus`, the tag-panel seeds) like every other catalog read.
     public func definedTagNames() -> [String] {
         catalog.tagModel.names
     }
@@ -37,7 +38,7 @@ extension NativeAdapter {
     /// The active catalog's lens (`facet query --lens`, #228). `nil`
     /// outside tag mode (the lens is a tag-mode concept). Pure
     /// resolution in `LensStatus.resolve` (unit-tested) — `showsAll` is
-    /// derived from the floor bit. Cheap main-actor read.
+    /// derived from the floor bit. Cheap catalog read (cliQueue, P6).
     public func currentLens() -> LensStatus? {
         guard catalog.grouping == .tag else { return nil }
         return LensStatus.resolve(lens: catalog.lens, model: catalog.tagModel)
@@ -46,6 +47,10 @@ extension NativeAdapter {
     public func queryFacetStates()
         -> [WindowID: WindowQueryEntry.FacetWindowState]
     {
+        // P6: the only place `parkedCatalogs` is read. `writeQuery` now
+        // calls this on cliQueue (it used to read on main) — fail fast if
+        // a caller regresses.
+        dispatchPrecondition(condition: .onQueue(cliQueue))
         var out: [WindowID: WindowQueryEntry.FacetWindowState] = [:]
         // Parked catalogs first, then the active catalog OVERWRITES — so
         // if a window moved to the active desktop but a stale parked

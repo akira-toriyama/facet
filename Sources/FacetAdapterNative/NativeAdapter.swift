@@ -176,6 +176,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     var pidToBundleId: [pid_t: String] = [:]
 
     // (Slide — in-flight animation state)
+    // P6: the slide CLOCK (timer / anims / settle / clock fields below) is
+    // touched ONLY on the main runloop — by `startSlide`, `slideTick`, and
+    // the settle, all main. The COMMAND that starts a slide runs on
+    // `cliQueue`: it commits the catalog there, then hands a *value* plan to
+    // `startSlide` via a single `DispatchQueue.main.async`. The settle is
+    // AX-only (no catalog access) so the slide never re-touches catalog off
+    // the cliQueue serialization point. See NativeAdapter+Slide.swift.
     /// In-flight slide clock + its settle. Touched on main only.
     var slideTimer: Timer?
     var slideFinish: (() -> Void)?
@@ -192,6 +199,16 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// True while the in-flight slide is a retile (no park bookkeeping),
     /// so an interrupt can drop it and retarget from current positions.
     var slideIsRetile = false
+    /// True from `startSlide` until the settle fires. Read by
+    /// `Controller.refresh` (via `isAnimating`) so a poll-driven reconcile
+    /// doesn't AX-snap windows mid-tween. Main-confined like the rest of
+    /// the slide clock — set in `startSlide`, which runs one
+    /// `DispatchQueue.main.async` hop after the command commits the catalog
+    /// on cliQueue. A reconcile landing in that sub-millisecond gap can
+    /// still slip past the guard, but the cost is at most a transient
+    /// frame-fight that self-heals on the settle's refresh — never catalog
+    /// corruption (the catalog was already committed on cliQueue).
+    var slideInProgress = false
     /// CADisplayLink (macOS 14+) driving the slide; `AnyObject?` keeps
     /// the stored type available on macOS 13. nil = Timer fallback.
     var displayLink: AnyObject?
@@ -299,10 +316,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
         // Phase δ: display reconfigure observer. Fires the
         // handler 0.5 s after the OS settles on a new layout
-        // (debounce inside the observer). Handler runs on main
-        // (the closure is `@MainActor`); it touches AX + the
-        // catalog, both of which the rest of NativeAdapter
-        // already manipulates from main paths.
+        // (debounce inside the observer). The closure is `@MainActor`,
+        // so the handler starts on main only to snapshot the `NSScreen`
+        // frames (main-only API); it then hands ALL catalog + AX work to
+        // `cliQueue.async` — the single serialization point (P6). It does
+        // NOT touch the catalog on main.
         let dObs = DisplayChangeObserver { [weak self] in
             self?.handleDisplayReconfigure()
         }
@@ -375,14 +393,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public var events: AsyncStream<BackendEvent> { eventStream }
     public var errors: AsyncStream<String> { errorStream }
 
+    /// P6: true while a cosmetic slide is in flight (see `slideInProgress`).
+    /// Read on the main actor by `Controller.refresh` to skip a reconcile
+    /// that would AX-fight the tween.
+    public var isAnimating: Bool { slideInProgress }
+
     // MARK: - Commands
 
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
+        // P6: the catalog is cliQueue-confined. Every caller dispatches on
+        // cliQueue (DNC `runBackendCommand`, grid/rail/tree, runWindowOps);
+        // fail fast if a future caller regresses to the main thread.
+        dispatchPrecondition(condition: .onQueue(cliQueue))
         // No facet workspaces on an unmanaged mac desktop.
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
-        // A slide already running? Finish it before mutating the catalog.
-        cancelSlideForRetarget()
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
@@ -437,6 +462,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     public func switchWorkspaceRelative(_ target: RelativeWorkspace,
                                         autoFocus: Bool) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         guard let t = catalog.relativeTarget(target) else {
@@ -484,9 +510,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// mode (the catalog's `setLens` returns nil) or on an unknown tag
     /// name (surfaced as an operational error).
     public func setLens(_ spec: LensSpec, autoFocus: Bool) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
               catalog.grouping == .tag else { return }
-        cancelSlideForRetarget()
         let resolved: UInt64?
         switch spec {
         case .only(let names):   resolved = catalog.lensOnly(names)
@@ -567,6 +593,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     public func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         let target = index + 1

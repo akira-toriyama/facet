@@ -114,9 +114,9 @@ extension NativeAdapter {
     }
 
     public func setLayoutMode(workspaceIndex index: Int, mode: String) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         let target = index + 1
         let rect = activeDisplayRect()
-        cancelSlideForRetarget()
         if catalog.grouping == .tag {
             // Tag mode: one global layout for the lens union (there's no
             // per-workspace tree). Reject modes that can't represent a tag
@@ -176,53 +176,61 @@ extension NativeAdapter {
     @MainActor
     func handleDisplayReconfigure() {
         Log.debug("native: handleDisplayReconfigure")
-
-        // Step 1: re-apply layout of the active WS against the
-        // freshly-queried display rect.
-        applyLayout(workspace: catalog.activeIndex,
-                    rect: activeDisplayRect())
-
-        // Step 2: anchor-parked rescue. Walk every parked
-        // window's recorded originalPosition; if it no longer
-        // sits on any visible display, move it to the nearest
-        // surviving display's anchor sliver.
+        // P6: NSScreen is main-only, so read the display frames HERE (a
+        // value snapshot), then do ALL catalog work + AX on `cliQueue` —
+        // the single catalog serialization point. The fired-on-main
+        // observer must not touch the catalog directly.
         let displays = NSScreen.screens.map(\.frame)
-        let parkedPositions = catalog.anchorParked.compactMap {
-            id -> (WindowID, CGPoint)? in
-            guard let pos = catalog.originalPositions[id]
-            else { return nil }
-            return (id, pos)
+        cliQueue.async { [weak self] in
+            guard let self else { return }
+
+            // Step 1: re-apply layout of the active WS against the
+            // freshly-queried display rect (activeDisplayRect hops to main
+            // for the visible frame — safe, main is free).
+            self.applyLayout(workspace: self.catalog.activeIndex,
+                             rect: self.activeDisplayRect())
+
+            // Step 2: anchor-parked rescue. Walk every parked window's
+            // recorded originalPosition; if it no longer sits on any
+            // visible display, move it to the nearest surviving display's
+            // anchor sliver.
+            let parkedPositions = self.catalog.anchorParked.compactMap {
+                id -> (WindowID, CGPoint)? in
+                guard let pos = self.catalog.originalPositions[id]
+                else { return nil }
+                return (id, pos)
+            }
+            let orphanPoints = DisplayGeometry.orphanedPoints(
+                among: parkedPositions.map(\.1),
+                displays: displays)
+            guard !orphanPoints.isEmpty else {
+                self.eventContinuation.yield(.refreshNeeded)
+                return
+            }
+            // Group orphans by id for the AX dispatch.
+            var rescued = 0
+            for (id, pos) in parkedPositions where orphanPoints.contains(pos) {
+                guard let pid = self.catalog.pid(for: id) else { continue }
+                // Rescue rect: the nearest surviving display. Anchor
+                // sliver lives at (maxX-1, maxY-1) of that display.
+                let probe = CGRect(x: pos.x, y: pos.y,
+                                   width: 1, height: 1)
+                guard let dest = DisplayGeometry.nearestDisplay(
+                    to: probe, in: displays) else { continue }
+                guard let ax = AXGeom.window(
+                    for: CGWindowID(id.serverID),
+                    pid: pid_t(pid)) else { continue }
+                let anchor = CGPoint(x: dest.maxX - 1,
+                                     y: dest.maxY - 1)
+                AXGeom.setPosition(ax, anchor)
+                rescued += 1
+            }
+            if rescued > 0 {
+                Log.debug("native: reconfig rescued \(rescued) "
+                    + "anchor-parked window(s)")
+            }
+            self.eventContinuation.yield(.refreshNeeded)
         }
-        let orphanPoints = DisplayGeometry.orphanedPoints(
-            among: parkedPositions.map(\.1),
-            displays: displays)
-        guard !orphanPoints.isEmpty else {
-            eventContinuation.yield(.refreshNeeded)
-            return
-        }
-        // Group orphans by id for the AX dispatch.
-        var rescued = 0
-        for (id, pos) in parkedPositions where orphanPoints.contains(pos) {
-            guard let pid = catalog.pid(for: id) else { continue }
-            // Rescue rect: the nearest surviving display. Anchor
-            // sliver lives at (maxX-1, maxY-1) of that display.
-            let probe = CGRect(x: pos.x, y: pos.y,
-                               width: 1, height: 1)
-            guard let dest = DisplayGeometry.nearestDisplay(
-                to: probe, in: displays) else { continue }
-            guard let ax = AXGeom.window(
-                for: CGWindowID(id.serverID),
-                pid: pid_t(pid)) else { continue }
-            let anchor = CGPoint(x: dest.maxX - 1,
-                                 y: dest.maxY - 1)
-            AXGeom.setPosition(ax, anchor)
-            rescued += 1
-        }
-        if rescued > 0 {
-            Log.debug("native: reconfig rescued \(rescued) "
-                + "anchor-parked window(s)")
-        }
-        eventContinuation.yield(.refreshNeeded)
     }
 
     /// `WindowBackend.retileActiveWorkspace` implementation:
@@ -237,7 +245,6 @@ extension NativeAdapter {
                 + "(WS \(catalog.activeIndex) is \(mode))")
             return
         }
-        cancelSlideForRetarget()
         let rect = activeDisplayRect()
         // 枠 E Phase 2: animate the in-place reflow. animateRetile owns
         // its settle (applyLayout + refresh); fall through to instant
@@ -289,6 +296,7 @@ extension NativeAdapter {
     }
 
     public func swapWindows(_ a: WindowID, _ b: WindowID) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard catalog.swapWindows(a, b,
                                   workspace: catalog.activeIndex) else {
             Log.debug("native: swap noop "
@@ -300,6 +308,7 @@ extension NativeAdapter {
 
     public func insertWindow(_ moved: WindowID, beside target: WindowID,
                              edge: InsertEdge) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard catalog.insertWindow(moved, beside: target, edge: edge,
                                    workspace: catalog.activeIndex) else {
             Log.debug("native: insert noop "
@@ -311,6 +320,7 @@ extension NativeAdapter {
 
     public func resizeWindow(_ id: WindowID, to frame: CGRect,
                              reflowDragged: Bool) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         // Name the display from the dragged window's centre — it's on the
         // active display, and this avoids the focused-window AX probe every
         // live tick.
@@ -367,6 +377,7 @@ extension NativeAdapter {
 
     public func predictedDrop(dragged a: WindowID, target b: WindowID,
                               zone: IntentZone) -> DropPrediction {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         let rect = activeDisplayRect()
         // Pre-drop computed layout (same math as the commit), then apply
         // the drop to a COPY of the catalog (a value type) and recompute.
@@ -517,7 +528,6 @@ extension NativeAdapter {
     private func settleWindowRetag(_ id: WindowID,
                                    _ vis: WorkspaceCatalog.RetagVisibility,
                                    logDetail: String) {
-        cancelSlideForRetarget()
         if vis != .unchanged, let pid = catalog.windowMap[id]?.pid {
             let ref = WindowRef(id: id, pid: pid)
             applyHide(toPark: vis == .park ? [ref] : [],
@@ -602,7 +612,6 @@ extension NativeAdapter {
             Log.debug("native: tag --remove \"\(name)\" — rejected (unknown / reserved)")
             return false
         }
-        cancelSlideForRetarget()
         let rect = activeDisplayRect()
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
         applyLayout(workspace: catalog.activeIndex, rect: rect)

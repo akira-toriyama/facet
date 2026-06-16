@@ -217,6 +217,26 @@ extension Controller {
     /// path (the activation-policy revert lives there so it can't be missed).
     func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
                        title: String, currentTags: [String], at screenPt: CGPoint) {
+        // P6: the tag vocabulary is catalog state — read it on `cliQueue`
+        // (the single serialization point), then build the panel back on
+        // main. The one-frame round-trip is imperceptible for a panel open.
+        let bk = backend
+        cliQueue.async {
+            let allTags = bk.definedTagNames()
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.showTagEditorPanel(
+                        forWindow: id, pid: pid, appName: appName, title: title,
+                        currentTags: currentTags, at: screenPt, allTags: allTags)
+                }
+            }
+        }
+    }
+
+    private func showTagEditorPanel(forWindow id: WindowID, pid: Int,
+                                    appName: String, title: String,
+                                    currentTags: [String], at screenPt: CGPoint,
+                                    allTags: [String]) {
         let bk = backend
         tagEditorSelfActivated = !sidebarView.kbNav
         if tagEditorSelfActivated {
@@ -229,7 +249,7 @@ extension Controller {
             appName: appName,
             title: title,
             pid: pid,
-            allTags: bk.definedTagNames(),
+            allTags: allTags,
             checkedTags: Set(currentTags),
             palette: treePaletteBox.pal,
             onToggle: { [weak self] name, on in
@@ -260,6 +280,23 @@ extension Controller {
     /// keeps focus so the user can keep picking (item 3 fix); it closes only
     /// on outside-click / Esc.
     func openLensSelector(at screenPt: CGPoint) {
+        // P6: lens + vocabulary are catalog state — read on `cliQueue`,
+        // build the panel on main (see openTagEditor).
+        let bk = backend
+        cliQueue.async {
+            let current = Set(bk.currentLens()?.tags ?? [])
+            let allTags = bk.definedTagNames()
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    self?.showLensSelectorPanel(
+                        at: screenPt, allTags: allTags, current: current)
+                }
+            }
+        }
+    }
+
+    private func showLensSelectorPanel(at screenPt: CGPoint,
+                                       allTags: [String], current: Set<String>) {
         let bk = backend
         tagEditorSelfActivated = !sidebarView.kbNav
         if tagEditorSelfActivated {
@@ -267,10 +304,9 @@ extension Controller {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
         }
-        let current = Set(bk.currentLens()?.tags ?? [])
         TagEditPanel.shared.showLens(
             at: screenPt,
-            allTags: bk.definedTagNames(),
+            allTags: allTags,
             checkedTags: current,
             palette: treePaletteBox.pal,
             onToggle: { [weak self] name, on in
@@ -295,6 +331,18 @@ extension Controller {
     /// beside the tree panel (it's a tree-panel-level mode, the `s` twin).
     /// Tag mode only — gated by the caller (`handleKbKey`).
     func enterTagManage() {
+        // P6: the tag vocabulary is catalog state — read on `cliQueue`,
+        // build the panel on main (see openTagEditor).
+        let bk = backend
+        cliQueue.async {
+            let allTags = bk.definedTagNames()
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.showTagManagePanel(allTags: allTags) }
+            }
+        }
+    }
+
+    private func showTagManagePanel(allTags: [String]) {
         let bk = backend
         tagEditorSelfActivated = !sidebarView.kbNav
         if tagEditorSelfActivated {
@@ -305,7 +353,7 @@ extension Controller {
         let f = panelHost.panel.frame
         TagEditPanel.shared.showManage(
             at: NSPoint(x: f.maxX + 8, y: f.maxY),
-            allTags: bk.definedTagNames(),
+            allTags: allTags,
             palette: treePaletteBox.pal,
             onCreate: { [weak self] name in
                 cliQueue.async { _ = bk.addTag(name) }

@@ -405,6 +405,54 @@ without the boilerplate of a separate type. Same YAGNI logic
 applies; revisit when a view needs to be shared across multiple
 windows or hosts.
 
+## Threading model (catalog serialization, P6)
+
+The native adapter's mutable state — `WorkspaceCatalog` (the active
+catalog), `parkedCatalogs` (per-mac-desktop), and the reconcile
+bookkeeping (`trustedNew` / `seenWindowIDs` / `pidToBundleId` / …) — is
+**confined to one serial queue, `cliQueue`** (`com.facet.backend.queue`).
+Every mutate AND read of that state happens there. This is the single
+serialization point that makes the `@unchecked Sendable` on `NativeAdapter`
+actually sound (the compiler can't verify queue-confinement, so the
+discipline is enforced at runtime by `dispatchPrecondition(.onQueue(cliQueue))`
+on the catalog entry points).
+
+How the surfaces reach it:
+
+- **CLI / IPC commands** (`Controller`'s DNC observer fires on `.main`)
+  hop to cliQueue via `runBackendCommand { bk in … }`; errors + the
+  follow-up reconcile hop back to main. The grid / rail / tree / tag-panel
+  callbacks already wrap their backend calls in `cliQueue.async`.
+- **The poll + AX-event refresh** (`Controller.refresh`) dispatches
+  `workspaces()` → `refreshCatalog()` on cliQueue.
+- **Display reconfigure** (a `@MainActor` observer) reads the `NSScreen`
+  frames on main (a value snapshot), then does all catalog work in
+  `cliQueue.async`.
+- **`facet query` reads** (`writeStatus` / `writeQuery` /
+  `queryFacetStates`) run on cliQueue too — reads tear against the cliQueue
+  writers just as writes do, so they are not exempt.
+
+The one-way rule that keeps it deadlock-free:
+
+> **`main → cliQueue` is ALWAYS `.async` (never `.sync`).
+> `cliQueue → main` may be `.sync`** — but only for `NSScreen` reads
+> (`activeDisplayRect` / `activeScale`), which AppKit pins to main.
+
+Because main never blocks waiting on cliQueue, main is always free to
+service the `cliQueue → main` `NSScreen` hop; the edges form no cycle.
+Adding a `main → cliQueue` `.sync` anywhere would close the cycle and
+deadlock — don't.
+
+Slide animations (枠 E) span both: the command commits the catalog on
+cliQueue, then hands a **value** plan (AX elements + frames) to the
+main-confined driver via a single `DispatchQueue.main.async`. The driver
+and its settle run on main and touch **no catalog** — the settle only
+AX-snaps windows to their final frames and yields a refresh. So the slide
+clock (`slideAnims` / timer / `slideInProgress`) is main-confined, the
+catalog is cliQueue-confined, and the two never share mutable state.
+`Controller.refresh` skips while `backend.isAnimating` so a reconcile can't
+AX-fight the in-flight tween.
+
 ## Non-goals
 
 - **SIP-disabled features in `facet`** — out of scope.

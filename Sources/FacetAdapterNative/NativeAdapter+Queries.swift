@@ -34,6 +34,9 @@ extension NativeAdapter {
     /// here — they go through `switchWorkspace` /
     /// `setLayoutMode` / `perform`.
     private func refreshCatalog() {
+        // P6: the highest-frequency catalog mutator. `workspaces()` (its
+        // sole caller) is always invoked on cliQueue — fail fast otherwise.
+        dispatchPrecondition(condition: .onQueue(cliQueue))
         let preMacDesktopID = activeMacDesktopID
         // Per-mac-desktop: if the user switched mac desktops,
         // park the current catalog and swap in the destination
@@ -231,7 +234,6 @@ extension NativeAdapter {
             && (!result.addedIDs.isEmpty || !result.removedIDs.isEmpty
                 || !hideResult.hidden.isEmpty || !hideResult.revealed.isEmpty)
         if shouldAnimateOpenClose {
-            cancelSlideForRetarget()
             // A revealed window snaps into its tile like a newly-opened
             // one (no glide from its off-screen resting frame); the
             // windows reflowing to fill a hidden window's freed slot
@@ -638,26 +640,19 @@ extension NativeAdapter {
     /// *minus menu bar / Dock*), the correct rect for tile
     /// geometry.
     ///
-    /// `visibleFrame` is `@MainActor` because it talks to
-    /// `NSScreen`. Two call contexts:
-    ///
-    ///   - **Main thread** (CLI dispatch: `switchWorkspace` /
-    ///     `moveWindow` / `setLayoutMode` / `retileActive` /
-    ///     `perform`, all called from `Controller.dispatch*`
-    ///     under `MainActor.assumeIsolated`): direct call, no
-    ///     hop.
-    ///
-    ///   - **Off-main** (`Controller.refresh` dispatches
-    ///     `workspaces()` to its serial `cliQueue` so AX-title
-    ///     resolution can run off-main — see
-    ///     `Controller.swift:472`. `refreshCatalog` →
-    ///     `applyLayout` chain therefore runs off-main too):
-    ///     synchronously hop to main to read `visibleFrame`,
-    ///     then return. Deadlock-free: main is not blocked
-    ///     waiting on cliQueue (the dispatch is `.async`),
-    ///     so main is always free to service the hop. Cost:
-    ///     ~1 ms per refresh tick, acceptable at the current
-    ///     2 s poll cadence.
+    /// `visibleFrame` is `@MainActor` because it talks to `NSScreen`.
+    /// P6: the catalog is cliQueue-confined, so EVERY caller of this runs
+    /// on `cliQueue` (the command mutators, the refresh/reconcile chain,
+    /// the slide setup) — not on main. It therefore always takes the
+    /// `DispatchQueue.main.sync` branch to read `visibleFrame`. That is
+    /// the ONE `cliQueue → main` sync hop in the codebase, and it is
+    /// deadlock-free by the project's threading rule: `main → cliQueue` is
+    /// ALWAYS `.async` (never `.sync`), so main is never blocked waiting on
+    /// cliQueue and is always free to service this hop. Cost: ~1 ms per
+    /// call. (The `Thread.isMainThread` fast-path below stays as a cheap
+    /// guard for any future main-thread caller, but in practice never
+    /// fires now.) Do NOT add a `main → cliQueue` `.sync` anywhere — it
+    /// would close the cycle and deadlock here.
     func activeDisplayRect(probe probeOverride: CGPoint? = nil) -> CGRect {
         // `probeOverride` lets a caller name the display directly (the live
         // resize follow passes the dragged window's centre) so we skip the
