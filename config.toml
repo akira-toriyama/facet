@@ -287,7 +287,7 @@ preview-mode = "popover"
 # Unknown / unset clamps to "float" (a typo can't break tiling). To
 # tile by default, set this to "bsp"; per-workspace tweaks are still
 # done live via the CLI.
-default = "grid"
+default = "float"
 
 # Spacing for tiled windows, in points. Everything here defaults to 0
 # — windows tile flush, edge-to-edge (facet's behaviour before gaps
