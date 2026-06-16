@@ -964,14 +964,14 @@ public final class SidebarView: NSView {
                             withAttributes: pillAttrs)
                         lx += pillW + 6
                     }
-                    // Tag chips (#tag): EVERY tag this window carries (the
-                    // tag-mode list is flat — there is no primary-tag header
-                    // to hide one under). A filled chip in `secondary` (a
-                    // distinct accent — readable, but not the `primary`
-                    // selection color — vs the outlined status pills), led by
-                    // a `tag` glyph (replacing the old `#` prefix) so it can't
-                    // be mistaken for a mark / scratchpad. Stops before a chip
-                    // would overrun the row's right edge.
+                    // Tags (#tag): EVERY tag this window carries (the tag-mode
+                    // list is flat — there is no primary-tag header to hide
+                    // one under). A `tag` glyph (replacing the old `#`) + the
+                    // name in `secondary`, NO filled chip background (it read
+                    // as an unwanted highlight); the glyph + accent colour
+                    // already distinguish it from a mark / scratchpad. Stops
+                    // before a tag would overrun the row's right edge.
+                    let pillH: CGFloat = 22
                     for tag in c.tags {
                         let chipFont = uiFont(windowFontSize - 1, .medium)
                         let maxTextW: CGFloat = 90
@@ -984,17 +984,9 @@ public final class SidebarView: NSView {
                         let icW = tagIcon.map {
                             $0.size.width * (icH / max($0.size.height, 1)) } ?? 0
                         let icGap: CGFloat = tagIcon == nil ? 0 : 3
-                        let padX: CGFloat = 6
-                        let pillH: CGFloat = 22
-                        let pillW = icW + icGap + textW + padX * 2
+                        let pillW = icW + icGap + textW
                         if lx + pillW > tx + tw { break }   // no room → stop
-                        let chip = NSBezierPath(
-                            roundedRect: NSRect(x: lx, y: labelY - 1,
-                                                width: pillW, height: pillH),
-                            xRadius: 5, yRadius: 5)
-                        pal.secondary.withAlphaComponent(0.15).setFill()
-                        chip.fill()
-                        var cx = lx + padX
+                        var cx = lx
                         if let tagIcon {
                             tagIcon.draw(in: NSRect(
                                 x: cx, y: labelY - 1 + (pillH - icH) / 2,
@@ -1018,54 +1010,38 @@ public final class SidebarView: NSView {
                         lx += pillW + 6
                     }
                     if c.isSticky {
-                        // Sticky badge: a float-style pill (primary border,
-                        // tertiary text — the SAME theme as the `float`
-                        // badge) but with the glyphs SLANTED via
-                        // `.obliqueness` so sticky ≠ float at a glance, plus
-                        // a leading `pin` icon (item 7).
+                        // Sticky: `pin` + horizontal text (no slant now — it
+                        // aligns with the other badges; the pin glyph already
+                        // sets it apart from float).
                         lx = drawStatusPill("sticky", icon: "SF:pin",
-                                            stroke: pal.primary,
-                                            textColor: pal.tertiary,
-                                            oblique: 0.2,
+                                            color: pal.tertiary,
                                             at: lx, labelY: labelY)
                     }
                     if let sp = c.scratchpad {
-                        // Scratchpad shelf badge: a dim outlined pill
-                        // `scratchpad:NAME` with a leading `tray` icon. Dim
-                        // (not the mark's accent green) so the shelf handle
-                        // reads as secondary, labelled in full so it can't
-                        // be mistaken for a user mark. Sticky ⊻ scratchpad,
-                        // so the sticky badge above + this never both appear.
+                        // Scratchpad shelf: `tray` + `scratchpad:NAME`, dim
+                        // (not the mark's accent) so it reads as secondary;
+                        // labelled in full so it can't be mistaken for a mark.
                         lx = drawStatusPill("scratchpad:\(sp)", icon: "SF:tray",
-                                            stroke: pal.muted,
-                                            textColor: pal.muted,
+                                            color: pal.muted,
                                             at: lx, labelY: labelY)
                     }
                     if let labelText {
-                        // master / float as an outlined `primary`-bordered
-                        // pill. A leading icon + text hue distinguish the
-                        // kind (item 7 / 10 — layout state in the primary
-                        // accent):
-                        //   master → `crown`, `primary` text
-                        //   float  → `macwindow`, `tertiary` text
-                        //            (the `sticky` pill above shares float's)
+                        // master / float — icon + text, no border. master →
+                        // `crown` + `primary`; float → `macwindow` +
+                        // `foreground` (matches the "Desktop N" band label).
                         lx = drawStatusPill(
                             labelText,
                             icon: c.isMaster ? "SF:crown" : "SF:macwindow",
-                            stroke: pal.primary,
-                            textColor: c.isMaster ? pal.primary : pal.tertiary,
+                            color: c.isMaster ? pal.primary : pal.foreground,
                             at: lx, labelY: labelY)
                     }
                     if c.isHidden {
-                        // Hidden (Cmd+H / minimized): a muted outlined pill
-                        // with a leading `eye.slash` icon — confirming the
-                        // dimmed row is hidden, not gone. Click restores it.
-                        // (A hidden window is never master/float/sticky —
-                        // those are excluded from hide-reclaim — so this is
-                        // the only status pill on its row.)
+                        // Hidden (Cmd+H / minimized): `eye.slash` + dim text —
+                        // confirming the dimmed row is hidden, not gone. Click
+                        // restores it. (Never master/float/sticky, so it's the
+                        // only badge on its row.)
                         lx = drawStatusPill("hidden", icon: "SF:eye.slash",
-                                            stroke: pal.muted,
-                                            textColor: pal.muted,
+                                            color: pal.muted,
                                             at: lx, labelY: labelY)
                     }
                 }
@@ -1115,39 +1091,29 @@ public final class SidebarView: NSView {
     /// `stroke` outlines the pill; `textColor` tints BOTH the label and
     /// the icon; `oblique` slants the glyphs (sticky); `maxTextW`
     /// tail-truncates long names (e.g. `scratchpad:NAME`).
-    private func drawStatusPill(_ text: String, icon: String,
-                                stroke: NSColor, textColor: NSColor,
-                                oblique: CGFloat = 0, maxTextW: CGFloat = 130,
+    /// Draw a window-state badge — an optional leading SF icon then text — at
+    /// `lx` on a window row's third line, returning the advanced x. Borderless
+    /// + horizontal (no pill outline, no slant): the glyph + `color` carry the
+    /// meaning, matching the tag chips' clean icon+text look. Shared by the
+    /// master / float / sticky / hidden / scratchpad badges.
+    private func drawStatusPill(_ text: String, icon: String, color: NSColor,
+                                maxTextW: CGFloat = 130,
                                 at lx: CGFloat, labelY: CGFloat) -> CGFloat {
         let font = uiFont(windowFontSize, .semibold)
         let para = NSMutableParagraphStyle()
-        para.alignment = .center
         para.lineBreakMode = .byTruncatingTail
-        var attrs: [NSAttributedString.Key: Any] = [
-            .font: font, .foregroundColor: textColor, .paragraphStyle: para]
-        if oblique != 0 { attrs[.obliqueness] = oblique }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font, .foregroundColor: color, .paragraphStyle: para]
         let textW = min(maxTextW, ceil((text as NSString)
             .size(withAttributes: [.font: font]).width))
-        let padX: CGFloat = 8
         let pillH: CGFloat = 22
-        // Explicit ~15pt glyph, height-clamped so it sits inside the 22pt
-        // pill with clear margin from the stroke (the menu's `.large` would
-        // touch the border — the reported icon↔border overlap).
         let iconImg = icon.isEmpty ? nil
             : IconResolver.resolve(icon, pointSize: 14,
-                                   color: textColor, scale: .medium)
+                                   color: color, scale: .medium)
         let iconH = iconImg.map { min($0.size.height, 15) } ?? 0
         let iconW = iconImg.map { $0.size.width * (iconH / max($0.size.height, 1)) } ?? 0
         let iconGap: CGFloat = iconImg == nil ? 0 : 4
-        let pillW = textW + iconW + iconGap + padX * 2
-        let pill = NSBezierPath(
-            roundedRect: NSRect(x: lx, y: labelY - 1,
-                                width: pillW, height: pillH)
-                .insetBy(dx: 0.5, dy: 0.5),
-            xRadius: 5, yRadius: 5)
-        pill.lineWidth = 1
-        stroke.setStroke(); pill.stroke()
-        var cx = lx + padX
+        var cx = lx
         if let iconImg {
             iconImg.draw(in: NSRect(
                 x: cx, y: labelY - 1 + (pillH - iconH) / 2,
@@ -1159,7 +1125,7 @@ public final class SidebarView: NSView {
             in: NSRect(x: cx, y: labelY - 1 + (pillH - textH) / 2 - 1.0,
                        width: textW, height: textH),
             withAttributes: attrs)
-        return lx + pillW + 6
+        return cx + textW + 10   // past the text + a gap to the next badge
     }
 
     /// Unified drag/lift context for `draw`: the source workspace,
