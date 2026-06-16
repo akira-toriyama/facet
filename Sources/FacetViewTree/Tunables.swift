@@ -16,10 +16,20 @@ let windowRowH: CGFloat = 28             // window row, no title (compact single
 let windowRowTallH: CGFloat = 44         // window row with title (app + title)
 let handleRowH: CGFloat = 42             // top drag-handle band (panel move + mac desktop label); taller so the divider has padding above/below
 
-// Typography.
-let headerFontSize: CGFloat = 12
-let activeHeaderFontSize: CGFloat = 13.5 // active workspace caption slightly bigger
-let windowFontSize: CGFloat = 12
+// Typography — ONE ordered scale (14 ▸ 13 ▸ 12 ▸ 11). Every tree text
+// routes through these constants (no bare literals) so the ladder stays
+// consistent: section headers sit ABOVE the body by SIZE; active vs
+// inactive (and selected vs not) is signalled by colour + weight at the
+// call site, never by a size change — the old `headerFontSize=12` /
+// `activeHeaderFontSize=13.5` pair flipped the header size on focus,
+// which reflowed the caption and read as the "scattered" look. Integer
+// steps only (the half-point 13.5 rendered fuzzy).
+let desktopBandFontSize: CGFloat = 14    // "Desktop N" chrome band (HandleBar)
+let headerFontSize: CGFloat = 13         // WS caption line 1 (WS name / lens) + search field
+let subheadFontSize: CGFloat = 12        // WS caption line 2 (layout-mode label) — subordinate to the name
+let windowFontSize: CGFloat = 12         // window-row app name (body text) + DnD chip
+let windowTitleFontSize: CGFloat = 11    // window-row title (2nd line)
+let badgeFontSize: CGFloat = 12          // mark / tag / status badges (row 3rd line) — body size, but .medium + accent so they still read as metadata
 
 let iconSize: CGFloat = 28               // app icon square
 let rowPadX: CGFloat = 12

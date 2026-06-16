@@ -311,13 +311,17 @@ public final class SidebarView: NSView {
             // One tag glyph per tag name (~14pt + gaps); "All tags" = 1 glyph.
             let tagCount = !tagModeActive ? 0
                 : (nm == "All tags" ? 1 : max(1, nm.split(separator: " ").count))
+            // Measure at the HEAVIEST draw weight (active = .bold name /
+            // .semibold layout) so the natural width is a safe upper bound —
+            // it must never be narrower than the drawn text or the
+            // horizontal scroll clips. Sizes are the constants the draw uses.
             let nameW = (nm as NSString).size(
-                withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+                withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
                 + CGFloat(tagCount) * 22
             let modeW = ws.layoutMode.isEmpty ? 0
                 : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
-                    withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
-                    // leading layout icon (~14pt + 5 gap) when one exists
+                    withAttributes: [.font: uiFont(subheadFontSize, .semibold)]).width
+                    // leading layout icon (~13pt + 5 gap) when one exists
                     + (layoutModeIcon(ws.layoutMode).isEmpty ? 0 : 19)
             naturalW = max(naturalW,
                            rowPadX + gripSpace + ceil(max(nameW, modeW)) + rowPadX)
@@ -327,7 +331,7 @@ public final class SidebarView: NSView {
                 let tt = eff(win)
                 let titleW = tt.isEmpty ? 0
                     : (tt as NSString).size(
-                        withAttributes: [.font: uiFont(windowFontSize - 1, .semibold)]).width
+                        withAttributes: [.font: uiFont(windowTitleFontSize, .semibold)]).width
                 naturalW = max(naturalW, txWin + ceil(max(appW, titleW)) + rowPadX)
             }
         }
@@ -721,7 +725,12 @@ public final class SidebarView: NSView {
                 let hp = NSMutableParagraphStyle()
                 hp.lineBreakMode = .byClipping     // no "…" — see `para` (B)
                 hp.maximumLineHeight = row.height
-                let fs = c.hot ? activeHeaderFontSize : headerFontSize
+                // Header size is the CONSTANT `headerFontSize` in both
+                // states — active vs inactive is colour (below) + a one-
+                // notch weight bump, never a size change (that flip was the
+                // old reflow / "scattered" feel). The WS name stays bold so
+                // the section header reads heavier than the body rows.
+                let nameWeight: NSFont.Weight = c.hot ? .bold : .semibold
                 let capY = c.firstHeader ? row.minY + 6 : row.minY + 18
                 let capH = row.maxY - capY - 6
                 // Drag grip — affords "grab to swap this workspace".
@@ -742,7 +751,8 @@ public final class SidebarView: NSView {
                     : pal.muted
                 let nameX0 = rowPadX + gripSpace
                 let nameAttrs: [NSAttributedString.Key: Any] = [
-                    .font: uiFont(fs, .bold), .foregroundColor: nameColor,
+                    .font: uiFont(headerFontSize, nameWeight),
+                    .foregroundColor: nameColor,
                     .kern: 0.6, .paragraphStyle: hp]
                 if tagModeActive {
                     // Tag mode: a `tag` glyph PER tag name (2+ tags each get
@@ -782,26 +792,22 @@ public final class SidebarView: NSView {
                                    height: nameH),
                         withAttributes: nameAttrs)
                 }
-                // Line 2: layout-mode text — secondary semibold on the
-                // active WS, `pal.muted` semibold when the WS isn't
-                // active so non-focused rows recede. No pill
-                // background (the WS name on line 1 carries enough
-                // visual weight for the group); the color + weight
-                // step alone separates the badge from body text.
-                // the secondary accent is the palette's second hue
-                // (terminal=amber, dracula=pink, system=systemPurple),
-                // reserved for status badges so the text never
-                // collides with the primary accent used by the
-                // active WS-name on line 1.
+                // Line 2: layout-mode text — the caption's "mini header".
+                // `primary` on the active WS (item 10: layout = primary
+                // accent), `pal.muted` when inactive so non-focused rows
+                // recede. No pill background — the colour + weight step
+                // alone separates it from body text.
                 if !c.mode.isEmpty {
                     // Layout mode: a leading SF icon (item 7 — the tree is
                     // text-heavy, so the glyph lets the layout register at a
-                    // glance) + the abbreviated label. Plain, no fill — same
-                    // weight (bold) as the WS name above it so the two-line
-                    // caption reads as one unit. `primary` on the active WS
-                    // (item 10: layout = primary accent), dim when inactive
-                    // so non-focused rows recede.
+                    // glance) + the abbreviated label. One SIZE step and one
+                    // WEIGHT step below the WS name above it (subhead 12 vs
+                    // name 13; .semibold/.medium vs .bold/.semibold) so the
+                    // two-line caption has real internal hierarchy — name
+                    // dominant, layout subordinate — instead of two equal
+                    // lines.
                     let modeColor = c.hot ? pal.primary : pal.muted
+                    let modeWeight: NSFont.Weight = c.hot ? .semibold : .medium
                     let mx = rowPadX + gripSpace
                     let modeY = capY + nameH + 4
                     var modeTextX = mx
@@ -828,7 +834,7 @@ public final class SidebarView: NSView {
                                    width: bounds.width - rowPadX - modeTextX,
                                    height: 18),
                         withAttributes: [
-                            .font: uiFont(fs, .bold),
+                            .font: uiFont(subheadFontSize, modeWeight),
                             .foregroundColor: modeColor,
                             .paragraphStyle: hp,
                         ])
@@ -900,8 +906,12 @@ public final class SidebarView: NSView {
                 (c.app as NSString).draw(
                     in: NSRect(x: tx, y: appY, width: tw, height: 18),
                     withAttributes: [
+                        // Body text: `.regular` unselected so it reads as
+                        // plain content, not a header; selection bumps to
+                        // `.semibold` + primary (colour carries focus, no
+                        // size change).
                         .font: uiFont(windowFontSize,
-                                      sel ? .semibold : .medium),
+                                      sel ? .semibold : .regular),
                         // Dim a hidden (Cmd+H/Cmd+M'd) row, but keep a
                         // selected row at full strength so the highlight
                         // stays legible.
@@ -910,12 +920,16 @@ public final class SidebarView: NSView {
                         .paragraphStyle: para,
                     ])
                 if hasTitle {
+                    // Window title: the row's supporting detail — one size
+                    // below the app name, `.regular`, and dimmed to `muted`
+                    // so it reads as secondary (was .semibold/foreground,
+                    // which made the title out-weigh its own app name).
                     (c.title as NSString).draw(
                         in: NSRect(x: tx, y: titleY,
                                    width: tw, height: 15),
                         withAttributes: [
-                            .font: uiFont(windowFontSize - 1, .semibold),
-                            .foregroundColor: pal.foreground.withAlphaComponent(
+                            .font: uiFont(windowTitleFontSize, .regular),
+                            .foregroundColor: pal.muted.withAlphaComponent(
                                 c.isHidden && !sel ? 0.45 : 1.0),
                             .paragraphStyle: para,
                         ])
@@ -929,7 +943,11 @@ public final class SidebarView: NSView {
                     let labelY = hasTitle ? row.minY + 51 : row.minY + 32
                     var lx = tx
                     if let mark = c.mark {
-                        let markFont = uiFont(windowFontSize, .bold)
+                        // Badges share the body size (12pt) but stay .medium +
+                        // accent-coloured so they read as metadata, not body —
+                        // colour carries the meaning. The mark keeps its
+                        // primary stroke + rounded outline.
+                        let markFont = uiFont(badgeFontSize, .medium)
                         let maxTextW: CGFloat = 60   // long → tail-truncate
                         let textW = min(maxTextW, ceil((mark as NSString)
                             .size(withAttributes: [.font: markFont]).width))
@@ -973,9 +991,10 @@ public final class SidebarView: NSView {
                     // before a tag would overrun the row's right edge.
                     let pillH: CGFloat = 22
                     for tag in c.tags {
-                        // Same font + icon size as the status badges
-                        // (master/float/sticky) so tags don't read smaller.
-                        let chipFont = uiFont(windowFontSize, .semibold)
+                        // Same badge tier as master/float/sticky (12pt
+                        // .medium) so tags read uniformly with the other
+                        // metadata; glyph tracks the text (14pt).
+                        let chipFont = uiFont(badgeFontSize, .medium)
                         let maxTextW: CGFloat = 90
                         let textW = min(maxTextW, ceil((tag as NSString)
                             .size(withAttributes: [.font: chipFont]).width))
@@ -1020,11 +1039,12 @@ public final class SidebarView: NSView {
                                             at: lx, labelY: labelY)
                     }
                     if let sp = c.scratchpad {
-                        // Scratchpad shelf: `tray` + `scratchpad:NAME`, dim
-                        // (not the mark's accent) so it reads as secondary;
-                        // labelled in full so it can't be mistaken for a mark.
+                        // Scratchpad shelf: `tray` + `scratchpad:NAME`, on the
+                        // least-emphasis `tertiary` tier (it's a parked-away
+                        // state) so it reads as the dimmest metadata; labelled
+                        // in full so it can't be mistaken for a mark.
                         lx = drawStatusPill("scratchpad:\(sp)", icon: "SF:tray",
-                                            color: pal.muted,
+                                            color: pal.tertiary,
                                             at: lx, labelY: labelY)
                     }
                     if let labelText {
@@ -1101,7 +1121,9 @@ public final class SidebarView: NSView {
     private func drawStatusPill(_ text: String, icon: String, color: NSColor,
                                 maxTextW: CGFloat = 130,
                                 at lx: CGFloat, labelY: CGFloat) -> CGFloat {
-        let font = uiFont(windowFontSize, .semibold)
+        // Badge tier: 12pt .medium (body size, lighter weight + accent) —
+        // colour carries the meaning. Glyph tracks the text (14pt).
+        let font = uiFont(badgeFontSize, .medium)
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
         let attrs: [NSAttributedString.Key: Any] = [

@@ -55,7 +55,7 @@ public final class SearchBar: NSView {
     private let placeholderText = "type to filter…"
 
     private func applyPlaceholder() {
-        let f = field.font ?? uiFont(13, .regular)
+        let f = field.font ?? uiFont(headerFontSize, .regular)
         field.placeholderAttributedString = NSAttributedString(
             string: placeholderText,
             attributes: [.foregroundColor: pal.muted, .font: f])
@@ -78,7 +78,7 @@ public final class SearchBar: NSView {
         layer?.backgroundColor =
             (base.blended(withFraction: 0.06, of: .white) ?? base).cgColor
         layer?.borderColor = pal.border.cgColor
-        let f = uiFont(13, .regular)
+        let f = uiFont(headerFontSize, .regular)
         field.font = f
         field.textColor = pal.foreground
         applyPlaceholder()
