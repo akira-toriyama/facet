@@ -143,12 +143,15 @@ extension WorkspaceCatalog {
         // shows. Both the empty (floor) lens AND the every-tag lens show
         // everything, so both read `All tags` (item 15) rather than a bare
         // `all` / the full tag list; a real subset shows its `#tag`s.
+        // The tree draws a leading `tag` glyph before this label, so the
+        // names are bare (no `#` prefix) and space-separated. Both the empty
+        // (floor) lens and the every-tag lens read "All tags".
         let allUserNames = Set(tagModel.names(in: lensAll))
         let label: String
         if lensNames.isEmpty || Set(lensNames) == allUserNames {
             label = "All tags"
         } else {
-            label = lensNames.map { "#\($0)" }.joined(separator: " ")
+            label = lensNames.joined(separator: " ")
         }
         return [Workspace(index: 0, name: label, isActive: true,
                           layoutMode: effectiveTagLayout, windows: wins)]

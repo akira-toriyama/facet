@@ -127,12 +127,25 @@ final class TagEditListView: NSView {
                         palette.muted.setStroke(); box.lineWidth = 1; box.stroke()
                     }
                 }
-                // Tag names always render in `secondary` — they're tags, so
-                // the colour is consistent whether checked or not (checked
-                // adds weight + the filled box, not a colour change).
+                // A `tag` glyph stands in for the `#` prefix, then the bare
+                // name. Always `secondary` (tags); checked adds weight + the
+                // filled box, not a colour change.
                 let emph = !manage && checked
-                ("#\(name)" as NSString).draw(
-                    in: textRect,
+                var nameX = textRect.minX
+                if let tagIcon = IconResolver.resolve(
+                    "SF:tag", pointSize: 12, color: palette.secondary,
+                    scale: .medium) {
+                    let ih = min(tagIcon.size.height, 13)
+                    let iw = tagIcon.size.width * (ih / max(tagIcon.size.height, 1))
+                    tagIcon.draw(in: NSRect(
+                        x: textRect.minX,
+                        y: textRect.minY + (textRect.height - ih) / 2,
+                        width: iw, height: ih))
+                    nameX = textRect.minX + iw + 5
+                }
+                (name as NSString).draw(
+                    in: NSRect(x: nameX, y: textRect.minY,
+                               width: textRect.maxX - nameX, height: textRect.height),
                     withAttributes: [
                         .font: uiFont(13, emph ? .semibold : .regular),
                         .foregroundColor: palette.secondary,
@@ -235,12 +248,15 @@ final class TagEditContainerView: NSView {
             // single left-aligned `primary` line (panel chrome, like the menu
             // titles); the tag CONTENT below stays secondary. No app-icon
             // gutter, so it sits flush left.
+            // manage "Tags" → secondary (it names the tag vocabulary); the
+            // lens "Select tags" stays primary (an action title).
             let titleText = manage ? "Tags" : appName
             (titleText as NSString).draw(
                 in: NSRect(x: Self.padX, y: Self.padV + (headerH - 18) / 2,
                            width: bounds.width - Self.padX * 2, height: 18),
                 withAttributes: [.font: uiFont(13, .bold),
-                                 .foregroundColor: palette.primary,
+                                 .foregroundColor: manage ? palette.secondary
+                                                          : palette.primary,
                                  .paragraphStyle: para])
         } else {
             // Mirror the tree window row: app icon + app name / title.

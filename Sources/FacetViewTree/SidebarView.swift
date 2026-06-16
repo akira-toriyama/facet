@@ -945,19 +945,25 @@ public final class SidebarView: NSView {
                     // tag-mode list is flat — there is no primary-tag header
                     // to hide one under). A filled chip in `secondary` (a
                     // distinct accent — readable, but not the `primary`
-                    // selection color — vs the outlined status pills),
-                    // prefixed `#` so it can't be mistaken for a mark /
-                    // scratchpad. Stops before a chip would overrun the
-                    // row's right edge.
+                    // selection color — vs the outlined status pills), led by
+                    // a `tag` glyph (replacing the old `#` prefix) so it can't
+                    // be mistaken for a mark / scratchpad. Stops before a chip
+                    // would overrun the row's right edge.
                     for tag in c.tags {
-                        let chipText = "#\(tag)"
                         let chipFont = uiFont(windowFontSize - 1, .medium)
                         let maxTextW: CGFloat = 90
-                        let textW = min(maxTextW, ceil((chipText as NSString)
+                        let textW = min(maxTextW, ceil((tag as NSString)
                             .size(withAttributes: [.font: chipFont]).width))
+                        let tagIcon = IconResolver.resolve(
+                            "SF:tag", pointSize: windowFontSize - 1,
+                            color: pal.secondary, scale: .medium)
+                        let icH = tagIcon.map { min($0.size.height, 12) } ?? 0
+                        let icW = tagIcon.map {
+                            $0.size.width * (icH / max($0.size.height, 1)) } ?? 0
+                        let icGap: CGFloat = tagIcon == nil ? 0 : 3
                         let padX: CGFloat = 6
                         let pillH: CGFloat = 22
-                        let pillW = textW + padX * 2
+                        let pillW = icW + icGap + textW + padX * 2
                         if lx + pillW > tx + tw { break }   // no room → stop
                         let chip = NSBezierPath(
                             roundedRect: NSRect(x: lx, y: labelY - 1,
@@ -965,20 +971,26 @@ public final class SidebarView: NSView {
                             xRadius: 5, yRadius: 5)
                         pal.secondary.withAlphaComponent(0.15).setFill()
                         chip.fill()
+                        var cx = lx + padX
+                        if let tagIcon {
+                            tagIcon.draw(in: NSRect(
+                                x: cx, y: labelY - 1 + (pillH - icH) / 2,
+                                width: icW, height: icH))
+                            cx += icW + icGap
+                        }
                         let chipPara = NSMutableParagraphStyle()
-                        chipPara.alignment = .center
                         chipPara.lineBreakMode = .byTruncatingTail
                         let chipAttrs: [NSAttributedString.Key: Any] = [
                             .font: chipFont,
                             .foregroundColor: pal.secondary,
                             .paragraphStyle: chipPara,
                         ]
-                        let chipH = (chipText as NSString)
+                        let chipH = (tag as NSString)
                             .size(withAttributes: chipAttrs).height
-                        (chipText as NSString).draw(
-                            in: NSRect(x: lx,
+                        (tag as NSString).draw(
+                            in: NSRect(x: cx,
                                        y: labelY - 1 + (pillH - chipH) / 2 - 1.0,
-                                       width: pillW, height: chipH),
+                                       width: textW, height: chipH),
                             withAttributes: chipAttrs)
                         lx += pillW + 6
                     }
