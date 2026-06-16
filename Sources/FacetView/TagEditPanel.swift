@@ -212,13 +212,15 @@ final class TagEditContainerView: NSView {
     var listTop: CGFloat { fieldTop + Self.fieldH + Self.fieldGap }
 
     override func draw(_ dirty: NSRect) {
-        // Card
+        // Card. Accent border (1.5pt) like the main panel, in `secondary` —
+        // these are tag panels and all their contents are secondary, so the
+        // frame matches (and the small sub-window reads as a facet panel).
         let bg = palette.background ?? NSColor.windowBackgroundColor
         let card = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+            roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75),
             xRadius: 9, yRadius: 9)
         bg.setFill(); card.fill()
-        palette.border.setStroke(); card.lineWidth = 1; card.stroke()
+        palette.secondary.setStroke(); card.lineWidth = 1.5; card.stroke()
 
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
