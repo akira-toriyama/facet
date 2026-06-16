@@ -41,6 +41,7 @@ final class FocusAssertBlockingTests: XCTestCase {
         func setLayoutMode(workspaceIndex index: Int, mode: String) {}
         func closeWindow(_ id: WindowID) {}
         func perform(_ action: WindowAction) {}
+        func retileActiveWorkspace() {}
         func windowMenu(mode: String, floating: Bool, isMaster: Bool,
                         windowCount: Int, isSticky: Bool) -> [WindowMenuItem] { [] }
         var events: AsyncStream<BackendEvent> { AsyncStream { _ in } }
