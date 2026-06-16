@@ -308,10 +308,12 @@ public final class SidebarView: NSView {
             // uppercases the WS name (matches the header draw at the Cell).
             let baseNm = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
             let nm = tagModeActive ? baseNm : baseNm.uppercased()
+            // One tag glyph per tag name (~14pt + gaps); "All tags" = 1 glyph.
+            let tagCount = !tagModeActive ? 0
+                : (nm == "All tags" ? 1 : max(1, nm.split(separator: " ").count))
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
-                // leading tag glyph (~14pt + 5 gap) on the tag-world lens label
-                + (tagModeActive ? 19 : 0)
+                + CGFloat(tagCount) * 22
             let modeW = ws.layoutMode.isEmpty ? 0
                 : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
                     withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
@@ -739,26 +741,47 @@ public final class SidebarView: NSView {
                     ? (tagModeActive ? pal.secondary : pal.primary)
                     : pal.muted
                 let nameX0 = rowPadX + gripSpace
-                var nameTextX = nameX0
-                // Tag mode: a leading `tag` glyph before the lens label
-                // (matches the layout icon on line 2; secondary-tinted).
-                if tagModeActive,
-                   let tagIcon = IconResolver.resolve(
-                    "SF:tag", pointSize: 13, color: nameColor, scale: .medium) {
-                    let ih = min(tagIcon.size.height, 14)
-                    let iw = tagIcon.size.width * (ih / max(tagIcon.size.height, 1))
-                    tagIcon.draw(in: NSRect(x: nameX0, y: capY + (nameH - ih) / 2,
-                                            width: iw, height: ih))
-                    nameTextX = nameX0 + iw + 5
+                let nameAttrs: [NSAttributedString.Key: Any] = [
+                    .font: uiFont(fs, .bold), .foregroundColor: nameColor,
+                    .kern: 0.6, .paragraphStyle: hp]
+                if tagModeActive {
+                    // Tag mode: a `tag` glyph PER tag name (2+ tags each get
+                    // their own icon), so "web chat" → 🏷 web 🏷 chat. The
+                    // "All tags" show-everything label is a single status
+                    // word → one leading glyph. (Tag names carry no spaces,
+                    // so the adapter's space-join splits cleanly.)
+                    let tags = c.text == "All tags"
+                        ? [c.text]
+                        : c.text.split(separator: " ").map(String.init)
+                    let rightEdge = bounds.width - rowPadX
+                    var x = nameX0
+                    for tag in tags where x < rightEdge {
+                        if let tagIcon = IconResolver.resolve(
+                            "SF:tag", pointSize: 13, color: nameColor,
+                            scale: .medium) {
+                            let ih = min(tagIcon.size.height, 14)
+                            let iw = tagIcon.size.width
+                                * (ih / max(tagIcon.size.height, 1))
+                            tagIcon.draw(in: NSRect(
+                                x: x, y: capY + (nameH - ih) / 2,
+                                width: iw, height: ih))
+                            x += iw + 4
+                        }
+                        let tw = ceil((tag as NSString)
+                            .size(withAttributes: nameAttrs).width)
+                        (tag as NSString).draw(
+                            in: NSRect(x: x, y: capY,
+                                       width: min(tw, rightEdge - x), height: nameH),
+                            withAttributes: nameAttrs)
+                        x += tw + 10        // gap before the next tag's glyph
+                    }
+                } else {
+                    (c.text as NSString).draw(
+                        in: NSRect(x: nameX0, y: capY,
+                                   width: bounds.width - rowPadX - nameX0,
+                                   height: nameH),
+                        withAttributes: nameAttrs)
                 }
-                (c.text as NSString).draw(
-                    in: NSRect(x: nameTextX, y: capY,
-                               width: bounds.width - rowPadX - nameTextX,
-                               height: nameH),
-                    withAttributes: [
-                        .font: uiFont(fs, .bold),
-                        .foregroundColor: nameColor,
-                        .kern: 0.6, .paragraphStyle: hp])
                 // Line 2: layout-mode text — secondary semibold on the
                 // active WS, `pal.muted` semibold when the WS isn't
                 // active so non-focused rows recede. No pill
