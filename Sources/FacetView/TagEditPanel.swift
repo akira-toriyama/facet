@@ -104,11 +104,16 @@ final class TagEditListView: NSView {
             let boxY = r.minY + (Self.rowH - boxSide) / 2
             let boxRect = NSRect(x: Self.padX, y: boxY,
                                  width: boxSide, height: boxSide)
-            let textRect = NSRect(x: Self.padX + boxSide + 8, y: r.minY + 5,
-                                  width: r.width - (Self.padX * 2 + boxSide + 8),
-                                  height: Self.rowH - 6)
+            // Text after the checkbox / `+` gutter, EXCEPT a manage-mode tag
+            // row (no checkbox) sits flush left at `padX`.
+            func textRect(from x: CGFloat) -> NSRect {
+                NSRect(x: x, y: r.minY + 5,
+                       width: r.width - x - Self.padX, height: Self.rowH - 6)
+            }
+            let gutterX = Self.padX + boxSide + 8
             switch row {
             case let .tag(name, checked):
+                let textRect = textRect(from: manage ? Self.padX : gutterX)
                 if !manage {
                     let box = NSBezierPath(roundedRect: boxRect,
                                            xRadius: 3, yRadius: 3)
@@ -139,7 +144,7 @@ final class TagEditListView: NSView {
                     withAttributes: [.font: uiFont(15, .bold),
                                      .foregroundColor: palette.secondary])
                 ("Create \"#\(name)\"" as NSString).draw(
-                    in: textRect,
+                    in: textRect(from: gutterX),
                     withAttributes: [
                         .font: uiFont(13, .semibold),
                         .foregroundColor: palette.secondary,
@@ -200,9 +205,10 @@ final class TagEditContainerView: NSView {
     static let fieldH: CGFloat = 30
     static let fieldGap: CGFloat = 8
 
-    /// Header band height: a single "Tags" line in manage mode, the taller
-    /// icon + two-line block in window mode.
-    var headerH: CGFloat { manage ? 24 : 40 }
+    /// Header band height: a single compact title line when there's no app
+    /// icon (manage "Tags" / lens "Select tags"), the taller icon + two-line
+    /// block only in per-window mode (which carries an app icon).
+    var headerH: CGFloat { icon == nil ? 24 : 40 }
 
     override var isFlipped: Bool { true }
 
@@ -224,12 +230,17 @@ final class TagEditContainerView: NSView {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
 
-        if manage {
-            ("Tags" as NSString).draw(
-                in: NSRect(x: Self.padX, y: Self.padV + 2,
-                           width: bounds.width - Self.padX * 2, height: 20),
+        if manage || icon == nil {
+            // Compact panel TITLE — manage "Tags" / lens "Select tags". A
+            // single left-aligned `primary` line (panel chrome, like the menu
+            // titles); the tag CONTENT below stays secondary. No app-icon
+            // gutter, so it sits flush left.
+            let titleText = manage ? "Tags" : appName
+            (titleText as NSString).draw(
+                in: NSRect(x: Self.padX, y: Self.padV + (headerH - 18) / 2,
+                           width: bounds.width - Self.padX * 2, height: 18),
                 withAttributes: [.font: uiFont(13, .bold),
-                                 .foregroundColor: palette.secondary,
+                                 .foregroundColor: palette.primary,
                                  .paragraphStyle: para])
         } else {
             // Mirror the tree window row: app icon + app name / title.
@@ -421,7 +432,9 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         // Reserve one extra row so a "+ Create" row stays visible.
         let visibleRows = min(max(allTags.count, 1) + 1, Self.maxVisibleRows)
         let listH = CGFloat(visibleRows) * TagEditListView.rowH
-        let headerH: CGFloat = manage ? 24 : 40
+        // Compact header unless this is the per-window panel (has an icon);
+        // must match TagEditContainerView.headerH (icon == nil ? 24 : 40).
+        let headerH: CGFloat = (manage || pid == 0) ? 24 : 40
         let listTop = TagEditContainerView.padV + headerH
             + TagEditContainerView.fieldGap + TagEditContainerView.fieldH
             + TagEditContainerView.fieldGap

@@ -310,6 +310,8 @@ public final class SidebarView: NSView {
             let nm = tagModeActive ? baseNm : baseNm.uppercased()
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
+                // leading tag glyph (~14pt + 5 gap) on the tag-world lens label
+                + (tagModeActive ? 19 : 0)
             let modeW = ws.layoutMode.isEmpty ? 0
                 : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
                     withAttributes: [.font: uiFont(activeHeaderFontSize, .bold)]).width
@@ -736,9 +738,22 @@ public final class SidebarView: NSView {
                 let nameColor = c.hot
                     ? (tagModeActive ? pal.secondary : pal.primary)
                     : pal.muted
+                let nameX0 = rowPadX + gripSpace
+                var nameTextX = nameX0
+                // Tag mode: a leading `tag` glyph before the lens label
+                // (matches the layout icon on line 2; secondary-tinted).
+                if tagModeActive,
+                   let tagIcon = IconResolver.resolve(
+                    "SF:tag", pointSize: 13, color: nameColor, scale: .medium) {
+                    let ih = min(tagIcon.size.height, 14)
+                    let iw = tagIcon.size.width * (ih / max(tagIcon.size.height, 1))
+                    tagIcon.draw(in: NSRect(x: nameX0, y: capY + (nameH - ih) / 2,
+                                            width: iw, height: ih))
+                    nameTextX = nameX0 + iw + 5
+                }
                 (c.text as NSString).draw(
-                    in: NSRect(x: rowPadX + gripSpace, y: capY,
-                               width: bounds.width - rowPadX * 2 - gripSpace,
+                    in: NSRect(x: nameTextX, y: capY,
+                               width: bounds.width - rowPadX - nameTextX,
                                height: nameH),
                     withAttributes: [
                         .font: uiFont(fs, .bold),
