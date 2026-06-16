@@ -17,3 +17,10 @@ public let pointerDragThreshold: CGFloat = 5
 /// screen" transition (Return / click on the selected cell; the backend
 /// workspace switch fires as it ends).
 public let overviewCommitZoomDuration: TimeInterval = 0.20
+
+/// Fade durations for the full-screen overview overlay (`OverviewPanel`)
+/// on show / hide — shared by the grid and the rail. (Were `gridFadeIn`
+/// / `gridFadeOut` in FacetViewGrid, though the rail's show / hide used
+/// them too.)
+public let overviewFadeIn: TimeInterval = 0.12
+public let overviewFadeOut: TimeInterval = 0.10

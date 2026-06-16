@@ -29,11 +29,12 @@ let gridHeaderModeMinFont: CGFloat = 9
 let gridHeaderModeMaxFont: CGFloat = 16
 let gridGhostLabelSize: CGFloat = 30    // centred label on an empty-WS swap ghost
 
-// Public so FacetApp's Controller can configure the OverviewPanel
-// fade timing without redefining the numbers.
+// Public so FacetApp's Controller can paint the grid's backdrop without
+// redefining the number. (The overlay fade timing is shared with the
+// rail — see `overviewFadeIn` / `overviewFadeOut` in FacetView's
+// SharedTunables; only this near-black backdrop alpha is grid-specific,
+// as the rail paints its own backdrop.)
 public let gridBackdropAlpha: CGFloat = 1.0    // overlay opacity (solid black)
-public let gridFadeIn: TimeInterval = 0.12     // overlay fade-in
-public let gridFadeOut: TimeInterval = 0.10    // overlay fade-out
 
 /// The grid's drag-ghost style: the shared dnd-kit "lift" feedback
 /// (ghost grows 1.06× + soft shadow fades in over 0.14s — see
