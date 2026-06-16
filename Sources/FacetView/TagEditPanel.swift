@@ -122,12 +122,15 @@ final class TagEditListView: NSView {
                         palette.muted.setStroke(); box.lineWidth = 1; box.stroke()
                     }
                 }
+                // Tag names always render in `secondary` — they're tags, so
+                // the colour is consistent whether checked or not (checked
+                // adds weight + the filled box, not a colour change).
                 let emph = !manage && checked
                 ("#\(name)" as NSString).draw(
                     in: textRect,
                     withAttributes: [
                         .font: uiFont(13, emph ? .semibold : .regular),
-                        .foregroundColor: emph ? palette.secondary : palette.foreground,
+                        .foregroundColor: palette.secondary,
                         .paragraphStyle: para,
                     ])
             case let .create(name):
