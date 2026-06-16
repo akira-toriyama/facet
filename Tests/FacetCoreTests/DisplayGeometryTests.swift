@@ -1,6 +1,6 @@
 import CoreGraphics
 import XCTest
-@testable import FacetAccessibility
+@testable import FacetCore
 
 /// Pure tests for `DisplayGeometry`. No NSScreen, no AX, no
 /// AppKit — every assertion runs against synthetic `[CGRect]`

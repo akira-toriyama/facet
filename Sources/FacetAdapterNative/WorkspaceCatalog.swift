@@ -95,7 +95,8 @@ struct WorkspaceCatalog {
     /// pass in). Position-based: array element `i` is workspace
     /// `i+1` (1-based, contiguous); the string is its display name
     /// (`""` = show the number). Seeded once from config via
-    /// `seed(names:)`, then mutated by `add`/`remove`/`rename`/`move`
+    /// `seed(configs:)`, then mutated by
+    /// `addWorkspace`/`removeWorkspace`/`renameWorkspace`/`moveActiveWorkspace`
     /// (session-only — config stays the read-only seed, memory
     /// `facet-cli-dynamic-runtime-model`). Per mac desktop: each
     /// catalog owns its own set.

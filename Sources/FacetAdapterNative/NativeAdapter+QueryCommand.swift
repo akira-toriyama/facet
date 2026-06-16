@@ -17,6 +17,12 @@
 //     pass (AXTitles is cliQueue-only by contract); merges the passed-in
 //     facet map by window id.
 //
+//   • `definedTagNames()` / `currentLens()` — cheap active-catalog reads
+//     for `facet query --tags` / `--lens` (#228). Production callers invoke
+//     them on `cliQueue` (like every catalog read), but — unlike the two
+//     phases above — they carry NO `dispatchPrecondition`: they're directly
+//     unit-tested off-queue (QueryTagsLensTests) to pin the mode gate.
+//
 // Both phases on the one cliQueue serialization point: the catalog read
 // never races the cliQueue mutators, and the heavy sweep stays off main.
 // Read-only / SIP-on throughout.

@@ -177,14 +177,7 @@ extension FacetApp {
     static let canonicalDirections = ["up", "down", "left", "right"]
 
     static func canonicalDirection(_ name: String) -> String {
-        switch canonicalize(name, allowed: canonicalDirections) {
-        case .success(let n): return n
-        case .failure(.unknownValue(let v, let expected)):
-            die("unknown direction \"\(v)\" — expected one of: "
-                + expected.joined(separator: ", "))
-        case .failure:
-            die("unknown direction \"\(name)\"")
-        }
+        canonicalOrDie(name, allowed: canonicalDirections, kind: "direction")
     }
 
     /// Validate + canonicalise a layout-mode name. Loud reject on
@@ -193,14 +186,7 @@ extension FacetApp {
     static let canonicalLayoutModes = LayoutRegistry.allModeNames
 
     static func canonicalLayoutMode(_ name: String) -> String {
-        switch canonicalize(name, allowed: canonicalLayoutModes) {
-        case .success(let n): return n
-        case .failure(.unknownValue(let v, let expected)):
-            die("unknown layout \"\(v)\" — expected one of: "
-                + expected.joined(separator: ", "))
-        case .failure:
-            die("unknown layout \"\(name)\"")
-        }
+        canonicalOrDie(name, allowed: canonicalLayoutModes, kind: "layout")
     }
 
     /// Parse the value of ``workspace --focus VALUE``. VALUE is a relative
@@ -230,16 +216,8 @@ extension FacetApp {
     /// already-extracted value token (the cursor consumed it).
     static func parsePositiveInt(_ value: String,
                                          flag: String) -> Int {
-        switch FacetCore.parseGeomInt(value, requirePositive: true) {
-        case .success(let n):
-            return n
-        case .failure(.notAnInteger(let v)):
-            die("\(flag) expects an integer (got \"\(v)\")")
-        case .failure(.notPositive(let n)):
-            die("\(flag) must be > 0 (1-indexed, got \(n))")
-        case .failure:
-            die("\(flag) parse error")
-        }
+        parseIntFlag(value, flag: flag, requirePositive: true,
+                     positiveHint: "1-indexed, ")
     }
 
 }

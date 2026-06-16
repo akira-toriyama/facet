@@ -305,7 +305,7 @@ final class Controller: NSObject {
             // panel would self-destruct the moment the editor opened.
             if TagEditPanel.shared.isOpen { return }
             // Drop kbNav. If we got here via --active's
-            // _exitActiveImpl path, exitKbNav has already run and
+            // exitActive path, exitKbNav has already run and
             // this is a harmless idempotent call.
             if sidebarView.kbNav {
                 sidebarView.exitKbNav()
@@ -944,7 +944,7 @@ final class Controller: NSObject {
         Log.debug("setHidden hide=\(hide)")
         userHidden = hide
         if hide {
-            _exitActiveImpl(restore: false)
+            exitActive(restore: false)
             previewTimer?.invalidate(); previewPool.hideAll()
             panelHost.hide()
             removeKbMonitor()
@@ -1032,13 +1032,4 @@ extension Controller: TreeController {
         }
     }
 
-    // -- Stubs for follow-up steps
-
-    func previewTargetChanged() {
-        _previewTargetChangedImpl()
-    }
-
-    func exitActive(restore: Bool) {
-        _exitActiveImpl(restore: restore)
-    }
 }

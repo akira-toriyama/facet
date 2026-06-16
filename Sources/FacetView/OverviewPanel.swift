@@ -13,7 +13,6 @@ import AppKit
 public final class OverviewPanel: NSPanel {
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
-    public override var acceptsFirstResponder: Bool { true }
 
     /// The full-screen overview overlay both the grid and the rail
     /// build. Borderless + nonactivating, floats just above the tree

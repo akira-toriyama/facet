@@ -17,7 +17,6 @@
 // `Controller`.
 
 import AppKit
-import FacetAccessibility
 import FacetCore
 import FacetView
 import FacetViewTree

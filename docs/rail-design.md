@@ -1,6 +1,6 @@
 # rail — summoned WS switcher（Theme D (ii) 設計メモ）
 
-Status: ✅ **shipped #109 (2026-05-31)** — `facet --view rail` として出荷（`Sources/FacetViewRail/`、`canonicalViews` に登録）。⚠️ **実装は本メモの当初設計から乖離**: shipped 版は「画面下部チップ + 中央ホバープレビュー」ではなく、**全画面 backdrop + 中央 HERO（active WS を大表示）+ 画面下部に全 WS の window サムネ列**（grid 寄りの俯瞰）。←/→ で browse・click で切替・window / header ドラッグで move / swap。以下本文は **Theme D (ii) grill 当時の設計記録**。コードの正は `Sources/FacetViewRail/`（RailView / RailOverlay / RailHeader / RailDrag）。
+Status: ✅ **shipped #109 (2026-05-31)** — `facet --view rail` として出荷（`Sources/FacetViewRail/`、`canonicalViews` に登録）。⚠️ **実装は本メモの当初設計から乖離**: shipped 版は「画面下部チップ + 中央ホバープレビュー」ではなく、**全画面 backdrop + 中央 HERO（active WS を大表示）+ 画面下部に全 WS の window サムネ列**（grid 寄りの俯瞰）。←/→ で browse・click で切替・window / header ドラッグで move / swap。以下本文は **Theme D (ii) grill 当時の設計記録**。コードの正は `Sources/FacetViewRail/`（RailView 本体 + RailHeader / RailDrag）。全画面 takeover パネルは rail 専用ではなく FacetView の共有 `OverviewPanel`（旧 `RailOverlay` / `GridOverlay` を統合）。
 図解: [`theme-d-rail.excalidraw`](theme-d-rail.excalidraw)
 （Excalidraw で再編集可。Theme D 全体は [architecture.md](architecture.md) の "Themes A–D" 参照）
 

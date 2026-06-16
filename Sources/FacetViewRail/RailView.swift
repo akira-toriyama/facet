@@ -151,9 +151,6 @@ public final class RailView: NSView {
     var layoutSuppressed = false
     var lastDrop: OverviewPendingDrop?
     var lastSwap: OverviewPendingSwap?
-    /// Give up waiting for a move/swap to land after this and reveal
-    /// the source so the UI can't freeze on a silent backend failure.
-    static let railDropAckTimeout: TimeInterval = 1.0
 
     // MARK: - Carousel slide animation (2-b v2)
 
@@ -188,6 +185,10 @@ public final class RailView: NSView {
     private let commitZoom = CommitZoom(duration: overviewCommitZoomDuration)
 
     public override var isFlipped: Bool { true }
+    // No `isOpaque` override (unlike GridView): although the rail paints
+    // its own opaque backdrop in `draw`, it stays at the NSView default
+    // (non-opaque) to sit cleanly under the clear, non-opaque
+    // `OverviewPanel` — same host-paints-backdrop arrangement as the grid.
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     // MARK: - Layout
@@ -208,24 +209,14 @@ public final class RailView: NSView {
         // the cursor; clear `drag` only when the backend confirms the
         // move (memory grid-drag-state-lifecycle), or after a timeout.
         if let ld = lastDrop {
-            let landed = workspaces.contains {
-                $0.index == ld.dstWS && $0.windows.contains { $0.id == ld.id }
-            }
-            if landed || Date().timeIntervalSince(ld.committedAt) > Self.railDropAckTimeout {
+            let landed = ld.landed(in: workspaces)
+            if landed || Date().timeIntervalSince(ld.committedAt) > overviewDropAckTimeout {
                 clearDrag()
             } else { return }
         }
         if let ls = lastSwap {
-            let s = workspaces.first { $0.index == ls.srcWS }
-            let d = workspaces.first { $0.index == ls.dstWS }
-            let landed: Bool = {
-                guard let s, let d else { return false }
-                let srcNow = Set(s.windows.map(\.id))
-                let dstNow = Set(d.windows.map(\.id))
-                return ls.srcIDs.allSatisfy(dstNow.contains)
-                    && ls.dstIDs.allSatisfy(srcNow.contains)
-            }()
-            if landed || Date().timeIntervalSince(ls.committedAt) > Self.railDropAckTimeout {
+            let landed = ls.landed(in: workspaces)
+            if landed || Date().timeIntervalSince(ls.committedAt) > overviewDropAckTimeout {
                 clearDrag()
             } else { return }
         }

@@ -244,8 +244,7 @@ extension NativeAdapter {
             let to = CGRect(x: p.x - enterDx, y: p.y, width: sz.width, height: sz.height)
             anims.append((ax, WindowSlide(id: ref.id, from: from, to: to)))
             catalog.markAnchorParked(ref.id, originalPosition: p)
-            let scr = Displays.containing(p)
-            parkSnaps.append((ax, CGPoint(x: scr.maxX - 1, y: scr.maxY - 1)))
+            parkSnaps.append((ax, Displays.anchorSliver(near: p)))
         }
 
         guard !anims.isEmpty else { return false }
@@ -405,9 +404,7 @@ extension NativeAdapter {
             to: CGRect(x: oldPos.x - dx, y: oldPos.y,
                        width: oldSize.width, height: oldSize.height))))
         catalog.markAnchorParked(oldTop, originalPosition: oldPos)
-        let oldScr = Displays.containing(oldPos)
-        let parkSnaps = [(ax: oldAx,
-                          at: CGPoint(x: oldScr.maxX - 1, y: oldScr.maxY - 1))]
+        let parkSnaps = [(ax: oldAx, at: Displays.anchorSliver(near: oldPos))]
         // New top: un-park, place off the far edge at full size, slide in.
         catalog.clearParkedState(of: newTop)
         AXGeom.setSize(newAx, r.size)

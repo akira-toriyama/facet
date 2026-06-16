@@ -116,14 +116,7 @@ extension Controller {
         guard let wp = winPreview else { return }
         for ws in lastWorkspaces {
             for win in ws.windows {
-                let id = win.id
-                wp.request(id) { [weak self] cg, frame, gotID in
-                    MainActor.assumeIsolated {
-                        let img = Self.nsThumb(cg, frame)
-                        self?.gridView?.setThumbnail(img, for: gotID)
-                        self?.railView?.setThumbnail(img, for: gotID)
-                    }
-                }
+                captureAndPushToOverview(win.id, wp)
             }
         }
     }
@@ -146,16 +139,8 @@ extension Controller {
             .flatMap { $0.windows.map(\.id) }
         for id in ids { wp.invalidate(id) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard self != nil else { return }
-            for id in ids {
-                wp.request(id) { [weak self] cg, frame, gotID in
-                    MainActor.assumeIsolated {
-                        let img = Self.nsThumb(cg, frame)
-                        self?.gridView?.setThumbnail(img, for: gotID)
-                        self?.railView?.setThumbnail(img, for: gotID)
-                    }
-                }
-            }
+            guard let self else { return }
+            for id in ids { self.captureAndPushToOverview(id, wp) }
         }
     }
 

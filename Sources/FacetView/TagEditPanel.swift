@@ -448,9 +448,13 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         // Reserve one extra row so a "+ Create" row stays visible.
         let visibleRows = min(max(allTags.count, 1) + 1, Self.maxVisibleRows)
         let listH = CGFloat(visibleRows) * TagEditListView.rowH
-        // Compact header unless this is the per-window panel (has an icon);
-        // must match TagEditContainerView.headerH (icon == nil ? 24 : 40).
-        let headerH: CGFloat = (manage || pid == 0) ? 24 : 40
+        // Resolve the icon once: the container derives its headerH from
+        // `icon == nil`, so the panel-level layout must use the SAME
+        // resolved value — not a parallel `(manage || pid == 0)` predicate
+        // that diverges when AppIcons returns nil for a real window.
+        let icon: NSImage? = (manage || pid == 0)
+            ? nil : AppIcons.icon(forPID: pid)
+        let headerH: CGFloat = icon == nil ? 24 : 40
         let listTop = TagEditContainerView.padV + headerH
             + TagEditContainerView.fieldGap + TagEditContainerView.fieldH
             + TagEditContainerView.fieldGap
@@ -482,8 +486,9 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         cont.manage = manage
         cont.appName = appName
         cont.title = title
-        // No app icon for manage / lens headers (pid 0 = no window target).
-        cont.icon = (manage || pid == 0) ? nil : AppIcons.icon(forPID: pid)
+        // No app icon for manage / lens headers (pid 0 = no window target);
+        // resolved once above so headerH and the container agree.
+        cont.icon = icon
         cont.palette = palette
 
         let f = NSTextField(frame: NSRect(

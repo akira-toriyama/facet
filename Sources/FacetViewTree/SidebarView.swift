@@ -95,9 +95,8 @@ public final class SidebarView: NSView {
     var skeletonBaseSig = ""
     public private(set) var activeWS: Int?    // REAL active WS (skip-switch)
 
-    // Optimistic selection: on click we move the highlight
-    // immediately and hold briefly; the next real query reconciles
-    // (reverts if the backend's focus actually failed).
+    // Last workspace snapshot pushed via update(); reused by internal
+    // relayouts and by drag / menu / preview lookups.
     var lastWorkspaces: [Workspace] = []
     // Mac desktop ordinal (Mission Control order) for the
     // top handle band's "Desktop N" label. nil = SkyLight
@@ -112,6 +111,9 @@ public final class SidebarView: NSView {
     // AX-resolved titles for windows the backend left blank; kept
     // across internal relayouts that don't re-resolve.
     var titleOverride: [WindowID: String] = [:]
+    // Optimistic selection: on click we move the highlight
+    // immediately and hold briefly; the next real query reconciles
+    // (reverts if the backend's focus actually failed).
     var optWindowID: WindowID?
     var optActiveWS: Int?
     var optUntil: Date?
@@ -349,7 +351,6 @@ public final class SidebarView: NSView {
         func appendWindowRow(_ win: Window, wsIndex: Int) {
             let wt = eff(win)
             let hasLabel = win.isMaster || win.isFloating
-            let baseRH = wt.isEmpty ? windowRowH : windowRowTallH
             // Third line under the title holds the mark pill (left) and
             // the master / float / hidden / scratchpad / tag-chip badges —
             // present when any of those conditions holds. In tag mode the
@@ -359,7 +360,7 @@ public final class SidebarView: NSView {
             let hasThird = hasLabel || (win.mark != nil)
                 || !win.isOnscreen || (win.scratchpad != nil)
                 || !win.tags.isEmpty
-            var rh: CGFloat = baseRH           // compact single line
+            var rh: CGFloat = windowRowH       // compact single line
             if !wt.isEmpty || hasThird {
                 rh = 34                        // top 8 + app 18 + bot 8
                 if !wt.isEmpty { rh += 20 }    // gap 4 + title 16

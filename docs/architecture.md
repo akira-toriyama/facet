@@ -158,9 +158,11 @@ is the index. **Do not relitigate** without explicit grill round.
   atomic write enforced in shipped templates.
   - **Grammar is an isolated seam (#227)**: the CLI uses yabai-style
     space-separated values (`--flag VALUE`, never `--flag=VALUE`).
-    Parsing lives entirely in the FacetApp client layer (`Main.swift`
-    + `FacetApp+Client.swift`, via the pure `ArgCursor` with per-flag
-    *strict consumption*). It translates argv into the canonical DNC
+    The pure parser type `ArgCursor` (per-flag *strict consumption*)
+    lives in `FacetCore` (`Sources/FacetCore/CLIParse.swift`) so it is
+    unit-testable without AppKit; the FacetApp client layer (`Main.swift`
+    + `FacetApp+Client*.swift`) drives it and owns the impure exit /
+    stderr shell. It translates argv into the canonical DNC
     control strings (`view:tree+active`, `tag-rename:OLD:NEW`, …) that
     `FacetCore` / the adapter consume — so the grammar can change
     without touching the core (the DNC payloads stayed byte-identical
@@ -297,8 +299,9 @@ not relitigate** without explicit grill round.
 - **Architecture**: `Sources/FacetAccessibility/DisplayChangeObserver.swift`
   mirrors `WindowEventObserver` (same `init(onChange:)` /
   `start()` / `stop()` shape). Pure geometry helpers in
-  `Sources/FacetAccessibility/DisplayGeometry.swift`
-  (`orphanedPoints`, `nearestDisplay`, `isVisible`).
+  `Sources/FacetCore/DisplayGeometry.swift`
+  (`orphanedPoints`, `nearestDisplay`, `isVisible`) — pure CGRect
+  maths, so they live in FacetCore, not the AX module.
   Controller and NativeAdapter each own their own observer
   instance — backend doesn't notify the controller, each
   handles its own concern (separation maintained).
@@ -381,10 +384,10 @@ two vocabularies don't drift apart:
 | **Clean Architecture — Application** (DI + Coordinator) | `FacetApp` (`Controller` + `Main`) |
 | **Clean Architecture — Use Case (Interactor)** | *NOT a separate layer* — see below |
 | **DDD — Entity** | `Workspace`, `Window` |
-| **DDD — Value Object** | `WindowID`, `Palette`, `FontKind`, `CGRect`, `GridConfig` |
+| **DDD — Value Object** | `WindowID`, `Palette`, `FontKind`, `CGRect` |
 | **DDD — Aggregate Root** | `Workspace` (owns its `windows`) |
 | **DDD — Repository** | `WindowBackend` protocol (window management) + `WindowCapturing` protocol (image capture) |
-| **DDD — Domain Service** | `Focus.assert` / `Focus.withRetry`, `AXTitles.resolve`, `WorkspaceCatalog` reconciliation, `DisplayGeometry` queries, `gridScaledWindowRect` |
+| **DDD — Domain Service** | `Focus.assert` / `Focus.withRetry`, `AXTitles.resolve`, `WorkspaceCatalog` reconciliation, `DisplayGeometry` queries, `scaledWindowRect` |
 | **DDD — Domain Event** | `BackendEvent` (consumed via `AsyncStream`) |
 | **DDD — Bounded Context** | one binary = one context, no inter-context translation needed |
 

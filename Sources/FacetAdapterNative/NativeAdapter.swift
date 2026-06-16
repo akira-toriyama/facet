@@ -157,7 +157,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// enough that a stale hint can't fast-add much later.
     let trustedNewTTL: TimeInterval = 2.0
 
-    /// Cap on `detectAutoFloating`'s per-refresh AX probes. The
+    /// Cap on `classifyNewWindows`'s per-refresh AX probes. The
     /// role check costs ~3 AX round-trips per window (window
     /// lookup + role + subrole), and each round-trip has a
     /// default 6s timeout — a 100-window startup with one busy

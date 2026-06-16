@@ -52,9 +52,13 @@ final class ConfigWatcher {
     }
 
     func stop() {
+        // The source's cancel handler (set in openAndWatch) owns the
+        // close of the captured fd — matching reopen(). Closing here too
+        // would double-close the same descriptor (cancel() fires the
+        // handler asynchronously on .main, after this body has run).
         source?.cancel()
         source = nil
-        if fd >= 0 { close(fd); fd = -1 }
+        fd = -1
     }
 
     private func openAndWatch() {
