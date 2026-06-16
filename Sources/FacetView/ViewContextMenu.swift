@@ -143,6 +143,7 @@ public enum ViewContextMenu {
         at scr: NSPoint,
         palette: ResolvedPalette,
         tagManage: Bool,
+        ordinal: Int? = nil,
         onSearch: @escaping () -> Void,
         onTagManage: @escaping () -> Void
     ) {
@@ -154,7 +155,10 @@ public enum ViewContextMenu {
             entries.append(Entry(label: "Manage tags", icon: "SF:tag",
                                  section: "Tags", run: onTagManage))
         }
-        present(at: scr, header: "Desktop", palette: palette, entries: entries)
+        // Title carries the mac-desktop number (matching the pinned
+        // "Desktop N" band the menu pops from); bare "Desktop" if unknown.
+        let header = ordinal.map { "Desktop \($0)" } ?? "Desktop"
+        present(at: scr, header: header, palette: palette, entries: entries)
     }
 
     /// Tag-world header menu (tag mode). Title-less (item 13 — the section

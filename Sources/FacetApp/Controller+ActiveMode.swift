@@ -195,6 +195,7 @@ extension Controller {
             at: scr,
             palette: treePaletteBox.pal,
             tagManage: config.effectiveGrouping == .tag,
+            ordinal: sidebarView.shownMacDesktopOrdinal,
             onSearch: { [weak self] in self?.enterSearchFromMenu() },
             onTagManage: { [weak self] in self?.enterTagManage() })
     }
