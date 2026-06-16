@@ -31,8 +31,8 @@ extension RailView {
         liftShadow(g, style: railGhostStyle)
     }
 
-    func installWorkspaceGhost(for cell: Cell) {
-        let thumbs = cell.wins.map { hit -> MiniThumbSpec in
+    func installWorkspaceGhost(for cell: OverviewCell) {
+        let thumbs = cell.windows.map { hit -> MiniThumbSpec in
             let local = NSRect(x: hit.rect.minX - cell.rect.minX,
                                y: hit.rect.minY - cell.rect.minY,
                                width: hit.rect.width, height: hit.rect.height)
@@ -41,7 +41,7 @@ extension RailView {
             return MiniThumbSpec(rect: local, content: content)
         }
         let g = makeWorkspaceGhost(cellRect: cell.rect,
-                                   label: railLabel(cell.name, cell.wsIndex),
+                                   label: railLabel(cell.label, cell.wsIndex),
                                    thumbs: thumbs,
                                    style: railGhostStyle,
                                    pal: pal)     // PR-B: rail's per-view palette
@@ -56,26 +56,26 @@ extension RailView {
 
     // MARK: - Commit / cancel
 
-    func commitDrop(sourceWS: Int, pid: Int, id: WindowID, dstCell: Cell) {
+    func commitDrop(sourceWS: Int, pid: Int, id: WindowID, dstCell: OverviewCell) {
         // Ghost stays at the release point as a placeholder; `drag`
         // stays set (source thumb hidden) until the backend acks the
         // move and `layoutCells`'s landing gate clears it.
-        lastDrop = PendingDrop(id: id, dstWS: dstCell.wsIndex, committedAt: Date())
+        lastDrop = OverviewPendingDrop(id: id, dstWS: dstCell.wsIndex, committedAt: Date())
         onMoveWindow?(sourceWS, dstCell.wsIndex, pid, id)
         scheduleAckDeadline()
     }
 
-    func commitContentSwap(sourceWS: Int, srcIDs: [WindowID], dstCell: Cell) {
+    func commitContentSwap(sourceWS: Int, srcIDs: [WindowID], dstCell: OverviewCell) {
         // Source the swap's window set from the LIVE workspace, not the
         // render-filtered cell thumbs (frameless / sub-2pt windows have
         // no thumb but must still move).
         let dstIDs = workspaces.first(where: { $0.index == dstCell.wsIndex })?
-            .windows.map(\.id) ?? dstCell.wins.map(\.id)
+            .windows.map(\.id) ?? dstCell.windows.map(\.id)
         if srcIDs.isEmpty && dstIDs.isEmpty {
             cancelDrop(to: drag?.sourceRect ?? .zero)    // both empty → no-op
             return
         }
-        lastSwap = PendingSwap(srcWS: sourceWS, dstWS: dstCell.wsIndex,
+        lastSwap = OverviewPendingSwap(srcWS: sourceWS, dstWS: dstCell.wsIndex,
                                srcIDs: srcIDs, dstIDs: dstIDs, committedAt: Date())
         onSwap?(sourceWS, dstCell.wsIndex, srcIDs, dstIDs)
         scheduleAckDeadline()

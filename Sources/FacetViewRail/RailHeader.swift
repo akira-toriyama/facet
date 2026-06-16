@@ -11,7 +11,7 @@ import FacetView
 
 extension RailView {
 
-    func drawHeader(_ cell: Cell) {
+    func drawHeader(_ cell: OverviewCell) {
         let hb = cell.headerRect
         guard hb.height > 1, hb.width > 1 else { return }
         let hover = hoverHeaderWS == cell.wsIndex
@@ -60,7 +60,7 @@ extension RailView {
                                (hb.height * railHeaderNameFrac).rounded()))
         let nameColor = browseTarget ? pal.secondary
             : (cell.isActive ? pal.primary : pal.foreground)
-        let name = railLabel(cell.name, cell.wsIndex)
+        let name = railLabel(cell.label, cell.wsIndex)
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {
             let nameH = nameFont * 1.3
