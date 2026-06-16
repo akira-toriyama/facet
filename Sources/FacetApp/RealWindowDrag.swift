@@ -64,8 +64,8 @@ final class RealWindowDragMonitor {
     /// drop hit-test's reference frames stable. A plain click gates it for
     /// only the few ms between mouse-down and -up — harmless.
     var inProgress: Bool { dragged != nil }
-    /// Pointer travel before a mouse-down becomes a drag (matches the
-    /// tree's `dragThreshold`); below it the gesture stays a click.
+    /// Pointer travel before a mouse-down becomes a drag (akin to the
+    /// shared `pointerDragThreshold`); below it the gesture stays a click.
     private let threshold: CGFloat = 6
 
     init(tiles: @escaping () -> [(id: WindowID, frame: CGRect)],

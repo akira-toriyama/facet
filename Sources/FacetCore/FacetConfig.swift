@@ -339,8 +339,7 @@ public struct FacetConfig: Sendable {
     /// (the Phase γ frozen default — facet tiles nothing until asked).
     public var effectiveDefaultLayout: String {
         let m = (defaultLayout ?? "float").lowercased()
-        let known = ["float", "bsp", "stack"] + LayoutRegistry.names
-        return known.contains(m) ? m : "float"
+        return LayoutRegistry.allModeNames.contains(m) ? m : "float"
     }
 
     /// Window-move animation on? **Default off** (opt-in): a fresh
