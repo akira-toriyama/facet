@@ -17,6 +17,10 @@
 //     pass (AXTitles is cliQueue-only by contract); merges the passed-in
 //     facet map by window id.
 //
+//   • `definedTagNames()` / `currentLens()` — cheap active-catalog reads
+//     for `facet query --tags` / `--lens` (#228); same cliQueue
+//     confinement + fail-fast `dispatchPrecondition` as the phases above.
+//
 // Both phases on the one cliQueue serialization point: the catalog read
 // never races the cliQueue mutators, and the heavy sweep stays off main.
 // Read-only / SIP-on throughout.
@@ -32,7 +36,9 @@ extension NativeAdapter {
     /// A cheap catalog read; P6 → callers invoke it on `cliQueue`
     /// (`writeStatus`, the tag-panel seeds) like every other catalog read.
     public func definedTagNames() -> [String] {
-        catalog.tagModel.names
+        // P6: catalog-confined read — same cliQueue guard as queryFacetStates.
+        dispatchPrecondition(condition: .onQueue(cliQueue))
+        return catalog.tagModel.names
     }
 
     /// The active catalog's lens (`facet query --lens`, #228). `nil`
@@ -40,6 +46,8 @@ extension NativeAdapter {
     /// resolution in `LensStatus.resolve` (unit-tested) — `showsAll` is
     /// derived from the floor bit. Cheap catalog read (cliQueue, P6).
     public func currentLens() -> LensStatus? {
+        // P6: catalog-confined read — same cliQueue guard as queryFacetStates.
+        dispatchPrecondition(condition: .onQueue(cliQueue))
         guard catalog.grouping == .tag else { return nil }
         return LensStatus.resolve(lens: catalog.lens, model: catalog.tagModel)
     }
