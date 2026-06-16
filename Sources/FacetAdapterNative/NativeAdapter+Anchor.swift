@@ -31,8 +31,7 @@ extension NativeAdapter {
         else { return }
         let center = CGPoint(x: pos.x + size.width / 2,
                              y: pos.y + size.height / 2)
-        let screen = Displays.containing(center)
-        let hidden = CGPoint(x: screen.maxX - 1, y: screen.maxY - 1)
+        let hidden = Displays.anchorSliver(near: center)
         AXGeom.setPosition(ax, hidden)
         catalog.markAnchorParked(ref.id, originalPosition: pos)
     }

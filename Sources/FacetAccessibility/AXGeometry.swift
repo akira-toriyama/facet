@@ -210,6 +210,16 @@ public enum Displays {
         }) ?? CGDisplayBounds(CGMainDisplayID())
     }
 
+    /// Bottom-right 1px anchor-sliver point on the display containing
+    /// `point` — the on-screen park position that dodges macOS's
+    /// off-screen clamp (memory: [[native-window-hide-methods]] 手法4).
+    /// `(maxX-1, maxY-1)` stays a pixel inside the bounds so the window
+    /// keeps `isOnscreen == true` while parked.
+    public static func anchorSliver(near point: CGPoint) -> CGPoint {
+        let s = containing(point)
+        return CGPoint(x: s.maxX - 1, y: s.maxY - 1)
+    }
+
     /// Visible rect (display bounds minus menu bar / Dock) for
     /// the display containing `point`, in **Quartz coords**
     /// (top-left origin), to match what AX `kAXPositionAttribute`
@@ -219,14 +229,18 @@ public enum Displays {
     /// reference. Falls back to `containing(point)` (full
     /// bounds) when no NSScreen match — better to tile into the
     /// full display than to no-op.
+    /// The `NSScreen` whose frame contains `point`, falling back to the
+    /// main screen. Shared by `visibleFrame` / `backingScaleFactor`.
+    @MainActor
+    private static func screen(containing point: CGPoint) -> NSScreen? {
+        NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
+    }
+
     @MainActor
     public static func visibleFrame(containing point: CGPoint)
         -> CGRect
     {
-        let screen = NSScreen.screens.first {
-            $0.frame.contains(point)
-        } ?? NSScreen.main
-        guard let s = screen,
+        guard let s = screen(containing: point),
               let primary = NSScreen.screens.first else {
             return containing(point)
         }
@@ -251,9 +265,6 @@ public enum Displays {
     public static func backingScaleFactor(containing point: CGPoint)
         -> CGFloat
     {
-        let screen = NSScreen.screens.first {
-            $0.frame.contains(point)
-        } ?? NSScreen.main
-        return screen?.backingScaleFactor ?? 2.0
+        screen(containing: point)?.backingScaleFactor ?? 2.0
     }
 }
