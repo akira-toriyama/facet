@@ -110,6 +110,59 @@ public struct WindowQueryEntry: Codable, Sendable, Equatable {
     }
 }
 
+/// `facet filter` field resolution for a query entry (#283 PR#2).
+///
+/// `WindowQueryEntry` is the COMPLETE window-centric record — top-level
+/// window-server fields PLUS the nested `facet` management block — so it,
+/// not the partial `FacetWindowState`, is the conformer.
+///
+/// FROZEN unmanaged-window rule: when `facet == nil` (the window isn't in
+/// any catalog), the management fields default to `workspace=""`,
+/// `tags=[]`, `floating=true`, everything else `false`/`nil`. So
+/// `not tag` MATCHES an unmanaged window while tag-presence does NOT, and
+/// an unmanaged window reads as floating (facet doesn't tile it).
+extension WindowQueryEntry: WindowFields {
+    public func filterValue(_ field: String) -> String? {
+        switch field {
+        case "app": return app
+        case "title": return title
+        case "bundleId": return bundleId
+        case "desktop": return desktop.map(String.init)
+        case "onscreen": return onscreen ? "true" : "false"
+        case "focused": return focused ? "true" : "false"
+        case "workspace": return facet?.workspace ?? ""
+        case "tag":
+            let tags = facet?.tags ?? []
+            return tags.isEmpty ? nil : tags.joined(separator: " ")
+        case "mark": return facet?.mark
+        case "scratchpad": return facet?.scratchpad
+        case "floating": return (facet?.floating ?? true) ? "true" : "false"
+        case "sticky": return (facet?.sticky ?? false) ? "true" : "false"
+        case "master": return (facet?.master ?? false) ? "true" : "false"
+        default: return nil
+        }
+    }
+
+    public func filterHas(_ field: String) -> Bool {
+        switch field {
+        case "tag": return !(facet?.tags ?? []).isEmpty
+        case "floating": return facet?.floating ?? true
+        case "sticky": return facet?.sticky ?? false
+        case "master": return facet?.master ?? false
+        case "focused": return focused
+        case "onscreen": return onscreen
+        case "mark": return facet?.mark != nil
+        case "scratchpad": return facet?.scratchpad != nil
+        case "app": return !app.isEmpty
+        case "title": return !title.isEmpty
+        case "bundleId": return !(bundleId ?? "").isEmpty
+        case "workspace": return !(facet?.workspace ?? "").isEmpty
+        case "desktop": return desktop != nil
+        default: return false
+        }
+    }
+}
+
 /// Encode an optional as an explicit `null` (rather than omitting the
 /// key, which `encodeIfPresent` / the synthesized encoder would do).
 private func encodeOptional<K: CodingKey, V: Encodable>(

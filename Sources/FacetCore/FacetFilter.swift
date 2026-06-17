@@ -165,6 +165,101 @@ public indirect enum FacetFilter: Sendable, Equatable {
     }
 }
 
+// MARK: - Evaluation (#283 PR#2)
+
+/// A window's facet-filter-visible fields, keyed by canonical field name.
+/// The evaluator (`FacetFilter.matches`) reads windows only through this
+/// protocol, so the two real window types — `Window` (in-process views)
+/// and `WindowQueryEntry` (the `facet query` path) — conform directly and
+/// no third "facts" type is introduced.
+public protocol WindowFields {
+    /// The scalar string value of `field`, or `nil` when the field is
+    /// absent / not carried by this window. The multi-value `tag` field
+    /// is the whitespace-joined tag list (so `~=` is token membership);
+    /// boolean flags are `"true"` / `"false"`.
+    func filterValue(_ field: String) -> String?
+    /// Whether `field` is present / truthy: a boolean flag → its value, a
+    /// string field → non-empty, `tag` → non-empty list, unknown → false.
+    /// Drives the bare-presence atom (`tag` / `floating` / `not tag`).
+    func filterHas(_ field: String) -> Bool
+}
+
+public extension FacetFilter {
+    /// The frozen set of canonical field names the evaluator resolves
+    /// (the field-name table that `WindowFields` conformers implement). A
+    /// referenced field outside this set is a typo: it resolves to a
+    /// no-match, and callers surface a loud-but-NON-FATAL warning by
+    /// diffing `fieldsReferenced()` against this set.
+    static let knownFields: Set<String> = [
+        "app", "title", "bundleId", "workspace", "tag",
+        "floating", "sticky", "master", "mark", "scratchpad",
+        "desktop", "onscreen", "focused",
+    ]
+
+    /// Every field name referenced by an atom in this expression — for
+    /// the caller's typo check against `knownFields`.
+    func fieldsReferenced() -> Set<String> {
+        switch self {
+        case .all: return []
+        case .atom(let a): return [a.field]
+        case .not(let f): return f.fieldsReferenced()
+        case .and(let parts), .or(let parts):
+            return parts.reduce(into: Set()) { $0.formUnion($1.fieldsReferenced()) }
+        }
+    }
+
+    /// Evaluate the filter against a window. Pure and total: an unknown
+    /// or absent field is a no-match (never a crash). Matching is
+    /// case-insensitive unless the atom carried the ` s` flag.
+    func matches(_ window: some WindowFields) -> Bool {
+        switch self {
+        case .all: return true
+        case .atom(let a): return a.matches(window)
+        case .not(let f): return !f.matches(window)
+        case .and(let parts): return parts.allSatisfy { $0.matches(window) }
+        case .or(let parts): return parts.contains { $0.matches(window) }
+        }
+    }
+}
+
+extension FacetFilter.Atom {
+    func matches(_ window: some WindowFields) -> Bool {
+        switch kind {
+        case .presence:
+            return window.filterHas(field)
+        case .compare(let op, let value, let caseSensitive):
+            guard let fieldValue = window.filterValue(field) else { return false }
+            return op.evaluate(fieldValue: fieldValue, value: value,
+                               caseSensitive: caseSensitive)
+        }
+    }
+}
+
+extension FacetFilter.Op {
+    /// Apply this CSS attribute operator. Empty-value `^=` / `$=` / `*=`
+    /// match nothing (per the CSS spec); `~=` is whitespace-token
+    /// membership (the natural `tag` semantic).
+    func evaluate(fieldValue: String, value: String, caseSensitive: Bool) -> Bool {
+        let a = caseSensitive ? fieldValue : fieldValue.lowercased()
+        let b = caseSensitive ? value : value.lowercased()
+        switch self {
+        case .equals:
+            return a == b
+        case .contains:
+            return a.split(whereSeparator: { $0.isWhitespace })
+                    .contains { $0 == Substring(b) }
+        case .prefix:
+            return b.isEmpty ? false : a.hasPrefix(b)
+        case .suffix:
+            return b.isEmpty ? false : a.hasSuffix(b)
+        case .substring:
+            return b.isEmpty ? false : a.contains(b)
+        case .hierarchical:
+            return a == b || a.hasPrefix(b + "-")
+        }
+    }
+}
+
 // MARK: - Lexer
 
 /// One lexical token, carrying its 0-based Character offset for errors.
