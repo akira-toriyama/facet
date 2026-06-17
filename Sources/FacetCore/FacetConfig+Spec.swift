@@ -171,7 +171,13 @@ public extension FacetConfig {
             .init("desktop", kind: .dynamicTable,
                   doc: "`[desktop.N]` per-mac-desktop workspace seeds: "
                      + "`K = { name = \"Dev\", layout = \"bsp\" }` (N = Mission "
-                     + "Control ordinal, K = facet WS index)."),
+                     + "Control ordinal, K = facet WS index). Also accepts "
+                     + "`[[desktop.N.group]]` filter groups (pivot, parse-only): "
+                     + "`{ label, match, apply }` — label = display header, "
+                     + "match = a facet filter WHERE-clause, apply = "
+                     + "`{ workspace, tags = [], floating, sticky, master }` "
+                     + "set on a window routed in. Workspace-axis only "
+                     + "(ignored under [grouping] by = \"tag\")."),
         ]
         )
     }
