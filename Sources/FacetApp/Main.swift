@@ -283,6 +283,22 @@ enum FacetApp {
                                                  | jq '.[]
                                                    | select(.facet.tags[]?
                                                             == "190")'
+          facet query --windows --filter EXPR
+                                             post-filter that array with a
+                                             facet filter expression (a
+                                             WHERE clause): field op value
+                                             atoms (= ~= ^= $= *= |=), bare
+                                             presence (tag / floating / …),
+                                             joined by and / or / not / ().
+                                             Case-insensitive (trailing ` s`
+                                             = sensitive). LOUD-but-non-fatal
+                                             — a bad expression prints a
+                                             caret to stderr and shows all
+                                             windows (exit 0). Examples:
+                                               facet query --windows \\
+                                                 --filter 'app=Safari'
+                                               facet query --windows \\
+                                                 --filter 'tag~=web and not floating'
           facet query --tags                 print the defined tag
                                              vocabulary as a JSON array
                                              (declaration order); [] in

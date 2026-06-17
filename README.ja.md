@@ -472,6 +472,15 @@ facet query --windows            # 全窓を flat JSON で (全 mac desktop)。
                                   # (管理外は null)。jq で絞る:
                                   #   facet query --windows \
                                   #     | jq '.[] | select(.facet.tags[]? == "190")'
+facet query --windows --filter EXPR  # その配列を facet filter 式
+                                  # (WHERE 句) で後置フィルタ: field op
+                                  # value (= ~= ^= $= *= |=) + 裸の
+                                  # presence (tag/floating/…) を
+                                  # and/or/not/() で結合。式が不正でも
+                                  # loud だが非 fatal: caret を stderr に
+                                  # 出し全窓表示 (exit 0)。例:
+                                  #   facet query --windows \
+                                  #     --filter 'tag~=web and not floating'
 facet query --tags               # 定義済みタグ語彙を JSON 配列で
                                   # (宣言順)。workspace モードでは []
 facet query --lens               # 現 lens を JSON で {"tags":[…],

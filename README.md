@@ -508,6 +508,15 @@ facet query --windows             # every window as flat JSON (all mac
                                   # Filter with jq:
                                   #   facet query --windows \
                                   #     | jq '.[] | select(.facet.tags[]? == "190")'
+facet query --windows --filter EXPR  # post-filter that array with a
+                                  # facet filter expr (a WHERE clause):
+                                  # field op value (= ~= ^= $= *= |=) +
+                                  # bare presence (tag/floating/…) joined
+                                  # by and/or/not/(). Bad expr is loud-
+                                  # but-non-fatal: caret to stderr, shows
+                                  # all windows (exit 0). e.g.:
+                                  #   facet query --windows \
+                                  #     --filter 'tag~=web and not floating'
 facet query --tags                # defined tag vocabulary as a JSON array
                                   # (declaration order); [] in workspace mode
 facet query --lens                # current lens as JSON {"tags":[…],
