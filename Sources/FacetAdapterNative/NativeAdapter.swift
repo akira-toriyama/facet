@@ -79,14 +79,44 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// the next call. Rebuilt every `refreshCatalog()` invocation.
     var workspaceList: [Workspace] = []
 
-    /// Held so `refreshCatalog` can read the configured workspace
-    /// list each tick. Note: this captures the config at adapter
-    /// init time; `Controller.reloadConfig()` re-reads
-    /// `config.toml` but does NOT push the fresh value back to
-    /// the adapter, so `[desktop.N]` table edits during a session
-    /// take effect only on restart. Wiring a config-push channel
-    /// is a known follow-up.
-    let config: FacetConfig
+    /// Backend config, hot-reloaded via `updateConfig` (the
+    /// `WindowBackend` command `Controller.reloadConfig()` calls). The
+    /// gaps / animation / layout-default / exclusion-rules / grouping
+    /// that `refreshCatalog` reads each tick pick up `config.toml` edits
+    /// without a restart. The live workspace SET is NOT re-seeded — once
+    /// seeded it's runtime-authoritative (`facet workspace --add/--remove`
+    /// own it; config stays the read-only seed, see
+    /// `WorkspaceCatalog.seed`), so `[desktop.N]` count/name edits still
+    /// land only on restart by design.
+    ///
+    /// Lock-guarded: the slide path reads it on the MAIN thread
+    /// (`NativeAdapter+Slide.swift` resolveAnimPreset) while `updateConfig`
+    /// writes on `cliQueue`, so the lock keeps the struct read/write atomic
+    /// (no torn read). Every `config.effective…` call site reads through
+    /// the computed accessor unchanged.
+    private let configLock = NSLock()
+    private var _config: FacetConfig
+    var config: FacetConfig {
+        configLock.lock(); defer { configLock.unlock() }
+        return _config
+    }
+
+    /// `WindowBackend` hot-reload: swap the config on `cliQueue` (so a
+    /// `refreshCatalog` tick never straddles the change) under the lock
+    /// (which covers the main-thread slide reader), then nudge one refresh
+    /// so the edits surface promptly rather than waiting for the ~2 s poll.
+    /// The workspace SET is unaffected — `WorkspaceCatalog.seed` is
+    /// one-shot, so runtime add/remove/rename stay authoritative.
+    public func updateConfig(_ config: FacetConfig) {
+        cliQueue.async { [weak self] in
+            guard let self else { return }
+            self.configLock.lock()
+            self._config = config
+            self.configLock.unlock()
+            Log.debug("native: config hot-reloaded")
+            self.eventContinuation.yield(.refreshNeeded)
+        }
+    }
 
     /// AX-driven event observer. Cuts the lag between "user
     /// opened a window" and "facet sees it" from the Controller's
@@ -241,7 +271,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// FacetConfig keeps a vanilla `~/.config/facet/config.toml`
     /// usable out of the box.
     public init(config: FacetConfig) {
-        self.config = config
+        self._config = config
         var ec: AsyncStream<BackendEvent>.Continuation!
         self.eventStream = AsyncStream { c in ec = c }
         self.eventContinuation = ec
