@@ -435,9 +435,10 @@ facet window --grow-master|--shrink-master   # master 幅 ±0.05 (master-* engin
 facet window --inc-master|--dec-master       # master 窓数 ±1 (master-* engine)
 
 # --active は修飾子 — --view tree と組み合わせた時のみ意味あり。
-# --active なしでも tree パネルはクリックすればキーボードナビ ON
-# になる; --active は hotkey から 1 発で focus 取得したい場合用
-# (Spotlight 風起動)。 --view grid と組み合わせると silent no-op
+# 行クリックは focus / 選択のみ; キーボードナビ + 検索 (s) +
+# tag 管理 (t) は --active か「Desktop N」ヘッダ右クリックから入る。
+# --active は focus を即取得するので hotkey から 1 発でナビに入れる
+# (Spotlight 風)。 --view grid と組み合わせると silent no-op
 # (grid は常に key/active)。
 
 # Workspace 操作
