@@ -18,6 +18,48 @@
 import CoreGraphics
 import Foundation
 
+/// One projected window group — the pivot's unified overview unit
+/// (`FilterProjection`, #284 PR#6). A `[[desktop.N.group]]` definition
+/// (`match` filter) projected over the live windows, OR — in the
+/// degrade path (no groups configured) — a 1:1 mirror of one facet
+/// workspace (by-workspace stays a first-class citizen). Views consume
+/// this (PR#7+); for now it is produced and unit-tested only.
+///
+/// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
+/// this group maps to (so `--focus` / `--move-to` hit the right WS),
+/// mirroring `Workspace.index`. It is `nil` for a multi-match config
+/// group, which spans workspaces and has no single source WS.
+/// `Sendable` (unlike the view-built `OverviewCell`): PR#8 produces this on
+/// the adapter's `cliQueue` and hands it to `main`, so it crosses threads.
+/// All fields are already `Sendable` (`Window` is).
+public struct FilterGroup: Sendable {
+    /// Stable, unique identity for view signatures / cell tracking.
+    /// Degrade: `"ws:<index>"`. Config group: `"group:<declOrder>:<label>"`.
+    public let id: String
+    public let label: String
+    public let windows: [Window]
+    public let sourceWorkspaceIndex: Int?
+
+    public init(id: String, label: String, windows: [Window],
+                sourceWorkspaceIndex: Int?) {
+        self.id = id
+        self.label = label
+        self.windows = windows
+        self.sourceWorkspaceIndex = sourceWorkspaceIndex
+    }
+}
+
+extension FilterGroup: Equatable {
+    /// `Window` is not `Equatable`; identity is its `id`, so groups compare
+    /// by their scalar fields plus the ordered window-id list (which is the
+    /// projection's actual contract — which windows land in which group).
+    public static func == (a: FilterGroup, b: FilterGroup) -> Bool {
+        a.id == b.id && a.label == b.label
+            && a.sourceWorkspaceIndex == b.sourceWorkspaceIndex
+            && a.windows.map(\.id) == b.windows.map(\.id)
+    }
+}
+
 /// `.window` — drag a window thumb to move it to another workspace.
 /// `.workspace` — drag a cell's header to swap two workspaces' contents
 /// (the backend's workspace index never changes; only the windows
