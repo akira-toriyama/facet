@@ -9,10 +9,6 @@ final class LayoutTreeTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func wid(_ n: Int) -> WindowID {
-        WindowID(serverID: n)
-    }
-
     /// Convenience rect: wide display by default so auto-balance
     /// picks vertical splits unless we say otherwise.
     private let wideRect = CGRect(x: 0, y: 0, width: 1600, height: 900)

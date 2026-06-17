@@ -15,22 +15,6 @@ final class WindowScratchpadTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-
-    private func window(_ n: Int, pid: Int = 1000) -> Window {
-        Window(id: wid(n), pid: pid, appName: "A",
-               title: "w\(n)", isFocused: false,
-               isFloating: false, frame: nil)
-    }
-
-    private func seededCatalog(_ n: Int = 5) -> WorkspaceCatalog {
-        var c = WorkspaceCatalog.init()
-        c.seed(configs: (1...n).map {
-            (index: $0, config: WorkspaceConfig(name: ""))
-        })
-        return c
-    }
-
     private let rect = CGRect(x: 0, y: 0, width: 1440, height: 900)
 
     // MARK: - stash

@@ -12,12 +12,6 @@ import XCTest
 /// mode-tolerant — and the tag-mode wiring.
 final class QueryTagsLensTests: XCTestCase {
 
-    private func adapter() -> NativeAdapter {
-        // Same harness as WindowMenuTests: FacetConfig() defaults are
-        // fine; the init's AX branch is harmless under XCTest.
-        NativeAdapter(config: FacetConfig())
-    }
-
     /// Seed the adapter's catalog into tag mode with work/web/media and
     /// the given lens (default = work) — mirrors TagCatalogTests' setup
     /// but on the live adapter so the public accessors read real state.

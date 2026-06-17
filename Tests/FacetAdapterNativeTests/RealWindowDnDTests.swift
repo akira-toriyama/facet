@@ -9,11 +9,6 @@ import XCTest
 /// as `WorkspaceCatalogTests` / `RotateMirrorTests`.
 final class RealWindowDnDTests: XCTestCase {
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-    private func window(_ n: Int) -> Window {
-        Window(id: wid(n), pid: 1000, appName: "A", title: "w\(n)",
-               isFocused: false, isFloating: false, frame: nil)
-    }
     private let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
 
     /// 5-workspace catalog seeded with windows 1...n all in active WS 1.
@@ -24,14 +19,6 @@ final class RealWindowDnDTests: XCTestCase {
         })
         _ = c.reconcile(live: (1...n).map { window($0) })
         return c
-    }
-
-    /// wid(1) | wid(2): a vertical split (left | right halves).
-    private func twoVertical() -> LayoutTree {
-        var t = LayoutTree()
-        t.insert(wid(1), focused: nil, in: rect)
-        t.insert(wid(2), focused: wid(1), in: rect)
-        return t
     }
 
     // MARK: - LayoutTree swap

@@ -9,16 +9,7 @@ import XCTest
 /// wid(1) left, wid(2) right on a 1600×900 rect.
 final class RotateMirrorTests: XCTestCase {
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
     private let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
-
-    /// wid(1) | wid(2) side by side (vertical split, halves of width).
-    private func twoVertical() -> LayoutTree {
-        var t = LayoutTree()
-        t.insert(wid(1), focused: nil, in: rect)
-        t.insert(wid(2), focused: wid(1), in: rect)
-        return t
-    }
 
     // MARK: - rotate
 

@@ -9,8 +9,6 @@ import XCTest
 /// window mapping, reassignment, and prune-on-close.
 final class WindowMarksTests: XCTestCase {
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-
     func testSetAndLookup() {
         var c = WorkspaceCatalog()
         c.setMark("a", to: wid(1))
