@@ -7,24 +7,29 @@ import FacetCore
 import FacetView
 
 extension FacetApp {
-    /// `facet query [--windows | --tags | --lens]` dispatcher. Bare → the
-    /// human-readable status snapshot (`runQueryStatus`); a single
-    /// projection flag → its machine-readable JSON (`--windows`, #223;
-    /// `--tags` / `--lens`, #228). Read-only + mode-tolerant: every
-    /// projection works in workspace OR tag mode (`--tags` is `[]` /
-    /// `--lens` is `null` where the concept doesn't apply), so there's no
-    /// `requireGrouping` gate — only the write verbs (`lens`,
-    /// `window --retag`) gate on tag mode.
+    /// `facet query [--windows [--filter EXPR] | --tags | --lens]`
+    /// dispatcher. Bare → the human-readable status snapshot
+    /// (`runQueryStatus`); a single projection flag → its machine-readable
+    /// JSON (`--windows`, #223; `--tags` / `--lens`, #228). `--filter EXPR`
+    /// (#284) is a modifier on `--windows` — it post-filters that array
+    /// with a `facet filter` expression — so it requires `--windows`
+    /// (loud exit 2 otherwise, like `--edge` requires `--view rail`).
+    /// Read-only + mode-tolerant: every projection works in workspace OR
+    /// tag mode (`--tags` is `[]` / `--lens` is `null` where the concept
+    /// doesn't apply), so there's no `requireGrouping` gate — only the
+    /// write verbs (`lens`, `window --retag`) gate on tag mode.
     static func runQuery(_ args: [String]) -> Never {
         var windows = false
         var tags = false
         var lens = false
+        var filterExpr: String?
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
             case "--windows": windows = true
             case "--tags":    tags = true
             case "--lens":    lens = true
+            case "--filter":  filterExpr = cursor.value(for: "--filter")
             default:
                 die("unknown `query` flag \"\(a)\" — see `facet --help`")
             }
@@ -37,7 +42,17 @@ extension FacetApp {
                 + "(--windows / --tags / --lens) per invocation — "
                 + "see `facet --help`")
         }
-        if windows { runQueryWindows() }
+        // `--filter` only filters the per-window array; it's meaningless on
+        // `--tags` / `--lens` / the bare status. Require `--windows` (a
+        // usage error → exit 2) rather than silently ignoring it — same
+        // modifier-needs-its-verb rule as `--edge` / `--loading`. (A
+        // malformed filter VALUE is the opposite: non-fatal, see
+        // `runQueryWindows`.)
+        if filterExpr != nil && !windows {
+            die("facet query --filter requires --windows — "
+                + "see `facet --help`")
+        }
+        if windows { runQueryWindows(filter: filterExpr) }
         if tags    { runQueryTags() }
         if lens    { runQueryLens() }
         runQueryStatus()
@@ -132,21 +147,28 @@ extension FacetApp {
         }
     }
 
-    /// `facet query --windows` — print the full per-window JSON array
-    /// (#223), a flat list of every window across every mac desktop with
-    /// raw props + facet's `facet` block (or `null` when unmanaged).
-    /// Filter with `jq`. Reads `/tmp/facet-query.json` (server writes it
+    /// `facet query --windows [--filter EXPR]` — print the full per-window
+    /// JSON array (#223), a flat list of every window across every mac
+    /// desktop with raw props + facet's `facet` block (or `null` when
+    /// unmanaged). Reads `/tmp/facet-query.json` (server writes it
     /// atomically on reconcile + startup). Same 0/3/4 exit-code contract
-    /// as the status read; prints the file's bytes verbatim after a
-    /// validating decode so the output is byte-stable.
-    static func runQueryWindows() -> Never {
+    /// as the status read.
+    ///
+    /// Without `--filter` the file's bytes print verbatim after a
+    /// validating decode, so the output is byte-stable (#223 contract).
+    /// With `--filter EXPR` (#284) the array is post-filtered by a
+    /// `facet filter` expression and the matching subset is re-emitted in
+    /// the same shape (pretty-printed, sorted keys). A malformed EXPR is
+    /// LOUD but NON-FATAL: the caret prints to stderr and all windows show
+    /// (exit 0, not 2) — a bad filter VALUE isn't a flag/arity usage error.
+    /// `jq` still composes downstream either way.
+    static func runQueryWindows(filter: String? = nil) -> Never {
+        let data: Data
+        let entries: [WindowQueryEntry]
         do {
-            let data = try Data(contentsOf:
+            data = try Data(contentsOf:
                 URL(fileURLWithPath: WindowQuery.defaultPath))
-            _ = try JSONDecoder().decode([WindowQueryEntry].self, from: data)
-            FileHandle.standardOutput.write(data)
-            FileHandle.standardOutput.write(Data("\n".utf8))
-            exit(0)
+            entries = try JSONDecoder().decode([WindowQueryEntry].self, from: data)
         } catch let CocoaError as CocoaError
             where CocoaError.code == .fileReadNoSuchFile
         {
@@ -161,6 +183,33 @@ extension FacetApp {
             FileHandle.standardError.write(Data(msg.utf8))
             exit(4)
         }
+
+        guard let expr = filter else {
+            // No filter: byte-stable verbatim print (unchanged #223 path).
+            FileHandle.standardOutput.write(data)
+            FileHandle.standardOutput.write(Data("\n".utf8))
+            exit(0)
+        }
+
+        // Apply the filter. The pure decision (parse → degrade-or-filter +
+        // diagnostics) lives in FacetCore (`QueryFilter`, unit-tested);
+        // this shell only renders the diagnostics + emits the result.
+        let outcome = QueryFilter.apply(expr, to: entries)
+        if let caret = outcome.parseErrorCaret {
+            let msg = "facet query --filter:\n\(caret)\n"
+                + "       showing all windows (filter ignored)\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+        }
+        if !outcome.unknownFields.isEmpty {
+            let bad = outcome.unknownFields.joined(separator: ", ")
+            let known = FacetFilter.knownFields.sorted().joined(separator: ", ")
+            let msg = "facet query --filter: unknown field(s) "
+                + "\(bad) — they match nothing. Known fields: \(known)\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+        }
+        // Re-emit in the on-disk shape (pretty + sorted keys), so a
+        // filtered array looks identical to an unfiltered one to `jq`.
+        emitQueryJSON(outcome.entries)
     }
 
 }
