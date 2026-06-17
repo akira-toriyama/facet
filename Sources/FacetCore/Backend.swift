@@ -163,6 +163,15 @@ public protocol WindowBackend: Sendable {
     func workspaces() -> [Workspace]
     func focusedWindow() -> WindowID?
 
+    /// Push a freshly-loaded config to the backend (hot-reload). The
+    /// adapter swaps it in on its own serialization queue so the next
+    /// refresh reads the new values — gaps, animation, layout-default,
+    /// exclusion rules and grouping take effect without a restart. The
+    /// live workspace SET is NOT re-seeded: once seeded it's
+    /// runtime-authoritative (config stays the read-only seed), so
+    /// `[desktop.N]` count/name edits still land only on restart by design.
+    func updateConfig(_ config: FacetConfig)
+
     /// Switch the active workspace.
     /// - Parameters:
     ///   - index: 0-based workspace index (CLI / catalog use 1-based;
@@ -500,6 +509,10 @@ public protocol WindowBackend: Sendable {
 
 public extension WindowBackend {
     var isAnimating: Bool { false }
+
+    /// Default no-op: a backend that doesn't hot-reload config (the
+    /// test stub, future backends) needs no implementation.
+    func updateConfig(_ config: FacetConfig) {}
 
     /// Convenience for callers that don't care about auto-focus
     /// (the majority). Keeps the call sites that already follow

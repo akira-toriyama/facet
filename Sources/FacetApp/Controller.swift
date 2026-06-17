@@ -416,8 +416,14 @@ final class Controller: NSObject {
     ///   - [workspaces]    → reflected in writeStatus (the live
     ///                       data-model overlay onto facet
     ///                       workspaces lands at Phase α impl)
+    ///   - backend config  → `backend.updateConfig` pushes the fresh
+    ///                       value so gaps / animation / layout-default /
+    ///                       exclusion-rules / grouping hot-reload
     /// Reload-off (intentionally — restart required):
     ///   - default-view
+    ///   - [desktop.N] workspace count / names — the catalog set is
+    ///     seed-once / runtime-authoritative (config is the read-only
+    ///     seed); a reload won't clobber runtime add/remove/rename.
     func reloadConfig() {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
@@ -429,6 +435,7 @@ final class Controller: NSObject {
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
         config = fresh
+        backend.updateConfig(fresh)   // hot-reload the backend's copy
         logConfigWarnings()
         applyBorderFromConfig()
         seedTreeGeometry()
