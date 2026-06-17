@@ -168,15 +168,16 @@ public struct FacetConfig: Sendable {
     /// `[layout] default`. See memory `facet-per-native-space-ws`.
     public var macDesktopWorkspaceConfigs: [Int: [Int: WorkspaceConfig]] = [:]
 
-    /// Per-mac-desktop `[[desktop.N.group]]` group definitions (pivot
-    /// PR#5). Outer key is the mac desktop ordinal (Mission Control order,
-    /// 1-based); value is that desktop's groups in config-declaration (=
-    /// display) order. `nil`/empty when none configured. Parsed from the
+    /// Per-mac-desktop `[[desktop.N.section]]` definitions (the section/lens
+    /// model). Outer key is the mac desktop ordinal (Mission Control order,
+    /// 1-based); value is that desktop's sections in config-declaration (=
+    /// tree display) order. `nil`/empty when none configured. Parsed from the
     /// raw TOML text (nested array-of-tables) by `load`, like
     /// `exclusionRules` / `tagDefs`. Workspace-axis only — read through
-    /// `effectiveMacDesktopGroupConfigs`, which drops them in tag mode.
-    /// PARSE-ONLY: no consumer yet (Phase 1 `FilterProjection`).
-    public var macDesktopGroupConfigs: [Int: [DesktopGroup]] = [:]
+    /// `effectiveMacDesktopSectionConfigs`, which drops them in tag mode.
+    /// PARSE-ONLY: no production consumer yet (PR3 `FilterProjection` +
+    /// PR5 tree).
+    public var macDesktopSectionConfigs: [Int: [DesktopSection]] = [:]
 
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
@@ -587,14 +588,14 @@ public struct FacetConfig: Sendable {
         ExclusionRules(exclusionRules ?? [])
     }
 
-    /// Effective `[[desktop.N.group]]` definitions. Empty in tag mode:
-    /// groups are a WORKSPACE-axis concept (`by = tag` has its own tag
-    /// world per mac desktop and ignores groups). The clamp lives here so
+    /// Effective `[[desktop.N.section]]` definitions. Empty in tag mode:
+    /// sections are a WORKSPACE-axis concept (`by = tag` has its own tag
+    /// world per mac desktop and ignores sections). The clamp lives here so
     /// every consumer is tag-mode-safe by construction; `load` additionally
-    /// logs LOUD when it drops a tag-mode user's groups (a silent clamp
+    /// logs LOUD when it drops a tag-mode user's sections (a silent clamp
     /// would surprise them). Always read through this, never the raw dict.
-    public var effectiveMacDesktopGroupConfigs: [Int: [DesktopGroup]] {
-        effectiveGrouping == .tag ? [:] : macDesktopGroupConfigs
+    public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
+        effectiveGrouping == .tag ? [:] : macDesktopSectionConfigs
     }
 
     // MARK: - Grouping / tags (M11-3)
@@ -728,34 +729,47 @@ public struct FacetConfig: Sendable {
         return out
     }
 
-    /// Build the per-mac-desktop `[[desktop.N.group]]` map from the raw
-    /// TOML text (pivot PR#5). Each block header is `desktop.<N>.group`
-    /// (`N` = Mission Control ordinal ≥ 1); rows are `{ label, match,
-    /// apply }`. A row missing `label`/`match` is dropped (see
-    /// `DesktopGroup.init(fromTOMLRow:)`); a desktop with no usable rows
-    /// contributes no entry. Group order within a desktop is file order.
-    /// PARSE-ONLY — no consumer yet; read through
-    /// `effectiveMacDesktopGroupConfigs`.
-    public static func decodeDesktopGroupSections(fromTOML text: String)
-        -> [Int: [DesktopGroup]]
+    /// Build the per-mac-desktop `[[desktop.N.section]]` map from the raw
+    /// TOML text (the section/lens model). Each block header is
+    /// `desktop.<N>.section` (`N` = Mission Control ordinal ≥ 1); rows are
+    /// `{ type, label, match, apply, layout }`. A row with an absent /
+    /// unknown `type`, or one missing a required per-type field, is DROPPED
+    /// with a LOUD `Log.line` (the ordinal + row index for context) — never
+    /// a silent clamp (see `DesktopSection.parse`). A desktop with no usable
+    /// rows contributes no entry. Section order within a desktop is file
+    /// order. PARSE-ONLY — no production consumer yet; read through
+    /// `effectiveMacDesktopSectionConfigs`.
+    public static func decodeDesktopSectionSections(fromTOML text: String)
+        -> [Int: [DesktopSection]]
     {
-        var out: [Int: [DesktopGroup]] = [:]
+        var out: [Int: [DesktopSection]] = [:]
         let blocks = parseTOMLArraysOfTables(text) { name in
-            name.hasPrefix("desktop.") && name.hasSuffix(".group")
+            name.hasPrefix("desktop.") && name.hasSuffix(".section")
         }
         // Iterate header texts in SORTED order and MERGE into the ordinal
         // bucket (not assign): two distinct spellings can normalize to the
-        // same ordinal (`desktop.1.group` vs `desktop.01.group`/`+1`, since
-        // `Int` accepts zero-pad / leading `+`). Sorting + appending makes
-        // the result independent of per-process Dictionary hash-seed order;
-        // file order within one spelling is already preserved by the parser.
+        // same ordinal (`desktop.1.section` vs `desktop.01.section`/`+1`,
+        // since `Int` accepts zero-pad / leading `+`). Sorting + appending
+        // makes the result independent of per-process Dictionary hash-seed
+        // order; file order within one spelling is already preserved by the
+        // parser.
         for name in blocks.keys.sorted() {
             guard let rows = blocks[name] else { continue }
-            // header = "desktop.<N>.group" → pull out N.
-            let mid = name.dropFirst("desktop.".count).dropLast(".group".count)
+            // header = "desktop.<N>.section" → pull out N.
+            let mid = name.dropFirst("desktop.".count).dropLast(".section".count)
             guard let ordinal = Int(mid), ordinal >= 1 else { continue }
-            let groups = rows.compactMap(DesktopGroup.init(fromTOMLRow:))
-            if !groups.isEmpty { out[ordinal, default: []].append(contentsOf: groups) }
+            var sections: [DesktopSection] = []
+            for (i, row) in rows.enumerated() {
+                let (section, note) = DesktopSection.parse(fromTOMLRow: row)
+                if let note {
+                    Log.line("config: [[desktop.\(ordinal).section]] "
+                        + "#\(i + 1): \(note)")
+                }
+                if let section { sections.append(section) }
+            }
+            if !sections.isEmpty {
+                out[ordinal, default: []].append(contentsOf: sections)
+            }
         }
         return out
     }
@@ -786,15 +800,15 @@ public struct FacetConfig: Sendable {
             if !rules.isEmpty { c.exclusionRules = rules }
             let tags = tagDefs(fromTOML: text)
             if !tags.isEmpty { c.tagDefs = tags }
-            let groups = decodeDesktopGroupSections(fromTOML: text)
-            if !groups.isEmpty { c.macDesktopGroupConfigs = groups }
-            // Tag mode ignores `[[desktop.N.group]]` (workspace-axis only).
+            let sections = decodeDesktopSectionSections(fromTOML: text)
+            if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
+            // Tag mode ignores `[[desktop.N.section]]` (workspace-axis only).
             // The `effective*` accessor clamps for consumers; warn LOUD here
             // so the misconfiguration isn't silent.
-            if c.effectiveGrouping == .tag && !c.macDesktopGroupConfigs.isEmpty {
+            if c.effectiveGrouping == .tag && !c.macDesktopSectionConfigs.isEmpty {
                 Log.line("config: [grouping] by = \"tag\" ignores "
-                    + "[[desktop.N.group]] (groups are workspace-axis only) "
-                    + "— remove the group blocks or switch to "
+                    + "[[desktop.N.section]] (sections are workspace-axis "
+                    + "only) — remove the section blocks or switch to "
                     + "by = \"workspace\"")
             }
             return c

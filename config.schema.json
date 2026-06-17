@@ -96,7 +96,7 @@
     },
     "desktop" : {
       "additionalProperties" : true,
-      "description" : "`[desktop.N]` per-mac-desktop workspace seeds: `K = { name = \"Dev\", layout = \"bsp\" }` (N = Mission Control ordinal, K = facet WS index). Also accepts `[[desktop.N.group]]` filter groups (pivot, parse-only): `{ label, match, apply }` — label = display header, match = a facet filter WHERE-clause, apply = `{ workspace, tags = [], floating, sticky, master }` set on a window routed in. Workspace-axis only (ignored under [grouping] by = \"tag\").",
+      "description" : "`[desktop.N]` per-mac-desktop workspace seeds: `K = { name = \"Dev\", layout = \"bsp\" }` (N = Mission Control ordinal, K = facet WS index). Also accepts `[[desktop.N.section]]` ordered display sections (pivot, parse-only) with a required `type` of workspace / lens / unassigned: workspace = `{ type, layout }` (auto-named spatial cell); lens = `{ type, label, match, apply }` where match = a facet filter WHERE-clause and apply = `{ workspace, tags = [], floating, sticky, master }` set on a window routed in; unassigned = `{ type, label }`. Array order = tree display order. Workspace-axis only (ignored under [grouping] by = \"tag\").",
       "type" : "object"
     },
     "exclude" : {

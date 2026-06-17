@@ -613,52 +613,75 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
-# Filter groups  [[desktop.N.group]]   (PREVIEW — parsed, not yet used)
+# Display sections  [[desktop.N.section]]   (PREVIEW — parsed, not yet used)
 # -----------------------------------------------------------------
 # A forward-looking way to organise windows: instead of the manual
-# `[desktop.N]` workspace list above, you describe groups with a filter.
-# facet PARSES these today but nothing consumes them yet — they have NO
-# effect on the current build. The recommended config stays the plain
-# by-workspace `[desktop.N]` blocks above (no surprises); this block
+# `[desktop.N]` workspace list above, you describe an ORDERED list of
+# sections. facet PARSES these today but nothing consumes them yet — they
+# have NO effect on the current build. The recommended config stays the
+# plain by-workspace `[desktop.N]` blocks above (no surprises); this block
 # documents the shape that's coming.
 #
-# Each `[[desktop.N.group]]` is one labelled group on the Nth mac desktop
-# (Mission Control order). A window shows up in EVERY group whose `match`
-# it satisfies (multi-match); groups display in the order written here.
+# Each `[[desktop.N.section]]` is one section on the Nth mac desktop
+# (Mission Control order). The array ORDER is the tree's display order.
+# Every section has a required `type` — one of three kinds:
 #
-#   label  — the group's header in the view.
-#   match  — a facet filter WHERE-clause (the same mini-language as
-#            `facet query --filter`). Examples:
-#              'tag~=web'                            windows tagged "web"
-#              'app=Xcode'                           the Xcode app
-#              '(tag~=work or tag~=urgent) and not floating'
-#   apply  — (optional) the facets to SET on a window dropped into the
-#            group, so the drop "sticks". Inline table; all keys optional:
-#              workspace = "Dev"      move to that workspace (auto-replace)
-#              tags      = ["web"]    add these tags (additive)
-#              floating  = true       float / unfloat
-#              sticky    = true       pin / unpin across desktops
-#              master    = true       mark / unmark as layout master
-#            Omit `apply` (or leave it empty) → the group is drop-inert
-#            (a drop snaps back instead of changing the window).
+#   type = "workspace"  — a permanent spatial cell (the tiling unit, the
+#       grid/rail cell). AUTO-NAMED (an emoji 🐶🍎🍕), so you neither name
+#       nor filter it. Optional `layout` seeds its tiling engine.
+#         [[desktop.1.section]]
+#         type = "workspace"
+#         layout = "bsp"
 #
-# Groups are a WORKSPACE-axis concept: under `[grouping] by = "tag"` they
-# are ignored (facet logs a notice and falls back to the tag world).
+#   type = "lens"  — a saved visibility filter (an SQL VIEW), orthogonal
+#       to workspaces; a window shows in EVERY lens whose `match` it
+#       satisfies (multi-match). Keys:
+#         label  — the lens's header in the view (required).
+#         match  — a facet filter WHERE-clause (required; the same mini-
+#                  language as `facet query --filter`), e.g.
+#                    'tag~=web or app=Safari'
+#                    '(tag~=work or tag~=urgent) and not floating'
+#         apply  — (optional) facets SET on a window dropped into the lens,
+#                  so the drop "sticks". Inline table; all keys optional:
+#                    workspace = "Dev"   move to that workspace (auto-replace)
+#                    tags      = ["web"] add these tags (additive)
+#                    floating  = true    float / unfloat
+#                    sticky    = true    pin / unpin across desktops
+#                    master    = true    mark / unmark as layout master
+#                  Omit `apply` → the lens is drop-inert (a drop snaps back).
 #
-# Example — reproduce a Dev / Web / Notes split with tags instead of
-# named workspaces (uncomment to try once a consumer ships):
+#   type = "unassigned"  — the lost-and-found section (just a `label`) for
+#       windows in no other section.
 #
-# [[desktop.1.group]]
+# `type` is REQUIRED: a section with an absent or unknown `type` is skipped
+# with a loud log (never a silent guess). Sections are a WORKSPACE-axis
+# concept: under `[grouping] by = "tag"` they are ignored (facet logs a
+# notice and falls back to the tag world).
+#
+# Example — two auto-named workspaces plus Dev / Web / Notes lenses
+# (uncomment to try once a consumer ships):
+#
+# [[desktop.1.section]]
+# type = "workspace"
+# layout = "bsp"
+#
+# [[desktop.1.section]]
+# type = "workspace"
+#
+# [[desktop.1.section]]
+# type = "lens"
 # label = "Dev"
 # match = 'tag~=dev'
 # apply = { tags = ["dev"] }
 #
-# [[desktop.1.group]]
+# [[desktop.1.section]]
+# type = "lens"
 # label = "Web"
 # match = 'tag~=web or app=Safari'
 # apply = { tags = ["web"] }
 #
-# [[desktop.1.group]]
+# [[desktop.1.section]]
+# type = "lens"
 # label = "Notes"
 # match = 'tag~=notes'
 # apply = { tags = ["notes"] }
