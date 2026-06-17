@@ -142,9 +142,9 @@ public extension FacetConfig {
                 .cgDbl("width", \.borderWidth, min: 0.5, max: 30, default: 1.5),
                 .int("color-cycle-ms", \.borderColorCycleMs, min: 1000, max: 120000,
                      doc: "Border animation period (ms)."),
-                .int("min-width", \.borderMinWidth, min: 0.5, max: 30,
+                .cgDbl("min-width", \.borderMinWidth, min: 0.5, max: 30,
                      doc: "Width-breathing floor (set with max-width)."),
-                .int("max-width", \.borderMaxWidth, min: 0.5, max: 30,
+                .cgDbl("max-width", \.borderMaxWidth, min: 0.5, max: 30,
                      doc: "Width-breathing ceil."),
             ]),
 

@@ -69,13 +69,13 @@
           "description" : "Width-breathing ceil.",
           "maximum" : 30,
           "minimum" : 0.5,
-          "type" : "integer"
+          "type" : "number"
         },
         "min-width" : {
           "description" : "Width-breathing floor (set with max-width).",
           "maximum" : 30,
           "minimum" : 0.5,
-          "type" : "integer"
+          "type" : "number"
         },
         "width" : {
           "default" : 1.5,
