@@ -701,10 +701,14 @@ struct WorkspaceCatalog {
                 ? orderedMembers(of: entry.index).first
                 : nil
             let wins = (byWS[entry.index] ?? []).map { w in
+                // Per-window facet attributes read through the same
+                // named accessors `facetState` (query export) uses, so
+                // the two projections can't drift (grouping-01). Frame /
+                // master stay contextual (per-WS layout-derived).
                 Window(id: w.id, pid: w.pid, appName: w.appName,
                        title: w.title,
                        isFocused: w.id == focused,
-                       isFloating: floatingWindows.contains(w.id),
+                       isFloating: isFloating(w.id),
                        frame: wouldBeFrame(
                            for: w, isActiveWS: isActive,
                            mode: m, tileFrames: tileF,
@@ -714,7 +718,7 @@ struct WorkspaceCatalog {
                        isOnscreen: w.isOnscreen,
                        isMaster: w.id == master,
                        mark: mark(forWindow: w.id),
-                       isSticky: everywhereWindows.contains(w.id),
+                       isSticky: isSticky(w.id),
                        scratchpad: scratchpad(forWindow: w.id))
             }
             return Workspace(

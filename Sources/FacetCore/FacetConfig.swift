@@ -680,10 +680,10 @@ public struct FacetConfig: Sendable {
                 role: str("role"), subrole: str("subrole"),
                 maxWidth: dbl("max-width"), maxHeight: dbl("max-height"),
                 action: action)
-            let hasKey = rule.app != nil || rule.title != nil
-                || rule.role != nil || rule.subrole != nil
-                || rule.maxWidth != nil || rule.maxHeight != nil
-            return hasKey ? rule : nil
+            // Drop a blank `[[exclude]]` (no constraints → matches
+            // nothing) — same six-field disjunction as the old inline
+            // `hasKey`, single-sourced on the matcher.
+            return rule.matcher.isConstrained ? rule : nil
         }
     }
 

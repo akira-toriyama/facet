@@ -60,14 +60,6 @@ public struct ExclusionRule: Sendable, Equatable {
                   action: action)
     }
 
-    // Source-compatible accessors onto the matcher's fields.
-    public var app: String? { matcher.app }
-    public var title: String? { matcher.title }
-    public var role: String? { matcher.role }
-    public var subrole: String? { matcher.subrole }
-    public var maxWidth: Double? { matcher.maxWidth }
-    public var maxHeight: Double? { matcher.maxHeight }
-
     /// True iff the matcher's constraints all hold for `p`.
     public func matches(_ p: WindowProbe) -> Bool { matcher.matches(p) }
 

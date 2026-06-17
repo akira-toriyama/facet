@@ -208,13 +208,13 @@ final class FacetConfigTests: XCTestCase {
             subrole = "AXDialog"
             """)
         XCTAssertEqual(rules.count, 3)
-        XCTAssertEqual(rules[0].app, "com.apple.finder")
+        XCTAssertEqual(rules[0].matcher.app, "com.apple.finder")
         XCTAssertEqual(rules[0].action, .float)
-        XCTAssertEqual(rules[1].title, "^$")
-        XCTAssertEqual(rules[1].maxWidth, 400)
+        XCTAssertEqual(rules[1].matcher.title, "^$")
+        XCTAssertEqual(rules[1].matcher.maxWidth, 400)
         XCTAssertEqual(rules[1].action, .ignore)
         // No explicit action → defaults to float.
-        XCTAssertEqual(rules[2].subrole, "AXDialog")
+        XCTAssertEqual(rules[2].matcher.subrole, "AXDialog")
         XCTAssertEqual(rules[2].action, .float)
     }
 
@@ -229,7 +229,7 @@ final class FacetConfigTests: XCTestCase {
             app = "x"
             """)
         XCTAssertEqual(rules.count, 1)
-        XCTAssertEqual(rules[0].app, "x")
+        XCTAssertEqual(rules[0].matcher.app, "x")
     }
 
     func testExclusionRulesEmptyWhenAbsent() {
