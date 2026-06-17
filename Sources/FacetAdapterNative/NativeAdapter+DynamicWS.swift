@@ -28,6 +28,12 @@ extension NativeAdapter {
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
         else { return }
         let pos = catalog.addWorkspace()
+        // Section-managed desktop: the new slot is auto-named (emoji pool,
+        // index-keyed) like the seeded ones — the user can't name a
+        // workspace. Otherwise the catalog's default name stands.
+        if config.isSectionModelActive(ordinal: activeMacDesktopOrdinal) {
+            catalog.renameWorkspace(pos, to: WorkspaceNaming.name(forIndex: pos - 1))
+        }
         Log.debug("native: addWorkspace → position \(pos) "
             + "(count=\(catalog.workspaceCount))")
         eventContinuation.yield(.refreshNeeded)

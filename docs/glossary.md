@@ -164,8 +164,12 @@ macOS の **native Space**（OS が提供する仮想デスクトップ。Missio
 ### facet workspace
 **facet が定義する Window 集合**。タブのようにグループ化された window 群を
 1 まとまりとして扱う単位。1 つの [[mac desktop]] が複数の facet workspace を
-持つ。
-- コード: `WorkspaceCatalog` / `workspaces()`
+持つ。`[desktop.N]` 命名 or 既定の無名スロットが従来の名前。**section モデル
+（[[section]] type=workspace）が active な desktop では auto 命名**＝emoji プール
+（animal→fruit→food・🐶🍎🍕・`WorkspaceNaming`・index キー）でユーザは命名/rename
+不可（workspace は空間スロット＝意味は [[section]] が担う）。
+- コード: `WorkspaceCatalog` / `workspaces()` / `WorkspaceNaming`（auto名・FacetCore）
+  / `FacetConfig.effectiveWorkspaceList`（section active 時は auto名スロットを返す）
 - **Don't call it:** group, tab, page, desktop, mac desktop, Space, グループ, タブ
 
 ### per-mac-desktop workspaces

@@ -526,6 +526,22 @@ public struct FacetConfig: Sendable {
     public func effectiveWorkspaceList(forMacDesktopOrdinal ordinal: Int?)
         -> [(index: Int, config: WorkspaceConfig)]
     {
+        // Section model (authoritative when active): the workspace COUNT and
+        // per-workspace layout seed come from the `type = "workspace"`
+        // sections; names are AUTO-assigned (emoji pool, index-keyed — the
+        // user can't name a workspace). `isSectionModelActive` guarantees a
+        // non-nil ordinal with ≥1 workspace section, so this list is
+        // non-empty and wins over any `[desktop.N]` seed for that desktop
+        // (the coexistence is loud-logged at load).
+        if isSectionModelActive(ordinal: ordinal), let ordinal {
+            let wsSections = (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
+                .filter { $0.type == .workspace }
+            return wsSections.enumerated().map { k, s in
+                (index: k + 1,
+                 config: WorkspaceConfig(name: WorkspaceNaming.name(forIndex: k),
+                                         layout: s.layout))
+            }
+        }
         guard let ordinal,
               let configs = macDesktopWorkspaceConfigs[ordinal],
               let list = Self.sortedSlots(configs)
