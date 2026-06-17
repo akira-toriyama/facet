@@ -2,11 +2,10 @@ import XCTest
 @testable import FacetCore
 
 /// `FilterProjection` — `[Workspace]` → `[FilterGroup]` (the section/lens
-/// model). PR1 SCOPE: behaviour-preserving signature follow-on of the
-/// `DesktopGroup` → `DesktopSection` reshape — only `match`-bearing (`lens`)
-/// sections project here, exactly as a group did; the real per-type body
-/// (workspace implicit match, unassigned AND-set) lands in PR3. Pure;
-/// CI-only (CLT can't run `swift test`).
+/// model body). workspace sections map positionally to live workspaces (id
+/// from the wire index), lens sections multi-match, unassigned is deferred.
+/// Degrade (no sections) stays byte-identical to by-workspace. Pure; CI-only
+/// (CLT can't run `swift test`).
 final class FilterProjectionTests: XCTestCase {
 
     // MARK: - fixtures
@@ -14,8 +13,7 @@ final class FilterProjectionTests: XCTestCase {
     private func win(_ id: Int, app: String = "App", title: String = "",
                      tags: [String] = [], floating: Bool = false) -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: app, title: title,
-               isFocused: false, isFloating: floating, frame: nil,
-               tags: tags)
+               isFocused: false, isFloating: floating, frame: nil, tags: tags)
     }
 
     private func ws(_ index: Int, name: String, windows: [Window],
@@ -24,11 +22,12 @@ final class FilterProjectionTests: XCTestCase {
                   layoutMode: "float", windows: windows)
     }
 
+    private func wsSec() -> DesktopSection { DesktopSection(type: .workspace) }
     private func lens(_ label: String, _ match: String) -> DesktopSection {
         DesktopSection(type: .lens, label: label, match: match)
     }
 
-    // MARK: - degrade (no sections → 1:1 by-workspace)
+    // MARK: - degrade (no sections → 1:1 by-workspace, byte-identical)
 
     func testDegradeMapsWorkspacesOneToOne() {
         let wss = [
@@ -41,9 +40,9 @@ final class FilterProjectionTests: XCTestCase {
         XCTAssertEqual(r.groups[0].id, "ws:0")
         XCTAssertEqual(r.groups[0].label, "Dev")
         XCTAssertEqual(r.groups[0].sourceWorkspaceIndex, 0)
+        XCTAssertEqual(r.groups[0].sectionType, .workspace)
         XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [1, 2])
         XCTAssertEqual(r.groups[1].id, "ws:1")
-        XCTAssertEqual(r.groups[1].sourceWorkspaceIndex, 1)
         XCTAssertEqual(r.groups[1].windows.map(\.id.serverID), [3])
     }
 
@@ -54,9 +53,9 @@ final class FilterProjectionTests: XCTestCase {
     }
 
     /// Locks the FROZEN 0-based WIRE-index invariant: id/sourceWorkspaceIndex
-    /// come from `Workspace.index`, NOT the array position. A regression to
-    /// `.enumerated()` offset would break PR8's byte-identical --focus/
-    /// --move-to targeting; this fails it.
+    /// come from `Workspace.index`, NOT the array position, and the degrade
+    /// preserves array order (no re-sort). A regression breaks PR8's
+    /// byte-identical --focus/--move-to targeting.
     func testDegradeUsesWireIndexNotArrayPosition() {
         let wss = [
             ws(5, name: "Dev", windows: [win(1)]),
@@ -69,9 +68,19 @@ final class FilterProjectionTests: XCTestCase {
         XCTAssertEqual(r.groups[1].sourceWorkspaceIndex, 2)
     }
 
-    /// Equality round-trip: exercises FilterGroup's custom `==` (and
-    /// `Result`'s derived `==`) that PR8 relies on for byte-identical
-    /// degrade comparison — every other test drills into fields.
+    /// CONVERGENCE: for a FIXED `[Workspace]`, an all-`workspace`-sections
+    /// config produces the SAME groups as the section-less degrade.
+    func testWorkspaceSectionsConvergeWithDegrade() {
+        let wss = [
+            ws(5, name: "Dev", windows: [win(1)]),
+            ws(2, name: "Web", windows: [win(2)]),
+        ]
+        let degrade = FilterProjection.project(workspaces: wss, sections: [])
+        let sectioned = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), wsSec()])
+        XCTAssertEqual(degrade, sectioned)
+    }
+
     func testResultEquatableRoundTrip() {
         let wss = [ws(0, name: "Dev", windows: [win(1), win(2)])]
         let expected = FilterProjection.Result(
@@ -79,15 +88,72 @@ final class FilterProjectionTests: XCTestCase {
                                  windows: [win(1), win(2)], sourceWorkspaceIndex: 0)],
             diagnostics: [])
         XCTAssertEqual(expected, FilterProjection.project(workspaces: wss, sections: []))
-        // `==` discriminates each compared field.
-        let base = FilterGroup(id: "a", label: "L", windows: [win(1)], sourceWorkspaceIndex: 0)
+        // `==` discriminates each compared field — including sectionType.
+        let base = FilterGroup(id: "a", label: "L", windows: [win(1)],
+                               sourceWorkspaceIndex: 0, sectionType: .workspace)
         XCTAssertNotEqual(base, FilterGroup(id: "b", label: "L", windows: [win(1)], sourceWorkspaceIndex: 0))
         XCTAssertNotEqual(base, FilterGroup(id: "a", label: "X", windows: [win(1)], sourceWorkspaceIndex: 0))
         XCTAssertNotEqual(base, FilterGroup(id: "a", label: "L", windows: [win(1)], sourceWorkspaceIndex: 1))
         XCTAssertNotEqual(base, FilterGroup(id: "a", label: "L", windows: [win(2)], sourceWorkspaceIndex: 0))
+        XCTAssertNotEqual(base, FilterGroup(id: "a", label: "L", windows: [win(1)],
+                                            sourceWorkspaceIndex: 0, sectionType: .lens))
     }
 
-    // MARK: - lens sections (match-bearing; behaviour-preserving in PR1)
+    // MARK: - workspace sections (positional, wire-index id)
+
+    /// k-th workspace section ↔ workspaces[k]; id/sourceWorkspaceIndex come
+    /// from `ws.index` even when index != array position (sparse catalog).
+    func testWorkspaceSectionsMapPositionallyByWireIndex() {
+        let wss = [
+            ws(3, name: "A", windows: [win(1)]),
+            ws(7, name: "B", windows: [win(2)]),
+        ]
+        let r = FilterProjection.project(workspaces: wss, sections: [wsSec(), wsSec()])
+        XCTAssertEqual(r.groups.map(\.id), ["ws:3", "ws:7"])
+        XCTAssertEqual(r.groups.map(\.sourceWorkspaceIndex), [3, 7])
+        XCTAssertEqual(r.groups.map(\.sectionType), [.workspace, .workspace])
+        XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [1])
+        XCTAssertTrue(r.diagnostics.isEmpty)
+    }
+
+    /// Extra live workspaces (dynamic `facet workspace --add`) append at the
+    /// tail of the workspace-section run.
+    func testExtraWorkspacesAppendAtTail() {
+        let wss = [
+            ws(0, name: "A", windows: []),
+            ws(1, name: "B", windows: []),
+            ws(2, name: "C", windows: []),
+        ]
+        // Only one workspace section, three live workspaces.
+        let r = FilterProjection.project(workspaces: wss, sections: [wsSec()])
+        XCTAssertEqual(r.groups.map(\.id), ["ws:0", "ws:1", "ws:2"])
+    }
+
+    /// The tail insertion goes BEFORE a later lens section, not at the very
+    /// end (workspaces group together in the tree).
+    func testExtraWorkspacesInsertBeforeLaterLens() {
+        let wss = [
+            ws(0, name: "A", windows: [win(1, tags: ["x"])]),
+            ws(1, name: "B", windows: []),
+        ]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), lens("L", "tag~=x")])
+        XCTAssertEqual(r.groups.map(\.id), ["ws:0", "ws:1", "section:1:L"])
+        XCTAssertEqual(r.groups[2].sectionType, .lens)
+    }
+
+    /// Surplus workspace sections (more than live workspaces) emit no group
+    /// and add a diagnostic.
+    func testSurplusWorkspaceSectionDiagnosed() {
+        let wss = [ws(0, name: "A", windows: []), ws(1, name: "B", windows: [])]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), wsSec(), wsSec()])
+        XCTAssertEqual(r.groups.map(\.id), ["ws:0", "ws:1"])
+        XCTAssertEqual(r.diagnostics.count, 1)
+        XCTAssertTrue(r.diagnostics[0].contains("workspace section #3"))
+    }
+
+    // MARK: - lens sections (multi-match)
 
     func testLensMatchSelectsWindowsAcrossWorkspaces() {
         let wss = [
@@ -96,33 +162,26 @@ final class FilterProjectionTests: XCTestCase {
         ]
         let r = FilterProjection.project(workspaces: wss, sections: [lens("Web", "tag~=web")])
         XCTAssertEqual(r.groups.count, 1)
-        XCTAssertEqual(r.groups[0].label, "Web")
-        XCTAssertNil(r.groups[0].sourceWorkspaceIndex)  // multi-WS lens section
         XCTAssertEqual(r.groups[0].id, "section:0:Web")
+        XCTAssertNil(r.groups[0].sourceWorkspaceIndex)
+        XCTAssertEqual(r.groups[0].sectionType, .lens)
         XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [1, 3])  // ws then win order
-        XCTAssertTrue(r.diagnostics.isEmpty)
     }
 
-    /// Multi-match: a window appears in EVERY section it satisfies.
-    func testMultiMatchWindowInMultipleSections() {
+    func testMultiMatchWindowInMultipleLensSections() {
         let wss = [ws(0, name: "Dev",
                       windows: [win(1, app: "Safari", tags: ["web", "work"])])]
-        let sections = [
-            lens("Web", "tag~=web"),
-            lens("Work", "tag~=work"),
-            lens("Apple", "app=Safari"),
-            lens("None", "tag~=nope"),
-        ]
-        let r = FilterProjection.project(workspaces: wss, sections: sections)
+        let r = FilterProjection.project(workspaces: wss, sections: [
+            lens("Web", "tag~=web"), lens("Work", "tag~=work"),
+            lens("Apple", "app=Safari"), lens("None", "tag~=nope"),
+        ])
         XCTAssertEqual(r.groups.map(\.label), ["Web", "Work", "Apple", "None"])
         XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [1])
         XCTAssertEqual(r.groups[1].windows.map(\.id.serverID), [1])
         XCTAssertEqual(r.groups[2].windows.map(\.id.serverID), [1])
-        XCTAssertEqual(r.groups[3].windows.map(\.id.serverID), [])  // matches nothing
+        XCTAssertEqual(r.groups[3].windows.map(\.id.serverID), [])
     }
 
-    /// `workspace=NAME` resolves via the projection's workspace-name overlay
-    /// (a bare `Window` no-matches `workspace`).
     func testWorkspaceFieldResolvesViaOverlay() {
         let wss = [
             ws(0, name: "Dev", windows: [win(1), win(2)]),
@@ -132,60 +191,52 @@ final class FilterProjectionTests: XCTestCase {
         XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [1, 2])
     }
 
-    /// `not tag` (untagged window) — the old `_default` bucket, a frozen
-    /// semantic this projection is the first to compile. An untagged window
-    /// must MATCH `not tag` but NOT a `tag~=` section, exercised through the
-    /// real overlay (`filterHas("tag")` empty-tags path).
     func testNotTagSelectsOnlyUntaggedWindows() {
         let wss = [ws(0, name: "Dev", windows: [
             win(1, tags: ["web"]), win(2), win(3, tags: ["code"]), win(4),
         ])]
-        let sections = [
-            lens("Untagged", "not tag"),
-            lens("Web", "tag~=web"),
-        ]
-        let r = FilterProjection.project(workspaces: wss, sections: sections)
-        XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [2, 4])   // untagged only
-        XCTAssertEqual(r.groups[1].windows.map(\.id.serverID), [1])      // tagged distinct
+        let r = FilterProjection.project(workspaces: wss, sections: [
+            lens("Untagged", "not tag"), lens("Web", "tag~=web"),
+        ])
+        XCTAssertEqual(r.groups[0].windows.map(\.id.serverID), [2, 4])
+        XCTAssertEqual(r.groups[1].windows.map(\.id.serverID), [1])
     }
 
-    func testSectionOrderIsDeclarationOrder() {
-        let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["a"])])]
-        let sections = [lens("C", "tag~=a"), lens("A", "tag~=a"), lens("B", "tag~=a")]
-        let r = FilterProjection.project(workspaces: wss, sections: sections)
-        XCTAssertEqual(r.groups.map(\.label), ["C", "A", "B"])
+    /// Declaration order is preserved across a mixed-type array; the lens id's
+    /// declOrder is the section's index in the full array (not among lenses).
+    func testDeclarationOrderPreservedAcrossMixedTypes() {
+        let wss = [ws(0, name: "A", windows: [win(1, tags: ["x"])])]
+        let r = FilterProjection.project(workspaces: wss, sections: [
+            lens("First", "tag~=x"),   // decl 0
+            wsSec(),                    // decl 1 → ws:0
+            lens("Third", "tag~=x"),    // decl 2
+        ])
+        XCTAssertEqual(r.groups.map(\.id), ["section:0:First", "ws:0", "section:2:Third"])
     }
 
-    /// PR1: non-match sections (workspace / unassigned) contribute nothing,
-    /// but the declaration index still counts them so a lens section's id
-    /// stays stable as the body grows.
-    func testNonMatchSectionsSkippedButCountForDeclOrder() {
-        let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["a"])])]
-        let sections = [
-            DesktopSection(type: .workspace),       // decl 0 — no match, skipped
-            DesktopSection(type: .unassigned, label: "Other"),  // decl 1 — skipped
-            lens("A", "tag~=a"),                    // decl 2 — projects
-        ]
-        let r = FilterProjection.project(workspaces: wss, sections: sections)
-        XCTAssertEqual(r.groups.map(\.label), ["A"])
-        XCTAssertEqual(r.groups[0].id, "section:2:A")  // decl index preserved
+    // MARK: - unassigned is deferred (no group)
+
+    func testUnassignedSectionEmitsNoGroup() {
+        let wss = [ws(0, name: "A", windows: [win(1)])]
+        let r = FilterProjection.project(workspaces: wss, sections: [
+            wsSec(), DesktopSection(type: .unassigned, label: "Other"),
+        ])
+        // Only the workspace group; the unassigned section is skipped.
+        XCTAssertEqual(r.groups.map(\.id), ["ws:0"])
+        XCTAssertTrue(r.diagnostics.isEmpty)
     }
 
     // MARK: - loud-but-non-fatal
 
-    func testMalformedMatchSectionSkippedWithDiagnostic() {
+    func testMalformedLensSkippedWithDiagnostic() {
         let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["a"])])]
-        let sections = [
+        let r = FilterProjection.project(workspaces: wss, sections: [
             lens("Bad", "tag~="),       // malformed
             lens("Good", "tag~=a"),
-        ]
-        let r = FilterProjection.project(workspaces: wss, sections: sections)
-        // Bad section omitted; Good still projects.
+        ])
         XCTAssertEqual(r.groups.map(\.label), ["Good"])
         XCTAssertEqual(r.groups[0].id, "section:1:Good")  // decl index preserved
         XCTAssertEqual(r.diagnostics.count, 1)
-        // Lock the projection-owned message shape: prefix + quoted label +
-        // two-line caret form (without coupling to the lexer's exact text).
         XCTAssertTrue(r.diagnostics[0].hasPrefix("config: section \"Bad\" match: "))
         XCTAssertTrue(r.diagnostics[0].contains("\n"))
         XCTAssertTrue(r.diagnostics[0].contains("^"))
@@ -194,34 +245,27 @@ final class FilterProjectionTests: XCTestCase {
     func testUnknownFieldDiagnosticButStillProjects() {
         let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["a"])])]
         let r = FilterProjection.project(workspaces: wss, sections: [lens("Typo", "bogusfield=x")])
-        // Section still appears (valid parse), just no-matches; warning emitted.
         XCTAssertEqual(r.groups.count, 1)
         XCTAssertEqual(r.groups[0].windows.count, 0)
-        // Fully deterministic shape here — lock it exactly.
         XCTAssertEqual(r.diagnostics, [
             "config: section \"Typo\" match references unknown field(s): bogusfield"])
     }
 
-    /// Multiple unknown fields are deterministically SORTED + `, `-joined
-    /// (the contract that propagates into PR8 logging).
     func testUnknownFieldsSortedAndJoined() {
         let wss = [ws(0, name: "Dev", windows: [win(1)])]
-        // Referenced in non-sorted source order (zzz before aaa).
         let r = FilterProjection.project(workspaces: wss, sections: [lens("Typo", "zzz=1 and aaa=2")])
         XCTAssertTrue(r.diagnostics[0].hasSuffix("unknown field(s): aaa, zzz"))
     }
 
     // MARK: - scale (perf baseline)
 
-    func testProjectsAtScale100Windows10Sections() {
-        // 100 windows spread over 5 workspaces; even ids tagged "even".
+    func testProjectsAtScale100Windows10Lenses() {
         var wss: [Workspace] = []
         var nextID = 1
         for d in 0..<5 {
             var windows: [Window] = []
             for _ in 0..<20 {
-                let tags = nextID % 2 == 0 ? ["even"] : ["odd"]
-                windows.append(win(nextID, tags: tags))
+                windows.append(win(nextID, tags: nextID % 2 == 0 ? ["even"] : ["odd"]))
                 nextID += 1
             }
             wss.append(ws(d, name: "WS\(d)", windows: windows))
@@ -230,8 +274,8 @@ final class FilterProjectionTests: XCTestCase {
         for i in 0..<9 { sections.append(lens("G\(i)", "tag~=odd")) }
         let r = FilterProjection.project(workspaces: wss, sections: sections)
         XCTAssertEqual(r.groups.count, 10)
-        XCTAssertEqual(r.groups[0].windows.count, 50)   // 50 even
-        XCTAssertEqual(r.groups[1].windows.count, 50)   // 50 odd
+        XCTAssertEqual(r.groups[0].windows.count, 50)
+        XCTAssertEqual(r.groups[1].windows.count, 50)
         XCTAssertTrue(r.diagnostics.isEmpty)
     }
 }

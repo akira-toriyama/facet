@@ -34,18 +34,27 @@ import Foundation
 /// threads. All fields are already `Sendable` (`Window` is).
 public struct FilterGroup: Sendable {
     /// Stable, unique identity for view signatures / cell tracking.
-    /// Degrade: `"ws:<index>"`. Config group: `"group:<declOrder>:<label>"`.
+    /// Degrade / workspace section: `"ws:<index>"`. Lens section:
+    /// `"section:<declOrder>:<label>"`.
     public let id: String
     public let label: String
     public let windows: [Window]
     public let sourceWorkspaceIndex: Int?
+    /// Which section kind produced this group — `.workspace` for the
+    /// spatial substrate (the degrade path + `type=workspace` sections;
+    /// the only kind grid/rail render, PR7), `.lens` for a saved-filter
+    /// section (tree-only, emphasised when active, PR5). Defaulted so the
+    /// degrade path + existing 4-arg call sites need no edit.
+    public let sectionType: SectionType
 
     public init(id: String, label: String, windows: [Window],
-                sourceWorkspaceIndex: Int?) {
+                sourceWorkspaceIndex: Int?,
+                sectionType: SectionType = .workspace) {
         self.id = id
         self.label = label
         self.windows = windows
         self.sourceWorkspaceIndex = sourceWorkspaceIndex
+        self.sectionType = sectionType
     }
 }
 
@@ -56,6 +65,7 @@ extension FilterGroup: Equatable {
     public static func == (a: FilterGroup, b: FilterGroup) -> Bool {
         a.id == b.id && a.label == b.label
             && a.sourceWorkspaceIndex == b.sourceWorkspaceIndex
+            && a.sectionType == b.sectionType
             && a.windows.map(\.id) == b.windows.map(\.id)
     }
 }
