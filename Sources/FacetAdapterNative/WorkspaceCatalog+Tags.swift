@@ -100,7 +100,7 @@ extension WorkspaceCatalog {
             .sorted { $0.id.serverID < $1.id.serverID }
             .map { w -> Window in
                 let mask = windowMap[w.id]?.tags ?? 0
-                let floating = floatingWindows.contains(w.id)
+                let floating = isFloating(w.id)
                 let inLens = (mask & lens) != 0
                 // A floating window in the lens is on-screen at its OWN
                 // position (it isn't tiled) — show its live frame, like
@@ -123,7 +123,7 @@ extension WorkspaceCatalog {
                               isOnscreen: w.isOnscreen,
                               isMaster: w.id == masterID,
                               mark: mark(forWindow: w.id),
-                              isSticky: everywhereWindows.contains(w.id),
+                              isSticky: isSticky(w.id),
                               scratchpad: scratchpad(forWindow: w.id),
                               tags: tagModel.names(in: mask))
             }
