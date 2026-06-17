@@ -147,6 +147,52 @@ public struct Window: Sendable {
     }
 }
 
+/// `facet filter` field resolution for an in-process window (#283 PR#2).
+///
+/// Maps canonical filter field names onto `Window`'s properties — the
+/// frozen field-name table (`appName`→`app`, `isFloating`→`floating`, …).
+/// `Window` does NOT carry its workspace name or mac-desktop ordinal
+/// (those live on the containing `Workspace` / catalog), so `workspace`
+/// and `desktop` resolve to a no-match here; Phase 1's projection
+/// supplies them at the seam.
+extension Window: WindowFields {
+    public func filterValue(_ field: String) -> String? {
+        switch field {
+        case "app": return appName
+        case "title": return title
+        case "bundleId": return bundleId
+        case "tag": return tags.isEmpty ? nil : tags.joined(separator: " ")
+        case "mark": return mark
+        case "scratchpad": return scratchpad
+        case "floating": return isFloating ? "true" : "false"
+        case "sticky": return isSticky ? "true" : "false"
+        case "master": return isMaster ? "true" : "false"
+        case "focused": return isFocused ? "true" : "false"
+        case "onscreen": return isOnscreen ? "true" : "false"
+        case "workspace", "desktop": return nil
+        default: return nil
+        }
+    }
+
+    public func filterHas(_ field: String) -> Bool {
+        switch field {
+        case "tag": return !tags.isEmpty
+        case "floating": return isFloating
+        case "sticky": return isSticky
+        case "master": return isMaster
+        case "focused": return isFocused
+        case "onscreen": return isOnscreen
+        case "mark": return mark != nil
+        case "scratchpad": return scratchpad != nil
+        case "app": return !appName.isEmpty
+        case "title": return !title.isEmpty
+        case "bundleId": return !(bundleId ?? "").isEmpty
+        case "workspace", "desktop": return false
+        default: return false
+        }
+    }
+}
+
 /// One facet workspace returned by the backend.
 public struct Workspace: Sendable {
     public let index: Int
