@@ -9,31 +9,6 @@ import XCTest
 /// of having extracted `WorkspaceCatalog` out of `NativeAdapter`.
 final class WorkspaceCatalogTests: XCTestCase {
 
-    // MARK: - Helpers
-
-    private func wid(_ n: Int) -> WindowID {
-        WindowID(serverID: n)
-    }
-
-    private func window(_ n: Int, pid: Int = 1000) -> Window {
-        Window(id: wid(n), pid: pid, appName: "A",
-               title: "w\(n)", isFocused: false,
-               isFloating: false, frame: nil)
-    }
-
-    /// A catalog seeded with `n` contiguous, unnamed workspaces — the
-    /// dynamic live set the adapter normally seeds from config. Most
-    /// tests need ≥1 workspace before `setActive` / `snapshot` etc.
-    /// work (an unseeded catalog has an empty set). Uses `.init()` so
-    /// it isn't itself rewritten when call sites adopt this helper.
-    private func seededCatalog(_ n: Int = 5) -> WorkspaceCatalog {
-        var c = WorkspaceCatalog.init()
-        c.seed(configs: (1...n).map {
-            (index: $0, config: WorkspaceConfig(name: ""))
-        })
-        return c
-    }
-
     // MARK: - Initial state
 
     func testInitialActiveIs1() {

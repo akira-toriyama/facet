@@ -9,14 +9,6 @@ import XCTest
 /// and tag preservation across slot re-creation.
 final class TagCatalogTests: XCTestCase {
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-
-    private func window(_ n: Int, pid: Int = 1000,
-                        floating: Bool = false) -> Window {
-        Window(id: wid(n), pid: pid, appName: "A", title: "w\(n)",
-               isFocused: false, isFloating: floating, frame: nil)
-    }
-
     /// A catalog seeded for tag mode with tags `work`(bit0) `web`(bit1)
     /// `media`(bit2) and the given lens (default = work).
     private func tagCatalog(lens: UInt64 = 0b001) -> WorkspaceCatalog {

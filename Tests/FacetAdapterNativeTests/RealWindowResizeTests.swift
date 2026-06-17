@@ -10,11 +10,6 @@ import XCTest
 /// controlling split's ratio moves so the opposite side tracks it.
 final class RealWindowResizeTests: XCTestCase {
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-    private func window(_ n: Int) -> Window {
-        Window(id: wid(n), pid: 1000, appName: "A", title: "w\(n)",
-               isFocused: false, isFloating: false, frame: nil)
-    }
     private let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
     private let tallRect = CGRect(x: 0, y: 0, width: 900, height: 1600)
 
@@ -25,14 +20,6 @@ final class RealWindowResizeTests: XCTestCase {
         })
         _ = c.reconcile(live: (1...n).map { window($0) })
         return c
-    }
-
-    /// wid(1) | wid(2): vertical split (left | right halves of `rect`).
-    private func twoVertical() -> LayoutTree {
-        var t = LayoutTree()
-        t.insert(wid(1), focused: nil, in: rect)
-        t.insert(wid(2), focused: wid(1), in: rect)
-        return t
     }
 
     /// wid(1) over wid(2): horizontal split (top | bottom of `tallRect`).

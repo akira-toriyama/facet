@@ -19,19 +19,7 @@ import XCTest
 ///   • cov-04 — the grouping GATE: `snapshot` yields one `Workspace` per
 ///     entry in workspace mode, exactly one synthetic `Workspace` in tag
 ///     mode.
-///
-/// NOTE: `wid`/`window` here duplicate the per-file helpers across the
-/// adapter test suite — that consolidation is the known `tests-02`
-/// backlog item; kept local until that sweep lands.
 final class CatalogProjectionParityTests: XCTestCase {
-
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-
-    private func window(_ n: Int, pid: Int = 1000) -> Window {
-        Window(id: wid(n), pid: pid, appName: "A",
-               title: "w\(n)", isFocused: false,
-               isFloating: false, frame: nil)
-    }
 
     private let rect = CGRect(x: 0, y: 0, width: 1000, height: 800)
 

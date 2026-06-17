@@ -9,13 +9,6 @@ import XCTest
 /// aligned as positions shift.
 final class DynamicWorkspaceTests: XCTestCase {
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-
-    private func window(_ n: Int, pid: Int = 1000) -> Window {
-        Window(id: wid(n), pid: pid, appName: "A", title: "w\(n)",
-               isFocused: false, isFloating: false, frame: nil)
-    }
-
     private func seeded(_ n: Int) -> WorkspaceCatalog {
         var c = WorkspaceCatalog()
         c.seed(configs: (1...n).map {

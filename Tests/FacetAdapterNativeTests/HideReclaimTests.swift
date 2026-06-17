@@ -13,24 +13,7 @@ final class HideReclaimTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
-
-    private func window(_ n: Int, pid: Int = 1000,
-                        onscreen: Bool = true) -> Window {
-        Window(id: wid(n), pid: pid, appName: "A",
-               title: "w\(n)", isFocused: false,
-               isFloating: false, frame: nil, isOnscreen: onscreen)
-    }
-
     private var rect: CGRect { CGRect(x: 0, y: 0, width: 1000, height: 800) }
-
-    private func seededCatalog(_ n: Int = 5) -> WorkspaceCatalog {
-        var c = WorkspaceCatalog.init()
-        c.seed(configs: (1...n).map {
-            (index: $0, config: WorkspaceConfig(name: ""))
-        })
-        return c
-    }
 
     /// Catalog with windows 10 + 20 adopted into WS1 in `mode`.
     private func twoWindowCatalog(mode: String) -> WorkspaceCatalog {
