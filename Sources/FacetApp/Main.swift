@@ -612,6 +612,21 @@ enum FacetApp {
             exit(2)
         }
 
+        // ``--loading`` masks a mac-desktop switch (fire-and-forget,
+        // before the switch); ``--active`` steals key focus + flips
+        // activation policy to enter keyboard nav *now*. The two want
+        // opposite things at the same instant — kb-nav over a content-
+        // less skeleton mid-switch is meaningless — so the combo exits 2
+        // rather than silently dropping ``--active`` (which dispatchView's
+        // ``--loading`` early return would otherwise do).
+        if loadingArg != nil && activeFlag {
+            let msg = "facet: --active can't combine with --loading "
+                + "(the skeleton has nothing to navigate) — "
+                + "see `facet --help`\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+            exit(2)
+        }
+
         // Geom flags are all-or-nothing modifiers; only meaningful
         // with --view tree (grid silently ignores, same as --active).
         // Partial sets (e.g. only --width) are rejected loudly so
