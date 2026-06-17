@@ -96,9 +96,9 @@ extension SidebarView {
         let curWS: Int? = {
             guard let s = kbSel, let i = kbIndex(of: s) else { return nil }
             switch rows[i].kind {
-            case .header(let ws):          return ws
-            case .window(let ws, _, _, _): return ws
-            default:                       return nil
+            case .header(let g, _):          return g
+            case .window(let g, _, _, _, _): return g
+            default:                         return nil
             }
         }()
         if let t = kbJumpTarget(rows: rows, fromWS: curWS, dir: dir) {
@@ -110,9 +110,9 @@ extension SidebarView {
 
     private func liftSourceWS() -> Int? {
         switch kbLifted {
-        case .win(let id): return wsOf(windowID: id)
-        case .hdr(let ws): return ws
-        case .none:        return nil
+        case .win(_, let id): return wsOf(windowID: id)
+        case .hdr(let g):     return g
+        case .none:           return nil
         }
     }
 
@@ -123,8 +123,9 @@ extension SidebarView {
     /// the selection.
     public func kbToggleLift() {
         // Tag mode is a flat list with no workspace to move a window /
-        // swap a header into, so the lift gesture is a no-op (#191 PR-6).
-        guard !tagModeActive else { return }
+        // swap a header into; the section model defers apply-based DnD to
+        // PR8. In both, the lift gesture is a no-op.
+        guard !tagModeActive, !sectionModeActive else { return }
         if kbLifted == nil {
             guard let s = kbSel else { return }
             kbLifted = s
@@ -175,22 +176,23 @@ extension SidebarView {
         needsDisplay = true
         guard let tgt else { return true }
         switch s {
-        case .win(let id):
+        case .win(let g, let id):
             // Move-only background move (same model as the mouse drop
             // since M9-1): "file" the window into the target WS and
             // stay put — no switch, so don't claim tgt is active (no
             // setOptimistic, which would mislabel the active WS). The
-            // reconcile relocates the row; kbSel follows it.
+            // reconcile relocates the row; kbSel follows it. (Reachable
+            // only in the by-workspace path — lift is off in section mode.)
             guard let src = wsOf(windowID: id), src != tgt else { return true }
             let bk = backend
             cliQueue.async {
                 bk.moveWindow(id, toWorkspaceIndex: tgt)
             }
-            kbSel = .win(id)
+            kbSel = .win(group: g, id)
             controller?.scheduleReconcile(after: 0.05)
-        case .hdr(let ws):
-            guard ws != tgt else { return true }
-            performSwap(sourceWS: ws, targetWS: tgt)
+        case .hdr(let g):
+            guard g != tgt else { return true }
+            performSwap(sourceWS: g, targetWS: tgt)
         }
         return true
     }
@@ -214,9 +216,11 @@ extension SidebarView {
         // Keyboard path → type-to-filter menu (the tree panel keeps key, so
         // PopupMenu's key monitor receives the typed query).
         switch rows[i].kind {
-        case .header(let ws):
-            headerMenu(at: scr, workspaceIndex: ws, filterable: true)
-        case .window(let ws, let pid, let id, let title):
+        case .header(_, let ws):
+            // A lens-section header has no layout to pick (PR6 adds a lens
+            // menu); only a workspace header opens the layout picker.
+            if let ws { headerMenu(at: scr, workspaceIndex: ws, filterable: true) }
+        case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title, filterable: true)
         default:

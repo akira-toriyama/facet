@@ -17,9 +17,11 @@ extension SidebarView {
               let win = window else { return }
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         switch row.kind {
-        case .header(let ws):
-            headerMenu(at: scr, workspaceIndex: ws)
-        case .window(let ws, let pid, let id, let title):
+        case .header(_, let ws):
+            // A lens-section header (workspaceIndex nil) has no layout to
+            // pick; PR6 adds a lens menu. Workspace header → layout picker.
+            if let ws { headerMenu(at: scr, workspaceIndex: ws) }
+        case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title)
         default:

@@ -105,6 +105,12 @@ final class Controller: NSObject {
     /// status` can surface it to the user. Single-slot — newest
     /// overwrites — keeps the status output bounded.
     private var lastError: String?
+    /// Last `FilterProjection` diagnostics logged for the section/lens
+    /// model (PR5). `apply()` runs the projection every refresh, but the
+    /// diagnostics (malformed lens `match`, surplus workspace section) depend
+    /// only on the static config — so log them once per change, not once per
+    /// frame.
+    private var loggedSectionDiagnostics: [String] = []
     /// Leading-edge debounce flag for `requestRefresh`: coalesces a
     /// burst of backend events into a single `refresh()` within
     /// `refreshDebounce`. Set on the first event, cleared when the
@@ -841,9 +847,30 @@ final class Controller: NSObject {
         let activeMacDesktopID = MacDesktops.activeID()
         let macDesktopOrdinal = activeMacDesktopID == 0
             ? nil : MacDesktops.ordinal(for: activeMacDesktopID)
-        let contentH = sidebarView.update(wss, titles: titles,
+        // Section/lens model (PR5): when this mac desktop is section-managed
+        // (≥1 `type="workspace"` section), the tree renders the config's
+        // ordered sections via `FilterProjection` — a window shows up in
+        // EVERY section it matches. Otherwise the by-workspace / tag path.
+        // The projection's loud-but-non-fatal diagnostics (malformed lens
+        // `match`, surplus workspace section) are logged once per change.
+        let contentH: CGFloat
+        if config.isSectionModelActive(ordinal: macDesktopOrdinal),
+           let ordinal = macDesktopOrdinal {
+            let sections = config.effectiveMacDesktopSectionConfigs[ordinal] ?? []
+            let result = FilterProjection.project(workspaces: wss,
+                                                  sections: sections)
+            if result.diagnostics != loggedSectionDiagnostics {
+                loggedSectionDiagnostics = result.diagnostics
+                for d in result.diagnostics { Log.line("tree: \(d)") }
+            }
+            contentH = sidebarView.update(sections: result.groups,
+                                          workspaces: wss, titles: titles,
+                                          macDesktop: macDesktopOrdinal)
+        } else {
+            contentH = sidebarView.update(wss, titles: titles,
                                           macDesktop: macDesktopOrdinal,
                                           tagMode: config.effectiveGrouping == .tag)
+        }
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }

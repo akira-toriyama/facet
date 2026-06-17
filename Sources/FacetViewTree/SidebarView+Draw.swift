@@ -174,6 +174,27 @@ extension SidebarView {
                             withAttributes: nameAttrs)
                         x += tw + 10        // gap before the next tag's glyph
                     }
+                } else if c.isLens {
+                    // Lens section (section model): a leading filter glyph +
+                    // the label, no layout sub-line — distinguishes a
+                    // saved-filter section from a workspace at a glance. The
+                    // accent (primary when the lens is active) is carried by
+                    // `nameColor` above, like a workspace header.
+                    var lx = nameX0
+                    if let icon = IconResolver.resolve(
+                        "SF:line.3.horizontal.decrease.circle", pointSize: 13,
+                        color: nameColor, scale: .medium) {
+                        let ih = min(icon.size.height, 14)
+                        let iw = icon.size.width * (ih / max(icon.size.height, 1))
+                        icon.draw(in: NSRect(x: lx, y: capY + (nameH - ih) / 2,
+                                             width: iw, height: ih))
+                        lx += iw + 5
+                    }
+                    (c.text as NSString).draw(
+                        in: NSRect(x: lx, y: capY,
+                                   width: bounds.width - rowPadX - lx,
+                                   height: nameH),
+                        withAttributes: nameAttrs)
                 } else {
                     (c.text as NSString).draw(
                         in: NSRect(x: nameX0, y: capY,
@@ -477,12 +498,12 @@ extension SidebarView {
         // keeps up with fast cursor motion. Header-swap dims nothing
         // here — its source WS is dashed-outlined above instead.
         let liftedWinID: WindowID? = draggingWid?.windowID ?? {
-            if case .win(let id)? = kbLifted { return id }
+            if case .win(_, let id)? = kbLifted { return id }
             return nil
         }()
         if let liftedWinID {
             for row in rows {
-                if case .window(_, _, let id, _) = row.kind,
+                if case .window(_, _, _, let id, _) = row.kind,
                    id == liftedWinID {
                     (pal.background ?? .windowBackgroundColor)
                         .withAlphaComponent(0.55).setFill()
@@ -540,9 +561,13 @@ extension SidebarView {
         if let d = draggingWid { return (d.workspaceIndex, dropWS, false) }
         if let s = draggingWS { return (s, dropWS, true) }
         switch kbLifted {
-        case .win(let id): return (wsOf(windowID: id) ?? -1, kbDropWS, false)
-        case .hdr(let ws): return (ws, kbDropWS, true)
-        case .none:        return nil
+        // Use the group ordinal stored in the lift (in the degrade path,
+        // where keyboard lift is the only place this is set, group ==
+        // ws.index == a valid `wsBands` key) rather than re-looking it up by
+        // id — matching the `.hdr` case and avoiding a nil-WS fallback.
+        case .win(let g, _): return (g, kbDropWS, false)
+        case .hdr(let g):    return (g, kbDropWS, true)
+        case .none:          return nil
         }
     }
 
