@@ -189,18 +189,26 @@ macOS の **native Space**（OS が提供する仮想デスクトップ。Missio
   モード, ペイン
 
 ### lens
-tag モードで **「今見えているタグ集合」**（dwm の tagset 相当）。`facet view`
-が "どう見せるか" なのに対し lens は "どのタグ集合を見るか"＝直交する別軸。
+tag モードで **「今見えているタグ集合」**（dwm の tagset 相当）＝[[facet view]] が
+適用する **view レベルの最上位 [[facet filter]]**。`facet view` が "どう見せるか"
+なのに対し lens は "どのタグ集合を見るか"＝直交する別軸。可視性
+`window.tags ∩ lens ≠ ∅` はそのまま filter 式に写せる（pivot Phase 1・#284 PR#4・
+`TagModel.lensFilter`）：ユーザタグ {A,B} の lens ＝ `tag~=A s or tag~=B s`、
+floor-only / `--all`（全窓表示）＝ filter なし（`.all`）、未タグ窓は `not tag`。
+**正典は内部の `UInt64` bitmask のまま**＝filter 表現は parity-only の read-only 投影で
+hot-path 置換ではない（bug っても bitmask が勝つ）。
 **M11-3 (tag モデル) で #176 にて実装済**（`WorkspaceCatalog.lensOnly` /
 `lensAdded` / `lensRemoved` / `lensToggled`）。memory `[[facet-tag-model-decisions]]`。
 - CLI: `facet lens --only/--add/--remove/--toggle A[,B,…] / --all`。
   複数タグは**カンマ結合**（空白 variadic ではない＝#227 の per-flag arity 1 を維持・
   `,`/`:` は名前の禁止文字で wire 形が無曖昧）。名前解決は **strict**＝未定義タグが
   1 つでもあれば lens 不変で `lastError`（silent-drop しない）。user verb は user bit
-  のみ操作し、lens が空になったら **floor（`_default`）= untagged baseline** へ
-  フォールバック（`--all`=`lensAll` とは別状態）。read は `facet query --lens`（#228 PR-1）。
-- **Don't call it:** view（facet view は UI surface の別概念）, tagset, filter,
-  タグビュー
+  のみ操作し、lens が空になったら **floor（`_default`）= 全窓表示（show-all）**へ
+  フォールバック（filter では `.all`／窓視点の "untagged" は `not tag`・`--all`=`lensAll`
+  とは別状態）。read は `facet query --lens`（#228 PR-1）。
+- **Don't call it:** view（facet view は UI surface の別概念）, tagset, タグビュー
+  （`filter` は誤称ではない＝lens は [[facet filter]] の最上位適用。ただし `facet filter`
+  言語そのものと lens 状態は区別する）
 
 ### tree view
 左サイドバーに表示する **[[facet workspace]] の階層リスト**。`SidebarView` がレンダリング。
@@ -572,7 +580,29 @@ exit 2）。query は read-only なので **mode 寛容**（tag verb と違い `
   `definedTagNames()`/`currentLens()`/`queryEntries()`（backend）
 - **Don't call it:** status, facet status, state dump, info コマンド
 
-### CLI 文法（`--flag VALUE`）
+### facet filter
+window 述語を書く facet 横断のミニ言語（SQL の WHERE 句相当）。`facet query --filter`・
+[[lens]]・`[[desktop.N.group]]` の `match`・`[[rule]]` が **1 つの文法**を共有する＝
+pivot が grouping-mode / lens / search / AX-role-float の 4 つの個別マッチ機構を統合する
+横断プリミティブ（memory `[[facet-filter-pivot-plan]]`）。
+- atom = `field op value`。op は **CSS 属性演算子**：`=`（完全一致）/ `~=`（空白トークン
+  含有・list 値 `tag` 向け）/ `^=`（前方）/ `$=`（後方）/ `*=`（部分）/ `|=`（階層前方）。
+  裸 field は presence（`tag` / `floating` / `sticky` / `master` …）、`not tag` は無タグ
+  （旧 `_default` floor の窓視点表現）。
+- 結合 = `and` / `or` / `not` / `()`（各 1 綴り・優先 `not` > `and` > `or`・暗黙 space-AND /
+  comma-OR / `-` 否定短縮なし）。値は裸 or `"…"`（引用内は `* ^ $` もリテラル）。大小無視が
+  既定・末尾 ` s` で大小区別。
+- field 名 frozen: `app` / `title` / `bundleId` / `workspace` / `tag` / `floating` / `sticky` /
+  `master` / `mark` / `scratchpad` / `desktop` / `onscreen` / `focused`。未知 field は parse
+  通過 → eval で no-match（typo は eval で loud・parse は crash しない）。malformed 式は caret 付き
+  loud だが **non-fatal**（該当面は show-all へ degrade）。**regex / 数値 op / `is:` / `has:` /
+  `[...]` なし**（重いパターンは将来 `facet query | jig`）。
+- コード: `FacetFilter`（AST + `parse` + `matches` + `description`）/ `WindowFields`（窓 → field
+  解決の protocol）/ `QueryFilter`（`facet query --filter` 配線）/ `TagModel.lensFilter`
+  （[[lens]] → filter）。すべて `FacetCore`・純ロジック・CI-only テスト。#283（Phase 0）で
+  AST/parser/evaluator、#290 で `facet query --filter`。
+- **Don't call it:** query language, search syntax, predicate DSL, WHERE engine,
+  クエリ言語, 検索構文, フィルタ DSL
 全コマンドが **yabai 式の空白区切り**（`--flag VALUE`）。`--flag=VALUE`（`=`）は
 #227 で全廃（hard cutover・後方互換なし）。各 flag は arity を宣言し、値トークンを
 無条件に食う（**strict consumption**・lookahead ゼロ）ので負座標 `--pos-x -1440` も

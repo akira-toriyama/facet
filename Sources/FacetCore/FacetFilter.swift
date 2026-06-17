@@ -165,6 +165,67 @@ public indirect enum FacetFilter: Sendable, Equatable {
     }
 }
 
+// MARK: - Rendering (the inverse of `parse`, #284 PR#4)
+
+extension FacetFilter: CustomStringConvertible {
+    /// The canonical `facet filter` source for this AST — the inverse of
+    /// `parse`. Round-trips for every filter built from clean field/value
+    /// tokens: `parse(f.description)` yields a structurally-flattened `f`
+    /// (a value containing a `"` cannot round-trip — the grammar has no
+    /// quote escape, the same limitation the lexer documents; nor can the
+    /// match-nothing `.not(.all)`, which renders as a bare `not`). `.all`
+    /// renders as the empty string (which parses back to `.all`), and a
+    /// precedence-lowering child is parenthesised (`not` / `and` wrapping
+    /// an `or`, etc.) so the printed form re-parses to the same tree.
+    public var description: String { render(parentPrecedence: 0) }
+
+    // Precedence ranks for parenthesisation: or = 1 (loosest) < and = 2 <
+    // not = 3. `parentPrecedence` is the rank of the enclosing operator; a
+    // node wraps itself in `()` when the parent binds tighter than it does.
+    private func render(parentPrecedence: Int) -> String {
+        switch self {
+        case .all:
+            return ""
+        case .atom(let a):
+            return a.description
+        case .not(let f):
+            // `not` binds tighter than `and`/`or`, so it never needs its
+            // own wrap; its operand does when it is looser (an `and`/`or`).
+            return "not " + f.render(parentPrecedence: 3)
+        case .and(let parts):
+            let s = parts.map { $0.render(parentPrecedence: 2) }
+                         .joined(separator: " and ")
+            return parentPrecedence > 2 ? "(\(s))" : s
+        case .or(let parts):
+            let s = parts.map { $0.render(parentPrecedence: 1) }
+                         .joined(separator: " or ")
+            return parentPrecedence > 1 ? "(\(s))" : s
+        }
+    }
+}
+
+extension FacetFilter.Atom: CustomStringConvertible {
+    public var description: String {
+        switch kind {
+        case .presence:
+            return field
+        case .compare(let op, let value, let caseSensitive):
+            return "\(field)\(op.rawValue)\(Self.quote(value))\(caseSensitive ? " s" : "")"
+        }
+    }
+
+    /// Quote a value only when a bareword would mis-lex it: empty, or
+    /// carrying whitespace, a paren, a quote, or an operator-lead char
+    /// (`= ~ ^ $ * |`). Inside quotes those are literal (the lexer's rule).
+    static func quote(_ v: String) -> String {
+        let needsQuote = v.isEmpty
+            || v.contains(where: { $0.isWhitespace })
+            || v.contains(where: { $0 == "(" || $0 == ")" || $0 == "\"" })
+            || v.contains(where: { operatorLeads.contains($0) })
+        return needsQuote ? "\"\(v)\"" : v
+    }
+}
+
 // MARK: - Evaluation (#283 PR#2)
 
 /// A window's facet-filter-visible fields, keyed by canonical field name.
