@@ -355,7 +355,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[border]` テーブル — 全 view のネオン枠 (tree パネル / grid・rail は
   画面縁の枠・`theme` と直交)。
   `effect` = `off` (既定) / `neon` / `cyber` / `vapor` / `kawaii` /
-  `rainbow` / `random`、 `glow` (既定 `true`) で bloom on/off、 `width`
+  `chomp` / `rainbow` / `random`、 `glow` (既定 `true`) で bloom on/off、 `width`
   で線幅 (px・0.5–30 クランプ・既定 1.5)。 WS 切替でネオンが一瞬フラッシュ、
   `color-cycle-ms` (1周の ms・1000–120000 クランプ・既定 6000・小さいほど速い)
   は連続アニメの周期 = `rainbow` の色相回転 +、 `min-width`/`max-width`
