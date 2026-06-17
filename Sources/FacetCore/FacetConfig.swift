@@ -155,9 +155,10 @@ public struct FacetConfig: Sendable {
     public var borderColorCycleMs: Int?
     /// Width breathing: when BOTH are set (max > min), the border width
     /// oscillates min↔max over `cycle-seconds` (any effect). Unset →
-    /// the fixed `width`. Raw; read `effectiveBorderMin/MaxWidth`.
-    public var borderMinWidth: Int?
-    public var borderMaxWidth: Int?
+    /// the fixed `width`. Fractional like the sibling `width` (e.g.
+    /// `0.5`). Raw; read `effectiveBorderMin/MaxWidth`.
+    public var borderMinWidth: CGFloat?
+    public var borderMaxWidth: CGFloat?
 
     /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
     /// the mac desktop ordinal (Mission Control order, 1-based, user
@@ -331,7 +332,7 @@ public struct FacetConfig: Sendable {
     /// `applyInnerGap` to every layout's frames; the screen-edge side
     /// of an outermost window is left flush (that distance is the
     /// outer gap, not this).
-    public var effectiveInnerGap: CGFloat { max(0, min(1000,innerGap ?? 0)) }
+    public var effectiveInnerGap: CGFloat { clampedGap(innerGap) }
 
     /// Startup layout mode for every workspace. Lowercased + clamped
     /// to a known mode (`float` / `bsp` / `stack` / a registered
@@ -417,10 +418,10 @@ public struct FacetConfig: Sendable {
     /// Width-breathing bounds, px (each clamped 0.5–30), or `nil` when
     /// unset. Breathing runs only when BOTH are set and max > min.
     public var effectiveBorderMinWidth: CGFloat? {
-        borderMinWidth.map { max(0.5, min(30, CGFloat($0))) }
+        borderMinWidth.map { max(0.5, min(30, $0)) }
     }
     public var effectiveBorderMaxWidth: CGFloat? {
-        borderMaxWidth.map { max(0.5, min(30, CGFloat($0))) }
+        borderMaxWidth.map { max(0.5, min(30, $0)) }
     }
 
     /// Named-enum config values that were written but didn't match any

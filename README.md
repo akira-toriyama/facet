@@ -377,7 +377,7 @@ Frequently-touched keys:
 - `[border]` table — a neon border on every view (tree panel, plus a
   screen-edge frame on the grid overview + rail), layered on top of
   `theme`. `effect` = `off` (default) / `neon` / `cyber` /
-  `vapor` / `kawaii` / `rainbow` / `random`; `glow` (default `true`)
+  `vapor` / `kawaii` / `chomp` / `rainbow` / `random`; `glow` (default `true`)
   toggles the bloom; `width` sets the line width (px, clamp 0.5–30,
   default 1.5).
   The border flashes a neon burst on a workspace switch. `color-cycle-ms`

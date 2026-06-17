@@ -25,6 +25,17 @@
 
 
 # -----------------------------------------------------------------
+# Launch view — the one bare top-level key
+# -----------------------------------------------------------------
+# Which view facet opens on startup. Unset (the default) = agent-only:
+# facet runs headless and shows nothing until a CLI verb asks for a
+# view (`facet --view tree|grid|rail`). Set it to auto-open one view
+# at launch. Values: "tree" | "grid" ("grid" is workspace-only — under
+# `by = tag` it exit-2s; see [grouping]).
+# default-view = "tree"
+
+
+# -----------------------------------------------------------------
 # Color / typography theme
 # -----------------------------------------------------------------
 # Picks the palette + font for the tree panel, grid overlay, and

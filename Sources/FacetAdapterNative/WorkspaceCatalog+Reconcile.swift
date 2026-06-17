@@ -207,8 +207,10 @@ extension WorkspaceCatalog {
     /// state. Such a window keeps its `windowMap` slot (WS assignment +
     /// marks survive) but is pulled out of the layout containers so the
     /// remaining tiled windows reclaim its freed slot; when it returns
-    /// on-screen it re-attaches at the tail (like a newly-opened
-    /// window, per the grill).
+    /// on-screen it re-attaches via `attachToLayout` exactly like a
+    /// newly-opened window — at the tail for stateless engines
+    /// (master-* / grid / spiral), re-inserted into the tree for bsp,
+    /// and at the visible TOP (index 0) for stack mode.
     ///
     /// MUST run AFTER the adapter's off-desktop drift heal so a window
     /// merely parked on another mac desktop (also `isOnscreen=false`)

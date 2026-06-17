@@ -127,7 +127,13 @@ extension NativeAdapter {
 
     /// facet's state for `id` within one catalog. `nil` when the window
     /// isn't in that catalog's `windowMap`.
-    private func facetState(forWindow id: WindowID, in cat: WorkspaceCatalog)
+    ///
+    /// Internal (not `private`) so the projection-parity tests can assert
+    /// it agrees with `snapshot`/`tagSnapshot` per window (the pivot makes
+    /// this the single window-centric source — Prep-1/cov-01). Call it
+    /// directly off-queue; the public `queryFacetStates()` traps off the
+    /// cliQueue via `dispatchPrecondition`, this helper does not.
+    func facetState(forWindow id: WindowID, in cat: WorkspaceCatalog)
         -> WindowQueryEntry.FacetWindowState?
     {
         guard let slot = cat.windowMap[id] else { return nil }

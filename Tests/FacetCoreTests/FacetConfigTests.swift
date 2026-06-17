@@ -563,5 +563,28 @@ final class FacetConfigTests: XCTestCase {
         // Optional comparison unambiguous — no `accuracy:` on Optionals.
         XCTAssertEqual(c.effectiveBorderMinWidth, CGFloat(0.5))
         XCTAssertEqual(c.effectiveBorderMaxWidth, CGFloat(30))
+        // Fractional in-range values survive (the fields are CGFloat,
+        // like the sibling `width` — a `.5` is no longer dropped by an
+        // integer decode). Regression pin for config-01.
+        c.borderMinWidth = 1.5
+        c.borderMaxWidth = 4.5
+        XCTAssertEqual(c.effectiveBorderMinWidth, CGFloat(1.5))
+        XCTAssertEqual(c.effectiveBorderMaxWidth, CGFloat(4.5))
+    }
+
+    func testFromTOMLDecodesFractionalBorderBreathWidths() {
+        // config-01: the DECODE path is the real bug site — when these
+        // were `.int`/asInt, a fractional `min-width = 0.5` was silently
+        // dropped (asInt returns nil for a TOML double). As `.cgDbl`
+        // they decode like the sibling `width`.
+        let parsed = parseTOMLSubset("""
+            [border]
+            min-width = 0.5
+            max-width = 4.5
+            """)
+        let c = FacetConfig.from(toml: parsed)
+        XCTAssertEqual(c.borderMinWidth, CGFloat(0.5),
+                       "fractional min-width decodes (was dropped under .int)")
+        XCTAssertEqual(c.borderMaxWidth, CGFloat(4.5))
     }
 }

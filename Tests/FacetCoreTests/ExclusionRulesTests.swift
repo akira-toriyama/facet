@@ -121,4 +121,34 @@ final class ExclusionRulesTests: XCTestCase {
         XCTAssertTrue(WindowMatcher(subrole: "AXDialog").needsAXRole)
         XCTAssertFalse(WindowMatcher(app: "X").needsAXRole)
     }
+
+    // MARK: - Invalid-regex safety (cov-03)
+    //
+    // The documented contract is "an invalid pattern can't crash and
+    // never matches — a typo only loses that one predicate." It was
+    // comment-only; pin it before the pivot's `title:/re/` reuses or
+    // replaces this exact path (e.g. a future switch to
+    // NSRegularExpression, which THROWS on a bad pattern).
+
+    func testRegexMatchesReturnsFalseForMalformedPattern() {
+        // Unbalanced bracket / paren / dangling escape — all invalid.
+        XCTAssertFalse(WindowMatcher.regexMatches("[", "anything"))
+        XCTAssertFalse(WindowMatcher.regexMatches("(", "anything"))
+        XCTAssertFalse(WindowMatcher.regexMatches(#"\"#, "anything"))
+        // A valid pattern still works (sanity).
+        XCTAssertTrue(WindowMatcher.regexMatches("a.c", "abc"))
+    }
+
+    func testMalformedRuleRegexMatchesNothingNoCrash() {
+        // A rule whose app pattern is malformed loses just that predicate
+        // (matches nothing), never crashes, and doesn't taint sibling rules.
+        let r = ExclusionRules([
+            ExclusionRule(app: "[", action: .ignore),
+            ExclusionRule(app: #"^com\.apple\.finder$"#, action: .float),
+        ])
+        XCTAssertNil(r.action(for: probe(bundle: "anything")),
+                     "malformed pattern matches nothing")
+        XCTAssertEqual(r.action(for: probe(bundle: "com.apple.finder")), .float,
+                       "the later valid rule still matches")
+    }
 }

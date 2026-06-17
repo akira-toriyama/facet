@@ -1,9 +1,10 @@
-// Two focus-retry strategies, used by the Controller after every
-// workspace switch / window move. Both run on `cliQueue` (off-main)
-// and self-reschedule via `cliQueue.asyncAfter` until they either
-// succeed or hit the attempt cap.
+// Three focus strategies (two async + one blocking), used by the
+// Controller after every workspace switch / window move. The two
+// async ones run on `cliQueue` (off-main) and self-reschedule via
+// `cliQueue.asyncAfter` until they either succeed or hit the attempt
+// cap; the blocking one sleeps the calling (off-main) thread.
 //
-// Why two:
+// Why three:
 //   - `withRetry`  — bounded short retry (~14 attempts ≈ 420 ms).
 //                    Same-workspace clicks; no race with the WM
 //                    deciding focus, so just try a few times then
@@ -15,6 +16,10 @@
 //                    WM's late assertion. This one keeps re-asserting
 //                    AX focus and stops only when the backend agrees
 //                    the target window is focused.
+//   - `assertBlocking` — synchronous twin of `assert` that BLOCKS the
+//                    current off-main thread until focus is confirmed,
+//                    so a synchronous follow-up sequence (`runWindowOps`
+//                    acting on the focused window) can be gated on it.
 //
 // Shared with FacetAdapterNative via this module (extracted out
 // of FacetAdapterRift at M5).
