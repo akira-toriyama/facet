@@ -10,15 +10,6 @@ import XCTest
 /// sticky window collapses to "Unstick" + "Close".
 final class WindowMenuTests: XCTestCase {
 
-    private func adapter() -> NativeAdapter {
-        // FacetConfig() defaults are fine — windowMenu doesn't
-        // read config. The init's AX-permission-missing branch
-        // pushes an error to a stream we don't subscribe to,
-        // and the WindowEventObserver hops to main, so the
-        // call is harmless under XCTest.
-        NativeAdapter(config: FacetConfig())
-    }
-
     private func labels(_ items: [WindowMenuItem]) -> [String] {
         items.map(\.label)
     }
