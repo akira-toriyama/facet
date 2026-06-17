@@ -332,7 +332,7 @@ public struct FacetConfig: Sendable {
     /// `applyInnerGap` to every layout's frames; the screen-edge side
     /// of an outermost window is left flush (that distance is the
     /// outer gap, not this).
-    public var effectiveInnerGap: CGFloat { max(0, min(1000,innerGap ?? 0)) }
+    public var effectiveInnerGap: CGFloat { clampedGap(innerGap) }
 
     /// Startup layout mode for every workspace. Lowercased + clamped
     /// to a known mode (`float` / `bsp` / `stack` / a registered
