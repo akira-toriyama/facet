@@ -163,6 +163,11 @@ public enum AX {
         else { return nil }
         let axApp = AXUIElementCreateApplication(
             pid_t(app.processIdentifier))
+        // Bound the per-app AX round-trip like every other hot-path
+        // read (AX.focus / AX.raise / AXTitles.resolve) so a hung
+        // frontmost app can't stall this — `focusedWindow()` re-reads
+        // it up to 50× per assertBlocking sequence on cliQueue.
+        AXUIElementSetMessagingTimeout(axApp, 0.25)
         var winRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
                 axApp, kAXFocusedWindowAttribute as CFString,
