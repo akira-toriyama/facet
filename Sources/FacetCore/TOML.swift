@@ -43,10 +43,10 @@ public func parseTOMLArrayOfTables(_ text: String, table name: String)
 
 /// Every `[[name]]` array-of-tables block whose header `name` satisfies
 /// `match`, keyed by that literal header text (rows in file order within
-/// each). For DYNAMIC nested arrays like `[[desktop.N.group]]` where the
+/// each). For DYNAMIC nested arrays like `[[desktop.N.section]]` where the
 /// ordinal in the middle isn't known up front — the caller parses `N` out
 /// of each key. The flat parser keys arrays by header text and is
-/// nesting-agnostic, so `[[desktop.1.group]]` lands under `desktop.1.group`
+/// nesting-agnostic, so `[[desktop.1.section]]` lands under `desktop.1.section`
 /// independent of any `[desktop.1]` table.
 public func parseTOMLArraysOfTables(
     _ text: String, where match: (String) -> Bool

@@ -582,7 +582,7 @@ exit 2）。query は read-only なので **mode 寛容**（tag verb と違い `
 
 ### facet filter
 window 述語を書く facet 横断のミニ言語（SQL の WHERE 句相当）。`facet query --filter`・
-[[lens]]・`[[desktop.N.group]]` の `match`・`[[rule]]` が **1 つの文法**を共有する＝
+[[lens]]・`[[desktop.N.section]]`（type=lens）の `match`・`[[rule]]` が **1 つの文法**を共有する＝
 pivot が grouping-mode / lens / search / AX-role-float の 4 つの個別マッチ機構を統合する
 横断プリミティブ（memory `[[facet-filter-pivot-plan]]`）。
 - atom = `field op value`。op は **CSS 属性演算子**：`=`（完全一致）/ `~=`（空白トークン
@@ -612,40 +612,54 @@ FacetApp の client 層（`Main.swift` / `FacetApp+Client*.swift`）がそれを
 exit / stderr など副作用を担う。コアへ渡る DNC 制御文字列（`view:tree+active` 等）は不変。
 - **Don't call it:** equals syntax, `--flag=value`, GNU-style options
 
-### group
-config で宣言する **window の組織単位**（pivot・`[[desktop.N.group]]`）。
-`{ label, match, apply }` で「ラベル付きの窓集合」を定義し、内蔵の by-workspace
-編成をユーザ定義の [[facet filter]] 編成に置き換える。1 window = [[match]] に当たった
-**全** group に出る（multi-match・表示順 = config 宣言順）。group 未定義の
+### section
+config で宣言する **順序付きの表示単位**（pivot・`[[desktop.N.section]]`）。
+per-mac-desktop の順序付き配列で、**配列順 = [[tree view]] の表示順**。各 section は
+必須の `type` で 3 種に分かれる（互いに厳密に区別する）:
+- **type=workspace**: 常設の空間土台（タイル単位・grid/rail のセル）。**auto 命名**
+  （emoji 🐶🍎🍕・ユーザは命名/絞り込み不可）＝暗黙 `match='workspace=<this>'` /
+  暗黙 `apply=setWorkspace(<this>)`。任意の `layout` seed のみ持つ。
+- **type=lens**: workspace に直交する**保存可視性フィルタ**（SQL VIEW・`label` +
+  [[match]] + 任意 [[apply]]）。1 window = match に当たった**全** lens に出る
+  （multi-match）。lens は「絞る」だけ（束ね直さない）。
+- **type=unassigned**: 迷子の安全網（`label` のみ）。**現状 defer**（現カタログでは
+  全管理窓が必ず workspace 所属＝AND 定義の unassigned は常に空ゆえ projection/tree
+  分岐は未実装。type は完全性のため維持）。
+
+`type` は**必須**＝省略 or 未知値の section は **loud-log で drop**（silent な既定推測
+はしない＝authored match の黙殺を防ぐ・トミー 2026-06-17）。section 未定義の
 [[mac desktop]] は内蔵 by-workspace へ degrade。**workspace 軸専用**＝tag モード
-（[[grouping]] `by=tag`）は group を無視（`effectiveMacDesktopGroupConfigs` が空に
-clamp・load 時に loud-log）。**PR#5 は parse-only**（consumer は Phase 1
-`FilterProjection`）。
-- コード: `DesktopGroup` / `FacetConfig.macDesktopGroupConfigs` /
-  `decodeDesktopGroupSections` /
-  `effectiveMacDesktopGroupConfigs`（`FacetCore`）
-- **Don't call it:** workspace（group は多重所属・filter 由来／workspace は 1 窓 1 個・
-  タイル枠）, tag, section, グループ, セクション
+（[[grouping]] `by=tag`）は section を無視（`effectiveMacDesktopSectionConfigs` が空に
+clamp・load 時に loud-log）。**現状 parse-only**（production consumer は PR3
+`FilterProjection` 再設計 + PR5 tree）。
+- コード: `DesktopSection` / `SectionType` / `FacetConfig.macDesktopSectionConfigs` /
+  `decodeDesktopSectionSections` /
+  `effectiveMacDesktopSectionConfigs`（`FacetCore`）
+- **Don't call it:** group（旧称）, workspace（section は多重所属・filter 由来／
+  workspace は 1 窓 1 個・タイル枠）, tab, page, グループ, セクション以外
 
 ### match
-[[group]] / [[rule]] が共有する **述語キー**＝当たった窓をその group に出す（rule では
-apply 対象にする）[[facet filter]] の WHERE 式。config には**文字列のまま**格納し、
-consumer 側で compile（parse error は caret 付き loud かつ **non-fatal**＝該当面は
-show-all へ degrade）。`match` / [[apply]] は match に当たる窓へ apply を効かせる**対の
-キー**。
-- コード: `DesktopGroup.match`（生文字列）→ `FacetFilter.parse`（consumer）
+[[section]]（type=lens）/ [[rule]] が共有する **述語キー**＝当たった窓をその section
+に出す（rule では apply 対象にする）[[facet filter]] の WHERE 式。config には**文字列の
+まま**格納し、consumer 側で compile（parse error は caret 付き loud かつ
+**non-fatal**＝該当面は show-all へ degrade）。`match` / [[apply]] は match に当たる窓へ
+apply を効かせる**対のキー**。
+- コード: `DesktopSection.match`（生文字列）→ `FacetFilter.parse`（consumer）
 - **Don't call it:** filter, where, query, predicate（式言語そのものは [[facet filter]]）,
   マッチ条件, 絞り込み
 
 ### apply
-[[group]] / [[rule]] の **[[match]] の逆写像**＝窓をその group へ入れる（drop / CLI / key）
-時に窓へ設定する facet 群。gesture 非依存の宣言値で、旧 `onDrop` の改称。型付き
-`ApplyOp`（`addTag` / `setFloating` / `setSticky` / `setMaster` / `setWorkspace`）の
-リスト。frozen セマンティクス: `addTag`=additive 既定（冪等）/ `setWorkspace`=単数値
-auto-replace / apply 無 or 全 non-invertible = drop-inert（snap-back）。wire は inline
-table `apply = { workspace, tags = [], floating, sticky, master }`、decode 順は
-**setWorkspace → addTag(s) → setFloating → setSticky → setMaster** に正規化（frozen）。
-**PR#5 は型 + parse のみ**（逆写像 resolver / 結線は Phase 2 PR#9-10）。
+[[section]] / [[rule]] の **[[match]] の逆写像**＝窓をその section へ入れる（drop /
+CLI / key）時に窓へ設定する facet 群。gesture 非依存の宣言値で、旧 `onDrop` の改称。
+型付き `ApplyOp`（`addTag` / `removeTag` / `setFloating` / `setSticky` / `setMaster` /
+`setWorkspace`）のリスト。frozen セマンティクス: `addTag`=additive 既定（冪等）/
+`removeTag`=その逆写像（drag=移動の un-apply で**唯一**反転する op・wire キー無＝合成
+専用）/ `setWorkspace`=単数値 auto-replace / apply 無 or 全 non-invertible =
+drop-inert（snap-back）。wire は inline table
+`apply = { workspace, tags = [], floating, sticky, master }`、decode 順は
+**setWorkspace → addTag(s) → setFloating → setSticky → setMaster** に正規化（frozen・
+`removeTag` は decode されない）。**現状 型 + parse のみ**（逆写像 resolver / 結線は
+PR8）。
 - コード: `ApplyOp` / `ApplyOp.list(from:)`（`FacetCore`）
 - **Don't call it:** onDrop, onGroupChange, action, ハンドラ, 副作用
 
