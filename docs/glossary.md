@@ -173,9 +173,13 @@ macOS の **native Space**（OS が提供する仮想デスクトップ。Missio
 持つ機能。`NativeAdapter` は active な mac desktop id でカタログを park / swap
 する。SkyLight は **read-only** 利用（書き込みは SIP-off 必要）。SkyLight
 未利用環境では `activeMacDesktopID == 0` で 1 つの shared catalog に縮退
-（pre-feature 挙動）。
-- 設定: `[desktop.N]` キー（ordinal で指定）
+（pre-feature 挙動）。**opt-in 管理は `[desktop.N]` または `[[desktop.N.section]]`
+のどちらかが在れば発火**（pivot・section-only config も managed 化）。同一 desktop に
+`[desktop.N]` と type=workspace [[section]] が両在する時は **section が authoritative**
+（`[desktop.N]` の name/layout seed は無視・load 時に loud-log）。
+- 設定: `[desktop.N]` キー（ordinal で指定）/ `[[desktop.N.section]]`（[[section]]）
 - コード: `MacDesktops`（in `FacetAccessibility`）, `FacetConfig.isMacDesktopManaged`
+  / `FacetConfig.isSectionModelActive`（section モデル発火の gate）
 - **Don't call it:** per-native-Space workspaces（コメント / メモリでは旧称が
   残る）, virtual desktop workspace, multi-desktop, デスクトップ別
 

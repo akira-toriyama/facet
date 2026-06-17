@@ -550,18 +550,41 @@ public struct FacetConfig: Sendable {
 
     /// Whether facet manages the mac desktop at `ordinal`.
     ///
-    /// - With **any** `[desktop.N]` section present, facet is opt-in:
-    ///   it manages ONLY the mac desktops that have a section. A mac
-    ///   desktop without one is left untouched — no facet workspaces,
-    ///   no window parking, and the panel hides there.
-    /// - With **no** `[desktop.N]` sections at all, every mac desktop
+    /// - With **any** `[desktop.N]` workspace seed OR any
+    ///   `[[desktop.N.section]]` present, facet is opt-in: it manages ONLY
+    ///   the mac desktops that have one. A mac desktop without either is
+    ///   left untouched — no facet workspaces, no window parking, and the
+    ///   panel hides there.
+    /// - With **neither** present (the shipped default), every mac desktop
     ///   is managed with `defaultWorkspaceCount` unnamed slots.
     /// - `nil` ordinal (SkyLight unavailable / single-desktop mode) is
     ///   always managed.
+    ///
+    /// The section signal is read through `effectiveMacDesktopSectionConfigs`
+    /// (tag-mode-clamped), so a tag-mode config never opts in via sections.
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
-        if macDesktopWorkspaceConfigs.isEmpty { return true }
+        let sections = effectiveMacDesktopSectionConfigs
+        if macDesktopWorkspaceConfigs.isEmpty && sections.isEmpty { return true }
         guard let ordinal else { return true }
         return macDesktopWorkspaceConfigs[ordinal] != nil
+            || sections[ordinal] != nil
+    }
+
+    /// Whether the section/lens model drives the mac desktop at `ordinal` —
+    /// i.e. it has at least one `type = "workspace"` section. This is the
+    /// gate the read path (PR3+), auto-naming (PR4), and the overview/tree
+    /// (PR5+) consult to decide between the section model and the legacy
+    /// `[desktop.N]` by-workspace seeding.
+    ///
+    /// Read through `effectiveMacDesktopSectionConfigs`, so it is `false` in
+    /// tag mode by construction. `nil` ordinal (SkyLight unavailable /
+    /// single-desktop) is `false`: the section model is a per-ordinal opt-in,
+    /// and an unresolvable ordinal falls back to the existing default-slot
+    /// path (matching how `[desktop.N]` is ignored for a `nil` ordinal).
+    public func isSectionModelActive(ordinal: Int?) -> Bool {
+        guard let ordinal else { return false }
+        return effectiveMacDesktopSectionConfigs[ordinal]?
+            .contains { $0.type == .workspace } ?? false
     }
 
     // MARK: - Construction from parsed TOML
@@ -810,6 +833,19 @@ public struct FacetConfig: Sendable {
                     + "[[desktop.N.section]] (sections are workspace-axis "
                     + "only) — remove the section blocks or switch to "
                     + "by = \"workspace\"")
+            }
+            // Precedence: when a mac desktop carries BOTH a `[desktop.N]`
+            // workspace seed AND `[[desktop.N.section]]` type=workspace
+            // sections, the SECTIONS are authoritative for that desktop and
+            // the `[desktop.N]` name/layout seeds are ignored there. Surface
+            // the ambiguity LOUD rather than silently picking.
+            for ordinal in c.macDesktopWorkspaceConfigs.keys.sorted()
+            where c.isSectionModelActive(ordinal: ordinal) {
+                Log.line("config: mac desktop \(ordinal) has both [desktop."
+                    + "\(ordinal)] workspace seeds and [[desktop.\(ordinal)"
+                    + ".section]] type=\"workspace\" sections — the sections "
+                    + "are authoritative; the [desktop.\(ordinal)] name/layout "
+                    + "seeds are ignored on that desktop.")
             }
             return c
         }
