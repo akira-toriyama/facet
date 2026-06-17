@@ -26,15 +26,20 @@ extension Controller {
         // No snapshot yet (cold start, never queried): trigger an
         // async fetch and re-enter once it lands. Keeps the UX
         // consistent — pressing --view grid always either shows or
-        // no-ops, never shows an empty grid.
+        // no-ops, never shows an empty grid. Bail if the fetch comes
+        // back empty (e.g. an unmanaged mac desktop under opt-in
+        // `[desktop.N]` config) so we don't spin re-fetching forever
+        // (mirrors showRail).
         if lastWorkspaces.isEmpty {
             let bk = backend
             cliQueue.async {
                 let wss = bk.workspaces()
                 DispatchQueue.main.async { [weak self] in
                     MainActor.assumeIsolated {
-                        self?.lastWorkspaces = wss
-                        self?.showGrid()
+                        guard let self else { return }
+                        self.lastWorkspaces = wss
+                        if wss.isEmpty { return }   // nothing to show
+                        self.showGrid()
                     }
                 }
             }

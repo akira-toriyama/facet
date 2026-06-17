@@ -105,9 +105,12 @@ final class Controller: NSObject {
     /// status` can surface it to the user. Single-slot — newest
     /// overwrites — keeps the status output bounded.
     private var lastError: String?
-    /// Pauses refresh/apply while the user is mid-grip-drag, so a
-    /// layout pass can't stomp the panel height the next mouseDragged
-    /// is about to read (memory: grid-branch-grip-intermittent).
+    /// Leading-edge debounce flag for `requestRefresh`: coalesces a
+    /// burst of backend events into a single `refresh()` within
+    /// `refreshDebounce`. Set on the first event, cleared when the
+    /// debounced refresh fires. Main-actor confined. (Grip-drag
+    /// protection is separate — it lives in `refresh()` via the
+    /// `realWindowDrag?.inProgress` gate.)
     private var refreshPending = false
     /// `--view tree --loading MS` skeleton hold timer (see
     /// `showLoading` in Controller+CLIDispatch.swift). Lives here —
