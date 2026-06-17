@@ -1,0 +1,362 @@
+// facet filter — the WHERE-clause mini-language (pivot Phase 0, #283).
+//
+// `facet filter` is facet's cross-cutting matching primitive: one small
+// language that the pivot uses everywhere a window predicate is needed —
+// `facet query --filter`, `[[desktop.N.group]] match`, lens membership,
+// and `[[rule]]` adopt-rules. It replaces the four ad-hoc matchers
+// (grouping-mode / lens / search / role-float) with a single grammar.
+//
+// This file is the GRAMMAR + AST + parser ONLY — pure FacetCore logic,
+// no call sites yet (the evaluator `matches(_:)` lands in #283 PR#2 on a
+// `WindowFields` protocol). Keeping it dead-but-tested means it cannot
+// regress the running app; the exhaustive parser grammar table
+// (`FacetFilterParserTests`) is the cheapest, highest-coverage safety net
+// for the whole pivot.
+//
+// Grammar (locked design — `/tmp/facet-pivot-brainstorm.md`, fully
+// decided; do NOT grow it — "a WHERE clause is enough"):
+//
+//   expr    := orExpr
+//   orExpr  := andExpr ( "or"  andExpr )*
+//   andExpr := notExpr ( "and" notExpr )*
+//   notExpr := "not" notExpr | primary
+//   primary := "(" expr ")" | atom
+//   atom    := field                       // bare presence
+//            | field op value [ "s" ]       // comparison (+ optional case flag)
+//   op      := "=" | "~=" | "^=" | "$=" | "*=" | "|="
+//   value   := bareword | '"' … '"'
+//
+// - Combinators are the lowercase words `and` / `or` / `not` and `()` —
+//   one spelling each. NO implicit space-AND, NO comma-OR, NO `-`
+//   negation shorthand. Precedence: `not` > `and` > `or`.
+// - Operators are the CSS attribute operators: `=` exact, `~=`
+//   whitespace-token contains (the natural meaning for the `tag` list),
+//   `^=` prefix, `$=` suffix, `*=` substring, `|=` hierarchical prefix.
+//   (Operator *semantics* are evaluated in PR#2; this file only parses
+//   them into `Op`.)
+// - Presence is a BARE field: `tag` (has any tag) / `floating` / etc.
+//   `not tag` (untagged — the old `_default` bucket) is just `not`
+//   applied to the `tag` presence atom.
+// - Values are bare or `"…"`; inside quotes `* ^ $` and spaces are
+//   LITERAL (no escapes) — e.g. `title*="2 * 3"`. There is no way to
+//   embed a literal `"` (rare for app/title; use `facet query | jig`).
+// - Matching is case-INSENSITIVE by default; a trailing bare `s` after a
+//   comparison value opts into case-SENSITIVE (CSS `[attr=v s]` flag,
+//   bracket-free). Only `s` is recognised (insensitive is the default).
+// - Field names are NOT validated here: an unknown field parses fine and
+//   becomes a no-match at eval (a typo is loud at eval, never a fatal
+//   parse crash). The canonical resolvable set is frozen in PR#2.
+// - `parse` is total: it returns `.success` or a `ParseError` carrying a
+//   caret offset for loud-but-NON-FATAL reporting (the caller logs the
+//   caret and degrades to show-all — it never aborts).
+
+/// A parsed `facet filter` expression — the predicate AST.
+///
+/// `and` / `or` carry a flattened list (`a and b and c` →
+/// `.and([a, b, c])`), a lone atom is `.atom` (not a 1-element `.and`),
+/// and an empty / whitespace-only input parses to `.all` (matches every
+/// window — the natural "no filter" / degrade value).
+public indirect enum FacetFilter: Sendable, Equatable {
+    case atom(Atom)
+    case and([FacetFilter])
+    case or([FacetFilter])
+    case not(FacetFilter)
+    /// Matches everything — the parse of an empty expression.
+    case all
+
+    /// A CSS attribute operator. Raw value is the wire spelling.
+    public enum Op: String, Sendable, Equatable, CaseIterable {
+        case equals = "="        // exact whole-value match
+        case contains = "~="     // whitespace-token contains (tag list)
+        case prefix = "^="       // value is a prefix
+        case suffix = "$="       // value is a suffix
+        case substring = "*="    // value appears anywhere
+        case hierarchical = "|=" // exact, or prefix immediately followed by "-"
+    }
+
+    /// A single leaf predicate: either a bare presence test on a field,
+    /// or a `field op value` comparison.
+    public struct Atom: Sendable, Equatable {
+        public let field: String
+        public let kind: Kind
+
+        public enum Kind: Sendable, Equatable {
+            /// Bare field — `tag` / `floating` / … (field is present / truthy).
+            case presence
+            /// `field op value` with the case-sensitivity flag resolved
+            /// (`false` = insensitive, the default).
+            case compare(op: Op, value: String, caseSensitive: Bool)
+        }
+
+        public init(field: String, kind: Kind) {
+            self.field = field
+            self.kind = kind
+        }
+    }
+
+    /// A non-fatal parse failure. `offset` is a 0-based **Character**
+    /// index into the input (the column to render a `^` under, not a
+    /// UTF-8 byte offset — so carets align under multibyte values);
+    /// `offset == input.count` points just past the end (EOF errors).
+    public struct ParseError: Error, Sendable, Equatable {
+        public let message: String
+        public let offset: Int
+
+        public init(message: String, offset: Int) {
+            self.message = message
+            self.offset = offset
+        }
+
+        /// A two-line caret rendering for loud reporting:
+        ///
+        ///     tag~web
+        ///        ^ expected '=' after '~'
+        ///
+        /// Tabs in the input are normalised to a single space so the
+        /// caret column stays aligned in a fixed-width terminal.
+        public func caret(in input: String) -> String {
+            let line = String(input.map { $0 == "\t" ? " " : $0 })
+            let pad = String(repeating: " ", count: max(0, offset))
+            return "\(line)\n\(pad)^ \(message)"
+        }
+    }
+
+    /// Parse `input` into a `FacetFilter`. Total: never throws, never
+    /// crashes — returns `.failure(ParseError)` for malformed input so
+    /// the caller can log the caret and degrade to show-all.
+    public static func parse(_ input: String) -> Result<FacetFilter, ParseError> {
+        do {
+            let tokens = try Lexer.tokenize(input)
+            if tokens.isEmpty { return .success(.all) }
+            var parser = Parser(tokens: tokens, end: input.count)
+            let expr = try parser.parseOr()
+            if let extra = parser.peek() {
+                throw ParseError(message: Self.unexpected(extra),
+                                 offset: extra.offset)
+            }
+            return .success(expr)
+        } catch let e as ParseError {
+            return .failure(e)
+        } catch {
+            // Lexer/Parser only ever throw ParseError; this is unreachable.
+            return .failure(ParseError(message: "\(error)", offset: 0))
+        }
+    }
+
+    /// The lowercase boolean keywords. Reserved: they can never be field
+    /// names (and no facet field is so named). In *value* position
+    /// (`tag=and`) or quoted they are ordinary literals.
+    static let keywords: Set<String> = ["and", "or", "not"]
+
+    /// A helpful message for an out-of-place token, with a typo hint when
+    /// it looks like a miscased keyword (`OR` → "did you mean 'or'?").
+    static func unexpected(_ t: Token) -> String {
+        if case .word(let w, _) = t {
+            let lower = w.lowercased()
+            if keywords.contains(lower) && w != lower {
+                return "unexpected '\(w)' — did you mean '\(lower)'? (boolean keywords are lowercase)"
+            }
+            if keywords.contains(w) {
+                return "unexpected keyword '\(w)'"
+            }
+            return "unexpected '\(w)'"
+        }
+        return "unexpected token"
+    }
+}
+
+// MARK: - Lexer
+
+/// One lexical token, carrying its 0-based Character offset for errors.
+enum Token: Sendable, Equatable {
+    case word(String, offset: Int)     // bareword (field name, value, or keyword)
+    case string(String, offset: Int)   // quoted value, quotes stripped
+    case op(FacetFilter.Op, offset: Int)
+    case lparen(offset: Int)
+    case rparen(offset: Int)
+
+    var offset: Int {
+        switch self {
+        case .word(_, let o), .string(_, let o), .op(_, let o),
+             .lparen(let o), .rparen(let o):
+            return o
+        }
+    }
+}
+
+/// Characters that start an operator (`=` plus the five `X=` leads). They
+/// also terminate a bareword, so a value containing them must be quoted.
+private let operatorLeads: Set<Character> = ["=", "~", "^", "$", "*", "|"]
+
+private enum Lexer {
+    static func tokenize(_ input: String) throws -> [Token] {
+        let chars = Array(input)
+        var tokens: [Token] = []
+        var i = 0
+        while i < chars.count {
+            let c = chars[i]
+            if c.isWhitespace { i += 1; continue }
+            switch c {
+            case "(":
+                tokens.append(.lparen(offset: i)); i += 1
+            case ")":
+                tokens.append(.rparen(offset: i)); i += 1
+            case "\"":
+                let start = i
+                i += 1
+                var value = ""
+                var closed = false
+                while i < chars.count {
+                    if chars[i] == "\"" { closed = true; i += 1; break }
+                    value.append(chars[i]); i += 1
+                }
+                guard closed else {
+                    throw FacetFilter.ParseError(
+                        message: "unterminated quoted value", offset: start)
+                }
+                tokens.append(.string(value, offset: start))
+            case "=":
+                tokens.append(.op(.equals, offset: i)); i += 1
+            case "~", "^", "$", "*", "|":
+                let start = i
+                guard i + 1 < chars.count, chars[i + 1] == "=" else {
+                    throw FacetFilter.ParseError(
+                        message: "expected '=' after '\(c)'", offset: start)
+                }
+                let op: FacetFilter.Op
+                switch c {
+                case "~": op = .contains
+                case "^": op = .prefix
+                case "$": op = .suffix
+                case "*": op = .substring
+                default:  op = .hierarchical   // "|"
+                }
+                tokens.append(.op(op, offset: start)); i += 2
+            default:
+                // Bareword: run until whitespace, a paren, a quote, or an
+                // operator lead.
+                let start = i
+                var word = ""
+                while i < chars.count {
+                    let ch = chars[i]
+                    if ch.isWhitespace || ch == "(" || ch == ")"
+                        || ch == "\"" || operatorLeads.contains(ch) { break }
+                    word.append(ch); i += 1
+                }
+                tokens.append(.word(word, offset: start))
+            }
+        }
+        return tokens
+    }
+}
+
+// MARK: - Parser (recursive descent; precedence not > and > or)
+
+private struct Parser {
+    let tokens: [Token]
+    /// Offset just past the last input character — used for EOF errors.
+    let end: Int
+    var pos = 0
+
+    func peek() -> Token? { pos < tokens.count ? tokens[pos] : nil }
+
+    /// The offset to point a caret at when the current token is missing
+    /// (EOF) — just past the end of the input.
+    func eofOffset() -> Int { end }
+
+    mutating func advance() { pos += 1 }
+
+    /// Is the current token the lowercase keyword `kw`?
+    func isKeyword(_ kw: String) -> Bool {
+        if case .word(let w, _) = peek(), w == kw { return true }
+        return false
+    }
+
+    mutating func parseOr() throws -> FacetFilter {
+        var parts = [try parseAnd()]
+        while isKeyword("or") {
+            advance()
+            parts.append(try parseAnd())
+        }
+        return parts.count == 1 ? parts[0] : .or(parts)
+    }
+
+    mutating func parseAnd() throws -> FacetFilter {
+        var parts = [try parseNot()]
+        while isKeyword("and") {
+            advance()
+            parts.append(try parseNot())
+        }
+        return parts.count == 1 ? parts[0] : .and(parts)
+    }
+
+    mutating func parseNot() throws -> FacetFilter {
+        if isKeyword("not") {
+            advance()
+            return .not(try parseNot())
+        }
+        return try parsePrimary()
+    }
+
+    mutating func parsePrimary() throws -> FacetFilter {
+        if case .lparen = peek() {
+            advance()
+            let inner = try parseOr()
+            guard case .rparen = peek() else {
+                throw FacetFilter.ParseError(
+                    message: "expected ')'",
+                    offset: peek()?.offset ?? eofOffset())
+            }
+            advance()
+            return inner
+        }
+        return .atom(try parseAtom())
+    }
+
+    mutating func parseAtom() throws -> FacetFilter.Atom {
+        guard case .word(let field, let off) = peek() else {
+            throw FacetFilter.ParseError(
+                message: peek().map { "expected a field name, found \(FacetFilter.unexpected($0))" }
+                    ?? "expected a field name",
+                offset: peek()?.offset ?? eofOffset())
+        }
+        // `not` is intercepted by parseNot; a leftover `and`/`or` here is
+        // a connective with no left-hand expression.
+        if FacetFilter.keywords.contains(field.lowercased()) {
+            throw FacetFilter.ParseError(
+                message: FacetFilter.unexpected(.word(field, offset: off)),
+                offset: off)
+        }
+        advance()
+
+        guard case .op(let op, _) = peek() else {
+            // Bare field → presence test.
+            return FacetFilter.Atom(field: field, kind: .presence)
+        }
+        advance()
+
+        // Value: a bareword or a quoted string.
+        let value: String
+        switch peek() {
+        case .word(let w, _): value = w; advance()
+        case .string(let s, _): value = s; advance()
+        default:
+            throw FacetFilter.ParseError(
+                message: "expected a value after '\(op.rawValue)'",
+                offset: peek()?.offset ?? eofOffset())
+        }
+
+        // Optional trailing case-sensitivity flag `s` (bracket-free CSS
+        // flag). Implicit-AND is illegal, so a bare `s` after a value can
+        // only be the flag; any other bare word here is a parse error
+        // (handled by the trailing-token check back in `parse`).
+        var caseSensitive = false
+        if case .word("s", _) = peek() {
+            advance()
+            caseSensitive = true
+        }
+        return FacetFilter.Atom(
+            field: field,
+            kind: .compare(op: op, value: value, caseSensitive: caseSensitive))
+    }
+}
