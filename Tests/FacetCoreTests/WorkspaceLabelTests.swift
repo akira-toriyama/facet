@@ -28,5 +28,11 @@ final class WorkspaceLabelTests: XCTestCase {
         // so it's returned verbatim.
         XCTAssertEqual(workspaceShortLabel(name: "workspace", idx: 0),
                        "workspace")
+        // "workspace " (trailing space, nothing after) is exactly the
+        // prefix length: the `count > prefixLen` guard skips the strip so
+        // the caption never goes empty. Kept verbatim by design — this
+        // pins the boundary against a future drop of that guard.
+        XCTAssertEqual(workspaceShortLabel(name: "workspace ", idx: 0),
+                       "workspace ")
     }
 }
