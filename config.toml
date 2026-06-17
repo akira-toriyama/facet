@@ -610,3 +610,55 @@ action = "ignore"
 3 = { name = "Cal" }
 4 = { name = "Tasks" }
 5 = { name = "Docs" }
+
+
+# -----------------------------------------------------------------
+# Filter groups  [[desktop.N.group]]   (PREVIEW — parsed, not yet used)
+# -----------------------------------------------------------------
+# A forward-looking way to organise windows: instead of the manual
+# `[desktop.N]` workspace list above, you describe groups with a filter.
+# facet PARSES these today but nothing consumes them yet — they have NO
+# effect on the current build. The recommended config stays the plain
+# by-workspace `[desktop.N]` blocks above (no surprises); this block
+# documents the shape that's coming.
+#
+# Each `[[desktop.N.group]]` is one labelled group on the Nth mac desktop
+# (Mission Control order). A window shows up in EVERY group whose `match`
+# it satisfies (multi-match); groups display in the order written here.
+#
+#   label  — the group's header in the view.
+#   match  — a facet filter WHERE-clause (the same mini-language as
+#            `facet query --filter`). Examples:
+#              'tag~=web'                            windows tagged "web"
+#              'app=Xcode'                           the Xcode app
+#              '(tag~=work or tag~=urgent) and not floating'
+#   apply  — (optional) the facets to SET on a window dropped into the
+#            group, so the drop "sticks". Inline table; all keys optional:
+#              workspace = "Dev"      move to that workspace (auto-replace)
+#              tags      = ["web"]    add these tags (additive)
+#              floating  = true       float / unfloat
+#              sticky    = true       pin / unpin across desktops
+#              master    = true       mark / unmark as layout master
+#            Omit `apply` (or leave it empty) → the group is drop-inert
+#            (a drop snaps back instead of changing the window).
+#
+# Groups are a WORKSPACE-axis concept: under `[grouping] by = "tag"` they
+# are ignored (facet logs a notice and falls back to the tag world).
+#
+# Example — reproduce a Dev / Web / Notes split with tags instead of
+# named workspaces (uncomment to try once a consumer ships):
+#
+# [[desktop.1.group]]
+# label = "Dev"
+# match = 'tag~=dev'
+# apply = { tags = ["dev"] }
+#
+# [[desktop.1.group]]
+# label = "Web"
+# match = 'tag~=web or app=Safari'
+# apply = { tags = ["web"] }
+#
+# [[desktop.1.group]]
+# label = "Notes"
+# match = 'tag~=notes'
+# apply = { tags = ["notes"] }

@@ -612,6 +612,43 @@ FacetApp の client 層（`Main.swift` / `FacetApp+Client*.swift`）がそれを
 exit / stderr など副作用を担う。コアへ渡る DNC 制御文字列（`view:tree+active` 等）は不変。
 - **Don't call it:** equals syntax, `--flag=value`, GNU-style options
 
+### group
+config で宣言する **window の組織単位**（pivot・`[[desktop.N.group]]`）。
+`{ label, match, apply }` で「ラベル付きの窓集合」を定義し、内蔵の by-workspace
+編成をユーザ定義の [[facet filter]] 編成に置き換える。1 window = [[match]] に当たった
+**全** group に出る（multi-match・表示順 = config 宣言順）。group 未定義の
+[[mac desktop]] は内蔵 by-workspace へ degrade。**workspace 軸専用**＝tag モード
+（[[grouping]] `by=tag`）は group を無視（`effectiveMacDesktopGroupConfigs` が空に
+clamp・load 時に loud-log）。**PR#5 は parse-only**（consumer は Phase 1
+`FilterProjection`）。
+- コード: `DesktopGroup` / `FacetConfig.macDesktopGroupConfigs` /
+  `decodeDesktopGroupSections` /
+  `effectiveMacDesktopGroupConfigs`（`FacetCore`）
+- **Don't call it:** workspace（group は多重所属・filter 由来／workspace は 1 窓 1 個・
+  タイル枠）, tag, section, グループ, セクション
+
+### match
+[[group]] / [[rule]] が共有する **述語キー**＝当たった窓をその group に出す（rule では
+apply 対象にする）[[facet filter]] の WHERE 式。config には**文字列のまま**格納し、
+consumer 側で compile（parse error は caret 付き loud かつ **non-fatal**＝該当面は
+show-all へ degrade）。`match` / [[apply]] は match に当たる窓へ apply を効かせる**対の
+キー**。
+- コード: `DesktopGroup.match`（生文字列）→ `FacetFilter.parse`（consumer）
+- **Don't call it:** filter, where, query, predicate（式言語そのものは [[facet filter]]）,
+  マッチ条件, 絞り込み
+
+### apply
+[[group]] / [[rule]] の **[[match]] の逆写像**＝窓をその group へ入れる（drop / CLI / key）
+時に窓へ設定する facet 群。gesture 非依存の宣言値で、旧 `onDrop` の改称。型付き
+`ApplyOp`（`addTag` / `setFloating` / `setSticky` / `setMaster` / `setWorkspace`）の
+リスト。frozen セマンティクス: `addTag`=additive 既定（冪等）/ `setWorkspace`=単数値
+auto-replace / apply 無 or 全 non-invertible = drop-inert（snap-back）。wire は inline
+table `apply = { workspace, tags = [], floating, sticky, master }`、decode 順は
+**setWorkspace → addTag(s) → setFloating → setSticky → setMaster** に正規化（frozen）。
+**PR#5 は型 + parse のみ**（逆写像 resolver / 結線は Phase 2 PR#9-10）。
+- コード: `ApplyOp` / `ApplyOp.list(from:)`（`FacetCore`）
+- **Don't call it:** onDrop, onGroupChange, action, ハンドラ, 副作用
+
 ---
 
 ## 設定 / Theme

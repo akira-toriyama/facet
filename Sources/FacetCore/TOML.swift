@@ -40,3 +40,16 @@ public func parseTOMLArrayOfTables(_ text: String, table name: String)
 {
     Toml.parseFlat(text).arrays[name] ?? []
 }
+
+/// Every `[[name]]` array-of-tables block whose header `name` satisfies
+/// `match`, keyed by that literal header text (rows in file order within
+/// each). For DYNAMIC nested arrays like `[[desktop.N.group]]` where the
+/// ordinal in the middle isn't known up front — the caller parses `N` out
+/// of each key. The flat parser keys arrays by header text and is
+/// nesting-agnostic, so `[[desktop.1.group]]` lands under `desktop.1.group`
+/// independent of any `[desktop.1]` table.
+public func parseTOMLArraysOfTables(
+    _ text: String, where match: (String) -> Bool
+) -> [String: [[String: TOMLValue]]] {
+    Toml.parseFlat(text).arrays.filter { match($0.key) }
+}
