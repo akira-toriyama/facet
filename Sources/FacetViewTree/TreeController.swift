@@ -72,6 +72,25 @@ public protocol TreeController: AnyObject, Sendable {
     /// so the active lens's header lights up. No-op outside the section model.
     func toggleActiveLens(_ label: String)
 
+    /// Section-model apply/un-apply MOVE (PR8): un-apply the SOURCE group's
+    /// additive tags, then apply the DEST group's ops (workspace dest → move
+    /// by index; lens dest → addTag / setFloating / setSticky / setMaster).
+    /// The view passes group IDs (`FilterGroup.id`) + the dest group's
+    /// `sourceWorkspaceIndex` (a workspace dest's relocation target); the
+    /// Controller resolves the apply via the live section config + the pure
+    /// `ApplyResolver` (a `FilterGroup` carries no apply ops). An inert /
+    /// stale / non-satisfying drop runs NO backend op — the tree row was
+    /// never hidden during the drag, so doing nothing IS the snap-back.
+    /// No-op outside the section model.
+    func applyMove(windowID: WindowID, fromGroupID: String,
+                   toGroupID: String, destSourceWorkspaceIndex: Int?)
+
+    /// Section-model ADD (right-click "Add to ▸ <lens>"): apply ONLY (no
+    /// un-apply) so the window joins the dest lens while staying in every
+    /// section it already matched (multi-match). No-op when the dest lens is
+    /// drop-inert / the window can't satisfy its `match`.
+    func applyAdd(windowID: WindowID, toGroupID: String)
+
     /// Open the lens selector (`TagEditPanel` lens variant) — the tag-world
     /// header's "Select tags" item (tag mode). A checklist of the tag
     /// vocabulary whose checked rows are the current lens; toggling a row

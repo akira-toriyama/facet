@@ -178,6 +178,24 @@ extension WorkspaceCatalog {
         return true
     }
 
+    /// Absolute master setter for the section-model apply DnD (PR8 — the
+    /// `setMaster` `ApplyOp`). `want` → `promoteToMaster` (id to order[0]).
+    /// `!want` (demote) → move `id` off the master slot (order[0] → slot 1)
+    /// so the next member becomes master. No-op when the WS has no maintained
+    /// order (non-`hasMaster` engine / bsp / float) or `id` isn't the master.
+    /// Returns whether the order changed.
+    @discardableResult
+    mutating func setMaster(_ id: WindowID, _ want: Bool,
+                            workspace n1Based: Int) -> Bool {
+        if want { return promoteToMaster(id, workspace: n1Based) }
+        guard var order = stackOrders[n1Based],
+              order.first == id, order.count > 1 else { return false }
+        order.removeFirst()
+        order.insert(id, at: 1)
+        stackOrders[n1Based] = order
+        return true
+    }
+
     // MARK: - Leave-focus snapshot (auto-focus on re-entry)
 
     /// Remember which window was focused on `ws` at leave time.
@@ -266,6 +284,31 @@ extension WorkspaceCatalog {
             floatingWindows.insert(id)
             detachFromLayouts(id)
         }
+    }
+
+    /// Absolute, idempotent float setter (focus-free) for the section-model
+    /// apply DnD (PR8 — the `setFloating` `ApplyOp`). Defers to `toggleFloat`'s
+    /// sticky / scratchpad short-circuits; no auto-center (a declarative apply,
+    /// not the user's toggle-float gesture, which centers). Returns whether
+    /// state changed.
+    @discardableResult
+    mutating func setFloating(_ id: WindowID, _ want: Bool,
+                              focused: WindowID? = nil, in rect: CGRect = .zero)
+        -> Bool
+    {
+        guard windowMap[id] != nil else { return false }
+        // Sticky / scratchpad windows are force-floating: only "stop floating"
+        // is meaningful, and `toggleFloat` already routes that to
+        // `clearSticky` / `releaseScratchpad`. Asking to float one already
+        // (force-)floating is a no-op.
+        if everywhereWindows.contains(id) || scratchpad(forWindow: id) != nil {
+            guard !want else { return false }
+            toggleFloat(id, focused: focused, in: rect)
+            return true
+        }
+        guard isFloating(id) != want else { return false }
+        toggleFloat(id, focused: focused, in: rect)
+        return true
     }
 
 }

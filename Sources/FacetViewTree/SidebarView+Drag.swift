@@ -25,6 +25,7 @@ extension SidebarView {
 
         var mode = 0          // 0 undecided · 1 panel-move · 2 window-drag
         var dragWS = 0
+        var dragGroup = 0     // section model: the dragged row's render-group ordinal
         var dragWindowID = WindowID(serverID: 0)
         let mask: NSEvent.EventTypeMask = [.leftMouseDragged, .leftMouseUp]
 
@@ -38,7 +39,23 @@ extension SidebarView {
                 // UserDefaults).
                 if mode == 2 {
                     let tgt = wsBands.first { $0.value.contains(cp.y) }?.key
-                    if let tgt, tgt != dragWS {
+                    if sectionModeActive {
+                        // Section model: a drop is an apply-based MOVE
+                        // (un-apply source → apply dest). `wsBands` keys are
+                        // render-group ordinals here (lastGroups), NOT WS
+                        // indices, so compare/route on `dragGroup`. The
+                        // Controller resolves the apply via the live config +
+                        // ApplyResolver and snaps back (runs no op) on an inert
+                        // / non-satisfying drop — the row was never hidden.
+                        if let tgt, tgt != dragGroup,
+                           dragGroup < lastGroups.count, tgt < lastGroups.count {
+                            controller?.applyMove(
+                                windowID: dragWindowID,
+                                fromGroupID: lastGroups[dragGroup].id,
+                                toGroupID: lastGroups[tgt].id,
+                                destSourceWorkspaceIndex: lastGroups[tgt].sourceWorkspaceIndex)
+                        }
+                    } else if let tgt, tgt != dragWS {
                         // M9-1: background move — file the window into
                         // the target WS without switching to it or
                         // focus-following. This matches the grid drop
@@ -67,23 +84,28 @@ extension SidebarView {
                 if mode == 0,
                    hypot(cp.x - start.x, cp.y - start.y) >= pointerDragThreshold {
                     // ⌘+drag is always a panel-move; so is ANY drag in tag
-                    // mode (the flat list has no workspace to drop onto) and
-                    // in the section model (PR5 — apply-based DnD lands in
-                    // PR8; until then a section-path drag must not move a
-                    // window / swap a header). Retag / move is via the row
-                    // context menu / CLI.
-                    if ev.modifierFlags.contains(.command)
-                        || tagModeActive || sectionModeActive {
-                        mode = 1                       // ⌘ / tag / section → move
+                    // mode (the flat list has no workspace to drop onto). In
+                    // the section model a window-row drag is an apply-based
+                    // MOVE (PR8 — `applyMove`: un-apply source → apply dest);
+                    // a section header still falls back to panel-move (header
+                    // swap stays by-workspace-only). Retag-via-menu still works.
+                    if ev.modifierFlags.contains(.command) || tagModeActive {
+                        mode = 1                       // ⌘ / tag → panel-move
                     } else {
                         switch row?.kind {
                         case .none, .search?:
                             mode = 1                   // empty / search → move
-                        case .window(_, let ws, _, let wid, _)?:
+                        case .window(let g, let ws, _, let wid, _)?:
                             mode = 2
                             dragWS = ws
+                            dragGroup = g
                             dragWindowID = wid
-                            draggingWid = (ws, wid)
+                            // Store the SOURCE identity the drag affordance
+                            // compares against `dropWS`: a render-group ordinal
+                            // in section mode (wsBands is keyed by ordinal
+                            // there), the real WS index in the by-workspace
+                            // degrade (where group == ws.index anyway).
+                            draggingWid = (sectionModeActive ? g : ws, wid)
                             if let rr = row?.rect,
                                let c = cells.first(where: {
                                    $0.row == rr && $0.kind == 2
@@ -104,16 +126,23 @@ extension SidebarView {
                             // contents with the drop-target WS. Panel
                             // move retreats to ⌘+drag / empty space. (Only
                             // reachable in the by-workspace path, where
-                            // group == ws.index == the swap target.)
-                            mode = 3
-                            dragWS = g
-                            draggingWS = g
-                            // ⑨ richer ghost: lift the whole WS section
-                            // (header + windows) as a snapshot card.
-                            if !showDragCard(rect: dragRect(forGroup: g)) {
-                                showChip(swapChipLabel(for: g))
+                            // group == ws.index == the swap target.) In the
+                            // section model a workspace-section header is NOT
+                            // swap-draggable (header swap stays by-workspace-
+                            // only); it falls back to panel-move.
+                            if sectionModeActive {
+                                mode = 1
+                            } else {
+                                mode = 3
+                                dragWS = g
+                                draggingWS = g
+                                // ⑨ richer ghost: lift the whole WS section
+                                // (header + windows) as a snapshot card.
+                                if !showDragCard(rect: dragRect(forGroup: g)) {
+                                    showChip(swapChipLabel(for: g))
+                                }
+                                lastDropWS = nil
                             }
-                            lastDropWS = nil
                         case .header(_, .none)?:
                             mode = 1                   // lens header → move
                         }
@@ -142,7 +171,12 @@ extension SidebarView {
                     break loop
                 } else if mode == 2 || mode == 3 {
                     dropWS = wsBands.first { $0.value.contains(cp.y) }?.key
-                    if let t = dropWS, t != dragWS {
+                    // Section mode keys wsBands by render-group ordinal, so the
+                    // cursor's "valid drop" test compares against the dragged
+                    // row's GROUP ordinal; by-workspace / header-swap keep the
+                    // WS index (group == ws.index there).
+                    let dragSrc = sectionModeActive ? dragGroup : dragWS
+                    if let t = dropWS, t != dragSrc {
                         NSCursor.closedHand.set()
                     } else {
                         NSCursor.arrow.set()

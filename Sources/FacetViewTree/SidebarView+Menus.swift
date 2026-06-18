@@ -21,9 +21,9 @@ extension SidebarView {
             // A lens-section header (workspaceIndex nil) has no layout to
             // pick; PR6 adds a lens menu. Workspace header → layout picker.
             if let ws { headerMenu(at: scr, workspaceIndex: ws) }
-        case .window(_, let ws, let pid, let id, let title):
+        case .window(let g, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
-                           pid: pid, windowID: id, title: title)
+                           pid: pid, windowID: id, title: title, currentGroup: g)
         default:
             break
         }
@@ -79,13 +79,28 @@ extension SidebarView {
                                 pid: Int,
                                 windowID id: WindowID,
                                 title: String,
-                                filterable: Bool = false) {
+                                filterable: Bool = false,
+                                currentGroup: Int? = nil) {
+        // Section model (PR8): "Add to ▸ <lens>" — apply-only ADD (multi-match).
+        // Lens sections only, excluding the row's OWN render group; the
+        // Controller's ApplyResolver no-ops a drop-inert / non-satisfying lens.
+        let lensTargets: [(label: String, groupID: String)] =
+            sectionModeActive
+            ? lastGroups.enumerated().compactMap { (g, grp) in
+                  guard grp.sectionType == .lens, g != currentGroup else { return nil }
+                  return (grp.label, grp.id)
+              }
+            : []
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
             workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
             palette: pal,
             tagMode: tagModeActive,
             filterable: filterable,
+            addToLensTargets: lensTargets,
+            onApplyAdd: { [weak self] gid in
+                self?.controller?.applyAdd(windowID: id, toGroupID: gid)
+            },
             onOpenTagEditor: { [weak self] wid, pid, app, title, tags, anchor in
                 self?.controller?.openTagEditor(
                     forWindow: wid, pid: pid, appName: app, title: title,

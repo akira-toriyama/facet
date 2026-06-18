@@ -648,10 +648,12 @@ struct WorkspaceCatalog {
     }
 
     func snapshot(live: [Window], focused: WindowID?,
-                         activeRect: CGRect)
+                         activeRect: CGRect, populateTags: Bool = false)
         -> [Workspace]
     {
         if grouping == .tag {
+            // tag mode carries tags already (the lens bitmask IS the model);
+            // `populateTags` is the section-model (by-workspace) gate only.
             return tagSnapshot(live: live, focused: focused,
                                activeRect: activeRect)
         }
@@ -719,7 +721,16 @@ struct WorkspaceCatalog {
                        isMaster: w.id == master,
                        mark: mark(forWindow: w.id),
                        isSticky: isSticky(w.id),
-                       scratchpad: scratchpad(forWindow: w.id))
+                       scratchpad: scratchpad(forWindow: w.id),
+                       // Section model (PR8): the lens `match`/`apply` round-
+                       // trip needs `tag~=X` to resolve, so populate tags from
+                       // the window's bitmask when the section model is live.
+                       // Off (default / by-workspace degrade) → `[]`, exactly
+                       // as before. Same `names(in:)` expression `tagSnapshot`
+                       // uses, so the two projections can't drift.
+                       tags: populateTags
+                           ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
+                           : [])
             }
             return Workspace(
                 index: entry.index - 1,

@@ -404,6 +404,27 @@ public protocol WindowBackend: Sendable {
     /// defined tag on that window's vocabulary.
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool
 
+    // MARK: - Section-model apply/un-apply (PR8)
+
+    /// ABSOLUTE, focus-free by-`WindowID` mutators driven by the tree's
+    /// section-path apply/un-apply DnD (the `ApplyOp` set). Unlike the
+    /// `perform(.toggle*)` gestures these target an arbitrary managed window,
+    /// are idempotent (set an absolute value, never flip), and skip lens
+    /// park/restore (the section model is the by-workspace axis). No-op
+    /// outside the section model (the native impl gates on
+    /// `isSectionModelActive`); the protocol defaults are no-ops so other
+    /// backends need not implement them.
+    func setFloating(_ id: WindowID, _ floating: Bool)
+    func setSticky(_ id: WindowID, _ sticky: Bool)
+    func setMaster(_ id: WindowID, _ master: Bool)
+
+    /// Set / clear a tag bit on a SPECIFIC window WITHOUT lens park/restore
+    /// (section-model apply / un-apply). `addTagSection` auto-vivifies +
+    /// keeps the `_default` floor; `removeTagSection` is strict. Both return
+    /// `false` on unknown window / vocab-full (add) / unknown name (remove).
+    func addTagSection(_ name: String, toWindow id: WindowID) -> Bool
+    func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool
+
     /// Define tag `name` in the session vocabulary without attaching it
     /// to any window (`facet tag --add NAME`, tag mode). Idempotent — a
     /// defined name is a no-op success. Returns `false` only when not in
@@ -560,6 +581,11 @@ public extension WindowBackend {
     }
     func addTag(_ name: String, toWindow id: WindowID) -> Bool { false }
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool { false }
+    func setFloating(_ id: WindowID, _ floating: Bool) { }
+    func setSticky(_ id: WindowID, _ sticky: Bool) { }
+    func setMaster(_ id: WindowID, _ master: Bool) { }
+    func addTagSection(_ name: String, toWindow id: WindowID) -> Bool { false }
+    func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func addTag(_ name: String) -> Bool { false }
     func removeTag(_ name: String) -> Bool { false }
     func renameTag(_ old: String, to new: String) -> Bool { false }

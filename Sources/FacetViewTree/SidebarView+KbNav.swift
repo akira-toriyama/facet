@@ -110,9 +110,14 @@ extension SidebarView {
 
     private func liftSourceWS() -> Int? {
         switch kbLifted {
-        case .win(_, let id): return wsOf(windowID: id)
-        case .hdr(let g):     return g
-        case .none:           return nil
+        case .win(let g, let id):
+            // Section model: the drop target walks render-group ordinals
+            // (`kbWsOrder` / `wsBands`), so the lift SOURCE must be the lifted
+            // row's GROUP ordinal too — NOT its real WS index (`wsOf`), a
+            // different namespace. By-workspace keeps `wsOf` (group == ws.index).
+            return sectionModeActive ? g : wsOf(windowID: id)
+        case .hdr(let g): return g
+        case .none:       return nil
         }
     }
 
@@ -122,10 +127,11 @@ extension SidebarView {
     /// the drop target through the workspace order instead of moving
     /// the selection.
     public func kbToggleLift() {
-        // Tag mode is a flat list with no workspace to move a window /
-        // swap a header into; the section model defers apply-based DnD to
-        // PR8. In both, the lift gesture is a no-op.
-        guard !tagModeActive, !sectionModeActive else { return }
+        // Tag mode is a flat list with no workspace to move a window / swap a
+        // header into — the lift gesture is a no-op there. The section model
+        // DOES support lift (PR8): a window-row lift commits an apply-based
+        // MOVE; a header lift no-ops (header swap stays by-workspace-only).
+        guard !tagModeActive else { return }
         if kbLifted == nil {
             guard let s = kbSel else { return }
             kbLifted = s
@@ -177,20 +183,37 @@ extension SidebarView {
         guard let tgt else { return true }
         switch s {
         case .win(let g, let id):
-            // Move-only background move (same model as the mouse drop
-            // since M9-1): "file" the window into the target WS and
-            // stay put — no switch, so don't claim tgt is active (no
-            // setOptimistic, which would mislabel the active WS). The
-            // reconcile relocates the row; kbSel follows it. (Reachable
-            // only in the by-workspace path — lift is off in section mode.)
-            guard let src = wsOf(windowID: id), src != tgt else { return true }
-            let bk = backend
-            cliQueue.async {
-                bk.moveWindow(id, toWorkspaceIndex: tgt)
+            if sectionModeActive {
+                // Section model: commit = apply-based MOVE. `tgt` and `g` are
+                // render-group ordinals (kbWsOrder / liftSourceWS, same
+                // namespace). The Controller resolves the apply and snaps back
+                // (runs no op) on an inert / non-satisfying drop.
+                guard tgt != g, g < lastGroups.count, tgt < lastGroups.count
+                else { return true }
+                controller?.applyMove(
+                    windowID: id,
+                    fromGroupID: lastGroups[g].id,
+                    toGroupID: lastGroups[tgt].id,
+                    destSourceWorkspaceIndex: lastGroups[tgt].sourceWorkspaceIndex)
+                kbSel = .win(group: g, id)
+            } else {
+                // Move-only background move (same model as the mouse drop
+                // since M9-1): "file" the window into the target WS and
+                // stay put — no switch, so don't claim tgt is active (no
+                // setOptimistic, which would mislabel the active WS). The
+                // reconcile relocates the row; kbSel follows it.
+                guard let src = wsOf(windowID: id), src != tgt else { return true }
+                let bk = backend
+                cliQueue.async {
+                    bk.moveWindow(id, toWorkspaceIndex: tgt)
+                }
+                kbSel = .win(group: g, id)
+                controller?.scheduleReconcile(after: 0.05)
             }
-            kbSel = .win(group: g, id)
-            controller?.scheduleReconcile(after: 0.05)
         case .hdr(let g):
+            // Section model: a workspace-section header swap is not supported
+            // (parity with the mouse path) — a header lift-commit no-ops.
+            if sectionModeActive { return true }
             guard g != tgt else { return true }
             performSwap(sourceWS: g, targetWS: tgt)
         }
@@ -220,9 +243,10 @@ extension SidebarView {
             // A lens-section header has no layout to pick (PR6 adds a lens
             // menu); only a workspace header opens the layout picker.
             if let ws { headerMenu(at: scr, workspaceIndex: ws, filterable: true) }
-        case .window(_, let ws, let pid, let id, let title):
+        case .window(let g, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
-                           pid: pid, windowID: id, title: title, filterable: true)
+                           pid: pid, windowID: id, title: title,
+                           filterable: true, currentGroup: g)
         default:
             break
         }

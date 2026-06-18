@@ -82,6 +82,22 @@ extension WorkspaceCatalog {
                        focused: focused, in: rect)
     }
 
+    /// Absolute, idempotent sticky setter for the section-model apply DnD
+    /// (PR8 — the `setSticky` `ApplyOp`). `on && !sticky` → `setSticky` (stays
+    /// at frame). `!on && sticky` → `clearSticky` (re-homes to the active WS,
+    /// Q4). Else no-op. Returns whether state changed.
+    @discardableResult
+    mutating func setSticky(_ id: WindowID, _ on: Bool,
+                            focused: WindowID? = nil, in rect: CGRect = .zero)
+        -> Bool
+    {
+        guard windowMap[id] != nil else { return false }
+        let cur = isSticky(id)
+        if on && !cur { setSticky(id); return true }
+        if !on && cur { clearSticky(id, focused: focused, in: rect); return true }
+        return false
+    }
+
     // MARK: - Scratchpad shelf (1:1 name ⇄ window, off-screen)
 
     /// Whether `id` is currently stashed (hidden on a shelf, parked
