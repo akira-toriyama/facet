@@ -213,6 +213,8 @@ public enum ViewContextMenu {
         palette: ResolvedPalette,
         tagMode: Bool = false,
         filterable: Bool = false,
+        addToLensTargets: [(label: String, groupID: String)] = [],
+        onApplyAdd: ((_ groupID: String) -> Void)? = nil,
         onOpenTagEditor: ((_ id: WindowID, _ pid: Int, _ appName: String,
                            _ title: String, _ currentTags: [String],
                            _ anchor: NSPoint) -> Void)? = nil,
@@ -259,6 +261,18 @@ public enum ViewContextMenu {
                 onOpenTagEditor?(id, pid, win?.appName ?? "",
                                  win?.title ?? title, win?.tags ?? [], scr)
             })
+        }
+        // Section model (PR8): "Add to <lens>" items — apply-only ADD
+        // (multi-match: the window joins the lens, staying in every section it
+        // already matched). Their own section so they read as a group. Grid /
+        // rail pass an empty list → no section appears.
+        if !addToLensTargets.isEmpty, let onApplyAdd {
+            for t in addToLensTargets {
+                entries.append(Entry(label: "Add to \(t.label)", icon: "SF:tag",
+                                     section: "Add to lens") {
+                    onApplyAdd(t.groupID)
+                })
+            }
         }
         entries += menu.filter { $0.section != "Layout" }.map(makeEntry)
         present(at: scr, header: "Window", palette: palette,

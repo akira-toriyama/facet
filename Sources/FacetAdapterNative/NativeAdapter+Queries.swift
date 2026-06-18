@@ -161,7 +161,12 @@ extension NativeAdapter {
         workspaceList = catalog.snapshot(
             live: live,
             focused: displayFocus,
-            activeRect: rect)
+            activeRect: rect,
+            // Section model (PR8): populate `Window.tags` so a lens
+            // `match='tag~=X'` / `apply:addTag(X)` round-trips. Gated on the
+            // active mac desktop being section-managed — by-workspace / tag
+            // degrade unaffected (passes false → `tags: []`).
+            populateTags: config.isSectionModelActive(ordinal: activeMacDesktopOrdinal))
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
         // windows (Cmd+H'd apps, windows on other mac desktops,
         // minimized windows) as examined so a later

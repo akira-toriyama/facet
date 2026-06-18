@@ -501,10 +501,18 @@ extension SidebarView {
             if case .win(_, let id)? = kbLifted { return id }
             return nil
         }()
+        // The SOURCE group ordinal of the lift (mouse: stored in draggingWid's
+        // workspaceIndex — group ordinal in section mode, ws.index in degrade;
+        // kb: carried by kbLifted). Disambiguates multi-match: dim ONLY the
+        // lifted instance, not every copy of the window across sections.
+        let liftedGroup: Int? = draggingWid?.workspaceIndex ?? {
+            if case .win(let g, _)? = kbLifted { return g }
+            return nil
+        }()
         if let liftedWinID {
             for row in rows {
-                if case .window(_, _, _, let id, _) = row.kind,
-                   id == liftedWinID {
+                if case .window(let g, _, _, let id, _) = row.kind,
+                   id == liftedWinID, liftedGroup == g {
                     (pal.background ?? .windowBackgroundColor)
                         .withAlphaComponent(0.55).setFill()
                     NSBezierPath(roundedRect: row.rect.insetBy(dx: 4, dy: 1),
