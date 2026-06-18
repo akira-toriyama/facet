@@ -240,8 +240,11 @@ preview-mode = "popover"
 # screen points with a TOP-LEFT origin: (0,0) is the top-left corner
 # of the main screen, x grows right, y grows DOWN. Same coords as the
 # CLI `facet --view tree --pos-x/--pos-y/--width/--height`. All FOUR
-# are needed to take effect; a partial set is ignored (logged). Leave
-# all unset for the built-in default (top-left, auto height). This
+# are needed to take effect; a partial set is ignored (logged), and
+# width + height must each be greater than 0 (a zero / negative size is
+# dropped silently). pos-x / pos-y may be negative (handy for an
+# off-screen or secondary-display corner). Leave all unset for the
+# built-in default (top-left, auto height). This
 # config value is authoritative each launch / `--reload` — dragging or
 # resizing the panel, or a CLI geom flag, only lasts the session, so
 # set it here to make a position / size stick.
@@ -433,8 +436,10 @@ enabled = false
 #                unnamed (empty-title) window.
 #   role       — exact AX role     (e.g. "AXWindow").
 #   subrole    — exact AX subrole  (e.g. "AXDialog").
-#   max-width  — match windows no wider than this (points).
-#   max-height — match windows no taller than this (points).
+#   max-width  — match windows no wider than this (whole points).
+#   max-height — match windows no taller than this (whole points).
+#                Integers only — a fractional value (e.g. 100.5) is
+#                silently ignored, applying no size constraint.
 #
 # action defaults to "float". A rule with no match key is ignored (it
 # would match nothing). A bad regex simply never matches — it can't
@@ -613,14 +618,28 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
-# Display sections  [[desktop.N.section]]   (PREVIEW — parsed, not yet used)
+# Display sections  [[desktop.N.section]]   (LIVE — [grouping] by = "workspace")
 # -----------------------------------------------------------------
-# A forward-looking way to organise windows: instead of the manual
+# A richer way to organise a mac desktop: instead of the plain
 # `[desktop.N]` workspace list above, you describe an ORDERED list of
-# sections. facet PARSES these today but nothing consumes them yet — they
-# have NO effect on the current build. The recommended config stays the
-# plain by-workspace `[desktop.N]` blocks above (no surprises); this block
-# documents the shape that's coming.
+# sections. These TAKE EFFECT today (workspace grouping only). When a mac
+# desktop has at least one `type = "workspace"` section, the section model
+# becomes AUTHORITATIVE for that desktop: the tree renders the sections in
+# declaration order, lens sections narrow the grid / rail overview, and
+# tree drag-and-drop applies / un-applies a lens's `apply` ops. It is
+# per-desktop and OPT-IN — leave it out and the plain by-workspace
+# `[desktop.N]` blocks above keep working unchanged.
+#
+# PRECEDENCE: on a desktop that has BOTH a `[desktop.N]` list AND one or
+# more `type = "workspace"` sections, the SECTIONS win — the workspace
+# count + each WS's `layout` come from the sections, names are auto-assigned
+# from an emoji pool (you can't name them), and that desktop's `[desktop.N]`
+# name / layout seeds are IGNORED (facet logs this loud at launch so the
+# override is never silent). A desktop whose sections are ONLY lens /
+# unassigned does NOT switch to the section model, so its `[desktop.N]`
+# seed still applies. On single-desktop / SkyLight-unavailable setups (no
+# resolvable Mission Control ordinal) facet falls back to the default 5
+# unnamed workspaces.
 #
 # Each `[[desktop.N.section]]` is one section on the Nth mac desktop
 # (Mission Control order). The array ORDER is the tree's display order.
@@ -628,7 +647,11 @@ action = "ignore"
 #
 #   type = "workspace"  — a permanent spatial cell (the tiling unit, the
 #       grid/rail cell). AUTO-NAMED (an emoji 🐶🍎🍕), so you neither name
-#       nor filter it. Optional `layout` seeds its tiling engine.
+#       nor filter it. Optional `layout` seeds its tiling engine. The COUNT
+#       of workspace sections is that desktop's live workspace count; each
+#       section's `layout` is that workspace's startup layout. Having at
+#       least one workspace section is what turns the section model ON for
+#       the desktop.
 #         [[desktop.1.section]]
 #         type = "workspace"
 #         layout = "bsp"
@@ -638,7 +661,7 @@ action = "ignore"
 #       satisfies (multi-match). Keys:
 #         label  — the lens's header in the view (required).
 #         match  — a facet filter WHERE-clause (required; the same mini-
-#                  language as `facet query --filter`), e.g.
+#                  language as `facet query --windows --filter`), e.g.
 #                    'tag~=web or app=Safari'
 #                    '(tag~=work or tag~=urgent) and not floating'
 #         apply  — (optional) facets SET on a window dropped into the lens,
@@ -651,15 +674,22 @@ action = "ignore"
 #                  Omit `apply` → the lens is drop-inert (a drop snaps back).
 #
 #   type = "unassigned"  — the lost-and-found section (just a `label`) for
-#       windows in no other section.
+#       windows in no other section. DEFERRED: this type decodes but the
+#       projection emits NO group for it yet — under the current catalog
+#       every managed window already has a workspace, so the set is always
+#       empty. An `unassigned` section will not appear in the tree today.
 #
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess). Sections are a WORKSPACE-axis
 # concept: under `[grouping] by = "tag"` they are ignored (facet logs a
 # notice and falls back to the tag world).
 #
-# Example — two auto-named workspaces plus Dev / Web / Notes lenses
-# (uncomment to try once a consumer ships):
+# Example — two auto-named workspaces plus Dev / Web / Notes lenses.
+# Uncomment and restart facet to try it (works in the default
+# `by = "workspace"` grouping). Uncommenting gives desktop 1 the section
+# model, which OVERRIDES the `[desktop.1]` block above (its name / layout
+# seeds are then ignored + logged). Activate a lens at runtime with
+# `facet lens --section "Dev"`; clear it with `facet lens --clear`:
 #
 # [[desktop.1.section]]
 # type = "workspace"

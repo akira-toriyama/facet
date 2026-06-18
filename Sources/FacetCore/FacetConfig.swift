@@ -175,8 +175,10 @@ public struct FacetConfig: Sendable {
     /// raw TOML text (nested array-of-tables) by `load`, like
     /// `exclusionRules` / `tagDefs`. Workspace-axis only — read through
     /// `effectiveMacDesktopSectionConfigs`, which drops them in tag mode.
-    /// PARSE-ONLY: no production consumer yet (PR3 `FilterProjection` +
-    /// PR5 tree).
+    /// Consumed in production: `FilterProjection` (tree), `OverviewProjection`
+    /// (grid/rail lens narrow), the `facet lens` active filter, `ApplyResolver`
+    /// (DnD apply/un-apply), and `effectiveWorkspaceList` (workspace count +
+    /// layout). Shipped #296–#301.
     public var macDesktopSectionConfigs: [Int: [DesktopSection]] = [:]
 
     /// `[[exclude]]` rules — windows matching one are floated or
@@ -776,8 +778,8 @@ public struct FacetConfig: Sendable {
     /// with a LOUD `Log.line` (the ordinal + row index for context) — never
     /// a silent clamp (see `DesktopSection.parse`). A desktop with no usable
     /// rows contributes no entry. Section order within a desktop is file
-    /// order. PARSE-ONLY — no production consumer yet; read through
-    /// `effectiveMacDesktopSectionConfigs`.
+    /// order. The decoded sections are consumed in production — read through
+    /// `effectiveMacDesktopSectionConfigs` (which drops them in tag mode).
     public static func decodeDesktopSectionSections(fromTOML text: String)
         -> [Int: [DesktopSection]]
     {

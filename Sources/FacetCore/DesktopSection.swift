@@ -1,8 +1,10 @@
 // `[[desktop.N.section]]` — the ordered, config-driven display units that
-// drive the pivot's filter-projected views (the section/lens model; the
-// consumer lands in PR3's `FilterProjection` redesign + PR5's tree). This
-// file is PARSE-ONLY for now: it defines the types and the TOML decode;
-// nothing reads them in production yet.
+// drive the pivot's filter-projected views (the section/lens model). This
+// file owns the types + the TOML decode; the parsed sections are consumed
+// in production via `effectiveMacDesktopSectionConfigs` — `FilterProjection`
+// (tree), `OverviewProjection` (grid/rail lens narrow), `ApplyResolver`
+// (DnD apply/un-apply), and `effectiveWorkspaceList` (workspace count +
+// layout). Shipped #296–#301; gated per-desktop by `isSectionModelActive`.
 //
 // A section is one entry in the per-mac-desktop ordered array — the array
 // order IS the tree's display order. Each section is one of three TYPES
