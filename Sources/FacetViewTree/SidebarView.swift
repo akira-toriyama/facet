@@ -48,6 +48,22 @@ public final class SidebarView: NSView {
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
         let tags: [String]       // window: tag names → `#tag` chips (flat tag mode)
+        /// header (section model, PR5): this is a `lens` section, not a
+        /// workspace — drawn with a leading lens glyph + no layout sub-line.
+        let isLens: Bool
+
+        init(row: NSRect, kind: Int, hot: Bool, firstHeader: Bool, pid: Int,
+             app: String, title: String, text: String, mode: String,
+             isMaster: Bool, isFloating: Bool, isSticky: Bool, mark: String?,
+             isHidden: Bool, scratchpad: String?, tags: [String],
+             isLens: Bool = false) {
+            self.row = row; self.kind = kind; self.hot = hot
+            self.firstHeader = firstHeader; self.pid = pid; self.app = app
+            self.title = title; self.text = text; self.mode = mode
+            self.isMaster = isMaster; self.isFloating = isFloating
+            self.isSticky = isSticky; self.mark = mark; self.isHidden = isHidden
+            self.scratchpad = scratchpad; self.tags = tags; self.isLens = isLens
+        }
     }
     var cells: [Cell] = []
     var hoverIdx: Int?            // row under the pointer
@@ -70,6 +86,22 @@ public final class SidebarView: NSView {
     /// and sticky across the internal relayouts that omit the arg. (#191
     /// PR-6.)
     var tagModeActive = false
+
+    /// Section/lens model (`[[desktop.N.section]]`, PR5): the tree renders
+    /// the config's ordered sections (workspace + lens) via
+    /// `FilterProjection`, with a window shown in EVERY section it matches
+    /// (multi-match duplication). A third render mode beside workspace / tag,
+    /// mutually exclusive with both (`effectiveMacDesktopSectionConfigs` is
+    /// empty in tag mode, and the Controller only takes this path when
+    /// `isSectionModelActive`). Sticky across internal relayouts (search /
+    /// optimistic / resize) via `rebuild()`, mirroring `tagModeActive`. Like
+    /// tag mode, DnD / keyboard-lift are disabled here — `apply`-based DnD
+    /// lands in PR8.
+    var sectionModeActive = false
+    /// Last projected groups pushed via `update(sections:)`; reused by the
+    /// internal relayouts in `rebuild()` (the projection is recomputed only
+    /// on a Controller refresh, not on every search keystroke / resize).
+    var lastGroups: [FilterGroup] = []
 
     var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public internal(set) var signature = ""
@@ -224,8 +256,22 @@ public final class SidebarView: NSView {
         // flicker to the backend's transient default focus before our
         // re-assert wins.
         optUntil = Date().addingTimeInterval(0.85)
-        update(lastWorkspaces)            // rebuild now with the override
+        rebuild()                         // rebuild now with the override
         controller?.scheduleReconcile(after: 0.9)
+    }
+
+    /// Re-render from the last snapshot, on whichever path is active. The
+    /// internal relayouts (optimistic highlight, search keystroke, resize)
+    /// must NOT fall back to the by-workspace path while the section model is
+    /// driving the tree, so they route here instead of calling
+    /// `update(_:)` directly. The projection is recomputed only on a
+    /// Controller refresh, so `rebuild()` reuses the last `lastGroups`.
+    func rebuild() {
+        if sectionModeActive {
+            _ = update(sections: lastGroups, workspaces: lastWorkspaces)
+        } else {
+            _ = update(lastWorkspaces)
+        }
     }
 
     // MARK: - Update / layout
@@ -235,6 +281,13 @@ public final class SidebarView: NSView {
                        titles: [WindowID: String]? = nil,
                        macDesktop: Int?? = nil,
                        tagMode: Bool? = nil) -> CGFloat {
+        // By-workspace / tag render path. The section/lens model uses the
+        // parallel `update(sections:)` below; this entry always leaves it,
+        // so a config that drops out of the section model (or a tag-mode
+        // mac desktop) falls back to the legacy render. Internal relayouts
+        // never call this directly — they route through `rebuild()`, which
+        // re-dispatches to the right path.
+        sectionModeActive = false
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         // Double-optional: omitting the arg (internal relayouts) keeps
@@ -306,7 +359,6 @@ public final class SidebarView: NSView {
         // nothing is tail-truncated. Measured up front because every row
         // rect — and thus hit-testing — is built at this width.
         let clipW = enclosingScrollView?.contentView.bounds.width ?? bounds.width
-        let txWin = rowPadX + 2 + iconSize + 8
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (ws, wins) in shown {
@@ -332,56 +384,20 @@ public final class SidebarView: NSView {
             naturalW = max(naturalW,
                            rowPadX + gripSpace + ceil(max(nameW, modeW)) + rowPadX)
             for win in wins {
-                let appW = (win.appName as NSString).size(
-                    withAttributes: [.font: uiFont(windowFontSize, .semibold)]).width
-                let tt = eff(win)
-                let titleW = tt.isEmpty ? 0
-                    : (tt as NSString).size(
-                        withAttributes: [.font: uiFont(windowTitleFontSize, .semibold)]).width
-                naturalW = max(naturalW, txWin + ceil(max(appW, titleW)) + rowPadX)
+                naturalW = max(naturalW, windowNaturalWidth(win, title: eff(win)))
             }
         }
         let w = max(clipW, naturalW)
         var y: CGFloat = 6        // small top inset
 
-        // Append one window row (TreeRow + Cell) and advance `y`. Shared
-        // by the search (flat cross-WS) and normal (per-WS) passes — the
-        // row-height ladder + the 13 Cell fields were an identical block
-        // in both. Nested so it captures `eff` / `hot` / `w` / `y`.
+        // Append one window row (TreeRow + Cell) and advance `y`. Thin
+        // wrapper over the shared `windowRow` method (which owns the
+        // row-height ladder + Cell mapping, so the by-workspace and section
+        // paths can never drift). Degrade: group == workspaceIndex ==
+        // ws.index, so kbNav / DnD band keys stay byte-identical.
         func appendWindowRow(_ win: Window, wsIndex: Int) {
-            let wt = eff(win)
-            let hasLabel = win.isMaster || win.isFloating
-            // Third line under the title holds the mark pill (left) and
-            // the master / float / hidden / scratchpad / tag-chip badges —
-            // present when any of those conditions holds. In tag mode the
-            // chips are EVERY tag the window carries (flat list — no
-            // primary tag is hidden under a header); workspace mode leaves
-            // `tags` empty, so this is `false` there.
-            let hasThird = hasLabel || (win.mark != nil)
-                || !win.isOnscreen || (win.scratchpad != nil)
-                || !win.tags.isEmpty
-            var rh: CGFloat = windowRowH       // compact single line
-            if !wt.isEmpty || hasThird {
-                rh = 34                        // top 8 + app 18 + bot 8
-                if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
-                if hasThird { rh += 24 }       // gap 2 + badge 22
-            }
-            let wr = NSRect(x: 0, y: y, width: w, height: rh)
-            rows.append(TreeRow(rect: wr, kind: .window(
-                workspaceIndex: wsIndex, pid: win.pid,
-                windowID: win.id, title: wt)))
-            cells.append(Cell(row: wr, kind: 2, hot: hot(win),
-                              firstHeader: false, pid: win.pid,
-                              app: win.appName, title: wt,
-                              text: "", mode: "",
-                              isMaster: win.isMaster,
-                              isFloating: win.isFloating,
-                              isSticky: win.isSticky,
-                              mark: win.mark,
-                              isHidden: !win.isOnscreen,
-                              scratchpad: win.scratchpad,
-                              tags: win.tags))
-            y += rh
+            y = windowRow(win, group: wsIndex, workspaceIndex: wsIndex,
+                          width: w, y: y, title: eff(win), hot: hot(win))
         }
 
         // The "Desktop N" grab band is no longer a scrolling row — it's
@@ -411,7 +427,8 @@ public final class SidebarView: NSView {
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
             rows.append(TreeRow(rect: hr,
-                                kind: .header(workspaceIndex: ws.index)))
+                                kind: .header(group: ws.index,
+                                              workspaceIndex: ws.index)))
             let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
             cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                               firstHeader: firstHeader, pid: 0, app: "",
@@ -426,6 +443,209 @@ public final class SidebarView: NSView {
                 appendWindowRow(win, wsIndex: ws.index)
             }
             wsBands[ws.index] = start...(y + 3)
+            y += 3
+        }
+        contentHeight = y + 6
+        contentWidth = w
+        if kbNav { resolveSel() }
+        needsDisplay = true
+        return contentHeight
+    }
+
+    // MARK: - Section/lens render path (PR5)
+
+    /// Natural (untruncated) width one window row needs — the icon gutter
+    /// plus the wider of its app name / title. Extracted so the by-workspace
+    /// and section paths' width pre-pass stay identical (horizontal scroll).
+    private func windowNaturalWidth(_ win: Window, title tt: String) -> CGFloat {
+        let txWin = rowPadX + 2 + iconSize + 8
+        let appW = (win.appName as NSString).size(
+            withAttributes: [.font: uiFont(windowFontSize, .semibold)]).width
+        let titleW = tt.isEmpty ? 0
+            : (tt as NSString).size(
+                withAttributes: [.font: uiFont(windowTitleFontSize, .semibold)]).width
+        return txWin + ceil(max(appW, titleW)) + rowPadX
+    }
+
+    /// Build one window row (TreeRow + Cell) at `y`, returning the advanced
+    /// `y`. Owns the row-height ladder + the Cell field mapping, so the
+    /// by-workspace and section render paths can never drift visually.
+    /// `group` is the rendered-group ordinal (degrade: == `workspaceIndex` ==
+    /// ws.index); `workspaceIndex` is the backend action target — the
+    /// window's REAL workspace (focus / switch), even inside a lens section.
+    private func windowRow(_ win: Window, group: Int, workspaceIndex: Int,
+                           width w: CGFloat, y: CGFloat,
+                           title wt: String, hot: Bool) -> CGFloat {
+        let hasLabel = win.isMaster || win.isFloating
+        // Third line under the title: mark pill (left) + master / float /
+        // hidden / scratchpad / tag-chip badges — present when any holds.
+        let hasThird = hasLabel || (win.mark != nil)
+            || !win.isOnscreen || (win.scratchpad != nil)
+            || !win.tags.isEmpty
+        var rh: CGFloat = windowRowH       // compact single line
+        if !wt.isEmpty || hasThird {
+            rh = 34                        // top 8 + app 18 + bot 8
+            if !wt.isEmpty { rh += 20 }    // gap 4 + title 16
+            if hasThird { rh += 24 }       // gap 2 + badge 22
+        }
+        let wr = NSRect(x: 0, y: y, width: w, height: rh)
+        rows.append(TreeRow(rect: wr, kind: .window(
+            group: group, workspaceIndex: workspaceIndex, pid: win.pid,
+            windowID: win.id, title: wt)))
+        cells.append(Cell(row: wr, kind: 2, hot: hot,
+                          firstHeader: false, pid: win.pid,
+                          app: win.appName, title: wt, text: "", mode: "",
+                          isMaster: win.isMaster, isFloating: win.isFloating,
+                          isSticky: win.isSticky, mark: win.mark,
+                          isHidden: !win.isOnscreen, scratchpad: win.scratchpad,
+                          tags: win.tags))
+        return y + rh
+    }
+
+    /// Render the section/lens model (`[[desktop.N.section]]`, PR5). The
+    /// Controller runs `FilterProjection` (off the by-workspace degrade
+    /// path) and hands the projected `groups` plus the live `workspaces`
+    /// (for header chrome — a workspace section's layout badge + active
+    /// highlight come from its source workspace). A window appears in EVERY
+    /// section it matches (multi-match); rows are keyed by `(group, id)` so a
+    /// duplicated window stays individually addressable. DnD / keyboard-lift
+    /// are disabled in this mode (apply-based DnD is PR8).
+    @discardableResult
+    public func update(sections groups: [FilterGroup],
+                       workspaces: [Workspace],
+                       titles: [WindowID: String]? = nil,
+                       macDesktop: Int?? = nil) -> CGFloat {
+        sectionModeActive = true
+        lastGroups = groups
+        lastWorkspaces = workspaces
+        // Section mode is workspace-axis; it never coexists with tag mode
+        // (the Controller only routes here when `isSectionModelActive`, and
+        // `effectiveMacDesktopSectionConfigs` is empty in tag mode).
+        tagModeActive = false
+        if let titles { titleOverride = titles }
+        if let macDesktop { macDesktopOrdinal = macDesktop }
+        activeWS = workspaces.first(where: { $0.isActive })?.index
+        let opt = optimisticHeld()
+        func hot(_ win: Window) -> Bool {
+            opt ? (win.id == optWindowID) : win.isFocused
+        }
+        func eff(_ win: Window) -> String {
+            win.title.isEmpty ? (titleOverride[win.id] ?? "") : win.title
+        }
+        // A window's REAL workspace (focus / switch target) — it stays the
+        // same even when the window is shown inside a lens section.
+        var realWS: [WindowID: Int] = [:]
+        var wsByIndex: [Int: Workspace] = [:]
+        for ws in workspaces {
+            wsByIndex[ws.index] = ws
+            for w in ws.windows { realWS[w.id] = ws.index }
+        }
+        // A workspace section's header chrome (active highlight + layout
+        // badge) is read from its source workspace. Lens sections never
+        // highlight here — PR6's active-lens emphasis lights up later.
+        func wsActive(_ src: Int?) -> Bool {
+            guard let src else { return false }
+            return opt ? (src == optActiveWS) : (wsByIndex[src]?.isActive ?? false)
+        }
+        func wsLayout(_ src: Int?) -> String {
+            guard let src else { return "" }
+            return wsByIndex[src]?.layoutMode ?? ""
+        }
+
+        let sig = (searching ? "S:\(query);" : "")
+            + "SEC;D\(macDesktopOrdinal ?? -1);"
+            + (opt
+                ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
+                : "R;")
+            + groups.enumerated().map { (g, grp) in
+                let isLens = grp.sectionType == .lens
+                let active = !isLens && wsActive(grp.sourceWorkspaceIndex)
+                let layout = isLens ? "" : wsLayout(grp.sourceWorkspaceIndex)
+                return "\(g):\(grp.id):\(isLens ? "L" : "W")"
+                    + "\(active ? "*" : "")\(layout)|"
+                    + grp.windows.map {
+                        "\($0.id.serverID)\(hot($0) ? "f" : "")"
+                        + "\($0.isOnscreen ? "" : "h"):\(eff($0))"
+                    }.joined(separator: ",")
+            }.joined(separator: ";")
+
+        if skeleton {
+            if sig == skeletonBaseSig { return skeletonHeight }
+            skeleton = false
+            Log.debug("tree: skeleton cleared (new content loaded)")
+        }
+        if sig == signature { return contentHeight }
+        signature = sig
+        rows.removeAll(); cells.removeAll(); wsBands.removeAll()
+
+        // Search filters by window within each section; a section with zero
+        // matches drops out (mirrors the by-workspace path, #202). Non-search
+        // keeps every section (an empty one still shows its header).
+        let shown: [(g: Int, grp: FilterGroup, wins: [Window])] =
+            groups.enumerated().compactMap { (g, grp) in
+                let wins = searching
+                    ? grp.windows.filter {
+                        fuzzyMatch(query, $0.appName + " " + eff($0)) }
+                    : grp.windows
+                if searching && wins.isEmpty { return nil }
+                return (g, grp, wins)
+            }
+
+        let clipW = enclosingScrollView?.contentView.bounds.width ?? bounds.width
+        let gripSpace = headerGripW + 6
+        var naturalW = sidebarWidth
+        for (_, grp, wins) in shown {
+            let isLens = grp.sectionType == .lens
+            // Lens label as-authored; workspace (auto-emoji) name uppercased,
+            // matching the header draw.
+            let nm = isLens ? grp.label : grp.label.uppercased()
+            let nameW = (nm as NSString).size(
+                withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
+                + (isLens ? 22 : 0)   // leading lens glyph
+            let layout = isLens ? "" : wsLayout(grp.sourceWorkspaceIndex)
+            let modeW = layout.isEmpty ? 0
+                : (layoutBadgeLabel(layout) as NSString).size(
+                    withAttributes: [.font: uiFont(subheadFontSize, .semibold)]).width
+                    + (layoutModeIcon(layout).isEmpty ? 0 : 19)
+            naturalW = max(naturalW,
+                           rowPadX + gripSpace + ceil(max(nameW, modeW)) + rowPadX)
+            for win in wins {
+                naturalW = max(naturalW, windowNaturalWidth(win, title: eff(win)))
+            }
+        }
+        let w = max(clipW, naturalW)
+        var y: CGFloat = 6
+
+        var firstHeader = true
+        for (g, grp, wins) in shown {
+            let start = y
+            let isLens = grp.sectionType == .lens
+            let src = grp.sourceWorkspaceIndex
+            let layout = isLens ? "" : wsLayout(src)
+            let active = !isLens && wsActive(src)
+            let label = isLens ? grp.label : grp.label.uppercased()
+            let hh = firstHeader ? headerFirstRowH : headerRowH
+            let hr = NSRect(x: 0, y: y, width: w, height: hh)
+            // Workspace section → click switches to its source WS; lens
+            // section → no workspace to switch to (PR6 activates the lens),
+            // so the header's action target is nil.
+            rows.append(TreeRow(rect: hr,
+                                kind: .header(group: g,
+                                              workspaceIndex: isLens ? nil : src)))
+            cells.append(Cell(row: hr, kind: 1, hot: active,
+                              firstHeader: firstHeader, pid: 0, app: "",
+                              title: "", text: label, mode: layout,
+                              isMaster: false, isFloating: false,
+                              isSticky: false, mark: nil, isHidden: false,
+                              scratchpad: nil, tags: [], isLens: isLens))
+            firstHeader = false
+            y += hh
+            for win in wins {
+                let aws = realWS[win.id] ?? src ?? (activeWS ?? 0)
+                y = windowRow(win, group: g, workspaceIndex: aws,
+                              width: w, y: y, title: eff(win), hot: hot(win))
+            }
+            wsBands[g] = start...(y + 3)
             y += 3
         }
         contentHeight = y + 6
@@ -461,13 +681,13 @@ public final class SidebarView: NSView {
     public var skeletonHeight: CGFloat {
         headerFirstRowH + headerRowH * 2 + windowRowH * 6 + 12
     }
-    public func relayout() { signature = ""; _ = update(lastWorkspaces) }
+    public func relayout() { signature = ""; rebuild() }
 
     // MARK: - type-to-filter (entered with `s` in --active)
 
     private func rebuildSearch() {
         signature = ""
-        _ = update(lastWorkspaces)
+        rebuild()
         kbSel = kbDefault()      // land on the first match each keystroke
         needsDisplay = true
         scrollSelVisible()
@@ -486,7 +706,7 @@ public final class SidebarView: NSView {
     public func endSearch() {
         guard searching else { return }
         searching = false; query = ""
-        signature = ""; _ = update(lastWorkspaces)
+        signature = ""; rebuild()
         needsDisplay = true
         controller?.previewTargetChanged()
     }
@@ -565,58 +785,44 @@ public final class SidebarView: NSView {
     public func previewTargets()
         -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
     {
-        enum T { case win(WindowID); case ws(Int) }
-        var t: T?
-        // Hover wins when the pointer is over a previewable row — this is
-        // what makes hover previews work in `--active` (kbNav) mode too,
-        // not just plain mode (previously kbNav short-circuited to kbSel
-        // and ignored hover entirely). Keyboard nav clears `hoverIdx`
-        // (see setSel), so an arrow key hands the preview to the keyboard
-        // selection and the next mouseMoved hands it back to hover —
-        // "most recent input wins".
-        if let h = hoverIdx, rows.indices.contains(h) {
-            switch rows[h].kind {
-            case .window(_, _, let id, _):      t = .win(id)
-            case .header(let w):                t = .ws(w)
-            default:                            break
-            }
-        }
-        if t == nil, kbNav, let s = kbSel {
-            switch s {
-            case .win(let id):                  t = .win(id)
-            case .hdr(let w):                   t = .ws(w)
-            }
-        }
-        guard let t, let win = self.window else { return [] }
+        // Resolve the single SOURCE ROW: hover wins, else the keyboard
+        // selection. Hover wins so previews work in `--active` (kbNav) mode
+        // too, not just plain mode (kbNav clears `hoverIdx` in setSel, so an
+        // arrow key hands the preview to the keyboard selection and the next
+        // mouseMoved hands it back — "most recent input wins"). Anchoring on
+        // the ROW (not a re-lookup by window id) keeps the anchor correct
+        // under the section model's multi-match, where the same window id
+        // appears in several rows.
+        let srcIdx: Int? = {
+            if let h = hoverIdx, rows.indices.contains(h) { return h }
+            if kbNav, let s = kbSel { return kbIndex(of: s) }
+            return nil
+        }()
+        guard let srcIdx, rows.indices.contains(srcIdx),
+              let win = self.window else { return [] }
         func screen(_ r: NSRect) -> NSRect {
             win.convertToScreen(convert(r, to: nil))
         }
-        switch t {
-        case .win(let id):
+        switch rows[srcIdx].kind {
+        case .window(_, _, _, let id, _):
             guard let ws = lastWorkspaces.first(where: { w in
                 w.windows.contains { $0.id == id }
             }), !ws.isActive,
-                  let winModel = ws.windows.first(where: { $0.id == id }),
-                  let rowIdx = rows.firstIndex(where: { r in
-                      if case .window(_, _, let wid, _) = r.kind {
-                          return wid == id
-                      }
-                      return false
-                  })
+                  let winModel = ws.windows.first(where: { $0.id == id })
             else { return [] }
-            return [(id, screen(rows[rowIdx].rect), winModel.frame)]
-        case .ws(let wi):
-            guard let ws = lastWorkspaces.first(where: { $0.index == wi }),
-                  !ws.isActive,
-                  let hdrIdx = rows.firstIndex(where: { r in
-                      if case .header(let w) = r.kind { return w == wi }
-                      return false
-                  })
+            return [(id, screen(rows[srcIdx].rect), winModel.frame)]
+        case .header(_, let wi):
+            // A lens-section header (workspaceIndex nil) has no single
+            // workspace to preview; only a workspace header previews windows.
+            guard let wi, let ws = lastWorkspaces.first(where: { $0.index == wi }),
+                  !ws.isActive
             else { return [] }
-            let anchor = screen(rows[hdrIdx].rect)
+            let anchor = screen(rows[srcIdx].rect)
             return ws.windows.map {
                 (window: $0.id, rowAnchor: anchor, windowFrame: $0.frame)
             }
+        case .search:
+            return []
         }
     }
 

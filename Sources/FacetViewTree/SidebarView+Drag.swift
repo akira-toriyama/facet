@@ -67,16 +67,19 @@ extension SidebarView {
                 if mode == 0,
                    hypot(cp.x - start.x, cp.y - start.y) >= pointerDragThreshold {
                     // ⌘+drag is always a panel-move; so is ANY drag in tag
-                    // mode, where the flat list has no workspace to drop a
-                    // window / swap a header onto (DnD retag is off — #191
-                    // PR-6). Retagging is via the row context menu / CLI.
-                    if ev.modifierFlags.contains(.command) || tagModeActive {
-                        mode = 1                       // ⌘+drag / tag mode → move
+                    // mode (the flat list has no workspace to drop onto) and
+                    // in the section model (PR5 — apply-based DnD lands in
+                    // PR8; until then a section-path drag must not move a
+                    // window / swap a header). Retag / move is via the row
+                    // context menu / CLI.
+                    if ev.modifierFlags.contains(.command)
+                        || tagModeActive || sectionModeActive {
+                        mode = 1                       // ⌘ / tag / section → move
                     } else {
                         switch row?.kind {
                         case .none, .search?:
                             mode = 1                   // empty / search → move
-                        case .window(let ws, _, let wid, _)?:
+                        case .window(_, let ws, _, let wid, _)?:
                             mode = 2
                             dragWS = ws
                             dragWindowID = wid
@@ -96,19 +99,23 @@ extension SidebarView {
                             lastDropWS = nil
                             prevApp = NSWorkspace.shared.frontmostApplication
                             NSApp.activate(ignoringOtherApps: true)
-                        case .header(let ws)?:
+                        case .header(let g, .some)?:
                             // Theme A: header drag = swap this WS's
                             // contents with the drop-target WS. Panel
-                            // move retreats to ⌘+drag / empty space.
+                            // move retreats to ⌘+drag / empty space. (Only
+                            // reachable in the by-workspace path, where
+                            // group == ws.index == the swap target.)
                             mode = 3
-                            dragWS = ws
-                            draggingWS = ws
+                            dragWS = g
+                            draggingWS = g
                             // ⑨ richer ghost: lift the whole WS section
                             // (header + windows) as a snapshot card.
-                            if !showDragCard(rect: dragRect(forWS: ws)) {
-                                showChip(swapChipLabel(for: ws))
+                            if !showDragCard(rect: dragRect(forGroup: g)) {
+                                showChip(swapChipLabel(for: g))
                             }
                             lastDropWS = nil
+                        case .header(_, .none)?:
+                            mode = 1                   // lens header → move
                         }
                     }
                 }
@@ -184,15 +191,16 @@ extension SidebarView {
 
     // MARK: - Drag card (⑨ — snapshot the lifted rows)
 
-    /// Union rect of a workspace's header + window rows.
-    private func dragRect(forWS ws: Int) -> NSRect? {
+    /// Union rect of a render group's header + window rows (header-swap
+    /// drag card — by-workspace path only, where group == ws.index).
+    private func dragRect(forGroup g: Int) -> NSRect? {
         var r: NSRect?
         for row in rows {
             let hit: Bool
             switch row.kind {
-            case .header(let w):       hit = (w == ws)
-            case .window(let w, _, _, _): hit = (w == ws)
-            default:                   hit = false
+            case .header(let rg, _):          hit = (rg == g)
+            case .window(let rg, _, _, _, _): hit = (rg == g)
+            default:                          hit = false
             }
             if hit { r = r.map { $0.union(row.rect) } ?? row.rect }
         }
@@ -202,7 +210,7 @@ extension SidebarView {
     /// A single window row's rect.
     private func dragRect(forWindow id: WindowID) -> NSRect? {
         rows.first {
-            if case .window(_, _, let wid, _) = $0.kind { return wid == id }
+            if case .window(_, _, _, let wid, _) = $0.kind { return wid == id }
             return false
         }?.rect
     }
@@ -315,11 +323,15 @@ extension SidebarView {
         switch row.kind {
         case .search:
             break
-        case .header(let i):
+        case .header(let g, let i):
             // Tag-world header (tag mode): one tag-world, nothing to switch
             // to — the layout picker is on right-click / `m`. Plain click /
             // Enter is a no-op (no spurious WS switch on the synthetic WS).
             if tagModeActive { return }
+            // Lens-section header (section model): no workspace to switch to.
+            // PR6 will activate the lens on click; for now sync the cursor
+            // and no-op.
+            guard let i else { kbSel = .hdr(group: g); return }
             // Move highlight to that workspace immediately: its
             // last-focused window, else its lowest window id (empty
             // → none). Without this the old workspace's window
@@ -335,7 +347,7 @@ extension SidebarView {
             // sel fill. A plain click does NOT turn kbNav on (since
             // #66 the panel takes key only via --active / the
             // Desktop-header menu); this just pre-syncs the cursor.
-            kbSel = .hdr(workspaceIndex: i)
+            kbSel = .hdr(group: g)
             let bk = backend
             // Header click = no explicit window pick. The backend's
             // `autoFocus: true` path uses the same `predictedFocus`
@@ -345,7 +357,7 @@ extension SidebarView {
             cliQueue.async {
                 bk.switchWorkspace(toIndex: i, autoFocus: true)
             }
-        case .window(let i, let pid, let id, let title):
+        case .window(let g, let i, let pid, let id, let title):
             // Off main so the click never hitches; skip the switch
             // round-trip when the window is already on the active
             // workspace.
@@ -356,7 +368,7 @@ extension SidebarView {
             // outline strands on the previous selection beside the
             // new sel fill. (A plain click doesn't enable kbNav —
             // see the header case above.)
-            kbSel = .win(id)
+            kbSel = .win(group: g, id)
             // A *hidden* row (Cmd+H'd / minimized window — hide-reclaim
             // pulled its tile slot, `isOnscreen == false`) is restored
             // on click: the backend un-hides / un-minimizes + focuses,
