@@ -67,6 +67,17 @@ extension Controller {
                     self.dispatchLensTarget(
                         String(s.dropFirst("lens:".count)))
 
+                // Section/lens model (PR6) — distinct from the tag-bitmask
+                // `lens:` above: activate / clear the ACTIVE lens (a
+                // `type="lens"` section, keyed by its label). The label can
+                // hold any character (incl. `:`), so the whole remainder is
+                // the label — no further parsing.
+                case let s where s.hasPrefix("lens-section:"):
+                    self.setActiveLens(
+                        String(s.dropFirst("lens-section:".count)))
+                case "lens-clear":
+                    self.setActiveLens(nil)
+
                 case "workspace-add":
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
@@ -480,6 +491,54 @@ extension Controller {
             return
         }
         runBackendCommand { bk in bk.setLens(spec); return nil }
+    }
+
+    /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`
+    /// section labelled `label`, or clear it with `nil`. Session-only +
+    /// per-mac-desktop (reset on a swap, never persisted). Validated against
+    /// the LIVE section config — an unknown label is loud-but-non-fatal
+    /// (`setError`, no change), matching facet's typo philosophy. On a real
+    /// change it re-renders so the lens's tree header lights up (`pal.primary`)
+    /// — grid/rail narrowing by the active lens lands in PR7.
+    ///
+    /// Unlike `dispatchLensTarget` (the tag-bitmask lens) this touches NO
+    /// backend / catalog state — the active lens is pure view-layer state — so
+    /// it runs entirely on the main actor with no `cliQueue` hop.
+    func setActiveLens(_ label: String?) {
+        guard let label else {
+            if currentActiveLens != nil {
+                currentActiveLens = nil
+                apply(lastWorkspaces)        // re-render: drop the highlight
+            }
+            return
+        }
+        // Read the ordinal FRESH (not the cached lastRenderedMacDesktopOrdinal):
+        // validation must check the mac desktop on screen NOW, and syncing the
+        // swap-detector to this same value below stops the apply() call from
+        // mistaking this command for a swap and wiping the just-set lens.
+        let ordinal = currentMacDesktopOrdinal()
+        guard config.isSectionModelActive(ordinal: ordinal) else {
+            setError("lens --section \(label): no section model on this "
+                + "mac desktop")
+            scheduleReconcile(after: 0.05)      // surface lastError via status
+            return
+        }
+        let lenses = lensSectionLabels(ordinal: ordinal)
+        guard lenses.contains(label) else {
+            let have = lenses.isEmpty ? "none" : lenses.joined(separator: ", ")
+            setError("lens --section \(label): no such lens section "
+                + "(have: \(have))")
+            scheduleReconcile(after: 0.05)      // surface lastError via status
+            return
+        }
+        guard currentActiveLens != label else { return }   // idempotent
+        currentActiveLens = label
+        // Sync the swap-detector to the ordinal just validated against, so the
+        // synchronous apply() below (same desktop, no main-actor suspension)
+        // sees no ordinal change and keeps the lens.
+        hasRenderedMacDesktop = true
+        lastRenderedMacDesktopOrdinal = ordinal
+        apply(lastWorkspaces)                // re-render: light up its header
     }
 
     private func dispatchWorkspaceRelative(_ target: RelativeWorkspace) {

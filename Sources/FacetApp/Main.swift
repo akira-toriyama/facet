@@ -181,19 +181,25 @@ enum FacetApp {
           facet workspace --move N           move the active workspace to
                                              position N (reorder)
 
-        LENS                                 (tag mode: which tags show)
+        LENS                                 (the active visibility filter)
           facet lens --only A[,B,…]          show exactly these tags
                                              (replace the shown set)
           facet lens --add A[,B,…]           union these into the shown set
           facet lens --remove A[,B,…]        drop these from the shown set
           facet lens --toggle A[,B,…]        flip each tag in / out
           facet lens --all                   show every tag
-                                             (multiple tags = comma-joined;
-                                             one unknown name rejects the
-                                             whole command; emptying the
-                                             lens shows untagged windows;
-                                             requires [grouping] by="tag";
-                                             no-op under by="workspace")
+                                             (tag mode — by="tag": multiple
+                                             tags = comma-joined; one unknown
+                                             name rejects the whole command;
+                                             emptying the lens shows untagged
+                                             windows)
+          facet lens --section LABEL         activate the lens section LABEL
+          facet lens --clear                 clear the active lens
+                                             (section model — by="workspace":
+                                             LABEL is a `type="lens"` section's
+                                             label; the active lens's tree
+                                             header is emphasised; an unknown
+                                             label is rejected)
 
         TAG                                  (tag mode: the tag vocabulary)
           facet tag --add NAME               declare tag NAME (no window

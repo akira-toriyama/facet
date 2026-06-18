@@ -102,6 +102,11 @@ public final class SidebarView: NSView {
     /// internal relayouts in `rebuild()` (the projection is recomputed only
     /// on a Controller refresh, not on every search keystroke / resize).
     var lastGroups: [FilterGroup] = []
+    /// The active lens label pushed via `update(sections:activeLens:)` (PR6):
+    /// the `type=lens` section whose header is emphasised (`pal.primary`), or
+    /// nil for none. Reused by `rebuild()` so an internal relayout (search /
+    /// optimistic / resize) keeps the highlight. Session-only.
+    var lastActiveLens: String?
 
     var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public internal(set) var signature = ""
@@ -268,7 +273,8 @@ public final class SidebarView: NSView {
     /// Controller refresh, so `rebuild()` reuses the last `lastGroups`.
     func rebuild() {
         if sectionModeActive {
-            _ = update(sections: lastGroups, workspaces: lastWorkspaces)
+            _ = update(sections: lastGroups, workspaces: lastWorkspaces,
+                       activeLens: lastActiveLens)
         } else {
             _ = update(lastWorkspaces)
         }
@@ -513,10 +519,12 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(sections groups: [FilterGroup],
                        workspaces: [Workspace],
+                       activeLens: String? = nil,
                        titles: [WindowID: String]? = nil,
                        macDesktop: Int?? = nil) -> CGFloat {
         sectionModeActive = true
         lastGroups = groups
+        lastActiveLens = activeLens
         lastWorkspaces = workspaces
         // Section mode is workspace-axis; it never coexists with tag mode
         // (the Controller only routes here when `isSectionModelActive`, and
@@ -541,8 +549,7 @@ public final class SidebarView: NSView {
             for w in ws.windows { realWS[w.id] = ws.index }
         }
         // A workspace section's header chrome (active highlight + layout
-        // badge) is read from its source workspace. Lens sections never
-        // highlight here — PR6's active-lens emphasis lights up later.
+        // badge) is read from its source workspace.
         func wsActive(_ src: Int?) -> Bool {
             guard let src else { return false }
             return opt ? (src == optActiveWS) : (wsByIndex[src]?.isActive ?? false)
@@ -550,6 +557,17 @@ public final class SidebarView: NSView {
         func wsLayout(_ src: Int?) -> String {
             guard let src else { return "" }
             return wsByIndex[src]?.layoutMode ?? ""
+        }
+        // Header "active" (drives the `pal.primary` accent + the signature's
+        // `*` marker): a workspace section follows its source workspace; a
+        // lens section lights up when it IS the active lens (PR6, matched by
+        // label — the CLI / click key). Folding it through `active`
+        // everywhere means the signature rebuilds whenever the active lens
+        // changes, with no separate sig field.
+        func headerActive(_ grp: FilterGroup) -> Bool {
+            grp.sectionType == .lens
+                ? (activeLens != nil && grp.label == activeLens)
+                : wsActive(grp.sourceWorkspaceIndex)
         }
 
         let sig = (searching ? "S:\(query);" : "")
@@ -559,7 +577,7 @@ public final class SidebarView: NSView {
                 : "R;")
             + groups.enumerated().map { (g, grp) in
                 let isLens = grp.sectionType == .lens
-                let active = !isLens && wsActive(grp.sourceWorkspaceIndex)
+                let active = headerActive(grp)
                 let layout = isLens ? "" : wsLayout(grp.sourceWorkspaceIndex)
                 return "\(g):\(grp.id):\(isLens ? "L" : "W")"
                     + "\(active ? "*" : "")\(layout)|"
@@ -622,7 +640,7 @@ public final class SidebarView: NSView {
             let isLens = grp.sectionType == .lens
             let src = grp.sourceWorkspaceIndex
             let layout = isLens ? "" : wsLayout(src)
-            let active = !isLens && wsActive(src)
+            let active = headerActive(grp)
             let label = isLens ? grp.label : grp.label.uppercased()
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)

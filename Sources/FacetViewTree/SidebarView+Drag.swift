@@ -328,10 +328,19 @@ extension SidebarView {
             // to — the layout picker is on right-click / `m`. Plain click /
             // Enter is a no-op (no spurious WS switch on the synthetic WS).
             if tagModeActive { return }
-            // Lens-section header (section model): no workspace to switch to.
-            // PR6 will activate the lens on click; for now sync the cursor
-            // and no-op.
-            guard let i else { kbSel = .hdr(group: g); return }
+            // Lens-section header (section model): no workspace to switch to —
+            // clicking it TOGGLES the active lens (PR6: click the active one
+            // again to clear). The label comes from the rendered group; the
+            // controller validates + re-renders so the lens's header lights up
+            // (`pal.primary`) and (PR7) narrows grid/rail.
+            guard let i else {
+                kbSel = .hdr(group: g)
+                if sectionModeActive, g < lastGroups.count,
+                   lastGroups[g].sectionType == .lens {
+                    controller?.toggleActiveLens(lastGroups[g].label)
+                }
+                return
+            }
             // Move highlight to that workspace immediately: its
             // last-focused window, else its lowest window id (empty
             // → none). Without this the old workspace's window

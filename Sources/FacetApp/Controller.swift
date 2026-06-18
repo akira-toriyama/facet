@@ -111,6 +111,22 @@ final class Controller: NSObject {
     /// only on the static config — so log them once per change, not once per
     /// frame.
     private var loggedSectionDiagnostics: [String] = []
+    /// Section/lens model (PR6): the session-only ACTIVE lens — the
+    /// `type="lens"` section the user activated (`facet lens --section LABEL`,
+    /// or a tree lens-header click), or nil for none. Emphasises its tree
+    /// header (`pal.primary`) and (PR7) narrows grid/rail. Per-mac-desktop:
+    /// reset to nil on a swap (a lens is scoped to its desktop's sections) and
+    /// never persisted. Set via `setActiveLens`.
+    var currentActiveLens: String?
+    /// Whether `apply()` has rendered at least once, and the mac-desktop
+    /// ordinal it last rendered — together they detect a mac-desktop swap so
+    /// `currentActiveLens` resets. The first render only records the ordinal
+    /// (no clear), so a lens activated between renders survives.
+    /// Internal (not private) so `setActiveLens` can sync them before its
+    /// synchronous `apply()` (keeping a just-set active lens from being read as
+    /// a mac-desktop swap and wiped).
+    var hasRenderedMacDesktop = false
+    var lastRenderedMacDesktopOrdinal: Int?
     /// Leading-edge debounce flag for `requestRefresh`: coalesces a
     /// burst of backend events into a single `refresh()` within
     /// `refreshDebounce`. Set on the first event, cleared when the
@@ -441,6 +457,14 @@ final class Controller: NSObject {
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
         config = fresh
+        // PR6: drop a now-stale active lens — if the edited config no longer
+        // defines it as a lens section on the current mac desktop, clear it
+        // (else a re-added same-label section would silently auto-light, and a
+        // removed one would keep a dead highlight). Session-only contract.
+        if let lens = currentActiveLens,
+           !lensSectionLabels(ordinal: currentMacDesktopOrdinal()).contains(lens) {
+            currentActiveLens = nil
+        }
         backend.updateConfig(fresh)   // hot-reload the backend's copy
         logConfigWarnings()
         applyBorderFromConfig()
@@ -463,6 +487,27 @@ final class Controller: NSObject {
         // to surface in `facet query` without waiting for the
         // next backend event.
         writeStatus(lastWorkspaces)
+    }
+
+    /// The active mac-desktop ordinal via read-only SkyLight (nil = SkyLight
+    /// unavailable / single-desktop). `apply()` (section keying), `setActiveLens`
+    /// (active-lens validation), and `reloadConfig` (re-validation) all read
+    /// through this so they agree on "which mac desktop" within one main-actor
+    /// turn. (PR6.)
+    func currentMacDesktopOrdinal() -> Int? {
+        let id = MacDesktops.activeID()
+        return id == 0 ? nil : MacDesktops.ordinal(for: id)
+    }
+
+    /// The `type="lens"` section labels on the mac desktop at `ordinal` — the
+    /// active-lens domain (empty when the section model isn't active there, or
+    /// it defines no lens sections). Shared by `setActiveLens` (validate) and
+    /// `reloadConfig` (re-validate after an edit). (PR6.)
+    func lensSectionLabels(ordinal: Int?) -> [String] {
+        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
+        else { return [] }
+        return (config.effectiveMacDesktopSectionConfigs[ord] ?? [])
+            .filter { $0.type == .lens }.map(\.label)
     }
 
     /// Surface any named-enum config value that silently clamped to a
@@ -844,9 +889,17 @@ final class Controller: NSObject {
         sidebarView.forceRedraw()
         // Mac desktop ordinal (read-only SkyLight) for the tree's top
         // handle band. 0 = SkyLight unavailable → no name.
-        let activeMacDesktopID = MacDesktops.activeID()
-        let macDesktopOrdinal = activeMacDesktopID == 0
-            ? nil : MacDesktops.ordinal(for: activeMacDesktopID)
+        let macDesktopOrdinal = currentMacDesktopOrdinal()
+        // PR6: reset the session-only active lens on a genuine mac-desktop
+        // swap — a lens is scoped to its desktop's `[[desktop.N.section]]`, so
+        // one activated on desktop A must not leak its highlight onto B. The
+        // swap is the ordinal change; the FIRST render only records it (a lens
+        // set before the first post-set re-render then survives).
+        if hasRenderedMacDesktop, macDesktopOrdinal != lastRenderedMacDesktopOrdinal {
+            currentActiveLens = nil
+        }
+        hasRenderedMacDesktop = true
+        lastRenderedMacDesktopOrdinal = macDesktopOrdinal
         // Section/lens model (PR5): when this mac desktop is section-managed
         // (≥1 `type="workspace"` section), the tree renders the config's
         // ordered sections via `FilterProjection` — a window shows up in
@@ -864,7 +917,9 @@ final class Controller: NSObject {
                 for d in result.diagnostics { Log.line("tree: \(d)") }
             }
             contentH = sidebarView.update(sections: result.groups,
-                                          workspaces: wss, titles: titles,
+                                          workspaces: wss,
+                                          activeLens: currentActiveLens,
+                                          titles: titles,
                                           macDesktop: macDesktopOrdinal)
         } else {
             contentH = sidebarView.update(wss, titles: titles,
