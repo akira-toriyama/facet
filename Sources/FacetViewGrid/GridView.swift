@@ -27,6 +27,11 @@ public final class GridView: NSView {
     /// events while the overlay is up (snapshot-on-show, per
     /// design).
     public var workspaces: [Workspace] = []
+    /// Window ids the active lens narrows the overview to (PR7), or `nil` for
+    /// no active lens (every thumbnail shows — degrade). Narrows ONLY the
+    /// per-cell thumbnails below; `workspaces` (cells / count / landing gate /
+    /// swap) stays unfiltered.
+    public var visibleWindowIDs: Set<WindowID>?
     public var activeIndex: Int?
     /// Display's frame at show time. All window-rect math scales
     /// from this so the per-cell mini-screen matches what the
@@ -326,7 +331,8 @@ public final class GridView: NSView {
             // coords so hit-testing and drawing agree byte-for-byte.
             var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
-                for win in ws.windows {
+                for win in ws.windows
+                where visibleWindowIDs?.contains(win.id) ?? true {   // active-lens narrow (PR7)
                     guard let f = win.frame else { continue }
                     let wr = gridScaledWindowRect(
                         windowFrame: f,
@@ -727,7 +733,7 @@ public final class GridView: NSView {
                     kind: .workspace,
                     pid: -1, id: WindowID(serverID: -1),
                     sourceRect: srcCell.rect,
-                    srcIDs: srcCell.windows.map(\.id),
+                    srcIDs: srcCell.windows.map(\.id),   // visible lifted set (display); the actual swap set is recomputed at commit
                     current: p,
                     dropTargetWS: nil)
                 layoutSuppressed = true
@@ -797,9 +803,7 @@ public final class GridView: NSView {
                            pid: d.pid, id: d.id,
                            dstCell: dstCell)
             case .workspace:
-                commitContentSwap(sourceWS: d.sourceWS,
-                                  srcIDs: d.srcIDs,
-                                  dstCell: dstCell)
+                commitContentSwap(sourceWS: d.sourceWS, dstCell: dstCell)
             }
         } else {
             cancelDrop(to: d.sourceRect)
@@ -885,10 +889,32 @@ public final class GridView: NSView {
         onMoveWindow?(sourceWS, dstCell.wsIndex, pid, id)
     }
 
-    private func commitContentSwap(sourceWS: Int,
-                                   srcIDs: [WindowID],
-                                   dstCell: OverviewCell) {
-        let dstIDs = dstCell.windows.map(\.id)
+    /// The window ids of workspace `wsIndex` to TRADE in a whole-workspace
+    /// swap. A swap is a STRUCTURAL op — it trades the workspaces' full
+    /// contents — so under an active lens (`visibleWindowIDs != nil`), where
+    /// the cell shows only matching windows, source from the UNFILTERED
+    /// `workspaces` so lens-hidden windows still move (matching the rail,
+    /// RailView.mouseDragged / kbLiftWorkspace). No active lens → the (frozen)
+    /// cell's windows, byte-identical to pre-PR7 (keeps the existing
+    /// frame-cull; never widens to frameless windows for non-lens users).
+    private func swapWindowIDs(forWS wsIndex: Int,
+                               cellWindows: [MiniWindowHit]) -> [WindowID] {
+        if visibleWindowIDs != nil,
+           let full = workspaces.first(where: { $0.index == wsIndex })?.windows {
+            return full.map(\.id)
+        }
+        return cellWindows.map(\.id)
+    }
+
+    private func commitContentSwap(sourceWS: Int, dstCell: OverviewCell) {
+        // Derive BOTH swap sets HERE (one epoch) so a lens toggle mid-drag
+        // can't desync a promotion-time src from a commit-time dst into a
+        // partial swap. The source cell is frozen during the drag
+        // (layoutSuppressed), so its windows are the lifted set; `swapWindowIDs`
+        // sources the full workspace under a lens, the frozen cell otherwise.
+        let srcWins = cells.first(where: { $0.wsIndex == sourceWS })?.windows ?? []
+        let srcIDs = swapWindowIDs(forWS: sourceWS, cellWindows: srcWins)
+        let dstIDs = swapWindowIDs(forWS: dstCell.wsIndex, cellWindows: dstCell.windows)
         lastSwap = OverviewPendingSwap(
             srcWS: sourceWS,
             dstWS: dstCell.wsIndex,
@@ -1057,7 +1083,7 @@ public final class GridView: NSView {
             kind: .workspace,
             pid: -1, id: WindowID(serverID: -1),
             sourceRect: cell.rect,
-            srcIDs: cell.windows.map(\.id),
+            srcIDs: cell.windows.map(\.id),   // visible lifted set (display); the actual swap set is recomputed at commit
             current: at,
             dropTargetWS: nil)
         layoutSuppressed = true
@@ -1080,9 +1106,7 @@ public final class GridView: NSView {
                                pid: d.pid, id: d.id,
                                dstCell: dstCell)
                 case .workspace:
-                    commitContentSwap(sourceWS: d.sourceWS,
-                                      srcIDs: d.srcIDs,
-                                      dstCell: dstCell)
+                    commitContentSwap(sourceWS: d.sourceWS, dstCell: dstCell)
                 }
             } else {
                 // Drop on source / outside any cell → cancel.
