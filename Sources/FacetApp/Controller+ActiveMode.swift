@@ -295,6 +295,14 @@ extension Controller {
         }
     }
 
+    /// Section/lens model (PR6): TreeController hook — the user clicked a
+    /// `type="lens"` section header in the tree. Toggle it as the active lens
+    /// (clicking the active one clears it). `setActiveLens` validates the
+    /// label + re-renders; this just maps the click to set / clear.
+    func toggleActiveLens(_ label: String) {
+        setActiveLens(currentActiveLens == label ? nil : label)
+    }
+
     private func showLensSelectorPanel(at screenPt: CGPoint,
                                        allTags: [String], current: Set<String>) {
         let bk = backend

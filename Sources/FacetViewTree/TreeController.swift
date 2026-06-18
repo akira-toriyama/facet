@@ -65,6 +65,13 @@ public protocol TreeController: AnyObject, Sendable {
     func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
                        title: String, currentTags: [String], at screenPt: CGPoint)
 
+    /// Section/lens model (PR6): the user clicked a `type=lens` section
+    /// header in the tree. TOGGLE it as the active lens — activate `label`,
+    /// or clear if it is already active. The controller validates against
+    /// the live section config (an unknown label is a no-op) and re-renders
+    /// so the active lens's header lights up. No-op outside the section model.
+    func toggleActiveLens(_ label: String)
+
     /// Open the lens selector (`TagEditPanel` lens variant) — the tag-world
     /// header's "Select tags" item (tag mode). A checklist of the tag
     /// vocabulary whose checked rows are the current lens; toggling a row
