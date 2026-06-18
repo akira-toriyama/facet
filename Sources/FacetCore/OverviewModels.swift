@@ -22,8 +22,8 @@ import Foundation
 /// (`FilterProjection`). A `[[desktop.N.section]]` (type=lens) `match`
 /// filter projected over the live windows, OR — in the degrade path (no
 /// sections configured) — a 1:1 mirror of one facet workspace (by-workspace
-/// stays a first-class citizen). Views consume this (PR5+); for now it is
-/// produced and unit-tested only.
+/// stays a first-class citizen). The tree consumes this via
+/// `SidebarView.update(sections:)`; grid/rail render the `.workspace` kind.
 ///
 /// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
 /// this group maps to (so `--focus` / `--move-to` hit the right WS),
