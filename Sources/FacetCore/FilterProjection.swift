@@ -55,7 +55,11 @@
 /// supplies it here, so a section `match='workspace=Dev'` resolves correctly.
 /// `desktop` stays no-match: sections are already scoped per mac desktop by
 /// the `[[desktop.N.section]]` config, so matching on `desktop=` is redundant.
-private struct ProjectedWindowFields: WindowFields {
+///
+/// Shared with `OverviewProjection` (PR7) — both evaluate a lens `match`
+/// against a window that knows its workspace name, so the seam-overlay lives
+/// here once. Internal (not file-private) for that reason.
+struct ProjectedWindowFields: WindowFields {
     let window: Window
     let workspaceName: String
 
