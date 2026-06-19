@@ -4,7 +4,7 @@ import XCTest
 
 /// `NativeAdapter.windowMenu(mode:floating:isMaster:windowCount:isSticky:)`
 /// is pure (no AX, no catalog state) — a per-mode lookup table for the
-/// right-click / keyboard (`m` in --active) context menu, gated by the
+/// right-click / keyboard (`m` in keyboard nav) context menu, gated by the
 /// window's state so master vs non-master (and a lone stack window) get
 /// the right items. Every non-sticky window also offers "Sticky"; a
 /// sticky window collapses to "Unstick" + "Close".

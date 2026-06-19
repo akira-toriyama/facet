@@ -77,6 +77,16 @@ extension SidebarView {
                         performSwap(sourceWS: dragWS, targetWS: tgt)
                     }
                 } else if let row, row.rect.contains(cp) {
+                    // #66 safety belt: drop key/active BEFORE acting on
+                    // the row, mirroring the Enter path (kbActivate).
+                    // Since the tree now opens active, a plain click
+                    // lands while facet holds key — focusing a same-app
+                    // window then fails unless facet relinquishes key
+                    // first. No-op when already passive (exitActive
+                    // guards on kbNav). prevApp here is the Controller's
+                    // (set at show time), distinct from this view's drag
+                    // prevApp, so there's no interference.
+                    controller?.exitActive(restore: false)
                     handleClick(row)
                 }
                 break loop
@@ -387,9 +397,9 @@ extension SidebarView {
             // Carry the kb-nav cursor with the click so the
             // outline (drawn only while `kbNav` is on) doesn't
             // strand on the previously selected row beside the new
-            // sel fill. A plain click does NOT turn kbNav on (since
-            // #66 the panel takes key only via --active / the
-            // Desktop-header menu); this just pre-syncs the cursor.
+            // sel fill. The click already dropped kbNav (exitActive
+            // ran before handleClick — #66 safety belt), so this just
+            // pre-syncs the cursor for the next nav entry.
             kbSel = .hdr(group: g)
             let bk = backend
             // Header click = no explicit window pick. The backend's
@@ -409,7 +419,7 @@ extension SidebarView {
             // Keep the kb-nav cursor (drawn only while `kbNav` is
             // on) in sync with the click target, otherwise the
             // outline strands on the previous selection beside the
-            // new sel fill. (A plain click doesn't enable kbNav —
+            // new sel fill. (The click dropped kbNav via exitActive —
             // see the header case above.)
             kbSel = .win(group: g, id)
             // A *hidden* row (Cmd+H'd / minimized window — hide-reclaim

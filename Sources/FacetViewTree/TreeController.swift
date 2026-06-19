@@ -14,7 +14,7 @@ import FacetCore
 
 @MainActor
 public protocol TreeController: AnyObject, Sendable {
-    /// Leave keyboard-nav (`--active`) mode. `restore == true` means
+    /// Leave keyboard-nav mode. `restore == true` means
     /// the user dismissed without picking anything; the controller
     /// re-focuses the previously-frontmost app. `false` means a
     /// selection was made — the controller has already focused the

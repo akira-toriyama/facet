@@ -50,7 +50,7 @@ value-bearing flag migrated to the space form, not just the rows shown.
 
 | Old (`=` form) | New (space form) |
 |---|---|
-| `facet --view=tree --active` | `facet --view tree --active` |
+| `facet --view=tree` | `facet --view tree` |
 | `facet --hide=grid` | `facet --hide grid` |
 | `facet --toggle=rail` | `facet --toggle rail` |
 | `facet --view=rail --edge=left` | `facet --view rail --edge left` |

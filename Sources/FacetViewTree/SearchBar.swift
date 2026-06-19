@@ -1,4 +1,4 @@
-// Custom search bar used by the tree view's `--active` mode.
+// Custom search bar used by the tree view's keyboard-nav mode.
 // `NSSearchField`'s system cell can't be vertically centred or themed
 // to match `pal`, so we draw the rounded bg + border + magnifier
 // glyph ourselves around a borderless `NSTextField`. The field stays

@@ -9,7 +9,7 @@
 //   - ``AXTitles`` resolve to fill in titles the backend left blank
 //   - the focus retry state machine (``Focus.withRetry`` /
 //     ``Focus.assert``)
-//   - keyboard-nav (``--active``) + search
+//   - keyboard-nav + search
 //   - distributed-notification CLI IPC
 //
 // Conforms to ``TreeController`` so ``SidebarView`` can talk to it
@@ -218,7 +218,7 @@ final class Controller: NSObject {
     private let searchDelegate = SearchFieldDelegate()
     /// Whether `openTagEditor` itself flipped the app to `.regular` + active
     /// (the panel was passive — right-click path) vs. found it already
-    /// `--active` (the `m` path). Drives `finishTagEditor`: only the former
+    /// in keyboard nav (the `m` path). Drives `finishTagEditor`: only the former
     /// reverts the activation policy + restores the previous app; the latter
     /// re-keys the tree panel to resume keyboard nav. (#4 tag-edit panel.)
     var tagEditorSelfActivated = false
@@ -270,10 +270,10 @@ final class Controller: NSObject {
         }
         panelHost.searchBar.field.delegate = searchDelegate
         // Keep kbNav in sync with the panel's key status. The panel
-        // only becomes key via explicit kb-nav entry (`--active` →
+        // only becomes key via explicit kb-nav entry (`enterActive` →
         // makeKey); a plain tree-row click no longer grabs key (that
         // would break same-app focus — see KeyablePanel). So this now
-        // fires on the --active enter/exit, not on every click.
+        // fires on the kb-nav enter/exit, not on every click.
         panelHost.onKeyChanged = { [weak self] isKey in
             self?.handlePanelKeyChange(isKey: isKey)
         }
@@ -334,8 +334,8 @@ final class Controller: NSObject {
             // re-keys the tree on close, resuming nav. Without this guard the
             // panel would self-destruct the moment the editor opened.
             if TagEditPanel.shared.isOpen { return }
-            // Drop kbNav. If we got here via --active's
-            // exitActive path, exitKbNav has already run and
+            // Drop kbNav. If we got here via the kb-nav exitActive
+            // path, exitKbNav has already run and
             // this is a harmless idempotent call.
             if sidebarView.kbNav {
                 sidebarView.exitKbNav()

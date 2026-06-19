@@ -52,18 +52,15 @@ extension FacetApp {
         postControl("theme:" + name)
     }
 
-    /// Post ``view:NAME[+active][+loading:MS][+geom:X,Y,W,H][+edge:E]``.
+    /// Post ``view:NAME[+loading:MS][+geom:X,Y,W,H][+edge:E]``.
     /// Name must already be canonical. Geom + loading are optional and
     /// only meaningful for tree; edge is only meaningful for rail (each
-    /// view silently ignores the modifiers it doesn't use, same pattern
-    /// as +active).
+    /// view silently ignores the modifiers it doesn't use).
     static func postView(_ name: String,
-                         active: Bool,
                          loadingMs: Int?,
                          geom: (Int, Int, Int, Int)?,
                          edge: String? = nil) -> Never {
         var payload = "view:\(name)"
-        if active { payload += "+active" }
         if let ms = loadingMs { payload += "+loading:\(ms)" }
         if let g = geom {
             payload += "+geom:\(g.0),\(g.1),\(g.2),\(g.3)"

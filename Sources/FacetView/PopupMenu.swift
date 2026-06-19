@@ -347,7 +347,7 @@ public final class PopupMenu {
 
     /// `filterable` adds a `⌕` box and type-to-filter (the `m` keyboard path,
     /// mirroring the `t` tag panel). Only pass it from a surface that KEEPS key
-    /// focus (the tree panel in `--active`): the menu deliberately never becomes
+    /// focus (the tree panel in keyboard nav): the menu deliberately never becomes
     /// key — were it a real `KeyablePanel` the tree would resign key and its
     /// kbNav would tear down — so the typed string is captured by this object's
     /// local key monitor below (which only fires while facet is key).
@@ -410,7 +410,7 @@ public final class PopupMenu {
             }) as Any)
         // Esc-to-close even when facet isn't the active app. The local
         // keyDown monitor below only fires while facet is key (e.g.
-        // --active kb-nav); a right-click menu opens without activating
+        // kb-nav); a right-click menu opens without activating
         // facet, so Esc would otherwise never reach it. Global monitors
         // observe (can't swallow) — fine for Esc: closing is all we need.
         monitors.append(NSEvent.addGlobalMonitorForEvents(

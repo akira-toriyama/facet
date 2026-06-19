@@ -20,7 +20,7 @@
 // See `printHelp()` for the user-facing reference; the categories
 // below are the quick orientation:
 //
-//   Views   : --view NAME [--active] / --hide NAME / --toggle NAME
+//   Views   : --view NAME / --hide NAME / --toggle NAME
 //   Theme   : --theme NAME
 //   Server  : --quit / --reload / --resign / --help
 //   Query   : facet query (read-only, no `--`)
@@ -44,11 +44,11 @@
 //   Tag       : facet tag --add NAME / --remove NAME / --rename OLD NEW
 //               (tag mode only — edits the tag vocabulary)
 //
-// ``--active`` is a modifier; ``facet --active`` standalone is
-// NOT supported (would be ambiguous about which view to activate).
-// Same for ``--show`` / ``--hide`` / ``--toggle`` bare — every
-// view op must specify NAME explicitly. Shell aliases handle
-// shorthand if the user wants it.
+// ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
+// every view op must specify NAME explicitly. Shell aliases handle
+// shorthand if the user wants it. (The tree opens directly in
+// keyboard-nav mode; there is no ``--active`` modifier — it was
+// folded into ``--view tree`` itself.)
 //
 // Same-module extension files (#182, split further in P8-3): the
 // client-mode `post*` primitives + canonical / parse helpers live in
@@ -100,7 +100,7 @@ enum FacetApp {
           facet                              server mode (start the app)
 
         VIEW OPERATIONS                      NAME ∈ tree | grid | rail
-          facet --view NAME [--active]       open NAME (idempotent)
+          facet --view NAME                  open NAME (idempotent)
           facet --hide NAME                  close NAME
           facet --toggle NAME                toggle NAME
 
@@ -108,14 +108,13 @@ enum FacetApp {
           grid / rail aren't available, so --view / --hide / --toggle
           with grid|rail exit 2.
 
-          --active is a modifier — meaningful only with --view tree.
-          A plain click on the tree only focuses/selects a row; it
-          does NOT enter keyboard nav. Nav + search (s) + tag-manage
-          (t) are entered via --active, or by right-clicking the
-          "Desktop N" header (Search / Manage tags). --active takes
-          key focus immediately so a hotkey can jump straight in
-          (Spotlight-style). --view grid silently ignores; the
-          overlay is always key/active.
+          --view tree opens directly in keyboard nav: facet takes key
+          focus immediately (Spotlight-style) so the arrow keys,
+          Enter, search (s) and tag-manage (t) work the moment it
+          appears. Acting on a window — click a row or Enter a
+          selection — hands key back first, so same-app focus still
+          works. (Right-clicking the "Desktop N" header also opens
+          Search / Manage tags.)
 
           --edge top|bottom|left|right is a --view rail modifier:
           dock the rail's workspace strip against that screen edge
@@ -148,7 +147,7 @@ enum FacetApp {
 
           NAME is required for every view op (no implicit "tree").
           Shell aliases handle shorthand if you want it:
-            alias fa='facet --view tree --active'
+            alias fa='facet --view tree'
             alias fg='facet --view grid'
 
         WORKSPACE                            (active / target workspace)
@@ -470,13 +469,12 @@ enum FacetApp {
         }
 
         // Two-pass: collect all flags first so the dispatch below
-        // is order-independent (``--view tree --active`` and
-        // ``--active --view tree`` both work).
+        // is order-independent (e.g. ``--view tree --theme dracula``
+        // and ``--theme dracula --view tree`` both work).
         var viewArg: String?
         var hideArg: String?
         var toggleArg: String?
         var themeArg: String?
-        var activeFlag = false
         var edgeArg: String?            // rail dock edge (--edge ); nil = config default
         var loadingArg: Int?            // nil = not requested; ms otherwise
         var quitFlag = false
@@ -560,7 +558,6 @@ enum FacetApp {
             switch a {
             case "--quit":              quitFlag = true
             case "--reload":            reloadFlag = true
-            case "--active":            activeFlag = true
             case "--loading":
                 let raw = cursor.value(for: "--loading")
                 guard let ms = Int(raw), ms >= 0 else {
@@ -600,15 +597,6 @@ enum FacetApp {
             }
         }
 
-        // ``--active`` is a modifier only — standalone is rejected
-        // (would be ambiguous about which view to activate).
-        if activeFlag && viewArg == nil {
-            let msg = "facet: --active requires --view NAME — "
-                + "see `facet --help`\n"
-            FileHandle.standardError.write(Data(msg.utf8))
-            exit(2)
-        }
-
         // ``--edge`` only means something for the rail (it picks the
         // strip's screen edge); requiring ``--view rail`` keeps a stray
         // ``--edge`` from silently doing nothing on tree / grid. A
@@ -634,23 +622,8 @@ enum FacetApp {
             exit(2)
         }
 
-        // ``--loading`` masks a mac-desktop switch (fire-and-forget,
-        // before the switch); ``--active`` steals key focus + flips
-        // activation policy to enter keyboard nav *now*. The two want
-        // opposite things at the same instant — kb-nav over a content-
-        // less skeleton mid-switch is meaningless — so the combo exits 2
-        // rather than silently dropping ``--active`` (which dispatchView's
-        // ``--loading`` early return would otherwise do).
-        if loadingArg != nil && activeFlag {
-            let msg = "facet: --active can't combine with --loading "
-                + "(the skeleton has nothing to navigate) — "
-                + "see `facet --help`\n"
-            FileHandle.standardError.write(Data(msg.utf8))
-            exit(2)
-        }
-
         // Geom flags are all-or-nothing modifiers; only meaningful
-        // with --view tree (grid silently ignores, same as --active).
+        // with --view tree (grid silently ignores them).
         // Partial sets (e.g. only --width) are rejected loudly so
         // the user doesn't end up with a half-applied frame.
         var geom: (Int, Int, Int, Int)? = nil
@@ -705,7 +678,7 @@ enum FacetApp {
         if quitFlag                  { postControl("quit") }
         if reloadFlag                { postControl("reload") }
 
-        if let v = viewArg           { postView(v, active: activeFlag, loadingMs: loadingArg, geom: geom, edge: edgeArg) }
+        if let v = viewArg           { postView(v, loadingMs: loadingArg, geom: geom, edge: edgeArg) }
         if let h = hideArg           { postHide(h) }
         if let t = toggleArg         { postToggle(t) }
 
@@ -770,6 +743,10 @@ enum FacetApp {
         case "grid":
             controller.showGrid()
         case "tree":
+            // Boot-show is passive (no enterActive): facet must not
+            // steal key/focus the instant it launches or restarts. A
+            // `--view tree` summon opens active; this is just the
+            // resting state the tree settles into after any interaction.
             controller.setHidden(false)
         default:
             controller.setHidden(true)
@@ -788,8 +765,8 @@ enum FacetApp {
     /// `nil`), so when the field editor is focused they drive its
     /// `selectAll:`/`copy:`/`paste:`/`cut:`/`undo:`/`redo:`. The menu
     /// bar is hidden in `.accessory`; it only appears (and these key
-    /// equivalents fire) once `--active` flips the app to `.regular` +
-    /// activates it (Controller.enterActive) — which is exactly when the
+    /// equivalents fire) once the tree enters keyboard nav (`.regular` +
+    /// activate, Controller.enterActive) — which is exactly when the
     /// search box is usable, so the shortcuts work where they're needed.
     @MainActor
     private static func installMainMenu() {

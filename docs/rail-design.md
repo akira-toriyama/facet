@@ -24,7 +24,7 @@ Win11 タスクビュー型）。Grid と同じく一時的に画面へ重ねて
 | 3 | view か dock か / ライフサイクル | **Grid と同じ召喚式 view** として扱う（`--view=rail` 想定）。dock ではない |
 | 4 | 中央プレビューの配置・multi-display | 軽微。`PreviewOverlayPool` 流用 + 配置ロジックのみ新規（詳細は未着手） |
 | 5 | Grid と機能が重複しないか | **両方いる** — 役割が違う。rail = 速い切替（switcher）/ Grid = じっくり管理（manager, window 移動・セルスワップ・俯瞰）。共存 OK＝ rail は作る価値あり |
-| 6 | focus を奪わないか | ほぼ解決。`KeyablePanel` の非アクティブパターン（`--active` 時のみ key 化） |
+| 6 | focus を奪わないか | ほぼ解決。`KeyablePanel` の非アクティブパターン（keyboard nav 時のみ key 化） |
 
 ### overflow（WS が増えた時）
 

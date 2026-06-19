@@ -134,7 +134,7 @@ public enum ViewContextMenu {
     /// Panel-level menu for the pinned "Desktop N" band — the third
     /// right-click surface (scope hierarchy: panel ▸ workspace ▸ window).
     /// Exposes the tree-wide keyboard modes that are otherwise reachable
-    /// only by entering `--active`: Search (the `s` key) always, and Manage
+    /// only by entering keyboard nav: Search (the `s` key) always, and Manage
     /// tags (the `t` key) only under tag grouping. Picking an item runs its
     /// callback, which self-activates facet — no window is focused, so the
     /// #66 same-app-focus invariant and the never-steal-focus contract both

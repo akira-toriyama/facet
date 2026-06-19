@@ -2,7 +2,7 @@
 //
 // A borderless `.nonactivatingPanel` reports `canBecomeKey == false`,
 // so it can never receive key events. We only make it key explicitly
-// (the `--active` keyboard-nav mode); the rest of the time it stays
+// (the tree's keyboard-nav mode); the rest of the time it stays
 // non-activating and never steals focus from the user's frontmost
 // app.
 
@@ -10,7 +10,7 @@ import AppKit
 
 public final class KeyablePanel: NSPanel {
     /// The panel may become key ONLY when explicitly entering keyboard
-    /// nav (`--active`), which sets this true via `PanelHost.makeKey()`.
+    /// nav, which sets this true via `PanelHost.makeKey()`.
     /// A plain tree-row click must NOT make the panel key: if it did,
     /// facet's own panel would hold the key window and no public-AX call
     /// could move the keyboard focus to the clicked window of an
