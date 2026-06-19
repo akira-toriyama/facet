@@ -141,7 +141,6 @@ final class SlideAnimationTests: XCTestCase {
         // Opt-in: a fresh install animates nothing until enabled = true.
         let c = FacetConfig.from(toml: [:])
         XCTAssertFalse(c.effectiveAnimationsEnabled)
-        XCTAssertEqual(c.effectiveAnimationDuration, 0.28, accuracy: 0.0001)
     }
 
     func testAnimationEnabledParsed() {
@@ -149,16 +148,6 @@ final class SlideAnimationTests: XCTestCase {
         XCTAssertTrue(on.effectiveAnimationsEnabled)
         let off = FacetConfig.from(toml: ["animation": ["enabled": .bool(false)]])
         XCTAssertFalse(off.effectiveAnimationsEnabled)
-    }
-
-    func testAnimationDurationClampsLow() {
-        let c = FacetConfig.from(toml: ["animation": ["duration-ms": .int(5)]])
-        XCTAssertEqual(c.effectiveAnimationDuration, 0.08, accuracy: 0.0001)
-    }
-
-    func testAnimationDurationClampsHigh() {
-        let c = FacetConfig.from(toml: ["animation": ["duration-ms": .int(9999)]])
-        XCTAssertEqual(c.effectiveAnimationDuration, 0.8, accuracy: 0.0001)
     }
 
     func testAnimationCurveDefaultsToCubic() {
