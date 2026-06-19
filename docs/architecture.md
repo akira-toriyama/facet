@@ -467,6 +467,79 @@ catalog is cliQueue-confined, and the two never share mutable state.
 `Controller.refresh` skips while `backend.isAnimating` so a reconcile can't
 AX-fight the in-flight tween.
 
+## Section / lens read-path (the pivot)
+
+The default read-path is spatial: windows live in facet workspaces, and a
+view renders one cell per workspace. The **pivot** (M11-3 tag model #176,
+then the projection re-design #282–#301) adds a second, orthogonal read-path
+that renders the config's declared **sections** instead — a window shows up
+in every section it matches, not just the one workspace it lives in. The
+whole projection / apply surface is pure `FacetCore`, so it is exhaustively
+unit-tested and the views stay rendering-only.
+
+### The projection (pure)
+
+`FilterProjection.project(workspaces:sections:)` takes the backend's live
+`[Workspace]` and the mac desktop's `[DesktopSection]` config and returns a
+`Result` — the renderable `[ProjectedSection]` plus loud-but-non-fatal
+diagnostics. Two types are deliberately kept apart:
+
+- **`DesktopSection`** — the *config declaration* (`[[desktop.N.section]]`): a
+  required `type` (`workspace` / `lens` / `unassigned`), an optional `label`,
+  a raw `match` string, and an `apply` op list.
+- **`ProjectedSection`** — the *projection result*: one rendered unit, with a
+  stable `id` (`"ws:<index>"` or `"section:<declOrder>:<label>"`), a `label`,
+  the `windows` that landed in it, `sourceWorkspaceIndex` (`nil` for a
+  multi-match lens), and the `sectionType`. (Was `FilterGroup` until the
+  Phase D rename retired the forbidden word `group`.)
+
+Per-type semantics:
+
+- **workspace** — the spatial substrate. Maps positionally onto the live
+  workspaces by *wire index* (the k-th workspace section ↔ `workspaces[k]`),
+  takes their windows verbatim (no filter eval), carries the layout seed.
+- **lens** — a saved filter. Its `match` compiles to a `facet filter` and is
+  evaluated over *every* window (multi-match: a window in two lens sections
+  appears in both). A lens narrows; it never re-bundles.
+- **unassigned** — deferred (every managed window currently has a workspace,
+  so the AND-defined unassigned set is always empty); the type decodes but
+  the projection emits no section for it yet.
+
+**Degrade is a first-class citizen**: a mac desktop with no sections projects
+1:1 to by-workspace, byte-identical to the pre-pivot tree, and an
+all-`workspace` config converges to the same result. The gate is
+`FacetConfig.isSectionModelActive`.
+
+### The filter language (`facet filter`)
+
+`FacetFilter` is a small, total WHERE-clause language (`parse` → AST →
+`matches`, with a `description` inverse). A lens `match` is one of these; the
+projection overlays the window's workspace name (`ProjectedWindowFields`) so
+`match='workspace=Dev'` resolves at the seam. A malformed match is
+loud-but-non-fatal (skipped + a diagnostic caret), matching the CLI
+philosophy. The tag-mode **lens** mask itself is expressible as a filter
+(`TagModel.lensFilter`, parity-only — the `UInt64` bitmask stays
+authoritative; the filter form is a dead-but-tested read-only projection).
+
+### The mutating read-path (`ApplyResolver`, pure)
+
+Dragging a window onto a section (or right-clicking "Add to ▸ lens") routes
+through `ApplyResolver` — the pure brain that turns a section id + the dropped
+window into an executable `Plan` (`un-apply(source) → apply(dest)` for a MOVE,
+apply-only for an ADD). It validates the core invariant — the window must
+satisfy the dest section's `match` *after* the apply — and returns an inert
+plan (snap-back, no backend op) when it can't; the Controller dispatches a
+non-inert plan's ops on `cliQueue`.
+
+### Where it is consumed
+
+The tree (`SidebarView.update(sections:)`) renders `[ProjectedSection]`
+directly; grid / rail narrow their cells to the active lens via
+`OverviewProjection`. The read-path is **LIVE under `[grouping] by =
+"workspace"`**; under `by = "tag"` sections are ignored
+(`effectiveMacDesktopSectionConfigs` clamps to empty — a tag world owns its
+own lens instead).
+
 ## Non-goals
 
 - **SIP-disabled features in `facet`** — out of scope.
