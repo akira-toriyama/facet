@@ -164,7 +164,7 @@ public enum MacDesktops {
     /// 1-based position of `activeID` among **user** mac desktops
     /// (`type == 0`, i.e. excluding fullscreen Spaces), in Mission
     /// Control order across displays. This is the ordinal the user
-    /// thinks in ("Desktop 1 / Desktop 2") and what `[desktop.N]`
+    /// thinks in ("Desktop 1 / Desktop 2") and what `[[desktop.N.section]]`
     /// config keys against. Takes the already-known active id (callers
     /// have just read it) to avoid a redundant `SLSGetActiveSpace`.
     /// `nil` when SkyLight is unavailable or `activeID` isn't in the

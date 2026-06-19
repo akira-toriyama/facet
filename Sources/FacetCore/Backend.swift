@@ -169,7 +169,8 @@ public protocol WindowBackend: Sendable {
     /// exclusion rules and grouping take effect without a restart. The
     /// live workspace SET is NOT re-seeded: once seeded it's
     /// runtime-authoritative (config stays the read-only seed), so
-    /// `[desktop.N]` count/name edits still land only on restart by design.
+    /// `[[desktop.N.section]]` workspace-count / layout edits still land only
+    /// on restart by design.
     func updateConfig(_ config: FacetConfig)
 
     /// Switch the active workspace.

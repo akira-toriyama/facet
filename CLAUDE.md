@@ -10,7 +10,7 @@ All UI / config / code terminology follows
 `facet workspace`, `facet view`, `lens`, `AX target`, `pal`,
 `loading skeleton`, …), **not** the `Don't call it:` synonyms.
 The 4 core concepts are kept strictly apart: **mac desktop** (= macOS
-native Space; code `MacDesktops` / `[desktop.N]`), **facet workspace**
+native Space; code `MacDesktops` / `[[desktop.N.section]]`), **facet workspace**
 (facet's window grouping; `WorkspaceCatalog`), **facet view** (UI:
 `tree`/`grid`/`rail`), **lens** (tag display set; M11-3, shipped in
 #176 — `facet lens`, `WorkspaceCatalog.lensOnly`). Apple's own SLS /
@@ -158,13 +158,17 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   window across mac desktops (that needs SIP-off; see
   [[native-window-hide-methods]] 手法4). SkyLight unavailable →
   `activeMacDesktopID == 0` → one shared catalog (pre-feature
-  behaviour). `[desktop.N]` config keys by ordinal; catalog state is
-  session-only (never persisted), rebuilt from live windows on
-  restart. **Opt-in rule**: any `[desktop.N]` section makes facet
+  behaviour). `[[desktop.N.section]]` config keys by ordinal; catalog
+  state is session-only (never persisted), rebuilt from live windows on
+  restart. **Opt-in rule**: any `[[desktop.N.section]]` block makes facet
   manage ONLY configured mac desktops — others are hands-off (no
   adopt/park, empty `workspaces()` → Controller's empty-list guard
-  hides the panel). No `[desktop.N]` at all → every mac desktop
+  hides the panel). No `[[desktop.N.section]]` at all → every mac desktop
   managed with the global default. `FacetConfig.isMacDesktopManaged`.
+  **Workspaces are never named from config** (the old `[desktop.N]`
+  by-name seed was retired): a `type = "workspace"` section is auto-named
+  from the emoji pool (`WorkspaceNaming`); naming is runtime-only via
+  `facet workspace --rename`.
 - **Loading skeleton is CLI-triggered, not auto** (`facet --view tree
   --loading MS`): macOS exposes no pre-mac-desktop-switch hook, so
   facet can't detect a switch early enough to mask the flicker.

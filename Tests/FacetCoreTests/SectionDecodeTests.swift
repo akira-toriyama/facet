@@ -235,10 +235,11 @@ final class SectionDecodeTests: XCTestCase {
             fromTOML: "[desktop.1]\n1 = { name = \"Dev\" }\n").isEmpty)
     }
 
-    /// A `[desktop.N]` workspace table and a `[[desktop.N.section]]` array
-    /// coexist — the flat parser keys them separately, so neither shadows
-    /// the other. (Precedence between them is decided in PR2.)
-    func testCoexistsWithDesktopWorkspaceTable() {
+    /// A bare `[desktop.N]` table (no longer decoded — the by-name workspace
+    /// seed was retired) sits in the same file as a `[[desktop.N.section]]`
+    /// array; the section decode keys off the `.section` suffix only, so the
+    /// bare table never shadows or pollutes it.
+    func testSectionDecodeIgnoresBareDesktopTable() {
         let text = """
         [desktop.1]
         1 = { name = "Dev" }
@@ -247,11 +248,9 @@ final class SectionDecodeTests: XCTestCase {
         label = "Web"
         match = 'tag~=web'
         """
-        var c = FacetConfig.from(toml: parseTOMLSubset(text))
-        c.macDesktopSectionConfigs =
-            FacetConfig.decodeDesktopSectionSections(fromTOML: text)
-        XCTAssertEqual(c.macDesktopWorkspaceConfigs[1]?[1]?.name, "Dev")
-        XCTAssertEqual(c.macDesktopSectionConfigs[1]?[0].label, "Web")
+        let sections = FacetConfig.decodeDesktopSectionSections(fromTOML: text)
+        XCTAssertEqual(sections[1]?.count, 1)
+        XCTAssertEqual(sections[1]?[0].label, "Web")
     }
 
     // MARK: - apply inline table (canonical order frozen; lens sections)

@@ -25,8 +25,8 @@ extension Controller {
         guard let scr = NSScreen.main else { return }
         // No snapshot yet (cold start): fetch then re-enter so the rail
         // never paints empty. Bail if the fetch comes back empty (e.g.
-        // an unmanaged mac desktop under opt-in `[desktop.N]` config) so
-        // we don't spin re-fetching forever.
+        // an unmanaged mac desktop under opt-in `[[desktop.N.section]]`
+        // config) so we don't spin re-fetching forever.
         if lastWorkspaces.isEmpty {
             let bk = backend
             cliQueue.async {

@@ -45,7 +45,7 @@ extension NativeAdapter {
         // observer, so catalog access stays single-threaded.
         swapCatalogIfMacDesktopChanged()
         let macDesktopSwapped = activeMacDesktopID != preMacDesktopID
-        // Unmanaged mac desktop (no `[desktop.N]` in opt-in mode):
+        // Unmanaged mac desktop (no `[[desktop.N.section]]` in opt-in mode):
         // facet stays completely hands-off — adopt no windows, park
         // nothing, and return an empty workspace list so the
         // Controller hides the panel (its empty-list guard in
@@ -209,17 +209,16 @@ extension NativeAdapter {
         // mismatch. That path seeds `defaultWorkspaceCount` UNNAMED slots,
         // and `seed`'s idempotence guard then blocks the correction for the
         // rest of the session (the catalog is parked by mac-desktop id and
-        // restored tainted). Once a real ordinal resolves AND this desktop
-        // carries a `[desktop.N]` / section config, discard the degenerate
-        // (all-empty) catalog so the fresh `seed` below lands the configured
-        // names. Gated on a REAL ordinal — SkyLight-unavailable single-
-        // desktop mode (`id == 0` → ordinal nil) keeps its unnamed slots —
-        // and on all-empty names, so a runtime rename / add (which makes a
-        // name non-empty) is never clobbered.
+        // restored tainted). Once a real ordinal resolves AND this desktop's
+        // section model is active, discard the degenerate (all-empty) catalog
+        // so the fresh `seed` below lands the configured (emoji) names. Gated
+        // on a REAL ordinal — SkyLight-unavailable single-desktop mode
+        // (`id == 0` → ordinal nil) keeps its unnamed slots — and on all-empty
+        // names, so a runtime rename / add (which makes a name non-empty) is
+        // never clobbered.
         if let ordinal = activeMacDesktopOrdinal,
            catalog.holdsOnlyUnnamedSlots,
-           config.macDesktopWorkspaceConfigs[ordinal] != nil
-             || config.isSectionModelActive(ordinal: ordinal) {
+           config.isSectionModelActive(ordinal: ordinal) {
             Log.debug("native: recovering nil-ordinal seed-taint — "
                 + "re-seeding desktop ordinal=\(ordinal)")
             catalog = WorkspaceCatalog()

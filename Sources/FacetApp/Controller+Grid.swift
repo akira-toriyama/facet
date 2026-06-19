@@ -28,7 +28,7 @@ extension Controller {
         // consistent — pressing --view grid always either shows or
         // no-ops, never shows an empty grid. Bail if the fetch comes
         // back empty (e.g. an unmanaged mac desktop under opt-in
-        // `[desktop.N]` config) so we don't spin re-fetching forever
+        // `[[desktop.N.section]]` config) so we don't spin re-fetching forever
         // (mirrors showRail).
         if lastWorkspaces.isEmpty {
             let bk = backend

@@ -190,13 +190,21 @@ extension SidebarView {
                                              width: iw, height: ih))
                         lx += iw + 5
                     }
-                    (c.text as NSString).draw(
+                    // Kind prefix (トミー 2026-06-19): spell the section TYPE
+                    // out on the header so workspace vs lens reads at a glance,
+                    // not just from the funnel glyph. Lens always has a label.
+                    (("lens · " + c.text) as NSString).draw(
                         in: NSRect(x: lx, y: capY,
                                    width: bounds.width - rowPadX - lx,
                                    height: nameH),
                         withAttributes: nameAttrs)
                 } else {
-                    (c.text as NSString).draw(
+                    // Workspace header: spell "workspace" out too (パートナー
+                    // to the lens prefix). An unnamed default slot has no name,
+                    // so show the bare kind word rather than a dangling "· ".
+                    let wsLabel = c.text.isEmpty
+                        ? "workspace" : "workspace · " + c.text
+                    (wsLabel as NSString).draw(
                         in: NSRect(x: nameX0, y: capY,
                                    width: bounds.width - rowPadX - nameX0,
                                    height: nameH),

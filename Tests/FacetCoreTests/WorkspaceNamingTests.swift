@@ -61,30 +61,11 @@ final class WorkspaceNamingTests: XCTestCase {
         XCTAssertNil(list[1].config.layout)
     }
 
-    /// Section model wins over a coexisting `[desktop.N]` named seed for the
-    /// same desktop (precedence; loud-logged at load).
-    func testSectionModelWinsOverDesktopNameSeed() {
-        var c = FacetConfig()
-        c.macDesktopWorkspaceConfigs = [1: [1: WorkspaceConfig(name: "Dev", layout: "stack")]]
-        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace)]]
-        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        XCTAssertEqual(list.count, 1)
-        XCTAssertEqual(list[0].config.name, WorkspaceNaming.name(forIndex: 0))  // emoji, not "Dev"
-        XCTAssertNil(list[0].config.layout)                                     // section's, not "stack"
-    }
-
-    /// DEGRADE byte-identical: a section-less config (or one with only
-    /// `[desktop.N]` seeds) takes the existing path — emoji naming never
-    /// engages.
-    func testDegradeUsesExistingPathUnchanged() {
-        // section-less → default unnamed slots
+    /// DEGRADE: a section-less config (or a desktop without a `type=workspace`
+    /// section) takes the default-slot path — emoji naming never engages.
+    func testDegradeUsesDefaultSlotsWhenSectionModelInactive() {
         let bare = FacetConfig().effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertTrue(bare.allSatisfy { $0.config.name.isEmpty })
         XCTAssertFalse(bare.isEmpty)
-        // [desktop.N]-named → those names, untouched
-        var named = FacetConfig()
-        named.macDesktopWorkspaceConfigs = [1: [1: WorkspaceConfig(name: "Dev")]]
-        let list = named.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        XCTAssertEqual(list.map(\.config.name), ["Dev"])
     }
 }
