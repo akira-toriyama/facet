@@ -219,6 +219,27 @@ final class FacetFilterEvalTests: XCTestCase {
         }
     }
 
+    // `FilterField` is the single source of the field-name catalogue (#23):
+    // `knownFields` derives from it, and the wire spelling (`rawValue`) is
+    // exactly the case name. This pins the catalogue so a case added or
+    // removed without keeping the `WindowFields` conformers' switch
+    // statements in step is caught loudly in CI (the whole point of folding
+    // the four parallel name lists into one enum).
+    func testFilterFieldIsSingleSourceOfKnownFields() {
+        XCTAssertEqual(FacetFilter.FilterField.allCases.count, 13)
+        // knownFields is exactly the FilterField rawValues — no drift.
+        XCTAssertEqual(
+            Set(FacetFilter.FilterField.allCases.map(\.rawValue)),
+            FacetFilter.knownFields)
+        // rawValue == wire spelling == case name (catches a typo'd raw or a
+        // renamed case that would silently change the `facet filter` surface).
+        XCTAssertEqual(
+            Set(FacetFilter.FilterField.allCases.map(\.rawValue)),
+            ["app", "title", "bundleId", "workspace", "tag", "floating",
+             "sticky", "master", "mark", "scratchpad", "desktop",
+             "onscreen", "focused"])
+    }
+
     func testFieldsReferencedAndUnknownIsNoMatch() {
         guard case .success(let f) =
                 FacetFilter.parse("tag~=web and frob=x or not floating") else {

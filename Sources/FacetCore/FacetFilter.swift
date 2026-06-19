@@ -246,16 +246,32 @@ public protocol WindowFields {
 }
 
 public extension FacetFilter {
+    /// The canonical, resolvable filter fields — the field-name table that
+    /// every `WindowFields` conformer (`Window`, `WindowQueryEntry`,
+    /// `ApplyPlanWindowFields`) maps to its own backing storage. The
+    /// `rawValue` is the wire spelling used in `facet filter` source.
+    ///
+    /// This enum is the SINGLE source of those names: add a field here once
+    /// and `knownFields` derives from it, so the name catalogue can never
+    /// drift out of sync with itself. (The conformers' `switch` statements
+    /// still map each name to a *different* property per window type —
+    /// `app` → `appName` on `Window` but → `app` on `WindowQueryEntry` — so
+    /// they stay hand-written; only the name catalogue is unified here. A
+    /// new case is exhaustively visible to a future maintainer adding it to
+    /// each `switch`.)
+    enum FilterField: String, CaseIterable, Sendable {
+        case app, title, bundleId, workspace, tag
+        case floating, sticky, master, mark, scratchpad
+        case desktop, onscreen, focused
+    }
+
     /// The frozen set of canonical field names the evaluator resolves
     /// (the field-name table that `WindowFields` conformers implement). A
     /// referenced field outside this set is a typo: it resolves to a
     /// no-match, and callers surface a loud-but-NON-FATAL warning by
-    /// diffing `fieldsReferenced()` against this set.
-    static let knownFields: Set<String> = [
-        "app", "title", "bundleId", "workspace", "tag",
-        "floating", "sticky", "master", "mark", "scratchpad",
-        "desktop", "onscreen", "focused",
-    ]
+    /// diffing `fieldsReferenced()` against this set. Derived from
+    /// `FilterField` so the catalogue has exactly one definition.
+    static let knownFields: Set<String> = Set(FilterField.allCases.map(\.rawValue))
 
     /// Every field name referenced by an atom in this expression — for
     /// the caller's typo check against `knownFields`.
