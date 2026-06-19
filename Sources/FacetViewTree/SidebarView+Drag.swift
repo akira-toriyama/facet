@@ -42,18 +42,18 @@ extension SidebarView {
                     if sectionModeActive {
                         // Section model: a drop is an apply-based MOVE
                         // (un-apply source → apply dest). `wsBands` keys are
-                        // render-group ordinals here (lastGroups), NOT WS
+                        // render-group ordinals here (lastSections), NOT WS
                         // indices, so compare/route on `dragGroup`. The
                         // Controller resolves the apply via the live config +
                         // ApplyResolver and snaps back (runs no op) on an inert
                         // / non-satisfying drop — the row was never hidden.
                         if let tgt, tgt != dragGroup,
-                           dragGroup < lastGroups.count, tgt < lastGroups.count {
+                           dragGroup < lastSections.count, tgt < lastSections.count {
                             controller?.applyMove(
                                 windowID: dragWindowID,
-                                fromGroupID: lastGroups[dragGroup].id,
-                                toGroupID: lastGroups[tgt].id,
-                                destSourceWorkspaceIndex: lastGroups[tgt].sourceWorkspaceIndex)
+                                fromSectionID: lastSections[dragGroup].id,
+                                toSectionID: lastSections[tgt].id,
+                                destSourceWorkspaceIndex: lastSections[tgt].sourceWorkspaceIndex)
                         }
                     } else if let tgt, tgt != dragWS {
                         // M9-1: background move — file the window into
@@ -369,9 +369,9 @@ extension SidebarView {
             // (`pal.primary`) and (PR7) narrows grid/rail.
             guard let i else {
                 kbSel = .hdr(group: g)
-                if sectionModeActive, g < lastGroups.count,
-                   lastGroups[g].sectionType == .lens {
-                    controller?.toggleActiveLens(lastGroups[g].label)
+                if sectionModeActive, g < lastSections.count,
+                   lastSections[g].sectionType == .lens {
+                    controller?.toggleActiveLens(lastSections[g].label)
                 }
                 return
             }

@@ -188,13 +188,13 @@ extension SidebarView {
                 // render-group ordinals (kbWsOrder / liftSourceWS, same
                 // namespace). The Controller resolves the apply and snaps back
                 // (runs no op) on an inert / non-satisfying drop.
-                guard tgt != g, g < lastGroups.count, tgt < lastGroups.count
+                guard tgt != g, g < lastSections.count, tgt < lastSections.count
                 else { return true }
                 controller?.applyMove(
                     windowID: id,
-                    fromGroupID: lastGroups[g].id,
-                    toGroupID: lastGroups[tgt].id,
-                    destSourceWorkspaceIndex: lastGroups[tgt].sourceWorkspaceIndex)
+                    fromSectionID: lastSections[g].id,
+                    toSectionID: lastSections[tgt].id,
+                    destSourceWorkspaceIndex: lastSections[tgt].sourceWorkspaceIndex)
                 kbSel = .win(group: g, id)
             } else {
                 // Move-only background move (same model as the mouse drop

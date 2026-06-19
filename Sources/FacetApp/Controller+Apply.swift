@@ -1,9 +1,9 @@
 // Section-model apply/un-apply DnD orchestration (PR8) — the Controller half
 // of the tree's section-path MOVE (drag / kb-lift) and ADD (right-click "Add
-// to ▸ lens"). The view hands over group IDs + the dest workspace index; the
+// to ▸ lens"). The view hands over section IDs + the dest workspace index; the
 // Controller resolves the executable plan with the PURE `ApplyResolver` over
 // the LIVE section config (read FRESH here, matching `setActiveLens`'s
-// discipline — a `FilterGroup` carries no apply ops), then dispatches the op
+// discipline — a `ProjectedSection` carries no apply ops), then dispatches the op
 // sequence on `cliQueue` and schedules one coalesced reconcile.
 //
 // Snap-back is "do nothing": an inert / stale / non-satisfying plan runs NO
@@ -16,19 +16,19 @@ import FacetCore
 import Foundation
 
 extension Controller {
-    func applyMove(windowID: WindowID, fromGroupID: String,
-                   toGroupID: String, destSourceWorkspaceIndex: Int?) {
+    func applyMove(windowID: WindowID, fromSectionID: String,
+                   toSectionID: String, destSourceWorkspaceIndex: Int?) {
         guard let plan = resolveApplyPlan(
-            windowID: windowID, fromGroupID: fromGroupID,
-            toGroupID: toGroupID, destWorkspaceIndex: destSourceWorkspaceIndex)
+            windowID: windowID, fromSectionID: fromSectionID,
+            toSectionID: toSectionID, destWorkspaceIndex: destSourceWorkspaceIndex)
         else { return }                          // inert / stale → snap-back
         runApplyPlan(plan, on: windowID)
     }
 
-    func applyAdd(windowID: WindowID, toGroupID: String) {
+    func applyAdd(windowID: WindowID, toSectionID: String) {
         guard let plan = resolveApplyPlan(
-            windowID: windowID, fromGroupID: nil,
-            toGroupID: toGroupID, destWorkspaceIndex: nil)
+            windowID: windowID, fromSectionID: nil,
+            toSectionID: toSectionID, destWorkspaceIndex: nil)
         else { return }
         runApplyPlan(plan, on: windowID)
     }
@@ -36,8 +36,8 @@ extension Controller {
     /// Build the plan on the main actor (the pure resolver over the live
     /// section config + last-rendered workspaces). `nil` ⇒ not section-model /
     /// window gone / inert — the caller does nothing (snap-back).
-    private func resolveApplyPlan(windowID: WindowID, fromGroupID: String?,
-                                  toGroupID: String, destWorkspaceIndex: Int?)
+    private func resolveApplyPlan(windowID: WindowID, fromSectionID: String?,
+                                  toSectionID: String, destWorkspaceIndex: Int?)
         -> ApplyResolver.Plan?
     {
         let ordinal = currentMacDesktopOrdinal()
@@ -47,7 +47,7 @@ extension Controller {
         guard let (win, wsName) = findRenderedWindow(windowID) else { return nil }
         let plan = ApplyResolver.plan(
             window: win, workspaceName: wsName,
-            fromGroupID: fromGroupID, toGroupID: toGroupID,
+            fromSectionID: fromSectionID, toSectionID: toSectionID,
             destWorkspaceIndex: destWorkspaceIndex, in: sections)
         if plan.isInert {
             if let r = plan.reason { Log.debug("apply: inert — \(r)") }

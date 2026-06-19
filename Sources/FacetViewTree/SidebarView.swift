@@ -98,10 +98,10 @@ public final class SidebarView: NSView {
     /// tag mode, DnD / keyboard-lift are disabled here — `apply`-based DnD
     /// lands in PR8.
     var sectionModeActive = false
-    /// Last projected groups pushed via `update(sections:)`; reused by the
+    /// Last projected sections pushed via `update(sections:)`; reused by the
     /// internal relayouts in `rebuild()` (the projection is recomputed only
     /// on a Controller refresh, not on every search keystroke / resize).
-    var lastGroups: [FilterGroup] = []
+    var lastSections: [ProjectedSection] = []
     /// The active lens label pushed via `update(sections:activeLens:)` (PR6):
     /// the `type=lens` section whose header is emphasised (`pal.primary`), or
     /// nil for none. Reused by `rebuild()` so an internal relayout (search /
@@ -270,10 +270,10 @@ public final class SidebarView: NSView {
     /// must NOT fall back to the by-workspace path while the section model is
     /// driving the tree, so they route here instead of calling
     /// `update(_:)` directly. The projection is recomputed only on a
-    /// Controller refresh, so `rebuild()` reuses the last `lastGroups`.
+    /// Controller refresh, so `rebuild()` reuses the last `lastSections`.
     func rebuild() {
         if sectionModeActive {
-            _ = update(sections: lastGroups, workspaces: lastWorkspaces,
+            _ = update(sections: lastSections, workspaces: lastWorkspaces,
                        activeLens: lastActiveLens)
         } else {
             _ = update(lastWorkspaces)
@@ -510,20 +510,20 @@ public final class SidebarView: NSView {
 
     /// Render the section/lens model (`[[desktop.N.section]]`, PR5). The
     /// Controller runs `FilterProjection` (off the by-workspace degrade
-    /// path) and hands the projected `groups` plus the live `workspaces`
+    /// path) and hands the projected `sections` plus the live `workspaces`
     /// (for header chrome — a workspace section's layout badge + active
     /// highlight come from its source workspace). A window appears in EVERY
     /// section it matches (multi-match); rows are keyed by `(group, id)` so a
     /// duplicated window stays individually addressable. DnD / keyboard-lift
     /// are disabled in this mode (apply-based DnD is PR8).
     @discardableResult
-    public func update(sections groups: [FilterGroup],
+    public func update(sections: [ProjectedSection],
                        workspaces: [Workspace],
                        activeLens: String? = nil,
                        titles: [WindowID: String]? = nil,
                        macDesktop: Int?? = nil) -> CGFloat {
         sectionModeActive = true
-        lastGroups = groups
+        lastSections = sections
         lastActiveLens = activeLens
         lastWorkspaces = workspaces
         // Section mode is workspace-axis; it never coexists with tag mode
@@ -564,10 +564,10 @@ public final class SidebarView: NSView {
         // label — the CLI / click key). Folding it through `active`
         // everywhere means the signature rebuilds whenever the active lens
         // changes, with no separate sig field.
-        func headerActive(_ grp: FilterGroup) -> Bool {
-            grp.sectionType == .lens
-                ? (activeLens != nil && grp.label == activeLens)
-                : wsActive(grp.sourceWorkspaceIndex)
+        func headerActive(_ sec: ProjectedSection) -> Bool {
+            sec.sectionType == .lens
+                ? (activeLens != nil && sec.label == activeLens)
+                : wsActive(sec.sourceWorkspaceIndex)
         }
 
         let sig = (searching ? "S:\(query);" : "")
@@ -575,13 +575,13 @@ public final class SidebarView: NSView {
             + (opt
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
-            + groups.enumerated().map { (g, grp) in
-                let isLens = grp.sectionType == .lens
-                let active = headerActive(grp)
-                let layout = isLens ? "" : wsLayout(grp.sourceWorkspaceIndex)
-                return "\(g):\(grp.id):\(isLens ? "L" : "W")"
+            + sections.enumerated().map { (g, sec) in
+                let isLens = sec.sectionType == .lens
+                let active = headerActive(sec)
+                let layout = isLens ? "" : wsLayout(sec.sourceWorkspaceIndex)
+                return "\(g):\(sec.id):\(isLens ? "L" : "W")"
                     + "\(active ? "*" : "")\(layout)|"
-                    + grp.windows.map {
+                    + sec.windows.map {
                         "\($0.id.serverID)\(hot($0) ? "f" : "")"
                         + "\($0.isOnscreen ? "" : "h"):\(eff($0))"
                     }.joined(separator: ",")
@@ -599,28 +599,28 @@ public final class SidebarView: NSView {
         // Search filters by window within each section; a section with zero
         // matches drops out (mirrors the by-workspace path, #202). Non-search
         // keeps every section (an empty one still shows its header).
-        let shown: [(g: Int, grp: FilterGroup, wins: [Window])] =
-            groups.enumerated().compactMap { (g, grp) in
+        let shown: [(g: Int, sec: ProjectedSection, wins: [Window])] =
+            sections.enumerated().compactMap { (g, sec) in
                 let wins = searching
-                    ? grp.windows.filter {
+                    ? sec.windows.filter {
                         fuzzyMatch(query, $0.appName + " " + eff($0)) }
-                    : grp.windows
+                    : sec.windows
                 if searching && wins.isEmpty { return nil }
-                return (g, grp, wins)
+                return (g, sec, wins)
             }
 
         let clipW = enclosingScrollView?.contentView.bounds.width ?? bounds.width
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
-        for (_, grp, wins) in shown {
-            let isLens = grp.sectionType == .lens
+        for (_, sec, wins) in shown {
+            let isLens = sec.sectionType == .lens
             // Lens label as-authored; workspace (auto-emoji) name uppercased,
             // matching the header draw.
-            let nm = isLens ? grp.label : grp.label.uppercased()
+            let nm = isLens ? sec.label : sec.label.uppercased()
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
                 + (isLens ? 22 : 0)   // leading lens glyph
-            let layout = isLens ? "" : wsLayout(grp.sourceWorkspaceIndex)
+            let layout = isLens ? "" : wsLayout(sec.sourceWorkspaceIndex)
             let modeW = layout.isEmpty ? 0
                 : (layoutBadgeLabel(layout) as NSString).size(
                     withAttributes: [.font: uiFont(subheadFontSize, .semibold)]).width
@@ -635,13 +635,13 @@ public final class SidebarView: NSView {
         var y: CGFloat = 6
 
         var firstHeader = true
-        for (g, grp, wins) in shown {
+        for (g, sec, wins) in shown {
             let start = y
-            let isLens = grp.sectionType == .lens
-            let src = grp.sourceWorkspaceIndex
+            let isLens = sec.sectionType == .lens
+            let src = sec.sourceWorkspaceIndex
             let layout = isLens ? "" : wsLayout(src)
-            let active = headerActive(grp)
-            let label = isLens ? grp.label : grp.label.uppercased()
+            let active = headerActive(sec)
+            let label = isLens ? sec.label : sec.label.uppercased()
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
             // Workspace section → click switches to its source WS; lens

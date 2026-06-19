@@ -18,7 +18,7 @@
 import CoreGraphics
 import Foundation
 
-/// One projected window group — the pivot's unified overview unit
+/// One projected section — the pivot's unified overview unit
 /// (`FilterProjection`). A `[[desktop.N.section]]` (type=lens) `match`
 /// filter projected over the live windows, OR — in the degrade path (no
 /// sections configured) — a 1:1 mirror of one facet workspace (by-workspace
@@ -26,13 +26,13 @@ import Foundation
 /// `SidebarView.update(sections:)`; grid/rail render the `.workspace` kind.
 ///
 /// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
-/// this group maps to (so `--focus` / `--move-to` hit the right WS),
+/// this section maps to (so `--focus` / `--move-to` hit the right WS),
 /// mirroring `Workspace.index`. It is `nil` for a multi-match lens section,
 /// which spans workspaces and has no single source WS.
 /// `Sendable` (unlike the view-built `OverviewCell`): the consumer produces
 /// this on the adapter's `cliQueue` and hands it to `main`, so it crosses
 /// threads. All fields are already `Sendable` (`Window` is).
-public struct FilterGroup: Sendable {
+public struct ProjectedSection: Sendable {
     /// Stable, unique identity for view signatures / cell tracking.
     /// Degrade / workspace section: `"ws:<index>"`. Lens section:
     /// `"section:<declOrder>:<label>"`.
@@ -40,7 +40,7 @@ public struct FilterGroup: Sendable {
     public let label: String
     public let windows: [Window]
     public let sourceWorkspaceIndex: Int?
-    /// Which section kind produced this group — `.workspace` for the
+    /// Which section kind produced this section — `.workspace` for the
     /// spatial substrate (the degrade path + `type=workspace` sections;
     /// the only kind grid/rail render, PR7), `.lens` for a saved-filter
     /// section (tree-only, emphasised when active, PR5). Defaulted so the
@@ -58,11 +58,11 @@ public struct FilterGroup: Sendable {
     }
 }
 
-extension FilterGroup: Equatable {
-    /// `Window` is not `Equatable`; identity is its `id`, so groups compare
+extension ProjectedSection: Equatable {
+    /// `Window` is not `Equatable`; identity is its `id`, so sections compare
     /// by their scalar fields plus the ordered window-id list (which is the
-    /// projection's actual contract — which windows land in which group).
-    public static func == (a: FilterGroup, b: FilterGroup) -> Bool {
+    /// projection's actual contract — which windows land in which section).
+    public static func == (a: ProjectedSection, b: ProjectedSection) -> Bool {
         a.id == b.id && a.label == b.label
             && a.sourceWorkspaceIndex == b.sourceWorkspaceIndex
             && a.sectionType == b.sectionType

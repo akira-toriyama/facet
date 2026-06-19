@@ -84,11 +84,11 @@ extension SidebarView {
         // Section model (PR8): "Add to ▸ <lens>" — apply-only ADD (multi-match).
         // Lens sections only, excluding the row's OWN render group; the
         // Controller's ApplyResolver no-ops a drop-inert / non-satisfying lens.
-        let lensTargets: [(label: String, groupID: String)] =
+        let lensTargets: [(label: String, sectionID: String)] =
             sectionModeActive
-            ? lastGroups.enumerated().compactMap { (g, grp) in
-                  guard grp.sectionType == .lens, g != currentGroup else { return nil }
-                  return (grp.label, grp.id)
+            ? lastSections.enumerated().compactMap { (g, sec) in
+                  guard sec.sectionType == .lens, g != currentGroup else { return nil }
+                  return (sec.label, sec.id)
               }
             : []
         ViewContextMenu.showWindow(
@@ -98,8 +98,8 @@ extension SidebarView {
             tagMode: tagModeActive,
             filterable: filterable,
             addToLensTargets: lensTargets,
-            onApplyAdd: { [weak self] gid in
-                self?.controller?.applyAdd(windowID: id, toGroupID: gid)
+            onApplyAdd: { [weak self] sid in
+                self?.controller?.applyAdd(windowID: id, toSectionID: sid)
             },
             onOpenTagEditor: { [weak self] wid, pid, app, title, tags, anchor in
                 self?.controller?.openTagEditor(

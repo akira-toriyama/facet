@@ -213,8 +213,8 @@ public enum ViewContextMenu {
         palette: ResolvedPalette,
         tagMode: Bool = false,
         filterable: Bool = false,
-        addToLensTargets: [(label: String, groupID: String)] = [],
-        onApplyAdd: ((_ groupID: String) -> Void)? = nil,
+        addToLensTargets: [(label: String, sectionID: String)] = [],
+        onApplyAdd: ((_ sectionID: String) -> Void)? = nil,
         onOpenTagEditor: ((_ id: WindowID, _ pid: Int, _ appName: String,
                            _ title: String, _ currentTags: [String],
                            _ anchor: NSPoint) -> Void)? = nil,
@@ -270,7 +270,7 @@ public enum ViewContextMenu {
             for t in addToLensTargets {
                 entries.append(Entry(label: "Add to \(t.label)", icon: "SF:tag",
                                      section: "Add to lens") {
-                    onApplyAdd(t.groupID)
+                    onApplyAdd(t.sectionID)
                 })
             }
         }
