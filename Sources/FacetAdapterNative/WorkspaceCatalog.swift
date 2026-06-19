@@ -112,6 +112,19 @@ struct WorkspaceCatalog {
         }
     }
 
+    /// True when the catalog has been seeded but holds ONLY unnamed
+    /// placeholder slots (every name `""`) — the degenerate state a
+    /// nil-ordinal seed produces (`effectiveWorkspaceList(nil)` returns
+    /// `defaultWorkspaceCount` empty-name slots). Deliberately distinct
+    /// from a FRESH catalog (`workspaceNames` empty) and from a real /
+    /// user-customised one (≥1 non-empty name — the CLI rejects an empty
+    /// name, so `""` is only ever the placeholder sentinel). The adapter
+    /// reads this to recover from a nil-ordinal seed-taint: `seed` is
+    /// idempotent, so only a full discard + re-seed restores the names.
+    var holdsOnlyUnnamedSlots: Bool {
+        !workspaceNames.isEmpty && workspaceNames.allSatisfy(\.isEmpty)
+    }
+
     /// 1-based index of the active workspace.
     private(set) var activeIndex: Int = 1
 
