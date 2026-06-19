@@ -541,10 +541,8 @@ final class Controller: NSObject {
     func overviewVisibleWindowIDs(in wss: [Workspace], ordinal: Int?) -> Set<WindowID>? {
         guard let match = currentActiveLensMatch(ordinal: ordinal) else { return nil }
         let result = OverviewProjection.filterWorkspaces(wss, byLensMatch: match)
-        if result.diagnostics != loggedOverviewDiagnostics {
-            loggedOverviewDiagnostics = result.diagnostics
-            for d in result.diagnostics { Log.line("overview: \(d)") }
-        }
+        logDiagnosticsOnChange(result.diagnostics, prefix: "overview: ",
+                               against: &loggedOverviewDiagnostics)
         return Set(result.workspaces.flatMap { $0.windows.map(\.id) })
     }
 
@@ -556,6 +554,21 @@ final class Controller: NSObject {
     /// hot-reload), never from the per-tick `effective*` accessors.
     private func logConfigWarnings() {
         for warning in config.unknownValueWarnings() { Log.line(warning) }
+    }
+
+    /// Log `diagnostics` once per change, each line carrying `prefix`.
+    /// `previous` is the per-call-site state slot it diffs against — the
+    /// projection runs every refresh but its diagnostics depend only on the
+    /// static config, so this emits only when the set actually changes, not
+    /// once per frame. Each caller keeps its OWN slot (overview / section):
+    /// folding them into one would let an overview change suppress a tree
+    /// change and vice versa.
+    private func logDiagnosticsOnChange(_ diagnostics: [String],
+                                        prefix: String,
+                                        against previous: inout [String]) {
+        guard diagnostics != previous else { return }
+        previous = diagnostics
+        for d in diagnostics { Log.line(prefix + d) }
     }
 
     // MARK: - Per-surface palette resolution (PR-B)
@@ -967,10 +980,8 @@ final class Controller: NSObject {
             let sections = config.effectiveMacDesktopSectionConfigs[ordinal] ?? []
             let result = FilterProjection.project(workspaces: wss,
                                                   sections: sections)
-            if result.diagnostics != loggedSectionDiagnostics {
-                loggedSectionDiagnostics = result.diagnostics
-                for d in result.diagnostics { Log.line("tree: \(d)") }
-            }
+            logDiagnosticsOnChange(result.diagnostics, prefix: "tree: ",
+                                   against: &loggedSectionDiagnostics)
             contentH = sidebarView.update(sections: result.sections,
                                           workspaces: wss,
                                           activeLens: currentActiveLens,
