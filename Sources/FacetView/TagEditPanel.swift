@@ -6,7 +6,7 @@
 // (the filter / new-tag-name box) so it must be able to take key + IME — it
 // is a `KeyablePanel` (`wantsKey = true`) and the Controller flips the app to
 // a regular, active app around show()/close() (the activation-policy dance the
-// tree panel already uses for `--active`).
+// tree panel already uses for keyboard nav).
 //
 // Two modes share this one UI:
 //

@@ -1,4 +1,4 @@
-// Active mode (`--active` keyboard navigation) — key-focus entry /
+// Active mode (tree keyboard navigation) — key-focus entry /
 // exit, the local keyDown handler (full nav + type-to-filter
 // sub-mode), and search begin / end. Extracted unchanged from
 // Controller.swift (#182 phase 3) — same-module extension, no logic
@@ -12,21 +12,24 @@ import FacetViewTree
 
 extension Controller {
 
-    // MARK: - Active mode (--active keyboard navigation)
+    // MARK: - Active mode (tree keyboard navigation)
     //
-    // `--show` stays passive (non-activating, never steals focus).
-    // `--active` additionally makes the app/panel key so a plain
-    // local NSEvent monitor receives ↑↓/Enter/Esc — no Input
-    // Monitoring, no CGEventTap (those paths fail silently when
+    // The tree opens directly in this mode (no `--active` flag — it
+    // was folded into `--view tree`): enterActive makes the app/panel
+    // key so a plain local NSEvent monitor receives ↑↓/Enter/Esc — no
+    // Input Monitoring, no CGEventTap (those paths fail silently when
     // permissions are not granted, which is too easy a footgun).
+    // Acting on a window (click / Enter) calls exitActive FIRST so
+    // facet drops key before focusing — that's what keeps same-app
+    // focus working (#66). The panel then settles back to passive.
 
     func enterActive() {
         Log.debug("enterActive")
         setHidden(false)                           // ensure visible
-        // kbMonitor was already installed by setHidden(false) so
-        // `s` works even in passive (--view tree without --active)
-        // when the panel has focus; enterActive only flips kbNav on
-        // to unlock the full nav set (↑↓/Enter/Esc/etc).
+        // kbMonitor was already installed by setHidden(false); its own
+        // `panel.isKeyWindow` guard keeps it inert until we take key
+        // just below. enterActive flips kbNav on to unlock the full nav
+        // set (↑↓/Enter/Esc/etc) and takes key.
         prevApp = NSWorkspace.shared.frontmostApplication
         // A .accessory + .nonactivatingPanel app can't reliably
         // become key, so the local keyDown monitor wouldn't fire
@@ -42,12 +45,12 @@ extension Controller {
     func exitActive(restore: Bool) {
         Log.debug("exitActive restore=\(restore) wasKbNav=\(sidebarView.kbNav)")
         // Don't remove kbMonitor here — it stays installed for the whole
-        // session so `s` / nav fire the moment facet is key again (via
-        // --active or the Desktop-header menu's enterSearchFromMenu). Its
-        // own `panel.isKeyWindow` guard makes it a no-op while the panel
-        // isn't key, so leaving it installed is harmless. (A plain click
-        // does NOT make the panel key — #66 — so there is no "passive `s`
-        // after a click".)
+        // session so `s` / nav fire the moment facet is key again (a new
+        // `--view tree` show, or the Desktop-header menu's
+        // enterSearchFromMenu). Its own `panel.isKeyWindow` guard makes
+        // it a no-op while the panel isn't key, so leaving it installed
+        // is harmless. (Acting on a row drops key via exitActive — #66 —
+        // so a focused window never has to fight facet for the keys.)
         guard sidebarView.kbNav else { return }
         sidebarView.exitKbNav()                    // also clears `searching`
         panelHost.resignKey()
@@ -206,7 +209,7 @@ extension Controller {
     /// the "Tag" ops-menu item. The panel is a separate key-focusable
     /// floating window; like the old tag-input box it needs the app to be
     /// regular + active so its filter field takes keystrokes + IME. When the
-    /// tree panel is already `--active` (the `m` path) that's already set up,
+    /// tree panel is already in keyboard nav (the `m` path) that's already set up,
     /// so we leave it; otherwise (right-click path) we flip it ourselves and
     /// record so `finishTagEditor` reverts exactly what we did.
     ///
@@ -383,7 +386,7 @@ extension Controller {
     /// on another row) for both the per-window checklist and tag-manage mode.
     /// Undoes exactly the activation change `openTagEditor` / `enterTagManage`
     /// made — if we flipped to `.regular`, revert to `.accessory` and hand
-    /// focus back to the user's previous app; if we were already `--active`,
+    /// focus back to the user's previous app; if we were already in keyboard nav,
     /// re-key the tree panel so keyboard nav resumes (the tree resigned key
     /// when the panel took it, but the `handlePanelKeyChange` guard kept kbNav
     /// alive).

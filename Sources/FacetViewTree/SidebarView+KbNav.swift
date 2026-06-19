@@ -1,4 +1,4 @@
-// SidebarView keyboard control (facet --active) — selection nav over the
+// SidebarView keyboard control (tree keyboard nav) — selection nav over the
 // row ladder and keyboard drag-and-drop (Space lift, arrow aim, Return
 // commit, Esc cancel). Thin wrappers over the pure index helpers in
 // KbNav.swift. Same-module extension split out of SidebarView.swift (P8-2).
@@ -8,7 +8,7 @@ import FacetCore
 import FacetView
 
 extension SidebarView {
-    // MARK: - Keyboard navigation (facet --active)
+    // MARK: - Keyboard navigation (tree keyboard nav)
 
     // Selection is tracked by logical identity (window id / empty-WS
     // index), never array position, so it survives the 2 s refresh
@@ -220,14 +220,14 @@ extension SidebarView {
         return true
     }
 
-    /// `m` in --active: open the selected row's context menu — the
+    /// `m` in keyboard nav: open the selected row's context menu — the
     /// same menu right-click shows (window actions / workspace layout).
     /// Anchored OUTSIDE the tree, just past the panel's right edge
     /// (`f.maxX + 8`, the same placement as the `t` tag-manage panel)
     /// and level with the selected row's top — so the menu sits *beside*
     /// the target window instead of covering it (dropping it inside the
     /// tree hid the very row the user is acting on). (Space is the lift
-    /// gesture in Theme A.) facet stays --active; pick with the mouse or
+    /// gesture in Theme A.) facet stays in keyboard nav; pick with the mouse or
     /// Esc.
     public func kbContextMenu() {
         guard let s = kbSel, let i = kbIndex(of: s),

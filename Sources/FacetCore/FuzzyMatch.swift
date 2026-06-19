@@ -1,7 +1,7 @@
 // Subsequence (fuzzy) match — `q`'s characters appear in `s` in
 // order, not necessarily contiguous. Case-insensitive. Empty
 // query matches everything. Used by SearchBar / SidebarView for
-// the `s` filter in keyboard-nav (`--active`) mode.
+// the `s` filter in keyboard-nav mode.
 
 public func fuzzyMatch(_ q: String, _ s: String) -> Bool {
     if q.isEmpty { return true }

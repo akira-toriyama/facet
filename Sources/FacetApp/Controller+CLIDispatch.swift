@@ -35,12 +35,11 @@ extension Controller {
 
                 // Symmetric view ops — canonical-only, no aliases.
                 case let s where s.hasPrefix("view:"):
-                    // Payload: NAME[+active][+loading:MS][+geom:X,Y,W,H][+edge:E]
+                    // Payload: NAME[+loading:MS][+geom:X,Y,W,H][+edge:E]
                     let rest = String(s.dropFirst("view:".count))
                     let parts = rest.split(separator: "+")
                     let name = String(parts.first ?? "")
                     let mods = parts.dropFirst().map(String.init)
-                    let active = mods.contains("active")
                     let geom: NSRect? = mods
                         .first(where: { $0.hasPrefix("geom:") })
                         .flatMap { Self.parseGeom($0) }
@@ -50,8 +49,8 @@ extension Controller {
                     let edge: RailEdge? = mods
                         .first(where: { $0.hasPrefix("edge:") })
                         .flatMap { RailEdge(rawValue: String($0.dropFirst("edge:".count))) }
-                    self.dispatchView(name, active: active,
-                                      geom: geom, loadingMs: loadingMs, edge: edge)
+                    self.dispatchView(name, geom: geom,
+                                      loadingMs: loadingMs, edge: edge)
                 case let s where s.hasPrefix("hide:"):
                     self.dispatchHide(
                         String(s.dropFirst("hide:".count)))
@@ -383,7 +382,7 @@ extension Controller {
     /// Open (or activate) ``name``. Idempotent — re-issuing the
     /// same view doesn't toggle it off; use ``dispatchToggle`` /
     /// ``dispatchHide`` for that.
-    private func dispatchView(_ name: String, active: Bool, geom: NSRect?,
+    private func dispatchView(_ name: String, geom: NSRect?,
                               loadingMs: Int? = nil, edge: RailEdge? = nil) {
         guard !rejectsWorkspaceOnlyView(name) else { return }
         // Views are mutually exclusive: requesting any non-grid view
@@ -409,18 +408,25 @@ extension Controller {
             // Apply explicit geom BEFORE showing so the panel
             // appears at the right place on the first paint.
             if let g = geom { panelHost.setExplicitFrame(g) }
+            // `--loading` paints a pre-switch skeleton and returns — a
+            // background mask that never takes key (so it can't steal
+            // focus mid mac-desktop switch). A normal show opens the
+            // tree directly in keyboard-nav mode (enterActive: key +
+            // `.regular`) so the arrows / Enter / s / t work the moment
+            // it appears — the old `--active` flag is folded in here.
+            // Acting on a window drops key first (handleClick / Enter
+            // call exitActive) so same-app focus survives (#66).
             if let ms = loadingMs { showLoading(durationMs: ms); return }
-            if active { enterActive() } else { setHidden(false) }
+            enterActive()
         case "grid":
-            // ``+active`` is silently a no-op for grid — the
-            // overlay is always key/active by nature. Geom is
-            // likewise ignored (grid is always full-screen).
+            // Geom is ignored (grid is always full-screen); the
+            // overlay is always key/active by nature.
             showGrid()
         case "rail":
-            // ``+active`` / geom are no-ops — the rail is a passive
-            // overview bar (never key). ``+edge`` (CLI ``--edge``)
-            // picks which screen edge it docks against; nil falls back
-            // to the ``[rail] edge`` config default.
+            // Geom is a no-op — the rail is a passive overview bar
+            // (never key). ``+edge`` (CLI ``--edge``) picks which
+            // screen edge it docks against; nil falls back to the
+            // ``[rail] edge`` config default.
             showRail(edge: edge ?? config.effectiveRailEdge)
         default:
             Log.debug("dispatchView unknown=\(name) — ignored")
@@ -609,7 +615,10 @@ extension Controller {
     private func dispatchToggle(_ name: String) {
         guard !rejectsWorkspaceOnlyView(name) else { return }
         switch name {
-        case "tree": setHidden(!userHidden)
+        // Toggling ON opens the tree active (same entry as `--view
+        // tree`); OFF hides it. Mirrors the show path so a toggle
+        // hotkey lands in keyboard nav, not a passive panel.
+        case "tree": if userHidden { enterActive() } else { setHidden(true) }
         case "grid": toggleGrid()
         case "rail": toggleRail()
         default:     Log.debug("dispatchToggle unknown=\(name) — ignored")

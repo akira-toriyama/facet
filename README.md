@@ -229,7 +229,7 @@ and change **how many** windows share it (`--inc-master` /
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
 | Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel (session-only — set `[tree]` geometry in config to pin it) |
 | Double-click the panel header (tree) | reset position + size to the `[tree]` config geometry (or the built-in default) |
-| Right-click (tree) | context menu, by target: window row → actions · workspace header → layout picker (in tag mode the header is the **tag-world** — one menu with **Layout** + **Select tags** to pick the lens) · `Desktop N` band → Search / Manage tags (the `s` / `t` modes, no `--active` needed) |
+| Right-click (tree) | context menu, by target: window row → actions · workspace header → layout picker (in tag mode the header is the **tag-world** — one menu with **Layout** + **Select tags** to pick the lens) · `Desktop N` band → Search / Manage tags (the `s` / `t` modes) |
 | Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
@@ -241,23 +241,18 @@ the CLI — see [CLI](#cli) below.
 
 ### Keyboard navigation
 
-The tree panel responds to keys only while it holds key focus,
-which facet takes only when you explicitly ask — a plain click on
-a row just focuses that window, it does **not** enter keyboard nav.
-Two ways in:
+The tree opens directly in keyboard nav — facet takes key focus
+the moment it appears (Spotlight-style), so the arrow keys,
+`Return`, search (`s`) and tag-manage (`t`) work right away.
+Trade-off: facet briefly becomes the active app (Dock + Cmd-Tab)
+while the panel is up. Acting on a window — click a row or press
+`Return` on a selection — hands key **back** first, so focusing a
+same-app window still works; facet then drops to the background.
+`Esc` backs out of search / the context menu but **stays in the
+tree**.
 
-- **`--active` flag** — `facet --view tree --active` takes focus
-  *immediately* (one shortcut from your hotkey tool). Trade-off:
-  facet briefly becomes the active app (Dock + Cmd-Tab) while
-  you're in nav. `Esc` backs out of search / the context menu but
-  **stays in the tree**; you leave nav by clicking another app or
-  pressing `Return` on a window (facet then drops back to the
-  background).
-- **Right-click the `Desktop N` header** — opens a menu with
-  **Search** (`s`) and, under tag grouping, **Manage tags** (`t`);
-  picking one enters that mode without `--active`. (macOS won't let
-  a click both focus a window *and* leave facet able to catch the
-  next keystroke, so the keyboard modes live behind this menu.)
+You can also **right-click the `Desktop N` header** for a menu with
+**Search** (`s`) and, under tag grouping, **Manage tags** (`t`).
 
 | Key | Action |
 |---|---|
@@ -444,7 +439,7 @@ Hammerspoon, macOS Shortcuts, …). Full cheatsheet:
 
 ```sh
 # Per-view ops — NAME ∈ tree | grid | rail, required for every op.
-facet --view NAME [--active]      # open NAME (idempotent)
+facet --view NAME                 # open NAME (idempotent)
 facet --view rail --edge left     # dock the rail strip (top|bottom|left|right)
 facet --hide NAME                 # close NAME
 facet --toggle NAME               # toggle NAME
@@ -465,13 +460,12 @@ facet window --cycle-stack next|prev # rotate stack to next / previous member
 facet window --grow-master|--shrink-master   # master width ±0.05 (master-* engines)
 facet window --inc-master|--dec-master       # master window count ±1 (master-* engines)
 
-# --active is a modifier — only meaningful with --view tree.
-# A plain click only focuses/selects; keyboard nav + search (s) +
-# tag-manage (t) are entered via --active or by right-clicking the
-# "Desktop N" header. --active takes focus immediately so a hotkey
-# invocation jumps straight into nav (Spotlight-style). With
-# --view grid it's silently ignored; the overlay is always
-# key/active by construction.
+# --view tree opens directly in keyboard nav: facet takes focus
+# immediately (Spotlight-style) so the arrows / Return / search (s)
+# / tag-manage (t) work at once. Acting on a window (click a row or
+# Return) hands key back first, so same-app focus still works. You
+# can also right-click the "Desktop N" header for Search / Manage
+# tags. (grid is always key/active by construction; rail is passive.)
 
 # Workspace ops
 facet workspace --focus N               # switch to workspace N (1-indexed)

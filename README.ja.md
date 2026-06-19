@@ -215,7 +215,7 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
 | 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 (session 限り — 固定は `[tree]` geometry を config に書く) |
 | パネルヘッダをダブルクリック (tree) | 位置・サイズを `[tree]` config geometry (未設定なら既定) にリセット |
-| 右クリック (tree) | 対象別コンテキストメニュー: window 行 → アクション ・ workspace header → layout 切替 (tag mode ではヘッダが **tag-world** ＝ **Layout** + **Select tags**〔lens 選択〕の 1 枚メニュー) ・「Desktop N」バンド → Search / Manage tags (`s` / `t` モード・`--active` 不要) |
+| 右クリック (tree) | 対象別コンテキストメニュー: window 行 → アクション ・ workspace header → layout 切替 (tag mode ではヘッダが **tag-world** ＝ **Layout** + **Select tags**〔lens 選択〕の 1 枚メニュー) ・「Desktop N」バンド → Search / Manage tags (`s` / `t` モード) |
 | window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
@@ -227,19 +227,16 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 
 ### キーボードナビ
 
-tree パネルは key focus を持っている間だけキー入力に反応する。 facet が
-key を取るのは明示的に要求した時だけ — ロウのクリックはその窓に focus する
-だけで、 キーボードナビには入らない。 入り方は 2 通り:
+tree は最初からキーボードナビで開く — 出た瞬間に facet が key focus を取る
+(Spotlight 風) ので、 矢印キー・`Return`・検索 (`s`)・tag 管理 (`t`) が
+すぐ使える。 代償: パネル表示中は facet が一時的に active app になる
+(Dock + Cmd-Tab に表示)。 窓に作用する時 — 行をクリック か選択行で
+`Return` — は先に key を**手放す**ので、 同一 app の別窓への focus も効く;
+その後 facet は背景に戻る。 `Esc` は検索 / コンテキストメニューを 1 段
+戻すだけで **tree からは抜けない**。
 
-- **`--active` フラグ** — `facet --view tree --active` は即 focus 取得
-  (= hotkey から 1 発でナビ突入)。 代償: ナビ中 facet が active app に
-  なる (Dock + Cmd-Tab に表示)。 `Esc` は検索 / コンテキストメニューを
-  1 段戻すだけで **tree からは抜けない**。 ナビを抜けるのは他 app を
-  クリック か window 行で `Return` (facet は背景に戻る)。
-- **「Desktop N」ヘッダを右クリック** — **Search** (`s`)、 tag grouping
-  なら **Manage tags** (`t`) のメニューが開き、 選ぶとそのモードに入る
-  (`--active` 不要)。 (macOS は「窓に focus しつつ次のキーも facet が拾う」
-  を許さないため、 キーボードモードはこのメニュー経由にしている。)
+**「Desktop N」ヘッダの右クリック**でも **Search** (`s`)、 tag grouping
+なら **Manage tags** (`t`) のメニューが開く。
 
 | キー | アクション |
 |---|---|
@@ -414,7 +411,7 @@ Karabiner / Raycast / Hammerspoon / macOS Shortcuts 等) からこれら
 
 ```sh
 # View 対称コマンド — NAME ∈ tree | grid | rail、 全 op で必須
-facet --view NAME [--active]      # NAME 開く (idempotent)
+facet --view NAME                 # NAME 開く (idempotent)
 facet --view rail --edge left     # rail strip を辺に dock (top|bottom|left|right)
 facet --hide NAME                 # NAME 閉じる
 facet --toggle NAME               # NAME トグル
@@ -434,12 +431,11 @@ facet window --cycle-stack next|prev # stack の次 / 前メンバーへ循環
 facet window --grow-master|--shrink-master   # master 幅 ±0.05 (master-* engine)
 facet window --inc-master|--dec-master       # master 窓数 ±1 (master-* engine)
 
-# --active は修飾子 — --view tree と組み合わせた時のみ意味あり。
-# 行クリックは focus / 選択のみ; キーボードナビ + 検索 (s) +
-# tag 管理 (t) は --active か「Desktop N」ヘッダ右クリックから入る。
-# --active は focus を即取得するので hotkey から 1 発でナビに入れる
-# (Spotlight 風)。 --view grid と組み合わせると silent no-op
-# (grid は常に key/active)。
+# --view tree は最初からキーボードナビで開く: facet が即 focus 取得
+# (Spotlight 風) なので 矢印 / Return / 検索 (s) / tag 管理 (t) が
+# すぐ効く。 窓に作用する時 (行クリック か Return) は先に key を手放す
+# ので同一 app focus も効く。「Desktop N」ヘッダ右クリックでも
+# Search / Manage tags に入れる。 (grid は常に key/active・rail は passive)
 
 # Workspace 操作
 facet workspace --focus N               # workspace N に切替 (1-indexed)

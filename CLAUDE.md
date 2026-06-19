@@ -199,23 +199,28 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``Main.canonicalViews`` + matching cases in
   ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
   don't reintroduce per-view bespoke flags.
-- **``--active`` is a modifier**, not a verb. Only meaningful
-  combined with ``--view tree`` (becomes ``view:tree+active`` on
-  the DNC). For grid it's silently ignored — the overlay is
-  always key/active by construction. A plain click on the tree
-  only focuses / selects a row — it does **NOT** enter keyboard
-  nav: since #66 the panel's ``canBecomeKey`` is gated to explicit
-  entry (``wantsKey``), so a click no longer grabs key (that would
-  re-break same-app focus). Keyboard nav + search (``s``) +
-  tag-manage (``t``) are entered via ``--active`` **or** by
-  right-clicking the ``Desktop N`` header (Search / Manage tags,
-  which self-activate facet — ``ViewContextMenu.showDesktop`` →
-  ``enterSearchFromMenu`` / ``enterTagManage``). ``--active`` flips
-  activation policy + takes key *immediately* so a hotkey jumps
-  straight in. ("Click a window row, then ``s``" is impossible on
-  macOS: the row click hands the system key window to the target
-  app, so facet can't receive ``s`` — hence the Desktop-header
-  menu. Memory: [[tree-click-crossapp-focus-broken-sequoia]].)
+- **The tree opens in keyboard-nav (active) mode directly** —
+  there is **no ``--active`` modifier** (it was folded into
+  ``--view tree`` itself; the flag, the ``view:tree+active`` DNC
+  mod, the ``activeFlag`` parse + its two validations were all
+  removed). ``--view tree`` and a toggle-on (``--toggle tree``)
+  call ``enterActive`` — flip activation policy to ``.regular`` +
+  take key — so ↑↓ / Enter / search (``s``) / tag-manage (``t``)
+  work the instant the panel appears (Spotlight-style; a hotkey
+  jumps straight in). **#66 is preserved by handing key BACK
+  before focusing**: acting on a row (mouse click in
+  ``SidebarView.mouseDown`` → ``handleClick``, or Enter →
+  ``kbActivate``) calls ``exitActive(restore: false)`` FIRST, so
+  facet relinquishes key and a same-app window focuses via public
+  AX (``KeyablePanel.canBecomeKey`` is still gated to ``wantsKey``;
+  a click never leaves the panel holding key *while* focusing).
+  The panel settles back to passive — the resting state — after
+  any interaction. The ``Desktop N`` header right-click (Search /
+  Manage tags → ``enterSearchFromMenu`` / ``enterTagManage``)
+  still self-activates. **Boot-time ``default-view = "tree"`` shows
+  PASSIVE** (no ``enterActive``) so facet never steals focus on
+  launch. Grid is always key/active by construction; the rail is
+  always passive. Memory: [[tree-click-crossapp-focus-broken-sequoia]].
 - **``--edge top|bottom|left|right`` is a modifier too** (M9-3),
   only meaningful with ``--view rail`` (becomes ``view:rail+edge:NAME``
   on the DNC); ``--edge`` without ``--view rail`` is a loud
@@ -250,8 +255,9 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   M9-4 fit-or-scroll model; don't reintroduce `scrollOffset` /
   `railScrollToShow`. Design: memory `[[facet-rail-carousel-decisions]]`.
 - **No bare-flag tree aliases**. ``--show`` / ``--hide`` /
-  ``--toggle`` / ``--active`` standalone were dropped — every
-  view op specifies NAME explicitly. Keeps the canonical form
+  ``--toggle`` standalone were dropped — every view op specifies
+  NAME explicitly (and ``--active`` was removed entirely — see the
+  tree-opens-active note above). Keeps the canonical form
   unambiguous (no "is ``--hide`` short for ``--hide tree`` or
   is it the legacy bare verb?" surface area). Shorthand is the
   user's shell-alias problem, not facet's. Reintroducing bare

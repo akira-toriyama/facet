@@ -7,10 +7,10 @@ import XCTest
 final class ArgCursorTests: XCTestCase {
 
     func testNextConsumesInOrderThenNil() {
-        var c = ArgCursor(["--view", "tree", "--active"])
+        var c = ArgCursor(["--view", "tree", "--toggle"])
         XCTAssertEqual(c.next(), "--view")
         XCTAssertEqual(c.next(), "tree")
-        XCTAssertEqual(c.next(), "--active")
+        XCTAssertEqual(c.next(), "--toggle")
         XCTAssertNil(c.next())
         XCTAssertNil(c.next())          // idempotent at end
     }

@@ -63,8 +63,8 @@ final class PanelHost: NSObject {
     private let petWindow: NSPanel
 
     /// Notified when the panel becomes / resigns key. Controller wires
-    /// kbNav on/off here so a plain click on the tree panel (without
-    /// --active) still enables keyboard navigation while the panel is
+    /// kbNav on/off here so a plain click on the tree panel still
+    /// enables keyboard navigation while the panel is
     /// focused.
     var onKeyChanged: ((Bool) -> Void)?
 
@@ -266,7 +266,7 @@ final class PanelHost: NSObject {
         panel.orderOut(nil)
     }
 
-    /// Make the panel key (used by `--active` keyboard-nav mode).
+    /// Make the panel key (used by the tree's keyboard-nav mode).
     /// Controller handles NSApp activation policy around this call.
     /// `wantsKey` gates `canBecomeKey`, so this is the ONLY path that
     /// lets the panel take key — a plain click never does.

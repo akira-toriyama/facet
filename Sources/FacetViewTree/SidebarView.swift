@@ -68,11 +68,11 @@ public final class SidebarView: NSView {
     var cells: [Cell] = []
     var hoverIdx: Int?            // row under the pointer
 
-    // Keyboard-nav mode (entered via `facet --active`).
+    // Keyboard-nav mode (entered by opening the tree, `facet --view tree`).
     public internal(set) var kbNav = false
     var kbSel: TreeKbSel?
 
-    // Type-to-filter sub-mode (entered with `s` while in --active).
+    // Type-to-filter sub-mode (entered with `s` while in keyboard nav).
     // When on, headers drop out; only fuzzy-matching window rows
     // are listed (cross-workspace flat list).
     public internal(set) var searching = false
@@ -309,7 +309,7 @@ public final class SidebarView: NSView {
         // has one active WS, and tag mode emits a single always-active
         // synthetic workspace (no header is rendered for it — see the
         // `tagModeActive` gate below). The optimistic overlay (kbNav /
-        // `--active` mid-switch) is workspace-mode only — a single
+        // keyboard-nav mid-switch) is workspace-mode only — a single
         // transient target.
         func headerActive(_ ws: Workspace) -> Bool {
             opt ? (ws.index == optActiveWS) : ws.isActive
@@ -701,7 +701,7 @@ public final class SidebarView: NSView {
     }
     public func relayout() { signature = ""; rebuild() }
 
-    // MARK: - type-to-filter (entered with `s` in --active)
+    // MARK: - type-to-filter (entered with `s` in keyboard nav)
 
     private func rebuildSearch() {
         signature = ""
@@ -759,10 +759,12 @@ public final class SidebarView: NSView {
     /// pointing-hand; off-rows → arrow.
     ///
     /// NOTE: cursor changes only take effect while facet is the
-    /// active app (i.e. `--active`). In passive `--view tree` the
-    /// panel is a non-activating background accessory, and macOS lets
+    /// active app (i.e. in keyboard nav, which the tree opens in).
+    /// Once the panel falls back to its resting state — after acting
+    /// on a row (a click / Enter runs exitActive) — it is a
+    /// non-activating background accessory, and macOS lets
     /// only the active app own the cursor — `NSCursor.set()` here is a
-    /// harmless no-op then. Passive affordance is carried by the
+    /// harmless no-op then. The resting affordance is carried by the
     /// always-drawn grip (which also brightens on hover), so this is
     /// an OS limitation we accept rather than fight.
     private func hoverCursor(forRow i: Int?) -> NSCursor {
@@ -804,7 +806,7 @@ public final class SidebarView: NSView {
         -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
     {
         // Resolve the single SOURCE ROW: hover wins, else the keyboard
-        // selection. Hover wins so previews work in `--active` (kbNav) mode
+        // selection. Hover wins so previews work in keyboard-nav (kbNav) mode
         // too, not just plain mode (kbNav clears `hoverIdx` in setSel, so an
         // arrow key hands the preview to the keyboard selection and the next
         // mouseMoved hands it back — "most recent input wins"). Anchoring on

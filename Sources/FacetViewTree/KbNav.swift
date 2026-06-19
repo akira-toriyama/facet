@@ -1,4 +1,4 @@
-// Pure-logic helpers for the sidebar's keyboard-nav (`--active`)
+// Pure-logic helpers for the sidebar's keyboard-nav
 // mode. SidebarView's kb methods are thin wrappers around these
 // free functions so the index math can be exercised without
 // instantiating an NSView or the main actor.
