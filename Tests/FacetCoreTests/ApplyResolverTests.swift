@@ -2,7 +2,7 @@ import XCTest
 @testable import FacetCore
 
 /// `ApplyResolver` — the pure brain of the section apply/un-apply DnD (PR8):
-/// group id → `DesktopSection` apply, the removeTag-only inverse, the
+/// section id → `DesktopSection` apply, the removeTag-only inverse, the
 /// post-apply match invariant, and the MOVE / ADD `Plan`. Pure; CI-only (CLT
 /// can't run `swift test`).
 final class ApplyResolverTests: XCTestCase {
@@ -32,36 +32,36 @@ final class ApplyResolverTests: XCTestCase {
          lens("Empty", "app=Nope")]
     }
 
-    // MARK: - section(forGroupID:)
+    // MARK: - section(forSectionID:)
 
     func testSectionDecodesLensID() {
-        let s = ApplyResolver.section(forGroupID: "section:1:Web", in: sections())
+        let s = ApplyResolver.section(forSectionID: "section:1:Web", in: sections())
         XCTAssertEqual(s?.type, .lens)
         XCTAssertEqual(s?.label, "Web")
     }
 
     func testSectionNilForWorkspaceID() {
         // "ws:N" is handled by the caller via destWorkspaceIndex, not here.
-        XCTAssertNil(ApplyResolver.section(forGroupID: "ws:0", in: sections()))
+        XCTAssertNil(ApplyResolver.section(forSectionID: "ws:0", in: sections()))
     }
 
     func testSectionNilForOutOfRangeDeclOrder() {
-        XCTAssertNil(ApplyResolver.section(forGroupID: "section:9:Web", in: sections()))
+        XCTAssertNil(ApplyResolver.section(forSectionID: "section:9:Web", in: sections()))
     }
 
     func testSectionNilForTypeMismatch() {
         // declOrder 0 is the workspace section, not a lens → reject.
-        XCTAssertNil(ApplyResolver.section(forGroupID: "section:0:", in: sections()))
+        XCTAssertNil(ApplyResolver.section(forSectionID: "section:0:", in: sections()))
     }
 
     func testSectionNilForLabelMismatch() {
         // Stale id: declOrder 1 is "Web", not "Stale" → reject (config moved).
-        XCTAssertNil(ApplyResolver.section(forGroupID: "section:1:Stale", in: sections()))
+        XCTAssertNil(ApplyResolver.section(forSectionID: "section:1:Stale", in: sections()))
     }
 
     func testSectionDecodesLabelContainingColon() {
         let secs = [wsSec(), lens("a:b:c", "app=X", apply: [.addTag("t")])]
-        let s = ApplyResolver.section(forGroupID: "section:1:a:b:c", in: secs)
+        let s = ApplyResolver.section(forSectionID: "section:1:a:b:c", in: secs)
         XCTAssertEqual(s?.label, "a:b:c")   // split on the FIRST colon only
     }
 
@@ -129,7 +129,7 @@ final class ApplyResolverTests: XCTestCase {
         // forward setFloating(true), no workspace relocation.
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome", tags: ["web"]), workspaceName: "Dev",
-            fromGroupID: "section:1:Web", toGroupID: "section:2:Float",
+            fromSectionID: "section:1:Web", toSectionID: "section:2:Float",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertFalse(p.isInert)
         XCTAssertEqual(p.inverse, [.removeTag("web")])
@@ -141,7 +141,7 @@ final class ApplyResolverTests: XCTestCase {
         // Web → workspace ws:0: inverse removeTag(web), forward [], destWS 0.
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome", tags: ["web"]), workspaceName: "Dev",
-            fromGroupID: "section:1:Web", toGroupID: "ws:0",
+            fromSectionID: "section:1:Web", toSectionID: "ws:0",
             destWorkspaceIndex: 0, in: sections())
         XCTAssertFalse(p.isInert)
         XCTAssertEqual(p.inverse, [.removeTag("web")])
@@ -150,20 +150,20 @@ final class ApplyResolverTests: XCTestCase {
     }
 
     func testPlanAddHasNoInverse() {
-        // ADD (fromGroupID nil): apply only, no un-apply.
+        // ADD (fromSectionID nil): apply only, no un-apply.
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome"), workspaceName: "Dev",
-            fromGroupID: nil, toGroupID: "section:1:Web",
+            fromSectionID: nil, toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertFalse(p.isInert)
         XCTAssertEqual(p.inverse, [])
         XCTAssertEqual(p.forward, [.addTag("web")])
     }
 
-    func testPlanSameGroupIsInert() {
+    func testPlanSameSectionIsInert() {
         let p = ApplyResolver.plan(
             window: win(1), workspaceName: "Dev",
-            fromGroupID: "section:1:Web", toGroupID: "section:1:Web",
+            fromSectionID: "section:1:Web", toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertTrue(p.isInert)
     }
@@ -172,7 +172,7 @@ final class ApplyResolverTests: XCTestCase {
         // "Empty" (section:3) has no apply → drop-inert.
         let p = ApplyResolver.plan(
             window: win(1), workspaceName: "Dev",
-            fromGroupID: "ws:0", toGroupID: "section:3:Empty",
+            fromSectionID: "ws:0", toSectionID: "section:3:Empty",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertTrue(p.isInert)
     }
@@ -183,7 +183,7 @@ final class ApplyResolverTests: XCTestCase {
                     lens("Safari", "app=Safari", apply: [.addTag("s")])]
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome"), workspaceName: "Dev",
-            fromGroupID: "ws:0", toGroupID: "section:1:Safari",
+            fromSectionID: "ws:0", toSectionID: "section:1:Safari",
             destWorkspaceIndex: nil, in: secs)
         XCTAssertTrue(p.isInert)
     }
@@ -192,7 +192,7 @@ final class ApplyResolverTests: XCTestCase {
         // moveWindow rejects sticky windows → snap-back rather than no-op.
         let p = ApplyResolver.plan(
             window: win(1, sticky: true), workspaceName: "Dev",
-            fromGroupID: "section:1:Web", toGroupID: "ws:0",
+            fromSectionID: "section:1:Web", toSectionID: "ws:0",
             destWorkspaceIndex: 0, in: sections())
         XCTAssertTrue(p.isInert)
     }
@@ -200,7 +200,7 @@ final class ApplyResolverTests: XCTestCase {
     func testPlanStaleDestinationIsInert() {
         let p = ApplyResolver.plan(
             window: win(1), workspaceName: "Dev",
-            fromGroupID: "ws:0", toGroupID: "section:9:Gone",
+            fromSectionID: "ws:0", toSectionID: "section:9:Gone",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertTrue(p.isInert)
     }
@@ -209,7 +209,7 @@ final class ApplyResolverTests: XCTestCase {
         // Dragging OUT of a workspace section: no additive tag to reverse.
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome"), workspaceName: "Dev",
-            fromGroupID: "ws:0", toGroupID: "section:1:Web",
+            fromSectionID: "ws:0", toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertEqual(p.inverse, [])
         XCTAssertEqual(p.forward, [.addTag("web")])
@@ -221,7 +221,7 @@ final class ApplyResolverTests: XCTestCase {
         let secs = sections()
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome"), workspaceName: "Dev",
-            fromGroupID: "ws:0", toGroupID: "section:1:Web",
+            fromSectionID: "ws:0", toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: secs)
         // Simulate the backend applying the forward op (addTag("web")).
         var tags: [String] = []
@@ -230,7 +230,7 @@ final class ApplyResolverTests: XCTestCase {
         let wss = [Workspace(index: 0, name: "Dev", isActive: true,
                              layoutMode: "float", windows: [after])]
         let proj = FilterProjection.project(workspaces: wss, sections: secs)
-        let web = proj.groups.first { $0.label == "Web" }
+        let web = proj.sections.first { $0.label == "Web" }
         XCTAssertEqual(web?.windows.map(\.id), [after.id])   // now in the lens
     }
 
@@ -258,7 +258,7 @@ final class ApplyResolverTests: XCTestCase {
                          apply: [.setSticky(true)])]
         let p = ApplyResolver.plan(
             window: win(1, tags: ["web"]), workspaceName: "Dev",
-            fromGroupID: "section:1:Web", toGroupID: "section:2:Pinned",
+            fromSectionID: "section:1:Web", toSectionID: "section:2:Pinned",
             destWorkspaceIndex: nil, in: secs)
         XCTAssertTrue(p.isInert)
     }
@@ -273,7 +273,7 @@ final class ApplyResolverTests: XCTestCase {
                          apply: [.addTag("work")])]
         let p = ApplyResolver.plan(
             window: win(1, tags: ["play"]), workspaceName: "Dev",
-            fromGroupID: "section:1:Play", toGroupID: "section:2:Work",
+            fromSectionID: "section:1:Play", toSectionID: "section:2:Work",
             destWorkspaceIndex: nil, in: secs)
         XCTAssertFalse(p.isInert)   // net = remove play, add work → satisfies
         XCTAssertEqual(p.inverse, [.removeTag("play")])
@@ -285,7 +285,7 @@ final class ApplyResolverTests: XCTestCase {
         // NOT a silent MOVE→ADD downgrade (matches stale-dest treatment).
         let p = ApplyResolver.plan(
             window: win(1, tags: ["web"]), workspaceName: "Dev",
-            fromGroupID: "section:9:Gone", toGroupID: "section:1:Web",
+            fromSectionID: "section:9:Gone", toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertTrue(p.isInert)
     }

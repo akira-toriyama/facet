@@ -971,7 +971,7 @@ final class Controller: NSObject {
                 loggedSectionDiagnostics = result.diagnostics
                 for d in result.diagnostics { Log.line("tree: \(d)") }
             }
-            contentH = sidebarView.update(sections: result.groups,
+            contentH = sidebarView.update(sections: result.sections,
                                           workspaces: wss,
                                           activeLens: currentActiveLens,
                                           titles: titles,

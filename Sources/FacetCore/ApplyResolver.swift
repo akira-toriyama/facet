@@ -1,6 +1,6 @@
 // `ApplyResolver` — the pure, backend-neutral brain of the section
 // apply/un-apply DnD (the pivot's MUTATING read-path, PR8). It wires a
-// dropped / right-clicked `FilterGroup` (which carries NO apply ops — only
+// dropped / right-clicked `ProjectedSection` (which carries NO apply ops — only
 // its id, by the frozen `OverviewModels` contract) back to its authored
 // `DesktopSection.apply`, produces the forward apply list + the removeTag-only
 // inverse, and validates the CORE INVARIANT: a window must SATISFY the dest
@@ -18,13 +18,13 @@
 //   • right-click = ADD: `apply` only (no source, no inverse) → multi-match.
 //
 // WORKSPACE vs LENS dest:
-//   • A `type=workspace` group id is `"ws:<index>"`. Its relocation is the
+//   • A `type=workspace` section id is `"ws:<index>"`. Its relocation is the
 //     IMPLICIT `setWorkspace`, surfaced to the caller as `destWorkspaceIndex`
-//     (the dest group's 0-based wire `sourceWorkspaceIndex`) so the caller
+//     (the dest section's 0-based wire `sourceWorkspaceIndex`) so the caller
 //     routes it through the unified `moveWindow(_:toWorkspaceIndex:)` path,
 //     never an emoji NAME (auto-named workspaces collide on label by design).
 //     A workspace `match` is `""` → the invariant is trivially satisfied.
-//   • A `type=lens` group id is `"section:<declOrder>:<label>"`. Its `apply`
+//   • A `type=lens` section id is `"section:<declOrder>:<label>"`. Its `apply`
 //     (with any authored `setWorkspace` STRIPPED — lenses don't relocate,
 //     "lens は絞るだけ") is the forward list; an empty/wholly-stripped lens
 //     apply is DROP-INERT (snap-back).
@@ -39,7 +39,7 @@ public enum ApplyResolver {
     /// ⇒ the caller snaps back WITHOUT any backend op; `reason` is the
     /// loud-but-non-fatal diagnostic to log.
     public struct Plan: Equatable, Sendable {
-        /// Synthesised `removeTag(s)` undoing the SOURCE group's additive
+        /// Synthesised `removeTag(s)` undoing the SOURCE section's additive
         /// tags (MOVE only; empty for ADD and for a workspace source).
         public let inverse: [ApplyOp]
         /// The DEST section's apply, `setWorkspace` stripped (canonical order
@@ -67,14 +67,14 @@ public enum ApplyResolver {
              isInert: true, reason: reason)
     }
 
-    /// Resolve a rendered LENS group id (`"section:<declOrder>:<label>"`) back
+    /// Resolve a rendered LENS section id (`"section:<declOrder>:<label>"`) back
     /// to its `DesktopSection`. `declOrder` is the index into the FULL
     /// `sections` array (`FilterProjection` enumerates the array verbatim), so
     /// it indexes back directly; the in-bounds + `type == .lens` + label-suffix
     /// guards reject a stale config (hot-reload between project and drop).
     /// Returns `nil` for a `"ws:<index>"` id (the caller handles workspace
     /// dests via `destWorkspaceIndex`) or any unrecognised / mismatched id.
-    public static func section(forGroupID id: String,
+    public static func section(forSectionID id: String,
                                in sections: [DesktopSection]) -> DesktopSection? {
         guard id.hasPrefix("section:") else { return nil }
         // "section:<declOrder>:<label>" — the label may contain ':', so take
@@ -125,19 +125,19 @@ public enum ApplyResolver {
             base: window, workspaceName: workspaceName, applying: ops))
     }
 
-    /// Resolve a MOVE (`fromGroupID != nil`) or ADD (`fromGroupID == nil`)
-    /// into an executable `Plan`. `destWorkspaceIndex` is the dest group's
+    /// Resolve a MOVE (`fromSectionID != nil`) or ADD (`fromSectionID == nil`)
+    /// into an executable `Plan`. `destWorkspaceIndex` is the dest section's
     /// `sourceWorkspaceIndex` (supplied by the view seam; meaningful only for
     /// a workspace dest). Total — never throws; an unresolvable / inert drop
     /// returns `isInert == true` with a `reason`.
     public static func plan(window: Window,
                             workspaceName: String,
-                            fromGroupID: String?,
-                            toGroupID: String,
+                            fromSectionID: String?,
+                            toSectionID: String,
                             destWorkspaceIndex: Int?,
                             in sections: [DesktopSection]) -> Plan {
-        // Same group → nothing to do.
-        if let fromGroupID, fromGroupID == toGroupID {
+        // Same section → nothing to do.
+        if let fromSectionID, fromSectionID == toSectionID {
             return inert("same section")
         }
 
@@ -147,17 +147,17 @@ public enum ApplyResolver {
         // (config hot-reloaded between render and drop) → inert, matching the
         // stale-dest treatment, so a MOVE never silently degrades to an ADD.
         var inverse: [ApplyOp] = []
-        if let fromGroupID, !fromGroupID.hasPrefix("ws:") {
-            guard let src = section(forGroupID: fromGroupID, in: sections) else {
-                return inert("stale source \"\(fromGroupID)\"")
+        if let fromSectionID, !fromSectionID.hasPrefix("ws:") {
+            guard let src = section(forSectionID: fromSectionID, in: sections) else {
+                return inert("stale source \"\(fromSectionID)\"")
             }
             inverse = ApplyResolver.inverse(of: src.apply)
         }
 
-        let destIsWorkspace = toGroupID.hasPrefix("ws:")
-        let destSection = destIsWorkspace ? nil : section(forGroupID: toGroupID, in: sections)
+        let destIsWorkspace = toSectionID.hasPrefix("ws:")
+        let destSection = destIsWorkspace ? nil : section(forSectionID: toSectionID, in: sections)
         if !destIsWorkspace && destSection == nil {
-            return inert("stale destination \"\(toGroupID)\"")
+            return inert("stale destination \"\(toSectionID)\"")
         }
 
         // Forward = dest apply minus setWorkspace (a workspace dest relocates
