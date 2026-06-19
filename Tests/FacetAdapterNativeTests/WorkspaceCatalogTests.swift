@@ -987,4 +987,63 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertEqual(snap.map(\.index), [0, 1, 2])
         XCTAssertEqual(snap.map(\.name), ["dev", "ide", "sns"])
     }
+
+    // MARK: - nil-ordinal seed-taint recovery (fix/desktop-n-nil-ordinal)
+
+    func testHoldsOnlyUnnamedSlotsDistinguishesStates() {
+        // Fresh (unseeded) catalog: NOT degenerate (it can still seed).
+        let fresh = WorkspaceCatalog()
+        XCTAssertFalse(fresh.holdsOnlyUnnamedSlots)
+
+        // nil-ordinal seed → defaultWorkspaceCount empty-name slots: degenerate.
+        var tainted = WorkspaceCatalog()
+        tainted.seed(configs: (1...5).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        })
+        XCTAssertTrue(tainted.holdsOnlyUnnamedSlots)
+
+        // A catalog with ≥1 real name: NOT degenerate.
+        var named = WorkspaceCatalog()
+        named.seed(configs: [(index: 1, config: WorkspaceConfig(name: "Dev"))])
+        XCTAssertFalse(named.holdsOnlyUnnamedSlots)
+    }
+
+    func testUserRenameMakesCatalogIneligibleForReset() {
+        // The recovery predicate must NOT fire after a runtime rename — the
+        // user's mutation has to survive (config is only the read-only seed).
+        var c = WorkspaceCatalog()
+        c.seed(configs: (1...5).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        })
+        XCTAssertTrue(c.holdsOnlyUnnamedSlots)
+        c.renameWorkspace(1, to: "Dev")
+        XCTAssertFalse(c.holdsOnlyUnnamedSlots,
+                       "a renamed workspace makes the catalog non-degenerate")
+    }
+
+    func testFreshReseedAfterNilOrdinalLandsNamesAndLayout() {
+        // Documents the bug + the fix's recovery shape. `seed` is idempotent,
+        // so a tainted catalog cannot self-correct — only the adapter's
+        // discard-and-reseed (a FRESH catalog) restores names + layout.
+        var tainted = WorkspaceCatalog()
+        tainted.seed(configs: (1...5).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        })
+        // Idempotence guard: a second seed on the tainted catalog is a no-op.
+        tainted.seed(configs: [(index: 1, config: WorkspaceConfig(name: "Dev"))])
+        XCTAssertTrue(tainted.holdsOnlyUnnamedSlots,
+                      "seed() alone cannot correct a tainted catalog")
+
+        // The fix: discard (fresh catalog), then re-seed with the resolved
+        // ordinal's named config — names AND per-WS layout land.
+        var recovered = WorkspaceCatalog()
+        recovered.seed(configs: [
+            (index: 1, config: WorkspaceConfig(name: "Dev", layout: "bsp")),
+            (index: 2, config: WorkspaceConfig(name: "Web")),
+            (index: 3, config: WorkspaceConfig(name: "Notes")),
+        ])
+        XCTAssertEqual(recovered.workspaceNames, ["Dev", "Web", "Notes"])
+        XCTAssertFalse(recovered.holdsOnlyUnnamedSlots)
+        XCTAssertEqual(recovered.mode(of: 1), "bsp")
+    }
 }

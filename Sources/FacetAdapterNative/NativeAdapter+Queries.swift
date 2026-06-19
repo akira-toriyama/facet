@@ -202,6 +202,28 @@ extension NativeAdapter {
     /// hot-reload takes; `seed` / `seedTags` are idempotent (first-call
     /// only), so the catalog's runtime set / lens stay authoritative.
     private func seedCatalogFromConfig() {
+        // nil-ordinal seed-taint recovery: a prior refresh may have seeded
+        // THIS (per-mac-desktop) catalog while the active-space ordinal was
+        // unresolved — launched / switched into a fullscreen space
+        // (`MacDesktops.ordinal` skips `type != 0`) or a transient SLS
+        // mismatch. That path seeds `defaultWorkspaceCount` UNNAMED slots,
+        // and `seed`'s idempotence guard then blocks the correction for the
+        // rest of the session (the catalog is parked by mac-desktop id and
+        // restored tainted). Once a real ordinal resolves AND this desktop
+        // carries a `[desktop.N]` / section config, discard the degenerate
+        // (all-empty) catalog so the fresh `seed` below lands the configured
+        // names. Gated on a REAL ordinal — SkyLight-unavailable single-
+        // desktop mode (`id == 0` → ordinal nil) keeps its unnamed slots —
+        // and on all-empty names, so a runtime rename / add (which makes a
+        // name non-empty) is never clobbered.
+        if let ordinal = activeMacDesktopOrdinal,
+           catalog.holdsOnlyUnnamedSlots,
+           config.macDesktopWorkspaceConfigs[ordinal] != nil
+             || config.isSectionModelActive(ordinal: ordinal) {
+            Log.debug("native: recovering nil-ordinal seed-taint — "
+                + "re-seeding desktop ordinal=\(ordinal)")
+            catalog = WorkspaceCatalog()
+        }
         // Seed the per-WS default layout mode from config (`[layout]
         // default`). Layout mode is otherwise session-only, so without
         // this every restart / per-mac-desktop catalog resets to the
