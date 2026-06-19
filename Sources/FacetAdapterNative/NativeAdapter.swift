@@ -67,11 +67,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     var activeMacDesktopID: UInt64 = 0
 
     /// 1-based Mission-Control ordinal of the active mac desktop
-    /// (user mac desktops only). Selects the `[desktop.N]` workspace config;
+    /// (user mac desktops only). Selects the `[[desktop.N.section]]` config;
     /// `nil` → fall back to `defaultWorkspaceCount` unnamed slots.
     /// Refreshed on every mac-desktop swap. May briefly go stale if the
     /// user reorders mac desktops in Mission Control without switching —
-    /// a cosmetic name/count mismatch only
+    /// a cosmetic count mismatch only
     /// (memory: facet-per-native-space-ws).
     var activeMacDesktopOrdinal: Int?
 
@@ -86,8 +86,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// without a restart. The live workspace SET is NOT re-seeded — once
     /// seeded it's runtime-authoritative (`facet workspace --add/--remove`
     /// own it; config stays the read-only seed, see
-    /// `WorkspaceCatalog.seed`), so `[desktop.N]` count/name edits still
-    /// land only on restart by design.
+    /// `WorkspaceCatalog.seed`), so `[[desktop.N.section]]` workspace-count /
+    /// layout edits still land only on restart by design.
     ///
     /// Lock-guarded: the slide path reads it on the MAIN thread
     /// (`NativeAdapter+Slide.swift` resolveAnimPreset) while `updateConfig`
@@ -266,10 +266,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     private let errorStream: AsyncStream<String>
     let errorContinuation: AsyncStream<String>.Continuation
 
-    /// Init with config so workspace count + names come from the
-    /// user's `[desktop.N]` sections. The (default = 5) fallback in
-    /// FacetConfig keeps a vanilla `~/.config/facet/config.toml`
-    /// usable out of the box.
+    /// Init with config so the workspace count + per-WS layout come from the
+    /// user's `[[desktop.N.section]]` blocks (names are auto-assigned). The
+    /// (default = 5) fallback in FacetConfig keeps a vanilla
+    /// `~/.config/facet/config.toml` usable out of the box.
     public init(config: FacetConfig) {
         self._config = config
         var ec: AsyncStream<BackendEvent>.Continuation!

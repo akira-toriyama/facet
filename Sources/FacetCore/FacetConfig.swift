@@ -16,12 +16,14 @@ import Foundation
 import Palette   // sill's pure (AppKit-free) theme layer — `canonical(_:)`
 import Toml      // sill's pure TOML subset parser (`Toml.Value` accessors)
 
-/// Per-WS configuration parsed from a `[desktop.N]` inline table:
-/// `1 = { name = "Dev", layout = "bsp" }`. `name` is required;
-/// `layout` is the optional seed for `facet workspace --layout`
-/// (the runtime catalog can still override it for the session).
-/// An unknown / mistyped layout falls back to the global
-/// `[layout] default` at seed time.
+/// Runtime descriptor for one facet workspace: a display `name` plus an
+/// optional `layout` seed for `facet workspace --layout`. Workspaces are
+/// no longer seeded from config by name — a `[[desktop.N.section]]`
+/// `type = "workspace"` cell is auto-named from the emoji pool
+/// (`WorkspaceNaming`), and `name` is owned at runtime by
+/// `facet workspace --rename`. `layout` comes from the section's `layout`
+/// (or the global `[layout] default`); an unknown / mistyped value falls
+/// back to that default at seed time.
 public struct WorkspaceConfig: Sendable, Equatable {
     public let name: String
     public let layout: String?
@@ -159,14 +161,6 @@ public struct FacetConfig: Sendable {
     /// `0.5`). Raw; read `effectiveBorderMin/MaxWidth`.
     public var borderMinWidth: CGFloat?
     public var borderMaxWidth: CGFloat?
-
-    /// Per-mac-desktop `[desktop.N]` workspace configs. Outer key is
-    /// the mac desktop ordinal (Mission Control order, 1-based, user
-    /// desktops only); inner is `facet WS index -> WorkspaceConfig`
-    /// (name + optional layout). A mac desktop without a section falls
-    /// back to `defaultWorkspaceCount` unnamed slots with the global
-    /// `[layout] default`. See memory `facet-per-native-space-ws`.
-    public var macDesktopWorkspaceConfigs: [Int: [Int: WorkspaceConfig]] = [:]
 
     /// Per-mac-desktop `[[desktop.N.section]]` definitions (the section/lens
     /// model). Outer key is the mac desktop ordinal (Mission Control order,
@@ -510,27 +504,26 @@ public struct FacetConfig: Sendable {
         return out
     }
 
-    /// Facet workspace defaults for a mac desktop without a
-    /// `[desktop.N]` section. 5 is the memory-confirmed (`facet-workspace-model`
-    /// N2) "control above zero, easy to expand" starting point.
+    /// Facet workspace count for a mac desktop without a configured section
+    /// model. 5 is the memory-confirmed (`facet-workspace-model` N2) "control
+    /// above zero, easy to expand" starting point.
     public static let defaultWorkspaceCount = 5
 
-    /// Workspace list for a given mac-desktop ordinal (1-based,
-    /// Mission Control order). Returns the `[desktop.N]` config when
-    /// that mac desktop has a non-empty section, else
-    /// `defaultWorkspaceCount` unnamed slots with no layout
-    /// override. `nil` ordinal (SkyLight unavailable / single-desktop
-    /// mode) → default slots.
+    /// Workspace list for a given mac-desktop ordinal (1-based, Mission
+    /// Control order). When the section model is active there (≥1
+    /// `type = "workspace"` section), the COUNT and per-workspace layout seed
+    /// come from those sections and names are auto-assigned (emoji pool); else
+    /// `defaultWorkspaceCount` unnamed slots with no layout override. `nil`
+    /// ordinal (SkyLight unavailable / single-desktop mode) → default slots.
     public func effectiveWorkspaceList(forMacDesktopOrdinal ordinal: Int?)
         -> [(index: Int, config: WorkspaceConfig)]
     {
         // Section model (authoritative when active): the workspace COUNT and
         // per-workspace layout seed come from the `type = "workspace"`
         // sections; names are AUTO-assigned (emoji pool, index-keyed — the
-        // user can't name a workspace). `isSectionModelActive` guarantees a
-        // non-nil ordinal with ≥1 workspace section, so this list is
-        // non-empty and wins over any `[desktop.N]` seed for that desktop
-        // (the coexistence is loud-logged at load).
+        // user can't name a workspace from config; runtime `facet workspace
+        // --rename` owns the name). `isSectionModelActive` guarantees a
+        // non-nil ordinal with ≥1 workspace section, so this list is non-empty.
         if isSectionModelActive(ordinal: ordinal), let ordinal {
             let wsSections = (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
                 .filter { $0.type == .workspace }
@@ -540,37 +533,19 @@ public struct FacetConfig: Sendable {
                                          layout: s.layout))
             }
         }
-        guard let ordinal,
-              let configs = macDesktopWorkspaceConfigs[ordinal],
-              let list = Self.sortedSlots(configs)
-        else {
-            return (1...Self.defaultWorkspaceCount).map {
-                ($0, WorkspaceConfig(name: ""))
-            }
+        return (1...Self.defaultWorkspaceCount).map {
+            ($0, WorkspaceConfig(name: ""))
         }
-        return list
-    }
-
-    /// Clamp + order a raw `index → WorkspaceConfig` map into
-    /// `(index, config)` slots: drop keys < 1, sort ascending.
-    /// `nil` when nothing valid remains (lets callers fall back).
-    private static func sortedSlots(_ configs: [Int: WorkspaceConfig])
-        -> [(index: Int, config: WorkspaceConfig)]?
-    {
-        let valid = configs.filter { $0.key >= 1 }
-        guard !valid.isEmpty else { return nil }
-        return valid.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
     }
 
     /// Whether facet manages the mac desktop at `ordinal`.
     ///
-    /// - With **any** `[desktop.N]` workspace seed OR any
-    ///   `[[desktop.N.section]]` present, facet is opt-in: it manages ONLY
-    ///   the mac desktops that have one. A mac desktop without either is
-    ///   left untouched — no facet workspaces, no window parking, and the
-    ///   panel hides there.
-    /// - With **neither** present (the shipped default), every mac desktop
-    ///   is managed with `defaultWorkspaceCount` unnamed slots.
+    /// - With **any** `[[desktop.N.section]]` present, facet is opt-in: it
+    ///   manages ONLY the mac desktops that have a section block. A mac
+    ///   desktop without one is left untouched — no facet workspaces, no
+    ///   window parking, and the panel hides there.
+    /// - With **none** present (the shipped default), every mac desktop is
+    ///   managed with `defaultWorkspaceCount` unnamed slots.
     /// - `nil` ordinal (SkyLight unavailable / single-desktop mode) is
     ///   always managed.
     ///
@@ -578,23 +553,20 @@ public struct FacetConfig: Sendable {
     /// (tag-mode-clamped), so a tag-mode config never opts in via sections.
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
-        if macDesktopWorkspaceConfigs.isEmpty && sections.isEmpty { return true }
+        if sections.isEmpty { return true }
         guard let ordinal else { return true }
-        return macDesktopWorkspaceConfigs[ordinal] != nil
-            || sections[ordinal] != nil
+        return sections[ordinal] != nil
     }
 
     /// Whether the section/lens model drives the mac desktop at `ordinal` —
     /// i.e. it has at least one `type = "workspace"` section. This is the
-    /// gate the read path (PR3+), auto-naming (PR4), and the overview/tree
-    /// (PR5+) consult to decide between the section model and the legacy
-    /// `[desktop.N]` by-workspace seeding.
+    /// gate the read path, auto-naming, and the overview/tree consult to
+    /// decide between the section model and the default unnamed slots.
     ///
     /// Read through `effectiveMacDesktopSectionConfigs`, so it is `false` in
     /// tag mode by construction. `nil` ordinal (SkyLight unavailable /
     /// single-desktop) is `false`: the section model is a per-ordinal opt-in,
-    /// and an unresolvable ordinal falls back to the existing default-slot
-    /// path (matching how `[desktop.N]` is ignored for a `nil` ordinal).
+    /// and an unresolvable ordinal falls back to the default-slot path.
     public func isSectionModelActive(ordinal: Int?) -> Bool {
         guard let ordinal else { return false }
         return effectiveMacDesktopSectionConfigs[ordinal]?

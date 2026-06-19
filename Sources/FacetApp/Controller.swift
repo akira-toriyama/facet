@@ -448,7 +448,7 @@ final class Controller: NSObject {
     ///                       exclusion-rules / grouping hot-reload
     /// Reload-off (intentionally — restart required):
     ///   - default-view
-    ///   - [desktop.N] workspace count / names — the catalog set is
+    ///   - [[desktop.N.section]] workspace count / layout — the catalog set is
     ///     seed-once / runtime-authoritative (config is the read-only
     ///     seed); a reload won't clobber runtime add/remove/rename.
     func reloadConfig() {

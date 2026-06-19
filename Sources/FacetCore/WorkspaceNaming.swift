@@ -10,7 +10,7 @@
 // Pure FacetCore. The seed path reads it through
 // `FacetConfig.effectiveWorkspaceList`; the dynamic `facet workspace --add`
 // path renames the new slot via the adapter. NOT engaged for a section-less
-// (or `[desktop.N]`-named) desktop — those keep their existing names.
+// desktop — its default slots stay unnamed until a runtime rename.
 
 import Foundation
 

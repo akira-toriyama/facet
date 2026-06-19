@@ -60,9 +60,9 @@ catppuccin-mocha, … plus `random` — live toggleable).
 
 Each workspace runs a layout, set at runtime with
 `facet workspace --layout NAME` (per-WS, never persisted — set a
-per-mac-desktop startup layout via `[desktop.N]` in
-[`config.toml`](config.toml), e.g. `1 = { name = "Dev", layout =
-"bsp" }`). facet
+per-mac-desktop startup layout via a `[[desktop.N.section]]` block in
+[`config.toml`](config.toml), e.g. `type = "workspace"` with `layout =
+"bsp"`). facet
 never hides windows, so a layout only *positions* them and the
 focused window is always raised. Diagrams use four windows; **1** is
 the master / focus where that matters.
@@ -404,16 +404,19 @@ Frequently-touched keys:
   subrole). The template ships one default that floats tiny unnamed
   popups. (System sheets / dialogs / palettes are auto-floated by AX
   role regardless.)
-- `[desktop.N]` table — per-mac-desktop workspace list. `N` is the
-  mac desktop's Mission Control position; each entry is a 1-indexed inline
-  table: `1 = { name = "Dev" }` (name only) or
-  `1 = { name = "Dev", layout = "bsp" }` (name + startup layout).
-  `layout` is optional — when omitted the WS starts at the global
-  `[layout] default`. Two modes: **no** `[desktop.N]` anywhere → every
-  mac desktop gets the default workspaces automatically; **any**
-  `[desktop.N]` present → **opt-in**: facet manages only the mac desktops
-  that have a section; a mac desktop without one is left untouched (windows
-  as-is, panel hidden there).
+- `[[desktop.N.section]]` blocks — the per-mac-desktop section model
+  (`N` = the mac desktop's Mission Control position). An ordered list of
+  sections describes that desktop; each has a required `type`:
+  `"workspace"` (an auto-named — emoji — spatial cell with an optional
+  `layout` seed; the count of these is that desktop's workspace count),
+  `"lens"` (a saved visibility filter — `label` + `match` + optional
+  `apply`), or `"unassigned"`. **Workspaces are not named from config** —
+  a runtime `facet workspace --rename` owns the name. Two modes: **no**
+  `[[desktop.N.section]]` anywhere → every mac desktop gets the default
+  workspaces automatically; **any** present → **opt-in**: facet manages
+  only the mac desktops that have a section block; a mac desktop without
+  one is left untouched (windows as-is, panel hidden there). Section model
+  is `by = "workspace"` only (ignored under `by = "tag"`).
 - `[grouping] by` — `workspace` (default) or `tag`. `tag` swaps the
   per-mac-desktop workspace list for a dwm-style **tag world**: a window
   can carry multiple tags, and the **lens** (`facet lens`) picks which

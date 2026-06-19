@@ -120,20 +120,21 @@ is the index. **Do not relitigate** without explicit grill round.
   workspace, 2 dimensions). Window-unit management (not app-rules).
   Default 5 WS per mac desktop; dynamic add/remove/rename/move at
   runtime via `facet workspace --add` / `--remove` / `--rename` /
-  `--move`. Persistent naming is via `[desktop.N]` in config.toml
-  (read-only seed — facet never writes config).
+  `--move`. Workspaces are auto-named (emoji pool) — there is no
+  config-side naming; `--rename` owns the name at runtime.
 - **Per-mac-desktop workspaces**: each mac desktop keeps an
   independent set of facet workspaces (own `WorkspaceCatalog`,
   parked/swapped on mac-desktop switch). The active mac-desktop id + ordinal
   are read read-only via private SkyLight (`MacDesktops`,
   `SLSGetActiveSpace` / `SLSCopyManagedDisplaySpaces`); facet never
   moves windows across mac desktops, so it stays SIP-on / public-contract
-  (the rejected cross-mac-desktop move was hide 手法4). `[desktop.N]` config
-  customises a mac desktop's WS list by Mission-Control ordinal — each
-  entry is an inline-table value (`1 = { name = "...", layout = "..." }`,
-  layout optional). Catalog state is session-only. Opt-in: any `[desktop.N]` → facet
+  (the rejected cross-mac-desktop move was hide 手法4). `[[desktop.N.section]]`
+  config customises a mac desktop by Mission-Control ordinal — an ordered
+  list of `type = workspace | lens | unassigned` sections (workspace =
+  auto-named cell + optional `layout`; the count sets the WS count).
+  Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
-  no `[desktop.N]` → all mac desktops managed by default. SkyLight gone → single shared
+  none → all mac desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the
   earlier "mac desktop co-use discouraged" stance — facet now nests
   under mac desktops by design.)
@@ -185,9 +186,10 @@ is the index. **Do not relitigate** without explicit grill round.
   (developer has 1 display).
 - **Fullscreen apps**: excluded from facet management, left to
   macOS.
-- **Persistence**: not in facet. Persistent WS names live in
-  `[desktop.N]` config sections (read-only seed). Runtime layout /
-  catalog mutations are session-only.
+- **Persistence**: not in facet. WS names are not persisted —
+  workspaces are auto-named (emoji pool); a `[[desktop.N.section]]`
+  block only seeds the WS count + per-WS `layout` (read-only). Runtime
+  rename / layout / catalog mutations are all session-only.
 - **Startup**: don't touch existing windows. **Shutdown**: restore
   all hidden windows (treat shutdown = workspace feature OFF).
 
@@ -560,9 +562,10 @@ own lens instead).
   current active WS; user moves them with `facet window
   --move-to N`.
 - **Persistence of workspace state across restart** — out of
-  scope for facet itself. WS names persist via `[desktop.N]`
-  config (read-only seed); runtime layout / catalog mutations
-  are session-only by design.
+  scope for facet itself. WS names are not persisted (auto-named
+  emoji); a `[[desktop.N.section]]` block only seeds the WS count +
+  per-WS `layout` (read-only). Runtime rename / layout / catalog
+  mutations are session-only by design.
 - **Plugin / extension system, menubar icon, system notifications,
   theme editor GUI, window snapping, global hotkey reservation,
   screen recording, animation customization, UI translation

@@ -18,9 +18,9 @@
 // clamps at runtime so a typo can't break the layout).
 //
 // NOT decoded here (facet parses these from the raw TOML text itself —
-// they're non-uniform): the `[[exclude]]` / `[[tag]]`
-// arrays-of-tables and the dynamic `[desktop.N]` sections. The spec still
-// DESCRIBES them so completion covers them.
+// they're non-uniform): the `[[exclude]]` / `[[tag]]` /
+// `[[desktop.N.section]]` arrays-of-tables. The spec still DESCRIBES them
+// so completion covers them.
 
 import CoreGraphics
 import ConfigSchema
@@ -169,47 +169,23 @@ public extension FacetConfig {
             ]),
 
             .init("desktop", kind: .dynamicTable,
-                  doc: "`[desktop.N]` per-mac-desktop workspace seeds: "
-                     + "`K = { name = \"Dev\", layout = \"bsp\" }` (N = Mission "
-                     + "Control ordinal, K = facet WS index). Also accepts "
-                     + "`[[desktop.N.section]]` ordered display sections "
-                     + "(pivot, LIVE under [grouping] by = \"workspace\") with "
-                     + "a required `type` of "
+                  doc: "`[[desktop.N.section]]` ordered per-mac-desktop display "
+                     + "sections (N = Mission Control ordinal; LIVE under "
+                     + "[grouping] by = \"workspace\") — the sole way to "
+                     + "configure a mac desktop. Each has a required `type` of "
                      + "workspace / lens / unassigned: workspace = "
-                     + "`{ type, layout }` (auto-named spatial cell); lens = "
+                     + "`{ type, layout }` (auto-named spatial cell — workspaces "
+                     + "are not named from config); lens = "
                      + "`{ type, label, match, apply }` where match = a facet "
                      + "filter WHERE-clause and apply = "
                      + "`{ workspace, tags = [], floating, sticky, master }` "
                      + "set on a window routed in; unassigned = "
                      + "`{ type, label }`. Array order = tree display order. "
-                     + "Workspace-axis only (ignored under "
-                     + "[grouping] by = \"tag\")."),
+                     + "Any section block makes facet opt-in (manages only "
+                     + "configured desktops). Workspace-axis only (ignored "
+                     + "under [grouping] by = \"tag\")."),
         ]
         )
-    }
-
-    /// `[desktop.N]` per-mac-desktop workspace configs — dynamic section
-    /// names, so the declarative spec can't drive these; decoded here from
-    /// the same flat `tables` map (unchanged from the old inline loop).
-    static func decodeDesktopSections(
-        _ toml: [String: [String: TOMLValue]], into c: inout FacetConfig
-    ) {
-        for (sectionName, section) in toml
-        where sectionName.hasPrefix("desktop.") {
-            guard let ordinal = Int(sectionName.dropFirst("desktop.".count)),
-                  ordinal >= 1 else { continue }
-            var configs: [Int: WorkspaceConfig] = [:]
-            for (key, value) in section {
-                guard let idx = Int(key), idx >= 1,
-                      case .table(let t) = value,
-                      case .string(let name)? = t["name"]
-                else { continue }
-                var layout: String? = nil
-                if case .string(let l)? = t["layout"] { layout = l }
-                configs[idx] = WorkspaceConfig(name: name, layout: layout)
-            }
-            if !configs.isEmpty { c.macDesktopWorkspaceConfigs[ordinal] = configs }
-        }
     }
 
     // MARK: - JSON Schema (taplo) — emitted from the SAME `configSpec`

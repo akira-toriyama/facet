@@ -15,16 +15,14 @@ extension FacetConfig {
     /// Build from the FLAT `[section: [key: value]]` map (the literal-
     /// header dict from `Toml.parseFlat`). The uniform `[block]` keys are
     /// driven by the single declarative `configSpec` (which ALSO emits the
-    /// JSON Schema — see `FacetConfig+Spec.swift`); the dynamic
-    /// `[desktop.N]` sections are decoded by their own helper. The
-    /// `[[exclude]]/[[tag]]` arrays-of-tables are filled by
-    /// `load` from the raw text (they don't live in this flat map).
+    /// JSON Schema — see `FacetConfig+Spec.swift`). The
+    /// `[[exclude]]/[[tag]]/[[desktop.N.section]]` arrays-of-tables are
+    /// filled by `load` from the raw text (they don't live in this flat map).
     public static func from(toml: [String: [String: TOMLValue]])
         -> FacetConfig
     {
         var c = FacetConfig()
         configSpec.decode(toml, into: &c)
-        decodeDesktopSections(toml, into: &c)
         return c
     }
 
@@ -166,19 +164,6 @@ extension FacetConfig {
                     + "[[desktop.N.section]] (sections are workspace-axis "
                     + "only) — remove the section blocks or switch to "
                     + "by = \"workspace\"")
-            }
-            // Precedence: when a mac desktop carries BOTH a `[desktop.N]`
-            // workspace seed AND `[[desktop.N.section]]` type=workspace
-            // sections, the SECTIONS are authoritative for that desktop and
-            // the `[desktop.N]` name/layout seeds are ignored there. Surface
-            // the ambiguity LOUD rather than silently picking.
-            for ordinal in c.macDesktopWorkspaceConfigs.keys.sorted()
-            where c.isSectionModelActive(ordinal: ordinal) {
-                Log.line("config: mac desktop \(ordinal) has both [desktop."
-                    + "\(ordinal)] workspace seeds and [[desktop.\(ordinal)"
-                    + ".section]] type=\"workspace\" sections — the sections "
-                    + "are authoritative; the [desktop.\(ordinal)] name/layout "
-                    + "seeds are ignored on that desktop.")
             }
             return c
         }
