@@ -641,12 +641,18 @@ per-mac-desktop の順序付き配列で、**配列順 = [[tree view]] の表示
 はしない＝authored match の黙殺を防ぐ・トミー 2026-06-17）。section 未定義の
 [[mac desktop]] は内蔵 by-workspace へ degrade。**workspace 軸専用**＝tag モード
 （[[grouping]] `by=tag`）は section を無視（`effectiveMacDesktopSectionConfigs` が空に
-clamp・load 時に loud-log）。**現状 parse-only**（production consumer は PR3
-`FilterProjection` 再設計 + PR5 tree）。
-- コード: `DesktopSection` / `SectionType` / `FacetConfig.macDesktopSectionConfigs` /
-  `decodeDesktopSectionSections` /
+clamp・load 時に loud-log）。**LIVE**（`by="workspace"` の下で tree が消費・PR3
+`FilterProjection` 再設計 + PR5 tree 出荷済）＝`FilterProjection.project` が live
+window 上に section を投影し、1 表示単位として `ProjectedSection` を産む。**config の
+宣言 `DesktopSection` ↔ 投影結果 `ProjectedSection` を区別する**（後者は旧称 `FilterGroup`
+＝Phase D で禁止語 group をリネーム）。
+- コード: `DesktopSection`（config 宣言）/ `ProjectedSection`（投影結果＝1 表示単位・
+  `id`〔`"ws:<index>"` / `"section:<declOrder>:<label>"`〕/ `label` / `windows` /
+  `sourceWorkspaceIndex` / `sectionType`・`OverviewModels`）/
+  `FilterProjection.project`（投影・純）/ `SectionType` /
+  `FacetConfig.macDesktopSectionConfigs` / `decodeDesktopSectionSections` /
   `effectiveMacDesktopSectionConfigs`（`FacetCore`）
-- **Don't call it:** group（旧称）, workspace（section は多重所属・filter 由来／
+- **Don't call it:** group（旧称＝旧型名 `FilterGroup`）, workspace（section は多重所属・filter 由来／
   workspace は 1 窓 1 個・タイル枠）, tab, page, グループ, セクション以外
 
 ### match

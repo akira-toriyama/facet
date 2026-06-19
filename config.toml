@@ -675,7 +675,7 @@ action = "ignore"
 #
 #   type = "unassigned"  — the lost-and-found section (just a `label`) for
 #       windows in no other section. DEFERRED: this type decodes but the
-#       projection emits NO group for it yet — under the current catalog
+#       projection emits NO section for it yet — under the current catalog
 #       every managed window already has a workspace, so the set is always
 #       empty. An `unassigned` section will not appear in the tree today.
 #
