@@ -46,6 +46,15 @@ public protocol TreeController: AnyObject, Sendable {
     /// know about AX or the backend's post-switch default-focus race.
     func focusWindow(_ window: Window, postSwitch: Bool)
 
+    /// Tag-unification Phase 1 (PR4): the user clicked an out-of-lens
+    /// (parked, dimmed `lens`-badged) window row. Drop the active
+    /// section-lens — restoring EVERY parked window into its layout — then
+    /// focus `window`. The window is always on the active workspace
+    /// (lens-park is active-WS only), so no switch. Reuses the `lens --clear`
+    /// path; the restore and the focus both ride the serial CLI queue, so the
+    /// window is back in its tile before focus lands.
+    func revealLensParked(_ window: Window)
+
     /// Switch to `window`'s workspace if needed, focus it, then run
     /// `ops` against the now-focused window. Used for right-click
     /// menu items that operate on the focused window — keeps the

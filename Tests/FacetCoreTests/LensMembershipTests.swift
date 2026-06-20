@@ -2,8 +2,9 @@ import XCTest
 @testable import FacetCore
 
 /// `LensMembership.matches` — the SINGLE per-window lens-`match` predicate
-/// shared by the display read-path (`FilterProjection` / `OverviewProjection`)
-/// and the Phase-1 real-hide park path. These lock the two behaviours the
+/// shared by the tree display read-path (`FilterProjection`) and the Phase-1
+/// real-hide park path (grid/rail then drop the parked windows via the
+/// snapshot's `Window.isLensParked` flag). These lock the two behaviours the
 /// shared predicate must guarantee: (1) it agrees with `FacetFilter.matches`
 /// for ordinary window fields, and (2) it overlays the workspace NAME so
 /// `workspace=` resolves (a bare `Window` can't). Pure; CI-only (CLT can't run

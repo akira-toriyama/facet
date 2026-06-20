@@ -167,6 +167,46 @@ final class SectionLensCatalogTests: XCTestCase {
         XCTAssertTrue(c.lensParkedMembers.isEmpty)
     }
 
+    // MARK: - Snapshot surfaces the lens-park flag (PR4)
+
+    func testSnapshotMarksLensParkedWindows() {
+        var c = threeWindowCatalog(mode: "master-left")
+        c.activeSectionLens = "Web"
+        _ = c.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect)  // 30 out
+        let snap = c.snapshot(live: [window(10), window(20), window(30)],
+                              focused: nil, activeRect: rect)
+        func parked(_ id: WindowID) -> Bool {
+            snap[0].windows.first { $0.id == id }?.isLensParked ?? false
+        }
+        XCTAssertTrue(parked(wid(30)), "out-of-lens window is flagged lens-parked")
+        XCTAssertFalse(parked(wid(10)), "in-lens window is not lens-parked")
+        XCTAssertFalse(parked(wid(20)), "in-lens window is not lens-parked")
+    }
+
+    func testSnapshotClearsLensParkFlagAfterClear() {
+        var c = threeWindowCatalog(mode: "master-left")
+        c.activeSectionLens = "Web"
+        _ = c.applySectionLens(visibleIDs: [wid(10)], in: rect)
+        _ = c.clearSectionLens(in: rect)
+        let snap = c.snapshot(live: [window(10), window(20), window(30)],
+                              focused: nil, activeRect: rect)
+        XCTAssertTrue(snap[0].windows.allSatisfy { !$0.isLensParked },
+                      "a cleared lens leaves no window flagged lens-parked")
+    }
+
+    func testSnapshotNeverFlagsInactiveWorkspaceWindows() {
+        // The lens parks only the ACTIVE WS, so an inactive WS's preview is
+        // never narrowed — its windows must read `isLensParked == false`.
+        var c = threeWindowCatalog(mode: "master-left")
+        _ = c.moveWindow(wid(30), to: 2, in: rect)   // 30 lives on inactive WS2
+        c.activeSectionLens = "None"
+        _ = c.applySectionLens(visibleIDs: [], in: rect)   // park WS1's 10,20
+        let snap = c.snapshot(live: [window(10), window(20), window(30)],
+                              focused: nil, activeRect: rect)
+        XCTAssertEqual(snap[1].windows.first { $0.id == wid(30) }?.isLensParked,
+                       false, "inactive-WS window is never lens-parked")
+    }
+
     // MARK: - forgetWindow cleanup
 
     func testForgetWindowClearsLensParkState() {

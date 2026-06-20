@@ -536,8 +536,11 @@ non-inert plan's ops on `cliQueue`.
 ### Where it is consumed
 
 The tree (`SidebarView.update(sections:)`) renders `[ProjectedSection]`
-directly; grid / rail narrow their cells to the active lens via
-`OverviewProjection`. The read-path is **LIVE under `[grouping] by =
+directly. The active section-lens is a REAL hide (tag-unification Phase 1):
+the catalog anchor-parks the out-of-lens windows in the active workspace and
+the snapshot flags each `Window.isLensParked`, so the tree dims + `lens`-badges
+those rows while grid / rail drop their thumbnails — one catalog authority, no
+view-side `match` recompute. The read-path is **LIVE under `[grouping] by =
 "workspace"`**; under `by = "tag"` sections are ignored
 (`effectiveMacDesktopSectionConfigs` clamps to empty — a tag world owns its
 own lens instead).

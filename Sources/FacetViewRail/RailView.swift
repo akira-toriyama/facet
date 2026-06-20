@@ -45,11 +45,6 @@ public final class RailView: NSView {
     // MARK: - Inputs (Controller-supplied)
 
     public var workspaces: [Workspace] = []
-    /// Window ids the active lens narrows the overview to (PR7), or `nil` for
-    /// no active lens (every thumbnail shows — degrade). Narrows ONLY the
-    /// per-cell thumbnails (via `scaledWins`, so strip cells AND the hero);
-    /// `workspaces` (cells / count / landing gate / swap) stays unfiltered.
-    public var visibleWindowIDs: Set<WindowID>?
     public var activeIndex: Int?
     /// Keyboard "browse" cursor — the workspace the centre HERO
     /// previews (←/→ move it, Return commits). Decoupled from
@@ -449,7 +444,7 @@ public final class RailView: NSView {
                             _ screen: CGRect) -> [MiniWindowHit] {
         var out: [MiniWindowHit] = []
         for win in ws.windows
-        where visibleWindowIDs?.contains(win.id) ?? true {   // active-lens narrow (PR7)
+        where !win.isLensParked {   // drop out-of-lens parked windows
             guard let f = win.frame else { continue }
             let r = scaledWindowRect(windowFrame: f,
                                      screenFrame: screen,

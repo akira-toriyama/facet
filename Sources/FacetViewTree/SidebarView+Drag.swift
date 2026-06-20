@@ -427,13 +427,22 @@ extension SidebarView {
             // on click: the backend un-hides / un-minimizes + focuses,
             // and the next reconcile re-tiles it. A normal row just
             // focuses. Memory: `facet-hide-reclaim-decisions`.
-            let hidden = lastWorkspaces.first { $0.index == i }?
-                .windows.first { $0.id == id }?.isOnscreen == false
+            let win0 = lastWorkspaces.first { $0.index == i }?
+                .windows.first { $0.id == id }
+            let hidden = win0?.isOnscreen == false
+            // A *lens-parked* row (out of the active section-lens,
+            // anchor-parked + dimmed with a `lens` badge): clicking it drops
+            // the lens and focuses the window (it's always on the active WS).
+            let lensParked = win0?.isLensParked == true
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
             let bk = backend
             let ctrl = controller
+            if lensParked {
+                Task { @MainActor in ctrl?.revealLensParked(window) }
+                return
+            }
             cliQueue.async {
                 if needSwitch {
                     bk.switchWorkspace(toIndex: i)

@@ -330,11 +330,14 @@ extension SidebarView {
                         // size change).
                         .font: uiFont(windowFontSize,
                                       sel ? .semibold : .regular),
-                        // Dim a hidden (Cmd+H/Cmd+M'd) row, but keep a
+                        // Dim a hidden (Cmd+H/Cmd+M'd) OR lens-parked
+                        // (out-of-lens, anchor-parked) row, but keep a
                         // selected row at full strength so the highlight
                         // stays legible.
                         .foregroundColor: (sel ? pal.primary : pal.foreground)
-                            .withAlphaComponent(c.isHidden && !sel ? 0.45 : 1.0),
+                            .withAlphaComponent(
+                                (c.isHidden || c.isLensParked) && !sel
+                                    ? 0.45 : 1.0),
                         .paragraphStyle: para,
                     ])
                 if hasTitle {
@@ -348,7 +351,8 @@ extension SidebarView {
                         withAttributes: [
                             .font: uiFont(windowTitleFontSize, .regular),
                             .foregroundColor: pal.muted.withAlphaComponent(
-                                c.isHidden && !sel ? 0.45 : 1.0),
+                                (c.isHidden || c.isLensParked) && !sel
+                                    ? 0.45 : 1.0),
                             .paragraphStyle: para,
                         ])
                 }
@@ -356,7 +360,7 @@ extension SidebarView {
                 // badge or the `scratchpad:NAME` shelf pill, then the
                 // master / float / hidden label.
                 if hasLabel || hasMark || c.isSticky || c.isHidden
-                    || hasScratch || hasTags {
+                    || c.isLensParked || hasScratch || hasTags {
                     // Wider gap below the title before the mark / status.
                     let labelY = hasTitle ? row.minY + 51 : row.minY + 32
                     var lx = tx
@@ -483,6 +487,20 @@ extension SidebarView {
                         lx = drawStatusPill("hidden", icon: "SF:eye.slash",
                                             color: pal.muted,
                                             at: lx, labelY: labelY)
+                    }
+                    if c.isLensParked {
+                        // Lens-parked (out of the active section-lens,
+                        // anchor-parked): a distinct `lens` badge — NOT the
+                        // `eye.slash` hidden one — so it reads as "filtered by
+                        // the active lens", not "I hid this". The filter glyph
+                        // echoes the active lens section's accent header. Click
+                        // the row to drop the lens + focus it. (Mutually
+                        // exclusive with `isHidden` — the park path skips
+                        // already-hidden members — so they never co-draw.)
+                        lx = drawStatusPill(
+                            "lens",
+                            icon: "SF:line.3.horizontal.decrease.circle",
+                            color: pal.muted, at: lx, labelY: labelY)
                     }
                 }
             }

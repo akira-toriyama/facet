@@ -42,12 +42,6 @@ public protocol OverviewView: NSView {
     /// (even under an active lens): the landing gate / cell count / swap
     /// source it, so it must mirror the live backend, not the lens view.
     var workspaces: [Workspace] { get set }
-    /// Window ids the active lens narrows the overview to (PR7); `nil` = no
-    /// active lens → every window's thumbnail shows (degrade, byte-identical
-    /// to pre-PR7). Set alongside `workspaces`; narrows ONLY the per-cell
-    /// thumbnails — the cell set (one per workspace) and `workspaces` itself
-    /// stay unfiltered, so "lens narrows, never re-bundles / drops a cell".
-    var visibleWindowIDs: Set<WindowID>? { get set }
     /// Index of the active workspace at show time.
     var activeIndex: Int? { get set }
     /// Display frame the windows were measured against; mini-thumb

@@ -9,9 +9,11 @@
 // `appName`/`title` (only `windowMap`'s workspace + pid + tags). So the
 // EVALUATION lives adapter-side (`NativeAdapter+Queries.swift`), which builds
 // the in-lens id set from live windows + the shared `LensMembership` predicate
-// and hands it here as `visibleIDs`. Display (`FilterProjection`/
-// `OverviewProjection`) and this hide path therefore route through the SAME
-// predicate — they can never disagree about a window's lens membership.
+// and hands it here as `visibleIDs`. The tree display (`FilterProjection`) and
+// this hide path therefore route through the SAME predicate — they can never
+// disagree about a window's lens membership; grid/rail then drop the parked
+// windows via the snapshot's `Window.isLensParked` flag, so they ride this same
+// verdict too.
 //
 // `lensParkedMembers` is the section-model twin of `hiddenMembers`: excluded
 // from `nonFloatingMembers` (so stateless engines + the bsp re-seed skip it)

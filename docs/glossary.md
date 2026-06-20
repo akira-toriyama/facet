@@ -714,13 +714,19 @@ swap 時に `backend.currentSectionLens()` から **読み戻す**（per-desktop
 section モデル外でのみ nil）。効果は 3 つ:
 - **実 hide（核）**: active lens の `match` を満たさない **現 workspace の窓を
   [[anchor]] park**（hidden workspace と同じ実 hide）して残りを再タイル。**catalog が
-  権威**（`activeSectionLens` / `lensParkedMembers`）・`--clear` で復帰。これが Phase 1
-  の本体（旧「表示を絞るだけ」から格上げ）。
+  権威**（`activeSectionLens` / `lensParkedMembers`）・park された窓は snapshot で
+  `Window.isLensParked` が立つ・`--clear` で復帰。これが Phase 1 の本体（旧「表示を
+  絞るだけ」から格上げ）。
 - **[[tree view]]**: active lens の section ヘッダを控えめに強調（`pal.primary` +
   bold）。`Controller.currentActiveLens` は **その highlight ミラー**（catalog の権威を
-  読み戻すだけ）。
-- **grid/rail**: active lens の `match` で overview セルを絞る（live・実 park と
-  **補完的**＝同じ membership 述語で評価するので食い違わない）。
+  読み戻すだけ）。さらに **park された窓行を dim（hidden と同じ 0.45α）＋ 専用 `lens`
+  バッジ**（`eye.slash`「hidden」とは別グリフ＝「自分で隠した」と区別）で表示。その行を
+  **クリックすると lens 解除＋focus**（`revealLensParked`＝全 park 復帰してから focus・
+  D3 継続再 park と戦わない）。
+- **grid/rail**: park された窓のサムネを **`Window.isLensParked` で直接 drop**（active WS
+  のみ・catalog が単一権威で view 側の `match` 再計算なし）。lens は active WS だけに
+  効くので inactive WS のセルは実状態を全表示（切替後の予測絞りはしない）。セル数は
+  **不変**（lens はセル内の窓を絞るだけ・再束ね/セル削除はしない）。
 
 ラベル一致で判定（CLI / クリックのキー）。tag モードの [[lens]]（bitmask）とは
 **別軸の別概念**＝grouping が排他なので両者が同時に有効になることはない。

@@ -817,7 +817,12 @@ struct WorkspaceCatalog {
                        // uses, so the two projections can't drift.
                        tags: populateTags
                            ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
-                           : [])
+                           : [],
+                       // Section-lens park (Phase 1 PR4): authoritative from
+                       // the catalog — the set only ever holds ACTIVE-WS
+                       // windows, so an inactive WS reads `false` here. Views
+                       // dim + badge it; no view-side match recompute.
+                       isLensParked: lensParkedMembers.contains(w.id))
             }
             return Workspace(
                 index: entry.index - 1,
