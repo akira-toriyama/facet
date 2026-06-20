@@ -2,9 +2,10 @@
 // drive the pivot's filter-projected views (the section/lens model). This
 // file owns the types + the TOML decode; the parsed sections are consumed
 // in production via `effectiveMacDesktopSectionConfigs` — `FilterProjection`
-// (tree), `OverviewProjection` (grid/rail lens narrow), `ApplyResolver`
-// (DnD apply/un-apply), and `effectiveWorkspaceList` (workspace count +
-// layout). Shipped #296–#301; gated per-desktop by `isSectionModelActive`.
+// (tree), the adapter's section-lens park (grid/rail drop the parked windows
+// via `Window.isLensParked`), `ApplyResolver` (DnD apply/un-apply), and
+// `effectiveWorkspaceList` (workspace count + layout). Shipped #296–#301; gated
+// per-desktop by `isSectionModelActive`.
 //
 // A section is one entry in the per-mac-desktop ordered array — the array
 // order IS the tree's display order. Each section is one of three TYPES
@@ -18,10 +19,16 @@
 //     (per-section, runtime-changeable) + an optional `apply` seed.
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
-//     optional `apply` (the inverse, for drops). A lens only NARROWS; it
-//     never re-bundles. `match` is stored VERBATIM and compiled by the
-//     consumer, so a malformed expression is rejected loud + non-fatal at
-//     projection time, never at config load (parse-only stays total).
+//     optional `apply` (the inverse, for drops). Activated at runtime with
+//     `facet lens NAME` (tag-unification Phase 1): the backend anchor-parks
+//     every window in the ACTIVE workspace the `match` doesn't select (a real
+//     hide) and re-tiles the rest; `facet lens --clear` lifts it. The
+//     grid/rail cell count stays INVARIANT (a lens narrows what's shown inside
+//     the ACTIVE workspace cell by dropping its `Window.isLensParked`
+//     thumbnails, never re-bundles or drops a cell).
+//     `match` is stored VERBATIM and compiled by the consumer, so a malformed
+//     expression is rejected loud + non-fatal at projection time, never at
+//     config load (parse-only stays total).
 //   • type = "unassigned" — the lost-and-found safety net: `label` only.
 //     (Deferred: the projection / tree branch is not built yet — under the
 //     current catalog every managed window has a workspace, so an

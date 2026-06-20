@@ -235,7 +235,12 @@ extension WorkspaceCatalog {
                 // slot — excluding them here makes every stateless engine
                 // and the bsp re-seed reclaim it (memory
                 // `facet-hide-reclaim-decisions`).
-                && !hiddenMembers.contains($0.key) }
+                && !hiddenMembers.contains($0.key)
+                // Section-lens-parked windows (tag-unification Phase 1) give
+                // up their slot the same way — the in-lens windows reclaim it.
+                // `lensParkedMembers` only ever holds ACTIVE-WS windows, so an
+                // inactive workspace's mirror preview is unaffected.
+                && !lensParkedMembers.contains($0.key) }
             .map(\.key)
             .sorted { $0.serverID < $1.serverID }
     }

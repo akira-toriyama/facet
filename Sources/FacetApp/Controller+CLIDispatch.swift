@@ -72,10 +72,13 @@ extension Controller {
                 // hold any character (incl. `:`), so the whole remainder is
                 // the label — no further parsing.
                 case let s where s.hasPrefix("lens-section:"):
+                    // CLI / hotkey path → autoFocus so focus lands in the
+                    // new visible set (the in-panel tree toggle passes false).
                     self.setActiveLens(
-                        String(s.dropFirst("lens-section:".count)))
+                        String(s.dropFirst("lens-section:".count)),
+                        autoFocus: true)
                 case "lens-clear":
-                    self.setActiveLens(nil)
+                    self.setActiveLens(nil, autoFocus: true)
 
                 case "workspace-add":
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
@@ -507,13 +510,23 @@ extension Controller {
     /// change it re-renders so the lens's tree header lights up (`pal.primary`)
     /// — grid/rail narrowing by the active lens lands in PR7.
     ///
-    /// Unlike `dispatchLensTarget` (the tag-bitmask lens) this touches NO
-    /// backend / catalog state — the active lens is pure view-layer state — so
-    /// it runs entirely on the main actor with no `cliQueue` hop.
-    func setActiveLens(_ label: String?) {
+    /// Tag-unification Phase 1: the active section-lens is now a REAL hide,
+    /// driven by the backend (the catalog is the authority). This validates
+    /// the label against the LIVE section config (nice error messages) +
+    /// optimistically lights the tree header, then routes the label to
+    /// `backend.setSectionLens` on `cliQueue` (where the catalog parks the
+    /// out-of-lens windows). `currentActiveLens` is the view's highlight
+    /// mirror — set optimistically here and read back from the catalog on a
+    /// mac-desktop swap (`apply()`). `autoFocus`: the CLI / hotkey path passes
+    /// `true` (focus lands in the new visible set); the in-panel tree
+    /// lens-header toggle passes `false` (the tree keeps key focus).
+    func setActiveLens(_ label: String?, autoFocus: Bool = false) {
         guard let label else {
             if currentActiveLens != nil {
                 currentActiveLens = nil
+                runBackendCommand { bk in
+                    bk.setSectionLens(nil, autoFocus: autoFocus); return nil
+                }
                 apply(lastWorkspaces)        // re-render: drop the highlight
             }
             return
@@ -524,16 +537,14 @@ extension Controller {
         // mistaking this command for a swap and wiping the just-set lens.
         let ordinal = currentMacDesktopOrdinal()
         guard config.isSectionModelActive(ordinal: ordinal) else {
-            setError("lens --section \(label): no section model on this "
-                + "mac desktop")
+            setError("lens \(label): no section model on this mac desktop")
             scheduleReconcile(after: 0.05)      // surface lastError via status
             return
         }
         let lenses = lensSectionLabels(ordinal: ordinal)
         guard lenses.contains(label) else {
             let have = lenses.isEmpty ? "none" : lenses.joined(separator: ", ")
-            setError("lens --section \(label): no such lens section "
-                + "(have: \(have))")
+            setError("lens \(label): no such lens section (have: \(have))")
             scheduleReconcile(after: 0.05)      // surface lastError via status
             return
         }
@@ -544,6 +555,9 @@ extension Controller {
         // sees no ordinal change and keeps the lens.
         hasRenderedMacDesktop = true
         lastRenderedMacDesktopOrdinal = ordinal
+        runBackendCommand { bk in
+            bk.setSectionLens(label, autoFocus: autoFocus); return nil
+        }
         apply(lastWorkspaces)                // re-render: light up its header
     }
 

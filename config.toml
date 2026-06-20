@@ -515,7 +515,9 @@ action = "ignore"
 # is visible but untagged). Tag windows + edit the vocabulary live:
 #   facet window --tag NAME / --untag NAME / --toggle-tag NAME
 #   facet tag --add NAME / --remove NAME / --rename OLD NEW
-#   facet lens --only NAME / --toggle NAME / --all
+#   facet lens NAME / --add/--remove/--toggle NAME / --all / --clear
+#     (`facet lens NAME` shows exactly NAME — comma-join several, e.g.
+#      web,code; `--clear` / `--all` show every window)
 # All of this is session-only; [[tag]] is just the startup seed.
 # -----------------------------------------------------------------
 # [[tag]]
@@ -579,8 +581,11 @@ action = "ignore"
 # config (rename at runtime with `facet workspace --rename`). When a
 # desktop has at least one `type = "workspace"` section, the section model
 # becomes AUTHORITATIVE for that desktop: the tree renders the sections in
-# declaration order, lens sections narrow the grid / rail overview, and
-# tree drag-and-drop applies / un-applies a lens's `apply` ops.
+# declaration order, activating a lens section (`facet lens NAME`) anchor-parks
+# the windows OUTSIDE it within the active workspace (a real hide — `--clear`
+# brings them back), and tree drag-and-drop applies / un-applies a lens's
+# `apply` ops. The section model is facet's canonical configuration; the
+# parallel `[grouping] by="tag"` mode (above) is folded into it in a later phase.
 #
 # OPT-IN: as soon as ANY [[desktop.N.section]] exists, facet manages ONLY
 # the desktops that have a section block. A desktop without one is left
@@ -611,7 +616,10 @@ action = "ignore"
 #
 #   type = "lens"  — a saved visibility filter (an SQL VIEW), orthogonal
 #       to workspaces; a window shows in EVERY lens whose `match` it
-#       satisfies (multi-match). Keys:
+#       satisfies (multi-match). Activating one with `facet lens NAME`
+#       anchor-parks every window in the active workspace that the lens does
+#       NOT match (a real hide, like a hidden workspace) and re-tiles the rest;
+#       `facet lens --clear` lifts the lens. Keys:
 #         label  — the lens's header in the view (required).
 #         match  — a facet filter WHERE-clause (required; the same mini-
 #                  language as `facet query --windows --filter`), e.g.
@@ -644,7 +652,8 @@ action = "ignore"
 # Edit to taste, add `[[desktop.4.section]]` blocks for more desktops, or
 # comment this whole sample out to fall back to the zero-config default
 # (every mac desktop gets 5 emoji workspaces). Activate a lens at runtime
-# with `facet lens --section "Web"`; clear it with `facet lens --clear`.
+# with `facet lens "Web"` (it parks the non-Web windows); clear it with
+# `facet lens --clear`.
 
 [[desktop.1.section]]
 type = "workspace"

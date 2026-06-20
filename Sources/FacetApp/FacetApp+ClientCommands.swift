@@ -76,45 +76,47 @@ extension FacetApp {
         die("facet workspace: dispatch fell through (bug)")
     }
 
-    /// Sub-command parser for ``facet lens <flag>``. One subject, two
-    /// mode-exclusive families (the active visibility filter is mode-scoped,
-    /// so they can never both apply — the grouping gate disambiguates):
+    /// Sub-command parser for ``facet lens <flag>`` — the active visibility
+    /// filter. Tag-unification Phase 1 (#191 follow-on) collapsed the two
+    /// mode-specific verb families into ONE surface that ADAPTS to
+    /// `[grouping]`. The unifying move: the lens NAME is positional, so the
+    /// same `facet lens NAME` does the mode-appropriate thing.
     ///
-    /// TAG MODE (M11-3; #228 multi-tag) — the tag-bitmask lens. Each
-    /// value-bearing verb takes one OR MORE comma-joined tag names (`A[,B,…]`):
-    ///   --only A[,B,…]    show exactly these tags (replace the set)
-    ///   --add A[,B,…]     union these into the shown set
-    ///   --remove A[,B,…]  drop these from the shown set
-    ///   --toggle A[,B,…]  flip each tag in / out of the shown set
-    ///   --all             show every tag
-    /// Names are validated for SHAPE here (`parseTagList`); the server resolves
-    /// them strictly (one unknown name → unchanged + error).
+    ///   facet lens NAME    activate the lens NAME —
+    ///                        tag mode     → show exactly these tag(s)
+    ///                                       (CSV `A[,B,…]`; the old `--only`)
+    ///                        section mode → activate the `type="lens"`
+    ///                                       section labelled NAME (one label;
+    ///                                       a comma list exits 2 — CSV is
+    ///                                       tag-mode-only)
+    ///   facet lens --clear deactivate the active lens → show the full current
+    ///                        scope. BOTH modes (the universal reset):
+    ///                        tag mode     → the `_default` floor = every window
+    ///                        section mode → clear the active section-lens
+    ///   facet lens --all   tag-mode-only: show every window. Section mode
+    ///                        exits 2 (the cross-workspace All (∗) selector is a
+    ///                        later phase; use `--clear` to drop the lens).
+    ///   facet lens --add / --remove / --toggle A[,B,…]
+    ///                        tag-mode-only multi-tag composition (union / drop
+    ///                        / flip the shown set). Section mode exits 2.
     ///
-    /// WORKSPACE / SECTION MODE (PR6) — the section/lens model's ACTIVE lens
-    /// (a `type="lens"` `[[desktop.N.section]]`, keyed by its label):
-    ///   --section LABEL   activate the lens section labelled LABEL
-    ///   --clear           clear the active lens (back to no filter)
-    /// The label's EXISTENCE is resolved by the server against the live
-    /// section config (an unknown label → unchanged + error), mirroring how
-    /// the tag verbs resolve names server-side.
-    ///
-    /// One action per invocation, loud reject on zero / multiple / unknown.
-    /// The grouping gate is per-family: the tag verbs require `by="tag"`, the
-    /// section verbs `by="workspace"` — a verb used in the wrong mode exits 2.
+    /// NAME shapes are validated here (`parseTagList` for tags, a label check
+    /// for sections); the server resolves them strictly (an unknown tag / label
+    /// → unchanged + error), mirroring how the tag verbs resolve names
+    /// server-side. One action per invocation, loud reject on zero / multiple.
+    /// The grouping gate is PER-VERB: NAME and `--clear` adapt to the mode; the
+    /// tag-composition verbs and `--all` require `by="tag"` and exit 2 in
+    /// section mode.
     static func runLensCommand(_ args: [String]) -> Never {
-        var onlyArg: String?
+        var nameArg: String?        // positional: tag CSV (only) / lens label
         var addArg: String?
         var removeArg: String?
         var toggleArg: String?
         var allFlag = false
-        var sectionArg: String?     // section/lens model: activate by label
-        var clearFlag = false       // section/lens model: clear the active lens
+        var clearFlag = false       // universal reset → full current scope
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
-            case "--only":
-                onlyArg = parseTagList(cursor.value(for: "lens --only"),
-                                       flag: "lens --only")
             case "--add":
                 addArg = parseTagList(cursor.value(for: "lens --add"),
                                       flag: "lens --add")
@@ -126,44 +128,93 @@ extension FacetApp {
                                          flag: "lens --toggle")
             case "--all":
                 allFlag = true
-            case "--section":
-                sectionArg = parseLensSectionLabel(
-                    cursor.value(for: "lens --section"), flag: "lens --section")
             case "--clear":
                 clearFlag = true
+            case "--section", "--only":
+                // Removed in Phase 1: both folded into the positional NAME.
+                let what = a == "--section"
+                    ? "activate that lens section, workspace mode"
+                    : "show those tags, tag mode"
+                die("`lens \(a)` was removed — pass the name positionally: "
+                    + "`facet lens NAME` (\(what))")
             default:
-                die("unknown `lens` flag \"\(a)\" — see `facet --help`")
+                // A leading '-' is an unrecognised flag; anything else is the
+                // positional NAME (the lens to activate / the tags to show).
+                if a.hasPrefix("-") {
+                    die("unknown `lens` flag \"\(a)\" — see `facet --help`")
+                }
+                guard nameArg == nil else {
+                    die("facet lens: takes one NAME — unexpected \"\(a)\" "
+                        + "(see `facet --help`)")
+                }
+                nameArg = a
             }
         }
-        let count = [onlyArg != nil, addArg != nil, removeArg != nil,
-                     toggleArg != nil, allFlag,
-                     sectionArg != nil, clearFlag].filter { $0 }.count
+        let count = [nameArg != nil, addArg != nil, removeArg != nil,
+                     toggleArg != nil, allFlag, clearFlag].filter { $0 }.count
         requireExactlyOneAction(count, subject: "lens")
-        // Section verbs are workspace-axis (the section model is dropped in
-        // tag mode); tag verbs are tag-axis. Gate per-family so a mismatch
-        // fails loud (exit 2) rather than silently no-opping server-side.
-        if sectionArg != nil || clearFlag {
-            requireGrouping(.workspace, subject: "lens --section/--clear")
-        } else {
-            requireGrouping(.tag, subject: "lens")
+
+        // Resolve the mode first (NAME validation is mode-specific), then build
+        // the single action and route it. Reads the same config the server
+        // seeded from.
+        let mode = FacetConfig.load().effectiveGrouping
+        let action: LensAction
+        if let name = nameArg {
+            // SHAPE-validate the positional NAME per mode: a tag CSV
+            // (`parseTagList`) or a section label (`parseLensSectionLabel`).
+            // The comma → section reject is a ROUTING rule (`routeLens`), since
+            // a label may legitimately hold most punctuation.
+            switch mode {
+            case .tag:       action = .name(parseTagList(name, flag: "lens"))
+            case .workspace: action = .name(parseLensSectionLabel(name,
+                                                                  flag: "lens"))
+            }
+        } else if let n = addArg    { action = .add(n) }
+        else if let n = removeArg   { action = .remove(n) }
+        else if let n = toggleArg   { action = .toggle(n) }
+        else if allFlag             { action = .all }
+        else                        { action = .clear }   // count == 1 ⇒ --clear
+
+        // Pure routing table (FacetCore). Gate BEFORE the server check so a
+        // mode mismatch (a fundamental error) wins over a transient one.
+        let effect: LensEffect
+        switch routeLens(action, grouping: mode) {
+        case .success(let e):
+            effect = e
+        case .failure(.tagOnlyVerb(let verb)):
+            if verb == "--all" {
+                die("facet lens --all requires [grouping] by=\"tag\" — current "
+                    + "config is \(mode.rawValue) mode (the section model's "
+                    + "cross-workspace All selector is a later phase; use "
+                    + "`facet lens --clear` to drop the active lens)")
+            }
+            die("facet lens \(verb) requires [grouping] by=\"tag\" — current "
+                + "config is \(mode.rawValue) mode")
+        case .failure(.csvInSectionName(let name)):
+            die("facet lens \"\(name)\": the section model takes one lens "
+                + "label, not a comma list (CSV is tag-mode-only)")
         }
+
         requireServerAlive()
-        if let n = onlyArg   { postLens("only:" + n) }
-        if let n = addArg    { postLens("add:" + n) }
-        if let n = removeArg { postLens("remove:" + n) }
-        if let n = toggleArg { postLens("toggle:" + n) }
-        if allFlag           { postLens("all") }
-        if let s = sectionArg { postControl("lens-section:" + s) }
-        if clearFlag          { postControl("lens-clear") }
-        die("facet lens: dispatch fell through (bug)")
+        switch effect {
+        case .showTags(let c):        postLens("only:" + c)
+        case .addTags(let c):         postLens("add:" + c)
+        case .removeTags(let c):      postLens("remove:" + c)
+        case .toggleTags(let c):      postLens("toggle:" + c)
+        case .showAll:                postLens("all")    // floor = show all
+        case .activateSection(let l): postControl("lens-section:" + l)
+        case .clearSection:           postControl("lens-clear")
+        }
     }
 
-    /// Validate the value of `lens --section LABEL` — a `type="lens"` section
-    /// label. Section labels are config-authored TOML strings, so the policy
-    /// is loose (spaces and most punctuation are fine, kept VERBATIM for the
-    /// server's exact-label match): reject only an empty / all-whitespace
-    /// value or a leading `-` (which would mean a dropped value swallowed the
-    /// next flag). Existence is the server's call. Loud reject (exit 2).
+    /// Validate the positional NAME of `facet lens NAME` in section mode — a
+    /// `type="lens"` section label. Section labels are config-authored TOML
+    /// strings, so the policy is loose (spaces and most punctuation are fine,
+    /// kept VERBATIM for the server's exact-label match): reject only an empty
+    /// / all-whitespace value or a leading `-` (an unrecognised flag, caught
+    /// earlier — kept here for defence). A comma is rejected by the caller
+    /// (CSV is tag-mode-only). Existence is the server's call. Loud reject
+    /// (exit 2).
     static func parseLensSectionLabel(_ value: String, flag: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else {

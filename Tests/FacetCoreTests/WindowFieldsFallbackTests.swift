@@ -4,8 +4,8 @@ import XCTest
 /// The two projection `WindowFields` adapters that overlay extra context onto
 /// a bare `Window` before a `FacetFilter` evaluates it:
 ///
-/// - `ProjectedWindowFields` (FilterProjection / OverviewProjection) — adds the
-///   containing workspace NAME; everything else delegates to `Window`.
+/// - `ProjectedWindowFields` (FilterProjection / the section-lens park scan) —
+///   adds the containing workspace NAME; everything else delegates to `Window`.
 /// - `ApplyPlanWindowFields` (ApplyResolver) — replays an ordered `ApplyOp`
 ///   list onto the base window (tags + last-writer-wins floating/sticky/master
 ///   overlays) so the post-apply state is filtered, not the pre-apply one.

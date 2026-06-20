@@ -215,6 +215,24 @@ public protocol WindowBackend: Sendable {
     /// (memory [[tree-click-crossapp-focus-broken-sequoia]]).
     func setLens(_ spec: LensSpec, autoFocus: Bool)
 
+    /// Activate (or clear, with `nil`) the ACTIVE SECTION-lens — a
+    /// `type="lens"` `[[desktop.N.section]]`, keyed by its `label`. Distinct
+    /// from `setLens` (the tag-mode bitmask lens above): this is the
+    /// section/lens model's real-hide path (tag-unification Phase 1). The
+    /// backend resolves the label to the section's `match`, evaluates it over
+    /// the ACTIVE workspace's windows, and parks (anchor sliver) the ones the
+    /// lens EXCLUDES while restoring + re-tiling the ones it includes — so the
+    /// workspace shows only the lens's windows. The lens PERSISTS across
+    /// workspace switches (re-composed for each destination) and lives in the
+    /// per-mac-desktop catalog (session-only + auto-scoped per mac desktop).
+    /// No-op outside the section model (`isSectionModelActive`); an unknown
+    /// label / malformed `match` is surfaced as an operational error
+    /// (loud-but-non-fatal). `autoFocus` mirrors `setLens`: the CLI / hotkey
+    /// path wants `true` (focus lands in the new visible set), the in-panel
+    /// tree lens-header toggle passes `false` (the tree keeps key focus while
+    /// the user picks).
+    func setSectionLens(_ label: String?, autoFocus: Bool)
+
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
     func addWorkspace()
@@ -481,6 +499,16 @@ public protocol WindowBackend: Sendable {
     /// read as `definedTagNames()`.
     func currentLens() -> LensStatus?
 
+    /// The active SECTION-lens label (tag-unification Phase 1), or `nil` when
+    /// none is active / outside the section model. Read-back so the view's
+    /// tree highlight reflects the catalog (the authority) — including after a
+    /// mac-desktop swap restores a desktop whose lens was set on a prior
+    /// visit (the lens persists per-mac-desktop). Thread-safe: a lock-guarded
+    /// mirror of the active catalog's `activeSectionLens`, so the Controller
+    /// reads it on the main actor without a `cliQueue` hop (like `isAnimating`
+    /// / `config`).
+    func currentSectionLens() -> String?
+
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
     /// Reads the in-memory catalog structs, so the Controller calls it on
@@ -554,6 +582,7 @@ public extension WindowBackend {
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
     func setLens(_ spec: LensSpec, autoFocus: Bool) {}
+    func setSectionLens(_ label: String?, autoFocus: Bool) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 
@@ -596,6 +625,7 @@ public extension WindowBackend {
     func stashedScratchpads() -> [String] { [] }
     func definedTagNames() -> [String] { [] }
     func currentLens() -> LensStatus? { nil }
+    func currentSectionLens() -> String? { nil }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }

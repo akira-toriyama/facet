@@ -30,12 +30,9 @@ extension Controller {
         v.paletteBox = paletteBox
         v.autoresizingMask = [.width, .height]
         v.workspaces = lastWorkspaces
-        // Active-lens narrow (PR7): seed the visible-window-id set so the
-        // overview opens already filtered. `nil` when no lens narrows →
-        // every thumbnail shows (degrade). `workspaces` stays unfiltered.
-        // Fresh ordinal read: an explicit show is never mid-swap.
-        v.visibleWindowIDs = overviewVisibleWindowIDs(in: lastWorkspaces,
-                                                      ordinal: currentMacDesktopOrdinal())
+        // The active section-lens narrows the overview through each window's
+        // `isLensParked` flag (set in the snapshot) — the view drops the parked
+        // thumbnails itself, so there is nothing extra to seed here.
         v.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         v.screenFrame = screenFrame
         // ③ Context menu: header layout picker + window-ops menu.

@@ -384,7 +384,9 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   記述。 各 section は必須の `type` を持つ: `"workspace"` (絵文字で自動命名
   される空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
   workspace 数)、 `"lens"` (保存フィルタ — `label` + `match` + 任意の
-  `apply`)、 `"unassigned"`。 **workspace は config から命名できない** —
+  `apply`。 `facet lens NAME` で有効化すると active workspace 内で match を外れた
+  窓を anchor park〔実 hide〕・`facet lens --clear` で解除)、 `"unassigned"`。
+  **workspace は config から命名できない** —
   名前は実行時 `facet workspace --rename` が所有。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの
@@ -456,6 +458,12 @@ facet window --unmark NAME        # マークを消す
                                   # 1:1 — 1 窓 = 1 マーク。同名を付け直すと
                                   # 旧窓から外れる。session のみ・mac desktop ごと。
 
+# Lens (section モデル) — type="lens" の [[desktop.N.section]] を label で
+# 有効化。active workspace 内で lens の match を外れた窓を anchor park (実 hide)
+# し残りを再タイル。mac desktop 切替を跨いで持続。
+facet lens "Web"                  # label が Web の lens を有効化
+facet lens --clear                # active lens を解除 (park した窓が戻る)
+
 # Scratchpad — 名前付きの隠し棚 (ドロップダウン端末 / メモ用途)
 facet scratchpad --stash NAME     # focus 中の window を名前付き棚へしまう (画面外へ隠す)
 facet scratchpad --toggle NAME    # 今いる WS にフロート overlay として呼ぶ —
@@ -515,12 +523,14 @@ facet window --untag NAME         # focus 中の窓から tag を外す
 facet window --toggle-tag NAME    # focus 中の窓の tag を flip
 facet window --retag OLD NEW      # focus 中の窓の tag を改名
 
-# Lens — tree に表示する tag
-facet lens --only A[,B]           # この tag だけ表示
+# Lens — tree に表示する tag (NAME は positional・workspace モードで
+# lens section を有効化するのと同じ動詞)
+facet lens A[,B]                  # この tag だけ表示 (旧 --only)
 facet lens --add A[,B]            # 表示セットに tag を足す
 facet lens --remove A[,B]         # 表示セットから tag を外す
 facet lens --toggle A[,B]         # 表示セットの tag を flip
-facet lens --all                  # 全窓表示 (lens クリア)
+facet lens --all                  # 全窓表示
+facet lens --clear                # lens 解除 → 全窓表示 (tag モードでは --all と同結果)
 
 # タグ語彙 — 割り当て可能な名前付き tag
 facet tag --add NAME              # 新しい tag を定義

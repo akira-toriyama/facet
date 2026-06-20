@@ -111,17 +111,15 @@ final class Controller: NSObject {
     /// only on the static config — so log them once per change, not once per
     /// frame.
     private var loggedSectionDiagnostics: [String] = []
-    /// Last `OverviewProjection` diagnostics logged for the active-lens
-    /// grid/rail narrow (PR7). Like `loggedSectionDiagnostics`, the
-    /// diagnostics (malformed / unknown-field lens `match`) depend only on
-    /// the static config + active lens, so log once per change, not per frame.
-    private var loggedOverviewDiagnostics: [String] = []
-    /// Section/lens model (PR6): the session-only ACTIVE lens — the
-    /// `type="lens"` section the user activated (`facet lens --section LABEL`,
-    /// or a tree lens-header click), or nil for none. Emphasises its tree
-    /// header (`pal.primary`) and (PR7) narrows grid/rail. Per-mac-desktop:
-    /// reset to nil on a swap (a lens is scoped to its desktop's sections) and
-    /// never persisted. Set via `setActiveLens`.
+    /// Section/lens model: the session-only ACTIVE lens — the `type="lens"`
+    /// section the user activated (`facet lens NAME`, or a tree lens-header
+    /// click), or nil for none. This is the VIEW's highlight MIRROR (emphasises
+    /// its tree header in `pal.primary` + narrows grid/rail); the real hide —
+    /// anchor-parking the out-of-lens windows in the current workspace — lives
+    /// in the catalog, which is the authority (tag-unification Phase 1). Set
+    /// optimistically via `setActiveLens`. Per-mac-desktop + never persisted,
+    /// but it PERSISTS across a swap: on a mac-desktop swap it's read BACK from
+    /// `backend.currentSectionLens()` (line ~860), not reset to nil.
     var currentActiveLens: String?
     /// Whether `apply()` has rendered at least once, and the mac-desktop
     /// ordinal it last rendered — together they detect a mac-desktop swap so
@@ -515,36 +513,11 @@ final class Controller: NSObject {
             .filter { $0.type == .lens }.map(\.label)
     }
 
-    /// The `match` clause of the active lens on the mac desktop at `ordinal`,
-    /// or `nil` when no lens is active / the section model isn't active there /
-    /// the active label no longer maps to a lens section. The `ordinal` is
-    /// passed in (not read here) so the caller pins ONE read for the whole
-    /// frame — `apply()` hands in the same value it keyed the swap-reset and
-    /// tree render off, so the narrow can't disagree with them. (PR7.)
-    func currentActiveLensMatch(ordinal: Int?) -> String? {
-        guard let label = currentActiveLens else { return nil }
-        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
-        else { return nil }
-        return (config.effectiveMacDesktopSectionConfigs[ord] ?? [])
-            .first { $0.type == .lens && $0.label == label }?.match
-    }
-
-    /// The window ids visible under the active lens, for narrowing the open
-    /// grid/rail (PR7), or `nil` when no lens narrows the overview (degrade →
-    /// every window shows). The structural set the views hold (`workspaces`)
-    /// stays UNFILTERED — only this id set narrows the per-cell thumbnails, so
-    /// the cell count / landing gate / swap stay correct. The projection's
-    /// loud-but-non-fatal diagnostics (malformed / unknown-field `match`) are
-    /// logged once per change. `ordinal` pins the mac desktop for the frame
-    /// (see `currentActiveLensMatch`); a swap clears `currentActiveLens`
-    /// before this is called (see `apply()`), so a swap degrades here too.
-    func overviewVisibleWindowIDs(in wss: [Workspace], ordinal: Int?) -> Set<WindowID>? {
-        guard let match = currentActiveLensMatch(ordinal: ordinal) else { return nil }
-        let result = OverviewProjection.filterWorkspaces(wss, byLensMatch: match)
-        logDiagnosticsOnChange(result.diagnostics, prefix: "overview: ",
-                               against: &loggedOverviewDiagnostics)
-        return Set(result.workspaces.flatMap { $0.windows.map(\.id) })
-    }
+    // The grid/rail no longer recompute a lens `match` view-side to narrow
+    // their thumbnails. The active section-lens is a REAL park now (Phase 1):
+    // the catalog parks the out-of-lens windows and the snapshot marks each
+    // `Window.isLensParked`, which the views drop directly — so the catalog is
+    // the single authority and there is no view-side recompute to drift from it.
 
     /// Surface any named-enum config value that silently clamped to a
     /// default (e.g. a layout name carried across a breaking rename:
@@ -847,29 +820,30 @@ final class Controller: NSObject {
         // active-lens narrow all key off it — read ONCE here so they agree
         // within this main-actor turn. 0 = SkyLight unavailable → no name.
         let macDesktopOrdinal = currentMacDesktopOrdinal()
-        // PR6: reset the session-only active lens on a genuine mac-desktop
-        // swap — a lens is scoped to its desktop's `[[desktop.N.section]]`, so
-        // one activated on desktop A must not leak onto B. The swap is the
-        // ordinal change; the FIRST render only records it (a lens set before
-        // the first post-set re-render then survives). HOISTED above the PR7
-        // overview narrow (and the tree render) so both read the POST-reset
-        // lens in this same frame — otherwise a destination desktop with a
-        // same-labelled lens would briefly narrow the open rail by a lens the
-        // user never activated there.
+        // Tag-unification Phase 1: the active section-lens is now a REAL hide
+        // held per-mac-desktop in the catalog (the authority), not pure view
+        // state. On a genuine mac-desktop swap, READ BACK the destination
+        // desktop's lens (it persists in the swapped-in catalog) rather than
+        // blanket-resetting to nil — a reset would desync the tree header
+        // highlight from a lens that's still parking that desktop's windows.
+        // (The grid/rail thumbnail narrow rides the catalog's `isLensParked`
+        // flag, which swaps with the catalog automatically.) `nil` outside the
+        // section model. HOISTED above the tree render so it reads the post-swap
+        // lens in this same frame. The FIRST render only records the ordinal (no
+        // read-back), so an optimistically-set lens survives until the first
+        // real swap.
         if hasRenderedMacDesktop, macDesktopOrdinal != lastRenderedMacDesktopOrdinal {
-            currentActiveLens = nil
+            currentActiveLens = config.isSectionModelActive(ordinal: macDesktopOrdinal)
+                ? backend.currentSectionLens() : nil
         }
         hasRenderedMacDesktop = true
         lastRenderedMacDesktopOrdinal = macDesktopOrdinal
-        // Active-lens narrow (PR7): the visible-window-id set for whichever
-        // overview is open. Computed once per apply (nil when no overview is
-        // up, or no lens narrows). `workspaces` stays the UNFILTERED set;
-        // only this id set narrows the per-cell thumbnails.
-        let overviewVisible = (gridView != nil || railView != nil)
-            ? overviewVisibleWindowIDs(in: wss, ordinal: macDesktopOrdinal) : nil
+        // The active section-lens narrows the open grid/rail through the
+        // snapshot's per-window `isLensParked` flag (the views drop the parked
+        // thumbnails themselves) — no view-side recompute. `wss` stays the
+        // UNFILTERED set; only the parked windows on the active WS are dropped.
         if let g = gridView {
             g.workspaces = wss
-            g.visibleWindowIDs = overviewVisible
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.layoutCells()       // refresh open grid on backend events
         }
@@ -880,7 +854,6 @@ final class Controller: NSObject {
             let oldActive = rv.activeIndex
             let newActive = wss.first(where: { $0.isActive })?.index
             rv.workspaces = wss
-            rv.visibleWindowIDs = overviewVisible
             rv.activeIndex = newActive
             // 2-b carousel: an EXTERNAL switch (CLI / another view) while
             // the rail is open re-centres the strip on the new active —
@@ -1169,6 +1142,16 @@ extension Controller: TreeController {
                 Focus.withRetry(window)
             }
         }
+    }
+
+    func revealLensParked(_ window: Window) {
+        Log.debug("revealLensParked id=\(window.id.serverID): clear lens + focus")
+        // Drop the active lens (clearSectionLens restores + re-tiles every
+        // parked window) then focus the clicked one. Both enqueue on the
+        // serial cliQueue in this order, so the restore lands first. The
+        // window is on the active WS (lens-park is active-WS only) → no switch.
+        setActiveLens(nil)
+        focusWindow(window, postSwitch: false)
     }
 
     func runWindowOps(_ ops: [WindowAction],

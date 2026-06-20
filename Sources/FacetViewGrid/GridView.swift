@@ -27,11 +27,6 @@ public final class GridView: NSView {
     /// events while the overlay is up (snapshot-on-show, per
     /// design).
     public var workspaces: [Workspace] = []
-    /// Window ids the active lens narrows the overview to (PR7), or `nil` for
-    /// no active lens (every thumbnail shows — degrade). Narrows ONLY the
-    /// per-cell thumbnails below; `workspaces` (cells / count / landing gate /
-    /// swap) stays unfiltered.
-    public var visibleWindowIDs: Set<WindowID>?
     public var activeIndex: Int?
     /// Display's frame at show time. All window-rect math scales
     /// from this so the per-cell mini-screen matches what the
@@ -332,7 +327,7 @@ public final class GridView: NSView {
             var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
                 for win in ws.windows
-                where visibleWindowIDs?.contains(win.id) ?? true {   // active-lens narrow (PR7)
+                where !win.isLensParked {   // drop out-of-lens parked windows
                     guard let f = win.frame else { continue }
                     let wr = gridScaledWindowRect(
                         windowFrame: f,
@@ -891,16 +886,17 @@ public final class GridView: NSView {
 
     /// The window ids of workspace `wsIndex` to TRADE in a whole-workspace
     /// swap. A swap is a STRUCTURAL op — it trades the workspaces' full
-    /// contents — so under an active lens (`visibleWindowIDs != nil`), where
-    /// the cell shows only matching windows, source from the UNFILTERED
-    /// `workspaces` so lens-hidden windows still move (matching the rail,
-    /// RailView.mouseDragged / kbLiftWorkspace). No active lens → the (frozen)
-    /// cell's windows, byte-identical to pre-PR7 (keeps the existing
-    /// frame-cull; never widens to frameless windows for non-lens users).
+    /// contents — so when the cell hides some of its windows (the active WS
+    /// under a lens drops its out-of-lens parked windows, `isLensParked`),
+    /// source from the UNFILTERED `workspaces` so the lens-parked windows
+    /// still move (matching the rail, RailView.mouseDragged / kbLiftWorkspace).
+    /// No lens-parked windows → the (frozen) cell's windows, byte-identical to
+    /// the non-lens path (keeps the existing frame-cull; never widens to
+    /// frameless windows for non-lens users).
     private func swapWindowIDs(forWS wsIndex: Int,
                                cellWindows: [MiniWindowHit]) -> [WindowID] {
-        if visibleWindowIDs != nil,
-           let full = workspaces.first(where: { $0.index == wsIndex })?.windows {
+        if let full = workspaces.first(where: { $0.index == wsIndex })?.windows,
+           full.contains(where: \.isLensParked) {
             return full.map(\.id)
         }
         return cellWindows.map(\.id)
