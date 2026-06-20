@@ -74,8 +74,8 @@ public enum OverviewProjection {
                 Workspace(index: ws.index, name: ws.name, isActive: ws.isActive,
                           layoutMode: ws.layoutMode,
                           windows: ws.windows.filter {
-                              filter.matches(ProjectedWindowFields(
-                                  window: $0, workspaceName: ws.name))
+                              LensMembership.matches(
+                                  $0, inWorkspaceNamed: ws.name, filter: filter)
                           })
             }
             return Result(workspaces: filtered, diagnostics: diags)

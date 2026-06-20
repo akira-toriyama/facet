@@ -56,9 +56,12 @@
 /// `desktop` stays no-match: sections are already scoped per mac desktop by
 /// the `[[desktop.N.section]]` config, so matching on `desktop=` is redundant.
 ///
-/// Shared with `OverviewProjection` (PR7) — both evaluate a lens `match`
-/// against a window that knows its workspace name, so the seam-overlay lives
-/// here once. Internal (not file-private) for that reason.
+/// The seam-overlay every lens-`match` evaluation runs through, wrapped by the
+/// single `LensMembership.matches` predicate that `FilterProjection`,
+/// `OverviewProjection`, and the Phase-1 real-hide park path all share — so a
+/// window's lens membership is decided identically on the display and hide
+/// paths. Internal (not file-private) so `LensMembership` (same module) can
+/// construct it; the public predicate exposes only `Window` + name + filter.
 struct ProjectedWindowFields: WindowFields {
     let window: Window
     let workspaceName: String
@@ -153,8 +156,8 @@ public enum FilterProjection {
                     var matched: [Window] = []
                     for ws in workspaces {
                         for w in ws.windows
-                        where filter.matches(ProjectedWindowFields(
-                            window: w, workspaceName: ws.name)) {
+                        where LensMembership.matches(
+                            w, inWorkspaceNamed: ws.name, filter: filter) {
                             matched.append(w)
                         }
                     }
