@@ -335,6 +335,33 @@ struct WorkspaceCatalog {
     /// forgotten.
     var pendingHideCandidates: Set<WindowID> = []
 
+    // MARK: - Section-lens state (tag-unification Phase 1)
+
+    /// The active section-lens's `label` (a `type="lens"`
+    /// `[[desktop.N.section]]`), or nil for no active lens. The AUTHORITY for
+    /// the lens — held here (not in the view) so the continuous re-park, which
+    /// runs on `cliQueue` in `refreshCatalog`, can read it; the view's
+    /// `currentActiveLens` is a highlight read-back of this. The match
+    /// EVALUATION lives adapter-side (the catalog has no live
+    /// `appName`/`title`), so the catalog stores only the opaque label +
+    /// `lensParkedMembers`; the adapter resolves the label → `match` against
+    /// its config and hands `applySectionLens` the visible-id verdict.
+    /// Session-only, and per-mac-desktop for free (this whole catalog is
+    /// swapped per mac desktop).
+    var activeSectionLens: String?
+
+    /// Active-workspace windows currently parked because they fall OUTSIDE the
+    /// active section-lens. The section-model twin of `hiddenMembers` (Cmd+H):
+    /// excluded from `nonFloatingMembers` so the visible (in-lens) windows
+    /// reclaim the freed tile slot, AND detached from the layout containers
+    /// (`detachFromLayouts`) so bsp / stack drop them too. UNLIKE a hide, they
+    /// ARE anchor-parked (facet moved them to the sliver). Only ever holds
+    /// ACTIVE-WS windows — a workspace switch lifts the lens from the old WS
+    /// (re-attach + clear) and re-applies to the new (`setActive`), so an
+    /// inactive workspace's tree/grid preview is never narrowed by the lens.
+    /// A subset of `anchorParked`.
+    var lensParkedMembers: Set<WindowID> = []
+
     init() {}
 
     // MARK: - Dynamic workspace set (seed + mutate)
@@ -494,14 +521,43 @@ struct WorkspaceCatalog {
         let toRestore: [WindowRef]
     }
 
-    /// Switch to `n1Based`. Returns the plan when the switch is
-    /// valid and meaningful; nil when target is invalid or already
-    /// active. Caller applies AX side-effects against the
-    /// returned `WindowRef` lists.
+    /// Switch to `n1Based`, lens-unaware (no active section-lens). Returns the
+    /// plan when the switch is valid and meaningful; nil when target is
+    /// invalid or already active. Caller applies AX side-effects against the
+    /// returned `WindowRef` lists. Thin wrapper over the lens-aware form so
+    /// every existing call site (+ test) stays byte-identical.
     @discardableResult
     mutating func setActive(_ n1Based: Int) -> SwitchPlan? {
+        setActive(n1Based, lensVisibleIDs: nil, in: .zero)
+    }
+
+    /// Lens-aware switch (tag-unification Phase 1). `lensVisibleIDs` is the
+    /// adapter's section-lens evaluation over the DESTINATION workspace's
+    /// members (the ids whose live `Window` PASSES the active lens's `match`);
+    /// `nil` = no active lens (restore everything — the historical behaviour
+    /// the wrapper above relies on). With a lens active the plan restores ONLY
+    /// the destination's in-lens members and leaves the rest parked — they're
+    /// already off-screen from the destination having been inactive, so this
+    /// is D1's "one net plan, no flicker": an out-of-lens window is never
+    /// restored-then-re-parked.
+    ///
+    /// Lifting the lens off the OLD workspace first (re-attach its lens-parked
+    /// members to its layout, clear the set) keeps `lensParkedMembers` an
+    /// active-WS-only invariant; the lens re-composes for the old WS on a
+    /// later switch back. The re-attach is pure bookkeeping (the old WS is
+    /// going off-screen — no AX), and those windows stay anchor-parked (the
+    /// `toPark` sweep's `shouldParkAnchor` guard no-ops on them).
+    @discardableResult
+    mutating func setActive(_ n1Based: Int, lensVisibleIDs: Set<WindowID>?,
+                            in rect: CGRect) -> SwitchPlan? {
         guard isValid(n1Based), n1Based != activeIndex else { return nil }
         let old = activeIndex
+        // Lift the lens off the old workspace (see the doc comment).
+        for id in lensParkedMembers {
+            guard let slot = windowMap[id] else { continue }
+            attachToLayout(id, workspace: slot.workspace, focused: nil, in: rect)
+        }
+        lensParkedMembers.removeAll()
         activeIndex = n1Based
         previousActiveIndex = old
         // Sticky windows stay on-screen across the switch (they're
@@ -512,12 +568,30 @@ struct WorkspaceCatalog {
         // shelf and must STAY parked through the switch, so they're
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
-        let toPark = windowMap
+        var toPark = windowMap
             .filter { $0.value.workspace == old && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
-        let toRestore = windowMap
-            .filter { $0.value.workspace == n1Based && isParkEligible($0.key) }
-            .map { WindowRef(id: $0.key, pid: $0.value.pid) }
+        // Destination: restore every member without a lens, only the in-lens
+        // members with one. Out-of-lens members are recorded + detached AND
+        // added to `toPark` so they end up parked — normally a no-op (an
+        // inactive WS's windows are already parked, so `parkAnchor`'s
+        // `shouldParkAnchor` guard skips them), but it self-heals the rare
+        // window that reaches the destination on-screen. A user-hidden (Cmd+H)
+        // member is left exactly as-is — never lens-parked — but kept in
+        // `toRestore` for parity with the lens-unaware path (`restoreAnchor`
+        // no-ops on it, since it isn't anchor-parked).
+        var toRestore: [WindowRef] = []
+        for (id, slot) in windowMap
+        where slot.workspace == n1Based && isParkEligible(id) {
+            if hiddenMembers.contains(id)
+                || lensVisibleIDs == nil || lensVisibleIDs!.contains(id) {
+                toRestore.append(WindowRef(id: id, pid: slot.pid))
+            } else {
+                lensParkedMembers.insert(id)
+                detachFromLayouts(id)
+                toPark.append(WindowRef(id: id, pid: slot.pid))
+            }
+        }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
     }

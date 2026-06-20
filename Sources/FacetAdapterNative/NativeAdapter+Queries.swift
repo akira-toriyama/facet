@@ -137,6 +137,17 @@ extension NativeAdapter {
                 + "hidden=\(hideResult.hidden.count) "
                 + "revealed=\(hideResult.revealed.count)")
         }
+        // Section-lens (tag-unification Phase 1, D3): continuous re-park.
+        // Re-evaluate the active section-lens over the active WS and park any
+        // member that's now out of the lens (a window just opened into the
+        // active WS while a lens is active) / restore one that re-entered.
+        // Runs BEFORE `retileAfterReconcile` so a newly-parked window is
+        // already detached + excluded from `nonFloatingMembers` when the
+        // re-tile computes frames — no tile-then-park flicker. Syncs the
+        // main-readable mirror too (covers a mac-desktop swap that restored a
+        // desktop whose lens persists). No-op when no lens is active.
+        applySectionLensReconcile(live: live, rect: rect)
+        syncSectionLensMirror()
         // Event-driven re-tile of the active WS (with open/close reflow
         // animation when applicable). See `retileAfterReconcile`.
         retileAfterReconcile(addedIDs: result.addedIDs,
@@ -351,6 +362,78 @@ extension NativeAdapter {
             && !catalog.stashedWindows.contains(id)
             && catalog.shouldParkAnchor(id) {
             parkAnchor(WindowRef(id: id, pid: slot.pid))
+        }
+    }
+
+    // MARK: - Section-lens evaluation (tag-unification Phase 1)
+
+    /// The active section-lens's compiled filter, or nil when no lens is
+    /// active / the label no longer maps to a lens section / its `match` won't
+    /// parse. The catalog holds the label (authority); this resolves it to the
+    /// section's `match` against the LIVE config (so a hot-reload is picked up)
+    /// and compiles it, caching by the raw string so the WHERE-clause is
+    /// parsed once across reconciles rather than every tick.
+    private func sectionLensFilter() -> FacetFilter? {
+        guard let label = catalog.activeSectionLens,
+              let ord = activeMacDesktopOrdinal,
+              let match = config.effectiveMacDesktopSectionConfigs[ord]?
+                .first(where: { $0.type == .lens && $0.label == label })?.match
+        else { return nil }
+        if let c = sectionLensCompiled, c.match == match { return c.filter }
+        guard case .success(let filter) = FacetFilter.parse(match) else {
+            sectionLensCompiled = nil
+            return nil
+        }
+        sectionLensCompiled = (match, filter)
+        return filter
+    }
+
+    /// The active-lens-visible id set for workspace `n1Based`: its managed
+    /// members whose live `Window` passes the active section-lens `match`
+    /// (evaluated through the shared `LensMembership` predicate, with the
+    /// workspace name overlaid so a `match='workspace=Dev'` resolves). `nil`
+    /// when no lens is active — callers then restore everything. The catalog
+    /// can't do this itself (it has no live `appName`/`title`), so the adapter
+    /// owns the evaluation and hands the verdict back to the catalog.
+    func sectionLensVisibleIDs(workspace n1Based: Int,
+                               live: [Window]) -> Set<WindowID>? {
+        guard let filter = sectionLensFilter() else { return nil }
+        let wsName = catalog.workspaceName(n1Based)
+        return Set(live.filter { w in
+            catalog.windowMap[w.id]?.workspace == n1Based
+                && LensMembership.matches(w, inWorkspaceNamed: wsName,
+                                          filter: filter)
+        }.map(\.id))
+    }
+
+    /// Convenience for callers without a live window list at hand (the
+    /// workspace-switch path). Enumerates only when a lens is actually active,
+    /// so a no-lens switch pays nothing extra.
+    func sectionLensVisibleIDs(workspace n1Based: Int) -> Set<WindowID>? {
+        guard sectionLensFilter() != nil else { return nil }
+        return sectionLensVisibleIDs(workspace: n1Based,
+                                     live: enumerateCGWindows())
+    }
+
+    /// Section-lens continuous re-park (D3). Re-evaluate the active lens over
+    /// the active workspace and apply the park/restore delta — catches a
+    /// window opened into the active WS while a lens is active (it should be
+    /// hidden) or one whose match flipped. Idempotent: an unchanged verdict
+    /// yields an empty plan and no AX. When a newly-parked window was holding
+    /// focus (e.g. raise-on-open surfaced it), redirect focus off the
+    /// now-off-screen sliver. No-op when no lens is active.
+    private func applySectionLensReconcile(live: [Window], rect: CGRect) {
+        guard catalog.activeSectionLens != nil,
+              let visible = sectionLensVisibleIDs(workspace: catalog.activeIndex,
+                                                  live: live)
+        else { return }
+        let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
+        guard !plan.isEmpty else { return }
+        Log.debug("native: section-lens re-park "
+            + "parked=\(plan.toPark.count) restored=\(plan.toRestore.count)")
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+        if let f = focusedWindow(), plan.toPark.contains(where: { $0.id == f }) {
+            applySectionLensAutoFocus(visibleIDs: visible)
         }
     }
 

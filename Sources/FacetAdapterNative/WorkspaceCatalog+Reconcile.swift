@@ -303,6 +303,7 @@ extension WorkspaceCatalog {
         pendingAddCandidates.remove(id)
         hiddenMembers.remove(id)                  // drop hide-reclaim state
         pendingHideCandidates.remove(id)
+        lensParkedMembers.remove(id)              // drop section-lens park state
         marks = marks.filter { $0.value != id }   // drop any mark on it
         everywhereWindows.remove(id)              // drop sticky on it
         scratchpads = scratchpads.filter { $0.value != id }  // drop shelf

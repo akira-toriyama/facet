@@ -259,6 +259,37 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // live-resize path, so no lock.
     var followAXCache: [WindowID: AXUIElement] = [:]
 
+    // (Section-lens — tag-unification Phase 1)
+    /// Compiled cache for the active section-lens's `match`, keyed by the raw
+    /// string so a config hot-reload (or a lens change) recompiles. Avoids
+    /// re-parsing the WHERE-clause on every reconcile's continuous re-park.
+    /// Touched only on `cliQueue` (the eval helpers), like the rest of the
+    /// catalog-adjacent state.
+    var sectionLensCompiled: (match: String, filter: FacetFilter)?
+
+    /// Lock-guarded, main-readable mirror of the active catalog's
+    /// `activeSectionLens` label. The catalog is `cliQueue`-confined, but the
+    /// Controller's `apply()` (main actor) reads the active lens back to drive
+    /// the tree highlight — including after a mac-desktop swap restored a
+    /// desktop whose lens persists. Refreshed on `cliQueue` (every
+    /// `refreshCatalog` + each `setSectionLens`) under the lock so the
+    /// main-thread `currentSectionLens()` read is race-free (same pattern as
+    /// `config`).
+    private let sectionLensLock = NSLock()
+    private var _activeSectionLensLabel: String?
+
+    /// Refresh the main-readable mirror from the active catalog. Called on
+    /// `cliQueue` wherever `catalog.activeSectionLens` may have changed.
+    func syncSectionLensMirror() {
+        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        _activeSectionLensLabel = catalog.activeSectionLens
+    }
+
+    public func currentSectionLens() -> String? {
+        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        return _activeSectionLensLabel
+    }
+
     // MARK: - Event / error streams
 
     private let eventStream: AsyncStream<BackendEvent>
@@ -441,7 +472,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Backend protocol convention is 0-based; catalog (matching
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
-        guard let plan = catalog.setActive(target) else { return }
+        let rect = activeDisplayRect()
+        // Section-lens (Phase 1, D1): when a lens is active, evaluate which of
+        // the DESTINATION workspace's members pass its `match` so the switch
+        // restores ONLY those — the rest stay parked + detached (one net plan,
+        // no restore-then-re-park flicker). `nil` = no active lens → restore
+        // everything (the historical behaviour).
+        let lensVisible = sectionLensVisibleIDs(workspace: target)
+        guard let plan = catalog.setActive(target, lensVisibleIDs: lensVisible,
+                                           in: rect) else { return }
 
         // Leave-snapshot only fires on a real transition: setActive
         // already returned nil for the no-op `target == activeIndex`
@@ -451,9 +490,11 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         if let cur = focusedWindow() {
             catalog.recordLeaveFocus(cur, in: plan.oldActive)
         }
+        // The lens-park set just changed (lifted off old WS, applied to the
+        // new) — keep the main-readable mirror in lock-step for read-back.
+        syncSectionLensMirror()
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) autoFocus=\(autoFocus)")
-        let rect = activeDisplayRect()
         // Consume the relative-switch direction hint (set just before by
         // switchWorkspaceRelative) regardless of whether we animate, so
         // it never leaks into a later switch.
@@ -519,6 +560,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     func applyAutoFocus(newActiveWS: Int) {
         let wsWindows = enumerateCGWindows().filter {
             catalog.windowMap[$0.id]?.workspace == newActiveWS
+                // Section-lens (Phase 1): a window the active lens parked is
+                // off-screen — never auto-focus it. Empty set in the no-lens
+                // case, so this is a no-op there.
+                && !catalog.lensParkedMembers.contains($0.id)
         }
         guard let pick = catalog.autoFocusTarget(
                 in: newActiveWS, windows: wsWindows)
@@ -601,6 +646,96 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             return
         }
         Log.debug("native: lens autoFocus pick=\(pick.id.serverID) "
+            + "app=\(pick.appName)")
+        Focus.assert(pick, backend: self)
+    }
+
+    // MARK: - Section-lens (tag-unification Phase 1)
+
+    /// Activate / clear the active section-lens (`type="lens"` section, by
+    /// `label`). The section-model twin of `setLens` (tag-mode bitmask lens):
+    /// resolve the label → the section's `match`, evaluate it over the ACTIVE
+    /// workspace's members, then park the ones it excludes + restore/re-tile
+    /// the ones it includes. `nil` clears the lens (restores every parked
+    /// window). No-op outside the section model; an unknown label or malformed
+    /// `match` is a loud-but-non-fatal operational error (the lens is left
+    /// unchanged, D2). The catalog (`activeSectionLens`) is the authority; the
+    /// main-readable mirror is synced so the view's highlight reads back.
+    public func setSectionLens(_ label: String?, autoFocus: Bool) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
+              config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
+        else { return }
+        let rect = activeDisplayRect()
+
+        // Clear.
+        guard let label else {
+            guard catalog.activeSectionLens != nil else { return }
+            let plan = catalog.clearSectionLens(in: rect)
+            sectionLensCompiled = nil
+            syncSectionLensMirror()
+            Log.debug("native: setSectionLens cleared "
+                + "(restored=\(plan.toRestore.count))")
+            applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
+            eventContinuation.yield(.refreshNeeded)
+            return
+        }
+
+        // Activate. Validate the label → resolve + compile its `match`. D2:
+        // an unknown label or a `match` that won't parse rejects LOUD (the
+        // lens is left unchanged — no park decision without a sound filter).
+        guard let ord = activeMacDesktopOrdinal,
+              let section = config.effectiveMacDesktopSectionConfigs[ord]?
+                .first(where: { $0.type == .lens && $0.label == label })
+        else {
+            errorContinuation.yield("lens \(label): no such lens section")
+            return
+        }
+        guard case .success = FacetFilter.parse(section.match) else {
+            errorContinuation.yield("lens \(label): malformed match")
+            return
+        }
+        catalog.activeSectionLens = label
+        sectionLensCompiled = nil   // recompile against the (possibly new) match
+        syncSectionLensMirror()
+        let live = enumerateCGWindows()
+        let visible = sectionLensVisibleIDs(workspace: catalog.activeIndex,
+                                            live: live) ?? []
+        let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
+        Log.debug("native: setSectionLens \"\(label)\" "
+            + "visible=\(visible.count) parked=\(plan.toPark.count) "
+            + "restored=\(plan.toRestore.count)")
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+        applyLayout(workspace: catalog.activeIndex, rect: rect)
+        if autoFocus { applySectionLensAutoFocus(visibleIDs: visible) }
+        eventContinuation.yield(.refreshNeeded)
+    }
+
+    /// Auto-focus after a section-lens change. Keep the current focus when its
+    /// window stays visible (passes the lens, or is sticky — never parked) so
+    /// activating a lens that still shows the focused window doesn't yank
+    /// focus; otherwise focus the first in-lens window, or defocus to Finder
+    /// when the lens selects nothing (D2: an empty workspace is allowed).
+    /// Internal so the continuous re-park can reuse it. `visibleIDs` is the
+    /// active workspace's in-lens id set.
+    func applySectionLensAutoFocus(visibleIDs: Set<WindowID>) {
+        if let cur = focusedWindow(), let slot = catalog.windowMap[cur],
+           slot.workspace == catalog.activeIndex {
+            let staysVisible = visibleIDs.contains(cur)
+                || catalog.everywhereWindows.contains(cur)
+            if staysVisible { return }
+        }
+        let live = enumerateCGWindows()
+        guard let pick = live.first(where: {
+            visibleIDs.contains($0.id)
+                && !catalog.floatingWindows.contains($0.id)
+        }) ?? live.first(where: { visibleIDs.contains($0.id) })
+        else {
+            activateFinder()
+            return
+        }
+        Log.debug("native: section-lens autoFocus pick=\(pick.id.serverID) "
             + "app=\(pick.appName)")
         Focus.assert(pick, backend: self)
     }

@@ -847,17 +847,19 @@ final class Controller: NSObject {
         // active-lens narrow all key off it — read ONCE here so they agree
         // within this main-actor turn. 0 = SkyLight unavailable → no name.
         let macDesktopOrdinal = currentMacDesktopOrdinal()
-        // PR6: reset the session-only active lens on a genuine mac-desktop
-        // swap — a lens is scoped to its desktop's `[[desktop.N.section]]`, so
-        // one activated on desktop A must not leak onto B. The swap is the
-        // ordinal change; the FIRST render only records it (a lens set before
-        // the first post-set re-render then survives). HOISTED above the PR7
-        // overview narrow (and the tree render) so both read the POST-reset
-        // lens in this same frame — otherwise a destination desktop with a
-        // same-labelled lens would briefly narrow the open rail by a lens the
-        // user never activated there.
+        // Tag-unification Phase 1: the active section-lens is now a REAL hide
+        // held per-mac-desktop in the catalog (the authority), not pure view
+        // state. On a genuine mac-desktop swap, READ BACK the destination
+        // desktop's lens (it persists in the swapped-in catalog) rather than
+        // blanket-resetting to nil — a reset would desync the tree highlight
+        // (and the PR7 overview narrow) from a lens that's still parking that
+        // desktop's windows. `nil` outside the section model. HOISTED above the
+        // overview narrow + tree render so both read the post-swap lens in this
+        // same frame. The FIRST render only records the ordinal (no read-back),
+        // so an optimistically-set lens survives until the first real swap.
         if hasRenderedMacDesktop, macDesktopOrdinal != lastRenderedMacDesktopOrdinal {
-            currentActiveLens = nil
+            currentActiveLens = config.isSectionModelActive(ordinal: macDesktopOrdinal)
+                ? backend.currentSectionLens() : nil
         }
         hasRenderedMacDesktop = true
         lastRenderedMacDesktopOrdinal = macDesktopOrdinal
