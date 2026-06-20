@@ -410,7 +410,9 @@ Frequently-touched keys:
   `"workspace"` (an auto-named — emoji — spatial cell with an optional
   `layout` seed; the count of these is that desktop's workspace count),
   `"lens"` (a saved visibility filter — `label` + `match` + optional
-  `apply`), or `"unassigned"`. **Workspaces are not named from config** —
+  `apply`; activate it with `facet lens NAME` to anchor-park the windows it
+  doesn't match within the active workspace, `facet lens --clear` to lift it),
+  or `"unassigned"`. **Workspaces are not named from config** —
   a runtime `facet workspace --rename` owns the name. Two modes: **no**
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
   workspaces automatically; **any** present → **opt-in**: facet manages
@@ -487,6 +489,12 @@ facet window --unmark NAME        # remove a mark
                                   # a name moves it off the old window.
                                   # session-only, per mac desktop.
 
+# Lens (section model) — activate a type="lens" [[desktop.N.section]] by its
+# label; windows in the active workspace the lens doesn't match are anchor-
+# parked (a real hide) and the rest re-tile. Persists across mac-desktop swaps.
+facet lens "Web"                  # activate the lens labelled Web
+facet lens --clear                # lift the active lens (parked windows return)
+
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
 facet scratchpad --stash NAME     # park the focused window onto a named
                                   # shelf (hides it off-screen)
@@ -551,12 +559,15 @@ facet window --untag NAME         # remove a tag from the focused window
 facet window --toggle-tag NAME    # flip a tag on the focused window
 facet window --retag OLD NEW      # rename a tag on the focused window
 
-# Lens — which tags the tree shows
-facet lens --only A[,B]           # show exactly these tags
+# Lens — which tags the tree shows (NAME is positional, the same verb
+# that activates a lens section in workspace mode)
+facet lens A[,B]                  # show exactly these tags (the old --only)
 facet lens --add A[,B]            # add tags to the shown set
 facet lens --remove A[,B]         # drop tags from the shown set
 facet lens --toggle A[,B]         # flip tags in the shown set
-facet lens --all                  # show every window (clear the lens)
+facet lens --all                  # show every window
+facet lens --clear                # drop the lens → show every window
+                                  # (same result as --all in tag mode)
 
 # Tag vocabulary — the named tags available to assign
 facet tag --add NAME              # define a new tag

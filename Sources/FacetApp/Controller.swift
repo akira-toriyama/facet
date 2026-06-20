@@ -116,12 +116,15 @@ final class Controller: NSObject {
     /// diagnostics (malformed / unknown-field lens `match`) depend only on
     /// the static config + active lens, so log once per change, not per frame.
     private var loggedOverviewDiagnostics: [String] = []
-    /// Section/lens model (PR6): the session-only ACTIVE lens — the
-    /// `type="lens"` section the user activated (`facet lens --section LABEL`,
-    /// or a tree lens-header click), or nil for none. Emphasises its tree
-    /// header (`pal.primary`) and (PR7) narrows grid/rail. Per-mac-desktop:
-    /// reset to nil on a swap (a lens is scoped to its desktop's sections) and
-    /// never persisted. Set via `setActiveLens`.
+    /// Section/lens model: the session-only ACTIVE lens — the `type="lens"`
+    /// section the user activated (`facet lens NAME`, or a tree lens-header
+    /// click), or nil for none. This is the VIEW's highlight MIRROR (emphasises
+    /// its tree header in `pal.primary` + narrows grid/rail); the real hide —
+    /// anchor-parking the out-of-lens windows in the current workspace — lives
+    /// in the catalog, which is the authority (tag-unification Phase 1). Set
+    /// optimistically via `setActiveLens`. Per-mac-desktop + never persisted,
+    /// but it PERSISTS across a swap: on a mac-desktop swap it's read BACK from
+    /// `backend.currentSectionLens()` (line ~860), not reset to nil.
     var currentActiveLens: String?
     /// Whether `apply()` has rendered at least once, and the mac-desktop
     /// ordinal it last rendered — together they detect a mac-desktop swap so

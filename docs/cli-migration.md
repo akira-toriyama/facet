@@ -71,7 +71,7 @@ value-bearing flag migrated to the space form, not just the rows shown.
 | `facet window --focus=left` | `facet window --focus left` |
 | `facet window --cycle-stack=next` | `facet window --cycle-stack next` |
 | `facet window --tag=#190` | `facet window --tag #190` |
-| `facet lens --only=web` | `facet lens --only web` |
+| `facet lens --toggle=web` | `facet lens --toggle web` |
 | `facet tag --add=web` | `facet tag --add web` |
 | `facet tag --rename=old:new` | `facet tag --rename old new` |
 | `facet scratchpad --stash=notes` | `facet scratchpad --stash notes` |

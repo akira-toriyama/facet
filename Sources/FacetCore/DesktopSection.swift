@@ -18,10 +18,15 @@
 //     (per-section, runtime-changeable) + an optional `apply` seed.
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
-//     optional `apply` (the inverse, for drops). A lens only NARROWS; it
-//     never re-bundles. `match` is stored VERBATIM and compiled by the
-//     consumer, so a malformed expression is rejected loud + non-fatal at
-//     projection time, never at config load (parse-only stays total).
+//     optional `apply` (the inverse, for drops). Activated at runtime with
+//     `facet lens NAME` (tag-unification Phase 1): the backend anchor-parks
+//     every window in the ACTIVE workspace the `match` doesn't select (a real
+//     hide) and re-tiles the rest; `facet lens --clear` lifts it. The
+//     grid/rail cell count stays INVARIANT (a lens narrows what's shown inside
+//     the workspace cells, never re-bundles them — see `OverviewProjection`).
+//     `match` is stored VERBATIM and compiled by the consumer, so a malformed
+//     expression is rejected loud + non-fatal at projection time, never at
+//     config load (parse-only stays total).
 //   • type = "unassigned" — the lost-and-found safety net: `label` only.
 //     (Deferred: the projection / tree branch is not built yet — under the
 //     current catalog every managed window has a workspace, so an

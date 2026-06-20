@@ -47,7 +47,7 @@ public struct TagModel: Sendable, Equatable {
     /// The reserved top bit (63) — the `_default` floor (M11-3 → #191).
     /// In tag mode every window carries it, so a window is never
     /// `tags == 0` ("lost"). It is NOT part of the user vocabulary: it
-    /// never appears in `[[tag]]`, in `names`, in a `lens --only` mask,
+    /// never appears in `[[tag]]`, in `names`, in a `lens NAME` (only) mask,
     /// or as a tree chip. User tags occupy bits 0...62; `allMask` (the
     /// `lens --all` user-tag union) never sets it. The catalog ORs it
     /// in where the floor must apply (new windows, `lens --all`).

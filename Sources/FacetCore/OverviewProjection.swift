@@ -11,11 +11,20 @@
 // the workspace axis).
 //
 // Pure + backend-neutral (unit-tested in `FacetCoreTests`); the Controller
-// derives a visible-window-id set from the result and feeds it to whichever
-// overview is open (PR7). The landing gate (`OverviewPendingDrop.landed`)
+// derives a visible-window-id set from the result and feeds it (live) to
+// whichever overview is open. The landing gate (`OverviewPendingDrop.landed`)
 // keeps reading the UNFILTERED `[Workspace]`, never this result — a window
 // moved out of the lens's selection would otherwise never appear in the
 // filtered destination and the drop would stay stuck forever.
+//
+// Tag-unification Phase 1: an active lens is now a REAL hide — the backend
+// anchor-parks the out-of-lens windows in the ACTIVE workspace. This cosmetic
+// narrow is therefore COMPLEMENTARY, not redundant: in the active workspace it
+// hides the parked windows' sliver thumbnails, and in an inactive workspace it
+// PREDICTS the post-switch view (those windows aren't parked yet). Both use the
+// same membership predicate (`LensMembership`) as the real park, so the
+// preview and the hide can't disagree. (Reflecting the real park in grid/rail
+// + retiring any genuinely-redundant narrow is PR-4 work.)
 //
 // DEGRADE — no active lens (`match == nil`): the workspaces pass through
 // VERBATIM (every window visible), so the section-less / lens-inactive

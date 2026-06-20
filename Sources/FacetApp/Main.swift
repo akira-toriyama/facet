@@ -39,8 +39,8 @@
 //                 (tag mode only — [grouping] by="tag")
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
-//   Lens      : facet lens --only/--add/--remove/--toggle A[,B,…] / --all
-//               (tag mode only — [grouping] by="tag")
+//   Lens      : facet lens NAME / --clear  (both modes; NAME adapts)
+//               / --add/--remove/--toggle A[,B,…] / --all  (tag mode only)
 //   Tag       : facet tag --add NAME / --remove NAME / --rename OLD NEW
 //               (tag mode only — edits the tag vocabulary)
 //
@@ -180,25 +180,30 @@ enum FacetApp {
           facet workspace --move N           move the active workspace to
                                              position N (reorder)
 
-        LENS                                 (the active visibility filter)
-          facet lens --only A[,B,…]          show exactly these tags
-                                             (replace the shown set)
+        LENS                                 (the active visibility filter;
+                                             one surface, adapts to [grouping])
+          facet lens NAME                    activate the lens NAME —
+                                             tag mode: show exactly these tag(s)
+                                             (CSV A[,B,…]); section model:
+                                             activate the `type="lens"` section
+                                             labelled NAME (out-of-lens windows
+                                             in the current workspace are
+                                             anchor-parked; one label — a comma
+                                             list exits 2, CSV is tag-mode-only;
+                                             an unknown tag / label is rejected)
+          facet lens --clear                 drop the active lens → show the
+                                             full current scope (BOTH modes —
+                                             tag mode: every window; section
+                                             model: clear the active lens)
           facet lens --add A[,B,…]           union these into the shown set
           facet lens --remove A[,B,…]        drop these from the shown set
           facet lens --toggle A[,B,…]        flip each tag in / out
-          facet lens --all                   show every tag
-                                             (tag mode — by="tag": multiple
+          facet lens --all                   show every window
+                                             (tag mode only — by="tag": multiple
                                              tags = comma-joined; one unknown
-                                             name rejects the whole command;
-                                             emptying the lens shows untagged
-                                             windows)
-          facet lens --section LABEL         activate the lens section LABEL
-          facet lens --clear                 clear the active lens
-                                             (section model — by="workspace":
-                                             LABEL is a `type="lens"` section's
-                                             label; the active lens's tree
-                                             header is emphasised; an unknown
-                                             label is rejected)
+                                             name rejects the whole command.
+                                             --all/--add/--remove/--toggle exit
+                                             2 in the section model)
 
         TAG                                  (tag mode: the tag vocabulary)
           facet tag --add NAME               declare tag NAME (no window
@@ -417,11 +422,14 @@ enum FacetApp {
     }
 
     /// Fail Fast (M11-3, design Q7): reject a subject that doesn't match
-    /// the configured grouping mode. `lens` is tag-mode-only; the
-    /// `workspace` switch / layout / management verbs are
-    /// workspace-mode-only (tag mode has no workspaces — running them
-    /// would scramble the catalog's park state). Reads the same config
-    /// the server seeded from; a mismatch exits 2 (usage) rather than
+    /// the configured grouping mode. The `workspace` switch / layout /
+    /// management verbs are workspace-mode-only (tag mode has no workspaces —
+    /// running them would scramble the catalog's park state); the `tag`
+    /// vocabulary verbs are tag-mode-only. (`lens` no longer gates as a whole
+    /// here: tag-unification Phase 1 made `lens NAME` / `--clear` mode-ADAPTIVE
+    /// and only the tag-composition verbs / `--all` tag-only, so `runLensCommand`
+    /// does its own per-verb check off `effectiveGrouping`.) Reads the same
+    /// config the server seeded from; a mismatch exits 2 (usage) rather than
     /// silently no-opping server-side.
     static func requireGrouping(_ want: Grouping, subject: String) {
         let have = FacetConfig.load().effectiveGrouping
