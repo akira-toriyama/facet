@@ -233,6 +233,16 @@ public protocol WindowBackend: Sendable {
     /// the user picks).
     func setSectionLens(_ label: String?, autoFocus: Bool)
 
+    /// Activate a section (EX-1 throughline) — a workspace (clears any active
+    /// lens, exclusive model) or a `type="lens"` section (cross-workspace
+    /// union). Lens-activate and workspace-activate funnel through this one
+    /// seam so the "exactly one active section" invariant has a single home
+    /// (grid/rail clicks join in EX-2; the user-facing CLI collapses to it in
+    /// EX-4). A lens *clear* stays on `setSectionLens(nil)` — clearing returns
+    /// to the active workspace without switching it. `autoFocus` follows
+    /// `setSectionLens` / `switchWorkspace`.
+    func activateSection(_ section: ActiveSection, autoFocus: Bool)
+
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
     func addWorkspace()
@@ -499,15 +509,20 @@ public protocol WindowBackend: Sendable {
     /// read as `definedTagNames()`.
     func currentLens() -> LensStatus?
 
-    /// The active SECTION-lens label (tag-unification Phase 1), or `nil` when
-    /// none is active / outside the section model. Read-back so the view's
-    /// tree highlight reflects the catalog (the authority) — including after a
-    /// mac-desktop swap restores a desktop whose lens was set on a prior
-    /// visit (the lens persists per-mac-desktop). Thread-safe: a lock-guarded
-    /// mirror of the active catalog's `activeSectionLens`, so the Controller
-    /// reads it on the main actor without a `cliQueue` hop (like `isAnimating`
-    /// / `config`).
+    /// The active SECTION-lens label, or `nil` when none is active / outside
+    /// the section model. EX-1: a thread-safe shim over
+    /// `currentActiveSection().lensLabel` — the lens label derived from the
+    /// lock-guarded `_activeSection` mirror (`currentActiveSection()` is the
+    /// primary read-back since EX-1). Kept for existing callers; the Controller
+    /// reads it on the main actor without a `cliQueue` hop (like `config`).
     func currentSectionLens() -> String?
+
+    /// The active section (EX-1) — `.lens(label)` when a section-lens is
+    /// active, else `.workspace(activeIndex)`. The unified, main-actor-safe
+    /// read-back the Controller mirrors for the single active-section
+    /// highlight; supersedes `currentSectionLens()` (now a `.lensLabel` shim).
+    /// Lock-guarded mirror of the active catalog's `activeSection`.
+    func currentActiveSection() -> ActiveSection
 
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
@@ -583,6 +598,7 @@ public extension WindowBackend {
     func switchWorkspace(named name: String, autoFocus: Bool) {}
     func setLens(_ spec: LensSpec, autoFocus: Bool) {}
     func setSectionLens(_ label: String?, autoFocus: Bool) {}
+    func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 
@@ -626,6 +642,7 @@ public extension WindowBackend {
     func definedTagNames() -> [String] { [] }
     func currentLens() -> LensStatus? { nil }
     func currentSectionLens() -> String? { nil }
+    func currentActiveSection() -> ActiveSection { .workspace(1) }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }

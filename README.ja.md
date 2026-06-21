@@ -384,8 +384,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   記述。 各 section は必須の `type` を持つ: `"workspace"` (絵文字で自動命名
   される空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
   workspace 数)、 `"lens"` (保存フィルタ — `label` + `match` + 任意の
-  `apply`。 `facet lens NAME` で有効化すると active workspace 内で match を外れた
-  窓を anchor park〔実 hide〕・`facet lens --clear` で解除)、 `"unassigned"`。
+  `layout` + `apply`。 `facet lens NAME` で有効化すると、 match を外れた窓を
+  **すべての workspace 横断で** anchor park (cross-workspace exclusive な実 hide)
+  し、 一致した窓を union タイルする。 どれかの workspace に切り替えると lens は
+  自動解除・`facet lens --clear` で park した窓が戻る)、 `"unassigned"`。
   **workspace は config から命名できない** —
   名前は実行時 `facet workspace --rename` が所有。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
@@ -459,8 +461,9 @@ facet window --unmark NAME        # マークを消す
                                   # 旧窓から外れる。session のみ・mac desktop ごと。
 
 # Lens (section モデル) — type="lens" の [[desktop.N.section]] を label で
-# 有効化。active workspace 内で lens の match を外れた窓を anchor park (実 hide)
-# し残りを再タイル。mac desktop 切替を跨いで持続。
+# 有効化。match を外れた窓を全 workspace 横断で anchor park
+# (cross-workspace exclusive な実 hide) し、一致した窓を union タイル。
+# どれかの workspace に切り替えると lens は自動解除。mac desktop 切替を跨いで持続。
 facet lens "Web"                  # label が Web の lens を有効化
 facet lens --clear                # active lens を解除 (park した窓が戻る)
 

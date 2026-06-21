@@ -401,15 +401,18 @@ extension SidebarView {
             // ran before handleClick — #66 safety belt), so this just
             // pre-syncs the cursor for the next nav entry.
             kbSel = .hdr(group: g)
-            let bk = backend
-            // Header click = no explicit window pick. The backend's
-            // `autoFocus: true` path uses the same `predictedFocus`
-            // helper as fallback, so the window highlighted above
-            // is the same one that ends up focused (or Finder
-            // activated when the WS is empty).
-            cliQueue.async {
-                bk.switchWorkspace(toIndex: i, autoFocus: true)
-            }
+            // Header click = no explicit window pick (the backend's
+            // `autoFocus: true` path uses the same `predictedFocus` helper as
+            // fallback, so the window highlighted above is the one that ends up
+            // focused, or Finder activated when the WS is empty). Route through
+            // the Controller (NOT the backend directly) so `currentActiveSection`
+            // is updated optimistically: a same-WS header click while a lens is
+            // active clears the lens via the adapter's same-index edge, and
+            // without the Controller-side mirror update the stale `.lens(…)`
+            // would swallow the next lens activation. `i` is 0-based
+            // (Workspace.index, matched at `$0.index == i` above);
+            // ActiveSection.workspace is 1-based → `i + 1`.
+            controller?.activateSection(.workspace(i + 1), autoFocus: true)
         case .window(let g, let i, let pid, let id, let title):
             // Off main so the click never hitches; skip the switch
             // round-trip when the window is already on the active
@@ -430,22 +433,34 @@ extension SidebarView {
             let win0 = lastWorkspaces.first { $0.index == i }?
                 .windows.first { $0.id == id }
             let hidden = win0?.isOnscreen == false
-            // A *lens-parked* row (out of the active section-lens,
-            // anchor-parked + dimmed with a `lens` badge): clicking it drops
-            // the lens and focuses the window (it's always on the active WS).
+            // A *lens-parked* row (out of the active section-lens, anchor-parked
+            // + dimmed with a `lens` badge): clicking it drops the lens and
+            // focuses the window. EX-0 made the lens cross-workspace, so a parked
+            // row can live in an INACTIVE workspace — only the active-WS case
+            // clears the lens in place (`revealLensParked`); an inactive-WS parked
+            // row falls through to the `needSwitch` path below, which switches to
+            // its home WS (that switch clears the lens via `setActive`) so the
+            // window becomes visible before focus (else focus would land on the
+            // still-parked sliver).
             let lensParked = win0?.isLensParked == true
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
             let bk = backend
             let ctrl = controller
-            if lensParked {
+            if lensParked && !needSwitch {
                 Task { @MainActor in ctrl?.revealLensParked(window) }
                 return
             }
             cliQueue.async {
                 if needSwitch {
-                    bk.switchWorkspace(toIndex: i)
+                    // EX-1: same activateSection seam as the header click (clears
+                    // any active lens via the throughline). `autoFocus: false`
+                    // because focusWindow below focuses the explicit target —
+                    // `needSwitch` guarantees a different WS so the same-index
+                    // edge is unreachable here (behaviour-identical to the old
+                    // switchWorkspace). `i` 0-based → `i + 1` (1-based enum).
+                    bk.activateSection(.workspace(i + 1), autoFocus: false)
                 }
                 if hidden {
                     bk.revealWindow(id)

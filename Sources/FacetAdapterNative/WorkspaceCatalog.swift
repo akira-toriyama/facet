@@ -341,7 +341,8 @@ struct WorkspaceCatalog {
     /// `[[desktop.N.section]]`), or nil for no active lens. The AUTHORITY for
     /// the lens — held here (not in the view) so the continuous re-park, which
     /// runs on `cliQueue` in `refreshCatalog`, can read it; the view's
-    /// `currentActiveLens` is a highlight read-back of this. The match
+    /// `currentActiveSection` is a highlight read-back of this (via the
+    /// `activeSection` derivation + the adapter mirror). The match
     /// EVALUATION lives adapter-side (the catalog has no live
     /// `appName`/`title`), so the catalog stores only the opaque label +
     /// `lensParkedMembers`; the adapter resolves the label → `match` against
@@ -349,6 +350,17 @@ struct WorkspaceCatalog {
     /// Session-only, and per-mac-desktop for free (this whole catalog is
     /// swapped per mac desktop).
     var activeSectionLens: String?
+
+    /// The single active-section concept (EX-1): a lens when one is active,
+    /// else the active workspace. DERIVED — `activeSectionLens` / `activeIndex`
+    /// stay the load-bearing stored fields (the XOR is enforced by `setActive`
+    /// nulling the lens, EX-0.4; field consolidation is deferred to EX-3/EX-4).
+    /// Read by the adapter mirror (`syncSectionLensMirror`) to drive the
+    /// Controller's single active-section highlight. `activeIndex` is already
+    /// 1-based, matching `ActiveSection.workspace`, so no conversion here.
+    var activeSection: ActiveSection {
+        activeSectionLens.map(ActiveSection.lens) ?? .workspace(activeIndex)
+    }
 
     /// Runtime layout override for the active section-lens union (EX-0.3).
     /// `nil` follows the lens section's configured `layout` (→ `LensLayout.resolve`).

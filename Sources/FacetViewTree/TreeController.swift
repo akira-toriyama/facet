@@ -49,11 +49,23 @@ public protocol TreeController: AnyObject, Sendable {
     /// Tag-unification Phase 1 (PR4): the user clicked an out-of-lens
     /// (parked, dimmed `lens`-badged) window row. Drop the active
     /// section-lens — restoring EVERY parked window into its layout — then
-    /// focus `window`. The window is always on the active workspace
-    /// (lens-park is active-WS only), so no switch. Reuses the `lens --clear`
-    /// path; the restore and the focus both ride the serial CLI queue, so the
-    /// window is back in its tile before focus lands.
+    /// focus `window`. Called ONLY for a parked window on the ACTIVE workspace
+    /// (no switch needed); EX-0's cross-workspace lens means a parked row can
+    /// live in an inactive WS, but `handleClick` routes that case through
+    /// `activateSection(.workspace(…))` instead (the switch clears the lens +
+    /// makes the window visible). Reuses the `lens --clear` path; the restore
+    /// and the focus both ride the serial CLI queue, so the window is back in
+    /// its tile before focus lands.
     func revealLensParked(_ window: Window)
+
+    /// Activate a section (EX-1 throughline) — a workspace (clears any active
+    /// lens) or a `type=lens` section. The header / cell click routes here
+    /// (not straight to the backend) so the Controller updates its
+    /// `currentActiveSection` highlight mirror up-front: a same-workspace click
+    /// while a lens is active clears the lens via the adapter's same-index edge,
+    /// and without the Controller-side mirror update that stale `.lens(…)` would
+    /// swallow the next lens activation.
+    func activateSection(_ section: ActiveSection, autoFocus: Bool)
 
     /// Switch to `window`'s workspace if needed, focus it, then run
     /// `ops` against the now-focused window. Used for right-click

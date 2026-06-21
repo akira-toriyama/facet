@@ -567,9 +567,13 @@ public final class SidebarView: NSView {
         // everywhere means the signature rebuilds whenever the active lens
         // changes, with no separate sig field.
         func headerActive(_ sec: ProjectedSection) -> Bool {
+            // EX-1 single-highlight: exactly one active section is lit. When a
+            // lens is active, workspace-section headers go dark (the catalog is
+            // already exclusive — `activeLens XOR activeWorkspace`; the view now
+            // reflects it) so only the active lens header reads `pal.primary`.
             sec.sectionType == .lens
                 ? (activeLens != nil && sec.label == activeLens)
-                : wsActive(sec.sourceWorkspaceIndex)
+                : (activeLens == nil && wsActive(sec.sourceWorkspaceIndex))
         }
 
         let sig = (searching ? "S:\(query);" : "")

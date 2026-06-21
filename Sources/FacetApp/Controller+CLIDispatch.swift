@@ -513,17 +513,19 @@ extension Controller {
     /// Tag-unification Phase 1: the active section-lens is now a REAL hide,
     /// driven by the backend (the catalog is the authority). This validates
     /// the label against the LIVE section config (nice error messages) +
-    /// optimistically lights the tree header, then routes the label to
-    /// `backend.setSectionLens` on `cliQueue` (where the catalog parks the
-    /// out-of-lens windows). `currentActiveLens` is the view's highlight
-    /// mirror — set optimistically here and read back from the catalog on a
-    /// mac-desktop swap (`apply()`). `autoFocus`: the CLI / hotkey path passes
-    /// `true` (focus lands in the new visible set); the in-panel tree
-    /// lens-header toggle passes `false` (the tree keeps key focus).
+    /// optimistically lights the tree header, then routes the label to the
+    /// `backend.activateSection` throughline on `cliQueue` (where the catalog
+    /// gathers the matching windows + parks the rest). `currentActiveSection` is
+    /// the view's highlight mirror — set optimistically here to `.lens(label)`
+    /// and read back from the catalog on a mac-desktop swap / WS switch
+    /// (`apply()`). A `nil` CLEAR returns the active section to the spatial
+    /// workspace (`.workspace(N)`) and routes through `setSectionLens(nil)` (a
+    /// clear is a deactivation, not a switch). `autoFocus`: the CLI / hotkey
+    /// path passes `true`; the in-panel tree lens-header toggle passes `false`.
     func setActiveLens(_ label: String?, autoFocus: Bool = false) {
         guard let label else {
-            if currentActiveLens != nil {
-                currentActiveLens = nil
+            if case .lens = currentActiveSection {
+                currentActiveSection = .workspace(activeWSIndex(in: lastWorkspaces))
                 runBackendCommand { bk in
                     bk.setSectionLens(nil, autoFocus: autoFocus); return nil
                 }
@@ -548,17 +550,33 @@ extension Controller {
             scheduleReconcile(after: 0.05)      // surface lastError via status
             return
         }
-        guard currentActiveLens != label else { return }   // idempotent
-        currentActiveLens = label
+        // Idempotent — structurally un-stale now: `.workspace(N) != .lens(label)`,
+        // so a re-activation after a WS switch (which cleared the lens) is never
+        // swallowed (the EX-0.5 double-SSOT bug, fixed at the root by EX-1).
+        guard currentActiveSection != .lens(label) else { return }
+        currentActiveSection = .lens(label)
         // Sync the swap-detector to the ordinal just validated against, so the
         // synchronous apply() below (same desktop, no main-actor suspension)
         // sees no ordinal change and keeps the lens.
         hasRenderedMacDesktop = true
         lastRenderedMacDesktopOrdinal = ordinal
         runBackendCommand { bk in
-            bk.setSectionLens(label, autoFocus: autoFocus); return nil
+            bk.activateSection(.lens(label), autoFocus: autoFocus); return nil
         }
         apply(lastWorkspaces)                // re-render: light up its header
+    }
+
+    /// EX-1 Controller-side activation throughline: route to the validated
+    /// per-kind entry — lens → `setActiveLens` (label lookup, idempotent guard,
+    /// section-model gate); workspace → `dispatchWorkspace` (P6 range check).
+    /// Both ultimately reach `backend.activateSection`. The user-facing single
+    /// `facet section` verb is EX-4; here it is the internal seam the CLI
+    /// dispatch and (in EX-2) grid/rail clicks funnel through.
+    func activateSection(_ section: ActiveSection, autoFocus: Bool = true) {
+        switch section {
+        case .lens(let label):  setActiveLens(label, autoFocus: autoFocus)
+        case .workspace(let n): dispatchWorkspace(n, autoFocus: autoFocus)
+        }
     }
 
     private func dispatchWorkspaceRelative(_ target: RelativeWorkspace) {
@@ -575,7 +593,23 @@ extension Controller {
     /// a debug log) — the DNC receiver shouldn't exit the server
     /// just because a stale hotkey points past the current WS count.
     /// Idempotent: switching to the current WS is a backend no-op.
-    private func dispatchWorkspace(_ n: Int) {
+    /// `autoFocus` (default `true`) is forwarded to the throughline: the CLI
+    /// `--focus N` path wants `true`; a caller that focuses its own target
+    /// afterward (the tree window-row click) passes `false`.
+    private func dispatchWorkspace(_ n: Int, autoFocus: Bool = true) {
+        // Reflect the activation in the view mirror UP-FRONT so it never goes
+        // stale when the backend clears a lens WITHOUT a `wsSwitched` read-back —
+        // the same-index-clear path (`--focus` / click the ALREADY-active
+        // workspace while a lens is active): the backend clears the lens, but
+        // `apply()` sees no switch, so without this the mirror keeps a dead
+        // `.lens(…)` and the next `lens NAME` is swallowed by the idempotent
+        // guard (found in EX-1 host-verify — the EX-0.5 bug class via a new
+        // path). In-range guard against the main-actor snapshot so a stale /
+        // out-of-range `n` doesn't set a bogus `.workspace(N)`; the authoritative
+        // range check + error stay inside the closure.
+        if n >= 1, n <= lastWorkspaces.count {
+            currentActiveSection = .workspace(n)
+        }
         // P6: the range check reads `workspaces()` (which runs the catalog
         // reconcile) and the switch mutates it — both must happen in ONE
         // cliQueue block so a poll reconcile can't interleave between them.
@@ -585,11 +619,14 @@ extension Controller {
                 let hint = count > 0 ? "1..\(count)" : "no workspaces available"
                 return "workspace \(n) out of range (\(hint))"
             }
-            // CLI `workspace --focus N`: no explicit window pick, so let
-            // the backend auto-focus the last-touched window of the
-            // destination (or activate Finder if empty). See memory
-            // [[facet-ws-switch-focus-management]].
-            bk.switchWorkspace(toIndex: n - 1, autoFocus: true)
+            // CLI `workspace --focus N`: no explicit window pick, so the
+            // backend auto-focuses the last-touched window of the destination
+            // (or activates Finder if empty) when `autoFocus`. See memory
+            // [[facet-ws-switch-focus-management]]. EX-1: route through the
+            // activateSection throughline (clears any active lens). NOT
+            // optimistic — the highlight updates via the apply() read-back on
+            // the reconcile (wsSwitched). `n` is 1-based (range-checked above).
+            bk.activateSection(.workspace(n), autoFocus: autoFocus)
             return nil
         }
     }

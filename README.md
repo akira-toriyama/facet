@@ -410,8 +410,10 @@ Frequently-touched keys:
   `"workspace"` (an auto-named — emoji — spatial cell with an optional
   `layout` seed; the count of these is that desktop's workspace count),
   `"lens"` (a saved visibility filter — `label` + `match` + optional
-  `apply`; activate it with `facet lens NAME` to anchor-park the windows it
-  doesn't match within the active workspace, `facet lens --clear` to lift it),
+  `layout` + `apply`; activate it with `facet lens NAME` to anchor-park
+  every non-matching window across **every** workspace — cross-workspace
+  exclusive — and union-tile the matches; switching to any workspace clears
+  the lens, `facet lens --clear` lifts it and restores the parked windows),
   or `"unassigned"`. **Workspaces are not named from config** —
   a runtime `facet workspace --rename` owns the name. Two modes: **no**
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
@@ -490,8 +492,9 @@ facet window --unmark NAME        # remove a mark
                                   # session-only, per mac desktop.
 
 # Lens (section model) — activate a type="lens" [[desktop.N.section]] by its
-# label; windows in the active workspace the lens doesn't match are anchor-
-# parked (a real hide) and the rest re-tile. Persists across mac-desktop swaps.
+# label; non-matching windows are anchor-parked across EVERY workspace
+# (cross-workspace exclusive — a real hide) and the matches union-tile.
+# Switching to any workspace clears the lens. Persists across mac-desktop swaps.
 facet lens "Web"                  # activate the lens labelled Web
 facet lens --clear                # lift the active lens (parked windows return)
 

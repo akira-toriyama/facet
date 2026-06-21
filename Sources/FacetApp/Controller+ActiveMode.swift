@@ -298,12 +298,17 @@ extension Controller {
         }
     }
 
-    /// Section/lens model (PR6): TreeController hook — the user clicked a
-    /// `type="lens"` section header in the tree. Toggle it as the active lens
-    /// (clicking the active one clears it). `setActiveLens` validates the
-    /// label + re-renders; this just maps the click to set / clear.
+    /// Section/lens model: TreeController hook — the user clicked a
+    /// `type="lens"` section header in the tree. Toggle it as the active section
+    /// (clicking the already-active lens clears it back to the active workspace).
+    /// `setActiveLens` validates the label + re-renders; this maps the click to
+    /// activate / clear. Tree click → `autoFocus: false` (the tree keeps key).
     func toggleActiveLens(_ label: String) {
-        setActiveLens(currentActiveLens == label ? nil : label)
+        if currentActiveSection == .lens(label) {
+            setActiveLens(nil)                                // toggle off → active workspace
+        } else {
+            activateSection(.lens(label), autoFocus: false)   // tree keeps key focus
+        }
     }
 
     private func showLensSelectorPanel(at screenPt: CGPoint,

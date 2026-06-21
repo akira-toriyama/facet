@@ -268,27 +268,32 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     var sectionLensCompiled: (match: String, filter: FacetFilter)?
 
     /// Lock-guarded, main-readable mirror of the active catalog's
-    /// `activeSectionLens` label. The catalog is `cliQueue`-confined, but the
-    /// Controller's `apply()` (main actor) reads the active lens back to drive
-    /// the tree highlight — including after a mac-desktop swap restored a
-    /// desktop whose lens persists. Refreshed on `cliQueue` (every
-    /// `refreshCatalog` + each `setSectionLens`) under the lock so the
-    /// main-thread `currentSectionLens()` read is race-free (same pattern as
-    /// `config`).
+    /// `activeSection` (EX-1: was a lens-only `String?`). The catalog is
+    /// `cliQueue`-confined, but the Controller's `apply()` (main actor) reads
+    /// the active section back to drive the single active-section highlight —
+    /// including after a mac-desktop swap restored a desktop whose lens
+    /// persists (the swapped-in catalog's `activeSection` is mirrored by the
+    /// `syncSectionLensMirror()` call in `refreshCatalog`, after
+    /// `swapCatalogIfMacDesktopChanged`). Refreshed on `cliQueue` (every
+    /// `refreshCatalog` + each `setSectionLens` / `switchWorkspace`) under the
+    /// lock so the main-thread reads are race-free (same pattern as `config`).
     private let sectionLensLock = NSLock()
-    private var _activeSectionLensLabel: String?
+    private var _activeSection: ActiveSection = .workspace(1)
 
     /// Refresh the main-readable mirror from the active catalog. Called on
-    /// `cliQueue` wherever `catalog.activeSectionLens` may have changed.
+    /// `cliQueue` wherever `catalog.activeSection` may have changed.
     func syncSectionLensMirror() {
         sectionLensLock.lock(); defer { sectionLensLock.unlock() }
-        _activeSectionLensLabel = catalog.activeSectionLens
+        _activeSection = catalog.activeSection
     }
 
-    public func currentSectionLens() -> String? {
+    public func currentActiveSection() -> ActiveSection {
         sectionLensLock.lock(); defer { sectionLensLock.unlock() }
-        return _activeSectionLensLabel
+        return _activeSection
     }
+
+    /// Lens-only shim over `currentActiveSection()` for existing callers.
+    public func currentSectionLens() -> String? { currentActiveSection().lensLabel }
 
     // MARK: - Event / error streams
 
@@ -460,6 +465,28 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     public var isAnimating: Bool { slideInProgress }
 
     // MARK: - Commands
+
+    /// EX-1 throughline: route a section activation to the right machinery.
+    /// `.workspace` clears any active lens (exclusive model); `.lens` activates
+    /// the cross-workspace union. Both delegate to existing methods that
+    /// already `syncSectionLensMirror()`, so the mirror stays current.
+    public func activateSection(_ section: ActiveSection, autoFocus: Bool) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))
+        switch section {
+        case .workspace(let n):
+            // Exclusive model: activating a workspace clears any active lens.
+            // `setActive(activeIndex)` is a no-op (guards `n1Based != activeIndex`)
+            // so `switchWorkspace(sameIndex)` would NOT clear the lens — clear it
+            // explicitly when the target IS the current workspace but a lens is set.
+            if catalog.activeSectionLens != nil && n == catalog.activeIndex {
+                setSectionLens(nil, autoFocus: autoFocus)
+            } else {
+                switchWorkspace(toIndex: n - 1, autoFocus: autoFocus)   // 1-based → 0-based
+            }
+        case .lens(let label):
+            setSectionLens(label, autoFocus: autoFocus)
+        }
+    }
 
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
         // P6: the catalog is cliQueue-confined. Every caller dispatches on

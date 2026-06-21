@@ -190,8 +190,11 @@ is the index. **Do not relitigate** without explicit grill round.
   workspaces are auto-named (emoji pool); a `[[desktop.N.section]]`
   block only seeds the WS count + per-WS `layout` (read-only). Runtime
   rename / layout / catalog mutations are all session-only.
-- **Startup**: don't touch existing windows. **Shutdown**: restore
-  all hidden windows (treat shutdown = workspace feature OFF).
+- **Startup**: don't touch existing windows. The first `type=workspace`
+  section (or WS index 1 with no section config) is the initial
+  [active section](#two-tiling-machineries-one-active-section); no windows
+  move on startup. **Shutdown**: restore all hidden windows (treat shutdown
+  = workspace feature OFF).
 
 Memory cross-references: `facet-workspace-model`,
 `native-window-hide-methods`, `facet-cli-surface`,
@@ -536,14 +539,32 @@ non-inert plan's ops on `cliQueue`.
 ### Where it is consumed
 
 The tree (`SidebarView.update(sections:)`) renders `[ProjectedSection]`
-directly. The active section-lens is a REAL hide (tag-unification Phase 1):
-the catalog anchor-parks the out-of-lens windows in the active workspace and
-the snapshot flags each `Window.isLensParked`, so the tree dims + `lens`-badges
-those rows while grid / rail drop their thumbnails — one catalog authority, no
-view-side `match` recompute. The read-path is **LIVE under `[grouping] by =
+directly. The active section-lens is a REAL hide and **cross-workspace
+exclusive** (EX-0): the catalog anchor-parks the out-of-lens windows across
+ALL workspaces (not just the active one) and the snapshot flags each
+`Window.isLensParked`, so the tree dims + `lens`-badges those rows while
+grid / rail drop their thumbnails — one catalog authority, no view-side
+`match` recompute. The read-path is **LIVE under `[grouping] by =
 "workspace"`**; under `by = "tag"` sections are ignored
 (`effectiveMacDesktopSectionConfigs` clamps to empty — a tag world owns its
 own lens instead).
+
+### Two tiling machineries, one active section
+
+There is always **exactly one** [active section](glossary.md#active-section)
+— `activeSection := activeLens (type=lens) XOR activeWorkspace`. Which kind is
+active selects which tiling machinery runs over the windows:
+
+| | `type=workspace` | `type=lens` |
+|---|---|---|
+| Frames | stateful `applyLayout` on `activeIndex` | stateless `sectionLensUnionFrames(layout:in:)` |
+| Member set | per-WS members (the active workspace's own windows) | cross-WS `sectionLensUnionMembers()` (every matching window in any workspace) |
+| Layout source | per-WS `layoutMode` (stateful — bsp/stack carry tree/order state) | the lens `layout` key (stateless engines only; `bsp` / `stack` clamp to the global `[layout]` default) |
+
+`ActiveSection` selects the machinery (`activeSectionLens != nil` → the lens
+union machinery; else the workspace machinery). The catalog enforces the XOR
+structurally — every workspace switch nulls the active lens, so the two
+machineries are never live at once.
 
 ## Non-goals
 

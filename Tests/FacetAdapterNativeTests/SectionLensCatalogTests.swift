@@ -23,6 +23,29 @@ final class SectionLensCatalogTests: XCTestCase {
         return c
     }
 
+    // MARK: - activeSection derived concept (EX-1)
+
+    func testActiveSectionIsWorkspaceOneAtInit() {
+        let c = seededCatalog(2)                            // Fixtures.swift
+        XCTAssertEqual(c.activeSection, .workspace(1))      // startup invariant
+    }
+
+    func testActiveSectionReflectsActiveLens() {
+        var c = seededCatalog(2)
+        c.activeSectionLens = "Web"
+        XCTAssertEqual(c.activeSection, .lens("Web"))
+    }
+
+    func testActiveSectionFollowsWorkspaceSwitchAndClearsLens() {
+        var c = seededCatalog(2)
+        c.activeSectionLens = "Web"
+        // A real switch lifts the lens (EX-0.4) → active section becomes the
+        // destination workspace, lens cleared.
+        _ = c.setActive(2, in: rect)
+        XCTAssertEqual(c.activeSection, .workspace(2))
+        XCTAssertNil(c.activeSectionLens)
+    }
+
     // MARK: - applySectionLens park / restore
 
     func testParksOutOfLensRestoresIntoLens() {
