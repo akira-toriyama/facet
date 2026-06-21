@@ -350,6 +350,15 @@ struct WorkspaceCatalog {
     /// swapped per mac desktop).
     var activeSectionLens: String?
 
+    /// Runtime layout override for the active section-lens union (EX-0.3).
+    /// `nil` follows the lens section's configured `layout` (→ `LensLayout.resolve`).
+    /// Only stateless engines (master-*/grid/spiral) are ever stored here —
+    /// `setLayoutMode` guards this with `LensLayout.isStateless`.
+    /// Session-only and per-mac-desktop (same as `activeSectionLens`).
+    /// Reset to `nil` whenever the active lens changes or clears so a freshly-
+    /// activated lens always starts from its configured layout.
+    var activeSectionLensLayout: String?
+
     /// Windows currently parked because they fall OUTSIDE the active
     /// section-lens. The section-model twin of `hiddenMembers` (Cmd+H):
     /// excluded from `nonFloatingMembers` so the visible (in-lens) windows

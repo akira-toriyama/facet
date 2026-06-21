@@ -15,6 +15,32 @@ extension NativeAdapter {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         let target = index + 1
         let rect = activeDisplayRect()
+        // EX-0.3: Section-lens union branch. When a `type="lens"` section is
+        // active, --layout must target the LENS UNION, not the underlying
+        // active workspace (which tiles no windows on its own while the lens
+        // is active). Sits BEFORE the tag-mode branch so section-lens always
+        // wins, mirroring `applyLayout`/`targetFrames` order.
+        // `index` is ignored — the union spans all workspaces.
+        if catalog.activeSectionLens != nil {
+            // Stateful engines (bsp / stack) thread a per-WS tree and can't
+            // represent a cross-workspace union — reject loudly, mirroring
+            // the tag-mode rejection and the CLI's incompatible-layout check.
+            // Reuse `LensLayout.isStateless` (public, canonical predicate)
+            // instead of `LayoutGrouping.isCompatible(.tag)` so this branch
+            // stays forward-compatible with EX-4's tag-mode deletion.
+            guard LensLayout.isStateless(mode) else {
+                errorContinuation.yield(
+                    "layout \(mode): not available while a lens is active "
+                    + "(bsp / stack are workspace-only)")
+                return
+            }
+            catalog.activeSectionLensLayout = mode.lowercased()
+            Log.debug("native: setLayoutMode section-lens-union -> "
+                + "\(catalog.activeSectionLensLayout ?? "")")
+            applyLayout(workspace: catalog.activeIndex, rect: rect)
+            eventContinuation.yield(.refreshNeeded)
+            return
+        }
         if catalog.grouping == .tag {
             // Tag mode: one global layout for the lens union (there's no
             // per-workspace tree). Reject modes that can't represent a tag

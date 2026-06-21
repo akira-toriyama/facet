@@ -382,6 +382,19 @@ extension NativeAdapter {
             .layout
     }
 
+    /// Resolved stateless layout for the section-lens labelled `label` (EX-0.3).
+    /// Combines the runtime override (`catalog.activeSectionLensLayout`) with the
+    /// section's configured `layout` field: override wins when set, else the
+    /// config layout, with `LensLayout.resolve` providing the stateless clamp +
+    /// globalDefault fallback. The SINGLE source of truth consumed by both
+    /// `applyLayout` and `targetFrames` (via `sectionLensUnionFrames`) so the
+    /// instant and animated paths can't disagree. Called only when a section
+    /// lens is active (`catalog.activeSectionLens != nil`).
+    func resolvedLensLayout(forLabel label: String) -> String {
+        LensLayout.resolve(catalog.activeSectionLensLayout ?? lensLayout(forLabel: label),
+                           globalDefault: config.effectiveDefaultLayout)
+    }
+
     /// The active section-lens's compiled filter, or nil when no lens is
     /// active / the label no longer maps to a lens section / its `match` won't
     /// parse. The catalog holds the label (authority); this resolves it to the

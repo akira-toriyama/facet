@@ -122,6 +122,7 @@ extension WorkspaceCatalog {
     /// set move together.
     mutating func clearSectionLens(in rect: CGRect) -> SectionLensPlan {
         activeSectionLens = nil
+        activeSectionLensLayout = nil   // EX-0.3: clear runtime override with the lens
         guard !lensParkedMembers.isEmpty else {
             return SectionLensPlan(toPark: [], toRestore: [])
         }

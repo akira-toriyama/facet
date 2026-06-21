@@ -518,9 +518,10 @@ extension NativeAdapter {
         // layout. `n1Based` is ignored — the union spans all workspaces.
         // Sits BEFORE the tag-mode branch so both mode-paths are intercepted.
         if let label = catalog.activeSectionLens {
-            let resolved = LensLayout.resolve(lensLayout(forLabel: label),
-                                              globalDefault: config.effectiveDefaultLayout)
-            applyFrames(catalog.sectionLensUnionFrames(layout: resolved, in: rect),
+            // EX-0.3: resolvedLensLayout honours the runtime override (activeSectionLensLayout)
+            // so --layout retargeting reaches the union here (not silently the WS layout).
+            applyFrames(catalog.sectionLensUnionFrames(layout: resolvedLensLayout(forLabel: label),
+                                                       in: rect),
                         label: "section-lens-union", rect: rect, skip: skip,
                         cached: cached)
             return

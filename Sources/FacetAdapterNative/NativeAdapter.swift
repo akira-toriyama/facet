@@ -697,6 +697,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             return
         }
         catalog.activeSectionLens = label
+        catalog.activeSectionLensLayout = nil   // EX-0.3: freshly-activated lens starts from config layout
         sectionLensCompiled = nil   // recompile against the (possibly new) match
         syncSectionLensMirror()
         let live = enumerateCGWindows()

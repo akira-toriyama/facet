@@ -56,9 +56,9 @@ extension NativeAdapter {
         // in-lens set with the lens's stateless engine. Sits BEFORE the tag
         // branch so section-lens always wins when active, matching `applyLayout`.
         if let label = catalog.activeSectionLens {
-            let resolved = LensLayout.resolve(lensLayout(forLabel: label),
-                                              globalDefault: config.effectiveDefaultLayout)
-            return catalog.sectionLensUnionFrames(layout: resolved, in: rect)
+            // EX-0.3: resolvedLensLayout honours the runtime override (activeSectionLensLayout).
+            return catalog.sectionLensUnionFrames(layout: resolvedLensLayout(forLabel: label),
+                                                  in: rect)
         }
         // Tag mode (M11-3): one global engine over the visible lens union.
         // Closes the pre-existing animation bypass for tag mode.
