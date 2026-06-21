@@ -415,6 +415,29 @@ extension NativeAdapter {
                                      live: enumerateCGWindows())
     }
 
+    /// Cross-workspace evaluator (EX-0.1 / EX-1 exclusive lens). Returns the
+    /// set of ALL managed windows — across every workspace on the current mac
+    /// desktop — whose live `Window` passes the active section-lens `match`.
+    /// Unlike `sectionLensVisibleIDs(workspace:live:)`, there is NO
+    /// `workspace == n1Based` clause: each window is evaluated against its OWN
+    /// home-workspace name so a lens `match='workspace=Dev'` still resolves
+    /// correctly even for windows in inactive workspaces.
+    ///
+    /// `nil` when no lens is active (same semantics as the per-WS variant).
+    func sectionLensVisibleIDsAll(live: [Window]) -> Set<WindowID>? {
+        guard let filter = sectionLensFilter() else { return nil }
+        let byID = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var out: Set<WindowID> = []
+        for (id, slot) in catalog.windowMap {
+            guard let w = byID[id] else { continue }
+            if LensMembership.matches(w, inWorkspaceNamed: catalog.workspaceName(slot.workspace),
+                                      filter: filter) {
+                out.insert(id)
+            }
+        }
+        return out
+    }
+
     /// Section-lens continuous re-park (D3). Re-evaluate the active lens over
     /// the active workspace and apply the park/restore delta — catches a
     /// window opened into the active WS while a lens is active (it should be
@@ -424,8 +447,7 @@ extension NativeAdapter {
     /// now-off-screen sliver. No-op when no lens is active.
     private func applySectionLensReconcile(live: [Window], rect: CGRect) {
         guard catalog.activeSectionLens != nil,
-              let visible = sectionLensVisibleIDs(workspace: catalog.activeIndex,
-                                                  live: live)
+              let visible = sectionLensVisibleIDsAll(live: live)
         else { return }
         let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
         guard !plan.isEmpty else { return }

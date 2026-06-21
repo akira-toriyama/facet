@@ -16,10 +16,13 @@ func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
 /// per-file `window(_:)`, so existing call sites stay zero-diff:
 /// `window(10)`, `window(10, pid: 9)`, `window(20, onscreen: false)`,
 /// `window(30, floating: true)`.
+/// Pass `appName:` to override the default `"A"` so a lens `match='app=…'`
+/// can discriminate windows in cross-workspace gather tests.
 func window(_ n: Int, pid: Int = 1000,
             onscreen: Bool = true,
-            floating: Bool = false) -> Window {
-    Window(id: wid(n), pid: pid, appName: "A",
+            floating: Bool = false,
+            appName: String = "A") -> Window {
+    Window(id: wid(n), pid: pid, appName: appName,
            title: "w\(n)", isFocused: false,
            isFloating: floating, frame: nil, isOnscreen: onscreen)
 }

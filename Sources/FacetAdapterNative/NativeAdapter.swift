@@ -700,8 +700,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         sectionLensCompiled = nil   // recompile against the (possibly new) match
         syncSectionLensMirror()
         let live = enumerateCGWindows()
-        let visible = sectionLensVisibleIDs(workspace: catalog.activeIndex,
-                                            live: live) ?? []
+        // EX-0.1: evaluate cross-workspace so windows in INACTIVE workspaces
+        // that match the lens are gathered (not mis-parked). The per-WS variant
+        // (sectionLensVisibleIDs(workspace:live:)) only passes windows whose
+        // home WS == activeIndex, so matching inactive-WS windows were absent
+        // from the visible set and incorrectly parked.
+        let visible = sectionLensVisibleIDsAll(live: live) ?? []
         let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
         Log.debug("native: setSectionLens \"\(label)\" "
             + "visible=\(visible.count) parked=\(plan.toPark.count) "
