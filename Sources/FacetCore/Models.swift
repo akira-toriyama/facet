@@ -116,19 +116,20 @@ public struct Window: Sendable {
     /// memory `facet-tag-model-decisions`.
     public let tags: [String]
     /// Whether this window is parked OUT of the active section-lens
-    /// (tag-unification Phase 1). When a `type="lens"`
-    /// `[[desktop.N.section]]` is active, the active workspace's windows
-    /// that fall outside the lens `match` are really hidden (anchor-parked
-    /// to the sliver + detached from the layout) — the section-model twin
-    /// of a Cmd+H hide. Only ever `true` for ACTIVE-WS windows: the lens
-    /// applies only to the active workspace, so an inactive workspace's
-    /// preview is never narrowed by it. The adapter sets this from the
-    /// catalog's `lensParkedMembers`; it is authoritative (no view-side
-    /// match recompute). Views surface it like a hide — the tree dims the
-    /// row + draws a `lens` badge, and grid / rail drop the thumbnail. A
-    /// window is never both `isLensParked` and Cmd+H-hidden (the park path
-    /// skips already-hidden members), so the two treatments don't collide.
-    /// Mutually exclusive with the inactive-WS `isOnscreen == false` hide.
+    /// (tag-unification EX-1 cross-workspace model). When a `type="lens"`
+    /// `[[desktop.N.section]]` is active, every window across ALL workspaces
+    /// of the current mac desktop that falls outside the lens `match` is really
+    /// hidden (anchor-parked to the sliver + detached from the layout) — the
+    /// section-model twin of a Cmd+H hide. Any window on any workspace on the
+    /// current mac desktop may be `true`: the lens gathers a cross-workspace
+    /// union, so an inactive workspace's preview IS narrowed by the active lens
+    /// (its out-of-lens windows read `true` here). The adapter sets this from
+    /// the catalog's `lensParkedMembers`, which spans all workspaces; it is
+    /// authoritative (no view-side match recompute). Views surface it like a
+    /// hide — the tree dims the row + draws a `lens` badge, and grid / rail
+    /// drop the thumbnail. A window is never both `isLensParked` and
+    /// Cmd+H-hidden (the park path skips already-hidden members), so the two
+    /// treatments don't collide.
     public let isLensParked: Bool
 
     public init(id: WindowID,
