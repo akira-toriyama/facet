@@ -117,9 +117,11 @@ final class Controller: NSObject {
     /// its tree header in `pal.primary` + narrows grid/rail); the real hide —
     /// anchor-parking the out-of-lens windows in the current workspace — lives
     /// in the catalog, which is the authority (tag-unification Phase 1). Set
-    /// optimistically via `setActiveLens`. Per-mac-desktop + never persisted,
-    /// but it PERSISTS across a swap: on a mac-desktop swap it's read BACK from
-    /// `backend.currentSectionLens()` (line ~860), not reset to nil.
+    /// optimistically via `setActiveLens`. Per-mac-desktop + never persisted.
+    /// `apply()` re-reads it from `backend.currentSectionLens()` (the authority)
+    /// whenever the active section context shifts: a mac-desktop swap reads BACK
+    /// the destination's persisted lens, and a facet-workspace switch reads back
+    /// the now-cleared (nil) lens (EX-0.4: a switch drops the active lens).
     var currentActiveLens: String?
     /// Whether `apply()` has rendered at least once, and the mac-desktop
     /// ordinal it last rendered — together they detect a mac-desktop swap so
@@ -820,24 +822,45 @@ final class Controller: NSObject {
         // active-lens narrow all key off it — read ONCE here so they agree
         // within this main-actor turn. 0 = SkyLight unavailable → no name.
         let macDesktopOrdinal = currentMacDesktopOrdinal()
-        // Tag-unification Phase 1: the active section-lens is now a REAL hide
-        // held per-mac-desktop in the catalog (the authority), not pure view
-        // state. On a genuine mac-desktop swap, READ BACK the destination
-        // desktop's lens (it persists in the swapped-in catalog) rather than
-        // blanket-resetting to nil — a reset would desync the tree header
-        // highlight from a lens that's still parking that desktop's windows.
-        // (The grid/rail thumbnail narrow rides the catalog's `isLensParked`
-        // flag, which swaps with the catalog automatically.) `nil` outside the
-        // section model. HOISTED above the tree render so it reads the post-swap
-        // lens in this same frame. The FIRST render only records the ordinal (no
-        // read-back), so an optimistically-set lens survives until the first
-        // real swap.
-        if hasRenderedMacDesktop, macDesktopOrdinal != lastRenderedMacDesktopOrdinal {
-            currentActiveLens = config.isSectionModelActive(ordinal: macDesktopOrdinal)
-                ? backend.currentSectionLens() : nil
+        // Tag-unification Phase 1 + EX-0.4 (exclusive model): the active
+        // section-lens is a REAL hide held per-mac-desktop in the catalog (the
+        // authority); `currentActiveLens` is only the view's highlight MIRROR.
+        // Re-read it from the catalog whenever the active SECTION context may
+        // have shifted underneath the mirror:
+        //   • a facet-workspace switch — EX-0.4 clears the active lens at the
+        //     catalog, so the mirror must drop the highlight; without this the
+        //     stale mirror also makes `setActiveLens`'s idempotent guard swallow
+        //     a re-activation of the SAME lens after a switch.
+        //   • a genuine mac-desktop swap — the catalog (and its persisted lens)
+        //     swaps in; READ BACK the destination's lens rather than blanket-nil
+        //     (the grid/rail thumbnail narrow rides the catalog's `isLensParked`,
+        //     which swaps automatically).
+        // The catalog's mirror — read ordinal-independently via
+        // `backend.currentSectionLens()` — is the authority, so on a WS switch we
+        // re-read it EVEN IF SkyLight momentarily can't name the desktop (ordinal
+        // == nil); the ordinal only gates the mac-desktop-swap detector and the
+        // not-section-model highlight suppression. A PURE transient blip (no
+        // switch, no real swap) fires neither trigger, so it can't false-nil a
+        // live lens; and the baseline advances only on a real ordinal so a blip
+        // can't register as a new baseline (→ a false swap on recovery). HOISTED
+        // above the tree render so a cleared highlight lands in the same frame.
+        // The FIRST render only records the ordinal (no read-back), so an
+        // optimistically-set lens survives until the first real change.
+        let macDesktopSwapped = hasRenderedMacDesktop
+            && macDesktopOrdinal != nil
+            && macDesktopOrdinal != lastRenderedMacDesktopOrdinal
+        let wsSwitched = prevActive != nil && prevActiveWSIndex != prevActive
+        if macDesktopSwapped || wsSwitched {
+            if let ord = macDesktopOrdinal, !config.isSectionModelActive(ordinal: ord) {
+                currentActiveLens = nil          // section model off here → no highlight
+            } else {
+                currentActiveLens = backend.currentSectionLens()   // the authority
+            }
         }
         hasRenderedMacDesktop = true
-        lastRenderedMacDesktopOrdinal = macDesktopOrdinal
+        // Advance the baseline only on a real reading so a transient nil can't
+        // register as the new baseline (and fire a false swap on recovery).
+        if macDesktopOrdinal != nil { lastRenderedMacDesktopOrdinal = macDesktopOrdinal }
         // The active section-lens narrows the open grid/rail through the
         // snapshot's per-window `isLensParked` flag (the views drop the parked
         // thumbnails themselves) — no view-side recompute. `wss` stays the
