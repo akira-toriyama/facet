@@ -401,20 +401,18 @@ extension SidebarView {
             // ran before handleClick — #66 safety belt), so this just
             // pre-syncs the cursor for the next nav entry.
             kbSel = .hdr(group: g)
-            let bk = backend
-            // Header click = no explicit window pick. The backend's
-            // `autoFocus: true` path uses the same `predictedFocus`
-            // helper as fallback, so the window highlighted above
-            // is the same one that ends up focused (or Finder
-            // activated when the WS is empty).
-            cliQueue.async {
-                // EX-1: route through the activateSection throughline (clears
-                // any active lens; also clears it on a same-workspace click via
-                // the adapter's same-index edge). `i` is 0-based (Workspace.index,
-                // matched at `$0.index == i` above); ActiveSection.workspace is
-                // 1-based → `i + 1`.
-                bk.activateSection(.workspace(i + 1), autoFocus: true)
-            }
+            // Header click = no explicit window pick (the backend's
+            // `autoFocus: true` path uses the same `predictedFocus` helper as
+            // fallback, so the window highlighted above is the one that ends up
+            // focused, or Finder activated when the WS is empty). Route through
+            // the Controller (NOT the backend directly) so `currentActiveSection`
+            // is updated optimistically: a same-WS header click while a lens is
+            // active clears the lens via the adapter's same-index edge, and
+            // without the Controller-side mirror update the stale `.lens(…)`
+            // would swallow the next lens activation. `i` is 0-based
+            // (Workspace.index, matched at `$0.index == i` above);
+            // ActiveSection.workspace is 1-based → `i + 1`.
+            controller?.activateSection(.workspace(i + 1), autoFocus: true)
         case .window(let g, let i, let pid, let id, let title):
             // Off main so the click never hitches; skip the switch
             // round-trip when the window is already on the active

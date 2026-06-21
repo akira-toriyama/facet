@@ -597,6 +597,19 @@ extension Controller {
     /// `--focus N` path wants `true`; a caller that focuses its own target
     /// afterward (the tree window-row click) passes `false`.
     private func dispatchWorkspace(_ n: Int, autoFocus: Bool = true) {
+        // Reflect the activation in the view mirror UP-FRONT so it never goes
+        // stale when the backend clears a lens WITHOUT a `wsSwitched` read-back —
+        // the same-index-clear path (`--focus` / click the ALREADY-active
+        // workspace while a lens is active): the backend clears the lens, but
+        // `apply()` sees no switch, so without this the mirror keeps a dead
+        // `.lens(…)` and the next `lens NAME` is swallowed by the idempotent
+        // guard (found in EX-1 host-verify — the EX-0.5 bug class via a new
+        // path). In-range guard against the main-actor snapshot so a stale /
+        // out-of-range `n` doesn't set a bogus `.workspace(N)`; the authoritative
+        // range check + error stay inside the closure.
+        if n >= 1, n <= lastWorkspaces.count {
+            currentActiveSection = .workspace(n)
+        }
         // P6: the range check reads `workspaces()` (which runs the catalog
         // reconcile) and the switch mutates it — both must happen in ONE
         // cliQueue block so a poll reconcile can't interleave between them.
