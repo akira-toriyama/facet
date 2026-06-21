@@ -350,6 +350,17 @@ struct WorkspaceCatalog {
     /// swapped per mac desktop).
     var activeSectionLens: String?
 
+    /// The single active-section concept (EX-1): a lens when one is active,
+    /// else the active workspace. DERIVED — `activeSectionLens` / `activeIndex`
+    /// stay the load-bearing stored fields (the XOR is enforced by `setActive`
+    /// nulling the lens, EX-0.4; field consolidation is deferred to EX-3/EX-4).
+    /// Read by the adapter mirror (`syncSectionLensMirror`) to drive the
+    /// Controller's single active-section highlight. `activeIndex` is already
+    /// 1-based, matching `ActiveSection.workspace`, so no conversion here.
+    var activeSection: ActiveSection {
+        activeSectionLens.map(ActiveSection.lens) ?? .workspace(activeIndex)
+    }
+
     /// Runtime layout override for the active section-lens union (EX-0.3).
     /// `nil` follows the lens section's configured `layout` (→ `LensLayout.resolve`).
     /// Only stateless engines (master-*/grid/spiral) are ever stored here —
