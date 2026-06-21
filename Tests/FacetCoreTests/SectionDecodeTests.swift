@@ -133,6 +133,22 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(s[1]?.map(\.label), ["Good"])
     }
 
+    /// A lens section may carry an optional `layout` seed (EX-1a). The value
+    /// is stored verbatim here; `LensLayout.resolve` clamps it to a stateless
+    /// engine at activation time (the runtime ignores it until EX-1b).
+    func testLensSectionDecodesLayout() {
+        let row: [String: TOMLValue] = [
+            "type": .string("lens"),
+            "label": .string("Web"),
+            "match": .string("app~=Chrome"),
+            "layout": .string("spiral"),
+        ]
+        let (section, note) = DesktopSection.parse(fromTOMLRow: row)
+        XCTAssertNil(note)
+        XCTAssertEqual(section?.type, .lens)
+        XCTAssertEqual(section?.layout, "spiral")
+    }
+
     /// An unassigned section needs only a label.
     func testUnassignedSectionNeedsLabel() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """

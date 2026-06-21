@@ -136,7 +136,9 @@ public struct DesktopSection: Sendable, Equatable {
     public let match: String
     /// Facets to set on a window routed into this section. `[]` = drop-inert.
     public let apply: [ApplyOp]
-    /// Per-section layout seed (`workspace` only; `nil` otherwise).
+    /// Per-section layout seed. Set for `workspace` and `lens`; `nil` for
+    /// `unassigned`. Consumed differently: workspace drives stateful tiling;
+    /// lens drives union stateless tiling (see `LensLayout.resolve`).
     public let layout: String?
 
     public init(type: SectionType, label: String = "", match: String = "",
@@ -183,8 +185,11 @@ public struct DesktopSection: Sendable, Equatable {
             guard !match.isEmpty else {
                 return (nil, "lens section \"\(label)\" needs a non-empty `match`")
             }
+            var lensLayout: String? = nil
+            if case .string(let l)? = t["layout"], !l.isEmpty { lensLayout = l }
             return (DesktopSection(type: .lens, label: label, match: match,
-                                   apply: ApplyOp.list(from: t["apply"])), nil)
+                                   apply: ApplyOp.list(from: t["apply"]),
+                                   layout: lensLayout), nil)
 
         case .workspace:
             var layout: String? = nil
