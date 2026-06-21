@@ -341,7 +341,8 @@ struct WorkspaceCatalog {
     /// `[[desktop.N.section]]`), or nil for no active lens. The AUTHORITY for
     /// the lens — held here (not in the view) so the continuous re-park, which
     /// runs on `cliQueue` in `refreshCatalog`, can read it; the view's
-    /// `currentActiveLens` is a highlight read-back of this. The match
+    /// `currentActiveSection` is a highlight read-back of this (via the
+    /// `activeSection` derivation + the adapter mirror). The match
     /// EVALUATION lives adapter-side (the catalog has no live
     /// `appName`/`title`), so the catalog stores only the opaque label +
     /// `lensParkedMembers`; the adapter resolves the label → `match` against
