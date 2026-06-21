@@ -582,10 +582,11 @@ action = "ignore"
 # desktop has at least one `type = "workspace"` section, the section model
 # becomes AUTHORITATIVE for that desktop: the tree renders the sections in
 # declaration order, activating a lens section (`facet lens NAME`) anchor-parks
-# the windows OUTSIDE it within the active workspace (a real hide — `--clear`
-# brings them back), and tree drag-and-drop applies / un-applies a lens's
-# `apply` ops. The section model is facet's canonical configuration; the
-# parallel `[grouping] by="tag"` mode (above) is folded into it in a later phase.
+# every non-matching window in EVERY workspace (cross-workspace exclusive — a
+# real hide) and union-tiles the matches with that lens's `layout`; switching
+# to any workspace clears the lens automatically; `--clear` lifts it and
+# restores all parked windows. Tree drag-and-drop applies / un-applies a lens's
+# `apply` ops. The section model is facet's canonical configuration.
 #
 # OPT-IN: as soon as ANY [[desktop.N.section]] exists, facet manages ONLY
 # the desktops that have a section block. A desktop without one is left
@@ -617,14 +618,23 @@ action = "ignore"
 #   type = "lens"  — a saved visibility filter (an SQL VIEW), orthogonal
 #       to workspaces; a window shows in EVERY lens whose `match` it
 #       satisfies (multi-match). Activating one with `facet lens NAME`
-#       anchor-parks every window in the active workspace that the lens does
-#       NOT match (a real hide, like a hidden workspace) and re-tiles the rest;
-#       `facet lens --clear` lifts the lens. Keys:
+#       anchor-parks every non-matching window across ALL workspaces
+#       (cross-workspace exclusive hide) and union-tiles the matching set
+#       using this lens's `layout`; switching to any workspace clears the
+#       lens automatically; `facet lens --clear` lifts it and restores all
+#       parked windows. Keys:
 #         label  — the lens's header in the view (required).
 #         match  — a facet filter WHERE-clause (required; the same mini-
 #                  language as `facet query --windows --filter`), e.g.
 #                    'tag~=web or app=Safari'
 #                    '(tag~=work or tag~=urgent) and not floating'
+#         layout — (optional) the stateless tiling engine for the
+#                  cross-workspace union while this lens is active:
+#                  spiral (default) / master-left / master-right /
+#                  master-top / master-bottom / master-center / grid /
+#                  float. bsp and stack need per-workspace state a union
+#                  can't keep → silently clamped to the global [layout]
+#                  default. Omit → uses the [layout] default.
 #         apply  — (optional) facets SET on a window dropped into the lens,
 #                  so the drop "sticks". Inline table; all keys optional:
 #                    workspace = "Dev"   move to that workspace (auto-replace)
@@ -667,6 +677,7 @@ layout = "stack"
 type = "lens"
 label = "Web"
 match = 'app=Safari or app~=Chrome or app~=Firefox'
+layout = "spiral"
 apply = { tags = ["web"] }
 
 [[desktop.1.section]]
