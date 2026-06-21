@@ -28,6 +28,17 @@ public final class GridView: NSView {
     /// design).
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
+    /// EX-2: the projected section list (workspace + lens). Empty ⇒ degrade
+    /// to the `workspaces` iteration. Fed by the Controller (apply / show).
+    public var sections: [ProjectedSection] = []
+    /// EX-2: the active lens label (nil ⇒ a workspace is the active section).
+    /// Gates the single-highlight when building cells.
+    public var activeLens: String?
+    /// EX-2: window id → home workspace index (0-based), rebuilt each
+    /// `layoutCells` from the unfiltered `workspaces` snapshot. A window thumb
+    /// may sit in a LENS cell (`wsIndex == -1`) but still has a real home WS;
+    /// picks resolve through this, never through the cell's `wsIndex`.
+    private var windowHomeWS: [WindowID: Int] = [:]
     /// Display's frame at show time. All window-rect math scales
     /// from this so the per-cell mini-screen matches what the
     /// backend reported, even if a display change happens mid-show.

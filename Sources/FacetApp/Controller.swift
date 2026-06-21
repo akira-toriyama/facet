@@ -55,6 +55,13 @@ final class Controller: NSObject {
     /// (Setter is internal — the grid / rail cold-start fetch in
     /// Controller+Grid.swift / Controller+Rail.swift re-seeds it.)
     var lastWorkspaces: [Workspace] = []
+    /// EX-2: last projected sections + active lens, refreshed every
+    /// ``apply`` (hoisted above the grid/rail feed) and fed to the overview
+    /// surfaces — the same ordered `[ProjectedSection]` the tree renders, so
+    /// all three views agree. Empty/nil ⇒ section model off here ⇒ the
+    /// overview degrades to `lastWorkspaces`. Snapshot-on-show seeds from these.
+    var lastSections: [ProjectedSection] = []
+    var lastActiveLens: String?
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -875,6 +882,22 @@ final class Controller: NSObject {
         // Advance the baseline only on a real reading so a transient nil can't
         // register as the new baseline (and fire a false swap on recovery).
         if macDesktopOrdinal != nil { lastRenderedMacDesktopOrdinal = macDesktopOrdinal }
+        // EX-2: project ONCE here (hoisted above the grid/rail feed AND the
+        // tree render) so all three views share one ordered section list. Must
+        // run AFTER the active-section re-read above — `activeLens` reads the
+        // freshly-resolved `currentActiveSection.lensLabel`. Section model off
+        // ⇒ empty sections ⇒ the overview degrades to `wss` (byte-identical).
+        if config.isSectionModelActive(ordinal: macDesktopOrdinal),
+           let ordinal = macDesktopOrdinal {
+            let secs = config.effectiveMacDesktopSectionConfigs[ordinal] ?? []
+            let projected = FilterProjection.project(workspaces: wss, sections: secs)
+            logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
+                                   against: &loggedSectionDiagnostics)
+            lastSections = projected.sections
+        } else {
+            lastSections = []
+        }
+        lastActiveLens = currentActiveSection.lensLabel
         // The active section-lens narrows the open grid/rail through the
         // snapshot's per-window `isLensParked` flag (the views drop the parked
         // thumbnails themselves) — no view-side recompute. `wss` stays the
@@ -882,6 +905,8 @@ final class Controller: NSObject {
         if let g = gridView {
             g.workspaces = wss
             g.activeIndex = wss.first(where: { $0.isActive })?.index
+            g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
+            g.activeLens = lastActiveLens      // EX-2: active lens for single-highlight
             g.layoutCells()       // refresh open grid on backend events
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
@@ -892,6 +917,8 @@ final class Controller: NSObject {
             let newActive = wss.first(where: { $0.isActive })?.index
             rv.workspaces = wss
             rv.activeIndex = newActive
+            rv.sections = lastSections         // EX-2: symmetric feed (rail consumes in EX-2b)
+            rv.activeLens = lastActiveLens
             // 2-b carousel: an EXTERNAL switch (CLI / another view) while
             // the rail is open re-centres the strip on the new active —
             // but only when the user isn't mid-browse (selected == the
@@ -976,25 +1003,19 @@ final class Controller: NSObject {
         sidebarView.frame.size.width = panelHost.userWidth
         sidebarView.forceRedraw()
         // `macDesktopOrdinal` + the PR6 active-lens swap-reset were computed
-        // / applied above (hoisted so the PR7 overview narrow reads the
-        // post-reset lens). Reuse the value here for the tree render.
-        // Section/lens model (PR5): when this mac desktop is section-managed
-        // (≥1 `type="workspace"` section), the tree renders the config's
-        // ordered sections via `FilterProjection` — a window shows up in
-        // EVERY section it matches. Otherwise the by-workspace / tag path.
-        // The projection's loud-but-non-fatal diagnostics (malformed lens
-        // `match`, surplus workspace section) are logged once per change.
+        // / applied above. Section/lens model (PR5): when this mac desktop is
+        // section-managed (≥1 `type="workspace"` section), the tree renders the
+        // config's ordered sections — a window shows up in EVERY section it
+        // matches. Otherwise the by-workspace / tag path.
+        // EX-2: the projection is now HOISTED above the grid/rail feed (see
+        // `lastSections`/`lastActiveLens`), so the tree consumes the SAME
+        // ordered list all three views share — no second `FilterProjection.project`
+        // call, no second diagnostics log (logged once under "overview: ").
         let contentH: CGFloat
-        if config.isSectionModelActive(ordinal: macDesktopOrdinal),
-           let ordinal = macDesktopOrdinal {
-            let sections = config.effectiveMacDesktopSectionConfigs[ordinal] ?? []
-            let result = FilterProjection.project(workspaces: wss,
-                                                  sections: sections)
-            logDiagnosticsOnChange(result.diagnostics, prefix: "tree: ",
-                                   against: &loggedSectionDiagnostics)
-            contentH = sidebarView.update(sections: result.sections,
+        if config.isSectionModelActive(ordinal: macDesktopOrdinal) {
+            contentH = sidebarView.update(sections: lastSections,
                                           workspaces: wss,
-                                          activeLens: currentActiveSection.lensLabel,
+                                          activeLens: lastActiveLens,
                                           titles: titles,
                                           macDesktop: macDesktopOrdinal)
         } else {
