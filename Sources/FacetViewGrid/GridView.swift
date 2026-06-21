@@ -98,12 +98,14 @@ public final class GridView: NSView {
     // (Theme A). Promoted to a `.workspace` swap drag past threshold,
     // else resolved as a WS switch on mouseUp.
     private var pendingHeaderDown: (point: NSPoint, ws: Int)?
-    // Workspace whose header the pointer is hovering — brightens the
-    // header band + grip (mirrors the tree header hover affordance).
-    var hoverHeaderWS: Int?     // internal: read by drawHeader (GridHeader.swift)
-    // Workspace whose cell (anywhere) the pointer is over — outlines it
+    // The section id of the cell whose header the pointer is hovering —
+    // brightens the header band + grip (mirrors the tree header hover). EX-2:
+    // keyed on sectionID, NOT wsIndex (lens cells all share wsIndex=-1, so a
+    // wsIndex key would light EVERY lens header at once).
+    var hoverHeaderID: String?  // internal: read by drawHeader (GridHeader.swift)
+    // The section id of the cell (anywhere) the pointer is over — outlines it
     // with a faint stroke, matching the rail's cell-hover (M9-5 #5).
-    private var hoverWS: Int?
+    private var hoverWSID: String?
     var drag: OverviewDrag?     // internal: read by drawHeader (GridHeader.swift)
     private var dragGhost: NSView?
 
@@ -184,14 +186,18 @@ public final class GridView: NSView {
 
     // MARK: - Layout
 
-    /// Columns actually used for layout. Capped at the workspace
-    /// count so a mac desktop with fewer workspaces than the configured
-    /// `cols` fills the width with larger cells (the row is centered
-    /// by the existing `originX` math) instead of leaving a big empty
-    /// gap on the right. Only shrinks: when `count >= cols` the
-    /// configured value stands and rows wrap as before.
+    /// Columns actually used for layout. Capped at the CELL count (one cell
+    /// per section under the section model — workspace + lens; else one per
+    /// workspace) so a desktop with fewer cells than the configured `cols`
+    /// fills the width with larger cells (the row is centered by the existing
+    /// `originX` math) instead of leaving a big empty gap on the right. Only
+    /// shrinks: when `count >= cols` the configured value stands and rows wrap.
+    /// EX-2: keys off the cell count, NOT `workspaces.count` — lens sections
+    /// push the cell count above the workspace count, and capping on workspaces
+    /// would defeat `[grid] cols`.
     private var effectiveCols: Int {
-        max(1, min(config.cols, workspaces.count))
+        let cellCount = sections.isEmpty ? workspaces.count : sections.count
+        return max(1, min(config.cols, cellCount))
     }
 
     // MARK: - Border (shared BorderFX — a screen-edge neon frame)
@@ -607,7 +613,7 @@ public final class GridView: NSView {
                 if cell.isActive {
                     activeColor.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 1
-                } else if drag == nil, hoverWS == cell.wsIndex {
+                } else if drag == nil, hoverWSID == cell.sectionID {
                     pal.foreground.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 1.5
                 } else {
@@ -712,21 +718,25 @@ public final class GridView: NSView {
 
     public override func mouseMoved(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
-        let ws = cells.first(where: { $0.headerRect.contains(p) })?.wsIndex
-        let cellWS = cells.first(where: {
-            $0.rect.contains(p) || $0.headerRect.contains(p) })?.wsIndex
-        if ws != hoverHeaderWS || cellWS != hoverWS {
-            hoverHeaderWS = ws
-            hoverWS = cellWS
+        let headerCell = cells.first(where: { $0.headerRect.contains(p) })
+        let anyCell = cells.first(where: {
+            $0.rect.contains(p) || $0.headerRect.contains(p) })
+        if headerCell?.sectionID != hoverHeaderID
+            || anyCell?.sectionID != hoverWSID {
+            hoverHeaderID = headerCell?.sectionID
+            hoverWSID = anyCell?.sectionID
             needsDisplay = true
         }
-        (ws != nil ? NSCursor.openHand : NSCursor.arrow).set()
+        // The open-hand (drag) cursor only over a SWAPPABLE header — a lens
+        // cell header is a click target, not a drag handle.
+        (headerCell.map { !$0.isLens } == true
+            ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     public override func mouseExited(with e: NSEvent) {
-        if hoverHeaderWS != nil || hoverWS != nil {
-            hoverHeaderWS = nil
-            hoverWS = nil
+        if hoverHeaderID != nil || hoverWSID != nil {
+            hoverHeaderID = nil
+            hoverWSID = nil
             needsDisplay = true
         }
         NSCursor.arrow.set()
@@ -741,6 +751,9 @@ public final class GridView: NSView {
         let p = convert(e.locationInWindow, from: nil)
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            // A lens cell has no per-WS layout picker (it spans workspaces) —
+            // mirror kbContextMenu's guard.
+            guard !cell.isLens else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
                                        workspaces: workspaces, palette: pal)
@@ -748,8 +761,11 @@ public final class GridView: NSView {
         }
         if let cell = cells.first(where: { $0.rect.contains(p) }),
            let wh = cell.windows.first(where: { $0.rect.contains(p) }) {
+            // Window ops target the window's HOME WS (resolved) — a thumb may
+            // sit in a lens cell whose wsIndex is −1.
             ViewContextMenu.showWindow(
-                at: scr, backend: backend, workspaceIndex: cell.wsIndex,
+                at: scr, backend: backend,
+                workspaceIndex: windowHomeWS[wh.id] ?? cell.wsIndex,
                 workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: "",
                 palette: pal
             ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
