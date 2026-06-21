@@ -350,15 +350,17 @@ struct WorkspaceCatalog {
     /// swapped per mac desktop).
     var activeSectionLens: String?
 
-    /// Active-workspace windows currently parked because they fall OUTSIDE the
-    /// active section-lens. The section-model twin of `hiddenMembers` (Cmd+H):
+    /// Windows currently parked because they fall OUTSIDE the active
+    /// section-lens. The section-model twin of `hiddenMembers` (Cmd+H):
     /// excluded from `nonFloatingMembers` so the visible (in-lens) windows
     /// reclaim the freed tile slot, AND detached from the layout containers
     /// (`detachFromLayouts`) so bsp / stack drop them too. UNLIKE a hide, they
-    /// ARE anchor-parked (facet moved them to the sliver). Only ever holds
-    /// ACTIVE-WS windows — a workspace switch lifts the lens from the old WS
-    /// (re-attach + clear) and re-applies to the new (`setActive`), so an
-    /// inactive workspace's tree/grid preview is never narrowed by the lens.
+    /// ARE anchor-parked (facet moved them to the sliver). In the EX-1
+    /// cross-workspace exclusive model this can hold park-eligible windows from
+    /// ANY workspace on the current mac desktop — an inactive workspace's
+    /// tree/grid preview IS narrowed by the active lens (its out-of-lens windows
+    /// are flagged `isLensParked` in the snapshot). On restore each window
+    /// re-attaches to its own `slot.workspace`, never the active one.
     /// A subset of `anchorParked`.
     var lensParkedMembers: Set<WindowID> = []
 
@@ -541,12 +543,13 @@ struct WorkspaceCatalog {
     /// is D1's "one net plan, no flicker": an out-of-lens window is never
     /// restored-then-re-parked.
     ///
-    /// Lifting the lens off the OLD workspace first (re-attach its lens-parked
-    /// members to its layout, clear the set) keeps `lensParkedMembers` an
-    /// active-WS-only invariant; the lens re-composes for the old WS on a
-    /// later switch back. The re-attach is pure bookkeeping (the old WS is
-    /// going off-screen — no AX), and those windows stay anchor-parked (the
-    /// `toPark` sweep's `shouldParkAnchor` guard no-ops on them).
+    /// Lifting the lens off the OLD workspace first re-attaches every
+    /// lens-parked window to its home layout (`slot.workspace` — under the EX-1
+    /// cross-workspace model the set may hold windows from any workspace) and
+    /// clears the set; the destination's own out-of-lens members are then
+    /// re-parked below. The re-attach is pure bookkeeping (the old WS is going
+    /// off-screen — no AX), and those windows stay anchor-parked (the `toPark`
+    /// sweep's `shouldParkAnchor` guard no-ops on them).
     @discardableResult
     mutating func setActive(_ n1Based: Int, lensVisibleIDs: Set<WindowID>?,
                             in rect: CGRect) -> SwitchPlan? {

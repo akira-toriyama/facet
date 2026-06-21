@@ -1,6 +1,7 @@
-// Section-lens park / restore (tag-unification Phase 1) — the section-model
-// analog of the tag-mode lens (`WorkspaceCatalog+Tags.swift`). A `type="lens"`
-// `[[desktop.N.section]]` becomes a REAL hide within the active workspace: the
+// Section-lens park / restore (tag-unification Phase 1 → EX-1 exclusive model)
+// — the section-model analog of the tag-mode lens
+// (`WorkspaceCatalog+Tags.swift`). A `type="lens"` `[[desktop.N.section]]`
+// becomes a REAL hide across ALL workspaces on the current mac desktop: the
 // windows its `match` excludes are anchor-parked + detached from the layout so
 // the in-lens windows reclaim the freed slots. Pure state machine (AX-free,
 // unit-tested in `FacetAdapterNativeTests`).
@@ -19,9 +20,9 @@
 // from `nonFloatingMembers` (so stateless engines + the bsp re-seed skip it)
 // AND detached from the layout containers (so bsp / stack drop it), exactly
 // like a Cmd+H hide. Unlike a hide it is anchor-parked (facet moved it to the
-// sliver). It only ever holds ACTIVE-WS windows — `setActive` lifts the lens
-// off the old workspace and re-applies to the new — so an inactive workspace's
-// preview is never narrowed by the lens.
+// sliver). It holds windows from ANY workspace (cross-workspace exclusive model
+// — EX-1): `applySectionLens` scans all workspaces; `attachToLayout` on restore
+// uses `slot.workspace` so each window re-attaches to its OWN home workspace.
 
 import CoreGraphics
 import FacetCore
@@ -32,9 +33,9 @@ extension WorkspaceCatalog {
     /// analog of the tag-mode `LensPlan` / the `SwitchPlan` (no lens-mask
     /// fields: a section lens is a string `match`, evaluated adapter-side).
     struct SectionLensPlan: Equatable, Sendable {
-        /// Active-WS members that left the lens (now parked off-screen).
+        /// Members (from any workspace) that left the lens (now parked off-screen).
         let toPark: [WindowRef]
-        /// Active-WS members that re-entered the lens (restored into view).
+        /// Members (from any workspace) that re-entered the lens (restored into view).
         let toRestore: [WindowRef]
 
         var isEmpty: Bool { toPark.isEmpty && toRestore.isEmpty }
@@ -49,15 +50,20 @@ extension WorkspaceCatalog {
             ? workspaceNames[n1Based - 1] : ""
     }
 
-    /// Apply the active section-lens to the ACTIVE workspace given the
-    /// adapter's match verdict. `visibleIDs` is the set of active-WS members
-    /// whose live `Window` passes the lens `match`; everything else parks.
-    /// Mirrors the tag-mode `setLens` park/restore filter but is string-match
-    /// driven + active-WS scoped, and idempotent: re-running with an unchanged
+    /// Apply the active section-lens across ALL workspaces on the current mac
+    /// desktop given the adapter's match verdict. `visibleIDs` is the set of
+    /// members (from any workspace) whose live `Window` passes the lens
+    /// `match`; everything else parks. Mirrors the tag-mode `setLens`
+    /// park/restore filter but is string-match driven + cross-workspace scoped
+    /// (EX-1 exclusive model), and idempotent: re-running with an unchanged
     /// verdict returns an empty plan (so the continuous re-park can call it
     /// every reconcile cheaply). Sticky / stashed windows are park-exempt
     /// (`isParkEligible`); a user-hidden (Cmd+H) member is left alone (it
     /// already gave up its slot — re-parking it would fight the hide-reclaim).
+    ///
+    /// On restore, each window re-attaches to its OWN home workspace's layout
+    /// (`slot.workspace`), not to `activeIndex` — a window in WS2 that
+    /// re-enters the lens must rejoin WS2's layout containers, not WS1's.
     ///
     /// Returns the AX park/restore plan; the catalog half (record + detach /
     /// un-record + re-attach) is applied here so `nonFloatingMembers` and the
@@ -67,9 +73,7 @@ extension WorkspaceCatalog {
         var toPark: [WindowRef] = []
         var toRestore: [WindowRef] = []
         for (id, slot) in windowMap
-        where slot.workspace == activeIndex
-            && isParkEligible(id)
-            && !hiddenMembers.contains(id) {
+        where isParkEligible(id) && !hiddenMembers.contains(id) {
             let shouldShow = visibleIDs.contains(id)
             let isLensParked = lensParkedMembers.contains(id)
             if !shouldShow && !isLensParked {
@@ -78,7 +82,7 @@ extension WorkspaceCatalog {
                 toPark.append(WindowRef(id: id, pid: slot.pid))
             } else if shouldShow && isLensParked {
                 lensParkedMembers.remove(id)
-                attachToLayout(id, workspace: activeIndex,
+                attachToLayout(id, workspace: slot.workspace,
                                focused: nil, in: rect)
                 toRestore.append(WindowRef(id: id, pid: slot.pid))
             }
@@ -86,10 +90,9 @@ extension WorkspaceCatalog {
         return SectionLensPlan(toPark: toPark, toRestore: toRestore)
     }
 
-    /// Clear the active section-lens: every lens-parked window re-enters its
-    /// workspace's layout and is restored into view, and the lens drops.
-    /// `lensParkedMembers` only ever holds ACTIVE-WS windows, so all of them
-    /// want an AX restore. Returns the restore plan (`toPark` is always
+    /// Clear the active section-lens: every lens-parked window (from any
+    /// workspace) re-enters its own workspace's layout and is restored into
+    /// view, and the lens drops. Returns the restore plan (`toPark` is always
     /// empty). Also clears `activeSectionLens` so the authority + the parked
     /// set move together.
     mutating func clearSectionLens(in rect: CGRect) -> SectionLensPlan {

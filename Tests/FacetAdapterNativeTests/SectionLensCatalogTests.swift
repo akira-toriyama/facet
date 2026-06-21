@@ -97,16 +97,63 @@ final class SectionLensCatalogTests: XCTestCase {
         XCTAssertFalse(c.lensParkedMembers.contains(wid(10)))
     }
 
-    // MARK: - Active-WS scoping
+    // MARK: - Cross-workspace scoping (EX-1 exclusive model)
 
-    func testOnlyActiveWorkspaceMembersAreConsidered() {
-        var c = threeWindowCatalog(mode: "master-left")
-        _ = c.moveWindow(wid(30), to: 2, in: rect)   // 30 now lives in WS2
-        c.activeSectionLens = "None"
-        let park = c.applySectionLens(visibleIDs: [], in: rect)
-        // Only the active WS (WS1 = 10,20) parks; WS2's 30 is untouched.
-        XCTAssertEqual(Set(park.toPark.map(\.id)), [wid(10), wid(20)])
-        XCTAssertFalse(c.lensParkedMembers.contains(wid(30)))
+    /// EX-1: the lens now parks windows in ALL workspaces, not just the active
+    /// one. Window B in WS2 (inactive) must be parked when it does not match
+    /// the lens, even though the active workspace is WS1.
+    func testApplySectionLensParksAcrossWorkspaces() {
+        var c = seededCatalog(2)
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "master-left", in: rect)
+        _ = c.moveWindow(wid(20), to: 2, in: rect)   // A=wid(10) WS1 active, B=wid(20) WS2
+        c.activeSectionLens = "Web"
+        let plan = c.applySectionLens(visibleIDs: [wid(10)], in: rect)
+        // B (wid 20) lives in inactive WS2 but must still park.
+        XCTAssertTrue(plan.toPark.map(\.id).contains(wid(20)),
+                      "inactive-WS window must park under EX-1 cross-workspace lens")
+        XCTAssertTrue(c.lensParkedMembers.contains(wid(20)),
+                      "lensParkedMembers must include the inactive-WS window")
+    }
+
+    /// EX-1 restore: a lens-parked window from WS2 must re-attach to WS2's
+    /// layout (not the active WS1) when it re-enters the lens.
+    ///
+    /// Asserts on the per-workspace bsp TREE via `tiledFrames`, because that is
+    /// the container `attachToLayout(workspace:)` actually writes — keyed on the
+    /// passed workspace. `nonFloatingMembers` would NOT catch the bug: it is a
+    /// pure `windowMap` filter (`workspace == n && !lensParkedMembers`) that
+    /// never reads the layout containers, so it reads identically whether the
+    /// restore re-attaches to WS2 or WS1. With bsp, a window re-attached to the
+    /// WRONG workspace lands in that workspace's tree and is ABSENT from its
+    /// home tree — so the two `tiledFrames` assertions go red if the restore
+    /// branch uses `activeIndex` (WS1) instead of `slot.workspace` (WS2).
+    func testApplySectionLensRestoresWindowToHomeWorkspace() {
+        var c = seededCatalog(2)
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "bsp", in: rect)
+        _ = c.setMode(workspace: 2, to: "bsp", in: rect)
+        _ = c.moveWindow(wid(20), to: 2, in: rect)   // wid(10)=WS1, wid(20)=WS2
+        c.activeSectionLens = "Web"
+        // Park wid(20) — it doesn't match the lens initially → detached from
+        // WS2's tree.
+        _ = c.applySectionLens(visibleIDs: [wid(10)], in: rect)
+        XCTAssertTrue(c.lensParkedMembers.contains(wid(20)), "precondition: wid(20) is parked")
+        XCTAssertNil(c.tiledFrames(for: 2, in: rect)[wid(20)],
+                     "precondition: wid(20) detached from WS2's tree")
+        // Now widen the lens to include wid(20) — it should restore to WS2.
+        let restore = c.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect)
+        XCTAssertTrue(restore.toRestore.map(\.id).contains(wid(20)),
+                      "wid(20) must be in the restore plan")
+        XCTAssertFalse(c.lensParkedMembers.contains(wid(20)),
+                       "wid(20) must leave lensParkedMembers after restore")
+        // The critical, red-on-regression assertions: wid(20) re-attaches to
+        // WS2's tree (its home), and is absent from WS1's. The `activeIndex`
+        // bug would invert both.
+        XCTAssertNotNil(c.tiledFrames(for: 2, in: rect)[wid(20)],
+                        "wid(20) must re-attach to its home WS2 tree, not WS1")
+        XCTAssertNil(c.tiledFrames(for: 1, in: rect)[wid(20)],
+                     "wid(20) must NOT appear in WS1's tree after restore")
     }
 
     // MARK: - clearSectionLens
@@ -194,17 +241,18 @@ final class SectionLensCatalogTests: XCTestCase {
                       "a cleared lens leaves no window flagged lens-parked")
     }
 
-    func testSnapshotNeverFlagsInactiveWorkspaceWindows() {
-        // The lens parks only the ACTIVE WS, so an inactive WS's preview is
-        // never narrowed — its windows must read `isLensParked == false`.
+    func testSnapshotFlagsInactiveWorkspaceWindowsWhenParkedByLens() {
+        // EX-1: the cross-workspace lens parks non-matching windows in ALL
+        // workspaces, so an inactive WS's out-of-lens window IS flagged
+        // `isLensParked == true` in the snapshot.
         var c = threeWindowCatalog(mode: "master-left")
         _ = c.moveWindow(wid(30), to: 2, in: rect)   // 30 lives on inactive WS2
         c.activeSectionLens = "None"
-        _ = c.applySectionLens(visibleIDs: [], in: rect)   // park WS1's 10,20
+        _ = c.applySectionLens(visibleIDs: [], in: rect)   // park ALL: 10,20,30
         let snap = c.snapshot(live: [window(10), window(20), window(30)],
                               focused: nil, activeRect: rect)
         XCTAssertEqual(snap[1].windows.first { $0.id == wid(30) }?.isLensParked,
-                       false, "inactive-WS window is never lens-parked")
+                       true, "inactive-WS out-of-lens window is flagged lens-parked (EX-1)")
     }
 
     // MARK: - forgetWindow cleanup
