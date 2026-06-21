@@ -512,6 +512,19 @@ extension NativeAdapter {
     /// funnels through here.
     func applyLayout(workspace n1Based: Int, rect: CGRect,
                              skip: Set<WindowID> = [], cached: Bool = false) {
+        // EX-0.2 section-lens union branch: when a `type="lens"` section is
+        // active, tile the CROSS-WORKSPACE union of in-lens windows with the
+        // lens's stateless engine instead of the active workspace's per-WS
+        // layout. `n1Based` is ignored — the union spans all workspaces.
+        // Sits BEFORE the tag-mode branch so both mode-paths are intercepted.
+        if let label = catalog.activeSectionLens {
+            let resolved = LensLayout.resolve(lensLayout(forLabel: label),
+                                              globalDefault: config.effectiveDefaultLayout)
+            applyFrames(catalog.sectionLensUnionFrames(layout: resolved, in: rect),
+                        label: "section-lens-union", rect: rect, skip: skip,
+                        cached: cached)
+            return
+        }
         // Tag mode (M11-3): there's no per-workspace tree — tile the
         // visible lens union with the one global engine. `n1Based` is
         // ignored (every applyLayout call routes here in tag mode).

@@ -367,6 +367,21 @@ extension NativeAdapter {
 
     // MARK: - Section-lens evaluation (tag-unification Phase 1)
 
+    /// Per-section layout for the lens whose label matches `label`, or nil
+    /// when the label has no matching `type="lens"` section on the active mac
+    /// desktop or its `layout` field is absent / empty. Mirrors
+    /// `sectionLensFilter()`'s lookup path: read the live config every call so
+    /// a hot-reload is picked up immediately. `applyLayout` passes the result
+    /// to `LensLayout.resolve` so a nil / stateful name falls back to the
+    /// global default without tiling breaking. Called only when a section lens
+    /// is active (`catalog.activeSectionLens != nil`).
+    func lensLayout(forLabel label: String) -> String? {
+        guard let ord = activeMacDesktopOrdinal else { return nil }
+        return config.effectiveMacDesktopSectionConfigs[ord]?
+            .first(where: { $0.type == .lens && $0.label == label })?
+            .layout
+    }
+
     /// The active section-lens's compiled filter, or nil when no lens is
     /// active / the label no longer maps to a lens section / its `match` won't
     /// parse. The catalog holds the label (authority); this resolves it to the
