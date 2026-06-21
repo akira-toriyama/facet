@@ -416,42 +416,14 @@ extension NativeAdapter {
         return filter
     }
 
-    /// The active-lens-visible id set for workspace `n1Based`: its managed
-    /// members whose live `Window` passes the active section-lens `match`
-    /// (evaluated through the shared `LensMembership` predicate, with the
-    /// workspace name overlaid so a `match='workspace=Dev'` resolves). `nil`
-    /// when no lens is active — callers then restore everything. The catalog
-    /// can't do this itself (it has no live `appName`/`title`), so the adapter
-    /// owns the evaluation and hands the verdict back to the catalog.
-    func sectionLensVisibleIDs(workspace n1Based: Int,
-                               live: [Window]) -> Set<WindowID>? {
-        guard let filter = sectionLensFilter() else { return nil }
-        let wsName = catalog.workspaceName(n1Based)
-        return Set(live.filter { w in
-            catalog.windowMap[w.id]?.workspace == n1Based
-                && LensMembership.matches(w, inWorkspaceNamed: wsName,
-                                          filter: filter)
-        }.map(\.id))
-    }
-
-    /// Convenience for callers without a live window list at hand (the
-    /// workspace-switch path). Enumerates only when a lens is actually active,
-    /// so a no-lens switch pays nothing extra.
-    func sectionLensVisibleIDs(workspace n1Based: Int) -> Set<WindowID>? {
-        guard sectionLensFilter() != nil else { return nil }
-        return sectionLensVisibleIDs(workspace: n1Based,
-                                     live: enumerateCGWindows())
-    }
-
     /// Cross-workspace evaluator (EX-0.1 / EX-1 exclusive lens). Returns the
     /// set of ALL managed windows — across every workspace on the current mac
     /// desktop — whose live `Window` passes the active section-lens `match`.
-    /// Unlike `sectionLensVisibleIDs(workspace:live:)`, there is NO
-    /// `workspace == n1Based` clause: each window is evaluated against its OWN
-    /// home-workspace name so a lens `match='workspace=Dev'` still resolves
-    /// correctly even for windows in inactive workspaces.
+    /// Each window is evaluated against its OWN home-workspace name so a lens
+    /// `match='workspace=Dev'` resolves correctly even for windows in inactive
+    /// workspaces.
     ///
-    /// `nil` when no lens is active (same semantics as the per-WS variant).
+    /// `nil` when no lens is active.
     func sectionLensVisibleIDsAll(live: [Window]) -> Set<WindowID>? {
         guard let filter = sectionLensFilter() else { return nil }
         let byID = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })

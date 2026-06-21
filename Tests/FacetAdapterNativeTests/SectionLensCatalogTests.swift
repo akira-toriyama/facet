@@ -172,45 +172,107 @@ final class SectionLensCatalogTests: XCTestCase {
         XCTAssertEqual(c.nonFloatingMembers(of: 1), [wid(10), wid(20), wid(30)])
     }
 
-    // MARK: - Lens-aware setActive (D1 net plan)
+    // MARK: - Exclusive setActive (EX-0.4: workspace switch always clears the lens)
 
-    func testSwitchRestoresOnlyInLensMembers() {
+    /// EX-0.4: switching workspace clears the active section-lens — the
+    /// `activeSectionLens` and `activeSectionLensLayout` fields are nil after
+    /// the switch, and `lensParkedMembers` is empty.
+    ///
+    /// Red-on-regression: if the lens-clear were removed (e.g. by reverting
+    /// to the old D1 re-compose path) `activeSectionLens` would remain "Web"
+    /// after the switch and the first assertion would fail immediately.
+    func testSwitchClearsActiveLens() {
+        var c = seededCatalog(2)
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setMode(workspace: 1, to: "master-left", in: rect)
+        _ = c.moveWindow(wid(20), to: 2, in: rect)
+        _ = c.moveWindow(wid(30), to: 2, in: rect)   // WS1={10}, WS2={20,30}
+        // applySectionLens spans all workspaces, so wid(20)/wid(30) in inactive
+        // WS2 are parked — lensParkedMembers is non-empty going into the switch.
+        c.activeSectionLens = "Web"
+        c.activeSectionLensLayout = "grid"          // EX-0.3 runtime override
+        _ = c.applySectionLens(visibleIDs: [wid(10)], in: rect)   // parks 20+30
+        XCTAssertFalse(c.lensParkedMembers.isEmpty, "precondition: lens is applied")
+
+        // Switch to WS2 — must clear the lens.
+        let plan = c.setActive(2, in: rect)
+        XCTAssertNotNil(plan)
+        // Lens fields are cleared.
+        XCTAssertNil(c.activeSectionLens,
+                     "activeSectionLens must be nil after a workspace switch (exclusive model)")
+        XCTAssertNil(c.activeSectionLensLayout,
+                     "activeSectionLensLayout must be nil after a workspace switch")
+        // Parked-member set is empty: the lift loop re-attached everything.
+        XCTAssertTrue(c.lensParkedMembers.isEmpty,
+                      "lensParkedMembers must be empty after the switch lifts the lens")
+        // Destination members (20, 30) are in `toRestore` — no selective re-park.
+        XCTAssertEqual(Set(plan!.toRestore.map(\.id)), [wid(20), wid(30)])
+        // Old-WS members (10) are in `toPark`.
+        XCTAssertEqual(Set(plan!.toPark.map(\.id)), [wid(10)])
+    }
+
+    /// EX-0.4: switch with no prior lens active behaves identically to
+    /// the pre-EX historical path — destination members are unconditionally
+    /// restored, lensParkedMembers stays empty, lens fields stay nil.
+    func testSwitchWithoutLensRestoresAllUnchangedBehaviour() {
+        var c = threeWindowCatalog(mode: "master-left")
+        _ = c.moveWindow(wid(20), to: 2, in: rect)   // WS1={10,30}, WS2={20}
+        let plan = c.setActive(2)
+        XCTAssertNotNil(plan)
+        XCTAssertEqual(Set(plan!.toRestore.map(\.id)), [wid(20)])
+        XCTAssertTrue(c.lensParkedMembers.isEmpty)
+        XCTAssertNil(c.activeSectionLens)
+    }
+
+    /// EX-0.4 replaces D1's "lift only" with "lift + null lens fields".
+    /// This test verifies the lift half: lens-parked windows from WS1 are
+    /// re-attached to WS1's layout so an inactive WS's preview is correct.
+    ///
+    /// Red-on-regression: if `lensParkedMembers.removeAll()` were removed
+    /// from `setActive`, the second assert (`lensParkedMembers.isEmpty`)
+    /// would fail; if the re-attach loop were removed, the
+    /// `nonFloatingMembers(of: 1)` count would be wrong.
+    func testSwitchLiftsAndClearsLensFromOldWorkspace() {
+        var c = threeWindowCatalog(mode: "master-left")   // WS1={10,20,30}
+        c.activeSectionLens = "Web"
+        _ = c.applySectionLens(visibleIDs: [wid(10)], in: rect)   // parks 20, 30
+        XCTAssertEqual(c.lensParkedMembers, [wid(20), wid(30)], "precondition")
+
+        // Switch to (empty) WS2.
+        _ = c.setActive(2, in: rect)
+
+        // Lens is fully cleared.
+        XCTAssertNil(c.activeSectionLens,
+                     "activeSectionLens must be nil after switch (EX-0.4)")
+        XCTAssertTrue(c.lensParkedMembers.isEmpty,
+                      "lensParkedMembers must be empty after the lift")
+        // WS1 (now inactive) has all its members back in the layout
+        // (re-attached by the lift loop).
+        XCTAssertEqual(Set(c.nonFloatingMembers(of: 1)), [wid(10), wid(20), wid(30)],
+                       "WS1 must show all members after the lens is lifted")
+    }
+
+    /// EX-0.4: switching to a destination workspace restores ALL its
+    /// members (no per-lens filtering). Under D1 only in-lens members were
+    /// restored; under EX-0.4 the destination is unfiltered.
+    ///
+    /// Red-on-regression: if the old D1 selective-restore branch were
+    /// reinstated (checking `lensVisibleIDs`), the destination's out-of-lens
+    /// member (30) would be omitted from `toRestore` and this assertion fails.
+    func testSwitchRestoresAllDestinationMembers() {
         var c = threeWindowCatalog(mode: "master-left")
         _ = c.moveWindow(wid(20), to: 2, in: rect)
         _ = c.moveWindow(wid(30), to: 2, in: rect)   // WS1={10}, WS2={20,30}
         c.activeSectionLens = "Web"
-        // Switch to WS2 with the lens showing only 20.
-        let plan = c.setActive(2, lensVisibleIDs: [wid(20)], in: rect)
+        // Switch to WS2 — both 20 AND 30 must be in toRestore (no filtering).
+        let plan = c.setActive(2, in: rect)
         XCTAssertNotNil(plan)
-        // toPark = old-WS member (10) + the destination's out-of-lens 30
-        // (idempotent park; it stays off-screen). Only 20 (in-lens) restores.
-        XCTAssertEqual(Set(plan!.toPark.map(\.id)), [wid(10), wid(30)])
-        XCTAssertEqual(Set(plan!.toRestore.map(\.id)), [wid(20)])   // in-lens only
-        // 30 is out of the lens → recorded + detached, never restored.
-        XCTAssertEqual(c.lensParkedMembers, [wid(30)])
-        XCTAssertEqual(c.nonFloatingMembers(of: 2), [wid(20)])
-    }
-
-    func testSwitchLiftsLensOffOldWorkspace() {
-        var c = threeWindowCatalog(mode: "master-left")   // WS1={10,20,30}
-        c.activeSectionLens = "Web"
-        _ = c.applySectionLens(visibleIDs: [wid(10)], in: rect)   // park 20,30
-        XCTAssertEqual(c.lensParkedMembers, [wid(20), wid(30)])
-
-        // Switch to (empty) WS2: the lens lifts off WS1 (set clears) so an
-        // inactive WS's preview is never narrowed by it.
-        _ = c.setActive(2, lensVisibleIDs: [], in: rect)
-        XCTAssertTrue(c.lensParkedMembers.isEmpty)
-        // WS1 (now inactive) shows all its members again in the preview.
-        XCTAssertEqual(c.nonFloatingMembers(of: 1), [wid(10), wid(20), wid(30)])
-    }
-
-    func testSwitchWithoutLensRestoresAllUnchangedBehaviour() {
-        // The lens-unaware wrapper must behave exactly like before.
-        var c = threeWindowCatalog(mode: "master-left")
-        _ = c.moveWindow(wid(20), to: 2, in: rect)   // WS1={10,30}, WS2={20}
-        let plan = c.setActive(2)
-        XCTAssertEqual(Set(plan!.toRestore.map(\.id)), [wid(20)])
+        XCTAssertEqual(Set(plan!.toRestore.map(\.id)), [wid(20), wid(30)],
+                       "EX-0.4: ALL destination members must be restored, not just in-lens ones")
+        // Source member (10) parks.
+        XCTAssertEqual(Set(plan!.toPark.map(\.id)), [wid(10)])
+        // Lens is cleared.
+        XCTAssertNil(c.activeSectionLens)
         XCTAssertTrue(c.lensParkedMembers.isEmpty)
     }
 

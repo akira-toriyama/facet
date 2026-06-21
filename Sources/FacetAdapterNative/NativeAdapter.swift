@@ -473,14 +473,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
         let rect = activeDisplayRect()
-        // Section-lens (Phase 1, D1): when a lens is active, evaluate which of
-        // the DESTINATION workspace's members pass its `match` so the switch
-        // restores ONLY those — the rest stay parked + detached (one net plan,
-        // no restore-then-re-park flicker). `nil` = no active lens → restore
-        // everything (the historical behaviour).
-        let lensVisible = sectionLensVisibleIDs(workspace: target)
-        guard let plan = catalog.setActive(target, lensVisibleIDs: lensVisible,
-                                           in: rect) else { return }
+        // EX-0.4 (exclusive model): workspace switch always clears the active
+        // section-lens — no D1 re-compose on the destination. `setActive`
+        // handles the lift (restores lens-parked windows to their home layouts,
+        // nulls activeSectionLens + activeSectionLensLayout) and returns the
+        // unconditional restore plan for the destination's own members.
+        guard let plan = catalog.setActive(target, in: rect) else { return }
 
         // Leave-snapshot only fires on a real transition: setActive
         // already returned nil for the no-op `target == activeIndex`
@@ -490,8 +488,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         if let cur = focusedWindow() {
             catalog.recordLeaveFocus(cur, in: plan.oldActive)
         }
-        // The lens-park set just changed (lifted off old WS, applied to the
-        // new) — keep the main-readable mirror in lock-step for read-back.
+        // The lens-park set + activeSectionLens just changed (cleared by
+        // setActive) — keep the main-readable mirror in lock-step for read-back.
         syncSectionLensMirror()
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) autoFocus=\(autoFocus)")
@@ -702,10 +700,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         syncSectionLensMirror()
         let live = enumerateCGWindows()
         // EX-0.1: evaluate cross-workspace so windows in INACTIVE workspaces
-        // that match the lens are gathered (not mis-parked). The per-WS variant
-        // (sectionLensVisibleIDs(workspace:live:)) only passes windows whose
-        // home WS == activeIndex, so matching inactive-WS windows were absent
-        // from the visible set and incorrectly parked.
+        // that match the lens are gathered (not mis-parked). A per-WS evaluator
+        // (removed in EX-0.4) only passed windows whose home WS == activeIndex,
+        // so matching inactive-WS windows were absent from the visible set and
+        // incorrectly parked. See SectionLensGatherTests for the regression pin.
         let visible = sectionLensVisibleIDsAll(live: live) ?? []
         let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
         Log.debug("native: setSectionLens \"\(label)\" "

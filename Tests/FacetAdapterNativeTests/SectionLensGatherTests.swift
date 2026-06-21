@@ -6,11 +6,11 @@ import XCTest
 /// Regression tests for `NativeAdapter.sectionLensVisibleIDsAll(live:)` —
 /// the cross-workspace section-lens evaluator added in EX-0.1.
 ///
-/// These tests pin the exact bug that was fixed: before EX-0.1 both
-/// activation callers used `sectionLensVisibleIDs(workspace:live:)`, which
-/// gates on `catalog.windowMap[w.id]?.workspace == n1Based` (ACTIVE WS only).
-/// A matching window in an INACTIVE workspace was therefore ABSENT from
-/// `visibleIDs` and got parked rather than gathered.
+/// `sectionLensVisibleIDsAll(live:)` is the sole remaining evaluator after
+/// EX-0.4 deleted the per-WS `sectionLensVisibleIDs(workspace:live:)` variants
+/// (they were only called from `switchWorkspace`, which now clears the lens
+/// instead of re-composing it). These tests pin that the all-workspaces path
+/// correctly gathers matching windows from BOTH active and inactive workspaces.
 ///
 /// Each test exercises the adapter's evaluator directly (via `@testable`),
 /// not the catalog state machine — which is already covered in
@@ -109,32 +109,6 @@ final class SectionLensGatherTests: XCTestCase {
                       + "(regression: old evaluator excluded inactive WS windows)")
         XCTAssertFalse(visible.contains(nonMatch),
                        "non-matching window (app!=Web) must be excluded")
-    }
-
-    /// Confirms that the PER-WS evaluator (`sectionLensVisibleIDs(workspace:live:)`)
-    /// still EXCLUDES the inactive-WS window — making the per-WS vs all-WS
-    /// distinction explicit and red-on-regression for both directions.
-    ///
-    /// If someone accidentally makes `sectionLensVisibleIDs(workspace:live:)` also
-    /// cross-workspace (over-fix), this goes red.  If they revert the all-WS
-    /// evaluator to per-WS, the test above catches it.
-    func testPerWSEvaluatorExcludesInactiveWSWindow() {
-        let a = adapterWithWebLens()
-        let (ws1Web, ws2Web, _, live) = seedCrossWorkspace(a)
-
-        let perWS = a.sectionLensVisibleIDs(workspace: 1, live: live)
-
-        XCTAssertNotNil(perWS, "per-WS evaluator must return a set when a lens is active")
-        guard let perWS else { return }
-
-        // wid(10) is in WS1 (active) → included by per-WS filter.
-        XCTAssertTrue(perWS.contains(ws1Web),
-                      "per-WS evaluator must include the active-WS matching window")
-        // wid(20) is in WS2 (inactive) → the per-WS gate EXCLUDES it.
-        // This is exactly what the old evaluator did (and why EX-0.1 was needed).
-        XCTAssertFalse(perWS.contains(ws2Web),
-                       "per-WS evaluator must NOT include the inactive-WS window "
-                       + "(it is intentionally scoped to workspace 1)")
     }
 
     // MARK: - No-lens guard

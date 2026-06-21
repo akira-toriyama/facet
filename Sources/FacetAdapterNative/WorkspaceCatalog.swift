@@ -532,44 +532,37 @@ struct WorkspaceCatalog {
         let toRestore: [WindowRef]
     }
 
-    /// Switch to `n1Based`, lens-unaware (no active section-lens). Returns the
-    /// plan when the switch is valid and meaningful; nil when target is
-    /// invalid or already active. Caller applies AX side-effects against the
-    /// returned `WindowRef` lists. Thin wrapper over the lens-aware form so
-    /// every existing call site (+ test) stays byte-identical.
-    @discardableResult
-    mutating func setActive(_ n1Based: Int) -> SwitchPlan? {
-        setActive(n1Based, lensVisibleIDs: nil, in: .zero)
-    }
-
-    /// Lens-aware switch (tag-unification Phase 1). `lensVisibleIDs` is the
-    /// adapter's section-lens evaluation over the DESTINATION workspace's
-    /// members (the ids whose live `Window` PASSES the active lens's `match`);
-    /// `nil` = no active lens (restore everything — the historical behaviour
-    /// the wrapper above relies on). With a lens active the plan restores ONLY
-    /// the destination's in-lens members and leaves the rest parked — they're
-    /// already off-screen from the destination having been inactive, so this
-    /// is D1's "one net plan, no flicker": an out-of-lens window is never
-    /// restored-then-re-parked.
+    /// Switch to `n1Based` (EX-0.4: exclusive model — always clears the active
+    /// section-lens). Returns the plan when the switch is valid and meaningful;
+    /// nil when target is invalid or already active. Caller applies AX
+    /// side-effects against the returned `WindowRef` lists.
     ///
-    /// Lifting the lens off the OLD workspace first re-attaches every
-    /// lens-parked window to its home layout (`slot.workspace` — under the EX-1
-    /// cross-workspace model the set may hold windows from any workspace) and
-    /// clears the set; the destination's own out-of-lens members are then
-    /// re-parked below. The re-attach is pure bookkeeping (the old WS is going
-    /// off-screen — no AX), and those windows stay anchor-parked (the `toPark`
-    /// sweep's `shouldParkAnchor` guard no-ops on them).
+    /// The lift loop re-attaches every lens-parked window (from any workspace
+    /// under the EX-1 cross-workspace model) to its home layout before clearing
+    /// the set and nulling the lens fields — so `lensParkedMembers` is always
+    /// empty and `activeSectionLens` / `activeSectionLensLayout` are always nil
+    /// after a switch. The destination's own windows are then unconditionally
+    /// restored (no per-lens re-park: the exclusive model requires a fresh
+    /// `setSectionLens` call to re-apply a lens on the new workspace).
+    ///
+    /// `rect` defaults to `.zero` for no-lens / test call sites; it only feeds
+    /// the lift loop's `attachToLayout` (bsp split-orientation choice), never an
+    /// absolute frame, so the default is safe. Production switches pass
+    /// `activeDisplayRect()`.
     @discardableResult
-    mutating func setActive(_ n1Based: Int, lensVisibleIDs: Set<WindowID>?,
-                            in rect: CGRect) -> SwitchPlan? {
+    mutating func setActive(_ n1Based: Int, in rect: CGRect = .zero) -> SwitchPlan? {
         guard isValid(n1Based), n1Based != activeIndex else { return nil }
         let old = activeIndex
-        // Lift the lens off the old workspace (see the doc comment).
+        // Lift the lens off the old workspace: re-attach every lens-parked
+        // window to its home layout, then null the lens authority fields so
+        // the catalog is left in a clean no-lens state (EX-0.4).
         for id in lensParkedMembers {
             guard let slot = windowMap[id] else { continue }
             attachToLayout(id, workspace: slot.workspace, focused: nil, in: rect)
         }
         lensParkedMembers.removeAll()
+        activeSectionLens = nil
+        activeSectionLensLayout = nil
         activeIndex = n1Based
         previousActiveIndex = old
         // Sticky windows stay on-screen across the switch (they're
@@ -580,29 +573,18 @@ struct WorkspaceCatalog {
         // shelf and must STAY parked through the switch, so they're
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
-        var toPark = windowMap
+        let toPark = windowMap
             .filter { $0.value.workspace == old && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
-        // Destination: restore every member without a lens, only the in-lens
-        // members with one. Out-of-lens members are recorded + detached AND
-        // added to `toPark` so they end up parked — normally a no-op (an
-        // inactive WS's windows are already parked, so `parkAnchor`'s
-        // `shouldParkAnchor` guard skips them), but it self-heals the rare
-        // window that reaches the destination on-screen. A user-hidden (Cmd+H)
-        // member is left exactly as-is — never lens-parked — but kept in
-        // `toRestore` for parity with the lens-unaware path (`restoreAnchor`
-        // no-ops on it, since it isn't anchor-parked).
+        // Destination: restore every park-eligible member unconditionally.
+        // A user-hidden (Cmd+H) member is left exactly as-is — never
+        // lens-parked — but kept in `toRestore` for parity with the
+        // historical behaviour (`restoreAnchor` no-ops on it, since it
+        // isn't anchor-parked).
         var toRestore: [WindowRef] = []
         for (id, slot) in windowMap
         where slot.workspace == n1Based && isParkEligible(id) {
-            if hiddenMembers.contains(id)
-                || lensVisibleIDs == nil || lensVisibleIDs!.contains(id) {
-                toRestore.append(WindowRef(id: id, pid: slot.pid))
-            } else {
-                lensParkedMembers.insert(id)
-                detachFromLayouts(id)
-                toPark.append(WindowRef(id: id, pid: slot.pid))
-            }
+            toRestore.append(WindowRef(id: id, pid: slot.pid))
         }
         return SwitchPlan(oldActive: old, newActive: n1Based,
                           toPark: toPark, toRestore: toRestore)
