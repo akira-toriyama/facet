@@ -223,6 +223,53 @@ public final class GridView: NSView {
         CATransaction.commit()
     }
 
+    /// EX-2: one render-source per cell. Bridges the workspace-vs-lens section
+    /// kinds into a uniform shape `layoutCells` builds `OverviewCell`s from.
+    /// `wsIndex` is the 0-based source WS (−1 for a lens, which spans
+    /// workspaces); `isActive` is the single-highlight already gated by the
+    /// tree's `headerActive` XOR, so the accent draw needs no change.
+    private struct CellSource {
+        let wsIndex: Int
+        let sectionType: SectionType
+        let sectionID: String
+        let label: String
+        let mode: String
+        let windows: [Window]
+        let isActive: Bool
+    }
+
+    /// EX-2: build the per-cell sources. Degrade (no section model here) → one
+    /// cell per workspace, byte-identical to pre-EX-2. Section model → one cell
+    /// per projected section (workspace + lens), in config order.
+    private func overviewCellSources() -> [CellSource] {
+        if sections.isEmpty {
+            return workspaces.map { ws in
+                CellSource(wsIndex: ws.index, sectionType: .workspace,
+                           sectionID: "ws:\(ws.index)", label: ws.name,
+                           mode: ws.layoutMode, windows: ws.windows,
+                           isActive: activeLens == nil && ws.isActive)
+            }
+        }
+        return sections.map { sec in
+            let isLens = sec.sectionType == .lens
+            // The projection doesn't carry a workspace's live layoutMode; look
+            // it up by source index (a lens has no layout engine → "").
+            let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
+                workspaces.first { $0.index == src } }
+            let mode = isLens ? "" : (srcWS?.layoutMode ?? "")
+            // EX-2 single-highlight — mirror of SidebarView.headerActive XOR:
+            //   lens cell lit ⟺ it IS the active lens;
+            //   workspace cell lit ⟺ no lens active AND its WS is active.
+            let active = isLens
+                ? (activeLens != nil && sec.label == activeLens)
+                : (activeLens == nil && srcWS?.isActive == true)
+            return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
+                              sectionType: sec.sectionType, sectionID: sec.id,
+                              label: sec.label, mode: mode,
+                              windows: sec.windows, isActive: active)
+        }
+    }
+
     public func layoutCells() {
         // Drop-in-flight gate (runs *before* layoutSuppressed
         // check because a landed drop needs to release suppression
@@ -280,12 +327,20 @@ public final class GridView: NSView {
             for w in cell.windows { oldRects[w.id] = w.rect }
         }
         cells.removeAll()
-        guard !workspaces.isEmpty else {
+        // EX-2: window → home workspace index (0-based), from the unfiltered
+        // `workspaces` snapshot. A window thumb may sit in a LENS cell
+        // (wsIndex=-1) but still has a real home WS; picks resolve through this.
+        windowHomeWS = [:]
+        for ws in workspaces { for w in ws.windows { windowHomeWS[w.id] = ws.index } }
+        // EX-2: the per-cell sources — projected sections (workspace + lens)
+        // when the section model is active, else one per workspace (degrade).
+        let sources = overviewCellSources()
+        guard !sources.isEmpty else {
             reordering.removeAll(); stopReorderTimer()
             needsDisplay = true; return
         }
         let cols = effectiveCols
-        let rows = gridRowCount(wsCount: workspaces.count, cols: cols)
+        let rows = gridRowCount(wsCount: sources.count, cols: cols)
         let usableW = bounds.width  - 2 * gridOuterPad
         let usableH = bounds.height - 2 * gridOuterPad
         // Aspect from the screen we're being shown on (main display
@@ -323,7 +378,7 @@ public final class GridView: NSView {
         let originX = (bounds.width  - totalW) / 2
         let originY = (bounds.height - totalH) / 2
         let useScreen = screenFrame.width > 0 ? screenFrame : scr
-        for (i, ws) in workspaces.enumerated() {
+        for (i, src) in sources.enumerated() {
             let r = i / cols, c = i % cols
             let rowSlotY = originY + CGFloat(r)
                 * (cellSize.height + labelBand + gridCellGap)
@@ -334,10 +389,15 @@ public final class GridView: NSView {
                                   width: cellSize.width,
                                   height: cellSize.height)
             // Pre-compute window thumb rects in cell-local view
-            // coords so hit-testing and drawing agree byte-for-byte.
+            // coords so hit-testing and drawing agree byte-for-byte. A lens
+            // cell lays out its member windows by real frame (declared
+            // cosmetic — they may overlap when the lens is inactive). The
+            // isLensParked filter is a no-op for a lens cell's members (they
+            // match → never parked) and still drops parked windows from a
+            // workspace cell under an active lens.
             var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
-                for win in ws.windows
+                for win in src.windows
                 where !win.isLensParked {   // drop out-of-lens parked windows
                     guard let f = win.frame else { continue }
                     let wr = gridScaledWindowRect(
@@ -360,14 +420,21 @@ public final class GridView: NSView {
                 : cellRect.minY - labelH - gridLabelGap + 2
             let headerRect = NSRect(x: cellRect.minX, y: headerY,
                                     width: cellRect.width, height: labelH)
+            // A lens cell shows its bare label; a workspace cell decorates it
+            // with the index/emoji like before (gridLabel is workspace-only).
+            let cellLabel = src.sectionType == .lens
+                ? src.label
+                : gridLabel(name: src.label, idx: src.wsIndex)
             cells.append(OverviewCell(
-                wsIndex: ws.index,
+                wsIndex: src.wsIndex,
                 rect: cellRect,
                 headerRect: headerRect,
-                isActive: ws.isActive,
-                label: gridLabel(name: ws.name, idx: ws.index),
-                mode: ws.layoutMode,
-                windows: hits))
+                isActive: src.isActive,
+                label: cellLabel,
+                mode: src.mode,
+                windows: hits,
+                sectionType: src.sectionType,
+                sectionID: src.sectionID))
         }
         // FLIP: any id whose rect changed since the snapshot above
         // gets a new tween. Same-rect (most cells, every refresh)
