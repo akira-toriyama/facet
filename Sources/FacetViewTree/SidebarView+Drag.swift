@@ -408,7 +408,12 @@ extension SidebarView {
             // is the same one that ends up focused (or Finder
             // activated when the WS is empty).
             cliQueue.async {
-                bk.switchWorkspace(toIndex: i, autoFocus: true)
+                // EX-1: route through the activateSection throughline (clears
+                // any active lens; also clears it on a same-workspace click via
+                // the adapter's same-index edge). `i` is 0-based (Workspace.index,
+                // matched at `$0.index == i` above); ActiveSection.workspace is
+                // 1-based → `i + 1`.
+                bk.activateSection(.workspace(i + 1), autoFocus: true)
             }
         case .window(let g, let i, let pid, let id, let title):
             // Off main so the click never hitches; skip the switch
