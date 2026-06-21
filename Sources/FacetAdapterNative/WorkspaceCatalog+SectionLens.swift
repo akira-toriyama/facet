@@ -90,6 +90,31 @@ extension WorkspaceCatalog {
         return SectionLensPlan(toPark: toPark, toRestore: toRestore)
     }
 
+    /// The cross-workspace union currently shown by the active section-lens:
+    /// every tracked, tileable window NOT parked out of the lens. The
+    /// section-model twin of tag-mode's `visibleNonFloatingMembers()`, but the
+    /// "in lens" decision is the already-applied `lensParkedMembers` set (the
+    /// adapter evaluated the match and parked the rest). Spans ALL workspaces of
+    /// the current mac desktop — there is deliberately NO active-workspace clause.
+    /// Stable serverID order so tiling is deterministic.
+    func sectionLensUnionMembers() -> [WindowID] {
+        windowMap
+            .filter { !lensParkedMembers.contains($0.key)
+                && !floatingWindows.contains($0.key)
+                && !hiddenMembers.contains($0.key) }
+            .map(\.key)
+            .sorted { $0.serverID < $1.serverID }
+    }
+
+    /// Tiled frames for the active section-lens union — one stateless engine over
+    /// the cross-workspace set (the section-model twin of `tagUnionFrames`).
+    /// `layout` is the lens's resolved stateless engine name (see `LensLayout`).
+    func sectionLensUnionFrames(layout: String, in rect: CGRect) -> [WindowID: CGRect] {
+        guard let engine = LayoutRegistry.engine(named: layout) else { return [:] }
+        return engine.frames(order: sectionLensUnionMembers(),
+                             focused: nil, params: LayoutParams(), in: rect)
+    }
+
     /// Clear the active section-lens: every lens-parked window (from any
     /// workspace) re-enters its own workspace's layout and is restored into
     /// view, and the lens drops. Returns the restore plan (`toPark` is always

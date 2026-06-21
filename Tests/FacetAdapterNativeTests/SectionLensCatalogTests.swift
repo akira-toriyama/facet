@@ -255,6 +255,42 @@ final class SectionLensCatalogTests: XCTestCase {
                        true, "inactive-WS out-of-lens window is flagged lens-parked (EX-1)")
     }
 
+    // MARK: - Cross-workspace union members + frames (EX-1b.2)
+
+    /// Proves sectionLensUnionMembers() is a cross-workspace union: it returns
+    /// windows from BOTH WS1 (active) and WS2 (inactive) that are not parked,
+    /// and excludes the window that was parked out of the lens.
+    func testSectionLensUnionMembersExcludeParkedFloatingHidden() {
+        var c = seededCatalog(2)
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setMode(workspace: 1, to: "master-left", in: rect)
+        _ = c.moveWindow(wid(20), to: 2, in: rect)
+        _ = c.moveWindow(wid(30), to: 2, in: rect)
+        // wid(10) in WS1 (active), wid(20) and wid(30) in WS2 (inactive)
+        c.activeSectionLens = "Web"
+        _ = c.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect) // wid(30) parks
+        // Cross-workspace: both WS1 and WS2 windows appear in the union.
+        XCTAssertEqual(Set(c.sectionLensUnionMembers()), [wid(10), wid(20)],
+                       "union must contain windows from both WS1 (active) and WS2 (inactive)")
+        XCTAssertFalse(c.sectionLensUnionMembers().contains(wid(30)),
+                       "parked window must not appear in the union")
+    }
+
+    /// Proves sectionLensUnionFrames() tiles the cross-workspace union with a
+    /// stateless engine, producing distinct non-overlapping frames.
+    func testSectionLensUnionFramesTileWithStatelessEngine() {
+        var c = seededCatalog(1)
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: "master-left", in: rect)
+        c.activeSectionLens = "Web"
+        _ = c.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect)
+        let frames = c.sectionLensUnionFrames(layout: "grid",
+                                              in: CGRect(x: 0, y: 0, width: 1000, height: 1000))
+        XCTAssertEqual(frames.count, 2, "stateless engine must produce one frame per union member")
+        XCTAssertNotEqual(frames[wid(10)], frames[wid(20)],
+                          "two windows must get distinct non-overlapping cells")
+    }
+
     // MARK: - forgetWindow cleanup
 
     func testForgetWindowClearsLensParkState() {
