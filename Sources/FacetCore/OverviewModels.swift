@@ -23,7 +23,9 @@ import Foundation
 /// filter projected over the live windows, OR — in the degrade path (no
 /// sections configured) — a 1:1 mirror of one facet workspace (by-workspace
 /// stays a first-class citizen). The tree consumes this via
-/// `SidebarView.update(sections:)`; grid/rail render the `.workspace` kind.
+/// `SidebarView.update(sections:)`; the grid renders every section as a cell
+/// (workspace + lens, EX-2); the rail still renders workspace cells (lens
+/// cells land in EX-2b).
 ///
 /// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
 /// this section maps to (so `--focus` / `--move-to` hit the right WS),
@@ -41,9 +43,10 @@ public struct ProjectedSection: Sendable {
     public let windows: [Window]
     public let sourceWorkspaceIndex: Int?
     /// Which section kind produced this section — `.workspace` for the
-    /// spatial substrate (the degrade path + `type=workspace` sections;
-    /// the only kind grid/rail render, PR7), `.lens` for a saved-filter
-    /// section (tree-only, emphasised when active, PR5). Defaulted so the
+    /// spatial substrate (the degrade path + `type=workspace` sections),
+    /// `.lens` for a cross-workspace saved-filter section. Both kinds render
+    /// as cells in the tree + grid (EX-2), the lit one being the active
+    /// section; the rail renders lens cells in EX-2b. Defaulted so the
     /// degrade path + existing 4-arg call sites need no edit.
     public let sectionType: SectionType
 

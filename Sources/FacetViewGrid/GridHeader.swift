@@ -20,7 +20,7 @@ extension GridView {
         let activeColor = pal.primary
         let labelColor = pal.foreground.withAlphaComponent(0.85)
         let hb = cell.headerRect
-        let headerSel = (drag == nil && kbSelectedWS == cell.wsIndex
+        let headerSel = (drag == nil && kbSelectedID == cell.sectionID
                          && kbSelectedWindowIdx == -1)
         let headerHover = (drag == nil && hoverHeaderWS == cell.wsIndex)
         let headerHot = cell.isActive || headerSel || headerHover

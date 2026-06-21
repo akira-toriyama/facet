@@ -112,11 +112,10 @@ extension Controller {
         // -- Present + fade in --
         presentOverview(overlay, view: gv)
 
-        // Initial keyboard selection: active workspace if visible,
-        // else first cell.
-        gv.kbSelectedWS = lastWorkspaces.first(where: {
-            $0.isActive
-        })?.index ?? lastWorkspaces.first?.index
+        // Initial keyboard selection: the active (lit) cell — the active
+        // workspace, or the active lens — else the first cell. (EX-2: seeded by
+        // section id after layout, since cells now include lens sections.)
+        gv.kbSeedToActiveCell()
 
         // -- Local key monitor: the shared overview verbs (Esc / Return
         // / Space / Tab / 'm') + the grid's own 2-D arrow nav. The

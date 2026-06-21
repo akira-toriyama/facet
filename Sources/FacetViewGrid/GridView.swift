@@ -149,13 +149,29 @@ public final class GridView: NSView {
 
     // MARK: - Keyboard nav (Phase 1f-3)
 
-    public var kbSelectedWS: Int?
-    /// Window cursor within `kbSelectedWS`: `-1` = the WS-name/header
+    /// EX-2: the SELECTED cell's `sectionID` (`"ws:<i>"` / `"section:…"`).
+    /// Keyed on the stable, unique section id (NOT `wsIndex` — lens cells all
+    /// share `wsIndex == -1`, which would collide). `kbSelectedCell` resolves it.
+    public var kbSelectedID: String?
+    /// The currently keyboard-selected cell, resolved from `kbSelectedID`.
+    private var kbSelectedCell: OverviewCell? {
+        kbSelectedID.flatMap { id in cells.first { $0.sectionID == id } }
+    }
+    /// Window cursor within `kbSelectedID`'s cell: `-1` = the WS-name/header
     /// slot (no window ring), `0…n-1` = a window. Opens at `-1` so the
     /// grid shows NO pre-selected window — matching the rail (which
     /// opens with a WS browse cursor only) and the grid's own
     /// arrow-browse, which also lands on `-1`. Tab picks a window.
     public var kbSelectedWindowIdx: Int = -1
+
+    /// EX-2: seed the keyboard selection to the active (lit) cell — the one
+    /// the single-highlight lit (active workspace, or the active lens) —
+    /// falling back to the first cell. Called by the Controller after the
+    /// grid is laid out (cells must exist).
+    public func kbSeedToActiveCell() {
+        kbSelectedID = (cells.first(where: { $0.isActive }) ?? cells.first)?.sectionID
+        kbSelectedWindowIdx = -1
+    }
 
     /// Plays the "selected cell zoom → full screen" transition on a
     /// Return commit; input is gated on `commitZoom.isActive` until it
@@ -607,7 +623,7 @@ public final class GridView: NSView {
             // RailView.drawCell's hero/active/browse-target border
             // block): the active WS gets the primary accent, a browse
             // target (selected but not active) gets the secondary accent.
-            if drag == nil, kbSelectedWS == cell.wsIndex {
+            if drag == nil, kbSelectedID == cell.sectionID {
                 (cell.isActive ? pal.primary : pal.secondary).setStroke()
                 let kc = NSBezierPath(
                     roundedRect: cell.rect.insetBy(dx: 1.5, dy: 1.5),
@@ -642,8 +658,8 @@ public final class GridView: NSView {
                 // selected window inside the selected cell so the
                 // user sees WHICH window Space will lift. Drawn
                 // inside the cell clip so it can't escape.
-                if drag == nil, kbSelectedWS == cell.wsIndex,
-                   let s = kbSelectedWindow(), s.cell.wsIndex == cell.wsIndex
+                if drag == nil, kbSelectedID == cell.sectionID,
+                   let s = kbSelectedWindow(), s.cell.sectionID == cell.sectionID
                 {
                     // Accent fill + ring (covers the window front, like
                     // the rail) so the selection is unmistakable.
@@ -744,19 +760,23 @@ public final class GridView: NSView {
     /// — the WS header (layout picker) or a window thumb (window ops),
     /// anchored to that cell. No-op without a selection / backend.
     public func kbContextMenu() {
-        guard let backend, let win = window, let ws = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+        guard let backend, let win = window, let cell = kbSelectedCell else { return }
         func screenPt(_ r: NSRect) -> NSPoint {
             win.convertPoint(toScreen: convert(NSPoint(x: r.minX + 12, y: r.minY), to: nil))
         }
         if kbSelectedWindowIdx == -1 {
+            // A lens cell has no per-WS layout picker (it spans workspaces).
+            guard !cell.isLens else { return }
             ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
-                                       workspaceIndex: ws, workspaces: workspaces,
+                                       workspaceIndex: cell.wsIndex, workspaces: workspaces,
                                        palette: pal)
         } else if kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < cell.windows.count {
             let wh = cell.windows[kbSelectedWindowIdx]
+            // Window ops target the window's HOME WS (resolved) — a thumb may
+            // sit in a lens cell whose wsIndex is −1.
             ViewContextMenu.showWindow(
-                at: screenPt(wh.rect), backend: backend, workspaceIndex: ws,
+                at: screenPt(wh.rect), backend: backend,
+                workspaceIndex: windowHomeWS[wh.id] ?? cell.wsIndex,
                 workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: "",
                 palette: pal
             ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
@@ -1063,13 +1083,13 @@ public final class GridView: NSView {
     public func kbMoveSelection(dx: Int, dy: Int) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
         let cols = effectiveCols
-        guard let sel = kbSelectedWS,
-              let cur = cells.firstIndex(where: { $0.wsIndex == sel })
+        guard let sel = kbSelectedID,
+              let cur = cells.firstIndex(where: { $0.sectionID == sel })
         else { return }
         let ni = gridWrapIndex(index: cur, dx: dx, dy: dy,
                                cols: cols, count: cells.count)
         guard ni < cells.count else { return }
-        kbSelectedWS = cells[ni].wsIndex
+        kbSelectedID = cells[ni].sectionID
         // Arrow moves the WS cursor only — land on the header (WS-name)
         // slot (-1) so no window is auto-selected (Tab picks a window).
         // Matches the rail's browse behaviour: arrow ⇒ no window ring,
@@ -1087,10 +1107,7 @@ public final class GridView: NSView {
     /// a lift is in flight.
     public func kbCycleWindow(forward: Bool) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
-        guard drag == nil,
-              let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel })
-        else { return }
+        guard drag == nil, let cell = kbSelectedCell else { return }
         kbSelectedWindowIdx = cycleSlotIndex(
             current: kbSelectedWindowIdx,
             windowCount: cell.windows.count, forward: forward)
@@ -1099,9 +1116,8 @@ public final class GridView: NSView {
 
 
     private func kbSelectedWindow() -> (cell: OverviewCell, hit: MiniWindowHit)? {
-        guard let sel = kbSelectedWS,
-              kbSelectedWindowIdx >= 0,
-              let cell = cells.first(where: { $0.wsIndex == sel }),
+        guard kbSelectedWindowIdx >= 0,
+              let cell = kbSelectedCell,
               !cell.windows.isEmpty
         else { return nil }
         let ordered = readingOrder(cell.windows)
@@ -1110,10 +1126,11 @@ public final class GridView: NSView {
     }
 
     private func syncKbDragToSelection() {
-        guard var d = drag, let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel })
-        else { return }
-        d.dropTargetWS = (sel == d.sourceWS) ? nil : sel
+        guard var d = drag, let cell = kbSelectedCell else { return }
+        // EX-2 MUST-FIX #2: a lens cell is never a valid drop target (no source
+        // workspace) — a keyboard-lifted window/workspace can't commit onto it.
+        d.dropTargetWS = (cell.isLens || cell.wsIndex == d.sourceWS)
+            ? nil : cell.wsIndex
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         d.current = at
         drag = d
@@ -1136,7 +1153,9 @@ public final class GridView: NSView {
     /// identically to a mouse-initiated drag.
     public func kbLift() {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
-        guard drag == nil, let s = kbSelectedWindow() else { return }
+        // A window inside a lens cell is not move-draggable (its cell has no
+        // source workspace — `wsIndex == -1`). Lifting works in workspace cells.
+        guard drag == nil, let s = kbSelectedWindow(), !s.cell.isLens else { return }
         let at = NSPoint(x: s.cell.rect.midX, y: s.cell.rect.midY)
         drag = OverviewDrag(
             sourceWS: s.cell.wsIndex,
@@ -1158,9 +1177,8 @@ public final class GridView: NSView {
     /// might intend "move WS-X's contents here, leaving X empty in
     /// return".
     public func kbLiftWorkspace() {
-        guard drag == nil, let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel })
-        else { return }
+        // A lens cell cannot be lifted for a swap (it has no source workspace).
+        guard drag == nil, let cell = kbSelectedCell, !cell.isLens else { return }
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         drag = OverviewDrag(
             sourceWS: cell.wsIndex,
@@ -1198,20 +1216,26 @@ public final class GridView: NSView {
             }
             return
         }
-        guard let sel = kbSelectedWS else { return }
-        // Return on the selected cell → zoom that cell out to full screen
-        // (②), then switch + close. A direct mouse click stays instant.
+        guard let cell = kbSelectedCell else { return }
+        // A LENS cell → activate the lens (no WS-zoom transition; a lens has
+        // no single workspace to zoom).
+        if cell.isLens {
+            onPick?(.lens(label: cell.label))
+            return
+        }
+        // Return on the selected workspace cell → zoom that cell out to full
+        // screen (②), then switch + close. A direct mouse click stays instant.
         if let s = kbSelectedWindow() {
-            commitSwitch(target: sel) { [weak self] in
-                // Window home WS (resolved) — correct even if the thumb sits in
-                // a lens cell. (Full lens-cell kb selection lands in EX-2.6.)
+            commitSwitch(target: cell.wsIndex) { [weak self] in
+                // Window home WS (resolved) — a workspace cell's window homes
+                // to that WS; the lookup is robust regardless.
                 self?.onPick?(.window(
-                    homeWorkspaceIndex: self?.windowHomeWS[s.hit.id] ?? sel,
+                    homeWorkspaceIndex: self?.windowHomeWS[s.hit.id] ?? cell.wsIndex,
                     pid: s.hit.pid, windowID: s.hit.id))
             }
         } else {
-            commitSwitch(target: sel) { [weak self] in
-                self?.onPick?(.workspace(workspaceIndex: sel))
+            commitSwitch(target: cell.wsIndex) { [weak self] in
+                self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))
             }
         }
     }
