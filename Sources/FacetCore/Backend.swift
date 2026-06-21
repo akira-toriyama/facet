@@ -509,14 +509,12 @@ public protocol WindowBackend: Sendable {
     /// read as `definedTagNames()`.
     func currentLens() -> LensStatus?
 
-    /// The active SECTION-lens label (tag-unification Phase 1), or `nil` when
-    /// none is active / outside the section model. Read-back so the view's
-    /// tree highlight reflects the catalog (the authority) — including after a
-    /// mac-desktop swap restores a desktop whose lens was set on a prior
-    /// visit (the lens persists per-mac-desktop). Thread-safe: a lock-guarded
-    /// mirror of the active catalog's `activeSectionLens`, so the Controller
-    /// reads it on the main actor without a `cliQueue` hop (like `isAnimating`
-    /// / `config`).
+    /// The active SECTION-lens label, or `nil` when none is active / outside
+    /// the section model. EX-1: a thread-safe shim over
+    /// `currentActiveSection().lensLabel` — the lens label derived from the
+    /// lock-guarded `_activeSection` mirror (`currentActiveSection()` is the
+    /// primary read-back since EX-1). Kept for existing callers; the Controller
+    /// reads it on the main actor without a `cliQueue` hop (like `config`).
     func currentSectionLens() -> String?
 
     /// The active section (EX-1) — `.lens(label)` when a section-lens is

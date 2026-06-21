@@ -575,7 +575,7 @@ extension Controller {
     func activateSection(_ section: ActiveSection, autoFocus: Bool = true) {
         switch section {
         case .lens(let label):  setActiveLens(label, autoFocus: autoFocus)
-        case .workspace(let n): dispatchWorkspace(n)
+        case .workspace(let n): dispatchWorkspace(n, autoFocus: autoFocus)
         }
     }
 
@@ -593,7 +593,10 @@ extension Controller {
     /// a debug log) — the DNC receiver shouldn't exit the server
     /// just because a stale hotkey points past the current WS count.
     /// Idempotent: switching to the current WS is a backend no-op.
-    private func dispatchWorkspace(_ n: Int) {
+    /// `autoFocus` (default `true`) is forwarded to the throughline: the CLI
+    /// `--focus N` path wants `true`; a caller that focuses its own target
+    /// afterward (the tree window-row click) passes `false`.
+    private func dispatchWorkspace(_ n: Int, autoFocus: Bool = true) {
         // P6: the range check reads `workspaces()` (which runs the catalog
         // reconcile) and the switch mutates it — both must happen in ONE
         // cliQueue block so a poll reconcile can't interleave between them.
@@ -603,14 +606,14 @@ extension Controller {
                 let hint = count > 0 ? "1..\(count)" : "no workspaces available"
                 return "workspace \(n) out of range (\(hint))"
             }
-            // CLI `workspace --focus N`: no explicit window pick, so let
-            // the backend auto-focus the last-touched window of the
-            // destination (or activate Finder if empty). See memory
+            // CLI `workspace --focus N`: no explicit window pick, so the
+            // backend auto-focuses the last-touched window of the destination
+            // (or activates Finder if empty) when `autoFocus`. See memory
             // [[facet-ws-switch-focus-management]]. EX-1: route through the
             // activateSection throughline (clears any active lens). NOT
             // optimistic — the highlight updates via the apply() read-back on
             // the reconcile (wsSwitched). `n` is 1-based (range-checked above).
-            bk.activateSection(.workspace(n), autoFocus: true)
+            bk.activateSection(.workspace(n), autoFocus: autoFocus)
             return nil
         }
     }
