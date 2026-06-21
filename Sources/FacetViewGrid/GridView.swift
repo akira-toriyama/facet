@@ -766,8 +766,10 @@ public final class GridView: NSView {
     public override func mouseDown(with e: NSEvent) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
         let p = convert(e.locationInWindow, from: nil)
-        // Header band → workspace drag (swap) or click (switch).
+        // Header band → workspace drag (swap) or click (switch). A LENS cell's
+        // header is a click target only (no swap handle) → activate the lens.
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            if cell.isLens { onPick?(.lens(label: cell.label)); return }
             pendingHeaderDown = (point: p, ws: cell.wsIndex)
             return
         }
@@ -781,7 +783,12 @@ public final class GridView: NSView {
         if let win = cell.windows.reversed()
             .first(where: { $0.rect.contains(p) })
         {
-            pendingDown = (point: p, hit: win, ws: cell.wsIndex)
+            // Arm with the WINDOW's home WS (resolved), NOT the cell's wsIndex
+            // (−1 for a lens cell) — the window pick switches to its home WS.
+            pendingDown = (point: p, hit: win,
+                           ws: windowHomeWS[win.id] ?? cell.wsIndex)
+        } else if cell.isLens {
+            onPick?(.lens(label: cell.label))
         } else {
             onPick?(.workspace(workspaceIndex: cell.wsIndex))
         }
@@ -834,8 +841,10 @@ public final class GridView: NSView {
         }
         guard var d = drag else { return }
         d.current = p
+        // A lens cell is never a move/swap target (no source workspace) — skip
+        // it so a drag can't land on it (EX-2, MUST-FIX #2 mouse path).
         d.dropTargetWS = cells.first(where: {
-            $0.rect.contains(p) || $0.headerRect.contains(p)
+            ($0.rect.contains(p) || $0.headerRect.contains(p)) && !$0.isLens
         })
             .map(\.wsIndex)
             .flatMap { $0 == d.sourceWS ? nil : $0 }
@@ -850,7 +859,8 @@ public final class GridView: NSView {
         // Resolve as click when the gesture never crossed threshold.
         if drag == nil {
             if let pd = pendingDown {
-                onPick?(.window(workspaceIndex: pd.ws,
+                // pd.ws is the WINDOW's home WS (resolved at mouseDown).
+                onPick?(.window(homeWorkspaceIndex: pd.ws,
                                 pid: pd.hit.pid,
                                 windowID: pd.hit.id))
             } else if let ph = pendingHeaderDown {
@@ -1193,8 +1203,11 @@ public final class GridView: NSView {
         // (②), then switch + close. A direct mouse click stays instant.
         if let s = kbSelectedWindow() {
             commitSwitch(target: sel) { [weak self] in
-                self?.onPick?(.window(workspaceIndex: sel,
-                                      pid: s.hit.pid, windowID: s.hit.id))
+                // Window home WS (resolved) — correct even if the thumb sits in
+                // a lens cell. (Full lens-cell kb selection lands in EX-2.6.)
+                self?.onPick?(.window(
+                    homeWorkspaceIndex: self?.windowHomeWS[s.hit.id] ?? sel,
+                    pid: s.hit.pid, windowID: s.hit.id))
             }
         } else {
             commitSwitch(target: sel) { [weak self] in

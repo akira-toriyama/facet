@@ -8,5 +8,10 @@ import FacetCore
 
 public enum GridPick: Sendable {
     case workspace(workspaceIndex: Int)
-    case window(workspaceIndex: Int, pid: Int, windowID: WindowID)
+    /// EX-2: a lens-section cell was picked → activate that lens.
+    case lens(label: String)
+    /// A specific window thumb. `homeWorkspaceIndex` is the WINDOW's home WS
+    /// (0-based), resolved from the live snapshot — NOT the cell's `wsIndex`
+    /// (a window thumb may sit inside a lens cell whose `wsIndex` is −1).
+    case window(homeWorkspaceIndex: Int, pid: Int, windowID: WindowID)
 }
