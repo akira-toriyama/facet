@@ -20,11 +20,12 @@
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
 //     optional `apply` (the inverse, for drops). Activated at runtime with
-//     `facet lens NAME` (tag-unification Phase 1): the backend anchor-parks
-//     every window in the ACTIVE workspace the `match` doesn't select (a real
-//     hide) and re-tiles the rest; `facet lens --clear` lifts it. The
-//     grid/rail cell count stays INVARIANT (a lens narrows what's shown inside
-//     the ACTIVE workspace cell by dropping its `Window.isLensParked`
+//     `facet lens NAME` (tag-unification EX-1 cross-workspace model): the
+//     backend anchor-parks every non-matching window in EVERY workspace on the
+//     current mac desktop (a real hide), gathers the cross-workspace union of
+//     matching windows, and union-tiles them; `facet lens --clear` lifts it.
+//     The grid/rail cell count stays INVARIANT (a lens narrows what's shown
+//     inside each workspace cell by dropping its `Window.isLensParked`
 //     thumbnails, never re-bundles or drops a cell).
 //     `match` is stored VERBATIM and compiled by the consumer, so a malformed
 //     expression is rejected loud + non-fatal at projection time, never at

@@ -652,12 +652,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     /// Activate / clear the active section-lens (`type="lens"` section, by
     /// `label`). The section-model twin of `setLens` (tag-mode bitmask lens):
-    /// resolve the label → the section's `match`, evaluate it over the ACTIVE
-    /// workspace's members, then park the ones it excludes + restore/re-tile
-    /// the ones it includes. `nil` clears the lens (restores every parked
-    /// window). No-op outside the section model; an unknown label or malformed
-    /// `match` is a loud-but-non-fatal operational error (the lens is left
-    /// unchanged, D2). The catalog (`activeSectionLens`) is the authority; the
+    /// resolve the label → the section's `match`, evaluate it across ALL
+    /// workspaces on the current mac desktop (`sectionLensVisibleIDsAll`),
+    /// park out-of-lens windows everywhere, and gather the cross-workspace
+    /// union for tiling. `nil` clears the lens (restores every parked window).
+    /// No-op outside the section model; an unknown label or malformed `match`
+    /// is a loud-but-non-fatal operational error (the lens is left unchanged,
+    /// D2). The catalog (`activeSectionLens`) is the authority; the
     /// main-readable mirror is synced so the view's highlight reads back.
     public func setSectionLens(_ label: String?, autoFocus: Bool) {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
@@ -721,7 +722,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// focus; otherwise focus the first in-lens window, or defocus to Finder
     /// when the lens selects nothing (D2: an empty workspace is allowed).
     /// Internal so the continuous re-park can reuse it. `visibleIDs` is the
-    /// active workspace's in-lens id set.
+    /// cross-workspace in-lens id set; the focus pick may target a window whose
+    /// home workspace is inactive — intended, because the union has already been
+    /// tiled on-screen before focus fires.
     func applySectionLensAutoFocus(visibleIDs: Set<WindowID>) {
         if let cur = focusedWindow(), let slot = catalog.windowMap[cur],
            slot.workspace == catalog.activeIndex {

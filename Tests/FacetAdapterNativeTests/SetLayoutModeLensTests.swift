@@ -49,10 +49,11 @@ final class SetLayoutModeLensTests: XCTestCase {
     }
 
     /// Seed the adapter with 2 workspaces, adopt windows into both, apply
-    /// the "Web" section lens, and return the three WindowIDs. After this call:
+    /// the "Web" section lens, and return the four WindowIDs. After this call:
     ///   - `catalog.activeSectionLens == "Web"`
     ///   - `catalog.activeSectionLensLayout == nil` (fresh lens, no override yet)
     ///   - wid(30) is lens-parked (non-matching "A" app)
+    ///   - wid(10), wid(20), wid(40) are the three in-lens windows (cross-WS)
     private func seedAndActivateLens(_ a: NativeAdapter)
         -> (ws1Web: WindowID, ws2Web: WindowID, nonMatch: WindowID)
     {
@@ -65,14 +66,16 @@ final class SetLayoutModeLensTests: XCTestCase {
         let w10 = window(10, appName: "Web")   // WS1, matches lens
         let w20 = window(20, appName: "Web")   // WS2, matches lens
         let w30 = window(30, appName: "A")     // WS1, non-matching
+        let w40 = window(40, appName: "Web")   // WS2, matches lens (3rd for layout divergence)
 
-        a.catalog.reconcile(live: [w10, w20, w30])
+        a.catalog.reconcile(live: [w10, w20, w30, w40])
         a.catalog.moveWindow(wid(20), to: 2, in: rect)
+        a.catalog.moveWindow(wid(40), to: 2, in: rect)
         a.catalog.activeSectionLens = "Web"
         a.catalog.activeSectionLensLayout = nil   // mirror what setSectionLens does
 
         // Apply the lens so lensParkedMembers is correct.
-        _ = a.catalog.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect)
+        _ = a.catalog.applySectionLens(visibleIDs: [wid(10), wid(20), wid(40)], in: rect)
 
         return (wid(10), wid(20), wid(30))
     }
@@ -142,7 +145,18 @@ final class SetLayoutModeLensTests: XCTestCase {
 
     /// `targetFrames` honours the runtime override through `resolvedLensLayout`.
     /// With override = "grid", the returned map must differ from the "spiral"
-    /// (config) layout for 2+ in-lens windows.
+    /// (config) layout for the 3 in-lens windows (wid 10, 20, 40).
+    ///
+    /// Hand-verified divergence for n=3, rect=1600×900:
+    ///   Grid  (cols=2, rows=2, cellH=450):
+    ///     wid(10): {x:0,    y:0,   w:800,  h:450}
+    ///     wid(20): {x:800,  y:0,   w:800,  h:450}
+    ///     wid(40): {x:0,    y:450, w:1600, h:450}  ← last row widens to fill
+    ///   Spiral (i%4: 0=left-half, 1=top-half, last=fill):
+    ///     wid(10): {x:0,    y:0,   w:800,  h:900}  ← LEFT HALF, full height
+    ///     wid(20): {x:800,  y:0,   w:800,  h:450}
+    ///     wid(40): {x:800,  y:450, w:800,  h:450}
+    ///   wid(10) height=900 (spiral) ≠ 450 (grid) → maps differ. ✓
     func testTargetFramesHonoursOverride() {
         let a = adapterWithWebLens()
         _ = seedAndActivateLens(a)
@@ -154,25 +168,23 @@ final class SetLayoutModeLensTests: XCTestCase {
         a.catalog.activeSectionLensLayout = "grid"
         let gridFrames = a.targetFrames(for: 1, in: rect)
 
-        // Both must contain both in-lens windows.
+        // All three in-lens windows must appear in both maps.
         XCTAssertNotNil(spiralFrames[wid(10)], "wid(10) must be in spiral frames")
         XCTAssertNotNil(gridFrames[wid(10)],   "wid(10) must be in grid frames")
         XCTAssertNotNil(spiralFrames[wid(20)], "wid(20) must be in spiral frames")
         XCTAssertNotNil(gridFrames[wid(20)],   "wid(20) must be in grid frames")
+        XCTAssertNotNil(spiralFrames[wid(40)], "wid(40) must be in spiral frames")
+        XCTAssertNotNil(gridFrames[wid(40)],   "wid(40) must be in grid frames")
 
         // wid(30) is lens-parked → absent in both.
         XCTAssertNil(spiralFrames[wid(30)], "lens-parked wid(30) must be absent")
         XCTAssertNil(gridFrames[wid(30)],   "lens-parked wid(30) must be absent")
 
-        // The override must actually change the tiling. Spiral and grid
-        // produce different arrangements for 2 windows, so at least one
-        // window must have a different frame.
-        //
-        // If somehow spiral == grid (degenerate 1-window lens), this
-        // assertion is vacuous — but with 2 in-lens windows the two
-        // engines do produce different frame maps, so non-equality holds.
+        // The override must actually change the tiling. For n=3 the engines
+        // genuinely differ: grid assigns wid(10) h=450 (row 0 of 2); spiral
+        // assigns wid(10) h=900 (full-height left half). See header comment.
         XCTAssertNotEqual(gridFrames, spiralFrames,
-            "grid and spiral must produce different frame maps for 2 windows")
+            "grid and spiral must produce different frame maps for 3 windows")
     }
 
     // MARK: - Stateful rejected
@@ -196,7 +208,10 @@ final class SetLayoutModeLensTests: XCTestCase {
         // setLayoutMode has dispatchPrecondition(.onQueue(cliQueue)); run on it.
         cliQueue.sync { a.setLayoutMode(workspaceIndex: 0, mode: "bsp") }
 
-        // The runtime override must stay nil — a stateful mode can't tile a union.
+        // Sanity check: the runtime override stays nil — but note this assertion
+        // is NOT the primary regression pin (a pre-EX build also left it nil).
+        // The real pin is `layoutModes` below: the lens branch must intercept
+        // before the workspace branch can write `layoutModes[1] = "bsp"`.
         XCTAssertNil(a.catalog.activeSectionLensLayout,
             "activeSectionLensLayout must remain nil after a stateful rejection")
 

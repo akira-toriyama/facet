@@ -812,9 +812,10 @@ struct WorkspaceCatalog {
                        tags: populateTags
                            ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
                            : [],
-                       // Section-lens park (Phase 1 PR4): authoritative from
-                       // the catalog — the set only ever holds ACTIVE-WS
-                       // windows, so an inactive WS reads `false` here. Views
+                       // Section-lens park (EX-1 cross-WS model): authoritative
+                       // from the catalog — `lensParkedMembers` now spans ALL
+                       // workspaces on the current mac desktop, so an inactive-WS
+                       // out-of-lens window correctly reads `true` here. Views
                        // dim + badge it; no view-side match recompute.
                        isLensParked: lensParkedMembers.contains(w.id))
             }

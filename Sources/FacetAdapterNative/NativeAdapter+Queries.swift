@@ -137,10 +137,11 @@ extension NativeAdapter {
                 + "hidden=\(hideResult.hidden.count) "
                 + "revealed=\(hideResult.revealed.count)")
         }
-        // Section-lens (tag-unification Phase 1, D3): continuous re-park.
-        // Re-evaluate the active section-lens over the active WS and park any
-        // member that's now out of the lens (a window just opened into the
-        // active WS while a lens is active) / restore one that re-entered.
+        // Section-lens (EX-1 cross-workspace model, D3): continuous re-park.
+        // Re-evaluate the active section-lens across ALL workspaces on the
+        // current mac desktop (`applySectionLensReconcile` → `sectionLensVisibleIDsAll`)
+        // and park any member that's now out of the lens (a window just opened
+        // into any WS while a lens is active) / restore one that re-entered.
         // Runs BEFORE `retileAfterReconcile` so a newly-parked window is
         // already detached + excluded from `nonFloatingMembers` when the
         // re-tile computes frames — no tile-then-park flicker. Syncs the
