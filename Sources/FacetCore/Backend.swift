@@ -233,6 +233,16 @@ public protocol WindowBackend: Sendable {
     /// the user picks).
     func setSectionLens(_ label: String?, autoFocus: Bool)
 
+    /// Activate a section (EX-1 throughline) — a workspace (clears any active
+    /// lens, exclusive model) or a `type="lens"` section (cross-workspace
+    /// union). Lens-activate and workspace-activate funnel through this one
+    /// seam so the "exactly one active section" invariant has a single home
+    /// (grid/rail clicks join in EX-2; the user-facing CLI collapses to it in
+    /// EX-4). A lens *clear* stays on `setSectionLens(nil)` — clearing returns
+    /// to the active workspace without switching it. `autoFocus` follows
+    /// `setSectionLens` / `switchWorkspace`.
+    func activateSection(_ section: ActiveSection, autoFocus: Bool)
+
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
     func addWorkspace()
@@ -509,6 +519,13 @@ public protocol WindowBackend: Sendable {
     /// / `config`).
     func currentSectionLens() -> String?
 
+    /// The active section (EX-1) — `.lens(label)` when a section-lens is
+    /// active, else `.workspace(activeIndex)`. The unified, main-actor-safe
+    /// read-back the Controller mirrors for the single active-section
+    /// highlight; supersedes `currentSectionLens()` (now a `.lensLabel` shim).
+    /// Lock-guarded mirror of the active catalog's `activeSection`.
+    func currentActiveSection() -> ActiveSection
+
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
     /// Reads the in-memory catalog structs, so the Controller calls it on
@@ -583,6 +600,7 @@ public extension WindowBackend {
     func switchWorkspace(named name: String, autoFocus: Bool) {}
     func setLens(_ spec: LensSpec, autoFocus: Bool) {}
     func setSectionLens(_ label: String?, autoFocus: Bool) {}
+    func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 
@@ -626,6 +644,7 @@ public extension WindowBackend {
     func definedTagNames() -> [String] { [] }
     func currentLens() -> LensStatus? { nil }
     func currentSectionLens() -> String? { nil }
+    func currentActiveSection() -> ActiveSection { .workspace(1) }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }
