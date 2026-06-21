@@ -149,6 +149,34 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(section?.layout, "spiral")
     }
 
+    /// A forbidden (stateful) layout value such as "bsp" must be stored
+    /// VERBATIM at parse time — the clamp to a stateless engine is deferred
+    /// to `LensLayout.resolve` at activation, not at decode.
+    func testLensSectionStoresForbiddenLayoutVerbatim() {
+        let row: [String: TOMLValue] = [
+            "type": .string("lens"),
+            "label": .string("Dev"),
+            "match": .string("tag~=dev"),
+            "layout": .string("bsp"),
+        ]
+        let (section, _) = DesktopSection.parse(fromTOMLRow: row)
+        XCTAssertEqual(section?.layout, "bsp")
+    }
+
+    /// An empty-string `layout` must be treated as absent (the isEmpty guard)
+    /// and stored as nil, so callers see "no layout authored" rather than the
+    /// empty string leaking through to `LensLayout.resolve`.
+    func testLensSectionEmptyLayoutIsNil() {
+        let row: [String: TOMLValue] = [
+            "type": .string("lens"),
+            "label": .string("Tools"),
+            "match": .string("tag~=tools"),
+            "layout": .string(""),
+        ]
+        let (section, _) = DesktopSection.parse(fromTOMLRow: row)
+        XCTAssertNil(section?.layout)
+    }
+
     /// An unassigned section needs only a label.
     func testUnassignedSectionNeedsLabel() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """

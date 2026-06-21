@@ -7,16 +7,21 @@
 public enum LensLayout {
     /// Stateless engine name for a lens union. `requested` is the
     /// section's `layout`; `globalDefault` is `[layout] default`. Order:
-    /// requested-if-stateless → globalDefault-if-stateless → "grid".
+    /// requested-if-stateless → globalDefault-if-stateless → grid.
+    /// Lowercasing happens exactly once, on the returned value (isStateless
+    /// canonicalises its own argument internally).
     public static func resolve(_ requested: String?, globalDefault: String) -> String {
-        if let r = requested?.lowercased(), isStateless(r) { return r }
-        let g = globalDefault.lowercased()
-        if isStateless(g) { return g }
-        return "grid"
+        if let r = requested, isStateless(r) { return r.lowercased() }
+        if isStateless(globalDefault) { return globalDefault.lowercased() }
+        return GridLayout().name
     }
 
     /// A stateless engine = a registered `LayoutEngine` (master-*/grid/
     /// spiral). bsp / stack / float are NOT stateless engines.
+    /// Lowercases its argument before the registry lookup so it is
+    /// independently callable regardless of the caller's case convention.
+    /// Public: FacetAdapterNative's active-lens layout guard (EX-1b.6)
+    /// reuses this as the canonical "can this mode tile a union?" predicate.
     public static func isStateless(_ mode: String) -> Bool {
         LayoutRegistry.engine(named: mode.lowercased()) != nil
     }
