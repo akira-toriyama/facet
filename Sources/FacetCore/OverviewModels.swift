@@ -89,10 +89,24 @@ public struct OverviewCell {
     public let mode: String          // layout engine (bsp / stack), shown in header
     public let windows: [MiniWindowHit]
     public let isHero: Bool
+    /// Which section kind this cell renders — `.workspace` (the spatial
+    /// substrate) or `.lens` (a cross-workspace saved-filter section, EX-2).
+    /// Defaulted so every existing 8-arg call site compiles unchanged.
+    public let sectionType: SectionType
+    /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /
+    /// `"section:<declOrder>:<label>"`) — stable identity for routing /
+    /// signatures. Empty for legacy workspace-built cells.
+    public let sectionID: String
+
+    /// True for a `type=lens` cell — a cross-workspace section, never a
+    /// move/swap target (no source workspace; `wsIndex == -1`).
+    public var isLens: Bool { sectionType == .lens }
 
     public init(wsIndex: Int, rect: CGRect, headerRect: CGRect,
                 isActive: Bool, label: String, mode: String,
-                windows: [MiniWindowHit], isHero: Bool = false) {
+                windows: [MiniWindowHit], isHero: Bool = false,
+                sectionType: SectionType = .workspace,
+                sectionID: String = "") {
         self.wsIndex = wsIndex
         self.rect = rect
         self.headerRect = headerRect
@@ -101,6 +115,8 @@ public struct OverviewCell {
         self.mode = mode
         self.windows = windows
         self.isHero = isHero
+        self.sectionType = sectionType
+        self.sectionID = sectionID
     }
 }
 
