@@ -435,16 +435,22 @@ extension SidebarView {
             let win0 = lastWorkspaces.first { $0.index == i }?
                 .windows.first { $0.id == id }
             let hidden = win0?.isOnscreen == false
-            // A *lens-parked* row (out of the active section-lens,
-            // anchor-parked + dimmed with a `lens` badge): clicking it drops
-            // the lens and focuses the window (it's always on the active WS).
+            // A *lens-parked* row (out of the active section-lens, anchor-parked
+            // + dimmed with a `lens` badge): clicking it drops the lens and
+            // focuses the window. EX-0 made the lens cross-workspace, so a parked
+            // row can live in an INACTIVE workspace — only the active-WS case
+            // clears the lens in place (`revealLensParked`); an inactive-WS parked
+            // row falls through to the `needSwitch` path below, which switches to
+            // its home WS (that switch clears the lens via `setActive`) so the
+            // window becomes visible before focus (else focus would land on the
+            // still-parked sliver).
             let lensParked = win0?.isLensParked == true
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
             let bk = backend
             let ctrl = controller
-            if lensParked {
+            if lensParked && !needSwitch {
                 Task { @MainActor in ctrl?.revealLensParked(window) }
                 return
             }

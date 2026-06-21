@@ -1185,8 +1185,12 @@ extension Controller: TreeController {
         Log.debug("revealLensParked id=\(window.id.serverID): clear lens + focus")
         // Drop the active lens (clearSectionLens restores + re-tiles every
         // parked window) then focus the clicked one. Both enqueue on the
-        // serial cliQueue in this order, so the restore lands first. The
-        // window is on the active WS (lens-park is active-WS only) → no switch.
+        // serial cliQueue in this order, so the restore lands first. Called
+        // ONLY for a parked window on the ACTIVE workspace (no switch needed):
+        // EX-0's cross-workspace lens means a parked row can live in an inactive
+        // WS, but `SidebarView.handleClick` routes that case through the
+        // workspace-switch path instead (the switch clears the lens + makes the
+        // window visible), so this method never has to switch.
         setActiveLens(nil)
         focusWindow(window, postSwitch: false)
     }
