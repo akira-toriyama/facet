@@ -477,7 +477,11 @@ extension NativeAdapter {
             // never physically gather/park it. workspace name is overlaid too
             // (nil → "" for an orphan, so `not workspace` matches it).
             let tagged = w.withTags(catalog.tagModel.names(in: slot.tags))
-            if LensMembership.matches(tagged, inWorkspaceNamed: catalog.workspaceName(slot.workspace),
+            // nil workspace name = NO assignment (orphan) so `not workspace`
+            // matches; an assigned window passes its name (even "" when
+            // unnamed) so `not workspace` excludes it.
+            let wsName = slot.workspace.map { catalog.workspaceName($0) }
+            if LensMembership.matches(tagged, inWorkspaceNamed: wsName,
                                       filter: filter) {
                 out.insert(id)
             }

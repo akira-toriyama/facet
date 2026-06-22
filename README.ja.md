@@ -387,7 +387,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `layout` + `apply`。 `facet lens NAME` で有効化すると、 match を外れた窓を
   **すべての workspace 横断で** anchor park (cross-workspace exclusive な実 hide)
   し、 一致した窓を union タイルする。 どれかの workspace に切り替えると lens は
-  自動解除・`facet lens --clear` で park した窓が戻る)、 `"unassigned"`。
+  自動解除・`facet lens --clear` で park した窓が戻る。 **窓を lens に DnD すると
+  元の workspace から外れ**、 lens 経由でのみ存在する＝一致 lens が非 active の間は
+  **迷子 (orphan)** になる)。 よって窓は**どの workspace にも属さない**ことがあり、
+  迷子は invisible-but-logged（WS1 へ auto-home しない）。 **迷子受け皿** =
+  `match = 'not workspace'` の `type = "lens"` section で集約（desktop ごとに 1 つ推奨）。
   **workspace は config から命名できない** —
   名前は実行時 `facet workspace --rename` が所有。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で

@@ -413,8 +413,13 @@ Frequently-touched keys:
   `layout` + `apply`; activate it with `facet lens NAME` to anchor-park
   every non-matching window across **every** workspace — cross-workspace
   exclusive — and union-tile the matches; switching to any workspace clears
-  the lens, `facet lens --clear` lifts it and restores the parked windows),
-  or `"unassigned"`. **Workspaces are not named from config** —
+  the lens, `facet lens --clear` lifts it and restores the parked windows;
+  **dragging a window onto a lens relocates it out of its workspace** — it now
+  lives only via the lens, becoming a 迷子 (orphan) when no matching lens is
+  active). A window can thus belong to **no** workspace; orphans are
+  invisible-but-logged (never auto-homed). Surface them with a 迷子 receptacle —
+  a `type = "lens"` section whose `match = 'not workspace'` (recommended: keep
+  one per desktop). **Workspaces are not named from config** —
   a runtime `facet workspace --rename` owns the name. Two modes: **no**
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
   workspaces automatically; **any** present → **opt-in**: facet manages

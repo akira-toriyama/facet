@@ -65,13 +65,20 @@
 /// predicate exposes only `Window` + name + filter.
 struct ProjectedWindowFields: WindowFields {
     let window: Window
-    let workspaceName: String
+    /// The containing workspace's name, or `nil` when the window has NO
+    /// workspace assignment (EX-3 迷子 / orphan). `nil` (assignment absent) is
+    /// distinct from `""` (assigned to an unnamed workspace — "show the
+    /// number"): only `nil` makes `not workspace` match, so the 迷子 receptacle
+    /// (`match='not workspace'`) catches orphans WITHOUT also catching windows
+    /// in an unnamed workspace. Presence is keyed off the ASSIGNMENT, never the
+    /// display name.
+    let workspaceName: String?
 
     func filterValue(_ field: String) -> String? {
         field == "workspace" ? workspaceName : window.filterValue(field)
     }
     func filterHas(_ field: String) -> Bool {
-        field == "workspace" ? !workspaceName.isEmpty : window.filterHas(field)
+        field == "workspace" ? (workspaceName != nil) : window.filterHas(field)
     }
 }
 
