@@ -58,6 +58,9 @@ extension NativeAdapter {
                     + "unmanaged -> hands-off, panel hidden")
             }
             workspaceList = []
+            // Hands-off desktop carries no orphans either — clear the mirror so
+            // a stale prior-desktop orphan can't leak into the panel.
+            syncOrphanMirror(in: [], focused: nil, populateTags: false)
             return
         }
         seedCatalogFromConfig()
@@ -190,6 +193,8 @@ extension NativeAdapter {
         // makes the AX reality catch up. See memory
         // `facet-ws-switch-focus-management`.
         let displayFocus = redirectedFocus(live: live, axFocus: focused)
+        let sectionModelLive =
+            config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
         workspaceList = catalog.snapshot(
             live: live,
             focused: displayFocus,
@@ -198,7 +203,13 @@ extension NativeAdapter {
             // `match='tag~=X'` / `apply:addTag(X)` round-trips. Gated on the
             // active mac desktop being section-managed — by-workspace / tag
             // degrade unaffected (passes false → `tags: []`).
-            populateTags: config.isSectionModelActive(ordinal: activeMacDesktopOrdinal))
+            populateTags: sectionModelLive)
+        // EX-3 迷子: refresh the orphan mirror with the SAME live / focus /
+        // section-model gate the snapshot used. `snapshot` drops orphans (no
+        // `Workspace`), so the views' lens sections get them from this mirror
+        // via `Controller.apply` → `FilterProjection.project(…, orphans:)`.
+        syncOrphanMirror(in: live, focused: displayFocus,
+                         populateTags: sectionModelLive)
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
         // windows (Cmd+H'd apps, windows on other mac desktops,
         // minimized windows) as examined so a later

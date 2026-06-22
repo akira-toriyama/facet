@@ -193,4 +193,57 @@ final class OrphanWorkspaceTests: XCTestCase {
         XCTAssertTrue(plan.toPark.contains { $0.id == wid(99) },
                       "clearing a lens parks the orphans it was showing")
     }
+
+    // MARK: - EX-3 GAP fix: orphanWindows() projects orphans for lens sections
+
+    /// `orphanWindows` returns EXACTLY the managed windows in no workspace —
+    /// the input the tree/grid/rail lens sections need (snapshot drops them).
+    /// Closes the host-verify GAP (orphan rendered in no section even though
+    /// the activation path gathered it on-screen).
+    func testOrphanWindowsReturnsOnlyOrphans() {
+        var c = seededCatalog(3)
+        _ = c.reconcile(live: [window(10)])        // normal → WS1
+        makeOrphan(&c, 99)                          // orphan
+        let orphans = c.orphanWindows(
+            in: [window(10), window(99)], focused: nil, populateTags: false)
+        XCTAssertEqual(orphans.map(\.id), [wid(99)],
+                       "only the orphan (workspace==nil), never the workspaced window")
+    }
+
+    /// A stashed (shelved) window is excluded — it's invisible everywhere,
+    /// orphan or not (shared `trackedWindows` gate with `snapshot`).
+    func testOrphanWindowsExcludesStashed() {
+        var c = seededCatalog(3)
+        makeOrphan(&c, 99)
+        c.stashedWindows.insert(wid(99))
+        let orphans = c.orphanWindows(
+            in: [window(99)], focused: nil, populateTags: false)
+        XCTAssertTrue(orphans.isEmpty,
+                      "a stashed orphan is excluded (trackedWindows drops stashed)")
+    }
+
+    /// An UNMANAGED window (live but never reconciled → no `windowMap` entry)
+    /// is NOT an orphan: `windowMap[id]?.workspace == nil` is true for it too,
+    /// so the guard MUST key off the entry's presence (via `trackedWindows`),
+    /// not the optional-chain nil. Pins that distinction.
+    func testOrphanWindowsExcludesUnmanaged() {
+        let c = seededCatalog(3)
+        let orphans = c.orphanWindows(
+            in: [window(77)], focused: nil, populateTags: false)
+        XCTAssertTrue(orphans.isEmpty,
+                      "an unmanaged window (no windowMap entry) is not an orphan")
+    }
+
+    /// Tags ride the `populateTags` gate exactly as in `snapshot` (shared
+    /// `makeWindow`): on when the section model is live (so a `tag~=X` lens
+    /// gathers the orphan), `[]` otherwise.
+    func testOrphanWindowsTagsGatedBySectionModel() {
+        var c = seededCatalog(3)
+        makeOrphan(&c, 99)
+        _ = c.addTagToWindow(wid(99), name: "web")
+        let on = c.orphanWindows(in: [window(99)], focused: nil, populateTags: true)
+        XCTAssertEqual(on.first?.tags, ["web"], "tags populated under section model")
+        let off = c.orphanWindows(in: [window(99)], focused: nil, populateTags: false)
+        XCTAssertEqual(off.first?.tags, [], "tags suppressed off the section model")
+    }
 }

@@ -295,6 +295,33 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Lens-only shim over `currentActiveSection()` for existing callers.
     public func currentSectionLens() -> String? { currentActiveSection().lensLabel }
 
+    /// EX-3 迷子: the main-readable mirror of the catalog's orphan windows
+    /// (managed, assigned to no workspace). `snapshot` can't carry orphans
+    /// (they belong to no `Workspace`), so `Controller.apply` (main) reads this
+    /// mirror and feeds it to `FilterProjection.project(…, orphans:)` for the
+    /// views' lens sections. Refreshed on `cliQueue` at the tail of every
+    /// `refreshCatalog` (right after the `snapshot`) under `sectionLensLock`,
+    /// so the main-thread read is race-free — same handoff as `_activeSection`.
+    private var _orphanWindows: [Window] = []
+
+    /// Refresh the orphan mirror from the active catalog. Called on `cliQueue`
+    /// with the SAME `live` / `focused` / section-model `populateTags` gate the
+    /// `snapshot` used, so the two agree. The catalog read happens on-queue
+    /// (no concurrent mutator — catalog is cliQueue-confined); the lock guards
+    /// only the array handoff to the main thread.
+    func syncOrphanMirror(in live: [Window], focused: WindowID?,
+                          populateTags: Bool) {
+        let orphans = catalog.orphanWindows(in: live, focused: focused,
+                                            populateTags: populateTags)
+        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        _orphanWindows = orphans
+    }
+
+    public func orphanWindows() -> [Window] {
+        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        return _orphanWindows
+    }
+
     // MARK: - Event / error streams
 
     private let eventStream: AsyncStream<BackendEvent>

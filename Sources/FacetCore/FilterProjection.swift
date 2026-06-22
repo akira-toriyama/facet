@@ -108,8 +108,21 @@ public enum FilterProjection {
     ///   Extra live workspaces append at the tail of the workspace-section
     ///   run; surplus workspace sections + malformed lens matches are noted
     ///   in `diagnostics`.
+    ///
+    /// `orphans` (EX-3 迷子): windows that belong to NO workspace
+    /// (`WindowSlot.workspace == nil`), so the backend's `[Workspace]` snapshot
+    /// can't carry them. They are evaluated against LENS sections ONLY, with an
+    /// assignment-absent workspace (`inWorkspaceNamed: nil`) so `not workspace`
+    /// catches them — the 迷子 receptacle. They are NEVER added to a workspace
+    /// section (an orphan is in no workspace) and are appended AFTER the
+    /// workspace-resident matches in each lens. No dedup is needed: an orphan
+    /// appears in no `workspaces[].windows`, so it can't double-match. Default
+    /// `[]` keeps every non-orphan caller byte-identical. This closes the GAP
+    /// where an orphan rendered in NO tree/grid/rail section even though the
+    /// activation path gathered it on-screen (display ↔ gather disagreement).
     public static func project(workspaces: [Workspace],
-                               sections: [DesktopSection]) -> Result {
+                               sections: [DesktopSection],
+                               orphans: [Window] = []) -> Result {
         // Workspace sections map onto the live workspaces POSITIONALLY (k-th
         // workspace section ↔ workspaces[k]) — the backend already emits them
         // index-ascending, so array order == index order. The section's id /
@@ -170,6 +183,16 @@ public enum FilterProjection {
                             w, inWorkspaceNamed: ws.name, filter: filter) {
                             matched.append(w)
                         }
+                    }
+                    // EX-3 迷子: orphans (in no workspace) match against this
+                    // lens with `inWorkspaceNamed: nil`, so `not workspace`
+                    // catches them (the receptacle) and a content lens catches
+                    // them by their own fields. Appended AFTER the workspace
+                    // matches; no dedup (an orphan is in no `ws.windows`).
+                    for w in orphans
+                    where LensMembership.matches(
+                        w, inWorkspaceNamed: nil, filter: filter) {
+                        matched.append(w)
                     }
                     out.append(ProjectedSection(
                         id: "section:\(declOrder):\(s.label)", label: s.label,

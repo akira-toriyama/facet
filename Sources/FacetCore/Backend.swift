@@ -533,6 +533,18 @@ public protocol WindowBackend: Sendable {
     /// Lock-guarded mirror of the active catalog's `activeSection`.
     func currentActiveSection() -> ActiveSection
 
+    /// EX-3 迷子: the managed windows assigned to NO workspace
+    /// (`WindowSlot.workspace == nil`). The `workspaces()` snapshot can't carry
+    /// them (an orphan is in no `Workspace`), so the Controller reads them here
+    /// — main-actor-safe, off a lock-guarded mirror refreshed on `cliQueue` at
+    /// the tail of every catalog refresh (same handoff as `currentActiveSection`)
+    /// — and feeds them to `FilterProjection.project(…, orphans:)` so the views'
+    /// lens sections render them (the 迷子 receptacle + any content lens they
+    /// match). WITHOUT this, an orphan shows in no tree/grid/rail section even
+    /// though the activation path gathers it on-screen (display ↔ gather
+    /// disagreement). `[]` outside the section model / for backends without one.
+    func orphanWindows() -> [Window]
+
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
     /// Reads the in-memory catalog structs, so the Controller calls it on
@@ -653,6 +665,7 @@ public extension WindowBackend {
     func currentLens() -> LensStatus? { nil }
     func currentSectionLens() -> String? { nil }
     func currentActiveSection() -> ActiveSection { .workspace(1) }
+    func orphanWindows() -> [Window] { [] }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }

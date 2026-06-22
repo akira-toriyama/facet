@@ -844,40 +844,20 @@ struct WorkspaceCatalog {
                 ? orderedMembers(of: entry.index).first
                 : nil
             let wins = (byWS[entry.index] ?? []).map { w in
-                // Per-window facet attributes read through the same
-                // named accessors `facetState` (query export) uses, so
-                // the two projections can't drift (grouping-01). Frame /
-                // master stay contextual (per-WS layout-derived).
-                Window(id: w.id, pid: w.pid, appName: w.appName,
-                       title: w.title,
-                       isFocused: w.id == focused,
-                       isFloating: isFloating(w.id),
-                       frame: wouldBeFrame(
-                           for: w, isActiveWS: isActive,
-                           mode: m, tileFrames: tileF,
-                           stackSet: stackSet,
-                           engineFrames: engineF,
-                           activeRect: activeRect),
-                       isOnscreen: w.isOnscreen,
-                       isMaster: w.id == master,
-                       mark: mark(forWindow: w.id),
-                       isSticky: isSticky(w.id),
-                       scratchpad: scratchpad(forWindow: w.id),
-                       // Section model (PR8): the lens `match`/`apply` round-
-                       // trip needs `tag~=X` to resolve, so populate tags from
-                       // the window's bitmask when the section model is live.
-                       // Off (default / by-workspace degrade) → `[]`, exactly
-                       // as before. Same `names(in:)` expression `tagSnapshot`
-                       // uses, so the two projections can't drift.
-                       tags: populateTags
-                           ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
-                           : [],
-                       // Section-lens park (EX-1 cross-WS model): authoritative
-                       // from the catalog — `lensParkedMembers` now spans ALL
-                       // workspaces on the current mac desktop, so an inactive-WS
-                       // out-of-lens window correctly reads `true` here. Views
-                       // dim + badge it; no view-side match recompute.
-                       isLensParked: lensParkedMembers.contains(w.id))
+                // Per-window facet attributes read through the shared
+                // `makeWindow` helper (the SINGLE construction site, shared
+                // with `orphanWindows`) so the projections can't drift on the
+                // non-contextual fields. Frame / master stay CONTEXTUAL
+                // (per-WS layout-derived) and are passed in here.
+                makeWindow(w, focused: focused,
+                           frame: wouldBeFrame(
+                               for: w, isActiveWS: isActive,
+                               mode: m, tileFrames: tileF,
+                               stackSet: stackSet,
+                               engineFrames: engineF,
+                               activeRect: activeRect),
+                           isMaster: w.id == master,
+                           populateTags: populateTags)
             }
             return Workspace(
                 index: entry.index - 1,
@@ -885,6 +865,69 @@ struct WorkspaceCatalog {
                 isActive: isActive,
                 layoutMode: m,
                 windows: wins)
+        }
+    }
+
+    /// Build a `Window` projection for `w` from the catalog's per-window
+    /// accessors — the SINGLE construction site shared by `snapshot` (per-WS,
+    /// layout-contextual) and `orphanWindows` (no WS, no layout) so the two
+    /// can't drift on the NON-contextual fields (tags / mark / float / sticky /
+    /// scratchpad / isLensParked / focus / onscreen). The CONTEXTUAL fields —
+    /// `frame` (the per-WS would-be tile slot) and `isMaster` (first in the WS
+    /// tiling order) — are computed by the caller and passed in; an orphan, in
+    /// no workspace, passes the raw live frame + `isMaster: false`.
+    ///
+    /// `populateTags` (section model, PR8): when on, `Window.tags` carries the
+    /// window's bitmask names so a lens `match='tag~=X'` / `apply:addTag(X)`
+    /// round-trips; off (default / by-workspace degrade) → `[]`, exactly as
+    /// before. Same `names(in:)` expression `tagSnapshot` uses.
+    private func makeWindow(_ w: Window, focused: WindowID?,
+                            frame: CGRect?, isMaster: Bool,
+                            populateTags: Bool) -> Window {
+        Window(id: w.id, pid: w.pid, appName: w.appName,
+               title: w.title,
+               isFocused: w.id == focused,
+               isFloating: isFloating(w.id),
+               frame: frame,
+               isOnscreen: w.isOnscreen,
+               isMaster: isMaster,
+               mark: mark(forWindow: w.id),
+               isSticky: isSticky(w.id),
+               scratchpad: scratchpad(forWindow: w.id),
+               tags: populateTags
+                   ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
+                   : [],
+               // Section-lens park (EX-1 cross-WS model): authoritative from
+               // the catalog — `lensParkedMembers` spans ALL workspaces on the
+               // current mac desktop, so an inactive-WS out-of-lens window
+               // correctly reads `true` here. Views dim + badge it; no
+               // view-side recompute.
+               isLensParked: lensParkedMembers.contains(w.id))
+    }
+
+    /// EX-3 迷子: the managed windows assigned to NO workspace
+    /// (`WindowSlot.workspace == nil`), projected as `Window`s for the views'
+    /// LENS sections. `snapshot` buckets these under its `-1` sentinel and
+    /// drops them (they belong to no `Workspace`), so without this they render
+    /// in no tree/grid/rail section even though the activation path
+    /// (`sectionLensVisibleIDsAll`) gathers them on-screen — the host-verify
+    /// GAP. `Controller.apply` feeds the result to
+    /// `FilterProjection.project(…, orphans:)`, which appends them into the
+    /// `not workspace` receptacle (and any content lens they match) WITHOUT
+    /// touching workspace sections.
+    ///
+    /// Stashed windows are excluded (via `trackedWindows`). Frame = the raw
+    /// live bounds (an orphan has no WS layout — a parked sliver when not
+    /// gathered, real bounds when a 迷子 lens is active); `isMaster: false`.
+    /// Built through the SAME `makeWindow` helper as `snapshot`, so the two
+    /// can't drift. `trackedWindows` guarantees a `windowMap` entry, so
+    /// `workspace == nil` identifies a true orphan (never an unmanaged window).
+    func orphanWindows(in live: [Window], focused: WindowID?,
+                       populateTags: Bool) -> [Window] {
+        trackedWindows(in: live).compactMap { w in
+            guard windowMap[w.id]?.workspace == nil else { return nil }
+            return makeWindow(w, focused: focused, frame: w.frame,
+                              isMaster: false, populateTags: populateTags)
         }
     }
 
