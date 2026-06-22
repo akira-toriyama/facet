@@ -70,8 +70,10 @@ struct ProjectedWindowFields: WindowFields {
     /// distinct from `""` (assigned to an unnamed workspace — "show the
     /// number"): only `nil` makes `not workspace` match, so the 迷子 receptacle
     /// (`match='not workspace'`) catches orphans WITHOUT also catching windows
-    /// in an unnamed workspace. Presence is keyed off the ASSIGNMENT, never the
-    /// display name.
+    /// in an unnamed workspace. Presence is keyed off the ASSIGNMENT (`Int?`
+    /// nil vs not), never the display name — which is WHY an unnamed workspace
+    /// (name `""`, but assigned) does not collide with an orphan (`ws=nil`) in
+    /// `not workspace` / bare `workspace` filter logic.
     let workspaceName: String?
 
     func filterValue(_ field: String) -> String? {

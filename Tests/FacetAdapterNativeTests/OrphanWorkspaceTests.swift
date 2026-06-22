@@ -150,6 +150,17 @@ final class OrphanWorkspaceTests: XCTestCase {
         XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1, "sticky window keeps its WS")
     }
 
+    func testSetOrphanRejectsStashed() {
+        var c = seededCatalog(3)
+        _ = c.reconcile(live: [window(10)])        // WS1
+        c.stashedWindows.insert(wid(10))           // shelved scratchpad
+        switch c.setOrphan(wid(10)) {
+        case .rejected: break
+        default: XCTFail("a stashed window can't be orphaned (.rejected)")
+        }
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1, "stashed window keeps its WS")
+    }
+
     func testSetOrphanRemovesFromMembershipAndSnapshot() {
         var c = seededCatalog(3)
         _ = c.reconcile(live: [window(10)])        // WS1
