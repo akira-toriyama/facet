@@ -142,21 +142,40 @@ extension NativeAdapter {
         }
         // EX-3.3 (canon ④⑨ "新規窓 = 開いた世界の apply を継ぐ・必ず見える"): a
         // window launched while a section-lens is active inherits that lens's
-        // `apply` tags so it JOINS the lens — the `applySectionLensReconcile`
+        // FORWARD `apply` ops so it JOINS the lens — the `applySectionLensReconcile`
         // immediately below then shows it in the cross-workspace union instead
-        // of parking it. It keeps `workspace = activeIndex` (D-A: never an
-        // orphan-on-birth — orphans arise only from an explicit DnD move). Only
-        // the freshly-adopted ids are tagged (not existing windows). Non-tag
-        // apply (floating/sticky/master) inheritance is deferred — a lens
-        // `apply` is ~always `addTag`; an apply-less pure-condition lens that a
-        // new window doesn't match leaves it in its home WS (declared gap).
+        // of parking it. The full forward set is applied (tags + floating/sticky/
+        // master), so a window auto-joining lands in the same facet state as one
+        // dragged into the section; `setWorkspace` is the one op stripped — the
+        // window keeps `workspace = activeIndex` (D-A: never an orphan-on-birth —
+        // orphans arise only from an explicit DnD move). Only the freshly-adopted
+        // ids are touched (not existing windows), and the catalog setters are
+        // idempotent + run BEFORE the reconcile/retile below so the facets land in
+        // one pass (no float-then-tile flicker). An apply-less / wholly-stripped
+        // pure-condition lens that a new window doesn't match leaves it in its
+        // home WS (declared gap).
         if !result.addedIDs.isEmpty {
-            let inheritTags = activeSectionLensApplyTags()
-            if !inheritTags.isEmpty {
+            let inheritOps = activeSectionLensApplyForward()
+            if !inheritOps.isEmpty {
                 for id in result.addedIDs {
-                    for t in inheritTags { _ = catalog.addTagToWindow(id, name: t) }
+                    for op in inheritOps {
+                        switch op {
+                        case .addTag(let t):
+                            _ = catalog.addTagToWindow(id, name: t)
+                        case .setFloating(let b):
+                            _ = catalog.setFloating(id, b, focused: focused, in: rect)
+                        case .setSticky(let b):
+                            _ = catalog.setSticky(id, b, focused: focused, in: rect)
+                        case .setMaster(let b):
+                            _ = catalog.setMaster(id, b, workspace: catalog.activeIndex)
+                        // removeTag is never config-authored; setWorkspace is
+                        // stripped upstream (keep `workspace = activeIndex`).
+                        case .removeTag, .setWorkspace:
+                            break
+                        }
+                    }
                 }
-                Log.debug("native: new-window lens-inherit tags=\(inheritTags) "
+                Log.debug("native: new-window lens-inherit ops=\(inheritOps.count) "
                     + "windows=\(result.addedIDs.count)")
             }
         }
@@ -380,21 +399,26 @@ extension NativeAdapter {
             .layout
     }
 
-    /// EX-3.3: the `addTag` names in the ACTIVE section-lens's `apply` (canon
-    /// ④⑨ — a window launched while this lens is active inherits these so it
-    /// joins the lens). `[]` when no lens is active or the section has no
-    /// `addTag` apply (a pure-condition lens — the new window can't be made to
-    /// match, declared gap). Resolved against the LIVE config so a hot-reload is
-    /// honoured (mirrors `lensLayout(forLabel:)` / `sectionLensFilter()`).
-    func activeSectionLensApplyTags() -> [String] {
+    /// EX-3.3: the FORWARD `apply` ops in the ACTIVE section-lens (canon ④⑨ — a
+    /// window launched while this lens is active inherits these so it joins the
+    /// lens in the SAME facet state as one dragged in). Everything the section's
+    /// `apply` carries EXCEPT `setWorkspace`, which is stripped so the new window
+    /// keeps `workspace = activeIndex` (D-A: never an orphan-on-birth). This
+    /// mirrors the DnD forward set (`ApplyResolver` strips `setWorkspace`;
+    /// `removeTag` is never config-authored). `[]` when no lens is active or the
+    /// section has an empty / wholly-stripped `apply` (a pure-condition lens —
+    /// the new window can't be made to match, declared gap). Resolved against the
+    /// LIVE config so a hot-reload is honoured (mirrors `lensLayout(forLabel:)` /
+    /// `sectionLensFilter()`).
+    func activeSectionLensApplyForward() -> [ApplyOp] {
         guard let label = catalog.activeSectionLens,
               let ord = activeMacDesktopOrdinal,
               let section = config.effectiveMacDesktopSectionConfigs[ord]?
                 .first(where: { $0.type == .lens && $0.label == label })
         else { return [] }
-        return section.apply.compactMap {
-            if case .addTag(let t) = $0 { return t }
-            return nil
+        return section.apply.filter {
+            if case .setWorkspace = $0 { return false }
+            return true
         }
     }
 
@@ -656,8 +680,8 @@ extension NativeAdapter {
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
         // New windows start with no tags (the `tags` map stays empty). A
         // window opened while a `type="lens"` section is active inherits that
-        // lens's `apply` tags later in `refreshCatalog`
-        // (`activeSectionLensApplyTags`), so no per-window seed is needed here.
+        // lens's forward `apply` later in `refreshCatalog`
+        // (`activeSectionLensApplyForward`), so no per-window seed is needed here.
         // The probe below is built for the `[[exclude]]` action lookup, the
         // sole consumer of the resolved AX role/subrole now that `[[assign]]`
         // is retired (#191).
