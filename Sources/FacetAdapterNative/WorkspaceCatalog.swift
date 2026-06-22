@@ -45,21 +45,20 @@ struct WindowSlot: Equatable, Sendable {
     /// every per-workspace view (excluded by `== n1Based` filters, dropped
     /// from `snapshot`) until a `type="lens"` receptacle (`match='not
     /// workspace'`) gathers it. Orphans arise ONLY from an explicit DnD
-    /// move onto a lens (EX-3.2) — reconcile never adopts a nil. In
-    /// workspace mode this is the membership authority; in tag mode it's
-    /// bookkeeping only (visibility comes from `tags`).
+    /// move onto a lens (EX-3.2) — reconcile never adopts a nil. This is
+    /// the membership authority; the section model (a `type="lens"`
+    /// section + reconcile) owns visibility, reading `tags` for matching.
     let workspace: Int?
     let pid: Int
-    /// Tag bitmask (M11-3 `[grouping] by = "tag"`). `0` in workspace
-    /// mode (unused) and for a window not yet tag-assigned. In tag mode
-    /// a window always carries the `_default` floor
-    /// (`TagModel.defaultBit`, bit 63) so it is never `0` / lost.
-    /// Mutable: #191 runtime tagging (`facet window
-    /// --tag`/`--untag`/`--toggle-tag`) rewrites it in place. Every
-    /// `WindowSlot` re-creation must still carry this forward or a
-    /// tag-mode window silently loses its tags.
-    var tags: UInt64
-    init(workspace: Int?, pid: Int, tags: UInt64 = 0) {
+    /// Free-form per-window tag set (EX-4). Used by lens
+    /// `match='tag~=X'` + `facet window --tag/--untag/--toggle-tag/
+    /// --retag`. No vocabulary, no cap, no `_default` floor — empty
+    /// until the user tags the window; session-only (never persisted).
+    /// Mutable: #191/#228 runtime tagging rewrites it in place. Every
+    /// `WindowSlot` re-creation carries it forward (a Set copies
+    /// trivially) or a window silently loses its tags.
+    var tags: Set<String>
+    init(workspace: Int?, pid: Int, tags: Set<String> = []) {
         self.workspace = workspace
         self.pid = pid
         self.tags = tags
@@ -144,14 +143,6 @@ struct WorkspaceCatalog {
     /// so a window the user moved stays where they put it; new
     /// windows land in `activeIndex` on the next reconcile.
     var windowMap: [WindowID: WindowSlot] = [:]
-
-    // MARK: - Per-window tag storage (#191)
-
-    /// Tag vocabulary (declaration order = bit positions). Backs the
-    /// per-window tag attribute (`facet window --tag/--untag/--toggle-tag/
-    /// --retag`); auto-vivified at runtime. The bitmask storage migrates to
-    /// `Set<String>` in EX-4.3.
-    var tagModel = TagModel([])
 
     /// Windows currently parked at the bottom-right anchor sliver.
     /// `markAnchorParked` populates; `consumeAnchorRestore` clears.
@@ -851,9 +842,9 @@ struct WorkspaceCatalog {
     /// no workspace, passes the raw live frame + `isMaster: false`.
     ///
     /// `populateTags` (section model, PR8): when on, `Window.tags` carries the
-    /// window's bitmask names so a lens `match='tag~=X'` / `apply:addTag(X)`
-    /// round-trips; off (default / by-workspace degrade) → `[]`. Uses the
-    /// `tagModel.names(in:)` overlay.
+    /// window's tag set (sorted for a deterministic `#tag` chip order) so a
+    /// lens `match='tag~=X'` / `apply:addTag(X)` round-trips; off (default /
+    /// by-workspace degrade) → `[]`.
     private func makeWindow(_ w: Window, focused: WindowID?,
                             frame: CGRect?, isMaster: Bool,
                             populateTags: Bool) -> Window {
@@ -868,7 +859,7 @@ struct WorkspaceCatalog {
                isSticky: isSticky(w.id),
                scratchpad: scratchpad(forWindow: w.id),
                tags: populateTags
-                   ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
+                   ? (windowMap[w.id]?.tags.sorted() ?? [])
                    : [],
                // Section-lens park (EX-1 cross-WS model): authoritative from
                // the catalog — `lensParkedMembers` spans ALL workspaces on the

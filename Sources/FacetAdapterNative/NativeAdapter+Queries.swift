@@ -453,7 +453,7 @@ extension NativeAdapter {
             // inherit produces, EX-3) would show the window in the tree but
             // never physically gather/park it. workspace name is overlaid too
             // (nil → "" for an orphan, so `not workspace` matches it).
-            let tagged = w.withTags(catalog.tagModel.names(in: slot.tags))
+            let tagged = w.withTags(slot.tags.sorted())
             // nil workspace name = NO assignment (orphan) so `not workspace`
             // matches; an assigned window passes its name (even "" when
             // unnamed) so `not workspace` excludes it.
@@ -649,7 +649,7 @@ extension NativeAdapter {
     /// `deferred` ids are skipped this tick and re-probed next time.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>,
-            deferred: Set<WindowID>, tags: [WindowID: UInt64],
+            deferred: Set<WindowID>, tags: [WindowID: Set<String>],
             probedAX: [WindowID: AXUIElement])
     {
         let rules = config.effectiveExclusionRules
@@ -661,7 +661,7 @@ extension NativeAdapter {
         // The probe below is built for the `[[exclude]]` action lookup, the
         // sole consumer of the resolved AX role/subrole now that `[[assign]]`
         // is retired (#191).
-        let tagMasks: [WindowID: UInt64] = [:]
+        let tagMasks: [WindowID: Set<String>] = [:]
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
         var deferred: Set<WindowID> = []

@@ -32,12 +32,13 @@ import FacetAccessibility
 
 extension NativeAdapter {
 
-    /// The active catalog's tag vocabulary (`facet query --tags`, #228).
-    /// `[]` in workspace mode — the vocabulary only seeds in tag mode.
-    /// A cheap catalog read; P6 → callers invoke it on `cliQueue`
+    /// All tags currently applied to any managed window — the de-facto tag
+    /// vocabulary (`facet query --tags`, #228). The union of every live
+    /// window's free-form tag set (no vocabulary registry exists post-EX-4),
+    /// sorted. A cheap catalog read; P6 → callers invoke it on `cliQueue`
     /// (`writeStatus`, the tag-panel seeds) like every other catalog read.
     public func definedTagNames() -> [String] {
-        catalog.tagModel.names
+        Array(Set(catalog.windowMap.values.flatMap { $0.tags })).sorted()
     }
 
     public func queryFacetStates()
@@ -138,7 +139,7 @@ extension NativeAdapter {
             return WindowQueryEntry.FacetWindowState(
                 workspace: "迷子",
                 workspaceIndex: 0,
-                tags: cat.tagModel.names(in: slot.tags),
+                tags: slot.tags.sorted(),
                 floating: cat.isFloating(id),
                 sticky: cat.isSticky(id),
                 master: false,
@@ -155,7 +156,7 @@ extension NativeAdapter {
         return WindowQueryEntry.FacetWindowState(
             workspace: name,
             workspaceIndex: ws,
-            tags: cat.tagModel.names(in: slot.tags),
+            tags: slot.tags.sorted(),
             floating: cat.isFloating(id),
             sticky: cat.isSticky(id),
             master: master,
