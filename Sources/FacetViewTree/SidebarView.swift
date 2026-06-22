@@ -768,14 +768,10 @@ public final class SidebarView: NSView {
     /// header → every window of that workspace, all sharing the
     /// header row as their popover anchor (the caller stacks
     /// them). The active workspace is always skipped — would just
-    /// overlay the visible windows on themselves.
-    ///
-    /// Tag mode (#191 PR-6): the snapshot is ONE always-active synthetic
-    /// workspace, so this skip suppresses hover previews for every row.
-    /// That's correct for in-lens (on-screen) windows, but also drops the
-    /// preview for parked (out-of-lens) windows — restoring those would
-    /// need per-window lens membership plumbed to the view, deferred as a
-    /// follow-up rather than threaded through the flat-render change.
+    /// overlay the visible windows on themselves. Under the section model a
+    /// window row resolves to its real workspace (multi-match — the anchor is
+    /// the ROW, see below), so this skip is per-window; the removed `by=tag`
+    /// flat tree's one always-active synthetic workspace no longer exists.
     public func previewTargets()
         -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
     {
