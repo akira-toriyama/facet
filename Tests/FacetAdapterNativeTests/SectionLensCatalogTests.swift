@@ -30,6 +30,35 @@ final class SectionLensCatalogTests: XCTestCase {
         XCTAssertEqual(c.activeSection, .workspace(1))      // startup invariant
     }
 
+    /// EX-4.1 / canon ⑭ end-to-end seam: startup active = the FIRST
+    /// `type="workspace"` section, in SECTION-ARRAY order — even when a lens
+    /// section precedes the workspaces in config. `effectiveWorkspaceList`
+    /// drops lens/unassigned sections and 1-based-indexes the workspaces in
+    /// order; `seed` keeps `activeIndex == 1`; `activeSection` is therefore
+    /// `.workspace(1)` = the first workspace section ("Dev"-position), never
+    /// the leading lens, never an empty lens. This pins the full chain the
+    /// tag-mode removal (EX-4.2/4.3) perturbs around. (The halves are tested
+    /// in WorkspaceNamingTests.testSectionWorkspaceListAutoNamesByIndex +
+    /// SectionLensCatalogTests.testActiveSectionIsWorkspaceOneAtInit; this
+    /// chains them through `seed`.)
+    func testStartupActiveIsFirstWorkspaceSectionDespiteLeadingLens() {
+        var cfg = FacetConfig()
+        cfg.macDesktopSectionConfigs = [1: [
+            DesktopSection(type: .lens, label: "Web", match: "tag~=web"),
+            DesktopSection(type: .workspace, label: "Dev", match: ""),
+            DesktopSection(type: .workspace, label: "Side", match: ""),
+        ]]
+        var c = WorkspaceCatalog()
+        c.seed(configs: cfg.effectiveWorkspaceList(forMacDesktopOrdinal: 1))
+        XCTAssertEqual(c.workspaceNames.count, 2)            // lens dropped → 2 ws
+        // First WORKSPACE section is active (1-based), not the leading lens.
+        XCTAssertEqual(c.activeSection, .workspace(1))
+        XCTAssertNil(c.activeSectionLens)                    // never a lens at startup
+        // Auto-named by index (config can't name a workspace) — pins order.
+        XCTAssertEqual(c.workspaceNames[0], WorkspaceNaming.name(forIndex: 0))
+        XCTAssertEqual(c.workspaceNames[1], WorkspaceNaming.name(forIndex: 1))
+    }
+
     func testActiveSectionReflectsActiveLens() {
         var c = seededCatalog(2)
         c.activeSectionLens = "Web"
