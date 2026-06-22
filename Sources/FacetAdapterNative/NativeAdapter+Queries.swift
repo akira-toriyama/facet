@@ -137,6 +137,26 @@ extension NativeAdapter {
                 + "hidden=\(hideResult.hidden.count) "
                 + "revealed=\(hideResult.revealed.count)")
         }
+        // EX-3.3 (canon ④⑨ "新規窓 = 開いた世界の apply を継ぐ・必ず見える"): a
+        // window launched while a section-lens is active inherits that lens's
+        // `apply` tags so it JOINS the lens — the `applySectionLensReconcile`
+        // immediately below then shows it in the cross-workspace union instead
+        // of parking it. It keeps `workspace = activeIndex` (D-A: never an
+        // orphan-on-birth — orphans arise only from an explicit DnD move). Only
+        // the freshly-adopted ids are tagged (not existing windows). Non-tag
+        // apply (floating/sticky/master) inheritance is deferred — a lens
+        // `apply` is ~always `addTag`; an apply-less pure-condition lens that a
+        // new window doesn't match leaves it in its home WS (declared gap).
+        if !result.addedIDs.isEmpty {
+            let inheritTags = activeSectionLensApplyTags()
+            if !inheritTags.isEmpty {
+                for id in result.addedIDs {
+                    for t in inheritTags { _ = catalog.addTagToWindow(id, name: t) }
+                }
+                Log.debug("native: new-window lens-inherit tags=\(inheritTags) "
+                    + "windows=\(result.addedIDs.count)")
+            }
+        }
         // Section-lens (EX-1 cross-workspace model, D3): continuous re-park.
         // Re-evaluate the active section-lens across ALL workspaces on the
         // current mac desktop (`applySectionLensReconcile` → `sectionLensVisibleIDsAll`)
@@ -383,6 +403,24 @@ extension NativeAdapter {
             .layout
     }
 
+    /// EX-3.3: the `addTag` names in the ACTIVE section-lens's `apply` (canon
+    /// ④⑨ — a window launched while this lens is active inherits these so it
+    /// joins the lens). `[]` when no lens is active or the section has no
+    /// `addTag` apply (a pure-condition lens — the new window can't be made to
+    /// match, declared gap). Resolved against the LIVE config so a hot-reload is
+    /// honoured (mirrors `lensLayout(forLabel:)` / `sectionLensFilter()`).
+    func activeSectionLensApplyTags() -> [String] {
+        guard let label = catalog.activeSectionLens,
+              let ord = activeMacDesktopOrdinal,
+              let section = config.effectiveMacDesktopSectionConfigs[ord]?
+                .first(where: { $0.type == .lens && $0.label == label })
+        else { return [] }
+        return section.apply.compactMap {
+            if case .addTag(let t) = $0 { return t }
+            return nil
+        }
+    }
+
     /// Resolved stateless layout for the section-lens labelled `label` (EX-0.3).
     /// Combines the runtime override (`catalog.activeSectionLensLayout`) with the
     /// section's configured `layout` field: override wins when set, else the
@@ -431,7 +469,15 @@ extension NativeAdapter {
         var out: Set<WindowID> = []
         for (id, slot) in catalog.windowMap {
             guard let w = byID[id] else { continue }
-            if LensMembership.matches(w, inWorkspaceNamed: catalog.workspaceName(slot.workspace),
+            // Overlay the catalog's tag NAMES onto the live (tag-less) window so
+            // a `tag~=X` lens resolves in this gather/park path exactly as the
+            // snapshot overlays them for the tree DISPLAY — otherwise a
+            // tag-based section lens (the shape every DnD-to-lens + new-window
+            // inherit produces, EX-3) would show the window in the tree but
+            // never physically gather/park it. workspace name is overlaid too
+            // (nil → "" for an orphan, so `not workspace` matches it).
+            let tagged = w.withTags(catalog.tagModel.names(in: slot.tags))
+            if LensMembership.matches(tagged, inWorkspaceNamed: catalog.workspaceName(slot.workspace),
                                       filter: filter) {
                 out.insert(id)
             }
