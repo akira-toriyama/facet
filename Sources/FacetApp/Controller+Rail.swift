@@ -56,31 +56,39 @@ extension Controller {
         rv.edge = edge                              // M9-3: docked edge
         rv.cellsTarget = config.effectiveRailCells  // upper bound on visible cells
         rv.stripPercent = config.effectiveRailStrip // strip band size (% short edge)
-        rv.selectedWS = rv.activeIndex      // browse cursor starts on the active WS
-        rv.onPick = { [weak self] ws in
+        // EX-2b: the browse cursor (selectedSectionID) is seeded by the
+        // first layoutCells (its stranded-cursor repair snaps nil → the
+        // active section) — no explicit seed here.
+        rv.onPick = { [weak self, bk = backend] pick in
             guard let self else { return }
-            // Commit-on-click (grid-like): dispatch the switch off-main
-            // and dismiss in parallel so the overlay clears immediately;
-            // the workspace-switch lands as it fades out. autoFocus lets
-            // the backend focus the destination's last-touched window.
-            cliQueue.async {
-                self.backend.switchWorkspace(toIndex: ws, autoFocus: true)
-            }
-            self.hideRail()
-        }
-        // Click a specific window thumbnail → switch to its WS AND focus
-        // THAT window (grid parity). Unlike onPick (which uses
-        // autoFocus = the WS's last-touched window), this omits
-        // autoFocus then Focus.asserts the picked window. Dispatch
-        // off-main + dismiss in parallel, like the grid's onPick.window.
-        rv.onPickWindow = { [weak self, bk = backend] ws, pid, id in
-            guard let self else { return }
-            cliQueue.async {
-                bk.switchWorkspace(toIndex: ws)
-                let win = Window(id: id, pid: pid, appName: "",
-                                 title: "", isFocused: false,
-                                 isFloating: false, frame: nil)
-                Focus.assert(win, backend: bk)
+            // EX-2b: route every pick through the validated `activateSection`
+            // throughline (updates the currentActiveSection mirror on main,
+            // clears any active lens on a workspace pick) — never
+            // `bk.switchWorkspace` directly. Mirrors the grid's onPick. The
+            // dismiss runs in parallel so the overlay clears as the switch lands.
+            switch pick {
+            case .workspace(let ws):
+                // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
+                // is 1-based → +1. autoFocus → the WS's last-touched window.
+                self.activateSection(.workspace(ws + 1), autoFocus: true)
+            case .lens(let label):
+                self.activateSection(.lens(label), autoFocus: true)
+            case .window(let home, let pid, let id):
+                // `home` is the WINDOW's home WS (0-based), resolved via the
+                // view's windowHomeWS — correct whether the thumb sat in a
+                // workspace OR a lens cell. Switch there (clears any lens,
+                // updates the mirror on main), then re-assert focus on the
+                // pick. Guard home >= 0 so an unresolvable window focuses
+                // without a bogus .workspace(0).
+                if home >= 0 {
+                    self.activateSection(.workspace(home + 1), autoFocus: false)
+                }
+                cliQueue.async {
+                    let win = Window(id: id, pid: pid, appName: "",
+                                     title: "", isFocused: false,
+                                     isFloating: false, frame: nil)
+                    Focus.assert(win, backend: bk)
+                }
             }
             self.hideRail()
         }

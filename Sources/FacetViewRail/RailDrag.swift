@@ -93,10 +93,10 @@ extension RailView {
     }
 
     func cancelDrop(to sourceRect: NSRect) {
-        // Re-lay after the cancel so the hero re-syncs with `selectedWS`
-        // — a KEYBOARD aim advances selectedWS while lifted, so on cancel
-        // the frozen hero would otherwise be stale (mouse cancels leave
-        // selectedWS untouched, so this is a cheap no-op for them).
+        // Re-lay after the cancel so the hero re-syncs with `selectedSectionID`
+        // — a KEYBOARD aim advances selectedSectionID while lifted, so on
+        // cancel the frozen hero would otherwise be stale (mouse cancels leave
+        // selectedSectionID untouched, so this is a cheap no-op for them).
         guard let g = dragGhost else { clearDrag(); layoutCells(); return }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15

@@ -913,18 +913,24 @@ final class Controller: NSObject {
         // grid), so keep it live with every reconcile — the active-WS
         // highlight + window counts track switches and add/close.
         if let rv = railView {
-            let oldActive = rv.activeIndex
-            let newActive = wss.first(where: { $0.isActive })?.index
+            // EX-2b: the active SECTION id BEFORE the field update (reads the
+            // rail's still-old activeLens/activeIndex/sections).
+            let oldActiveID = activeSectionID(activeLens: rv.activeLens,
+                                              activeIndex: rv.activeIndex,
+                                              sections: rv.sections)
             rv.workspaces = wss
-            rv.activeIndex = newActive
-            rv.sections = lastSections         // EX-2: symmetric feed (rail consumes in EX-2b)
-            rv.activeLens = lastActiveLens
-            // 2-b carousel: an EXTERNAL switch (CLI / another view) while
-            // the rail is open re-centres the strip on the new active —
-            // but only when the user isn't mid-browse (selected == the
-            // old active), so a manual rotation isn't yanked back.
-            if rv.selectedWS == oldActive, let na = newActive {
-                rv.selectedWS = na
+            rv.activeIndex = wss.first(where: { $0.isActive })?.index
+            rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
+            rv.activeLens = lastActiveLens      // EX-2: active lens for single-highlight
+            // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
+            // is open re-centres the strip on the new active SECTION — but
+            // only when the user isn't mid-browse (cursor still on the OLD
+            // active section), so a manual rotation isn't yanked back.
+            let newActiveID = activeSectionID(activeLens: rv.activeLens,
+                                              activeIndex: rv.activeIndex,
+                                              sections: rv.sections)
+            if rv.selectedSectionID == oldActiveID, let n = newActiveID {
+                rv.selectedSectionID = n
             }
             rv.layoutCells()      // refresh open rail on backend events
         }
