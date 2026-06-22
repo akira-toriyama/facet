@@ -6,9 +6,8 @@ import XCTest
 /// section model engages ONLY when a desktop carries ≥1 `type = "workspace"`
 /// section (`isSectionModelActive`); a config that has sections but NONE of
 /// the workspace kind — lens-only, unassigned-only, or an empty array — must
-/// DEGRADE to the default unnamed slots, and a tag-mode config must ignore its
-/// sections entirely (`effectiveMacDesktopSectionConfigs` clamps to `[:]`).
-/// These are the load-bearing "sections present, model still off" branches.
+/// DEGRADE to the default unnamed slots. These are the load-bearing
+/// "sections present, model still off" branches.
 /// Pure; CI-only (CLT can't run `swift test`).
 final class EffectiveWorkspaceListSectionEdgeTests: XCTestCase {
 
@@ -47,23 +46,6 @@ final class EffectiveWorkspaceListSectionEdgeTests: XCTestCase {
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
         XCTAssertTrue(list.allSatisfy { $0.config.name.isEmpty })
-    }
-
-    // MARK: - tag mode clamps sections away (workspace-axis safety)
-
-    func testTagModeIgnoresWorkspaceSections() {
-        // A real workspace section exists, but `[grouping] by = tag` clamps
-        // `effectiveMacDesktopSectionConfigs` to `[:]`, so the model stays off
-        // and the list degrades to the legacy default — sections are a
-        // workspace-axis concept and must never leak into tag mode.
-        var c = FacetConfig()
-        c.grouping = "tag"
-        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace,
-                                                         layout: "bsp")]]
-        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
-        XCTAssertTrue(list.allSatisfy { $0.config.name.isEmpty })
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 1))      // gate confirms
     }
 
     // MARK: - nil ordinal never activates the section model

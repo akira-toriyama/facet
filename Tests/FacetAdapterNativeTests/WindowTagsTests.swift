@@ -39,4 +39,17 @@ final class WindowTagsTests: XCTestCase {
         XCTAssertEqual(c.retagWindow(id, old: "old", new: "new"), .retagged)
         XCTAssertEqual(c.windowMap[id]?.tags, ["new"])
     }
+
+    /// `facet query --tags` (the surviving read) is the SORTED union of every
+    /// window's tags — empty until a window is tagged, no vocabulary registry.
+    func testDefinedTagNamesIsSortedUnionOfWindowTags() {
+        let a = adapter()
+        a.catalog.seed(configs: [(index: 1, config: WorkspaceConfig(name: ""))])
+        _ = a.catalog.reconcile(live: [window(10), window(20)])
+        XCTAssertEqual(a.definedTagNames(), [], "no tags until one is applied")
+        _ = a.catalog.addTagToWindow(wid(10), name: "web")
+        _ = a.catalog.addTagToWindow(wid(20), name: "code")
+        _ = a.catalog.addTagToWindow(wid(20), name: "web")   // duplicate across windows
+        XCTAssertEqual(a.definedTagNames(), ["code", "web"], "sorted union, deduped")
+    }
 }

@@ -577,9 +577,9 @@ public struct FacetConfig: Sendable {
     /// Rule of Repair — never silently fall back). Empty = OK to start.
     /// The app entry prints these to stderr and `exit 2`.
     ///
-    /// No fatal checks remain (the tag-mode startup checks were removed
-    /// with `[grouping] by = "tag"`); kept as a stable seam so the entry
-    /// point's `exit 2` path survives a future Fail-Fast addition.
+    /// No fatal checks remain (the legacy tag-mode startup checks were
+    /// removed in EX-4); kept as a stable seam so the entry point's
+    /// `exit 2` path survives a future Fail-Fast addition.
     public func fatalConfigErrors() -> [String] {
         []
     }

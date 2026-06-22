@@ -36,7 +36,7 @@ extension NativeAdapter {
     /// vocabulary (`facet query --tags`, #228). The union of every live
     /// window's free-form tag set (no vocabulary registry exists post-EX-4),
     /// sorted. A cheap catalog read; P6 → callers invoke it on `cliQueue`
-    /// (`writeStatus`, the tag-panel seeds) like every other catalog read.
+    /// (`writeStatus`) like every other catalog read.
     public func definedTagNames() -> [String] {
         Array(Set(catalog.windowMap.values.flatMap { $0.tags })).sorted()
     }

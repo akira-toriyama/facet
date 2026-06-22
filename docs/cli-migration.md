@@ -70,10 +70,7 @@ value-bearing flag migrated to the space form, not just the rows shown.
 | `facet window --mark=a` | `facet window --mark a` |
 | `facet window --focus=left` | `facet window --focus left` |
 | `facet window --cycle-stack=next` | `facet window --cycle-stack next` |
-| `facet window --tag=#190` | `facet window --tag #190` |
-| `facet lens --toggle=web` | `facet lens --toggle web` |
-| `facet tag --add=web` | `facet tag --add web` |
-| `facet tag --rename=old:new` | `facet tag --rename old new` |
+| `facet window --tag=web` | `facet window --tag web` |
 | `facet scratchpad --stash=notes` | `facet scratchpad --stash notes` |
 | `facet status` | `facet query` |
 
@@ -81,24 +78,20 @@ value-bearing flag migrated to the space form, not just the rows shown.
 
 1. **`facet status` → `facet query`.** The read verb was renamed (the
    snapshot output is identical). A bare `facet status` now exits `2`.
-2. **`tag --rename` is two positional arguments**, not one
-   colon-joined token: `--rename OLD NEW` (was `--rename=OLD:NEW`). A
-   flag-looking `NEW` (e.g. `--add`) is rejected by the name policy — no
-   silent mis-rename.
-3. **`--loading` requires a value** (`--loading MS`); `0` disables it.
+2. **`--loading` requires a value** (`--loading MS`); `0` disables it.
    The bare `--loading` (defaulted to 500 ms) is gone.
-4. **`workspace --remove` requires a target**: `current` (the active
+3. **`workspace --remove` requires a target**: `current` (the active
    workspace — what bare `--remove` used to mean) or a 1-based index.
    `next` / `prev` / `recent` / name targets are not supported here.
-5. **Stricter names.** A leading `-`, an internal space, or any of
+4. **Stricter names.** A leading `-`, an internal space, or any of
    `:` `=` `,` is now rejected for tag / mark / scratchpad / workspace
    names (previously some slipped through).
 
 ## Unchanged
 
 - The DNC control strings on the wire (`view:tree+active`,
-  `tag-rename:OLD:NEW`, `workspace:name:NAME`, …) are **byte-identical**
-  — only the user-facing grammar changed, not the server protocol.
+  `workspace:name:NAME`, …) are **byte-identical** — only the
+  user-facing grammar changed, not the server protocol.
 - `--help` / `--version` / `--resign` still work anywhere on the
   command line (global, by convention).
 - TOML config keys are unaffected (this migration is CLI-only).

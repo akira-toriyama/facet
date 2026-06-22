@@ -108,12 +108,12 @@ public struct Window: Sendable {
     /// orthogonal to `mark`, mutually exclusive with `isSticky`.
     /// Views surface it as a small `scratchpad:NAME` badge.
     public let scratchpad: String?
-    /// Tag names this window belongs to, in declaration order
-    /// (`[grouping] by = "tag"` mode; empty in workspace mode). The
-    /// tag-mode tree is a flat window list, so the window appears once
-    /// and views surface EVERY entry here as a small `#tag` chip on its
-    /// row (no primary tag — #191). Session-only, per-mac-desktop. See
-    /// memory `facet-tag-model-decisions`.
+    /// Free-form string tags attached to this window, SORTED (deterministic
+    /// `#tag` chip order). Tags are a per-window attribute set live with
+    /// `facet window --tag/--untag/--toggle-tag/--retag` and consumed by lens
+    /// `match='tag~=X'`; views surface each entry as a small `#tag` chip on the
+    /// window's row. Session-only, per-mac-desktop; empty until the window is
+    /// tagged. (Stored as `Set<String>` in the adapter; sorted at the seam.)
     public let tags: [String]
     /// Whether this window is parked OUT of the active section-lens
     /// (tag-unification EX-1 cross-workspace model). When a `type="lens"`

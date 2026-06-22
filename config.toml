@@ -30,8 +30,7 @@
 # Which view facet opens on startup. Unset (the default) = agent-only:
 # facet runs headless and shows nothing until a CLI verb asks for a
 # view (`facet --view tree|grid|rail`). Set it to auto-open one view
-# at launch. Values: "tree" | "grid" ("grid" is workspace-only — under
-# `by = tag` it exit-2s; see [grouping]).
+# at launch. Values: "tree" | "grid" | "rail".
 # default-view = "tree"
 
 
@@ -485,47 +484,17 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
-# [grouping] — how windows are grouped: by facet workspace (default)
-# or by dwm-style tags (M11-3). `by=tag` replaces the per-mac-desktop
-# workspace list with one "tag world" per mac desktop: a window can
-# carry multiple tags, and `facet lens` picks which tag set is shown
-# (windows outside the lens are anchor-parked, same as a hidden
-# workspace). Default: workspace. Unknown value clamps to workspace.
-# In tag mode the tree is the only view — grid / rail are workspace-only
-# (`--view`/`--hide`/`--toggle`=grid|rail and `default-view="grid"` exit 2).
-# Note this is the grid *view*; the grid *layout* (`[layout] default`) is
-# still fine in tag mode.
+# Per-window tags (no config key — assigned at RUNTIME only)
 # -----------------------------------------------------------------
-# [grouping]
-# by = "tag"
-
-# -----------------------------------------------------------------
-# [[tag]] — the tag vocabulary for `by=tag` mode (ignored in
-# workspace mode). One table per tag; declaration order fixes each
-# tag's bit and the order its `#tag` chip lists on a window's row (the
-# tag-mode tree is a flat window list, not grouped by tag). Tables with
-# no non-empty name, or a duplicate name, are dropped. Names starting
-# with "_" are reserved (facet uses "_default" as an internal floor
-# every window carries — it never shows as a chip and can't be a
-# [[tag]] name).
-#
-# Tags are assigned at RUNTIME, not in config — there is no static
-# window→tag mapping. A freshly-opened window joins whatever tag the
-# current `facet lens` shows (at startup that's nothing — every window
-# is visible but untagged). Tag windows + edit the vocabulary live:
+# A window can carry any number of free-form string tags. There is no
+# tag vocabulary to declare here — tags are created on first use and
+# attached live with the CLI:
 #   facet window --tag NAME / --untag NAME / --toggle-tag NAME
-#   facet tag --add NAME / --remove NAME / --rename OLD NEW
-#   facet lens NAME / --add/--remove/--toggle NAME / --all / --clear
-#     (`facet lens NAME` shows exactly NAME — comma-join several, e.g.
-#      web,code; `--clear` / `--all` show every window)
-# All of this is session-only; [[tag]] is just the startup seed.
-# -----------------------------------------------------------------
-# [[tag]]
-# name = "web"
-# [[tag]]
-# name = "code"
-# [[tag]]
-# name = "chat"
+#   facet window --retag OLD NEW
+# Tags are session-only (never persisted) and per-mac-desktop. They
+# feed lens filters: a `type = "lens"` section whose `match` contains
+# `tag~=NAME` (see [[desktop.N.section]] below) shows every window
+# carrying NAME. `facet query --tags` lists every tag currently in use.
 
 
 # -----------------------------------------------------------------
@@ -575,8 +544,8 @@ action = "ignore"
 #
 # To shape a mac desktop, describe an ORDERED list of sections with
 # `[[desktop.N.section]]` (N = Mission Control order, 1-based, user
-# desktops only — fullscreen desktops don't count; LIVE under [grouping]
-# by = "workspace"). This is the ONLY way to configure a desktop —
+# desktops only — fullscreen desktops don't count). This is the ONLY
+# way to configure a desktop —
 # workspaces are auto-named (an emoji 🐶🍎🍕); you can't name them from
 # config (rename at runtime with `facet workspace --rename`). When a
 # desktop has at least one `type = "workspace"` section, the section model
@@ -663,9 +632,7 @@ action = "ignore"
 #       special "unassigned" type — the 迷子 receptacle is just a lens.
 #
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
-# with a loud log (never a silent guess). Sections are a WORKSPACE-axis
-# concept: under `[grouping] by = "tag"` they are ignored (facet logs a
-# notice and falls back to the tag world).
+# with a loud log (never a silent guess).
 #
 # ACTIVE SAMPLE — a 3-desktop dev workflow: 2 auto-named (emoji)
 # workspaces per desktop, plus 3 lenses on desktop 1 (Web / Code / Chat).

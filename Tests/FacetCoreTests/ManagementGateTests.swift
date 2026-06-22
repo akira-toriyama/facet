@@ -67,20 +67,4 @@ final class ManagementGateTests: XCTestCase {
         XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
         XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
     }
-
-    // MARK: - tag mode disables the section gates
-
-    func testTagModeDisablesSectionGates() {
-        var c = FacetConfig()
-        c.grouping = "tag"
-        c.macDesktopSectionConfigs = [1: [wsSection()]]
-        // effectiveMacDesktopSectionConfigs clamps to empty in tag mode →
-        // the section signal vanishes from both gates.
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
-        // Section-only + tag mode → the effective section map is empty →
-        // managed everywhere (byte-identical to a section-less config;
-        // sections are silently inert in tag mode + loud-logged at load()).
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 9))
-    }
 }
