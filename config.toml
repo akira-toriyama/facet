@@ -580,10 +580,12 @@ action = "ignore"
 # workspaces are auto-named (an emoji 🐶🍎🍕); you can't name them from
 # config (rename at runtime with `facet workspace --rename`). When a
 # desktop has at least one `type = "workspace"` section, the section model
-# becomes AUTHORITATIVE for that desktop: the tree AND the grid (`--view grid`)
-# render the sections in declaration order — lens sections appear as their own
-# cells, and clicking one activates that lens (same as `facet lens NAME`); the
-# active section is the single lit highlight in every view. Activating a lens
+# becomes AUTHORITATIVE for that desktop: the tree, the grid (`--view grid`),
+# AND the rail (`--view rail`) all render the sections in declaration order —
+# lens sections appear as their own cells (a rail carousel cell), and clicking
+# one activates that lens (same as `facet lens NAME`); the active section is the
+# single lit highlight in every view (on the rail it is also the centre hero —
+# an active lens renders its cross-workspace union there). Activating a lens
 # section (`facet lens NAME`) anchor-parks
 # every non-matching window in EVERY workspace (cross-workspace exclusive — a
 # real hide) and union-tiles the matches with that lens's `layout`; switching

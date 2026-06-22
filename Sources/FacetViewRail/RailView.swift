@@ -52,11 +52,24 @@ public final class RailView: NSView {
     public var sections: [ProjectedSection] = []
     /// EX-2: the active lens label (rail consumes it in EX-2b).
     public var activeLens: String?
-    /// Keyboard "browse" cursor — the workspace the centre HERO
-    /// previews (←/→ move it, Return commits). Decoupled from
-    /// `activeIndex` so browsing doesn't switch until commit. Seeded to
-    /// the active WS in `showRail`.
-    public var selectedWS: Int?
+    /// Keyboard "browse" cursor — the SECTION the centre HERO previews
+    /// (←/→ rotate it, Return commits). Keyed on the stable
+    /// `ProjectedSection.id` (`"ws:<i>"` / `"section:<order>:<label>"`),
+    /// NOT a workspace index — lens cells all share `wsIndex == −1`, which
+    /// would collide (EX-2b, the rail analog of the grid's `kbSelectedID`).
+    /// Decoupled from the active section so browsing doesn't activate until
+    /// commit. Seeded by the first `layoutCells` (the stranded-cursor
+    /// repair) + re-centred by the Controller on an external activate.
+    public var selectedSectionID: String?
+    /// EX-2b: window → home workspace index (0-based), rebuilt every
+    /// `layoutCells` from the UNFILTERED `workspaces` snapshot. A window
+    /// thumb may sit in a LENS cell (`wsIndex == −1`) but still has a real
+    /// home WS; window picks resolve through this, never the cell's wsIndex.
+    private var windowHomeWS: [WindowID: Int] = [:]
+    /// EX-2b: the ordered section ids the carousel cycles (sources order, no
+    /// peek-ghost duplicate), refreshed every `layoutCells`. Browse nav
+    /// cycles THIS, not `cells` (which appends a wrap-peek ghost).
+    private var sectionOrder: [String] = []
     /// The display frame windows were measured against (backend CG
     /// coords). Mini-thumb rects scale from this; `.zero` falls back
     /// to the view bounds.
@@ -91,14 +104,12 @@ public final class RailView: NSView {
 
     // MARK: - Callbacks
 
-    /// Click a workspace cell (empty area / header) or commit a
-    /// keyboard browse → switch to that WS. The Controller owns the
-    /// backend round-trip + whether the overlay then dismisses.
-    public var onPick: ((Int) -> Void)?
-    /// Click a specific window thumbnail → switch to its WS AND focus
-    /// THAT window (grid parity). `nil`-safe: falls back to a plain
-    /// switch via `onPick` is the caller's choice.
-    public var onPickWindow: ((_ ws: Int, _ pid: Int, _ id: WindowID) -> Void)?
+    /// Pick a section cell (workspace / lens), a window thumb, or commit a
+    /// keyboard browse → the Controller routes through `activateSection`
+    /// (EX-2b, mirrors the grid's `onPick(GridPick)`; replaces the old
+    /// `onPick(Int)` + `onPickWindow` pair). The Controller owns the backend
+    /// round-trip + whether the overlay then dismisses.
+    public var onPick: ((RailPick) -> Void)?
     /// Click the backdrop (no cell) or Esc → dismiss.
     public var onDismiss: (() -> Void)?
     /// Drag a window thumbnail onto another workspace cell → move it
@@ -129,12 +140,14 @@ public final class RailView: NSView {
     private(set) var cells: [OverviewCell] = []     // bottom row (all workspaces)
     private(set) var hero: OverviewCell?            // centre (active workspace)
 
-    private var hoverWS: Int? {
-        didSet { if hoverWS != oldValue { needsDisplay = true } }
+    private var hoverID: String? {
+        didSet { if hoverID != oldValue { needsDisplay = true } }
     }
     /// Bottom cell whose HEADER the pointer is over — brightens the
-    /// band + grip (the grab affordance for a WS swap, Phase R3).
-    var hoverHeaderWS: Int?
+    /// band + grip (the grab affordance for a WS swap, Phase R3). Keyed on
+    /// `sectionID` (EX-2b) so a lens cell's `wsIndex == −1` can't light
+    /// every lens header at once.
+    var hoverHeaderID: String?
     private var trackingArea: NSTrackingArea?
 
     // MARK: - Drag state (window move + WS swap)
@@ -148,8 +161,8 @@ public final class RailView: NSView {
 
     // mouseDown candidates (resolved to a drag past threshold, else a
     // click on mouseUp).
-    var pendingDown: (point: NSPoint, hit: MiniWindowHit, ws: Int)?
-    var pendingHeaderDown: (point: NSPoint, ws: Int)?
+    var pendingDown: (point: NSPoint, hit: MiniWindowHit, cellID: String)?
+    var pendingHeaderDown: (point: NSPoint, cellID: String)?
     var drag: OverviewDrag?
     var dragGhost: NSView?
     /// Freeze `layoutCells` mid-gesture so the source cell can't shift
@@ -199,6 +212,53 @@ public final class RailView: NSView {
 
     // MARK: - Layout
 
+    /// EX-2b: one carousel cell source per projected section (workspace +
+    /// lens), built with the single-highlight already gated. `wsIndex` is the
+    /// 0-based source WS (−1 for a lens, which spans workspaces). A rail-local
+    /// twin of the grid's `CellSource` (that one is `private` to FacetViewGrid).
+    private struct CellSource {
+        let wsIndex: Int
+        let sectionType: SectionType
+        let sectionID: String
+        let label: String           // ws.name for a workspace; the bare lens label
+        let mode: String            // layout engine; "" for a lens
+        let windows: [Window]
+        let isActive: Bool          // single-highlight XOR, baked at build time
+    }
+
+    /// EX-2b: build the carousel cell sources. Degrade (no section model here)
+    /// → one cell per workspace, byte-identical to pre-EX-2b. Section model →
+    /// one cell per projected section (workspace + lens), in config order, with
+    /// the single-highlight XOR baked into `isActive` (mirror of the grid's
+    /// `overviewCellSources` / `SidebarView.headerActive`).
+    private func overviewCellSources() -> [CellSource] {
+        if sections.isEmpty {
+            return workspaces.map { ws in
+                CellSource(wsIndex: ws.index, sectionType: .workspace,
+                           sectionID: "ws:\(ws.index)", label: ws.name,
+                           mode: ws.layoutMode, windows: ws.windows,
+                           isActive: activeLens == nil && ws.isActive)
+            }
+        }
+        return sections.map { sec in
+            let isLens = sec.sectionType == .lens
+            // The projection doesn't carry a workspace's live layoutMode; look
+            // it up by source index (a lens has no layout engine → "").
+            let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
+                workspaces.first { $0.index == src } }
+            let mode = isLens ? "" : (srcWS?.layoutMode ?? "")
+            // EX-2b single-highlight: lens cell lit ⟺ it IS the active lens;
+            // workspace cell lit ⟺ no lens active AND its WS is active.
+            let active = isLens
+                ? (activeLens != nil && sec.label == activeLens)
+                : (activeLens == nil && srcWS?.isActive == true)
+            return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
+                              sectionType: sec.sectionType, sectionID: sec.id,
+                              label: sec.label, mode: mode,
+                              windows: sec.windows, isActive: active)
+        }
+    }
+
     /// `OverviewView` no-arg layout — the common (non-forced) rebuild.
     /// A distinct method (not a defaulted parameter) so it can witness
     /// the protocol requirement; the forced path keeps `layoutCells(force:)`.
@@ -236,6 +296,16 @@ public final class RailView: NSView {
         let aspect = useScreen.width / max(1, useScreen.height)
         let horizontal = edge.axis == .horizontal
 
+        // EX-2b: build the section cell sources (degrade → one per workspace)
+        // + the window→home-WS map + the carousel section order from the
+        // current snapshot, before any geometry uses `n`. `sources` is
+        // non-empty here (guarded by `!workspaces.isEmpty`), so the carousel
+        // / hero resolution below always has a cell.
+        let sources = overviewCellSources()
+        sectionOrder = sources.map(\.sectionID)
+        windowHomeWS = [:]
+        for ws in workspaces { for w in ws.windows { windowHomeWS[w.id] = ws.index } }
+
         // -- Strip / hero split (orientation- & display-size-aware).
         //    `stripPercent`% of the SHORT screen edge CAPS the strip band
         //    (and thus the thumbnail scale); the hero fills the rest.
@@ -248,7 +318,7 @@ public final class RailView: NSView {
             edgeFloatFrac: railEdgeFloatFrac,
             heroGapFrac: railHeroGapFrac,
             outerFrac: railOuterFrac)
-        let n = workspaces.count
+        let n = sources.count
         let alongFull = horizontal ? bounds.width : bounds.height
         let availAlong = max(1, alongFull - outer * 2)
         // Show every workspace, up to the `[rail] cells` cap; the rest
@@ -322,8 +392,8 @@ public final class RailView: NSView {
         // strip's along-centre; each cell's slot offset comes from the
         // pure `railCarouselOffsets` (selected = 0, the rest fan out
         // circularly). Cells past the viewport clip to the peek.
-        let selectedPos = workspaces.firstIndex(where: { $0.index == selectedWS })
-            ?? workspaces.firstIndex(where: { $0.isActive })
+        let selectedPos = sources.firstIndex(where: { $0.sectionID == selectedSectionID })
+            ?? sources.firstIndex(where: { $0.isActive })
             ?? 0
         let offsets = railCarouselOffsets(count: n, selectedPos: selectedPos)
         let alongCentre = horizontal ? strip.midX : strip.midY
@@ -342,7 +412,7 @@ public final class RailView: NSView {
         // Place one strip cell at a signed carousel `offset` (0 = the
         // centred selected WS). Shared by the per-workspace cells and the
         // even-count wrap-peek ghost below.
-        func placeCell(_ ws: Workspace, offset: Int) {
+        func placeCell(_ src: CellSource, offset: Int) {
             let slotStart = alongCentre + CGFloat(offset) * slot - slot / 2
             let blockX: CGFloat, blockY: CGFloat
             if horizontal {
@@ -360,13 +430,14 @@ public final class RailView: NSView {
                                   width: thumbW, height: thumbH)
             let headerRect = NSRect(x: blockX.rounded(), y: headerY.rounded(),
                                     width: thumbW, height: headerH)
-            cells.append(OverviewCell(wsIndex: ws.index, rect: cellRect,
-                              headerRect: headerRect, isActive: ws.isActive,
-                              label: ws.name, mode: ws.layoutMode,
-                              windows: scaledWins(ws, cellRect, useScreen),
-                              isHero: false))
+            cells.append(OverviewCell(wsIndex: src.wsIndex, rect: cellRect,
+                              headerRect: headerRect, isActive: src.isActive,
+                              label: src.label, mode: src.mode,
+                              windows: scaledWins(src.windows, cellRect, useScreen),
+                              isHero: false,
+                              sectionType: src.sectionType, sectionID: src.sectionID))
         }
-        for (i, ws) in workspaces.enumerated() { placeCell(ws, offset: offsets[i]) }
+        for (i, src) in sources.enumerated() { placeCell(src, offset: offsets[i]) }
         // Both-ends peek symmetry (⑥): for an EVEN workspace count the
         // carousel offsets span [-n/2, +(n/2−1)] — one more cell on the
         // negative side — so when every workspace is shown the strip's
@@ -378,7 +449,7 @@ public final class RailView: NSView {
         // symmetrically and a +n/2 ghost would be off-viewport anyway.
         if n % 2 == 0, n > 1, n == visible,
            let li = offsets.firstIndex(of: -(n / 2)) {
-            placeCell(workspaces[li], offset: n / 2)
+            placeCell(sources[li], offset: n / 2)   // wrap-peek ghost (same source)
         }
 
         // -- Hero: the SELECTED workspace (browse) — aspect-fit, biased
@@ -401,10 +472,15 @@ public final class RailView: NSView {
         case .right:
             heroBox.size.width = max(0, (innerEdge - heroGap) - heroBox.minX)
         }
+        // The hero = the centred section. When it's a lens (Decision 1,
+        // トミー 2026-06-22) it renders the lens's cross-workspace union
+        // (`act.windows`); a workspace renders its own windows. `isActive` is
+        // the baked single-highlight XOR. `sources` is non-empty (guarded
+        // above), so the fallback chain never falls through.
         if heroBox.width > 1, heroBox.height > 1,
-           let act = workspaces.first(where: { $0.index == selectedWS })
-            ?? workspaces.first(where: { $0.isActive })
-            ?? workspaces.first {
+           let act = sources.first(where: { $0.sectionID == selectedSectionID })
+            ?? sources.first(where: { $0.isActive })
+            ?? sources.first {
             var hCellW = heroBox.width
             var hCellH = heroBox.height
             if hCellW / hCellH > aspect { hCellW = hCellH * aspect }
@@ -415,19 +491,22 @@ public final class RailView: NSView {
             let hy = min(max(bounds.midY - hCellH / 2, heroBox.minY),
                          heroBox.maxY - hCellH).rounded()
             let hCellRect = NSRect(x: hx, y: hy, width: hCellW, height: hCellH)
-            hero = OverviewCell(wsIndex: act.index, rect: hCellRect,
+            hero = OverviewCell(wsIndex: act.wsIndex, rect: hCellRect,
                         headerRect: .zero, isActive: act.isActive,
-                        label: act.name, mode: act.layoutMode,
-                        windows: scaledWins(act, hCellRect, useScreen),
-                        isHero: true)
+                        label: act.label, mode: act.mode,
+                        windows: scaledWins(act.windows, hCellRect, useScreen),
+                        isHero: true,
+                        sectionType: act.sectionType, sectionID: act.sectionID)
         }
 
         // Repair a stranded browse cursor: if the selected WS was
         // removed mid-browse (auto-removed / mac-desktop catalog swap),
         // snap it to the hero so the ←/→ cursor and the previewed hero
         // stay in sync and the next arrow continues from what's shown.
-        if !cells.contains(where: { $0.wsIndex == selectedWS }) {
-            selectedWS = hero?.wsIndex ?? cells.first?.wsIndex
+        // (Also SEEDS the cursor on first layout: `selectedSectionID` starts
+        // nil, no cell matches, so it snaps to the hero — the active section.)
+        if !cells.contains(where: { $0.sectionID == selectedSectionID }) {
+            selectedSectionID = hero?.sectionID ?? cells.first?.sectionID
         }
         needsDisplay = true
     }
@@ -446,10 +525,10 @@ public final class RailView: NSView {
     /// cell. The rect math is the shared `scaledWindowRect`
     /// (FacetCore) — rail keeps only the `>= 2` px cull and its own
     /// `MiniWindowHit` construction.
-    private func scaledWins(_ ws: Workspace, _ cell: NSRect,
+    private func scaledWins(_ windows: [Window], _ cell: NSRect,
                             _ screen: CGRect) -> [MiniWindowHit] {
         var out: [MiniWindowHit] = []
-        for win in ws.windows
+        for win in windows
         where !win.isLensParked {   // drop out-of-lens parked windows
             guard let f = win.frame else { continue }
             let r = scaledWindowRect(windowFrame: f,
@@ -614,9 +693,11 @@ public final class RailView: NSView {
     /// centred hero, play the "hero zoom → full screen" transition (②)
     /// then run `perform` (the actual switch + close); otherwise run it
     /// immediately. Honours Reduce Motion.
-    private func commitSwitch(target ws: Int, perform: @escaping () -> Void) {
+    private func commitSwitch(targetSectionID: String, perform: @escaping () -> Void) {
         guard !commitZoom.isActive else { return }   // a zoom is already in flight
-        guard ws == selectedWS, let h = hero,
+        // Play the hero-zoom transition iff the picked section IS the centred
+        // hero — works for a workspace switch AND a lens-union activation (EX-2b).
+        guard targetSectionID == selectedSectionID, let h = hero,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               let img = snapshotRegion(h.rect)
         else { perform(); return }
@@ -688,11 +769,11 @@ public final class RailView: NSView {
             path.lineWidth = 2.5
         } else if c.isActive {
             pal.primary.setStroke(); path.lineWidth = 2          // PRIMARY = active WS
-        } else if drag == nil && selectedWS == c.wsIndex {
-            // Browse target (≠ active) — SECONDARY accent border so it
-            // reads apart from the primary-accent active WS (2-b carousel).
+        } else if drag == nil && selectedSectionID == c.sectionID {
+            // Browse target (≠ active) — SECONDARY accent border so it reads
+            // apart from the primary-accent active section (2-b carousel).
             pal.secondary.setStroke(); path.lineWidth = 2
-        } else if hoverWS == c.wsIndex {
+        } else if hoverID == c.sectionID {
             pal.foreground.withAlphaComponent(0.7).setStroke(); path.lineWidth = 1.5
         } else {
             pal.border.setStroke(); path.lineWidth = 1
@@ -709,7 +790,7 @@ public final class RailView: NSView {
         // WS's bottom cell (small), matched by window id (suppressed
         // while lifted — the ghost carries the selection then).
         if drag == nil, let sel = kbSelectedWindow(),
-           c.isHero || c.wsIndex == selectedWS,
+           c.isHero || c.sectionID == selectedSectionID,
            let hit = c.windows.first(where: { $0.id == sel.id }) {
             let ring = NSBezierPath(roundedRect: hit.rect.insetBy(dx: -1, dy: -1),
                                     xRadius: 3, yRadius: 3)
@@ -734,18 +815,19 @@ public final class RailView: NSView {
 
     public override func mouseMoved(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        hoverWS = stripCellAt(p)?.wsIndex
-        let hh = stripCellAt(p).flatMap {
-            $0.headerRect.contains(p) ? $0.wsIndex : nil }
-        if hh != hoverHeaderWS { hoverHeaderWS = hh; needsDisplay = true }
+        hoverID = stripCellAt(p)?.sectionID
+        let headerCell = stripCellAt(p).flatMap { $0.headerRect.contains(p) ? $0 : nil }
+        let hh = headerCell?.sectionID
+        if hh != hoverHeaderID { hoverHeaderID = hh; needsDisplay = true }
         // The overlay is key, so the cursor sticks: an open hand over a
-        // header advertises the grab (header drag = swap, Phase R3).
-        (hh != nil ? NSCursor.openHand : NSCursor.arrow).set()
+        // WORKSPACE header advertises the grab (header drag = swap, Phase R3).
+        // A lens header is click-only (no swap), so it keeps the arrow.
+        (headerCell?.isLens == false ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     public override func mouseExited(with event: NSEvent) {
-        hoverWS = nil
-        if hoverHeaderWS != nil { hoverHeaderWS = nil; needsDisplay = true }
+        hoverID = nil
+        if hoverHeaderID != nil { hoverHeaderID = nil; needsDisplay = true }
         NSCursor.arrow.set()
     }
 
@@ -765,7 +847,7 @@ public final class RailView: NSView {
     /// panel, so, like the browse keys, scroll events are caught at the
     /// app's event monitor rather than the view responder chain.
     public func scrollRotate(_ event: NSEvent) {
-        guard drag == nil, workspaces.count > 1,
+        guard drag == nil, sectionOrder.count > 1,
               event.momentumPhase == [] else { return }
         var dy = event.scrollingDeltaY
         if dy == 0 { return }
@@ -798,23 +880,31 @@ public final class RailView: NSView {
         // (`stripRect`), so a press in the clipped outer-pad margin — bare
         // backdrop to the eye — never acts on a rotated-off cell.
         let inStrip = stripRect.isEmpty || stripRect.contains(p)
-        // Header press → workspace drag (swap) or click (switch).
+        // Header press: a WORKSPACE header may become a swap drag (or click);
+        // a LENS header is click-only → activate immediately (no swap arm,
+        // no grip — Decision 6).
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            pendingHeaderDown = (p, cell.wsIndex); return
+            if cell.isLens {
+                commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
+                    self?.onPick?(.lens(label: cell.label)) }
+                return
+            }
+            pendingHeaderDown = (p, cell.sectionID); return
         }
-        // Window-thumb press → window drag (move) or click (switch).
+        // Window-thumb press → window drag (move) or click (switch + focus).
         // The big hero windows are the primary, ergonomic drag source;
         // the tiny bottom-cell windows are a secondary source.
         if let w = heroWinAt(p), let h = hero {
-            pendingDown = (p, w, h.wsIndex); return
+            pendingDown = (p, w, h.sectionID); return
         }
         if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }) {
             if let w = cell.windows.reversed().first(where: { $0.rect.contains(p) }) {
-                pendingDown = (p, w, cell.wsIndex)
+                pendingDown = (p, w, cell.sectionID)
             } else {
-                // empty cell area → switch+close (zoom if it's the centre)
-                commitSwitch(target: cell.wsIndex) { [weak self] in
-                    self?.onPick?(cell.wsIndex)
+                // empty cell area → activate+close (zoom if it's the centre)
+                commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
+                    if cell.isLens { self?.onPick?(.lens(label: cell.label)) }
+                    else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
             }
             return
@@ -833,34 +923,42 @@ public final class RailView: NSView {
         let scr = win.convertPoint(toScreen: event.locationInWindow)
         let inStrip = stripRect.isEmpty || stripRect.contains(p)
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            guard !cell.isLens else { return }       // lens header → no layout picker
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
                                        workspaces: workspaces, palette: pal)
             return
         }
         if let w = heroWinAt(p), let h = hero {
-            railWinMenu(scr, backend: backend, ws: h.wsIndex, w: w); return
+            let home = windowHomeWS[w.id] ?? h.wsIndex
+            guard home >= 0 else { return }          // unresolved (lens, no home) → no menu
+            railWinMenu(scr, backend: backend, ws: home, w: w); return
         }
         if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }),
            let w = cell.windows.reversed().first(where: { $0.rect.contains(p) }) {
-            railWinMenu(scr, backend: backend, ws: cell.wsIndex, w: w)
+            let home = windowHomeWS[w.id] ?? cell.wsIndex
+            guard home >= 0 else { return }
+            railWinMenu(scr, backend: backend, ws: home, w: w)
         }
     }
 
     /// Keyboard 'm' (③): context menu for the centred WS — the header
     /// (layout picker) when no hero window is cursored, else that window.
     public func kbContextMenu() {
-        guard let backend, let win = window, let ws = selectedWS else { return }
+        guard let backend, let win = window, let id = selectedSectionID,
+              let cell = cells.first(where: { $0.sectionID == id }) else { return }
         if kbSelectedWindowIdx == -1 {
-            guard let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+            guard !cell.isLens else { return }       // lens has no layout engine
             let scr = win.convertPoint(toScreen:
                 convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
             ViewContextMenu.showLayout(at: scr, backend: backend,
-                                       workspaceIndex: ws, workspaces: workspaces,
+                                       workspaceIndex: cell.wsIndex, workspaces: workspaces,
                                        palette: pal)
         } else if let h = hero, kbSelectedWindowIdx >= 0,
                   kbSelectedWindowIdx < h.windows.count {
             let w = h.windows[kbSelectedWindowIdx]
+            let ws = windowHomeWS[w.id] ?? cell.wsIndex
+            guard ws >= 0 else { return }            // unresolved (lens, no home) → no menu
             let scr = win.convertPoint(toScreen:
                 convert(NSPoint(x: w.rect.minX + 12, y: w.rect.minY), to: nil))
             railWinMenu(scr, backend: backend, ws: ws, w: w)
@@ -888,13 +986,16 @@ public final class RailView: NSView {
             if let ph = pendingHeaderDown {
                 let dx = p.x - ph.point.x, dy = p.y - ph.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                guard let src = cells.first(where: { $0.wsIndex == ph.ws }) else { return }
+                // Workspace headers only (a lens header fired its pick on
+                // mouseDown without arming a pending) — guard !isLens defensively.
+                guard let src = cells.first(where: { $0.sectionID == ph.cellID }),
+                      !src.isLens else { return }
                 // Source the swap's window set from the LIVE workspace,
                 // not the render-filtered cell thumbs — a frameless /
                 // sub-2pt window has no thumb but must still move.
-                let srcIDs = workspaces.first(where: { $0.index == ph.ws })?
+                let srcIDs = workspaces.first(where: { $0.index == src.wsIndex })?
                     .windows.map(\.id) ?? src.windows.map(\.id)
-                drag = OverviewDrag(sourceWS: ph.ws, kind: .workspace, pid: -1,
+                drag = OverviewDrag(sourceWS: src.wsIndex, kind: .workspace, pid: -1,
                             id: WindowID(serverID: -1), sourceRect: src.rect,
                             srcIDs: srcIDs, current: p, dropTargetWS: nil)
                 layoutSuppressed = true
@@ -903,7 +1004,11 @@ public final class RailView: NSView {
             } else if let pd = pendingDown {
                 let dx = p.x - pd.point.x, dy = p.y - pd.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                drag = OverviewDrag(sourceWS: pd.ws, kind: .window, pid: pd.hit.pid,
+                // A window inside a LENS cell has no source workspace → not
+                // move-draggable (Decision 6). Resolve the cell + reject lens.
+                guard let cell = cells.first(where: { $0.sectionID == pd.cellID }),
+                      !cell.isLens else { return }
+                drag = OverviewDrag(sourceWS: cell.wsIndex, kind: .window, pid: pd.hit.pid,
                             id: pd.hit.id, sourceRect: pd.hit.rect, srcIDs: [],
                             current: p, dropTargetWS: nil)
                 layoutSuppressed = true
@@ -917,8 +1022,10 @@ public final class RailView: NSView {
         // active WS, already its own strip cell), and only within the
         // viewport clip (a rotated-off cell in the margin isn't a target).
         // A cell == source is not a target (no self-move).
-        let over = stripCellAt(p)?.wsIndex
-        d.dropTargetWS = (over == d.sourceWS) ? nil : over
+        // A lens cell is never a drop target (no source WS — Decision 6).
+        let over = stripCellAt(p)
+        d.dropTargetWS = (over?.isLens == true || over?.wsIndex == d.sourceWS)
+            ? nil : over?.wsIndex
         drag = d
         positionDragGhost(at: p)
         needsDisplay = true
@@ -934,13 +1041,21 @@ public final class RailView: NSView {
             // No drag crossed threshold → resolve as a click (zoom if the
             // target is the centred hero, else switch immediately).
             if let pd = pendingDown {
-                // Window thumb → switch to its WS AND focus THAT window.
-                commitSwitch(target: pd.ws) { [weak self] in
-                    self?.onPickWindow?(pd.ws, pd.hit.pid, pd.hit.id)
+                // Window thumb → switch to its HOME WS AND focus THAT window
+                // (home resolved via windowHomeWS — correct even inside a lens
+                // cell whose wsIndex is −1; the Controller guards home >= 0).
+                let cell = cells.first { $0.sectionID == pd.cellID }
+                let home = windowHomeWS[pd.hit.id] ?? cell?.wsIndex ?? -1
+                commitSwitch(targetSectionID: pd.cellID) { [weak self] in
+                    self?.onPick?(.window(homeWorkspaceIndex: home,
+                                          pid: pd.hit.pid, windowID: pd.hit.id))
                 }
-            } else if let ph = pendingHeaderDown {
-                commitSwitch(target: ph.ws) { [weak self] in
-                    self?.onPick?(ph.ws)       // header → switch WS only
+            } else if let ph = pendingHeaderDown,
+                      let cell = cells.first(where: { $0.sectionID == ph.cellID }) {
+                // Workspace header → switch to that WS (lens headers fired on
+                // mouseDown, so this is always a workspace cell).
+                commitSwitch(targetSectionID: ph.cellID) { [weak self] in
+                    self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))
                 }
             }
             return
@@ -988,16 +1103,17 @@ public final class RailView: NSView {
     /// previous, supplied by the Controller for the edge's axis); it
     /// wraps circularly.
     public func kbMoveSelection(dx: Int) {
-        guard !commitZoom.isActive, !workspaces.isEmpty else { return }
-        let cur = workspaces.firstIndex { $0.index == selectedWS } ?? 0
-        let ni = (cur + dx + workspaces.count) % workspaces.count   // wrap
-        guard workspaces[ni].index != selectedWS else { return }
+        guard !commitZoom.isActive, !sectionOrder.isEmpty else { return }
+        let m = sectionOrder.count
+        let cur = sectionOrder.firstIndex(of: selectedSectionID ?? "") ?? 0
+        let ni = (cur + dx + m) % m   // wrap over ALL sections (lenses included)
+        guard sectionOrder[ni] != selectedSectionID else { return }
         // Browse crossfade (①): snapshot the current hero before it
         // changes, to fade it out over the new one as the slide eases in.
         if drag == nil, let h = hero {
             prevHeroImage = snapshotRegion(h.rect); prevHeroRect = h.rect
         }
-        selectedWS = workspaces[ni].index
+        selectedSectionID = sectionOrder[ni]
         if drag != nil {
             // Lifted: rotate the carousel under the ghost so the aimed
             // workspace comes to centre = the drop target. Force past the
@@ -1033,11 +1149,13 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWindow() {
-        guard drag == nil, let h = hero, let sel = kbSelectedWindow() else { return }
+        // A window inside a LENS hero is not move-liftable (no source WS,
+        // Decision 6) — guard `!h.isLens` so `h.wsIndex` below is a real WS.
+        guard drag == nil, let h = hero, !h.isLens, let sel = kbSelectedWindow() else { return }
         // Lift from the BOTTOM cell's window (small) so the ghost matches
         // the rail's bottom-row size, not the big hero. Fall back to the
         // hero window if that window has no thumb in the bottom cell.
-        let hit = cells.first(where: { $0.wsIndex == selectedWS })?
+        let hit = cells.first(where: { $0.sectionID == selectedSectionID })?
             .windows.first(where: { $0.id == sel.id }) ?? sel
         let at = NSPoint(x: hit.rect.midX, y: hit.rect.midY)
         drag = OverviewDrag(sourceWS: h.wsIndex, kind: .window,
@@ -1050,8 +1168,10 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWorkspace() {
-        guard drag == nil, let ws = selectedWS,
-              let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+        // A lens cell cannot be lifted for a swap (no source WS — Decision 6).
+        guard drag == nil, let id = selectedSectionID,
+              let cell = cells.first(where: { $0.sectionID == id }), !cell.isLens else { return }
+        let ws = cell.wsIndex
         // Live workspace windows (not the render-filtered thumbs).
         let srcIDs = workspaces.first(where: { $0.index == ws })?.windows.map(\.id)
             ?? cell.windows.map(\.id)
@@ -1065,12 +1185,14 @@ public final class RailView: NSView {
         needsDisplay = true
     }
 
-    /// While lifted, an arrow advances `selectedWS` (the aim cursor);
+    /// While lifted, an arrow advances `selectedSectionID` (the aim cursor);
     /// re-target the drop + teleport the ghost to the aimed cell.
     private func syncRailDragToSelection() {
-        guard var d = drag, let sel = selectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel }) else { return }
-        d.dropTargetWS = (sel == d.sourceWS) ? nil : sel
+        guard var d = drag, let id = selectedSectionID,
+              let cell = cells.first(where: { $0.sectionID == id }) else { return }
+        // Aiming at a lens cell → no valid drop (lens isn't a swap/move
+        // destination); the ghost still teleports so the rotation reads.
+        d.dropTargetWS = (cell.isLens || cell.wsIndex == d.sourceWS) ? nil : cell.wsIndex
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         d.current = at
         drag = d
@@ -1100,15 +1222,22 @@ public final class RailView: NSView {
             }
             return
         }
-        guard let ws = selectedWS else { return }
-        // The selected WS is the centre, so this always plays the zoom (②).
+        guard let id = selectedSectionID,
+              let cell = cells.first(where: { $0.sectionID == id }) else { return }
+        // The selected section is the centre, so this always plays the zoom (②).
         if let hit = kbSelectedWindow() {
-            commitSwitch(target: ws) { [weak self] in
-                self?.onPickWindow?(ws, hit.pid, hit.id)   // window → switch + focus it
+            // Window (even inside a lens hero) → switch to its HOME WS + focus it.
+            let home = windowHomeWS[hit.id] ?? cell.wsIndex
+            commitSwitch(targetSectionID: id) { [weak self] in
+                self?.onPick?(.window(homeWorkspaceIndex: home, pid: hit.pid, windowID: hit.id))
+            }
+        } else if cell.isLens {
+            commitSwitch(targetSectionID: id) { [weak self] in
+                self?.onPick?(.lens(label: cell.label))    // lens → activate it
             }
         } else {
-            commitSwitch(target: ws) { [weak self] in
-                self?.onPick?(ws)                          // whole-WS → switch + close
+            commitSwitch(targetSectionID: id) { [weak self] in
+                self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))  // WS → switch
             }
         }
     }
@@ -1134,7 +1263,7 @@ public final class RailView: NSView {
 // snapshot inputs, the run-ops / move / swap callbacks, the no-arg
 // layoutCells / setThumbnail / clearThumbnails, the BorderFX trio, and
 // the common keyboard verbs). The rail-specific surface —
-// `onPick(Int)` / `onPickWindow`, `edge` / `cellsTarget` /
-// `stripPercent` / `selectedWS`, the 1-D `kbMoveSelection(dx:)`,
+// `onPick(RailPick)`, `edge` / `cellsTarget` /
+// `stripPercent` / `selectedSectionID`, the 1-D `kbMoveSelection(dx:)`,
 // `scrollRotate`, the carousel + hero — stays off the shared protocol.
 extension RailView: OverviewView {}

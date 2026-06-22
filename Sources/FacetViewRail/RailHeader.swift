@@ -14,12 +14,13 @@ extension RailView {
     func drawHeader(_ cell: OverviewCell) {
         let hb = cell.headerRect
         guard hb.height > 1, hb.width > 1 else { return }
-        let hover = hoverHeaderWS == cell.wsIndex
+        let hover = hoverHeaderID == cell.sectionID
         // Keyboard "whole-WS" pick: the WS-name slot is selected (Tab
         // cycled to -1, or an arrow just landed here). Highlight the
-        // WS name like the grid's header-slot focus.
+        // WS name like the grid's header-slot focus. Keyed on sectionID
+        // (EX-2b) — lens cells share wsIndex=−1, which would collide.
         let kbWholeWS = drag == nil && kbSelectedWindowIdx == -1
-            && selectedWS == cell.wsIndex
+            && selectedSectionID == cell.sectionID
         // The browse target (carousel centre) when it ISN'T the live
         // active WS: paint it in the SECONDARY accent so "previewing"
         // reads apart from the PRIMARY-accent active WS (2-b — mid-browse
@@ -42,12 +43,15 @@ extension RailView {
             band.fill()
         }
 
-        // Grip (left).
-        drawGripDots(in: NSRect(x: hb.minX + 4, y: hb.minY,
-                                width: railHeaderGripW, height: hb.height),
-                     tallExtent: 18,
-                     color: browseTarget ? pal.secondary : (hot ? pal.primary : pal.foreground),
-                     alpha: hot ? 0.85 : 0.5)
+        // Grip (left) — only for WORKSPACE cells (the swap grab affordance).
+        // A lens cell is click-only (activate, no swap), so it shows no grip.
+        if !cell.isLens {
+            drawGripDots(in: NSRect(x: hb.minX + 4, y: hb.minY,
+                                    width: railHeaderGripW, height: hb.height),
+                         tallExtent: 18,
+                         color: browseTarget ? pal.secondary : (hot ? pal.primary : pal.foreground),
+                         alpha: hot ? 0.85 : 0.5)
+        }
 
         // Name (+ mode), left-aligned, vertically centred.
         let lp = NSMutableParagraphStyle()
@@ -60,7 +64,9 @@ extension RailView {
                                (hb.height * railHeaderNameFrac).rounded()))
         let nameColor = browseTarget ? pal.secondary
             : (cell.isActive ? pal.primary : pal.foreground)
-        let name = railLabel(cell.label, cell.wsIndex)
+        // A lens cell shows its bare label (no WS ordinal); a workspace uses
+        // the shared short caption.
+        let name = cell.isLens ? cell.label : railLabel(cell.label, cell.wsIndex)
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {
             let nameH = nameFont * 1.3
