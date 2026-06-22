@@ -1,32 +1,30 @@
 // Client mode — read-only `facet query` projections. The bare query
 // prints the human-readable status snapshot; a projection flag emits
-// machine-readable JSON (--windows / --tags / --lens). Split out of
+// machine-readable JSON (--windows / --tags). Split out of
 // FacetApp+Client.swift (P8-3); same-module extension, no logic change.
 import AppKit
 import FacetCore
 import FacetView
 
 extension FacetApp {
-    /// `facet query [--windows [--filter EXPR] | --tags | --lens]`
+    /// `facet query [--windows [--filter EXPR] | --tags]`
     /// dispatcher. Bare → the human-readable status snapshot
     /// (`runQueryStatus`); a single projection flag → its machine-readable
-    /// JSON (`--windows`, #223; `--tags` / `--lens`, #228). `--filter EXPR`
+    /// JSON (`--windows`, #223; `--tags`, #228). `--filter EXPR`
     /// (#284) is a modifier on `--windows` — it post-filters that array
     /// with a `facet filter` expression — so it requires `--windows`
     /// (loud exit 2 otherwise, like `--edge` requires `--view rail`).
-    /// Read-only: every projection works unconditionally (`--tags` /
-    /// `--lens` read whatever the server reports).
+    /// Read-only: every projection works unconditionally (`--tags`
+    /// reads whatever the server reports).
     static func runQuery(_ args: [String]) -> Never {
         var windows = false
         var tags = false
-        var lens = false
         var filterExpr: String?
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
             case "--windows": windows = true
             case "--tags":    tags = true
-            case "--lens":    lens = true
             case "--filter":  filterExpr = cursor.value(for: "--filter")
             default:
                 die("unknown `query` flag \"\(a)\" — see `facet --help`")
@@ -34,14 +32,14 @@ extension FacetApp {
         }
         // One projection per invocation (mirrors the `lens` / `window`
         // one-action guard). Zero is fine → the bare status snapshot.
-        let count = (windows ? 1 : 0) + (tags ? 1 : 0) + (lens ? 1 : 0)
+        let count = (windows ? 1 : 0) + (tags ? 1 : 0)
         guard count <= 1 else {
             die("facet query: pick one projection "
-                + "(--windows / --tags / --lens) per invocation — "
+                + "(--windows / --tags) per invocation — "
                 + "see `facet --help`")
         }
         // `--filter` only filters the per-window array; it's meaningless on
-        // `--tags` / `--lens` / the bare status. Require `--windows` (a
+        // `--tags` / the bare status. Require `--windows` (a
         // usage error → exit 2) rather than silently ignoring it — same
         // modifier-needs-its-verb rule as `--edge` / `--loading`. (A
         // malformed filter VALUE is the opposite: non-fatal, see
@@ -52,7 +50,6 @@ extension FacetApp {
         }
         if windows { runQueryWindows(filter: filterExpr) }
         if tags    { runQueryTags() }
-        if lens    { runQueryLens() }
         runQueryStatus()
     }
 
@@ -77,8 +74,8 @@ extension FacetApp {
     /// read contract: 3 = file missing (server not running / never
     /// reconciled), 4 = present but malformed (server bug — restart).
     /// Returns the decoded snapshot on success. Shared by the
-    /// human-readable status render (`runQueryStatus`) and the `--tags` /
-    /// `--lens` JSON projections (#228), which all read the same file.
+    /// human-readable status render (`runQueryStatus`) and the `--tags`
+    /// JSON projection (#228), which both read the same file.
     static func readStatusSnapshotOrExit() -> StatusSnapshot {
         do {
             return try StatusSnapshot.read()
@@ -107,25 +104,9 @@ extension FacetApp {
         emitQueryJSON(readStatusSnapshotOrExit().tags)
     }
 
-    /// `facet query --lens` (#228) — the current lens as
-    /// `{ "tags": [...], "showsAll": bool }` (tag mode), or JSON `null`
-    /// in workspace mode (the lens is a tag-mode concept). `showsAll`
-    /// disambiguates a floor-only / `--all` lens (shows every window,
-    /// `tags` may be `[]`) from a lens of zero user tags. Same 0/3/4
-    /// exit contract as the other reads.
-    static func runQueryLens() -> Never {
-        guard let lens = readStatusSnapshotOrExit().lens else {
-            // Workspace mode (or a pre-#228 status file): no lens. Emit
-            // JSON null — a valid, mode-tolerant answer (exit 0).
-            FileHandle.standardOutput.write(Data("null\n".utf8))
-            exit(0)
-        }
-        emitQueryJSON(lens)
-    }
-
     /// Pretty-print `value` as JSON (sorted keys + trailing newline,
     /// matching the `--windows` output shape) and exit 0. Shared by the
-    /// `--tags` / `--lens` projections (#228) so all three machine
+    /// `--tags` projection (#228) so all machine
     /// readable query forms look alike to a `jq` pipeline. An encode
     /// failure (not realistically reachable for a `[String]` / small
     /// struct) is surfaced as malformed-data (exit 4), staying within

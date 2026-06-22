@@ -628,85 +628,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Focus.assert(pick, backend: self)
     }
 
-    // MARK: - Lens (M11-3 tag mode)
-
-    /// Change the lens. Mirrors `switchWorkspace`: resolve the spec to
-    /// a tag mask, mutate the catalog (which returns the union-delta
-    /// park/restore plan), park the windows leaving the lens, restore +
-    /// re-tile the ones entering, then auto-focus. No-op outside tag
-    /// mode (the catalog's `setLens` returns nil) or on an unknown tag
-    /// name (surfaced as an operational error).
-    public func setLens(_ spec: LensSpec, autoFocus: Bool) {
-        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
-        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
-              catalog.grouping == .tag else { return }
-        let resolved: UInt64?
-        switch spec {
-        case .only(let names):   resolved = catalog.lensOnly(names)
-        case .add(let names):    resolved = catalog.lensAdded(names)
-        case .remove(let names): resolved = catalog.lensRemoved(names)
-        case .toggle(let names): resolved = catalog.lensToggled(names)
-        case .all:               resolved = catalog.lensAll
-        }
-        guard let mask = resolved else {
-            // Strict resolution failed: at least one name is undefined.
-            // Surface the whole requested set so the user sees what they
-            // asked for (the lens is unchanged — no silent drop).
-            let names: [String]
-            switch spec {
-            case .only(let n), .add(let n),
-                 .remove(let n), .toggle(let n): names = n
-            case .all:                           names = []
-            }
-            errorContinuation.yield(
-                "lens \(names.joined(separator: ",")): no such tag")
-            return
-        }
-        guard let plan = catalog.setLens(mask) else { return }   // unchanged
-        Log.debug("native: setLens \(plan.oldLens) -> \(plan.newLens)")
-        let rect = activeDisplayRect()
-        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
-        // applyLayout auto-routes to the tag-union branch (grouping ==
-        // .tag), tiling the new visible union into `rect`.
-        applyLayout(workspace: catalog.activeIndex, rect: rect)
-        // The in-panel selector passes `autoFocus: false` so the tree /
-        // lens panel keeps key focus while the user keeps picking tags;
-        // the CLI path keeps the focus-the-new-union behaviour.
-        if autoFocus { applyLensAutoFocus(newLens: plan.newLens) }
-        eventContinuation.yield(.refreshNeeded)
-    }
-
-    /// Auto-focus after a lens change. Keep the current focus when its
-    /// window stays visible (its tags still intersect the lens, or it's
-    /// floating / sticky — never parked) so a `--toggle` that only adds
-    /// a tag doesn't yank focus; otherwise focus the first window of the
-    /// new visible union, or defocus to Finder when the union is empty.
-    /// Internal (not `private`) so the `tag --remove` path in
-    /// `NativeAdapter+DynamicWS` can reuse it — its lens edit needs the
-    /// same auto-focus as `setLens`.
-    func applyLensAutoFocus(newLens: UInt64) {
-        if let cur = focusedWindow(), let slot = catalog.windowMap[cur] {
-            let staysVisible = (slot.tags & newLens) != 0
-                || catalog.floatingWindows.contains(cur)
-                || catalog.everywhereWindows.contains(cur)
-            if staysVisible { return }
-        }
-        guard let pickID = catalog.visibleNonFloatingMembers().first,
-              let pick = enumerateCGWindows().first(where: { $0.id == pickID })
-        else {
-            activateFinder()
-            return
-        }
-        Log.debug("native: lens autoFocus pick=\(pick.id.serverID) "
-            + "app=\(pick.appName)")
-        Focus.assert(pick, backend: self)
-    }
-
     // MARK: - Section-lens (tag-unification Phase 1)
 
     /// Activate / clear the active section-lens (`type="lens"` section, by
-    /// `label`). The section-model twin of `setLens` (tag-mode bitmask lens):
-    /// resolve the label → the section's `match`, evaluate it across ALL
+    /// `label`): resolve the label → the section's `match`, evaluate it across ALL
     /// workspaces on the current mac desktop (`sectionLensVisibleIDsAll`),
     /// park out-of-lens windows everywhere, and gather the cross-workspace
     /// union for tiling. `nil` clears the lens (restores every parked window).

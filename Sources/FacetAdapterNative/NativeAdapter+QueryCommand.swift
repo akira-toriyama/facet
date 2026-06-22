@@ -17,11 +17,10 @@
 //     pass (AXTitles is cliQueue-only by contract); merges the passed-in
 //     facet map by window id.
 //
-//   • `definedTagNames()` / `currentLens()` — cheap active-catalog reads
-//     for `facet query --tags` / `--lens` (#228). Production callers invoke
-//     them on `cliQueue` (like every catalog read), but — unlike the two
-//     phases above — they carry NO `dispatchPrecondition`: they're directly
-//     unit-tested off-queue (QueryTagsLensTests) to pin the mode gate.
+//   • `definedTagNames()` — a cheap active-catalog read for `facet query
+//     --tags` (#228). Production callers invoke it on `cliQueue` (like every
+//     catalog read), but — unlike the two phases above — it carries NO
+//     `dispatchPrecondition`: it's directly unit-tested off-queue.
 //
 // Both phases on the one cliQueue serialization point: the catalog read
 // never races the cliQueue mutators, and the heavy sweep stays off main.
@@ -39,15 +38,6 @@ extension NativeAdapter {
     /// (`writeStatus`, the tag-panel seeds) like every other catalog read.
     public func definedTagNames() -> [String] {
         catalog.tagModel.names
-    }
-
-    /// The active catalog's lens (`facet query --lens`, #228). `nil`
-    /// outside tag mode (the lens is a tag-mode concept). Pure
-    /// resolution in `LensStatus.resolve` (unit-tested) — `showsAll` is
-    /// derived from the floor bit. Cheap catalog read (cliQueue, P6).
-    public func currentLens() -> LensStatus? {
-        guard catalog.grouping == .tag else { return nil }
-        return LensStatus.resolve(lens: catalog.lens, model: catalog.tagModel)
     }
 
     public func queryFacetStates()
@@ -129,7 +119,7 @@ extension NativeAdapter {
     /// isn't in that catalog's `windowMap`.
     ///
     /// Internal (not `private`) so the projection-parity tests can assert
-    /// it agrees with `snapshot`/`tagSnapshot` per window (the pivot makes
+    /// it agrees with `snapshot` per window (the pivot makes
     /// this the single window-centric source — Prep-1/cov-01). Call it
     /// directly off-queue; the public `queryFacetStates()` traps off the
     /// cliQueue via `dispatchPrecondition`, this helper does not.

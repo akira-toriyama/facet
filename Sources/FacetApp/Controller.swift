@@ -1041,8 +1041,8 @@ final class Controller: NSObject {
     /// event lands. Errors are swallowed: the status file is a
     /// debugging convenience, not a correctness path.
     private func writeStatus(_ wss: [Workspace]) {
-        // P6: the catalog reads (stashedScratchpads / definedTagNames /
-        // currentLens) run on `cliQueue` — the single catalog
+        // P6: the catalog reads (stashedScratchpads / definedTagNames)
+        // run on `cliQueue` — the single catalog
         // serialization point — alongside the file write. `wss` is an
         // immutable value snapshot, so `entries` is catalog-free. The
         // status file is a debugging convenience, so the tiny
@@ -1068,7 +1068,6 @@ final class Controller: NSObject {
                 workspaces: entries,
                 stashed: bk.stashedScratchpads(),
                 tags: bk.definedTagNames(),
-                lens: bk.currentLens(),
                 lastError: lastError,
                 timestamp: ISO8601DateFormatter().string(from: Date()))
             do { try snap.write() } catch {

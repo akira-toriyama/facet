@@ -1,7 +1,7 @@
-// Window metadata commands — marks (focus marks) + runtime window
-// tagging and the runtime tag vocabulary (#191 / #228, tag mode).
-// Extracted unchanged from NativeAdapter+DynamicWS.swift — same-module
-// extension, no logic change.
+// Window metadata commands — marks (focus marks) + runtime per-window
+// tagging (#191 / #228). The legacy tag-mode lens/vocabulary (by=tag) was
+// removed in EX-4; tagging is now a pure window attribute and visibility is
+// owned by the section model (a `type="lens"` section + reconcile).
 
 import AppKit
 import ApplicationServices
@@ -64,7 +64,7 @@ extension NativeAdapter {
         return true
     }
 
-    // MARK: - Runtime window tagging (#191, tag mode)
+    // MARK: - Runtime window tagging (#191 / #228)
 
     public func addTagToFocusedWindow(_ name: String) -> Bool {
         applyWindowRetag("tag", name, window: nil) {
@@ -85,8 +85,8 @@ extension NativeAdapter {
     }
 
     // GUI tag menu (#191 PR-7) — retag a SPECIFIC window (the
-    // right-clicked row), not the focused one. Same park/restore + retile
-    // path as the focused verbs, just with an explicit target.
+    // right-clicked row), not the focused one. Same reconcile-driven
+    // attribute write as the focused verbs, just with an explicit target.
 
     public func addTag(_ name: String, toWindow id: WindowID) -> Bool {
         applyWindowRetag("tag", name, window: id) {
@@ -100,66 +100,57 @@ extension NativeAdapter {
         }
     }
 
-    /// Shared body for the runtime-retag verbs. Guards tag mode, resolves
-    /// the target window (`explicitID`, else the focused window), runs the
-    /// catalog mutator, then — like `setLens`, on a single window — parks /
-    /// restores it if its lens visibility flipped and re-tiles the active
-    /// union, finally repainting. Returns `false` when there is no target
-    /// window or the mutator rejected the name (unknown on `untag` /
-    /// vocabulary full) so the Controller can surface the error.
+    /// Shared body for the runtime-retag verbs. Guards the managed mac
+    /// desktop, resolves the target window (`explicitID`, else the focused
+    /// window), runs the catalog mutator (a pure attribute write), then
+    /// re-tiles + requests a refresh. Returns `false` when there is no
+    /// target window or the mutator rejected the name (e.g. `--untag` of an
+    /// absent tag) so the Controller can surface the error.
     private func applyWindowRetag(
         _ verb: String, _ name: String, window explicitID: WindowID?,
-        _ mutate: (inout WorkspaceCatalog, WindowID)
-            -> WorkspaceCatalog.RetagVisibility?
+        _ mutate: (inout WorkspaceCatalog, WindowID) -> Bool
     ) -> Bool {
-        guard tagVocabReady(verb, name) else { return false }
+        guard windowTagReady(verb, name) else { return false }
         guard let id = explicitID ?? focusedWindow() else {
             Log.debug("native: \(verb) \"\(name)\" — no focused window")
             return false
         }
-        guard let vis = mutate(&catalog, id) else {
-            Log.debug("native: \(verb) \"\(name)\" — rejected (unknown / full)")
+        guard mutate(&catalog, id) else {
+            Log.debug("native: \(verb) \"\(name)\" — rejected (no window / not present)")
             return false
         }
-        settleWindowRetag(id, vis,
-                          logDetail: "\(verb) \"\(name)\" -> \(id.serverID)")
+        settleWindowRetag(id, logDetail: "\(verb) \"\(name)\" -> \(id.serverID)")
         return true
     }
 
-    /// Apply a single-window retag's lens-visibility transition — park /
-    /// restore the one window if it flipped (like `setLens` on one
-    /// window) — then re-tile the active union and repaint. Shared by the
+    /// Settle a single-window tag change. The tag set changed; re-tile +
+    /// request a refresh. If a section lens is active, the refresh-driven
+    /// `applySectionLensReconcile` re-parks/restores by the new tags (D3
+    /// continuous re-park) — visibility is owned by the section model, so
+    /// there is no synchronous park/restore here. Shared by the
     /// `window --tag/--untag/--toggle-tag` verbs (`applyWindowRetag`) and
-    /// `window --retag` (#228). `logDetail` is the verb-specific debug
-    /// suffix (the `[vis]` marker is appended here).
-    private func settleWindowRetag(_ id: WindowID,
-                                   _ vis: WorkspaceCatalog.RetagVisibility,
-                                   logDetail: String) {
-        if vis != .unchanged, let pid = catalog.windowMap[id]?.pid {
-            let ref = WindowRef(id: id, pid: pid)
-            applyHide(toPark: vis == .park ? [ref] : [],
-                      toRestore: vis == .restore ? [ref] : [])
-        }
+    /// `window --retag` (#228).
+    private func settleWindowRetag(_ id: WindowID, logDetail: String) {
         applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
-        Log.debug("native: \(logDetail) [\(vis)]")
+        Log.debug("native: \(logDetail)")
         eventContinuation.yield(.refreshNeeded)
     }
 
     /// `facet window --retag OLD NEW` (#228): replace tag OLD with NEW on
-    /// the focused window in a SINGLE atomic catalog write, then settle
-    /// its lens visibility + retile. Maps the catalog's `RetagOutcome` to
-    /// the backend-facing `WindowRetagResult` so the dispatch layer
-    /// surfaces a precise error (no-focus vs. unknown-OLD vs. vocab-full).
+    /// the focused window in a SINGLE atomic catalog write, then re-tile.
+    /// Maps the catalog's `RetagOutcome` to the backend-facing
+    /// `WindowRetagResult` so the dispatch layer surfaces a precise error
+    /// (no-focus vs. unknown-OLD vs. vocab-full).
     public func retagFocusedWindow(old: String,
                                    new: String) -> WindowRetagResult {
-        guard tagVocabReady("retag", "\(old):\(new)") else { return .noFocus }
+        guard windowTagReady("retag", "\(old):\(new)") else { return .noFocus }
         guard let id = focusedWindow() else {
             Log.debug("native: retag \"\(old)\"->\"\(new)\" — no focused window")
             return .noFocus
         }
         switch catalog.retagWindow(id, old: old, new: new) {
-        case .retagged(let vis):
-            settleWindowRetag(id, vis,
+        case .retagged:
+            settleWindowRetag(id,
                 logDetail: "retag \"\(old)\"->\"\(new)\" -> \(id.serverID)")
             return .retagged
         case .noWindow:
@@ -174,79 +165,14 @@ extension NativeAdapter {
         }
     }
 
-    /// Tag-mode + managed-desktop gate shared by every runtime tag verb
-    /// (`window --tag/--untag/--toggle-tag` and `tag --add/--remove/
-    /// --rename`). `false` (with a debug line) when the run isn't in tag
-    /// mode or this mac desktop is hands-off.
-    private func tagVocabReady(_ verb: String, _ name: String) -> Bool {
-        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
-              catalog.grouping == .tag else {
-            Log.debug("native: \(verb) \"\(name)\" — not tag mode / unmanaged")
+    /// Managed-desktop gate shared by every runtime window-tag verb
+    /// (`window --tag/--untag/--toggle-tag/--retag`). `false` (with a debug
+    /// line) when this mac desktop is hands-off.
+    private func windowTagReady(_ verb: String, _ name: String) -> Bool {
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal) else {
+            Log.debug("native: \(verb) \"\(name)\" — unmanaged mac desktop")
             return false
         }
         return true
-    }
-
-    // MARK: - Runtime tag vocabulary (#191, tag mode — `facet tag`)
-
-    /// `facet tag --add NAME`: declare a tag in the session vocabulary
-    /// without touching any window. Idempotent (a defined name is a
-    /// no-op success). `false` only when not in tag mode / unmanaged or
-    /// the vocabulary is full (63 user tags).
-    public func addTag(_ name: String) -> Bool {
-        guard tagVocabReady("tag --add", name) else { return false }
-        guard catalog.addTagName(name) != nil else {
-            Log.debug("native: tag --add \"\(name)\" — rejected (full / reserved)")
-            return false
-        }
-        Log.debug("native: tag --add \"\(name)\"")
-        // No window changed and the flat tree only lists windows (a tag
-        // with no window has no row), so the repaint is a no-op for the
-        // tree today — kept so any future vocabulary-aware surface (lens
-        // picker, etc.) refreshes on a new tag.
-        eventContinuation.yield(.refreshNeeded)
-        return true
-    }
-
-    /// `facet tag --remove NAME`: delete a tag, stripping its bit from
-    /// every window and freeing it for reuse. Parks / restores windows
-    /// whose lens visibility flipped and re-tiles the union — the
-    /// vocabulary analog of `setLens`. `false` when not in tag mode /
-    /// unmanaged or `name` is unknown / reserved.
-    public func removeTag(_ name: String) -> Bool {
-        guard tagVocabReady("tag --remove", name) else { return false }
-        guard let plan = catalog.removeTagName(name) else {
-            Log.debug("native: tag --remove \"\(name)\" — rejected (unknown / reserved)")
-            return false
-        }
-        let rect = activeDisplayRect()
-        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
-        applyLayout(workspace: catalog.activeIndex, rect: rect)
-        applyLensAutoFocus(newLens: plan.newLens)
-        Log.debug("native: tag --remove \"\(name)\" "
-            + "parked=\(plan.toPark.count) restored=\(plan.toRestore.count)")
-        eventContinuation.yield(.refreshNeeded)
-        return true
-    }
-
-    /// `facet tag --rename OLD NEW`: rename a tag in place (bit kept, so
-    /// no window mask / lens edit). `false` when not in tag mode /
-    /// unmanaged, `old` is unknown, or `new` is already defined.
-    public func renameTag(_ old: String, to new: String) -> Bool {
-        guard tagVocabReady("tag --rename", "\(old):\(new)") else {
-            return false
-        }
-        switch catalog.renameTagName(old, to: new) {
-        case .renamed:
-            Log.debug("native: tag --rename \"\(old)\" -> \"\(new)\"")
-            eventContinuation.yield(.refreshNeeded)
-            return true
-        case .unknownOld:
-            Log.debug("native: tag --rename \"\(old)\" — no such tag")
-            return false
-        case .collision:
-            Log.debug("native: tag --rename -> \"\(new)\" — name already in use")
-            return false
-        }
     }
 }
