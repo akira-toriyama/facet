@@ -49,7 +49,8 @@
 - `Sources/FacetCore/TagModel+LensFilter.swift` (whole file — bitmask→filter parity, dead path)
 - `Sources/FacetCore/TagModel.swift` (whole file — UInt64 bit registry; deleted in EX-4.3 after window-attr ops switch to `Set<String>`)
 - `Sources/FacetAdapterNative/WorkspaceCatalog+Tags.swift` (whole file — tag-mode grouping/lens machinery; its 4 surviving window-attribute mutators move to a new file in EX-4.2)
-- `Tests/FacetCoreTests/TagModelTests.swift`, `Tests/FacetAdapterNativeTests/TagCatalogTests.swift`, and any `QueryTagsLensTests`/`LensRouteTests` (CI-only; deleted/rewritten with their code)
+- **`Sources/FacetView/TagEditPanel.swift` (whole file, 35KB — the `t`-key tag-manage GUI / vocabulary editor, #191; plan-review add)** — and its `LensSpec` payload in `Backend.swift` (the DNC wire type for tag-mode lens commands; dead once `setLens` is deleted).
+- `Tests/FacetCoreTests/TagModelTests.swift`, `Tests/FacetAdapterNativeTests/TagCatalogTests.swift`, `Tests/FacetAdapterNativeTests/QueryTagsLensTests.swift`, `Tests/FacetCoreTests/LensRouteTests.swift` (CI-only; deleted/rewritten with their code — see EX-4.4 Step 4 for the exact pre-list + the survivors that must stay)
 
 **CREATE:**
 - `Sources/FacetAdapterNative/WorkspaceCatalog+WindowTags.swift` (the 4 surviving Set-based window-attribute mutators: `addTagToWindow` / `removeTagFromWindow` / `toggleTagOnWindow` / `retagWindow`)
@@ -74,7 +75,15 @@
 - `Sources/FacetApp/Main.swift` (help text; `requireGrouping` :424; grid/rail exit-2 :656-667; `facet tag` dispatch :545)
 - `Sources/FacetApp/FacetApp+ClientCommands.swift` (`runLensCommand` composition branches :110-208; `runTagCommand` :238-271; `runWindowCommand` gate :389)
 - `Sources/FacetApp/Controller+CLIDispatch.swift` (tag-add/remove/rename DNC :194-225; `lens-section:`→`lens:` rename :65-81)
-- `Sources/FacetView/ViewContextMenu.swift` + `Sources/FacetViewTree/SidebarView+Menus.swift` (layout-picker `LayoutGrouping…with: .tag` filter :120 / :52; `tagMode` param)
+- `Sources/FacetCore/Layout.swift` (**plan-review must-fix**: delete `supportedGroupings: Set<Grouping>` protocol requirement :68 + default extension :79 — its only consumer is `LayoutGrouping`, deleted with it; no engine overrides, verified grep)
+- **View-layer tag-mode surface (plan-review add — bigger than first mapped):**
+  - `Sources/FacetView/ViewContextMenu.swift` (`tagMode` param + `LayoutGrouping…with: .tag` filter :112-123,214-258)
+  - `Sources/FacetViewTree/SidebarView+Menus.swift` (`tagModeActive` :40,74,98 + `LayoutGrouping…with:.tag` :52)
+  - `Sources/FacetViewTree/SidebarView.swift` (the `tagModeActive` flag :90 + `update(tagMode:)` param :291-307 + 9 branch sites — flat-list/uppercase/chip-count/reset; collapse every `tagModeActive ? X : Y` to the workspace branch `Y`)
+  - `Sources/FacetViewTree/SidebarView+Drag.swift` (:102,374), `SidebarView+KbNav.swift` (:134), `SidebarView+Draw.swift` (:139,146) — `tagModeActive` branch removal
+  - `Sources/FacetApp/Controller.swift` (`sidebarView.update(… tagMode: config.effectiveGrouping == .tag)` :1038 — drop the arg)
+  - `Sources/FacetApp/Controller+ActiveMode.swift` (`t`-key `enterTagManage` case :151; `tagManage: config.effectiveGrouping == .tag` menu param :200; `enterTagManage`/`openTagEditor`/tag-manage undo :342-392)
+  - `Sources/FacetViewTree/TreeController.swift` + `Sources/FacetView/PopupMenu.swift` + `Sources/FacetView/PopupGeometry.swift` (TagEdit / tag-manage invocations — delete with `TagEditPanel.swift`)
 - docs: `config.toml`, `config.schema.json`, `docs/glossary.md`, `docs/architecture.md`, `README.md`, `README.ja.md`
 
 **VERIFY-ONLY (must NOT regress — accidental-deletion risk):**
@@ -115,6 +124,17 @@ func testStartupActiveIsFirstWorkspaceSectionAcrossMultipleSections() {
     XCTAssertEqual(c.workspaceNames.first, "A")   // first WORKSPACE section, not the lens
     XCTAssertNil(c.activeSectionLens)              // never a lens at startup
 }
+
+// Edge case (plan-review, codemap open-Q #5): a desktop config with ONLY
+// type=lens sections (no type=workspace). seed()'s fallback = one unnamed
+// workspace, so activeSection stays .workspace(1) — never lens, never crash.
+func testStartupWithNoWorkspaceSectionFallsBackToOneWorkspace() {
+    let cfg = FacetConfig(/* desktop.1 sections = [lens "Web" match:"tag~=web"] only */)
+    var c = WorkspaceCatalog()
+    c.seed(configs: cfg.effectiveWorkspaceList(forMacDesktopOrdinal: 1))  // → [] → fallback [""]
+    XCTAssertEqual(c.activeSection, .workspace(1))   // the lone fallback ws
+    XCTAssertNil(c.activeSectionLens)
+}
 ```
 
 - [ ] **Step 3: Run the test (CI-only — locally confirm it COMPILES via `swift build`)**. Run: `swift build`. Expected: GREEN (test target compiles). If `effectiveWorkspaceList` already filters+orders correctly, the assertion is satisfied at CI; if NOT, fix the filter in `FacetConfig` (filter `type == .workspace`, keep section-array order) — that fix becomes part of this commit.
@@ -146,11 +166,16 @@ Delete tag-mode grouping/lens everywhere, KEEPING `TagModel` + `WindowSlot.tags:
 - [ ] **A1: `FacetApp/FacetApp+ClientCommands.swift`** — in `runLensCommand` (≈:110-208) delete the `--add/--remove/--toggle/--all` branches; keep positional `NAME` (activate section) + `--clear`. Delete `runTagCommand` (≈:238-271) entirely. In `runWindowCommand` (≈:277-416) delete the `requireGrouping(.tag)` gate (≈:389) so `--tag/--untag/--toggle-tag/--retag` always parse.
 - [ ] **A2: `FacetApp/Main.swift`** — delete `requireGrouping` (:424) + all callers; delete the `tag` subcommand dispatch (:545); delete the grid/rail `requireGrouping(.workspace)` exit-2 (:656-667); rewrite `printHelp` (:94-207) to drop the `tag`/composition lines + tag-mode caveats and reflect the 2-system surface.
 - [ ] **A3: `FacetApp/Controller+CLIDispatch.swift`** — delete the `tag-add`/`tag-remove`/`tag-rename` DNC cases (:194-225); rename the DNC `lens-section:` → `lens:` and delete the tag-mode `lens:` path (:65-81). (Single wire-protocol rename — no compat alias, no old clients exist.)
-- [ ] **A4: `FacetView/ViewContextMenu.swift` (:112-123,214-258) + `FacetViewTree/SidebarView+Menus.swift` (:52)** — delete the `LayoutGrouping.isCompatible(..., with: .tag)` layout-picker filter + the `tagMode` parameter; the layout picker now offers the workspace-compatible set unconditionally (workspace section) / `LensLayout`-stateless set (lens section, already handled).
-- [ ] **A5: `swift build` green** (CLI no longer references composition/vocab verbs; backend `setLens`/vocab methods now dead but still present). Commit:
+- [ ] **A4: View-layer tag-mode removal (plan-review — caller layer, must precede the backend deletion in B).** This is bigger than the layout-picker filter; the `tagModeActive` flag + the `t`-key tag-manage GUI thread through the tree view and are all callers of tag-mode state/backend:
+  - DELETE `Sources/FacetView/TagEditPanel.swift` (whole file, the vocabulary editor) + its invocations: `Controller+ActiveMode.swift` `enterTagManage`/`openTagEditor`/the `t`-key case (:151) + the tag-manage undo branch (:342-392); `TreeController.swift` + `PopupMenu.swift` + `PopupGeometry.swift` TagEdit references. (It calls the `facet tag` backend verbs deleted in B1 — delete the caller first.)
+  - `Controller.swift:1038` — drop the `tagMode:` arg from `sidebarView.update(...)`. `Controller+ActiveMode.swift:200` — delete the `tagManage: config.effectiveGrouping == .tag` menu param + `onTagManage`.
+  - `SidebarView.swift` — delete the `tagModeActive` stored flag (:90) + the `tagMode:` param on `update(...)` (:291-307) + collapse all 9 `tagModeActive ? X : Y` branch sites to the workspace branch `Y` (flat-list header, uppercase names :376, chip count :378, reset :534, signature :328,443). `SidebarView+Drag.swift` (:102,374), `SidebarView+KbNav.swift` (:134), `SidebarView+Draw.swift` (:139,146) — same collapse.
+  - `ViewContextMenu.swift` — delete the `tagMode` param (:112,214) + the `LayoutGrouping.isCompatible(..., with: .tag)` layout-picker filter (:118-123) + the `if tagMode` branch (:258). `SidebarView+Menus.swift` — delete the `LayoutGrouping…with:.tag` filter (:52) + the `tagModeActive` menu branches (:40,74,98). The layout picker now offers the workspace-compatible set for a workspace section (unconditional) / `LensLayout`-stateless set for a lens section (already handled by EX-0.3).
+  - VERIFY: `grep -rn "tagModeActive\|tagMode\|TagEdit\|enterTagManage\|tagManage" Sources/FacetView* Sources/FacetApp/` → zero (all view tag-mode surface gone). `config.effectiveGrouping` is still referenced ONLY inside FacetConfig until C4.
+- [ ] **A5: `swift build` green** (CLI + view no longer reference composition/vocab verbs or `tagModeActive`/`TagEditPanel`; backend `setLens`/vocab methods + `catalog.lensOnly/…` are now DEAD CODE but still present and compile — deleted in B2/B3, caller-before-callee). Commit:
 
 ```bash
-git commit -am ":fire: refactor(cli)!: drop facet tag + lens --add/--remove/--toggle/--all + tag-mode gates (EX-4.2a)"
+git commit -am ":fire: refactor(cli)!: drop facet tag + lens composition verbs + tag-manage GUI (TagEditPanel) + view tagMode surface (EX-4.2a)"
 ```
 
 ### Step group B — delete the adapter tag-mode machinery (build-green commit)
@@ -158,7 +183,7 @@ git commit -am ":fire: refactor(cli)!: drop facet tag + lens --add/--remove/--to
 - [ ] **B1: `NativeAdapter+Tagging.swift`** — delete `addTag(_:)` / `removeTag(_:)` / `renameTag(_:to:)` (vocab verbs, :196-251). In `tagVocabReady` (:181) drop `catalog.grouping == .tag`, keep `config.isMacDesktopManaged(...)`; rename to e.g. `windowTagReady`. In `settleWindowRetag` (:135-146) DELETE the `applyHide(toPark:/toRestore:)` park/restore block — instead call `applySectionLensReconcile()` (re-evaluate the active lens membership for the changed tag set) then `applyLayout(workspace:rect:)` + `refreshNeeded`. The catalog mutators still return `RetagVisibility`; ignore it here (reconcile owns visibility) — or change their return in B3.
 - [ ] **B2: `NativeAdapter.swift`** — delete `setLens` (:639-689) + the tag-union comment (:669). `NativeAdapter+Scratchpad.swift` delete the `if catalog.grouping == .tag { applyFrames(tagUnionFrames…) }` branch (:532). `NativeAdapter+Slide.swift` delete the `if catalog.grouping == .tag { return tagUnionFrames }` branch (:65). `NativeAdapter+LayoutMode.swift` delete the whole `if catalog.grouping == .tag {…}` block (:44-61). `NativeAdapter+Queries.swift` delete the tag seed (:289 `if config.effectiveGrouping == .tag { seedTags(…) }`) + `parkOutOfLensWindows` (:389, tag-gated → delete or no-op). `NativeAdapter+QueryCommand.swift` delete `currentLens()` (:49) and its DNC/query wiring.
 - [ ] **B3: split `WorkspaceCatalog+Tags.swift`** — CREATE `WorkspaceCatalog+WindowTags.swift` holding ONLY the surviving window-attribute mutators (`addTagToWindow` / `removeTagFromWindow` / `toggleTagOnWindow` / `retagWindow` / `addTagName` / `RetagVisibility` / `RetagOutcome` / `retagVisibility` helper) — UNCHANGED (still UInt64 + `tagModel`, migrated in EX-4.3). DELETE `WorkspaceCatalog+Tags.swift` (seedTags, tagsForNewWindow, visibleNonFloatingMembers, tagUnionFrames, tagSnapshot, lens resolvers `lensOnly/Added/Removed/Toggled/lensMaskStrict/lensAll`, removeTagName, renameTagName, setLens, LensPlan). In `WorkspaceCatalog.swift` delete state `grouping` (:154), `lens` (:162), `tagLayoutMode` (:196), `effectiveTagLayout` (:200) and the `snapshot()` tag branch (`if grouping == .tag { return tagSnapshot() }`, :789) — `snapshot()` always returns the workspace snapshot now. KEEP `tagModel` (:158) until EX-4.3 (window-attr ops still use it).
-- [ ] **B4: `Backend.swift`** — delete the `setLens(_ spec: LensSpec)` protocol method (:216) + `LensSpec` if unused elsewhere. Keep window-tag protocol methods + `activateSection`.
+- [ ] **B4: `Backend.swift`** — delete the `setLens(_ spec: LensSpec)` protocol method (:216) + the `LensSpec` enum + its `parse(_:)` (:100-130 — the DNC wire payload; dead once `setLens` and the `lens --add/...` DNC are gone). Gate: `grep -rn "LensSpec\|setLens" Sources/ Tests/` → zero. Keep window-tag protocol methods + `activateSection`. Also delete `setLens` from any stub backend (`DummyBackend`).
 - [ ] **B5: `swift build` green.** Commit:
 
 ```bash
@@ -167,10 +192,10 @@ git commit -am ":fire: refactor(adapter)!: delete tag-mode lens/grouping machine
 
 ### Step group C — delete the FacetCore types (build-green commit)
 
-- [ ] **C1: `FacetCore/Grouping.swift`** — DELETE the file (`Grouping` enum + `LayoutGrouping`). Confirm no remaining reference (`grep -rn "Grouping" Sources/` → only comments, fix them).
-- [ ] **C2: `FacetCore/LensRoute.swift`** — DELETE the file. Confirm `routeLens`/`LensAction`/`LensEffect`/`LensRouteError` have no callers (the CLI rewrite in A1 removed them).
+- [ ] **C1: `FacetCore/Grouping.swift` + `FacetCore/Layout.swift`** — **(plan-review must-fix)** BEFORE deleting `Grouping.swift`, delete the `supportedGroupings` protocol requirement (`Layout.swift:68` `var supportedGroupings: Set<Grouping> { get }`) AND its default extension (`Layout.swift:79` `public var supportedGroupings: Set<Grouping> { [.workspace, .tag] }`) — its ONLY consumer is `LayoutGrouping.supported` (`Grouping.swift:51`), being deleted; no engine overrides it (verified grep). THEN DELETE `Grouping.swift` (`Grouping` enum + `LayoutGrouping`). Gate: `grep -rn "Grouping\|supportedGroupings" Sources/` → zero non-comment hits (the surviving `ActiveSection`/`FilterProjection`/`OverviewModels` contain the unrelated word "lens"/"tag", not `Grouping`).
+- [ ] **C2: `FacetCore/LensRoute.swift`** — Gate FIRST: `grep -rn "routeLens\|LensAction\|LensEffect\|LensRouteError\|LensRoute" Sources/ Tests/` → zero (the A1 CLI rewrite removed the `routeLens` call). THEN DELETE the file.
 - [ ] **C3: `FacetCore/TagModel+LensFilter.swift`** — DELETE the file (`lensFilter`, bitmask→filter parity, dead).
-- [ ] **C4: `FacetConfig.swift`** — delete `grouping` (:186) + `tagDefs` (:190) raw fields; `effectiveGrouping` (:599) + `effectiveTagModel` (:608); the `fatalConfigErrors` tag block (:631-654, the `guard effectiveGrouping == .tag` + `LayoutGrouping`/`[[tag]]`/grid checks); the `effectiveMacDesktopSectionConfigs` tag clamp (:589, now always returns `macDesktopSectionConfigs`). `FacetConfig+Decode.swift` delete `tagDefs` parse (:155) + the tag-mode-ignores-sections warning (:159-167). `FacetConfig+Spec.swift` delete the `by` field (:61) + the `[[tag]]` shape.
+- [ ] **C4: `FacetConfig.swift`** — delete `grouping` (:186) + `tagDefs` (:190) raw fields; `effectiveGrouping` (:599) + `effectiveTagModel` (:608); the `fatalConfigErrors` tag block (:631-654, the `guard effectiveGrouping == .tag` + `LayoutGrouping`/`[[tag]]`/grid checks). **`effectiveMacDesktopSectionConfigs` (:589) — change `effectiveGrouping == .tag ? [:] : macDesktopSectionConfigs` to just `return macDesktopSectionConfigs`** (sections are never clamped away now). **VERIFY `isSectionModelActive(ordinal:)` (:545) still reads correctly** — it gates on a non-empty `effectiveMacDesktopSectionConfigs`, so post-change it returns `true` whenever any section is configured (the desired behavior; was previously force-false under `.tag`). `FacetConfig+Decode.swift` delete `tagDefs` parse (:155) + the tag-mode-ignores-sections warning (:159-167). `FacetConfig+Spec.swift` delete the `by` field (:61) + the `[[tag]]` shape.
 - [ ] **C5: `swift build` green.** Confirm `grep -rn "grouping\|TagModel\|LensRoute\|LayoutGrouping\|tagDefs\|\.tag\b" Sources/FacetCore/` returns only intentional survivors (Window.tags, ApplyOp.addTag, tag~= filter field). Commit:
 
 ```bash
@@ -196,6 +221,18 @@ Now the only `TagModel`/UInt64 users are the 4 window-attribute mutators + the `
 **Interfaces:**
 - Consumes: nothing new.
 - Produces: `WindowSlot.tags: Set<String>` (default `[]`); `addTagToWindow(_:name:)`/`removeTagFromWindow(_:name:)`/`toggleTagOnWindow(_:name:)` returning `Bool` (mutated? — no `RetagVisibility`); `retagWindow(_:old:new:)` returning a small `Bool`/`enum`; `makeWindow` overlay = `populateTags ? (windowMap[w.id]?.tags).map { $0.sorted() } ?? [] : []`.
+
+**Test infrastructure (plan-review):** define the `seededCatalog` helper (mirror the existing `seededCatalog(_:)` in `SectionLensCatalogTests`/`WorkspaceCatalogTests` — confirm its exact shape there and reuse it). It must seed N workspaces AND register one tracked window so tag mutators have a target:
+
+```swift
+private func seededCatalog(_ n: Int) -> WorkspaceCatalog {
+    var c = WorkspaceCatalog()
+    c.seed(configs: (1...n).map { (index: $0, config: WorkspaceConfig(name: "ws\($0)")) })
+    c.windowMap[WindowID(serverID: 10)] = WindowSlot(workspace: 1, pid: 1234, tags: [])
+    return c
+}
+```
+(If `seededCatalog` already exists in the test target, extend it to register the test window rather than redefining — avoid a duplicate-symbol clash. Verify `WorkspaceConfig`'s exact init label before use.)
 
 - [ ] **Step 1: Write the failing test** (`WindowTagsTests.swift`):
 
@@ -258,7 +295,19 @@ init(workspace: Int?, pid: Int, tags: Set<String> = []) {
 }
 ```
 
-- [ ] **Step 5: Rewire `NativeAdapter+Tagging.swift`** — the `applyWindowRetag`/`retagFocusedWindow` handlers now take a `Bool`-returning mutator; on success call `applySectionLensReconcile()` (re-park/restore for the active lens) + `applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())` + `eventContinuation.yield(.refreshNeeded)`. Map `retagWindow` `false` → the existing no-window error. (Auto-vivify + unknown-name are no longer reject paths — `Set` always succeeds for a tracked window; `--untag` of an absent tag returns `false` = "not present", surfaced as before.)
+- [ ] **Step 5: Rewire `NativeAdapter+Tagging.swift`** — the `applyWindowRetag`/`retagFocusedWindow` handlers now take a `Bool`-returning mutator (no `RetagVisibility`). `settleWindowRetag` becomes: mutate → **re-evaluate the active section-lens membership for the changed tag set** → retile → repaint, with NO manual `applyHide(toPark:/toRestore:)`. **Confirm the actual EX-0 reconcile entry-point's signature before wiring** (`grep -n "func applySectionLensReconcile" Sources/FacetAdapterNative/` — it may take `live:`/`rect:`; feed the current window enumeration + `activeDisplayRect()` exactly as the existing reconcile callers do). New shape:
+
+```swift
+private func settleWindowRetag(_ id: WindowID, changed: Bool, logDetail: String) {
+    guard changed else { Log.debug("native: \(logDetail) [unchanged]"); return }
+    applySectionLensReconcile(/* live + rect per its real signature */)  // active lens re-parks/restores
+    applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
+    Log.debug("native: \(logDetail)")
+    eventContinuation.yield(.refreshNeeded)
+}
+```
+
+  Map `retagWindow`/mutator `false` → the existing no-window error path. (Auto-vivify + vocab-full are no longer reject paths — `Set.insert` always succeeds for a tracked window; `--untag` of an absent tag returns `false` = "not present", surfaced as the prior `--untag` reject.) Drop the now-unused `RetagOutcome`/`WindowRetagResult` mapping if the only distinction left is no-window.
 
 - [ ] **Step 6: Migrate the overlay seams** — `makeWindow` (`WorkspaceCatalog.swift:897-899`):
 
@@ -270,7 +319,7 @@ tags: populateTags ? (windowMap[w.id]?.tags.sorted() ?? []) : [],
 
 - [ ] **Step 7: `ApplyResolver.swift` (`ApplyPlanWindowFields.tags`, :232-287)** — keep the simulated tags as ordered `[String]` applying `addTag`/`removeTag` ops; the post-orphan/section match invariant (EX-3) is unaffected (it reads names, never bits). Verify the apply-simulate compiles against `Window.tags: [String]` (unchanged FacetCore type).
 
-- [ ] **Step 8: DELETE `TagModel.swift` + `TagModelTests.swift`.** `grep -rn "TagModel" Sources/ Tests/` → zero. Update/delete `TagCatalogTests.swift` (rewrite the surviving window-tag cases into `WindowTagsTests.swift`, delete the bit/lens/vocab cases).
+- [ ] **Step 8: DELETE `TagModel.swift` + `TagModelTests.swift`.** `grep -rn "TagModel" Sources/ Tests/` → zero. Update/delete `TagCatalogTests.swift` (rewrite the surviving window-tag cases into `WindowTagsTests.swift`, delete the bit/lens/vocab cases). **Query-tags semantics (plan-review):** `facet query --windows` KEEPS the `tags` field, now emitting `slot.tags.sorted()` — session-only/volatile (empty until the user tags a window; no config seed, no persistence). Add `testQueryTagsSortedAndSessionOnly` if a query-test target exists; note "live only, not persisted" in the schema/docs (EX-4.4). **Run-the-survivors verification (plan-review):** confirm the section-model + apply tests still pass post-migration — `ApplyResolverTests` (esp. `inverse` + `removeTag` parity), `FilterProjectionTests` / `FacetFilterEvalTests` / `FacetFilterParserTests` (`tag~=X` grammar), `NewWindowInheritTests` (section apply addTag inheritance), `SectionLensGatherTests`. These must remain INTACT (they exercise the surviving string-tag path, not the deleted bitmask) — do not delete them.
 
 - [ ] **Step 9: `swift build` green** + the new test compiles. Commit:
 
@@ -289,7 +338,15 @@ EX-3 CI lesson: a Spec edit MUST regenerate `config.schema.json` + sweep contrad
 - [ ] **Step 1: `config.toml` (repo root)** — delete the `[grouping]` block + every `[[tag]]` table + any `by=tag` sample/commentary. Confirm the surviving template is workspace/section-only.
 - [ ] **Step 2: Regenerate the schema** — `swift run facet --emit-schema > config.schema.json` (or the project's emit path). Confirm `[grouping]`/`[[tag]]`/`by` are gone from the JSON.
 - [ ] **Step 3: `docs/glossary.md`** — delete `[grouping] by=tag` / tag-mode / `TagModel` / `lens` bitmask entries; ensure `lens`/`active section`/`tag` (as a window attribute) read correctly under the section model. `docs/architecture.md` — drop the by=tag grouping from any two-machineries / grouping table. `README.md` + `README.ja.md` — remove tag-mode + `facet tag` + `lens --add/...` from the CLI surface; keep them bilingually in sync (`readme-bilingual`).
-- [ ] **Step 4: Stale-test sweep** — `grep -rn "grouping\|by=tag\|by = \"tag\"\|\[\[tag\]\]\|TagModel" Tests/`; update or delete every test asserting deleted behavior (e.g. a `ConfigSchemaDriftTests` comparing against the regenerated schema; a `FacetConfigTests` for `effectiveGrouping`). The schema-drift test must compare against the freshly emitted `config.schema.json`.
+- [ ] **Step 4: Stale-test sweep (plan-review — explicit pre-list).** DELETE entire files: `TagModelTests.swift`, `QueryTagsLensTests.swift`, `LensRouteTests.swift` (if present). REWRITE: `TagCatalogTests.swift` → fold the surviving window-tag cases into `WindowTagsTests.swift`, delete the bit/lens/vocab cases. UPDATE: `ConfigSchemaDriftTests` (compare against the freshly emitted `config.schema.json`), `FacetConfigTests`/`WindowFieldsFallbackTests` (any `effectiveGrouping`/`[[tag]]`/`by=tag` assertion). KEEP INTACT (survivors — do NOT touch): `NewWindowInheritTests`, `SectionLensGatherTests`, `FilterProjectionTests`, `FacetFilterEvalTests`/`FacetFilterParserTests`, `ApplyResolverTests`, `OrphanWorkspaceTests`, the EX-1/2/3 section tests. Then the **final precise survivor-aware grep gate** — these must be ZERO across `Sources/`:
+
+```sh
+grep -rnE "\bGrouping\b|supportedGroupings|\bTagModel\b|by=tag|by *= *\"tag\"|\[\[tag\]\]|tagMode|TagEdit|enterTagManage|tagManage|\bsetLens\b|LensRoute|LensSpec|tagDefs|parkOutOfLens|tagUnion|tagSnapshot|seedTags|effectiveGrouping|effectiveTagModel|tagLayoutMode|visibleNonFloatingMembers" Sources/
+```
+
+  (The SURVIVORS that legitimately contain "lens"/"tag" substrings — `activeSectionLens`, `sectionLens*`, `LensMembership`, `LensLayout`, `Window.tags`, `ApplyOp.addTag/removeTag`, `tag~=` filter field, `type="lens"` — are NOT matched by the patterns above. If any pattern hits, it's residue to delete.)
+
+- [ ] **Step 4b: grid/rail × section-lens behavior (plan-review).** Document in `architecture.md`: after the tag-mode exit-2 is gone, grid/rail are unconditionally dispatchable; they remain workspace/section-overview surfaces and drop lens-parked windows via the snapshot's `isLensParked` (EX-2). They are NOT blocked by a CLI gate anymore. If a CI-testable seam exists, add `testGridRailDispatchUnconditionalPostTagRemoval`; otherwise this is a host-verify item.
 - [ ] **Step 5: `swift build` green** + glossary/README terminology consistent (`CLAUDE.md` Terminology rule — terms land in the same PR as the code).
 - [ ] **Step 6: Commit.**
 
@@ -312,6 +369,16 @@ Run after the whole branch builds + the whole-branch adversarial review is clean
 7. **leftover `[grouping]`/`[[tag]]` in a config is silently ignored** (no crash, clamps to workspace/section model).
 
 ---
+
+## Plan-review (wf_9e9bc169-fbc, 2026-06-22) — folded
+
+3-lens adversarial review + adjudicator (source-grounded). Adjudicator verdict: **needs-fixes → 1 confirmed must-fix + 7 should-fix; the rest of the lenses' "must-fix" were REJECTED as misreadings** (the deletion sequencing callers→impl→types is sound; A5 compiles green because `setLens`+`catalog.lensOnly/…` survive until B2/B3; the window-`--tag` gate/`RetagVisibility` correctly survive EX-4.2 and are replaced in B1/4.3; the EX-4.1 test already calls `seed(configs:)`). Folded:
+
+- **MUST-FIX — `Layout.swift` `supportedGroupings`** (the real gap): `LayoutEngine` declares `supportedGroupings: Set<Grouping>` (:68) + default `[.workspace, .tag]` (:79); deleting `Grouping` breaks it → delete the requirement + default in C1 (no overrides). → **folded into EX-4.2c C1.**
+- SHOULD — view-layer tag surface (bigger than first mapped): `TagEditPanel.swift` (35KB tag-manage GUI) + `tagModeActive` flag across SidebarView+5 files + `enterTagManage`/`t`-key + `Controller.swift:1038` tagMode arg. → **folded into EX-4.2a A4** (caller layer, before B).
+- SHOULD — `LensSpec` enum deletion (Backend.swift, dead after setLens) → **B4**; `effectiveMacDesktopSectionConfigs` explicit code + `isSectionModelActive` verify → **C4**; `seededCatalog` helper definition → **EX-4.3 test-infra**; `applySectionLensReconcile` real signature → **EX-4.3 Step 5**; LensRoute pre-deletion grep gate → **C2**; explicit test pre-list + survivor-aware final grep gate → **EX-4.4 Step 4**; grid/rail × section-lens behavior doc/test → **EX-4.4 Step 4b**; query-tags KEEP-but-volatile + ApplyResolver/survivor parity run → **EX-4.3 Step 8**; startup no-workspace-section edge test → **EX-4.1 Step 2**.
+
+VERDICT after folding: **execution-ready (0 open must-fix).**
 
 ## Self-Review
 
