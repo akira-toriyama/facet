@@ -262,6 +262,15 @@ public protocol WindowBackend: Sendable {
     func moveActiveWorkspace(to position: Int)
 
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
+
+    /// EX-3: relocate `id` OUT of its workspace → 迷子 (`workspace = nil`). The
+    /// symmetric-move counterpart of `moveWindow`: a section DnD that drags a
+    /// window from a workspace onto a LENS makes it leave the workspace (canon
+    /// ⑤⑥ "全部移動") so it lives only via the lens's tag. The window parks if
+    /// it was on the active workspace. No-op for a sticky / stashed / already-
+    /// orphan / unknown window.
+    func orphanWindow(_ id: WindowID)
+
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)
 
@@ -599,6 +608,7 @@ public extension WindowBackend {
     func setLens(_ spec: LensSpec, autoFocus: Bool) {}
     func setSectionLens(_ label: String?, autoFocus: Bool) {}
     func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
+    func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 

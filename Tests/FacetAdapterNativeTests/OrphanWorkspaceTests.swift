@@ -104,4 +104,82 @@ final class OrphanWorkspaceTests: XCTestCase {
         }
         XCTAssertTrue(c.nonFloatingMembers(of: 1).contains(wid(10)))
     }
+
+    // MARK: - EX-3.2: setOrphan (workspace → 迷子) primitive
+
+    func testSetOrphanFromActiveWorkspaceParks() {
+        var c = seededCatalog(3)                    // active = WS1
+        _ = c.reconcile(live: [window(10)])        // WS1
+        let outcome = c.setOrphan(wid(10))
+        XCTAssertNil(c.windowMap[wid(10)]?.workspace, "left its workspace (迷子)")
+        switch outcome {
+        case .park(let ref): XCTAssertEqual(ref.id, wid(10))
+        default: XCTFail("active-WS window → orphan should .park, got \(outcome)")
+        }
+    }
+
+    func testSetOrphanFromInactiveWorkspaceStateOnly() {
+        var c = seededCatalog(3)                    // active = WS1
+        _ = c.reconcile(live: [window(10)])        // WS1
+        _ = c.moveWindow(wid(10), to: 2)           // → WS2 (inactive)
+        let outcome = c.setOrphan(wid(10))
+        XCTAssertNil(c.windowMap[wid(10)]?.workspace)
+        switch outcome {
+        case .stateOnly: break
+        default: XCTFail("inactive-WS window → orphan should .stateOnly, got \(outcome)")
+        }
+    }
+
+    func testSetOrphanRejectsAlreadyOrphan() {
+        var c = seededCatalog(3)
+        makeOrphan(&c, 99)
+        switch c.setOrphan(wid(99)) {
+        case .rejected: break
+        default: XCTFail("orphaning an orphan is a no-op (.rejected)")
+        }
+    }
+
+    func testSetOrphanRejectsSticky() {
+        var c = seededCatalog(3)
+        _ = c.reconcile(live: [window(10)])        // WS1
+        c.everywhereWindows.insert(wid(10))        // sticky = everywhere
+        switch c.setOrphan(wid(10)) {
+        case .rejected: break
+        default: XCTFail("a sticky window can't be orphaned (.rejected)")
+        }
+        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1, "sticky window keeps its WS")
+    }
+
+    func testSetOrphanRemovesFromMembershipAndSnapshot() {
+        var c = seededCatalog(3)
+        _ = c.reconcile(live: [window(10)])        // WS1
+        _ = c.setOrphan(wid(10))
+        XCTAssertFalse(c.nonFloatingMembers(of: 1).contains(wid(10)),
+                       "orphan leaves WS1 membership")
+        let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
+        let snap = c.snapshot(live: [window(10)], focused: nil, activeRect: rect)
+        let shown = Set(snap.flatMap { $0.windows.map(\.id) })
+        XCTAssertFalse(shown.contains(wid(10)), "orphan is invisible in the snapshot")
+    }
+
+    // MARK: - EX-3.2: lens-clear / switch park on-screen orphans
+
+    func testSwitchWorkspaceParksOnScreenOrphan() {
+        var c = seededCatalog(3)                    // active = WS1
+        makeOrphan(&c, 99)                          // on-screen orphan (not anchorParked)
+        guard let plan = c.setActive(2) else {
+            return XCTFail("switch to WS2 should produce a plan")
+        }
+        XCTAssertTrue(plan.toPark.contains { $0.id == wid(99) },
+                      "a switch parks every orphan (it belongs to no workspace)")
+    }
+
+    func testClearSectionLensParksOnScreenOrphan() {
+        var c = seededCatalog(3)
+        c.activeSectionLens = "X"                   // a lens is active
+        makeOrphan(&c, 99)                          // shown in the union (not parked)
+        let plan = c.clearSectionLens(in: .zero)
+        XCTAssertTrue(plan.toPark.contains { $0.id == wid(99) },
+                      "clearing a lens parks the orphans it was showing")
+    }
 }

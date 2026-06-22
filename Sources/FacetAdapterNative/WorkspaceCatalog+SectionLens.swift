@@ -131,7 +131,16 @@ extension WorkspaceCatalog {
     mutating func clearSectionLens(in rect: CGRect) -> SectionLensPlan {
         activeSectionLens = nil
         activeSectionLensLayout = nil   // EX-0.3: clear runtime override with the lens
-        guard !lensParkedMembers.isEmpty else {
+        // EX-3: an orphan (workspace == nil) shown in the cleared lens union
+        // belongs to no workspace → park it (already-parked ones no-op via
+        // `shouldParkAnchor`). Collected regardless of `lensParkedMembers` so a
+        // lens whose only members were orphans still collapses on clear.
+        var toPark: [WindowRef] = []
+        for (id, slot) in windowMap
+        where slot.workspace == nil && isParkEligible(id) {
+            toPark.append(WindowRef(id: id, pid: slot.pid))
+        }
+        guard !lensParkedMembers.isEmpty || !toPark.isEmpty else {
             return SectionLensPlan(toPark: [], toRestore: [])
         }
         var toRestore: [WindowRef] = []
@@ -145,6 +154,6 @@ extension WorkspaceCatalog {
             toRestore.append(WindowRef(id: id, pid: slot.pid))
         }
         lensParkedMembers.removeAll()
-        return SectionLensPlan(toPark: [], toRestore: toRestore)
+        return SectionLensPlan(toPark: toPark, toRestore: toRestore)
     }
 }

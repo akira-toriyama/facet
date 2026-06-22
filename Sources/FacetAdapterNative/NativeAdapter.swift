@@ -821,4 +821,32 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         reflowActive(rect: rect)
     }
 
+    /// EX-3: relocate `id` OUT of its workspace → 迷子 (mirrors `moveWindow`'s
+    /// outcome handling). A section DnD's ws→lens MOVE routes here (instead of
+    /// `moveWindow`) so the window leaves its workspace. If a lens that matches
+    /// the window is active, the trailing reconcile (`applySectionLensReconcile`)
+    /// re-shows it in the union; otherwise it stays parked (invisible 迷子). The
+    /// loud `Log.line` makes the orphaning visible (canon ⑧ invisible-but-logged).
+    public func orphanWindow(_ id: WindowID) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
+        else { return }
+        let rect = activeDisplayRect()
+        let outcome = catalog.setOrphan(id)
+        switch outcome {
+        case .rejected:
+            return
+        case .stateOnly:
+            Log.line("native: orphan \(id.serverID) — left its workspace "
+                + "(迷子); invisible unless a 迷子 receptacle lens is active")
+        case .park(let ref):
+            Log.line("native: orphan \(id.serverID) — left its workspace "
+                + "(迷子); parked")
+            applyHide(toPark: [ref], toRestore: [])
+        case .restore:
+            break   // setOrphan never returns .restore
+        }
+        reflowActive(rect: rect)
+    }
+
 }

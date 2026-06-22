@@ -597,8 +597,14 @@ struct WorkspaceCatalog {
         // shelf and must STAY parked through the switch, so they're
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
+        // Park the old workspace's members AND every orphan (workspace == nil):
+        // an orphan shown in the just-cleared lens union belongs to no
+        // workspace, so it must leave the screen on a switch. An orphan that
+        // was already parked no-ops (`shouldParkAnchor` gates on `anchorParked`),
+        // so listing it unconditionally is safe + idempotent.
         let toPark = windowMap
-            .filter { $0.value.workspace == old && isParkEligible($0.key) }
+            .filter { ($0.value.workspace == old || $0.value.workspace == nil)
+                && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         // Destination: restore every park-eligible member unconditionally.
         // A user-hidden (Cmd+H) member is left exactly as-is — never
@@ -686,6 +692,30 @@ struct WorkspaceCatalog {
         if n1Based == activeIndex { return .restore(ref) }
         if current.workspace == activeIndex { return .park(ref) }
         return .stateOnly
+    }
+
+    /// EX-3 symmetric-move counterpart of `moveWindow(to:)`: relocate `id` OUT
+    /// of its workspace → 迷子 (`workspace = nil`). A DnD that drags a window
+    /// from a workspace onto a LENS makes it leave the workspace (canon ⑤⑥
+    /// "全部移動") so it lives only via the lens's tag; it parks if it was on the
+    /// active workspace (now belongs to no visible workspace), else state-only.
+    /// Mirrors `moveWindow`'s incoherence guards: a sticky window is everywhere
+    /// (can't be orphaned), a stashed scratchpad is off-screen, and a window
+    /// that is already orphan / unknown is a no-op. `MoveOutcome.restore` is
+    /// never returned (orphaning never brings a window on-screen).
+    @discardableResult
+    mutating func setOrphan(_ id: WindowID) -> MoveOutcome {
+        guard let current = windowMap[id],
+              current.workspace != nil,
+              !everywhereWindows.contains(id),
+              !stashedWindows.contains(id) else { return .rejected }
+        let wasActive = current.workspace == activeIndex
+        windowMap[id] = WindowSlot(workspace: nil, pid: current.pid,
+                                   tags: current.tags)
+        detachFromLayouts(id)
+        clearLeaveFocus(of: id)
+        let ref = WindowRef(id: id, pid: current.pid)
+        return wasActive ? .park(ref) : .stateOnly
     }
 
     // MARK: - Park bookkeeping (adapter calls after AX success)
