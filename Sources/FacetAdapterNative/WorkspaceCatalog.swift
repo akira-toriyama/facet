@@ -39,10 +39,16 @@ import FacetCore
 /// the adapter performs on the window, so caching it here avoids
 /// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
 struct WindowSlot: Equatable, Sendable {
-    /// 1-based workspace index. Always set (workspace-mode authority;
-    /// in tag mode it's bookkeeping only — visibility comes from
-    /// `tags`).
-    let workspace: Int
+    /// 1-based workspace index, or `nil` for a 迷子 (orphan) — a window
+    /// assigned to NO facet workspace (EX-3 exclusive model: workspace =
+    /// 0 or 1). An orphan lives only via tags/lenses; it is invisible in
+    /// every per-workspace view (excluded by `== n1Based` filters, dropped
+    /// from `snapshot`) until a `type="lens"` receptacle (`match='not
+    /// workspace'`) gathers it. Orphans arise ONLY from an explicit DnD
+    /// move onto a lens (EX-3.2) — reconcile never adopts a nil. In
+    /// workspace mode this is the membership authority; in tag mode it's
+    /// bookkeeping only (visibility comes from `tags`).
+    let workspace: Int?
     let pid: Int
     /// Tag bitmask (M11-3 `[grouping] by = "tag"`). `0` in workspace
     /// mode (unused) and for a window not yet tag-assigned. In tag mode
@@ -53,7 +59,7 @@ struct WindowSlot: Equatable, Sendable {
     /// `WindowSlot` re-creation must still carry this forward or a
     /// tag-mode window silently loses its tags.
     var tags: UInt64
-    init(workspace: Int, pid: Int, tags: UInt64 = 0) {
+    init(workspace: Int?, pid: Int, tags: UInt64 = 0) {
         self.workspace = workspace
         self.pid = pid
         self.tags = tags
@@ -513,8 +519,12 @@ struct WorkspaceCatalog {
         stackOrders = remap(stackOrders)
         layoutParams = remap(layoutParams)
         lastFocusedOnLeave = remap(lastFocusedOnLeave)
-        for (id, slot) in windowMap where map[slot.workspace] != nil {
-            windowMap[id] = WindowSlot(workspace: map[slot.workspace]!,
+        // orphan (workspace == nil): not keyed in the remap → skip, leave nil
+        // unchanged (position-agnostic). (for-`where` can't `let`-bind, and a
+        // dict subscript with an Int? key won't compile — guard in the body.)
+        for (id, slot) in windowMap {
+            guard let ws = slot.workspace, let mapped = map[ws] else { continue }
+            windowMap[id] = WindowSlot(workspace: mapped,
                                        pid: slot.pid, tags: slot.tags)
         }
         activeIndex = map[activeIndex]
@@ -569,8 +579,10 @@ struct WorkspaceCatalog {
         // window to its home layout, then null the lens authority fields so
         // the catalog is left in a clean no-lens state (EX-0.4).
         for id in lensParkedMembers {
-            guard let slot = windowMap[id] else { continue }
-            attachToLayout(id, workspace: slot.workspace, focused: nil, in: rect)
+            // orphan: no home layout to lift back into — stays parked (it
+            // belongs to no workspace; the cleared lens leaves it invisible).
+            guard let slot = windowMap[id], let ws = slot.workspace else { continue }
+            attachToLayout(id, workspace: ws, focused: nil, in: rect)
         }
         lensParkedMembers.removeAll()
         activeSectionLens = nil
@@ -765,8 +777,14 @@ struct WorkspaceCatalog {
         // `stashed:` line. A *settled* (summoned) scratchpad window is
         // NOT in `stashedWindows`, so it stays and carries its badge.
         let tracked = trackedWindows(in: live)
+        // orphan (workspace == nil): belongs to no workspace section. Bucket it
+        // under the -1 sentinel (no valid 1-based index, never == any
+        // entry.index) so it forms no nil key and is naturally dropped from the
+        // per-WS emit below (invisible). It surfaces only via `facet query`'s
+        // 迷子 label / a 迷子 receptacle lens. The orphan-CREATION event is
+        // logged at the relocation seam (EX-3.2), not per-snapshot (hot path).
         let byWS = Dictionary(grouping: tracked) { w in
-            windowMap[w.id]!.workspace
+            windowMap[w.id]?.workspace ?? -1
         }
         return workspaceEntries.map { entry in
             let isActive = entry.index == activeIndex

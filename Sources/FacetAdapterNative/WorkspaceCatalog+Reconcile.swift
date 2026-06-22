@@ -238,8 +238,13 @@ extension WorkspaceCatalog {
                 guard onscreen else { continue }   // still hidden
                 hiddenMembers.remove(id)
                 pendingHideCandidates.remove(id)
-                attachToLayout(id, workspace: slot.workspace,
-                               focused: focused, in: activeRect)
+                // orphan: no home workspace layout to re-attach to (stays
+                // detached even when un-hidden — invisible unless a matching
+                // lens is active).
+                if let ws = slot.workspace {
+                    attachToLayout(id, workspace: ws,
+                                   focused: focused, in: activeRect)
+                }
                 newlyRevealed.append(id)
                 continue
             }

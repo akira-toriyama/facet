@@ -42,12 +42,16 @@ extension WorkspaceCatalog {
     }
 
     /// Display name of the 1-based workspace `n1Based`, or `""` for an
-    /// out-of-range index (the "show the number" sentinel). The adapter needs
-    /// this to overlay the workspace name when evaluating a lens
-    /// `match='workspace=Dev'` (`LensMembership` / `ProjectedWindowFields`).
-    func workspaceName(_ n1Based: Int) -> String {
-        (n1Based >= 1 && n1Based <= workspaceNames.count)
-            ? workspaceNames[n1Based - 1] : ""
+    /// out-of-range index OR `nil` (a 迷子 / orphan with no workspace — the
+    /// "show the number" / empty sentinel). The adapter needs this to overlay
+    /// the workspace name when evaluating a lens `match='workspace=Dev'`
+    /// (`LensMembership` / `ProjectedWindowFields`); an orphan resolves to ""
+    /// so `filterHas("workspace")` is false → `match='not workspace'` (the 迷子
+    /// receptacle) matches it, and `workspace=Dev` does not.
+    func workspaceName(_ n1Based: Int?) -> String {
+        guard let n1Based, n1Based >= 1, n1Based <= workspaceNames.count
+        else { return "" }
+        return workspaceNames[n1Based - 1]
     }
 
     /// Apply the active section-lens across ALL workspaces on the current mac
@@ -82,8 +86,12 @@ extension WorkspaceCatalog {
                 toPark.append(WindowRef(id: id, pid: slot.pid))
             } else if shouldShow && isLensParked {
                 lensParkedMembers.remove(id)
-                attachToLayout(id, workspace: slot.workspace,
-                               focused: nil, in: rect)
+                // orphan: no home workspace layout — it tiles via the lens
+                // union only (sectionLensUnionFrames covers all non-parked
+                // members), so skip the home re-attach but still un-park it.
+                if let ws = slot.workspace {
+                    attachToLayout(id, workspace: ws, focused: nil, in: rect)
+                }
                 toRestore.append(WindowRef(id: id, pid: slot.pid))
             }
         }
@@ -129,8 +137,11 @@ extension WorkspaceCatalog {
         var toRestore: [WindowRef] = []
         for id in lensParkedMembers {
             guard let slot = windowMap[id] else { continue }
-            attachToLayout(id, workspace: slot.workspace,
-                           focused: nil, in: rect)
+            // orphan: no home workspace → stays parked when the lens clears
+            // (it belongs to no workspace; invisible until a matching lens
+            // re-activates). Only home-owning windows re-attach + restore.
+            guard let ws = slot.workspace else { continue }
+            attachToLayout(id, workspace: ws, focused: nil, in: rect)
             toRestore.append(WindowRef(id: id, pid: slot.pid))
         }
         lensParkedMembers.removeAll()
