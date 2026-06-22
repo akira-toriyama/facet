@@ -48,7 +48,7 @@ public final class SidebarView: NSView {
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
         let isLensParked: Bool // window: parked OUT of the active lens → dim + lens badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
-        let tags: [String]       // window: tag names → `#tag` chips (flat tag mode)
+        let tags: [String]       // window: tag names → `#tag` chips (per-window, sorted)
         /// header (section model, PR5): this is a `lens` section, not a
         /// workspace — drawn with a leading lens glyph + no layout sub-line.
         let isLens: Bool
@@ -83,10 +83,9 @@ public final class SidebarView: NSView {
     /// Section/lens model (`[[desktop.N.section]]`, PR5): the tree renders
     /// the config's ordered sections (workspace + lens) via
     /// `FilterProjection`, with a window shown in EVERY section it matches
-    /// (multi-match duplication). A third render mode beside workspace / tag,
-    /// mutually exclusive with both (`effectiveMacDesktopSectionConfigs` is
-    /// empty in tag mode, and the Controller only takes this path when
-    /// `isSectionModelActive`). Sticky across internal relayouts (search /
+    /// (multi-match duplication). The section render mode, used when the
+    /// Controller takes this path (`isSectionModelActive` — the mac desktop
+    /// has ≥1 `type="workspace"` section). Sticky across internal relayouts (search /
     /// optimistic / resize) via `rebuild()`. DnD / keyboard-lift are disabled
     /// here — `apply`-based DnD lands in PR8.
     var sectionModeActive = false

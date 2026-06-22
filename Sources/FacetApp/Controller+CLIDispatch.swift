@@ -134,7 +134,7 @@ extension Controller {
                     self.runBackendCommand { bk in
                         bk.toggleTagOnFocusedWindow(name) ? nil
                             : "window --toggle-tag \(name): "
-                                + "no focused window / not tag mode"
+                                + "no focused window"
                     }
 
                 case let s where s.hasPrefix("window-tag:"):
@@ -142,7 +142,7 @@ extension Controller {
                     self.runBackendCommand { bk in
                         bk.addTagToFocusedWindow(name) ? nil
                             : "window --tag \(name): "
-                                + "no focused window / not tag mode"
+                                + "no focused window"
                     }
 
                 case let s where s.hasPrefix("window-untag:"):
@@ -175,13 +175,18 @@ extension Controller {
                                 return nil
                             case .noFocus:
                                 return "window --retag \(shown): "
-                                    + "no focused window / not tag mode"
+                                    + "no focused window"
+                            // EX-4: tags are a free-form Set<String> (no
+                            // vocabulary, no cap), so `retagWindow` only ever
+                            // returns `.retagged`/`.noFocus` now — these two
+                            // are unreachable but kept so the switch stays
+                            // exhaustive over `WindowRetagResult`.
                             case .oldUndefined:
                                 return "window --retag \(shown): "
                                     + "no such tag \(parts[0])"
                             case .vocabFull:
                                 return "window --retag \(shown): "
-                                    + "vocabulary full (63 tags)"
+                                    + "vocabulary full"
                             }
                         }
                     }

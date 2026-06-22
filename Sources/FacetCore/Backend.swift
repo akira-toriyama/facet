@@ -344,45 +344,38 @@ public protocol WindowBackend: Sendable {
     /// `false` when the name wasn't set (caller surfaces the error).
     func unmark(_ name: String) -> Bool
 
-    /// Add tag `name` to the focused window (`facet window --tag NAME`,
-    /// tag mode). Auto-vivifies an unknown name: creates it in the
-    /// session tag vocabulary, then assigns. Returns `false` when there
-    /// is no managed focused window, the run isn't in tag mode, or the
-    /// vocabulary is full (63 user tags). Caller surfaces the error.
+    /// Add tag `name` to the focused window (`facet window --tag NAME`).
+    /// Tags are a free-form per-window set (EX-4) — `name` is just added,
+    /// no vocabulary, no cap. A `type="lens"` section with `match='tag~=name'`
+    /// then gathers it on the next reconcile. Returns `false` only when there
+    /// is no managed focused window. Caller surfaces the error.
     func addTagToFocusedWindow(_ name: String) -> Bool
 
     /// Remove tag `name` from the focused window
-    /// (`facet window --untag NAME`, tag mode). Strict: rejects an
-    /// unknown name. The `_default` floor is never removed. Returns
-    /// `false` when there is no focused window, the run isn't in tag
-    /// mode, or `name` isn't a defined tag.
+    /// (`facet window --untag NAME`). Returns `false` when there is no
+    /// focused window or the window doesn't carry `name`.
     func removeTagFromFocusedWindow(_ name: String) -> Bool
 
     /// Toggle tag `name` on the focused window
-    /// (`facet window --toggle-tag NAME`, tag mode). Auto-vivifies an
-    /// unknown name (then sets it). Returns `false` for the same
-    /// reasons as `addTagToFocusedWindow`.
+    /// (`facet window --toggle-tag NAME`). Returns `false` only when there
+    /// is no managed focused window.
     func toggleTagOnFocusedWindow(_ name: String) -> Bool
 
-    /// Retag the focused window: replace tag `old` with `new` in a single
-    /// atomic mask write (`facet window --retag OLD NEW`, tag mode).
-    /// `old` must be DEFINED (Strict-A); `new` auto-vivifies. See
-    /// `WindowRetagResult` for the precise outcomes the caller messages.
+    /// Retag the focused window: replace tag `old` with `new` in one write
+    /// (`facet window --retag OLD NEW`). A window lacking `old` just gains
+    /// `new`. See `WindowRetagResult` for the outcomes the caller messages
+    /// (only `.retagged`/`.noFocus` occur now — tags are free-form).
     func retagFocusedWindow(old: String, new: String) -> WindowRetagResult
 
-    /// Add tag `name` to a SPECIFIC window `id` (the GUI tag menu's
-    /// "Tag…" item, tag mode). Like `addTagToFocusedWindow` but targets
-    /// an explicit window — the right-clicked row, which need not be
-    /// focused — so it never changes focus. Auto-vivifies an unknown
-    /// name. Returns `false` when `id` isn't a managed window, the run
-    /// isn't in tag mode, or the vocabulary is full.
+    /// Add tag `name` to a SPECIFIC window `id` (the GUI row tag action).
+    /// Like `addTagToFocusedWindow` but targets an explicit window — the
+    /// right-clicked row, which need not be focused — so it never changes
+    /// focus. Returns `false` when `id` isn't a managed window.
     func addTag(_ name: String, toWindow id: WindowID) -> Bool
 
-    /// Remove tag `name` from a SPECIFIC window `id` (the GUI tag menu's
-    /// "Untag #NAME" item, tag mode). Strict — rejects an unknown or
-    /// reserved name; the `_default` floor is never removed. Returns
-    /// `false` when `id` isn't managed, not tag mode, or `name` isn't a
-    /// defined tag on that window's vocabulary.
+    /// Remove tag `name` from a SPECIFIC window `id` (the GUI row tag
+    /// action). Returns `false` when `id` isn't managed or doesn't carry
+    /// `name`.
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool
 
     // MARK: - Section-model apply/un-apply (PR8)
@@ -431,10 +424,12 @@ public protocol WindowBackend: Sendable {
     /// show in the tree under their workspace. Empty when none.
     func stashedScratchpads() -> [String]
 
-    /// The defined tag VOCABULARY in declaration order (`facet query
-    /// --tags`, #228). `[]` outside tag mode. A cheap main-actor catalog
-    /// read, same risk class as `stashedScratchpads()` — the Controller
-    /// folds it into the status snapshot on reconcile.
+    /// All tags currently applied to any managed window, sorted (`facet
+    /// query --tags`, #228) — the de-facto vocabulary (EX-4: tags are
+    /// free-form per-window, no declared vocabulary). `[]` when no window
+    /// carries a tag. A cheap main-actor catalog read, same risk class as
+    /// `stashedScratchpads()` — the Controller folds it into the status
+    /// snapshot on reconcile.
     func definedTagNames() -> [String]
 
     /// The active SECTION-lens label, or `nil` when none is active / outside
