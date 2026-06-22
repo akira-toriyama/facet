@@ -34,13 +34,18 @@ final class WindowFieldsFallbackTests: XCTestCase {
         XCTAssertTrue(f.filterHas("workspace"))
     }
 
-    func testProjectedEmptyWorkspaceReadsAsEmptyStringButHasFalse() {
-        // The projection returns the name verbatim — `""`, NOT nil — yet
-        // `filterHas` is false (presence is emptiness-gated). This is the
-        // documented asymmetry vs. ApplyPlanWindowFields below.
+    func testProjectedEmptyWorkspaceReadsAsEmptyStringAndHasTrue() {
+        // EX-3 迷子: presence is ASSIGNMENT-gated (`workspaceName != nil`), NOT
+        // emptiness-gated. An assigned-but-UNNAMED workspace (name `""`) reads
+        // its name back verbatim as `""` AND is PRESENT (`filterHas == true`),
+        // so a `not workspace` lens does NOT catch it — only a true orphan
+        // (`nil`) does. This is the deliberate nil-vs-`""` distinction (the
+        // 迷子 receptacle keys off the ASSIGNMENT, never the display name). It
+        // still differs from ApplyPlanWindowFields below, which coalesces the
+        // empty name to `nil` (so `filterHas == false` there).
         let f = ProjectedWindowFields(window: win(1), workspaceName: "")
         XCTAssertEqual(f.filterValue("workspace"), "")
-        XCTAssertFalse(f.filterHas("workspace"))
+        XCTAssertTrue(f.filterHas("workspace"))
     }
 
     func testProjectedDelegatesNonWorkspaceFields() {
