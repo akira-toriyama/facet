@@ -327,29 +327,11 @@ extension Controller {
         }
     }
 
-    /// grid / rail are workspace-only surfaces; under `[grouping]
-    /// by="tag"` they must never appear (tag mode shows only the
-    /// tree). The CLI rejects `--view/--hide/--toggle grid|rail`
-    /// (exit 2) and `fatalConfigErrors` rejects a `default-view="grid"`
-    /// startup, so a grid/rail op only reaches a dispatch method here
-    /// via a stale chord or a hand-rolled DNC post that slipped past
-    /// those gates. Returns true → the caller should no-op the op.
-    /// `Log.line` (not `setError`) — it's a should-never-happen
-    /// backstop, not a user-facing error worth a status toast.
-    private func rejectsWorkspaceOnlyView(_ name: String) -> Bool {
-        guard config.effectiveGrouping == .tag,
-              name == "grid" || name == "rail" else { return false }
-        Log.line("\(name) is a workspace-only view — ignored under "
-            + "[grouping] by=\"tag\" (should have been rejected at the CLI)")
-        return true
-    }
-
     /// Open (or activate) ``name``. Idempotent — re-issuing the
     /// same view doesn't toggle it off; use ``dispatchToggle`` /
     /// ``dispatchHide`` for that.
     private func dispatchView(_ name: String, geom: NSRect?,
                               loadingMs: Int? = nil, edge: RailEdge? = nil) {
-        guard !rejectsWorkspaceOnlyView(name) else { return }
         // Views are mutually exclusive: requesting any non-grid view
         // drops the full-screen grid overlay first. This is also how
         // the grid closes on a mac-desktop switch — the chord ctrl+→
@@ -399,7 +381,6 @@ extension Controller {
     }
 
     private func dispatchHide(_ name: String) {
-        guard !rejectsWorkspaceOnlyView(name) else { return }
         switch name {
         case "tree": setHidden(true)
         case "grid": hideGrid()
@@ -613,7 +594,6 @@ extension Controller {
     }
 
     private func dispatchToggle(_ name: String) {
-        guard !rejectsWorkspaceOnlyView(name) else { return }
         switch name {
         // Toggling ON opens the tree active (same entry as `--view
         // tree`); OFF hides it. Mirrors the show path so a toggle

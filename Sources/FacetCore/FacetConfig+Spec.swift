@@ -18,9 +18,9 @@
 // clamps at runtime so a typo can't break the layout).
 //
 // NOT decoded here (facet parses these from the raw TOML text itself —
-// they're non-uniform): the `[[exclude]]` / `[[tag]]` /
-// `[[desktop.N.section]]` arrays-of-tables. The spec still DESCRIBES them
-// so completion covers them.
+// they're non-uniform): the `[[exclude]]` / `[[desktop.N.section]]`
+// arrays-of-tables. The spec still DESCRIBES them so completion covers
+// them.
 
 import CoreGraphics
 import ConfigSchema
@@ -55,11 +55,6 @@ public extension FacetConfig {
                      doc: "Theme name (sill catalog); `random` picks one per launch."),
                 .int("color-cycle-ms", \.themeColorCycleMs, min: 1000, max: 120000,
                      doc: "Accent-rotation period for animated themes (ms). Unset = static."),
-            ]),
-
-            .init("grouping", fields: [
-                .str("by", \.grouping, enum: ["workspace", "tag"], default: "workspace",
-                     doc: "Window grouping paradigm."),
             ]),
 
             .init("window", fields: [
@@ -163,16 +158,10 @@ public extension FacetConfig {
                           default: .string("float")),
             ]),
 
-            .init("tag", kind: .arrayOfTables, doc: "Declared tag names (M11-3).",
-                  fields: [
-                .descOnly("name", doc: "Tag name (required)."),
-            ]),
-
             .init("desktop", kind: .dynamicTable,
                   doc: "`[[desktop.N.section]]` ordered per-mac-desktop display "
-                     + "sections (N = Mission Control ordinal; LIVE under "
-                     + "[grouping] by = \"workspace\") — the sole way to "
-                     + "configure a mac desktop. Each has a required `type` of "
+                     + "sections (N = Mission Control ordinal) — the sole way "
+                     + "to configure a mac desktop. Each has a required `type` of "
                      + "workspace / lens / unassigned: workspace = "
                      + "`{ type, layout }` (auto-named spatial cell — workspaces "
                      + "are not named from config); lens = "
@@ -186,8 +175,7 @@ public extension FacetConfig {
                      + "迷子/orphan receptacle is just a lens with "
                      + "`match = 'not workspace'`.) Array order = tree display order. "
                      + "Any section block makes facet opt-in (manages only "
-                     + "configured desktops). Workspace-axis only (ignored "
-                     + "under [grouping] by = \"tag\")."),
+                     + "configured desktops)."),
         ]
         )
     }

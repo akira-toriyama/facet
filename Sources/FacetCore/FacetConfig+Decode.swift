@@ -1,8 +1,8 @@
 // FacetConfig decoding & disk I/O — the raw-TOML orchestration layer
-// (`from(toml:)` plus the `[[exclude]]` / `[[tag]]` /
-// `[[desktop.N.section]]` array-of-tables decoders) and the config-file
-// load path. Extracted unchanged from FacetConfig.swift — same-module
-// extension, no logic change. The declarative `[block]` schema lives in
+// (`from(toml:)` plus the `[[exclude]]` / `[[desktop.N.section]]`
+// array-of-tables decoders) and the config-file load path. Extracted
+// unchanged from FacetConfig.swift — same-module extension, no logic
+// change. The declarative `[block]` schema lives in
 // FacetConfig+Spec.swift; the `effective*` accessors stay on the core
 // struct, next to the raw fields they clamp.
 
@@ -16,7 +16,7 @@ extension FacetConfig {
     /// header dict from `Toml.parseFlat`). The uniform `[block]` keys are
     /// driven by the single declarative `configSpec` (which ALSO emits the
     /// JSON Schema — see `FacetConfig+Spec.swift`). The
-    /// `[[exclude]]/[[tag]]/[[desktop.N.section]]` arrays-of-tables are
+    /// `[[exclude]]/[[desktop.N.section]]` arrays-of-tables are
     /// filled by `load` from the raw text (they don't live in this flat map).
     public static func from(toml: [String: [String: TOMLValue]])
         -> FacetConfig
@@ -62,27 +62,6 @@ extension FacetConfig {
         }
     }
 
-    /// Build the ordered `[[tag]]` name list from the raw TOML text.
-    /// Each table is `name = "…"`; the name is normalized through
-    /// `TagName.normalized` (space→`-`, `#`-strip, policy check) so a
-    /// config tag like `name = "my tag"` becomes `my-tag` and is
-    /// reachable from the CLI (#227). Names that fail the policy entirely
-    /// (empty, or carrying a forbidden `:` / `=`) are dropped. Duplicate
-    /// normalized names are dropped (first wins) so the bit mapping stays
-    /// 1:1. Declaration order is preserved.
-    public static func tagDefs(fromTOML text: String) -> [String] {
-        var seen = Set<String>()
-        var out: [String] = []
-        for t in parseTOMLArrayOfTables(text, table: "tag") {
-            guard case .string(let raw)? = t["name"],
-                  let name = TagName.normalized(raw),
-                  !seen.contains(name) else { continue }
-            seen.insert(name)
-            out.append(name)
-        }
-        return out
-    }
-
     /// Build the per-mac-desktop `[[desktop.N.section]]` map from the raw
     /// TOML text (the section/lens model). Each block header is
     /// `desktop.<N>.section` (`N` = Mission Control ordinal ≥ 1); rows are
@@ -92,7 +71,7 @@ extension FacetConfig {
     /// a silent clamp (see `DesktopSection.parse`). A desktop with no usable
     /// rows contributes no entry. Section order within a desktop is file
     /// order. The decoded sections are consumed in production — read through
-    /// `effectiveMacDesktopSectionConfigs` (which drops them in tag mode).
+    /// `effectiveMacDesktopSectionConfigs`.
     public static func decodeDesktopSectionSections(fromTOML text: String)
         -> [Int: [DesktopSection]]
     {
@@ -152,19 +131,8 @@ extension FacetConfig {
             var c = FacetConfig.from(toml: parseTOMLSubset(text))
             let rules = exclusionRules(fromTOML: text)
             if !rules.isEmpty { c.exclusionRules = rules }
-            let tags = tagDefs(fromTOML: text)
-            if !tags.isEmpty { c.tagDefs = tags }
             let sections = decodeDesktopSectionSections(fromTOML: text)
             if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
-            // Tag mode ignores `[[desktop.N.section]]` (workspace-axis only).
-            // The `effective*` accessor clamps for consumers; warn LOUD here
-            // so the misconfiguration isn't silent.
-            if c.effectiveGrouping == .tag && !c.macDesktopSectionConfigs.isEmpty {
-                Log.line("config: [grouping] by = \"tag\" ignores "
-                    + "[[desktop.N.section]] (sections are workspace-axis "
-                    + "only) — remove the section blocks or switch to "
-                    + "by = \"workspace\"")
-            }
             return c
         }
         FileHandle.standardError.write(Data(

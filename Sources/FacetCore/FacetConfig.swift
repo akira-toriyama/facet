@@ -167,8 +167,7 @@ public struct FacetConfig: Sendable {
     /// 1-based); value is that desktop's sections in config-declaration (=
     /// tree display) order. `nil`/empty when none configured. Parsed from the
     /// raw TOML text (nested array-of-tables) by `load`, like
-    /// `exclusionRules` / `tagDefs`. Workspace-axis only — read through
-    /// `effectiveMacDesktopSectionConfigs`, which drops them in tag mode.
+    /// `exclusionRules`. Read through `effectiveMacDesktopSectionConfigs`.
     /// Consumed in production: `FilterProjection` (tree), the `facet lens`
     /// active filter (the adapter parks out-of-lens windows; grid/rail drop
     /// them via `Window.isLensParked`), `ApplyResolver` (DnD apply/un-apply),
@@ -182,16 +181,6 @@ public struct FacetConfig: Sendable {
     /// text (array-of-tables), not the flattened `[section]` dict, so
     /// it's filled by `load`, not `from(toml:)`.
     public var exclusionRules: [ExclusionRule]?
-
-    /// `[grouping] by` — `"workspace"` (default) or `"tag"` (M11-3).
-    /// Raw; read `effectiveGrouping`.
-    public var grouping: String?
-
-    /// `[[tag]]` names in declaration order (M11-3). `nil` when the
-    /// config defines none. Parsed from the raw TOML text
-    /// (array-of-tables) by `load`, like `exclusionRules`. Read
-    /// `effectiveTagModel`.
-    public var tagDefs: [String]?
 
     /// `[window] raise-on-open` — how a freshly-opened floating window
     /// (sheet / dialog / palette / `[[exclude]]` `action="float"`) is
@@ -550,8 +539,7 @@ public struct FacetConfig: Sendable {
     /// - `nil` ordinal (SkyLight unavailable / single-desktop mode) is
     ///   always managed.
     ///
-    /// The section signal is read through `effectiveMacDesktopSectionConfigs`
-    /// (tag-mode-clamped), so a tag-mode config never opts in via sections.
+    /// The section signal is read through `effectiveMacDesktopSectionConfigs`.
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
         if sections.isEmpty { return true }
@@ -564,10 +552,9 @@ public struct FacetConfig: Sendable {
     /// gate the read path, auto-naming, and the overview/tree consult to
     /// decide between the section model and the default unnamed slots.
     ///
-    /// Read through `effectiveMacDesktopSectionConfigs`, so it is `false` in
-    /// tag mode by construction. `nil` ordinal (SkyLight unavailable /
-    /// single-desktop) is `false`: the section model is a per-ordinal opt-in,
-    /// and an unresolvable ordinal falls back to the default-slot path.
+    /// `nil` ordinal (SkyLight unavailable / single-desktop) is `false`: the
+    /// section model is a per-ordinal opt-in, and an unresolvable ordinal
+    /// falls back to the default-slot path.
     public func isSectionModelActive(ordinal: Int?) -> Bool {
         guard let ordinal else { return false }
         return effectiveMacDesktopSectionConfigs[ordinal]?
@@ -580,79 +567,21 @@ public struct FacetConfig: Sendable {
         ExclusionRules(exclusionRules ?? [])
     }
 
-    /// Effective `[[desktop.N.section]]` definitions. Empty in tag mode:
-    /// sections are a WORKSPACE-axis concept (`by = tag` has its own tag
-    /// world per mac desktop and ignores sections). The clamp lives here so
-    /// every consumer is tag-mode-safe by construction; `load` additionally
-    /// logs LOUD when it drops a tag-mode user's sections (a silent clamp
-    /// would surprise them). Always read through this, never the raw dict.
+    /// Effective `[[desktop.N.section]]` definitions (the section/lens
+    /// model). Always read through this, never the raw dict.
     public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
-        effectiveGrouping == .tag ? [:] : macDesktopSectionConfigs
-    }
-
-    // MARK: - Grouping / tags (M11-3)
-
-    /// Effective grouping paradigm. `[grouping] by` clamped to a known
-    /// value; unknown / unset → `.workspace` (the historical default).
-    /// A typo here is also surfaced by `fatalConfigErrors` so it fails
-    /// loud rather than silently running the default.
-    public var effectiveGrouping: Grouping {
-        Grouping(rawValue: (grouping ?? "workspace").lowercased())
-            ?? .workspace
-    }
-
-    /// Effective tag vocabulary (empty `TagModel` when none defined).
-    /// Declaration order is preserved — it fixes each tag's bit, the
-    /// startup lens (`firstBit`), and the order a window's `#tag` chips
-    /// list on its flat tree row (`names(in:)`).
-    public var effectiveTagModel: TagModel {
-        TagModel(tagDefs ?? [])
+        macDesktopSectionConfigs
     }
 
     /// Fatal config errors that should refuse startup (Fail Fast /
     /// Rule of Repair — never silently fall back). Empty = OK to start.
     /// The app entry prints these to stderr and `exit 2`.
     ///
-    /// Checks (tag mode only):
-    ///   - `[grouping] by` is a typo (neither workspace nor tag).
-    ///   - `by = tag` but no `[[tag]]` defined (nothing to show).
-    ///   - `by = tag` with a default layout that's workspace-only
-    ///     (`bsp` / `stack`) — incompatible per `LayoutGrouping`.
-    ///   - `by = tag` with `default-view = "grid"` — the grid *view*
-    ///     is workspace-only (distinct from the `grid` *layout*, which
-    ///     is fine); tag mode shows the tree view only.
+    /// No fatal checks remain (the tag-mode startup checks were removed
+    /// with `[grouping] by = "tag"`); kept as a stable seam so the entry
+    /// point's `exit 2` path survives a future Fail-Fast addition.
     public func fatalConfigErrors() -> [String] {
-        var out: [String] = []
-        if let raw = grouping, !raw.isEmpty,
-           Grouping(rawValue: raw.lowercased()) == nil {
-            out.append("config: unknown [grouping] by \"\(raw)\" "
-                + "(expected \"workspace\" or \"tag\")")
-        }
-        guard effectiveGrouping == .tag else { return out }
-
-        let model = effectiveTagModel
-        if model.isEmpty {
-            out.append("config: [grouping] by = \"tag\" but no [[tag]] "
-                + "defined — add at least one [[tag]] name = \"…\"")
-        }
-        let layout = effectiveDefaultLayout
-        if !LayoutGrouping.isCompatible(mode: layout, with: .tag) {
-            out.append("config: layout \"\(layout)\" is not compatible "
-                + "with [grouping] by = \"tag\" (use a stateless layout "
-                + "like \"grid\" / \"master-left\" / \"float\"; "
-                + "\"bsp\" / \"stack\" are workspace-only)")
-        }
-        // The grid VIEW (full-screen overview) is workspace-only — note
-        // this is the `default-view` key, NOT the `grid` *layout* above,
-        // which is a perfectly valid stateless tag-mode layout. `rail`
-        // can't be a default-view (effectiveDefaultView clamps it to nil
-        // → agent-only), so only grid needs flagging here.
-        if effectiveDefaultView == "grid" {
-            out.append("config: default-view = \"grid\" is workspace-only "
-                + "— not available with [grouping] by = \"tag\" "
-                + "(tag mode shows the tree view only)")
-        }
-        return out
+        []
     }
 
     /// Effective `[window] raise-on-open`. Unknown / unset →

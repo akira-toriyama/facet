@@ -406,25 +406,6 @@ public protocol WindowBackend: Sendable {
     func addTagSection(_ name: String, toWindow id: WindowID) -> Bool
     func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool
 
-    /// Define tag `name` in the session vocabulary without attaching it
-    /// to any window (`facet tag --add NAME`, tag mode). Idempotent — a
-    /// defined name is a no-op success. Returns `false` only when not in
-    /// tag mode / unmanaged, or the vocabulary is full (63 user tags).
-    func addTag(_ name: String) -> Bool
-
-    /// Remove tag `name` from the vocabulary, stripping its bit from
-    /// every window (`facet tag --remove NAME`, tag mode). The freed bit
-    /// becomes reusable by a later add; windows keep the `_default`
-    /// floor. Returns `false` when not in tag mode / unmanaged, or
-    /// `name` is unknown / reserved.
-    func removeTag(_ name: String) -> Bool
-
-    /// Rename tag `old` to `new` in place (`facet tag --rename OLD NEW`,
-    /// tag mode) — the bit is unchanged, so windows keep their tag
-    /// membership. Returns `false` when not in tag mode / unmanaged,
-    /// `old` is unknown, or `new` is already a defined tag.
-    func renameTag(_ old: String, to new: String) -> Bool
-
     /// Stash the focused window onto scratchpad shelf `name`, parking
     /// it off-screen (`facet scratchpad --stash NAME`). A named hidden
     /// shelf, 1:1 like marks; clears any sticky (XOR), force-floats and
@@ -585,9 +566,6 @@ public extension WindowBackend {
     func setMaster(_ id: WindowID, _ master: Bool) { }
     func addTagSection(_ name: String, toWindow id: WindowID) -> Bool { false }
     func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool { false }
-    func addTag(_ name: String) -> Bool { false }
-    func removeTag(_ name: String) -> Bool { false }
-    func renameTag(_ old: String, to new: String) -> Bool { false }
     func stashScratchpad(_ name: String) -> Bool { false }
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }
