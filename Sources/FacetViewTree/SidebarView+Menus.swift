@@ -32,46 +32,17 @@ extension SidebarView {
     // The header (layout) + window (ops) menus are shared with grid /
     // rail via `ViewContextMenu` (FacetView) so all three views show the
     // identical themed popup (③).
-    /// Header right-click / `m` menu. Workspace mode → the layout picker
-    /// directly. Tag mode → a two-facet menu (Layout + Select tags), since
-    /// a tag-world also owns a lens (which tags are shown).
+    /// Header right-click / `m` menu → the workspace layout picker.
     func headerMenu(at scr: NSPoint, workspaceIndex ws: Int,
                             filterable: Bool = false) {
-        if tagModeActive {
-            // Tag mode: one sectioned menu (Layout + Select tags). Not
-            // filterable — the layout list is short and `Select tags` opens
-            // its own filterable checklist.
-            showTagWorldMenu(at: scr, workspaceIndex: ws)
-        } else {
-            showLayoutMenu(at: scr, workspaceIndex: ws, filterable: filterable)
-        }
-    }
-
-    private func showTagWorldMenu(at scr: NSPoint, workspaceIndex ws: Int) {
-        let modes = backend.layoutModes.filter {
-            LayoutGrouping.isCompatible(mode: $0, with: .tag)
-        }
-        let cur = lastWorkspaces.first { $0.index == ws }?.layoutMode
-        let bk = backend
-        ViewContextMenu.showTagWorld(
-            at: scr, layoutModes: modes, currentLayout: cur, palette: pal,
-            onPickLayout: { mode in
-                cliQueue.async { bk.setLayoutMode(workspaceIndex: ws, mode: mode) }
-            },
-            onSelectTags: { [weak self] in
-                self?.controller?.openLensSelector(at: scr) },
-            // "All tags" (item 15/16): lens = every tag = show everything.
-            // `autoFocus: false` keeps the tree from losing key to a window
-            // in the new union.
-            onAllTags: { cliQueue.async { bk.setLens(.all, autoFocus: false) } })
+        showLayoutMenu(at: scr, workspaceIndex: ws, filterable: filterable)
     }
 
     private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,
                                 filterable: Bool = false) {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
-                                   palette: pal, filterable: filterable,
-                                   tagMode: tagModeActive)
+                                   palette: pal, filterable: filterable)
     }
 
     func showWindowMenu(at scr: NSPoint,
@@ -95,16 +66,10 @@ extension SidebarView {
             at: scr, backend: backend, workspaceIndex: ws,
             workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
             palette: pal,
-            tagMode: tagModeActive,
             filterable: filterable,
             addToLensTargets: lensTargets,
             onApplyAdd: { [weak self] sid in
                 self?.controller?.applyAdd(windowID: id, toSectionID: sid)
-            },
-            onOpenTagEditor: { [weak self] wid, pid, app, title, tags, anchor in
-                self?.controller?.openTagEditor(
-                    forWindow: wid, pid: pid, appName: app, title: title,
-                    currentTags: tags, at: anchor)
             }
         ) { [weak self] ops, window, ws in
             self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)

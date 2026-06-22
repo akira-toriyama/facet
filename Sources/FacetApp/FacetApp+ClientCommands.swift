@@ -61,7 +61,6 @@ extension FacetApp {
                      addFlag, removeArg != nil, renameArg != nil,
                      moveArg != nil].filter { $0 }.count
         requireExactlyOneAction(count, subject: "workspace")
-        requireGrouping(.workspace, subject: "workspace")
         requireServerAlive()
         if let f = focusArg  { postWorkspaceFocus(f) }
         if let l = layoutArg { postSetLayout(l) }
@@ -77,69 +76,29 @@ extension FacetApp {
     }
 
     /// Sub-command parser for ``facet lens <flag>`` — the active visibility
-    /// filter. Tag-unification Phase 1 (#191 follow-on) collapsed the two
-    /// mode-specific verb families into ONE surface that ADAPTS to
-    /// `[grouping]`. The unifying move: the lens NAME is positional, so the
-    /// same `facet lens NAME` does the mode-appropriate thing.
-    ///
-    ///   facet lens NAME    activate the lens NAME —
-    ///                        tag mode     → show exactly these tag(s)
-    ///                                       (CSV `A[,B,…]`; the old `--only`)
-    ///                        section mode → activate the `type="lens"`
-    ///                                       section labelled NAME (one label;
-    ///                                       a comma list exits 2 — CSV is
-    ///                                       tag-mode-only)
-    ///   facet lens --clear deactivate the active lens → show the full current
-    ///                        scope. BOTH modes (the universal reset):
-    ///                        tag mode     → the `_default` floor = every window
-    ///                        section mode → clear the active section-lens
-    ///   facet lens --all   tag-mode-only: show every window. Section mode
-    ///                        exits 2 (the cross-workspace All (∗) selector is a
-    ///                        later phase; use `--clear` to drop the lens).
-    ///   facet lens --add / --remove / --toggle A[,B,…]
-    ///                        tag-mode-only multi-tag composition (union / drop
-    ///                        / flip the shown set). Section mode exits 2.
-    ///
-    /// NAME shapes are validated here (`parseTagList` for tags, a label check
-    /// for sections); the server resolves them strictly (an unknown tag / label
-    /// → unchanged + error), mirroring how the tag verbs resolve names
-    /// server-side. One action per invocation, loud reject on zero / multiple.
-    /// The grouping gate is PER-VERB: NAME and `--clear` adapt to the mode; the
-    /// tag-composition verbs and `--all` require `by="tag"` and exit 2 in
-    /// section mode.
+    /// filter (exclusive section model). One section is active at a time;
+    /// `facet lens NAME` activates the `type="lens"` section labelled NAME,
+    /// `facet lens --clear` deactivates it (back to the active workspace).
+    /// One action per invocation, loud reject on zero / multiple.
     static func runLensCommand(_ args: [String]) -> Never {
-        var nameArg: String?        // positional: tag CSV (only) / lens label
-        var addArg: String?
-        var removeArg: String?
-        var toggleArg: String?
-        var allFlag = false
-        var clearFlag = false       // universal reset → full current scope
+        var nameArg: String?        // positional: the lens section label
+        var clearFlag = false       // deactivate the active section-lens
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
-            case "--add":
-                addArg = parseTagList(cursor.value(for: "lens --add"),
-                                      flag: "lens --add")
-            case "--remove":
-                removeArg = parseTagList(cursor.value(for: "lens --remove"),
-                                         flag: "lens --remove")
-            case "--toggle":
-                toggleArg = parseTagList(cursor.value(for: "lens --toggle"),
-                                         flag: "lens --toggle")
-            case "--all":
-                allFlag = true
             case "--clear":
                 clearFlag = true
+            case "--add", "--remove", "--toggle", "--all":
+                die("`lens \(a)` was removed — the exclusive section model "
+                    + "activates ONE section at a time (no dynamic multi-tag "
+                    + "union). Define each filter as a `type = \"lens\"` "
+                    + "section and `facet lens NAME` to activate it.")
             case "--section", "--only":
-                // Removed in Phase 1: both folded into the positional NAME.
-                let what = a == "--section"
-                    ? "activate that lens section, workspace mode"
-                    : "show those tags, tag mode"
-                die("`lens \(a)` was removed — pass the name positionally: "
-                    + "`facet lens NAME` (\(what))")
+                die("`lens \(a)` was removed — pass the section label "
+                    + "positionally: `facet lens NAME`")
             default:
                 // A leading '-' is an unrecognised flag; anything else is the
-                // positional NAME (the lens to activate / the tags to show).
+                // positional NAME (the lens section to activate).
                 if a.hasPrefix("-") {
                     die("unknown `lens` flag \"\(a)\" — see `facet --help`")
                 }
@@ -150,61 +109,16 @@ extension FacetApp {
                 nameArg = a
             }
         }
-        let count = [nameArg != nil, addArg != nil, removeArg != nil,
-                     toggleArg != nil, allFlag, clearFlag].filter { $0 }.count
+        let count = [nameArg != nil, clearFlag].filter { $0 }.count
         requireExactlyOneAction(count, subject: "lens")
-
-        // Resolve the mode first (NAME validation is mode-specific), then build
-        // the single action and route it. Reads the same config the server
-        // seeded from.
-        let mode = FacetConfig.load().effectiveGrouping
-        let action: LensAction
-        if let name = nameArg {
-            // SHAPE-validate the positional NAME per mode: a tag CSV
-            // (`parseTagList`) or a section label (`parseLensSectionLabel`).
-            // The comma → section reject is a ROUTING rule (`routeLens`), since
-            // a label may legitimately hold most punctuation.
-            switch mode {
-            case .tag:       action = .name(parseTagList(name, flag: "lens"))
-            case .workspace: action = .name(parseLensSectionLabel(name,
-                                                                  flag: "lens"))
-            }
-        } else if let n = addArg    { action = .add(n) }
-        else if let n = removeArg   { action = .remove(n) }
-        else if let n = toggleArg   { action = .toggle(n) }
-        else if allFlag             { action = .all }
-        else                        { action = .clear }   // count == 1 ⇒ --clear
-
-        // Pure routing table (FacetCore). Gate BEFORE the server check so a
-        // mode mismatch (a fundamental error) wins over a transient one.
-        let effect: LensEffect
-        switch routeLens(action, grouping: mode) {
-        case .success(let e):
-            effect = e
-        case .failure(.tagOnlyVerb(let verb)):
-            if verb == "--all" {
-                die("facet lens --all requires [grouping] by=\"tag\" — current "
-                    + "config is \(mode.rawValue) mode (the section model's "
-                    + "cross-workspace All selector is a later phase; use "
-                    + "`facet lens --clear` to drop the active lens)")
-            }
-            die("facet lens \(verb) requires [grouping] by=\"tag\" — current "
-                + "config is \(mode.rawValue) mode")
-        case .failure(.csvInSectionName(let name)):
-            die("facet lens \"\(name)\": the section model takes one lens "
-                + "label, not a comma list (CSV is tag-mode-only)")
-        }
-
         requireServerAlive()
-        switch effect {
-        case .showTags(let c):        postLens("only:" + c)
-        case .addTags(let c):         postLens("add:" + c)
-        case .removeTags(let c):      postLens("remove:" + c)
-        case .toggleTags(let c):      postLens("toggle:" + c)
-        case .showAll:                postLens("all")    // floor = show all
-        case .activateSection(let l): postControl("lens-section:" + l)
-        case .clearSection:           postControl("lens-clear")
+        if let name = nameArg {
+            postControl("lens-section:"
+                        + parseLensSectionLabel(name, flag: "lens"))
+        } else {
+            postControl("lens-clear")   // --clear
         }
+        die("facet lens: dispatch fell through (bug)")
     }
 
     /// Validate the positional NAME of `facet lens NAME` in section mode — a
@@ -222,52 +136,6 @@ extension FacetApp {
                 + "`type = \"lens\"` section), got \"\(value)\"")
         }
         return value
-    }
-
-    /// Sub-command parser for ``facet tag <flag>`` (M11-3 tag mode).
-    /// Edits the session tag VOCABULARY (not a window — that's
-    /// ``facet window --tag``). Subject-verb mirror of ``facet
-    /// workspace``: one action per invocation, loud reject on zero /
-    /// multiple / unknown. Verbs:
-    ///   --add NAME        declare tag NAME (no window touched; idempotent)
-    ///   --remove NAME     delete NAME — strips it from every window; its
-    ///                     bit is freed for reuse
-    ///   --rename OLD NEW  rename OLD to NEW in place (bit kept); rejects
-    ///                     an unknown OLD or an already-defined NEW
-    /// Tag-mode only — `requireGrouping(.tag)`.
-    static func runTagCommand(_ args: [String]) -> Never {
-        var addArg: String?
-        var removeArg: String?
-        var renameArg: (String, String)?
-        var cursor = ArgCursor(args)
-        while let a = cursor.next() {
-            switch a {
-            case "--add":
-                addArg = parseTagName(cursor.value(for: "tag --add"), flag: "tag --add")
-            case "--remove":
-                removeArg = parseTagName(cursor.value(for: "tag --remove"), flag: "tag --remove")
-            case "--rename":
-                // Positional-2: OLD then NEW (#227). Each value is consumed
-                // unconditionally; a flag-looking NEW (e.g. `--add`) fails
-                // the name policy → loud reject (never a silent mis-rename).
-                let old = validateTagName(
-                    cursor.value(for: "tag --rename OLD"), flag: "tag --rename OLD")
-                let new = validateTagName(
-                    cursor.value(for: "tag --rename NEW"), flag: "tag --rename NEW")
-                renameArg = (old, new)
-            default:
-                die("unknown `tag` flag \"\(a)\" — see `facet --help`")
-            }
-        }
-        let count = [addArg != nil, removeArg != nil, renameArg != nil]
-            .filter { $0 }.count
-        requireExactlyOneAction(count, subject: "tag")
-        requireGrouping(.tag, subject: "tag")
-        requireServerAlive()
-        if let n = addArg    { postControl("tag-add:" + n) }
-        if let n = removeArg { postControl("tag-remove:" + n) }
-        if let r = renameArg { postControl("tag-rename:\(r.0):\(r.1)") }
-        die("facet tag: dispatch fell through (bug)")
     }
 
     /// Sub-command parser for ``facet window <flag>``. Subcommand
@@ -384,13 +252,6 @@ extension FacetApp {
             die("facet window: --follow only applies with --move-to N — "
                 + "see `facet --help`")
         }
-        // Tag verbs are tag-mode only (like `lens`); reject loudly in
-        // workspace mode (exit 2) before touching the server.
-        if tagArg != nil || untagArg != nil || toggleTagArg != nil
-            || retagArg != nil {
-            requireGrouping(.tag,
-                            subject: "window --tag/--untag/--toggle-tag/--retag")
-        }
         requireServerAlive()
         if let n = moveToArg { follow ? postWindowMoveFollow(n)
                                       : postWindowMove(n) }
@@ -497,27 +358,6 @@ extension FacetApp {
                 + "contain spaces or '=' ',' ':'")
         }
         return name
-    }
-
-    /// Parse a comma-joined tag list for the `lens` verbs (#228:
-    /// `--only/--add/--remove/--toggle web,code`). Splits on ',',
-    /// validates each piece with `validateTagName` (an empty element, a
-    /// leading '-', or a stray space / `=` / `:` loud-exits), and returns
-    /// the canonical comma-joined form for the DNC payload. A single name
-    /// is the degenerate arity-1 case (no comma needed); the empty string
-    /// is rejected. Comma-join (not space-variadic) keeps the parser's
-    /// per-flag arity at 1 and `,`/`:` out of names makes the wire form
-    /// unambiguous (#227 grammar).
-    static func parseTagList(_ value: String, flag: String) -> String {
-        let pieces = value
-            .split(separator: ",", omittingEmptySubsequences: false)
-            .map(String.init)
-        guard !pieces.contains(where: { $0.isEmpty }) else {
-            die("\(flag): empty tag name in \"\(value)\" — comma-separate "
-                + "non-empty names (e.g. web,code)")
-        }
-        return pieces.map { validateTagName($0, flag: flag) }
-            .joined(separator: ",")
     }
 
     /// Validate a workspace name (the value of `workspace --rename` or the

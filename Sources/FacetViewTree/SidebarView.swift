@@ -80,15 +80,6 @@ public final class SidebarView: NSView {
     public internal(set) var searching = false
     public internal(set) var query = ""
 
-    /// Tag mode (`[grouping] by = "tag"`): the snapshot is ONE synthetic
-    /// flat workspace, so the tree drops the workspace header — the list
-    /// reads as a flat window list with `#tag` chips per row — and
-    /// disables the workspace-targeting DnD (window-move / header-swap),
-    /// since a flat list has nowhere to drop. Set by `update(tagMode:)`
-    /// and sticky across the internal relayouts that omit the arg. (#191
-    /// PR-6.)
-    var tagModeActive = false
-
     /// Section/lens model (`[[desktop.N.section]]`, PR5): the tree renders
     /// the config's ordered sections (workspace + lens) via
     /// `FilterProjection`, with a window shown in EVERY section it matches
@@ -96,9 +87,8 @@ public final class SidebarView: NSView {
     /// mutually exclusive with both (`effectiveMacDesktopSectionConfigs` is
     /// empty in tag mode, and the Controller only takes this path when
     /// `isSectionModelActive`). Sticky across internal relayouts (search /
-    /// optimistic / resize) via `rebuild()`, mirroring `tagModeActive`. Like
-    /// tag mode, DnD / keyboard-lift are disabled here — `apply`-based DnD
-    /// lands in PR8.
+    /// optimistic / resize) via `rebuild()`. DnD / keyboard-lift are disabled
+    /// here — `apply`-based DnD lands in PR8.
     var sectionModeActive = false
     /// Last projected sections pushed via `update(sections:)`; reused by the
     /// internal relayouts in `rebuild()` (the projection is recomputed only
@@ -287,14 +277,12 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(_ workspaces: [Workspace],
                        titles: [WindowID: String]? = nil,
-                       macDesktop: Int?? = nil,
-                       tagMode: Bool? = nil) -> CGFloat {
-        // By-workspace / tag render path. The section/lens model uses the
+                       macDesktop: Int?? = nil) -> CGFloat {
+        // By-workspace render path. The section/lens model uses the
         // parallel `update(sections:)` below; this entry always leaves it,
-        // so a config that drops out of the section model (or a tag-mode
-        // mac desktop) falls back to the legacy render. Internal relayouts
-        // never call this directly — they route through `rebuild()`, which
-        // re-dispatches to the right path.
+        // so a config that drops out of the section model falls back to the
+        // legacy render. Internal relayouts never call this directly — they
+        // route through `rebuild()`, which re-dispatches to the right path.
         sectionModeActive = false
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
@@ -302,17 +290,11 @@ public final class SidebarView: NSView {
         // the current ordinal; passing it (the Controller refresh)
         // sets it — including to nil when SkyLight is unavailable.
         if let macDesktop { macDesktopOrdinal = macDesktop }
-        // Sticky like `macDesktop`: only the Controller refresh passes
-        // `tagMode`; internal relayouts (omit it) keep the current value.
-        if let tagMode { tagModeActive = tagMode }
         activeWS = workspaces.first(where: { $0.isActive })?.index   // always REAL
         let opt = optimisticHeld()
         // Read `ws.isActive` (not a single active index): workspace mode
-        // has one active WS, and tag mode emits a single always-active
-        // synthetic workspace (no header is rendered for it — see the
-        // `tagModeActive` gate below). The optimistic overlay (kbNav /
-        // keyboard-nav mid-switch) is workspace-mode only — a single
-        // transient target.
+        // has one active WS. The optimistic overlay (kbNav / keyboard-nav
+        // mid-switch) is workspace-mode only — a single transient target.
         func headerActive(_ ws: Workspace) -> Bool {
             opt ? (ws.index == optActiveWS) : ws.isActive
         }
@@ -325,7 +307,6 @@ public final class SidebarView: NSView {
                 ? (titleOverride[win.id] ?? "") : win.title
         }
         let sig = (searching ? "S:\(query);" : "")
-            + (tagModeActive ? "T;" : "")
             + "D\(macDesktopOrdinal ?? -1);"
             + (opt
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
@@ -370,20 +351,16 @@ public final class SidebarView: NSView {
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (ws, wins) in shown {
-            // Tag mode keeps the `#web` lens label as-is; workspace mode
-            // uppercases the WS name (matches the header draw at the Cell).
+            // Workspace mode uppercases the WS name (matches the header
+            // draw at the Cell).
             let baseNm = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
-            let nm = tagModeActive ? baseNm : baseNm.uppercased()
-            // One tag glyph per tag name (~14pt + gaps); "All tags" = 1 glyph.
-            let tagCount = !tagModeActive ? 0
-                : (nm == "All tags" ? 1 : max(1, nm.split(separator: " ").count))
+            let nm = baseNm.uppercased()
             // Measure at the HEAVIEST draw weight (active = .bold name /
             // .semibold layout) so the natural width is a safe upper bound —
             // it must never be narrower than the drawn text or the
             // horizontal scroll clips. Sizes are the constants the draw uses.
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
-                + CGFloat(tagCount) * 22
             let modeW = ws.layoutMode.isEmpty ? 0
                 : (layoutBadgeLabel(ws.layoutMode) as NSString).size(
                     withAttributes: [.font: uiFont(subheadFontSize, .semibold)]).width
@@ -427,11 +404,6 @@ public final class SidebarView: NSView {
             let start = y
             // Section header. Workspace mode: one per workspace ("WS N" /
             // name) — click switches, right-click / `m` picks the layout.
-            // Tag mode: ONE tag-world header — `ws.name` is the active lens
-            // label (the shown tags, else `all`); the per-row `#tag` chips
-            // still carry the grouping. Click is a no-op (one tag-world);
-            // right-click / `m` picks the tag-world's single global layout.
-            // (Tag mode was header-less before the layout-picker UI landed.)
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
             rows.append(TreeRow(rect: hr,
@@ -440,7 +412,7 @@ public final class SidebarView: NSView {
             let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
             cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                               firstHeader: firstHeader, pid: 0, app: "",
-                              title: "", text: tagModeActive ? t : t.uppercased(),
+                              title: "", text: t.uppercased(),
                               mode: ws.layoutMode,
                               isMaster: false, isFloating: false,
                               isSticky: false, mark: nil, isHidden: false,
@@ -528,10 +500,6 @@ public final class SidebarView: NSView {
         lastSections = sections
         lastActiveLens = activeLens
         lastWorkspaces = workspaces
-        // Section mode is workspace-axis; it never coexists with tag mode
-        // (the Controller only routes here when `isSectionModelActive`, and
-        // `effectiveMacDesktopSectionConfigs` is empty in tag mode).
-        tagModeActive = false
         if let titles { titleOverride = titles }
         if let macDesktop { macDesktopOrdinal = macDesktop }
         activeWS = workspaces.first(where: { $0.isActive })?.index

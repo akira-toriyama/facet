@@ -93,14 +93,13 @@ extension SidebarView {
             case .leftMouseDragged:
                 if mode == 0,
                    hypot(cp.x - start.x, cp.y - start.y) >= pointerDragThreshold {
-                    // ⌘+drag is always a panel-move; so is ANY drag in tag
-                    // mode (the flat list has no workspace to drop onto). In
-                    // the section model a window-row drag is an apply-based
-                    // MOVE (PR8 — `applyMove`: un-apply source → apply dest);
-                    // a section header still falls back to panel-move (header
-                    // swap stays by-workspace-only). Retag-via-menu still works.
-                    if ev.modifierFlags.contains(.command) || tagModeActive {
-                        mode = 1                       // ⌘ / tag → panel-move
+                    // ⌘+drag is always a panel-move. In the section model a
+                    // window-row drag is an apply-based MOVE (PR8 —
+                    // `applyMove`: un-apply source → apply dest); a section
+                    // header still falls back to panel-move (header swap stays
+                    // by-workspace-only). Retag-via-menu still works.
+                    if ev.modifierFlags.contains(.command) {
+                        mode = 1                       // ⌘ → panel-move
                     } else {
                         switch row?.kind {
                         case .none, .search?:
@@ -368,10 +367,6 @@ extension SidebarView {
         case .search:
             break
         case .header(let g, let i):
-            // Tag-world header (tag mode): one tag-world, nothing to switch
-            // to — the layout picker is on right-click / `m`. Plain click /
-            // Enter is a no-op (no spurious WS switch on the synthetic WS).
-            if tagModeActive { return }
             // Lens-section header (section model): no workspace to switch to —
             // clicking it TOGGLES the active lens (PR6: click the active one
             // again to clear). The label comes from the rendered group; the

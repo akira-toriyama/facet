@@ -62,12 +62,7 @@ extension Controller {
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
-                case let s where s.hasPrefix("lens:"):
-                    self.dispatchLensTarget(
-                        String(s.dropFirst("lens:".count)))
-
-                // Section/lens model (PR6) — distinct from the tag-bitmask
-                // `lens:` above: activate / clear the ACTIVE lens (a
+                // Section/lens model: activate / clear the ACTIVE lens (a
                 // `type="lens"` section, keyed by its label). The label can
                 // hold any character (incl. `:`), so the whole remainder is
                 // the label — no further parsing.
@@ -189,39 +184,6 @@ extension Controller {
                                     + "vocabulary full (63 tags)"
                             }
                         }
-                    }
-
-                case let s where s.hasPrefix("tag-add:"):
-                    let name = String(s.dropFirst("tag-add:".count))
-                    self.runBackendCommand { bk in
-                        bk.addTag(name) ? nil
-                            : "tag --add \(name): not tag mode, "
-                                + "or vocabulary full (63 tags)"
-                    }
-
-                case let s where s.hasPrefix("tag-remove:"):
-                    let name = String(s.dropFirst("tag-remove:".count))
-                    self.runBackendCommand { bk in
-                        bk.removeTag(name) ? nil
-                            : "tag --remove \(name): no such tag, "
-                                + "or not tag mode"
-                    }
-
-                case let s where s.hasPrefix("tag-rename:"):
-                    // Payload OLD:NEW — neither half can contain ':'
-                    // (the CLI's parseTagName forbids it), so one split
-                    // is unambiguous.
-                    let body = String(s.dropFirst("tag-rename:".count))
-                    let parts = body
-                        .split(separator: ":", maxSplits: 1,
-                               omittingEmptySubsequences: false)
-                        .map(String.init)
-                    let shown = body.replacingOccurrences(of: ":", with: " ")
-                    self.runBackendCommand { bk in
-                        (parts.count == 2
-                            && bk.renameTag(parts[0], to: parts[1])) ? nil
-                            : "tag --rename \(shown): no such tag, "
-                                + "or the new name is already in use"
                     }
 
                 case let s where s.hasPrefix("scratchpad-stash:"):
@@ -487,19 +449,6 @@ extension Controller {
             }
         default:       dispatchWorkspace(Int(arg) ?? 0)
         }
-    }
-
-    /// Route a `lens:` payload (M11-3 tag mode; #228 multi-tag). Parsing
-    /// the `all` / `VERB:CSV` wire form lives in the pure, unit-tested
-    /// `LensSpec.parse`; the backend resolves the names strictly and
-    /// surfaces an unknown-tag error itself, so this just dispatches and
-    /// schedules a repaint.
-    private func dispatchLensTarget(_ arg: String) {
-        guard let spec = LensSpec.parse(arg) else {
-            Log.debug("dispatchLensTarget malformed=\(arg) — ignored")
-            return
-        }
-        runBackendCommand { bk in bk.setLens(spec); return nil }
     }
 
     /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`

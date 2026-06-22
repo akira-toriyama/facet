@@ -14,10 +14,8 @@ extension FacetApp {
     /// (#284) is a modifier on `--windows` — it post-filters that array
     /// with a `facet filter` expression — so it requires `--windows`
     /// (loud exit 2 otherwise, like `--edge` requires `--view rail`).
-    /// Read-only + mode-tolerant: every projection works in workspace OR
-    /// tag mode (`--tags` is `[]` / `--lens` is `null` where the concept
-    /// doesn't apply), so there's no `requireGrouping` gate — only the
-    /// write verbs (`lens`, `window --retag`) gate on tag mode.
+    /// Read-only: every projection works unconditionally (`--tags` /
+    /// `--lens` read whatever the server reports).
     static func runQuery(_ args: [String]) -> Never {
         var windows = false
         var tags = false

@@ -147,8 +147,6 @@ extension Controller {
         case "h":            sidebarView.kbJumpWS(-1);   return true
         case "m":            sidebarView.kbContextMenu(); return true
         case "s":            enterSearch();              return true
-        case "t" where config.effectiveGrouping == .tag:
-                             enterTagManage();           return true
         default:             return false
         }
     }
@@ -190,112 +188,13 @@ extension Controller {
 
     /// Build + show the panel-level ("Desktop N") right-click menu — the
     /// third context-menu surface (panel ▸ workspace ▸ window). Search is
-    /// always offered; Manage tags only under tag grouping, mirroring the
-    /// `t`-key gate in `handleKbKey`. Each entry self-activates facet via
-    /// its callback.
+    /// always offered. Each entry self-activates facet via its callback.
     func showDesktopMenu(at scr: NSPoint) {
         ViewContextMenu.showDesktop(
             at: scr,
             palette: treePaletteBox.pal,
-            tagManage: config.effectiveGrouping == .tag,
             ordinal: sidebarView.shownMacDesktopOrdinal,
-            onSearch: { [weak self] in self?.enterSearchFromMenu() },
-            onTagManage: { [weak self] in self?.enterTagManage() })
-    }
-
-    // MARK: - GUI tag-edit checklist (#4)
-
-    /// Open the per-window tag-edit checklist (`TagEditPanel`) for `id` —
-    /// the "Tag" ops-menu item. The panel is a separate key-focusable
-    /// floating window; like the old tag-input box it needs the app to be
-    /// regular + active so its filter field takes keystrokes + IME. When the
-    /// tree panel is already in keyboard nav (the `m` path) that's already set up,
-    /// so we leave it; otherwise (right-click path) we flip it ourselves and
-    /// record so `finishTagEditor` reverts exactly what we did.
-    ///
-    /// The checklist mutates optimistically; toggling a row adds / removes
-    /// the tag on `id` (auto-vivifying for a brand-new name) and a tree
-    /// reconcile refreshes the chips. The panel handles its own keyboard /
-    /// outside-click closing and calls back `finishTagEditor` on every close
-    /// path (the activation-policy revert lives there so it can't be missed).
-    func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
-                       title: String, currentTags: [String], at screenPt: CGPoint) {
-        // P6: the tag vocabulary is catalog state — read it on `cliQueue`
-        // (the single serialization point), then build the panel back on
-        // main. The one-frame round-trip is imperceptible for a panel open.
-        let bk = backend
-        cliQueue.async {
-            let allTags = bk.definedTagNames()
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated {
-                    self?.showTagEditorPanel(
-                        forWindow: id, pid: pid, appName: appName, title: title,
-                        currentTags: currentTags, at: screenPt, allTags: allTags)
-                }
-            }
-        }
-    }
-
-    private func showTagEditorPanel(forWindow id: WindowID, pid: Int,
-                                    appName: String, title: String,
-                                    currentTags: [String], at screenPt: CGPoint,
-                                    allTags: [String]) {
-        let bk = backend
-        tagEditorSelfActivated = !sidebarView.kbNav
-        if tagEditorSelfActivated {
-            prevApp = NSWorkspace.shared.frontmostApplication
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        TagEditPanel.shared.show(
-            at: screenPt,
-            appName: appName,
-            title: title,
-            pid: pid,
-            allTags: allTags,
-            checkedTags: Set(currentTags),
-            palette: treePaletteBox.pal,
-            onToggle: { [weak self] name, on in
-                guard let self else { return }
-                cliQueue.async {
-                    if on { _ = bk.addTag(name, toWindow: id) }
-                    else  { _ = bk.removeTag(name, fromWindow: id) }
-                }
-                self.scheduleReconcile(after: 0.05)
-            },
-            onCreate: { [weak self] name in
-                guard let self else { return }
-                // addTag(_:toWindow:) auto-vivifies, so create == add.
-                cliQueue.async { _ = bk.addTag(name, toWindow: id) }
-                self.scheduleReconcile(after: 0.05)
-            },
-            onClose: { [weak self] in self?.finishTagEditor() }
-        )
-    }
-
-    /// Open the lens selector — the tag-world header's "Select tags" item.
-    /// A `TagEditPanel` lens-variant checklist of the tag vocabulary whose
-    /// checked rows are the current lens; toggling adds / removes that tag
-    /// from the lens (`setLens`). Same activation-policy dance + close
-    /// handling as `openTagEditor` (shares `tagEditorSelfActivated` /
-    /// `finishTagEditor`). Toggles call `setLens(_:autoFocus: false)` so the
-    /// re-tile does NOT hand key to a window in the new union — the panel
-    /// keeps focus so the user can keep picking (item 3 fix); it closes only
-    /// on outside-click / Esc.
-    func openLensSelector(at screenPt: CGPoint) {
-        // P6: lens + vocabulary are catalog state — read on `cliQueue`,
-        // build the panel on main (see openTagEditor).
-        let bk = backend
-        cliQueue.async {
-            let current = Set(bk.currentLens()?.tags ?? [])
-            let allTags = bk.definedTagNames()
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated {
-                    self?.showLensSelectorPanel(
-                        at: screenPt, allTags: allTags, current: current)
-                }
-            }
-        }
+            onSearch: { [weak self] in self?.enterSearchFromMenu() })
     }
 
     /// Section/lens model: TreeController hook — the user clicked a
@@ -309,100 +208,5 @@ extension Controller {
         } else {
             activateSection(.lens(label), autoFocus: false)   // tree keeps key focus
         }
-    }
-
-    private func showLensSelectorPanel(at screenPt: CGPoint,
-                                       allTags: [String], current: Set<String>) {
-        let bk = backend
-        tagEditorSelfActivated = !sidebarView.kbNav
-        if tagEditorSelfActivated {
-            prevApp = NSWorkspace.shared.frontmostApplication
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        TagEditPanel.shared.showLens(
-            at: screenPt,
-            allTags: allTags,
-            checkedTags: current,
-            palette: treePaletteBox.pal,
-            onToggle: { [weak self] name, on in
-                // autoFocus: false — keep key on the lens panel so the
-                // user can keep toggling tags without focus jumping to a
-                // window in the new union (item 3 fix).
-                cliQueue.async {
-                    bk.setLens(on ? .add([name]) : .remove([name]),
-                               autoFocus: false)
-                }
-                self?.scheduleReconcile(after: 0.05)
-            },
-            onClose: { [weak self] in self?.finishTagEditor() }
-        )
-    }
-
-    /// Open the tag-manage mode panel (`t`) — vocabulary editing (add /
-    /// rename / delete) not tied to a window. Shares `TagEditPanel.shared`
-    /// with the per-window checklist and the same activation-policy dance
-    /// (`tagEditorSelfActivated` + `finishTagEditor`), so the
-    /// `handlePanelKeyChange` self-destruct guard covers it too. Anchored
-    /// beside the tree panel (it's a tree-panel-level mode, the `s` twin).
-    /// Tag mode only — gated by the caller (`handleKbKey`).
-    func enterTagManage() {
-        // P6: the tag vocabulary is catalog state — read on `cliQueue`,
-        // build the panel on main (see openTagEditor).
-        let bk = backend
-        cliQueue.async {
-            let allTags = bk.definedTagNames()
-            DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated { self?.showTagManagePanel(allTags: allTags) }
-            }
-        }
-    }
-
-    private func showTagManagePanel(allTags: [String]) {
-        let bk = backend
-        tagEditorSelfActivated = !sidebarView.kbNav
-        if tagEditorSelfActivated {
-            prevApp = NSWorkspace.shared.frontmostApplication
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        let f = panelHost.panel.frame
-        TagEditPanel.shared.showManage(
-            at: NSPoint(x: f.maxX + 8, y: f.maxY),
-            allTags: allTags,
-            palette: treePaletteBox.pal,
-            onCreate: { [weak self] name in
-                cliQueue.async { _ = bk.addTag(name) }
-                self?.scheduleReconcile(after: 0.05)
-            },
-            onRename: { [weak self] old, new in
-                cliQueue.async { _ = bk.renameTag(old, to: new) }
-                self?.scheduleReconcile(after: 0.05)
-            },
-            onDelete: { [weak self] name in
-                cliQueue.async { _ = bk.removeTag(name) }
-                self?.scheduleReconcile(after: 0.05)
-            },
-            onClose: { [weak self] in self?.finishTagEditor() }
-        )
-    }
-
-    /// Called once on EVERY tag-panel close path (Esc / outside-click / click
-    /// on another row) for both the per-window checklist and tag-manage mode.
-    /// Undoes exactly the activation change `openTagEditor` / `enterTagManage`
-    /// made — if we flipped to `.regular`, revert to `.accessory` and hand
-    /// focus back to the user's previous app; if we were already in keyboard nav,
-    /// re-key the tree panel so keyboard nav resumes (the tree resigned key
-    /// when the panel took it, but the `handlePanelKeyChange` guard kept kbNav
-    /// alive).
-    func finishTagEditor() {
-        if tagEditorSelfActivated {
-            NSApp.setActivationPolicy(.accessory)
-            if let p = prevApp { p.activate() }
-            prevApp = nil
-        } else {
-            panelHost.makeKey()
-        }
-        tagEditorSelfActivated = false
     }
 }

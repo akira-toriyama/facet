@@ -1,7 +1,7 @@
-// On-screen placement maths for the themed "card" popups (PopupMenu +
-// TagEditPanel). Both open at a click anchor and must flip / clamp into
-// the visible frame with the same 4pt margin; extracted here so the two
-// can't drift on that margin or the flip-up rule.
+// On-screen placement maths for the themed "card" popups (PopupMenu).
+// They open at a click anchor and must flip / clamp into the visible
+// frame with the same 4pt margin; extracted here so callers can't drift
+// on that margin or the flip-up rule.
 
 import AppKit
 
