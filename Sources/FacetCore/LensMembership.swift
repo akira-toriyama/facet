@@ -28,10 +28,13 @@ public enum LensMembership {
     /// Whether `window`, perceived in the workspace named `workspaceName`,
     /// satisfies the compiled lens `filter`. Pure + total: an unknown or
     /// absent field is a no-match, never a crash (see `FacetFilter.matches`).
-    /// `workspaceName` is overlaid so a lens `match='workspace=Dev'` resolves;
-    /// pass `""` when no workspace name applies (then `workspace=` no-matches).
+    /// `workspaceName` is overlaid so a lens `match='workspace=Dev'` resolves.
+    /// Pass `nil` when the window has NO workspace assignment (EX-3 迷子 /
+    /// orphan) so `not workspace` matches it; pass the name (even `""` for an
+    /// unnamed-but-assigned workspace) otherwise — `""` is assigned, so
+    /// `not workspace` does NOT match it.
     public static func matches(_ window: Window,
-                               inWorkspaceNamed workspaceName: String,
+                               inWorkspaceNamed workspaceName: String?,
                                filter: FacetFilter) -> Bool {
         filter.matches(ProjectedWindowFields(window: window,
                                              workspaceName: workspaceName))

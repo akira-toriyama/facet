@@ -649,11 +649,18 @@ action = "ignore"
 #                    master    = true    mark / unmark as layout master
 #                  Omit `apply` → the lens is drop-inert (a drop snaps back).
 #
-#   type = "unassigned"  — the lost-and-found section (just a `label`) for
-#       windows in no other section. DEFERRED: this type decodes but the
-#       projection emits NO section for it yet — under the current catalog
-#       every managed window already has a workspace, so the set is always
-#       empty. An `unassigned` section will not appear in the tree today.
+#   迷子 (orphan) receptacle — a window can belong to NO workspace
+#       (`workspace = 0 or 1`, EX-3): dragging it onto a lens RELOCATES it out
+#       of its workspace ("全部移動"), so when no matching lens is active it is
+#       a 迷子 — invisible-but-logged, never auto-homed. Surface them with a
+#       plain `type = "lens"` whose `match` catches "no workspace assignment":
+#         [[desktop.1.section]]
+#         type = "lens"
+#         label = "迷子"
+#         match = 'not workspace'          # every window not filed in a workspace
+#       (`'not workspace and not tag'` for strictly tagless ones). RECOMMENDED:
+#       keep one per desktop so a stray window is never lost. There is no
+#       special "unassigned" type — the 迷子 receptacle is just a lens.
 #
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess). Sections are a WORKSPACE-axis
@@ -669,6 +676,14 @@ action = "ignore"
 # (every mac desktop gets 5 emoji workspaces). Activate a lens at runtime
 # with `facet lens "Web"` (it parks the non-Web windows); clear it with
 # `facet lens --clear`.
+
+# 推奨!! — the 迷子 (orphan) receptacle. A window dragged onto a lens leaves
+# its workspace; with no matching lens active it would be invisible. This
+# catch-all lens surfaces every such window so nothing is ever lost. Keep one.
+[[desktop.1.section]]
+type = "lens"
+label = "迷子"
+match = 'not workspace'
 
 [[desktop.1.section]]
 type = "workspace"

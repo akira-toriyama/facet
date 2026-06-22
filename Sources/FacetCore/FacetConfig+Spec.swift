@@ -181,8 +181,10 @@ public extension FacetConfig {
                      + "engine for the cross-workspace union (spiral default; "
                      + "bsp / stack clamp to the [layout] default), and apply = "
                      + "`{ workspace, tags = [], floating, sticky, master }` "
-                     + "set on a window routed in; unassigned = "
-                     + "`{ type, label }`. Array order = tree display order. "
+                     + "set on a window routed in. (unassigned = `{ type, label }` "
+                     + "still decodes but is DEFERRED/emits nothing — the EX-3 "
+                     + "迷子/orphan receptacle is just a lens with "
+                     + "`match = 'not workspace'`.) Array order = tree display order. "
                      + "Any section block makes facet opt-in (manages only "
                      + "configured desktops). Workspace-axis only (ignored "
                      + "under [grouping] by = \"tag\")."),

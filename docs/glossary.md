@@ -175,6 +175,23 @@ auto 命名**＝emoji プール（animal→fruit→food・🐶🍎🍕・`Worksp
   / `FacetConfig.effectiveWorkspaceList`（section active 時は auto名スロットを返す）
 - **Don't call it:** group, tab, page, desktop, mac desktop, Space, グループ, タブ
 
+### 迷子 (orphan)
+**どの [[facet workspace]] にも属さない窓**（`WindowSlot.workspace == nil`・EX-3
+排他モデルの `workspace = 0 or 1`）。窓を [[lens]] へ DnD すると元の workspace から
+外れる「全部移動」の代償として発生しうる（`ws=nil`・lens の tag は持つので厳密な
+"tag も 0" とは限らない）。**迷子は invisible-but-logged**＝一致する lens が active で
+ない限りどの per-workspace view にも出ず（`snapshot` から除外・`facet query` では
+`workspace="迷子"`/index 0）、WS1 へ auto-home し**ない**（ユーザ責任・canon ⑧）。
+**迷子受け皿** = `type="lens"` + `match='not workspace'` の section を config に明示
+記述すると、その lens を active 化して迷子を集約できる（専用 `unassigned` type は
+作らない・canon ⑦ Q20）。「workspace を持つか」は**割当（`Int?` の nil）で判定**＝
+無名 workspace（name `""`）の窓は assigned 扱いで `not workspace` に**出ない**。
+- コード: `WindowSlot.workspace: Int?` / `WorkspaceCatalog.setOrphan` /
+  `WindowBackend.orphanWindow` / `ProjectedWindowFields.workspaceName: String?`
+  （nil=未割当）/ `ApplyResolver.Plan.relocateSourceToOrphan`
+- **Don't call it:** unassigned（type は作らない）, lost window, untagged
+  （無タグ ≠ 迷子）, homeless, デタッチ窓
+
 ### per-mac-desktop workspaces
 各 [[mac desktop]]（native Space）ごとに **独立した `WorkspaceCatalog`** を
 持つ機能。`NativeAdapter` は active な mac desktop id でカタログを park / swap

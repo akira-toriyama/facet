@@ -39,10 +39,16 @@ import FacetCore
 /// the adapter performs on the window, so caching it here avoids
 /// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
 struct WindowSlot: Equatable, Sendable {
-    /// 1-based workspace index. Always set (workspace-mode authority;
-    /// in tag mode it's bookkeeping only — visibility comes from
-    /// `tags`).
-    let workspace: Int
+    /// 1-based workspace index, or `nil` for a 迷子 (orphan) — a window
+    /// assigned to NO facet workspace (EX-3 exclusive model: workspace =
+    /// 0 or 1). An orphan lives only via tags/lenses; it is invisible in
+    /// every per-workspace view (excluded by `== n1Based` filters, dropped
+    /// from `snapshot`) until a `type="lens"` receptacle (`match='not
+    /// workspace'`) gathers it. Orphans arise ONLY from an explicit DnD
+    /// move onto a lens (EX-3.2) — reconcile never adopts a nil. In
+    /// workspace mode this is the membership authority; in tag mode it's
+    /// bookkeeping only (visibility comes from `tags`).
+    let workspace: Int?
     let pid: Int
     /// Tag bitmask (M11-3 `[grouping] by = "tag"`). `0` in workspace
     /// mode (unused) and for a window not yet tag-assigned. In tag mode
@@ -53,7 +59,7 @@ struct WindowSlot: Equatable, Sendable {
     /// `WindowSlot` re-creation must still carry this forward or a
     /// tag-mode window silently loses its tags.
     var tags: UInt64
-    init(workspace: Int, pid: Int, tags: UInt64 = 0) {
+    init(workspace: Int?, pid: Int, tags: UInt64 = 0) {
         self.workspace = workspace
         self.pid = pid
         self.tags = tags
@@ -513,8 +519,12 @@ struct WorkspaceCatalog {
         stackOrders = remap(stackOrders)
         layoutParams = remap(layoutParams)
         lastFocusedOnLeave = remap(lastFocusedOnLeave)
-        for (id, slot) in windowMap where map[slot.workspace] != nil {
-            windowMap[id] = WindowSlot(workspace: map[slot.workspace]!,
+        // orphan (workspace == nil): not keyed in the remap → skip, leave nil
+        // unchanged (position-agnostic). (for-`where` can't `let`-bind, and a
+        // dict subscript with an Int? key won't compile — guard in the body.)
+        for (id, slot) in windowMap {
+            guard let ws = slot.workspace, let mapped = map[ws] else { continue }
+            windowMap[id] = WindowSlot(workspace: mapped,
                                        pid: slot.pid, tags: slot.tags)
         }
         activeIndex = map[activeIndex]
@@ -569,8 +579,10 @@ struct WorkspaceCatalog {
         // window to its home layout, then null the lens authority fields so
         // the catalog is left in a clean no-lens state (EX-0.4).
         for id in lensParkedMembers {
-            guard let slot = windowMap[id] else { continue }
-            attachToLayout(id, workspace: slot.workspace, focused: nil, in: rect)
+            // orphan: no home layout to lift back into — stays parked (it
+            // belongs to no workspace; the cleared lens leaves it invisible).
+            guard let slot = windowMap[id], let ws = slot.workspace else { continue }
+            attachToLayout(id, workspace: ws, focused: nil, in: rect)
         }
         lensParkedMembers.removeAll()
         activeSectionLens = nil
@@ -585,8 +597,14 @@ struct WorkspaceCatalog {
         // shelf and must STAY parked through the switch, so they're
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
+        // Park the old workspace's members AND every orphan (workspace == nil):
+        // an orphan shown in the just-cleared lens union belongs to no
+        // workspace, so it must leave the screen on a switch. An orphan that
+        // was already parked no-ops (`shouldParkAnchor` gates on `anchorParked`),
+        // so listing it unconditionally is safe + idempotent.
         let toPark = windowMap
-            .filter { $0.value.workspace == old && isParkEligible($0.key) }
+            .filter { ($0.value.workspace == old || $0.value.workspace == nil)
+                && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         // Destination: restore every park-eligible member unconditionally.
         // A user-hidden (Cmd+H) member is left exactly as-is — never
@@ -674,6 +692,30 @@ struct WorkspaceCatalog {
         if n1Based == activeIndex { return .restore(ref) }
         if current.workspace == activeIndex { return .park(ref) }
         return .stateOnly
+    }
+
+    /// EX-3 symmetric-move counterpart of `moveWindow(to:)`: relocate `id` OUT
+    /// of its workspace → 迷子 (`workspace = nil`). A DnD that drags a window
+    /// from a workspace onto a LENS makes it leave the workspace (canon ⑤⑥
+    /// "全部移動") so it lives only via the lens's tag; it parks if it was on the
+    /// active workspace (now belongs to no visible workspace), else state-only.
+    /// Mirrors `moveWindow`'s incoherence guards: a sticky window is everywhere
+    /// (can't be orphaned), a stashed scratchpad is off-screen, and a window
+    /// that is already orphan / unknown is a no-op. `MoveOutcome.restore` is
+    /// never returned (orphaning never brings a window on-screen).
+    @discardableResult
+    mutating func setOrphan(_ id: WindowID) -> MoveOutcome {
+        guard let current = windowMap[id],
+              current.workspace != nil,
+              !everywhereWindows.contains(id),
+              !stashedWindows.contains(id) else { return .rejected }
+        let wasActive = current.workspace == activeIndex
+        windowMap[id] = WindowSlot(workspace: nil, pid: current.pid,
+                                   tags: current.tags)
+        detachFromLayouts(id)
+        clearLeaveFocus(of: id)
+        let ref = WindowRef(id: id, pid: current.pid)
+        return wasActive ? .park(ref) : .stateOnly
     }
 
     // MARK: - Park bookkeeping (adapter calls after AX success)
@@ -765,8 +807,14 @@ struct WorkspaceCatalog {
         // `stashed:` line. A *settled* (summoned) scratchpad window is
         // NOT in `stashedWindows`, so it stays and carries its badge.
         let tracked = trackedWindows(in: live)
+        // orphan (workspace == nil): belongs to no workspace section. Bucket it
+        // under the -1 sentinel (no valid 1-based index, never == any
+        // entry.index) so it forms no nil key and is naturally dropped from the
+        // per-WS emit below (invisible). It surfaces only via `facet query`'s
+        // 迷子 label / a 迷子 receptacle lens. The orphan-CREATION event is
+        // logged at the relocation seam (EX-3.2), not per-snapshot (hot path).
         let byWS = Dictionary(grouping: tracked) { w in
-            windowMap[w.id]!.workspace
+            windowMap[w.id]?.workspace ?? -1
         }
         return workspaceEntries.map { entry in
             let isActive = entry.index == activeIndex
@@ -796,40 +844,20 @@ struct WorkspaceCatalog {
                 ? orderedMembers(of: entry.index).first
                 : nil
             let wins = (byWS[entry.index] ?? []).map { w in
-                // Per-window facet attributes read through the same
-                // named accessors `facetState` (query export) uses, so
-                // the two projections can't drift (grouping-01). Frame /
-                // master stay contextual (per-WS layout-derived).
-                Window(id: w.id, pid: w.pid, appName: w.appName,
-                       title: w.title,
-                       isFocused: w.id == focused,
-                       isFloating: isFloating(w.id),
-                       frame: wouldBeFrame(
-                           for: w, isActiveWS: isActive,
-                           mode: m, tileFrames: tileF,
-                           stackSet: stackSet,
-                           engineFrames: engineF,
-                           activeRect: activeRect),
-                       isOnscreen: w.isOnscreen,
-                       isMaster: w.id == master,
-                       mark: mark(forWindow: w.id),
-                       isSticky: isSticky(w.id),
-                       scratchpad: scratchpad(forWindow: w.id),
-                       // Section model (PR8): the lens `match`/`apply` round-
-                       // trip needs `tag~=X` to resolve, so populate tags from
-                       // the window's bitmask when the section model is live.
-                       // Off (default / by-workspace degrade) → `[]`, exactly
-                       // as before. Same `names(in:)` expression `tagSnapshot`
-                       // uses, so the two projections can't drift.
-                       tags: populateTags
-                           ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
-                           : [],
-                       // Section-lens park (EX-1 cross-WS model): authoritative
-                       // from the catalog — `lensParkedMembers` now spans ALL
-                       // workspaces on the current mac desktop, so an inactive-WS
-                       // out-of-lens window correctly reads `true` here. Views
-                       // dim + badge it; no view-side match recompute.
-                       isLensParked: lensParkedMembers.contains(w.id))
+                // Per-window facet attributes read through the shared
+                // `makeWindow` helper (the SINGLE construction site, shared
+                // with `orphanWindows`) so the projections can't drift on the
+                // non-contextual fields. Frame / master stay CONTEXTUAL
+                // (per-WS layout-derived) and are passed in here.
+                makeWindow(w, focused: focused,
+                           frame: wouldBeFrame(
+                               for: w, isActiveWS: isActive,
+                               mode: m, tileFrames: tileF,
+                               stackSet: stackSet,
+                               engineFrames: engineF,
+                               activeRect: activeRect),
+                           isMaster: w.id == master,
+                           populateTags: populateTags)
             }
             return Workspace(
                 index: entry.index - 1,
@@ -837,6 +865,69 @@ struct WorkspaceCatalog {
                 isActive: isActive,
                 layoutMode: m,
                 windows: wins)
+        }
+    }
+
+    /// Build a `Window` projection for `w` from the catalog's per-window
+    /// accessors — the SINGLE construction site shared by `snapshot` (per-WS,
+    /// layout-contextual) and `orphanWindows` (no WS, no layout) so the two
+    /// can't drift on the NON-contextual fields (tags / mark / float / sticky /
+    /// scratchpad / isLensParked / focus / onscreen). The CONTEXTUAL fields —
+    /// `frame` (the per-WS would-be tile slot) and `isMaster` (first in the WS
+    /// tiling order) — are computed by the caller and passed in; an orphan, in
+    /// no workspace, passes the raw live frame + `isMaster: false`.
+    ///
+    /// `populateTags` (section model, PR8): when on, `Window.tags` carries the
+    /// window's bitmask names so a lens `match='tag~=X'` / `apply:addTag(X)`
+    /// round-trips; off (default / by-workspace degrade) → `[]`, exactly as
+    /// before. Same `names(in:)` expression `tagSnapshot` uses.
+    private func makeWindow(_ w: Window, focused: WindowID?,
+                            frame: CGRect?, isMaster: Bool,
+                            populateTags: Bool) -> Window {
+        Window(id: w.id, pid: w.pid, appName: w.appName,
+               title: w.title,
+               isFocused: w.id == focused,
+               isFloating: isFloating(w.id),
+               frame: frame,
+               isOnscreen: w.isOnscreen,
+               isMaster: isMaster,
+               mark: mark(forWindow: w.id),
+               isSticky: isSticky(w.id),
+               scratchpad: scratchpad(forWindow: w.id),
+               tags: populateTags
+                   ? tagModel.names(in: windowMap[w.id]?.tags ?? 0)
+                   : [],
+               // Section-lens park (EX-1 cross-WS model): authoritative from
+               // the catalog — `lensParkedMembers` spans ALL workspaces on the
+               // current mac desktop, so an inactive-WS out-of-lens window
+               // correctly reads `true` here. Views dim + badge it; no
+               // view-side recompute.
+               isLensParked: lensParkedMembers.contains(w.id))
+    }
+
+    /// EX-3 迷子: the managed windows assigned to NO workspace
+    /// (`WindowSlot.workspace == nil`), projected as `Window`s for the views'
+    /// LENS sections. `snapshot` buckets these under its `-1` sentinel and
+    /// drops them (they belong to no `Workspace`), so without this they render
+    /// in no tree/grid/rail section even though the activation path
+    /// (`sectionLensVisibleIDsAll`) gathers them on-screen — the host-verify
+    /// GAP. `Controller.apply` feeds the result to
+    /// `FilterProjection.project(…, orphans:)`, which appends them into the
+    /// `not workspace` receptacle (and any content lens they match) WITHOUT
+    /// touching workspace sections.
+    ///
+    /// Stashed windows are excluded (via `trackedWindows`). Frame = the raw
+    /// live bounds (an orphan has no WS layout — a parked sliver when not
+    /// gathered, real bounds when a 迷子 lens is active); `isMaster: false`.
+    /// Built through the SAME `makeWindow` helper as `snapshot`, so the two
+    /// can't drift. `trackedWindows` guarantees a `windowMap` entry, so
+    /// `workspace == nil` identifies a true orphan (never an unmanaged window).
+    func orphanWindows(in live: [Window], focused: WindowID?,
+                       populateTags: Bool) -> [Window] {
+        trackedWindows(in: live).compactMap { w in
+            guard windowMap[w.id]?.workspace == nil else { return nil }
+            return makeWindow(w, focused: focused, frame: w.frame,
+                              isMaster: false, populateTags: populateTags)
         }
     }
 

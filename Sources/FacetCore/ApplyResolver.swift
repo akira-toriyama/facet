@@ -47,16 +47,26 @@ public enum ApplyResolver {
         public let forward: [ApplyOp]
         /// 0-based wire workspace index for a workspace dest, else `nil`.
         public let destWorkspaceIndex: Int?
+        /// EX-3 (canon ⑤⑥ "全部移動"): `true` ⇒ the MOVE drags a WINDOW out of a
+        /// WORKSPACE source onto a LENS dest, so it must LEAVE its workspace
+        /// (`workspace → nil`, 迷子) — the caller routes a dedicated
+        /// `orphanWindow` primitive instead of `destWorkspaceIndex` (a lens
+        /// never relocates to a workspace). Only `ws→lens` MOVE; never an ADD
+        /// (multi-match is intentional), never `lens→lens` (the source section
+        /// is a tag, not the workspace), never `ws→ws` (that's `destWorkspaceIndex`).
+        public let relocateSourceToOrphan: Bool
         /// `true` ⇒ snap back, run NO backend op.
         public let isInert: Bool
         /// Diagnostic for the inert case (the caller logs it loud).
         public let reason: String?
 
         public init(inverse: [ApplyOp], forward: [ApplyOp],
-                    destWorkspaceIndex: Int?, isInert: Bool, reason: String?) {
+                    destWorkspaceIndex: Int?, relocateSourceToOrphan: Bool = false,
+                    isInert: Bool, reason: String?) {
             self.inverse = inverse
             self.forward = forward
             self.destWorkspaceIndex = destWorkspaceIndex
+            self.relocateSourceToOrphan = relocateSourceToOrphan
             self.isInert = isInert
             self.reason = reason
         }
@@ -64,7 +74,7 @@ public enum ApplyResolver {
 
     private static func inert(_ reason: String) -> Plan {
         Plan(inverse: [], forward: [], destWorkspaceIndex: nil,
-             isInert: true, reason: reason)
+             relocateSourceToOrphan: false, isInert: true, reason: reason)
     }
 
     /// Resolve a rendered LENS section id (`"section:<declOrder>:<label>"`) back
@@ -160,6 +170,15 @@ public enum ApplyResolver {
             return inert("stale destination \"\(toSectionID)\"")
         }
 
+        // EX-3 (canon ⑤⑥): a MOVE that drags a window FROM a workspace section
+        // ONTO a lens relocates it OUT of its workspace (`workspace → nil`,
+        // 迷子) — a pure "引っ越し", not 併用. Precisely: source is a workspace
+        // ("ws:" id, a MOVE) and the dest is a lens. NOT an ADD (fromSectionID
+        // == nil → multi-match is intentional), NOT lens→lens (the source
+        // section is a tag, not the workspace), NOT ws→ws (→ destWorkspaceIndex).
+        let fromIsWorkspace = fromSectionID?.hasPrefix("ws:") ?? false
+        let relocateSourceToOrphan = fromIsWorkspace && !destIsWorkspace
+
         // Forward = dest apply minus setWorkspace (a workspace dest relocates
         // via destWorkspaceIndex; a lens never relocates).
         let forward = (destSection?.apply ?? []).filter {
@@ -184,8 +203,13 @@ public enum ApplyResolver {
             // can strip a tag the dest match NEEDS (→ window lands in neither
             // lens) or one it EXCLUDES (→ a valid move wrongly refused), so a
             // forward-only check mispredicts. Simulate the NET set, in order.
+            // EX-3: a ws→lens MOVE also leaves the workspace, so the match must
+            // be checked against the POST-orphan name ("") — else a lens whose
+            // satisfaction is tag-only (the common case) is unaffected, but one
+            // that referenced the old workspace name would mispredict.
             // Snap back BEFORE any mutation.
-            if !satisfiesAfterApply(window, workspaceName: workspaceName,
+            let matchWSName = relocateSourceToOrphan ? "" : workspaceName
+            if !satisfiesAfterApply(window, workspaceName: matchWSName,
                                     applying: inverse + forward,
                                     match: destSection!.match) {
                 return inert("window won't satisfy \"\(destSection!.label)\" after apply")
@@ -194,6 +218,7 @@ public enum ApplyResolver {
 
         return Plan(inverse: inverse, forward: forward,
                     destWorkspaceIndex: destIsWorkspace ? destWorkspaceIndex : nil,
+                    relocateSourceToOrphan: relocateSourceToOrphan,
                     isInert: false, reason: nil)
     }
 }

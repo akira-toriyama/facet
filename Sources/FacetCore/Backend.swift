@@ -262,6 +262,15 @@ public protocol WindowBackend: Sendable {
     func moveActiveWorkspace(to position: Int)
 
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
+
+    /// EX-3: relocate `id` OUT of its workspace → 迷子 (`workspace = nil`). The
+    /// symmetric-move counterpart of `moveWindow`: a section DnD that drags a
+    /// window from a workspace onto a LENS makes it leave the workspace (canon
+    /// ⑤⑥ "全部移動") so it lives only via the lens's tag. The window parks if
+    /// it was on the active workspace. No-op for a sticky / stashed / already-
+    /// orphan / unknown window.
+    func orphanWindow(_ id: WindowID)
+
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)
 
@@ -524,6 +533,18 @@ public protocol WindowBackend: Sendable {
     /// Lock-guarded mirror of the active catalog's `activeSection`.
     func currentActiveSection() -> ActiveSection
 
+    /// EX-3 迷子: the managed windows assigned to NO workspace
+    /// (`WindowSlot.workspace == nil`). The `workspaces()` snapshot can't carry
+    /// them (an orphan is in no `Workspace`), so the Controller reads them here
+    /// — main-actor-safe, off a lock-guarded mirror refreshed on `cliQueue` at
+    /// the tail of every catalog refresh (same handoff as `currentActiveSection`)
+    /// — and feeds them to `FilterProjection.project(…, orphans:)` so the views'
+    /// lens sections render them (the 迷子 receptacle + any content lens they
+    /// match). WITHOUT this, an orphan shows in no tree/grid/rail section even
+    /// though the activation path gathers it on-screen (display ↔ gather
+    /// disagreement). `[]` outside the section model / for backends without one.
+    func orphanWindows() -> [Window]
+
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
     /// Reads the in-memory catalog structs, so the Controller calls it on
@@ -599,6 +620,7 @@ public extension WindowBackend {
     func setLens(_ spec: LensSpec, autoFocus: Bool) {}
     func setSectionLens(_ label: String?, autoFocus: Bool) {}
     func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
+    func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 
@@ -643,6 +665,7 @@ public extension WindowBackend {
     func currentLens() -> LensStatus? { nil }
     func currentSectionLens() -> String? { nil }
     func currentActiveSection() -> ActiveSection { .workspace(1) }
+    func orphanWindows() -> [Window] { [] }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }

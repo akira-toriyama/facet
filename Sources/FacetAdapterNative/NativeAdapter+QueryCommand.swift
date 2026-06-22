@@ -137,20 +137,34 @@ extension NativeAdapter {
         -> WindowQueryEntry.FacetWindowState?
     {
         guard let slot = cat.windowMap[id] else { return nil }
-        let idx = slot.workspace
-        let name = (idx >= 1 && idx <= cat.workspaceNames.count)
-            ? cat.workspaceNames[idx - 1] : ""
-        // Master = first in the WS's tiling order, and only for engines
-        // that have a master slot (mirrors `WorkspaceCatalog.snapshot`).
-        let mode = cat.mode(of: idx)
-        let master = (LayoutRegistry.engine(named: mode)?.hasMaster ?? false)
-            && cat.orderedMembers(of: idx).first == id
         // A stashed (off-screen) scratchpad reports no shelf name — only a
         // settled (summoned) one does, matching the snapshot convention.
         let scratchpad = cat.isStashed(id) ? nil : cat.scratchpad(forWindow: id)
+        // orphan (workspace == nil): no home WS — report "迷子" + index 0 (0 is
+        // not a valid 1-based index, the orphan sentinel) and no master/mode
+        // lookup (an orphan is in no layout). It is still reported (distinct),
+        // never silently dropped from `facet query`.
+        guard let ws = slot.workspace else {
+            return WindowQueryEntry.FacetWindowState(
+                workspace: "迷子",
+                workspaceIndex: 0,
+                tags: cat.tagModel.names(in: slot.tags),
+                floating: cat.isFloating(id),
+                sticky: cat.isSticky(id),
+                master: false,
+                mark: cat.mark(forWindow: id),
+                scratchpad: scratchpad)
+        }
+        let name = (ws >= 1 && ws <= cat.workspaceNames.count)
+            ? cat.workspaceNames[ws - 1] : ""
+        // Master = first in the WS's tiling order, and only for engines
+        // that have a master slot (mirrors `WorkspaceCatalog.snapshot`).
+        let mode = cat.mode(of: ws)
+        let master = (LayoutRegistry.engine(named: mode)?.hasMaster ?? false)
+            && cat.orderedMembers(of: ws).first == id
         return WindowQueryEntry.FacetWindowState(
             workspace: name,
-            workspaceIndex: idx,
+            workspaceIndex: ws,
             tags: cat.tagModel.names(in: slot.tags),
             floating: cat.isFloating(id),
             sticky: cat.isSticky(id),

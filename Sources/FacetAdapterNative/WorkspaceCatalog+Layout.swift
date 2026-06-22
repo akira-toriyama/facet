@@ -277,9 +277,13 @@ extension WorkspaceCatalog {
         let wasFloating = floatingWindows.contains(id)
         if wasFloating {
             floatingWindows.remove(id)
-            // Re-enter the WS's layout (no-op if mode is float).
-            attachToLayout(id, workspace: slot.workspace,
-                           focused: focused, in: rect)
+            // Re-enter the WS's layout (no-op if mode is float). orphan: no
+            // home workspace layout to re-enter — stays detached (un-floated
+            // but in no tree, parked; invisible unless a matching lens shows it).
+            if let ws = slot.workspace {
+                attachToLayout(id, workspace: ws,
+                               focused: focused, in: rect)
+            }
         } else {
             floatingWindows.insert(id)
             detachFromLayouts(id)

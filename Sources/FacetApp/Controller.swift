@@ -890,7 +890,15 @@ final class Controller: NSObject {
         if config.isSectionModelActive(ordinal: macDesktopOrdinal),
            let ordinal = macDesktopOrdinal {
             let secs = config.effectiveMacDesktopSectionConfigs[ordinal] ?? []
-            let projected = FilterProjection.project(workspaces: wss, sections: secs)
+            // EX-3 迷子: feed the orphan windows (in no workspace, so absent
+            // from `wss`) so the projection appends them into the `not
+            // workspace` receptacle + any content lens they match. Main-actor-
+            // safe mirror read (lock-guarded, refreshed on cliQueue). Closes the
+            // GAP where an orphan rendered in no tree/grid/rail section even
+            // though the activation path gathered it on-screen.
+            let projected = FilterProjection.project(
+                workspaces: wss, sections: secs,
+                orphans: backend.orphanWindows())
             logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
                                    against: &loggedSectionDiagnostics)
             lastSections = projected.sections

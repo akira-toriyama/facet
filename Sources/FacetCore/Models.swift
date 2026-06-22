@@ -163,6 +163,20 @@ public struct Window: Sendable {
         self.tags = tags
         self.isLensParked = isLensParked
     }
+
+    /// EX-3: a copy with `tags` overlaid. A live CGWindow-derived `Window`
+    /// carries no tags (the bitmask lives in the adapter's catalog); the
+    /// gather / park path overlays the catalog tag NAMES here so a `tag~=X`
+    /// lens `match` resolves there exactly as the snapshot already overlays
+    /// tags for the tree DISPLAY — display and hide can't drift on a
+    /// tag-based lens.
+    public func withTags(_ tags: [String]) -> Window {
+        Window(id: id, pid: pid, appName: appName, title: title,
+               isFocused: isFocused, isFloating: isFloating, frame: frame,
+               isOnscreen: isOnscreen, isMaster: isMaster, bundleId: bundleId,
+               mark: mark, isSticky: isSticky, scratchpad: scratchpad,
+               tags: tags, isLensParked: isLensParked)
+    }
 }
 
 /// `facet filter` field resolution for an in-process window (#283 PR#2).

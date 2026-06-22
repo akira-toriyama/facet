@@ -130,9 +130,13 @@ is the index. **Do not relitigate** without explicit grill round.
   moves windows across mac desktops, so it stays SIP-on / public-contract
   (the rejected cross-mac-desktop move was hide 手法4). `[[desktop.N.section]]`
   config customises a mac desktop by Mission-Control ordinal — an ordered
-  list of `type = workspace | lens | unassigned` sections (workspace =
-  auto-named cell + optional `layout`; the count sets the WS count).
-  Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
+  list of `type = workspace | lens` sections (workspace =
+  auto-named cell + optional `layout`; the count sets the WS count). EX-3:
+  `WindowSlot.workspace` is `Int?` — a window can belong to NO workspace
+  (`workspace = 0 or 1`); dragging it onto a lens relocates it out of its
+  workspace (`orphanWindow`), and an orphan (迷子) is invisible-but-logged
+  until a `type = "lens"` receptacle (`match = 'not workspace'`) gathers it
+  (no `unassigned` type — that's deferred). Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
   none → all mac desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the

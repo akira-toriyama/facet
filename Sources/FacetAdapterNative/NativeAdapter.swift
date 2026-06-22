@@ -295,6 +295,33 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Lens-only shim over `currentActiveSection()` for existing callers.
     public func currentSectionLens() -> String? { currentActiveSection().lensLabel }
 
+    /// EX-3 迷子: the main-readable mirror of the catalog's orphan windows
+    /// (managed, assigned to no workspace). `snapshot` can't carry orphans
+    /// (they belong to no `Workspace`), so `Controller.apply` (main) reads this
+    /// mirror and feeds it to `FilterProjection.project(…, orphans:)` for the
+    /// views' lens sections. Refreshed on `cliQueue` at the tail of every
+    /// `refreshCatalog` (right after the `snapshot`) under `sectionLensLock`,
+    /// so the main-thread read is race-free — same handoff as `_activeSection`.
+    private var _orphanWindows: [Window] = []
+
+    /// Refresh the orphan mirror from the active catalog. Called on `cliQueue`
+    /// with the SAME `live` / `focused` / section-model `populateTags` gate the
+    /// `snapshot` used, so the two agree. The catalog read happens on-queue
+    /// (no concurrent mutator — catalog is cliQueue-confined); the lock guards
+    /// only the array handoff to the main thread.
+    func syncOrphanMirror(in live: [Window], focused: WindowID?,
+                          populateTags: Bool) {
+        let orphans = catalog.orphanWindows(in: live, focused: focused,
+                                            populateTags: populateTags)
+        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        _orphanWindows = orphans
+    }
+
+    public func orphanWindows() -> [Window] {
+        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        return _orphanWindows
+    }
+
     // MARK: - Event / error streams
 
     private let eventStream: AsyncStream<BackendEvent>
@@ -818,6 +845,34 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // (Phase γ: lazy retile / re-stack). 枠 E: the remaining
         // windows animate as they reflow to fill the moved window's
         // slot (the moved window itself already parked off-screen).
+        reflowActive(rect: rect)
+    }
+
+    /// EX-3: relocate `id` OUT of its workspace → 迷子 (mirrors `moveWindow`'s
+    /// outcome handling). A section DnD's ws→lens MOVE routes here (instead of
+    /// `moveWindow`) so the window leaves its workspace. If a lens that matches
+    /// the window is active, the trailing reconcile (`applySectionLensReconcile`)
+    /// re-shows it in the union; otherwise it stays parked (invisible 迷子). The
+    /// loud `Log.line` makes the orphaning visible (canon ⑧ invisible-but-logged).
+    public func orphanWindow(_ id: WindowID) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
+        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
+        else { return }
+        let rect = activeDisplayRect()
+        let outcome = catalog.setOrphan(id)
+        switch outcome {
+        case .rejected:
+            return
+        case .stateOnly:
+            Log.line("native: orphan \(id.serverID) — left its workspace "
+                + "(迷子); invisible unless a 迷子 receptacle lens is active")
+        case .park(let ref):
+            Log.line("native: orphan \(id.serverID) — left its workspace "
+                + "(迷子); parked")
+            applyHide(toPark: [ref], toRestore: [])
+        case .restore:
+            break   // setOrphan never returns .restore
+        }
         reflowActive(rect: rect)
     }
 

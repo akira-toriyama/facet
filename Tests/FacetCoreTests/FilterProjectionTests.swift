@@ -257,6 +257,77 @@ final class FilterProjectionTests: XCTestCase {
         XCTAssertTrue(r.diagnostics[0].hasSuffix("unknown field(s): aaa, zzz"))
     }
 
+    // MARK: - orphans (EX-3 迷子: in NO workspace, project into lens sections only)
+
+    /// An orphan (no workspace assignment) projects into a `not workspace`
+    /// lens section — the 迷子 receptacle. Fixes the host-verify GAP where an
+    /// orphan rendered in NO tree section even though the activation path
+    /// (`sectionLensVisibleIDsAll`) DID gather it on-screen (display ↔ gather
+    /// disagreement, violating EX-2's "3 views = same section list").
+    func testOrphanProjectsIntoNotWorkspaceLens() {
+        let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["web"])])]
+        let orphan = win(9, app: "Chrome", tags: ["web"])
+        let r = FilterProjection.project(
+            workspaces: wss,
+            sections: [wsSec(), lens("迷子", "not workspace")],
+            orphans: [orphan])
+        let receptacle = r.sections.first { $0.label == "迷子" }
+        XCTAssertEqual(receptacle?.windows.map(\.id.serverID), [9])
+        XCTAssertEqual(receptacle?.sectionType, .lens)
+    }
+
+    /// An orphan NEVER lands in a workspace section (it is in no workspace).
+    func testOrphanNeverProjectsIntoWorkspaceSection() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec()], orphans: [win(9)])
+        XCTAssertEqual(r.sections.map(\.id), ["ws:0"])
+        XCTAssertEqual(r.sections[0].windows.map(\.id.serverID), [1])  // orphan absent
+    }
+
+    /// An ASSIGNED window in an UNNAMED workspace (name "") is NOT caught by
+    /// `not workspace` even with an orphan present — presence is keyed off the
+    /// ASSIGNMENT (nil), not the display name. Only the orphan (ws=nil) matches.
+    func testAssignedUnnamedWindowNotCaughtByNotWorkspace() {
+        let wss = [ws(0, name: "", windows: [win(1)])]   // unnamed but ASSIGNED
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [lens("迷子", "not workspace")],
+            orphans: [win(9)])
+        XCTAssertEqual(r.sections[0].windows.map(\.id.serverID), [9])  // only the orphan
+    }
+
+    /// An orphan matches a CONTENT lens by its own fields (the tag it inherited
+    /// on the DnD-to-lens move) and is APPENDED after the workspace-resident
+    /// matches (the workspaces loop runs first, orphans after).
+    func testOrphanMatchesContentLensAppendedAfterWorkspaceWindows() {
+        let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["web"])])]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [lens("Web", "tag~=web")],
+            orphans: [win(9, tags: ["web"])])
+        XCTAssertEqual(r.sections[0].windows.map(\.id.serverID), [1, 9])
+    }
+
+    /// An orphan that matches NO lens shows up nowhere — no crash, no phantom
+    /// section, and workspace sections stay untouched.
+    func testOrphanMatchingNoLensVanishes() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), lens("Web", "tag~=web")],
+            orphans: [win(9, tags: ["code"])])
+        XCTAssertTrue(r.sections.allSatisfy {
+            !$0.windows.map(\.id.serverID).contains(9) })
+    }
+
+    /// The default `orphans: []` keeps every existing call site byte-identical
+    /// (the parameter is purely additive).
+    func testOrphansDefaultEmptyIsByteIdentical() {
+        let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["web"])])]
+        let secs = [wsSec(), lens("Web", "tag~=web")]
+        XCTAssertEqual(
+            FilterProjection.project(workspaces: wss, sections: secs),
+            FilterProjection.project(workspaces: wss, sections: secs, orphans: []))
+    }
+
     // MARK: - scale (perf baseline)
 
     func testProjectsAtScale100Windows10Lenses() {
