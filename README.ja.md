@@ -394,7 +394,10 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの
   ある mac desktop だけ facet が管理し、 無い mac desktop は完全に
   ノータッチ（窓そのまま・パネル非表示）。 section モデルは
-  `by = "workspace"` 専用 (`by = "tag"` では無視)。
+  `by = "workspace"` 専用 (`by = "tag"` では無視)。 3 view すべてが同じ
+  section リストを描画する — lens section は tree・grid・**rail** でセルとして
+  並び、 ちょうど 1 つだけハイライト。 rail では active section が中央の hero
+  になる（active な lens はそこに union を描く）。
 - `[grouping] by` — `workspace` (デフォルト) か `tag`。 `tag` は
   per-mac-desktop の workspace 一覧を dwm 流の **tag world** に差し替える:
   1 窓が複数 tag を持て、 **lens** (`facet lens`) でどの tag セットを

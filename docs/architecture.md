@@ -566,6 +566,17 @@ union machinery; else the workspace machinery). The catalog enforces the XOR
 structurally — every workspace switch nulls the active lens, so the two
 machineries are never live at once.
 
+All **three views render this one ordered section list** (`FilterProjection.project`
+→ `[ProjectedSection]`): the tree's section headers, the grid's cells, and the
+rail's carousel cells (with the active/selected section as the centre **hero** —
+an active lens renders its union there). Each lights **exactly one** section, the
+active one — **3-view unified highlight**, completed across tree (EX-1), grid
+(EX-2a), and rail (EX-2b). `OverviewCell.isActive` bakes the single-highlight XOR
+at cell-build time, so the accent draw is identical across surfaces; cell/window
+picks funnel through `WindowBackend.activateSection` (the same throughline the CLI
++ tree use). Lens cells are browsable but never drag/swap targets (no source
+workspace).
+
 ## Non-goals
 
 - **SIP-disabled features in `facet`** — out of scope.

@@ -420,7 +420,10 @@ Frequently-touched keys:
   workspaces automatically; **any** present → **opt-in**: facet manages
   only the mac desktops that have a section block; a mac desktop without
   one is left untouched (windows as-is, panel hidden there). Section model
-  is `by = "workspace"` only (ignored under `by = "tag"`).
+  is `by = "workspace"` only (ignored under `by = "tag"`). All three views
+  render the same section list — lens sections appear as cells in the tree,
+  grid, **and** rail, with exactly one section highlighted; on the rail the
+  active section is the centre hero (an active lens shows its union there).
 - `[grouping] by` — `workspace` (default) or `tag`. `tag` swaps the
   per-mac-desktop workspace list for a dwm-style **tag world**: a window
   can carry multiple tags, and the **lens** (`facet lens`) picks which
