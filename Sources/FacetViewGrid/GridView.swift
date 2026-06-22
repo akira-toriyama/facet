@@ -28,6 +28,17 @@ public final class GridView: NSView {
     /// design).
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
+    /// EX-2: the projected section list (workspace + lens). Empty ⇒ degrade
+    /// to the `workspaces` iteration. Fed by the Controller (apply / show).
+    public var sections: [ProjectedSection] = []
+    /// EX-2: the active lens label (nil ⇒ a workspace is the active section).
+    /// Gates the single-highlight when building cells.
+    public var activeLens: String?
+    /// EX-2: window id → home workspace index (0-based), rebuilt each
+    /// `layoutCells` from the unfiltered `workspaces` snapshot. A window thumb
+    /// may sit in a LENS cell (`wsIndex == -1`) but still has a real home WS;
+    /// picks resolve through this, never through the cell's `wsIndex`.
+    private var windowHomeWS: [WindowID: Int] = [:]
     /// Display's frame at show time. All window-rect math scales
     /// from this so the per-cell mini-screen matches what the
     /// backend reported, even if a display change happens mid-show.
@@ -87,12 +98,14 @@ public final class GridView: NSView {
     // (Theme A). Promoted to a `.workspace` swap drag past threshold,
     // else resolved as a WS switch on mouseUp.
     private var pendingHeaderDown: (point: NSPoint, ws: Int)?
-    // Workspace whose header the pointer is hovering — brightens the
-    // header band + grip (mirrors the tree header hover affordance).
-    var hoverHeaderWS: Int?     // internal: read by drawHeader (GridHeader.swift)
-    // Workspace whose cell (anywhere) the pointer is over — outlines it
+    // The section id of the cell whose header the pointer is hovering —
+    // brightens the header band + grip (mirrors the tree header hover). EX-2:
+    // keyed on sectionID, NOT wsIndex (lens cells all share wsIndex=-1, so a
+    // wsIndex key would light EVERY lens header at once).
+    var hoverHeaderID: String?  // internal: read by drawHeader (GridHeader.swift)
+    // The section id of the cell (anywhere) the pointer is over — outlines it
     // with a faint stroke, matching the rail's cell-hover (M9-5 #5).
-    private var hoverWS: Int?
+    private var hoverWSID: String?
     var drag: OverviewDrag?     // internal: read by drawHeader (GridHeader.swift)
     private var dragGhost: NSView?
 
@@ -138,13 +151,29 @@ public final class GridView: NSView {
 
     // MARK: - Keyboard nav (Phase 1f-3)
 
-    public var kbSelectedWS: Int?
-    /// Window cursor within `kbSelectedWS`: `-1` = the WS-name/header
+    /// EX-2: the SELECTED cell's `sectionID` (`"ws:<i>"` / `"section:…"`).
+    /// Keyed on the stable, unique section id (NOT `wsIndex` — lens cells all
+    /// share `wsIndex == -1`, which would collide). `kbSelectedCell` resolves it.
+    public var kbSelectedID: String?
+    /// The currently keyboard-selected cell, resolved from `kbSelectedID`.
+    private var kbSelectedCell: OverviewCell? {
+        kbSelectedID.flatMap { id in cells.first { $0.sectionID == id } }
+    }
+    /// Window cursor within `kbSelectedID`'s cell: `-1` = the WS-name/header
     /// slot (no window ring), `0…n-1` = a window. Opens at `-1` so the
     /// grid shows NO pre-selected window — matching the rail (which
     /// opens with a WS browse cursor only) and the grid's own
     /// arrow-browse, which also lands on `-1`. Tab picks a window.
     public var kbSelectedWindowIdx: Int = -1
+
+    /// EX-2: seed the keyboard selection to the active (lit) cell — the one
+    /// the single-highlight lit (active workspace, or the active lens) —
+    /// falling back to the first cell. Called by the Controller after the
+    /// grid is laid out (cells must exist).
+    public func kbSeedToActiveCell() {
+        kbSelectedID = (cells.first(where: { $0.isActive }) ?? cells.first)?.sectionID
+        kbSelectedWindowIdx = -1
+    }
 
     /// Plays the "selected cell zoom → full screen" transition on a
     /// Return commit; input is gated on `commitZoom.isActive` until it
@@ -157,14 +186,18 @@ public final class GridView: NSView {
 
     // MARK: - Layout
 
-    /// Columns actually used for layout. Capped at the workspace
-    /// count so a mac desktop with fewer workspaces than the configured
-    /// `cols` fills the width with larger cells (the row is centered
-    /// by the existing `originX` math) instead of leaving a big empty
-    /// gap on the right. Only shrinks: when `count >= cols` the
-    /// configured value stands and rows wrap as before.
+    /// Columns actually used for layout. Capped at the CELL count (one cell
+    /// per section under the section model — workspace + lens; else one per
+    /// workspace) so a desktop with fewer cells than the configured `cols`
+    /// fills the width with larger cells (the row is centered by the existing
+    /// `originX` math) instead of leaving a big empty gap on the right. Only
+    /// shrinks: when `count >= cols` the configured value stands and rows wrap.
+    /// EX-2: keys off the cell count, NOT `workspaces.count` — lens sections
+    /// push the cell count above the workspace count, and capping on workspaces
+    /// would defeat `[grid] cols`.
     private var effectiveCols: Int {
-        max(1, min(config.cols, workspaces.count))
+        let cellCount = sections.isEmpty ? workspaces.count : sections.count
+        return max(1, min(config.cols, cellCount))
     }
 
     // MARK: - Border (shared BorderFX — a screen-edge neon frame)
@@ -210,6 +243,53 @@ public final class GridView: NSView {
         CATransaction.setDisableActions(true)
         borderLayer.frame = bounds
         CATransaction.commit()
+    }
+
+    /// EX-2: one render-source per cell. Bridges the workspace-vs-lens section
+    /// kinds into a uniform shape `layoutCells` builds `OverviewCell`s from.
+    /// `wsIndex` is the 0-based source WS (−1 for a lens, which spans
+    /// workspaces); `isActive` is the single-highlight already gated by the
+    /// tree's `headerActive` XOR, so the accent draw needs no change.
+    private struct CellSource {
+        let wsIndex: Int
+        let sectionType: SectionType
+        let sectionID: String
+        let label: String
+        let mode: String
+        let windows: [Window]
+        let isActive: Bool
+    }
+
+    /// EX-2: build the per-cell sources. Degrade (no section model here) → one
+    /// cell per workspace, byte-identical to pre-EX-2. Section model → one cell
+    /// per projected section (workspace + lens), in config order.
+    private func overviewCellSources() -> [CellSource] {
+        if sections.isEmpty {
+            return workspaces.map { ws in
+                CellSource(wsIndex: ws.index, sectionType: .workspace,
+                           sectionID: "ws:\(ws.index)", label: ws.name,
+                           mode: ws.layoutMode, windows: ws.windows,
+                           isActive: activeLens == nil && ws.isActive)
+            }
+        }
+        return sections.map { sec in
+            let isLens = sec.sectionType == .lens
+            // The projection doesn't carry a workspace's live layoutMode; look
+            // it up by source index (a lens has no layout engine → "").
+            let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
+                workspaces.first { $0.index == src } }
+            let mode = isLens ? "" : (srcWS?.layoutMode ?? "")
+            // EX-2 single-highlight — mirror of SidebarView.headerActive XOR:
+            //   lens cell lit ⟺ it IS the active lens;
+            //   workspace cell lit ⟺ no lens active AND its WS is active.
+            let active = isLens
+                ? (activeLens != nil && sec.label == activeLens)
+                : (activeLens == nil && srcWS?.isActive == true)
+            return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
+                              sectionType: sec.sectionType, sectionID: sec.id,
+                              label: sec.label, mode: mode,
+                              windows: sec.windows, isActive: active)
+        }
     }
 
     public func layoutCells() {
@@ -269,12 +349,20 @@ public final class GridView: NSView {
             for w in cell.windows { oldRects[w.id] = w.rect }
         }
         cells.removeAll()
-        guard !workspaces.isEmpty else {
+        // EX-2: window → home workspace index (0-based), from the unfiltered
+        // `workspaces` snapshot. A window thumb may sit in a LENS cell
+        // (wsIndex=-1) but still has a real home WS; picks resolve through this.
+        windowHomeWS = [:]
+        for ws in workspaces { for w in ws.windows { windowHomeWS[w.id] = ws.index } }
+        // EX-2: the per-cell sources — projected sections (workspace + lens)
+        // when the section model is active, else one per workspace (degrade).
+        let sources = overviewCellSources()
+        guard !sources.isEmpty else {
             reordering.removeAll(); stopReorderTimer()
             needsDisplay = true; return
         }
         let cols = effectiveCols
-        let rows = gridRowCount(wsCount: workspaces.count, cols: cols)
+        let rows = gridRowCount(wsCount: sources.count, cols: cols)
         let usableW = bounds.width  - 2 * gridOuterPad
         let usableH = bounds.height - 2 * gridOuterPad
         // Aspect from the screen we're being shown on (main display
@@ -312,7 +400,7 @@ public final class GridView: NSView {
         let originX = (bounds.width  - totalW) / 2
         let originY = (bounds.height - totalH) / 2
         let useScreen = screenFrame.width > 0 ? screenFrame : scr
-        for (i, ws) in workspaces.enumerated() {
+        for (i, src) in sources.enumerated() {
             let r = i / cols, c = i % cols
             let rowSlotY = originY + CGFloat(r)
                 * (cellSize.height + labelBand + gridCellGap)
@@ -323,10 +411,15 @@ public final class GridView: NSView {
                                   width: cellSize.width,
                                   height: cellSize.height)
             // Pre-compute window thumb rects in cell-local view
-            // coords so hit-testing and drawing agree byte-for-byte.
+            // coords so hit-testing and drawing agree byte-for-byte. A lens
+            // cell lays out its member windows by real frame (declared
+            // cosmetic — they may overlap when the lens is inactive). The
+            // isLensParked filter is a no-op for a lens cell's members (they
+            // match → never parked) and still drops parked windows from a
+            // workspace cell under an active lens.
             var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
-                for win in ws.windows
+                for win in src.windows
                 where !win.isLensParked {   // drop out-of-lens parked windows
                     guard let f = win.frame else { continue }
                     let wr = gridScaledWindowRect(
@@ -349,14 +442,21 @@ public final class GridView: NSView {
                 : cellRect.minY - labelH - gridLabelGap + 2
             let headerRect = NSRect(x: cellRect.minX, y: headerY,
                                     width: cellRect.width, height: labelH)
+            // A lens cell shows its bare label; a workspace cell decorates it
+            // with the index/emoji like before (gridLabel is workspace-only).
+            let cellLabel = src.sectionType == .lens
+                ? src.label
+                : gridLabel(name: src.label, idx: src.wsIndex)
             cells.append(OverviewCell(
-                wsIndex: ws.index,
+                wsIndex: src.wsIndex,
                 rect: cellRect,
                 headerRect: headerRect,
-                isActive: ws.isActive,
-                label: gridLabel(name: ws.name, idx: ws.index),
-                mode: ws.layoutMode,
-                windows: hits))
+                isActive: src.isActive,
+                label: cellLabel,
+                mode: src.mode,
+                windows: hits,
+                sectionType: src.sectionType,
+                sectionID: src.sectionID))
         }
         // FLIP: any id whose rect changed since the snapshot above
         // gets a new tween. Same-rect (most cells, every refresh)
@@ -513,7 +613,7 @@ public final class GridView: NSView {
                 if cell.isActive {
                     activeColor.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 1
-                } else if drag == nil, hoverWS == cell.wsIndex {
+                } else if drag == nil, hoverWSID == cell.sectionID {
                     pal.foreground.withAlphaComponent(0.7).setStroke()
                     path.lineWidth = 1.5
                 } else {
@@ -529,7 +629,7 @@ public final class GridView: NSView {
             // RailView.drawCell's hero/active/browse-target border
             // block): the active WS gets the primary accent, a browse
             // target (selected but not active) gets the secondary accent.
-            if drag == nil, kbSelectedWS == cell.wsIndex {
+            if drag == nil, kbSelectedID == cell.sectionID {
                 (cell.isActive ? pal.primary : pal.secondary).setStroke()
                 let kc = NSBezierPath(
                     roundedRect: cell.rect.insetBy(dx: 1.5, dy: 1.5),
@@ -564,8 +664,8 @@ public final class GridView: NSView {
                 // selected window inside the selected cell so the
                 // user sees WHICH window Space will lift. Drawn
                 // inside the cell clip so it can't escape.
-                if drag == nil, kbSelectedWS == cell.wsIndex,
-                   let s = kbSelectedWindow(), s.cell.wsIndex == cell.wsIndex
+                if drag == nil, kbSelectedID == cell.sectionID,
+                   let s = kbSelectedWindow(), s.cell.sectionID == cell.sectionID
                 {
                     // Accent fill + ring (covers the window front, like
                     // the rail) so the selection is unmistakable.
@@ -618,21 +718,25 @@ public final class GridView: NSView {
 
     public override func mouseMoved(with e: NSEvent) {
         let p = convert(e.locationInWindow, from: nil)
-        let ws = cells.first(where: { $0.headerRect.contains(p) })?.wsIndex
-        let cellWS = cells.first(where: {
-            $0.rect.contains(p) || $0.headerRect.contains(p) })?.wsIndex
-        if ws != hoverHeaderWS || cellWS != hoverWS {
-            hoverHeaderWS = ws
-            hoverWS = cellWS
+        let headerCell = cells.first(where: { $0.headerRect.contains(p) })
+        let anyCell = cells.first(where: {
+            $0.rect.contains(p) || $0.headerRect.contains(p) })
+        if headerCell?.sectionID != hoverHeaderID
+            || anyCell?.sectionID != hoverWSID {
+            hoverHeaderID = headerCell?.sectionID
+            hoverWSID = anyCell?.sectionID
             needsDisplay = true
         }
-        (ws != nil ? NSCursor.openHand : NSCursor.arrow).set()
+        // The open-hand (drag) cursor only over a SWAPPABLE header — a lens
+        // cell header is a click target, not a drag handle.
+        (headerCell.map { !$0.isLens } == true
+            ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     public override func mouseExited(with e: NSEvent) {
-        if hoverHeaderWS != nil || hoverWS != nil {
-            hoverHeaderWS = nil
-            hoverWS = nil
+        if hoverHeaderID != nil || hoverWSID != nil {
+            hoverHeaderID = nil
+            hoverWSID = nil
             needsDisplay = true
         }
         NSCursor.arrow.set()
@@ -647,6 +751,9 @@ public final class GridView: NSView {
         let p = convert(e.locationInWindow, from: nil)
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            // A lens cell has no per-WS layout picker (it spans workspaces) —
+            // mirror kbContextMenu's guard.
+            guard !cell.isLens else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
                                        workspaces: workspaces, palette: pal)
@@ -654,8 +761,11 @@ public final class GridView: NSView {
         }
         if let cell = cells.first(where: { $0.rect.contains(p) }),
            let wh = cell.windows.first(where: { $0.rect.contains(p) }) {
+            // Window ops target the window's HOME WS (resolved) — a thumb may
+            // sit in a lens cell whose wsIndex is −1.
             ViewContextMenu.showWindow(
-                at: scr, backend: backend, workspaceIndex: cell.wsIndex,
+                at: scr, backend: backend,
+                workspaceIndex: windowHomeWS[wh.id] ?? cell.wsIndex,
                 workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: "",
                 palette: pal
             ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
@@ -666,19 +776,23 @@ public final class GridView: NSView {
     /// — the WS header (layout picker) or a window thumb (window ops),
     /// anchored to that cell. No-op without a selection / backend.
     public func kbContextMenu() {
-        guard let backend, let win = window, let ws = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == ws }) else { return }
+        guard let backend, let win = window, let cell = kbSelectedCell else { return }
         func screenPt(_ r: NSRect) -> NSPoint {
             win.convertPoint(toScreen: convert(NSPoint(x: r.minX + 12, y: r.minY), to: nil))
         }
         if kbSelectedWindowIdx == -1 {
+            // A lens cell has no per-WS layout picker (it spans workspaces).
+            guard !cell.isLens else { return }
             ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
-                                       workspaceIndex: ws, workspaces: workspaces,
+                                       workspaceIndex: cell.wsIndex, workspaces: workspaces,
                                        palette: pal)
         } else if kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < cell.windows.count {
             let wh = cell.windows[kbSelectedWindowIdx]
+            // Window ops target the window's HOME WS (resolved) — a thumb may
+            // sit in a lens cell whose wsIndex is −1.
             ViewContextMenu.showWindow(
-                at: screenPt(wh.rect), backend: backend, workspaceIndex: ws,
+                at: screenPt(wh.rect), backend: backend,
+                workspaceIndex: windowHomeWS[wh.id] ?? cell.wsIndex,
                 workspaces: workspaces, pid: wh.pid, windowID: wh.id, title: "",
                 palette: pal
             ) { [weak self] ops, w, ws in self?.onRunWindowOps?(ops, w, ws) }
@@ -688,8 +802,10 @@ public final class GridView: NSView {
     public override func mouseDown(with e: NSEvent) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
         let p = convert(e.locationInWindow, from: nil)
-        // Header band → workspace drag (swap) or click (switch).
+        // Header band → workspace drag (swap) or click (switch). A LENS cell's
+        // header is a click target only (no swap handle) → activate the lens.
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
+            if cell.isLens { onPick?(.lens(label: cell.label)); return }
             pendingHeaderDown = (point: p, ws: cell.wsIndex)
             return
         }
@@ -703,7 +819,12 @@ public final class GridView: NSView {
         if let win = cell.windows.reversed()
             .first(where: { $0.rect.contains(p) })
         {
-            pendingDown = (point: p, hit: win, ws: cell.wsIndex)
+            // Arm with the WINDOW's home WS (resolved), NOT the cell's wsIndex
+            // (−1 for a lens cell) — the window pick switches to its home WS.
+            pendingDown = (point: p, hit: win,
+                           ws: windowHomeWS[win.id] ?? cell.wsIndex)
+        } else if cell.isLens {
+            onPick?(.lens(label: cell.label))
         } else {
             onPick?(.workspace(workspaceIndex: cell.wsIndex))
         }
@@ -756,8 +877,10 @@ public final class GridView: NSView {
         }
         guard var d = drag else { return }
         d.current = p
+        // A lens cell is never a move/swap target (no source workspace) — skip
+        // it so a drag can't land on it (EX-2, MUST-FIX #2 mouse path).
         d.dropTargetWS = cells.first(where: {
-            $0.rect.contains(p) || $0.headerRect.contains(p)
+            ($0.rect.contains(p) || $0.headerRect.contains(p)) && !$0.isLens
         })
             .map(\.wsIndex)
             .flatMap { $0 == d.sourceWS ? nil : $0 }
@@ -772,7 +895,8 @@ public final class GridView: NSView {
         // Resolve as click when the gesture never crossed threshold.
         if drag == nil {
             if let pd = pendingDown {
-                onPick?(.window(workspaceIndex: pd.ws,
+                // pd.ws is the WINDOW's home WS (resolved at mouseDown).
+                onPick?(.window(homeWorkspaceIndex: pd.ws,
                                 pid: pd.hit.pid,
                                 windowID: pd.hit.id))
             } else if let ph = pendingHeaderDown {
@@ -975,13 +1099,13 @@ public final class GridView: NSView {
     public func kbMoveSelection(dx: Int, dy: Int) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
         let cols = effectiveCols
-        guard let sel = kbSelectedWS,
-              let cur = cells.firstIndex(where: { $0.wsIndex == sel })
+        guard let sel = kbSelectedID,
+              let cur = cells.firstIndex(where: { $0.sectionID == sel })
         else { return }
         let ni = gridWrapIndex(index: cur, dx: dx, dy: dy,
                                cols: cols, count: cells.count)
         guard ni < cells.count else { return }
-        kbSelectedWS = cells[ni].wsIndex
+        kbSelectedID = cells[ni].sectionID
         // Arrow moves the WS cursor only — land on the header (WS-name)
         // slot (-1) so no window is auto-selected (Tab picks a window).
         // Matches the rail's browse behaviour: arrow ⇒ no window ring,
@@ -999,10 +1123,7 @@ public final class GridView: NSView {
     /// a lift is in flight.
     public func kbCycleWindow(forward: Bool) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
-        guard drag == nil,
-              let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel })
-        else { return }
+        guard drag == nil, let cell = kbSelectedCell else { return }
         kbSelectedWindowIdx = cycleSlotIndex(
             current: kbSelectedWindowIdx,
             windowCount: cell.windows.count, forward: forward)
@@ -1011,9 +1132,8 @@ public final class GridView: NSView {
 
 
     private func kbSelectedWindow() -> (cell: OverviewCell, hit: MiniWindowHit)? {
-        guard let sel = kbSelectedWS,
-              kbSelectedWindowIdx >= 0,
-              let cell = cells.first(where: { $0.wsIndex == sel }),
+        guard kbSelectedWindowIdx >= 0,
+              let cell = kbSelectedCell,
               !cell.windows.isEmpty
         else { return nil }
         let ordered = readingOrder(cell.windows)
@@ -1022,10 +1142,11 @@ public final class GridView: NSView {
     }
 
     private func syncKbDragToSelection() {
-        guard var d = drag, let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel })
-        else { return }
-        d.dropTargetWS = (sel == d.sourceWS) ? nil : sel
+        guard var d = drag, let cell = kbSelectedCell else { return }
+        // EX-2 MUST-FIX #2: a lens cell is never a valid drop target (no source
+        // workspace) — a keyboard-lifted window/workspace can't commit onto it.
+        d.dropTargetWS = (cell.isLens || cell.wsIndex == d.sourceWS)
+            ? nil : cell.wsIndex
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         d.current = at
         drag = d
@@ -1048,7 +1169,9 @@ public final class GridView: NSView {
     /// identically to a mouse-initiated drag.
     public func kbLift() {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
-        guard drag == nil, let s = kbSelectedWindow() else { return }
+        // A window inside a lens cell is not move-draggable (its cell has no
+        // source workspace — `wsIndex == -1`). Lifting works in workspace cells.
+        guard drag == nil, let s = kbSelectedWindow(), !s.cell.isLens else { return }
         let at = NSPoint(x: s.cell.rect.midX, y: s.cell.rect.midY)
         drag = OverviewDrag(
             sourceWS: s.cell.wsIndex,
@@ -1070,9 +1193,8 @@ public final class GridView: NSView {
     /// might intend "move WS-X's contents here, leaving X empty in
     /// return".
     public func kbLiftWorkspace() {
-        guard drag == nil, let sel = kbSelectedWS,
-              let cell = cells.first(where: { $0.wsIndex == sel })
-        else { return }
+        // A lens cell cannot be lifted for a swap (it has no source workspace).
+        guard drag == nil, let cell = kbSelectedCell, !cell.isLens else { return }
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         drag = OverviewDrag(
             sourceWS: cell.wsIndex,
@@ -1110,17 +1232,26 @@ public final class GridView: NSView {
             }
             return
         }
-        guard let sel = kbSelectedWS else { return }
-        // Return on the selected cell → zoom that cell out to full screen
-        // (②), then switch + close. A direct mouse click stays instant.
+        guard let cell = kbSelectedCell else { return }
+        // A LENS cell → activate the lens (no WS-zoom transition; a lens has
+        // no single workspace to zoom).
+        if cell.isLens {
+            onPick?(.lens(label: cell.label))
+            return
+        }
+        // Return on the selected workspace cell → zoom that cell out to full
+        // screen (②), then switch + close. A direct mouse click stays instant.
         if let s = kbSelectedWindow() {
-            commitSwitch(target: sel) { [weak self] in
-                self?.onPick?(.window(workspaceIndex: sel,
-                                      pid: s.hit.pid, windowID: s.hit.id))
+            commitSwitch(target: cell.wsIndex) { [weak self] in
+                // Window home WS (resolved) — a workspace cell's window homes
+                // to that WS; the lookup is robust regardless.
+                self?.onPick?(.window(
+                    homeWorkspaceIndex: self?.windowHomeWS[s.hit.id] ?? cell.wsIndex,
+                    pid: s.hit.pid, windowID: s.hit.id))
             }
         } else {
-            commitSwitch(target: sel) { [weak self] in
-                self?.onPick?(.workspace(workspaceIndex: sel))
+            commitSwitch(target: cell.wsIndex) { [weak self] in
+                self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))
             }
         }
     }

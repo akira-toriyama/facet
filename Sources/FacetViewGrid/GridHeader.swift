@@ -20,9 +20,9 @@ extension GridView {
         let activeColor = pal.primary
         let labelColor = pal.foreground.withAlphaComponent(0.85)
         let hb = cell.headerRect
-        let headerSel = (drag == nil && kbSelectedWS == cell.wsIndex
+        let headerSel = (drag == nil && kbSelectedID == cell.sectionID
                          && kbSelectedWindowIdx == -1)
-        let headerHover = (drag == nil && hoverHeaderWS == cell.wsIndex)
+        let headerHover = (drag == nil && hoverHeaderID == cell.sectionID)
         let headerHot = cell.isActive || headerSel || headerHover
         (cell.isActive
             ? activeColor.withAlphaComponent(headerHover ? 0.20 : 0.12)
@@ -42,12 +42,16 @@ extension GridView {
             ho.lineWidth = 1.5
             ho.stroke()
         }
-        drawGripDots(
-            in: NSRect(x: hb.minX + 4, y: hb.minY,
-                       width: gridHeaderGripW, height: hb.height),
-            tallExtent: 18,
-            color: headerHot ? activeColor : labelColor,
-            alpha: headerHot ? 0.85 : 0.5)
+        // Grip dots = the swap-drag affordance. A lens cell header is a
+        // click-only target (no swap), so suppress them for lens cells.
+        if !cell.isLens {
+            drawGripDots(
+                in: NSRect(x: hb.minX + 4, y: hb.minY,
+                           width: gridHeaderGripW, height: hb.height),
+                tallExtent: 18,
+                color: headerHot ? activeColor : labelColor,
+                alpha: headerHot ? 0.85 : 0.5)
+        }
         // WS name (line 1) + layout mode (line 2, accent), stacked
         // and vertically centred. Two lines give the header a
         // natural thickness and surface the same layout-mode info

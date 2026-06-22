@@ -23,7 +23,9 @@ import Foundation
 /// filter projected over the live windows, OR — in the degrade path (no
 /// sections configured) — a 1:1 mirror of one facet workspace (by-workspace
 /// stays a first-class citizen). The tree consumes this via
-/// `SidebarView.update(sections:)`; grid/rail render the `.workspace` kind.
+/// `SidebarView.update(sections:)`; the grid renders every section as a cell
+/// (workspace + lens, EX-2); the rail still renders workspace cells (lens
+/// cells land in EX-2b).
 ///
 /// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
 /// this section maps to (so `--focus` / `--move-to` hit the right WS),
@@ -41,9 +43,10 @@ public struct ProjectedSection: Sendable {
     public let windows: [Window]
     public let sourceWorkspaceIndex: Int?
     /// Which section kind produced this section — `.workspace` for the
-    /// spatial substrate (the degrade path + `type=workspace` sections;
-    /// the only kind grid/rail render, PR7), `.lens` for a saved-filter
-    /// section (tree-only, emphasised when active, PR5). Defaulted so the
+    /// spatial substrate (the degrade path + `type=workspace` sections),
+    /// `.lens` for a cross-workspace saved-filter section. Both kinds render
+    /// as cells in the tree + grid (EX-2), the lit one being the active
+    /// section; the rail renders lens cells in EX-2b. Defaulted so the
     /// degrade path + existing 4-arg call sites need no edit.
     public let sectionType: SectionType
 
@@ -89,10 +92,24 @@ public struct OverviewCell {
     public let mode: String          // layout engine (bsp / stack), shown in header
     public let windows: [MiniWindowHit]
     public let isHero: Bool
+    /// Which section kind this cell renders — `.workspace` (the spatial
+    /// substrate) or `.lens` (a cross-workspace saved-filter section, EX-2).
+    /// Defaulted so every existing 8-arg call site compiles unchanged.
+    public let sectionType: SectionType
+    /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /
+    /// `"section:<declOrder>:<label>"`) — stable identity for routing /
+    /// signatures. Empty for legacy workspace-built cells.
+    public let sectionID: String
+
+    /// True for a `type=lens` cell — a cross-workspace section, never a
+    /// move/swap target (no source workspace; `wsIndex == -1`).
+    public var isLens: Bool { sectionType == .lens }
 
     public init(wsIndex: Int, rect: CGRect, headerRect: CGRect,
                 isActive: Bool, label: String, mode: String,
-                windows: [MiniWindowHit], isHero: Bool = false) {
+                windows: [MiniWindowHit], isHero: Bool = false,
+                sectionType: SectionType = .workspace,
+                sectionID: String = "") {
         self.wsIndex = wsIndex
         self.rect = rect
         self.headerRect = headerRect
@@ -101,6 +118,8 @@ public struct OverviewCell {
         self.mode = mode
         self.windows = windows
         self.isHero = isHero
+        self.sectionType = sectionType
+        self.sectionID = sectionID
     }
 }
 

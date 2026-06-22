@@ -46,6 +46,12 @@ public final class RailView: NSView {
 
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
+    /// EX-2: the projected section list. The rail does not yet consume it
+    /// (rail section rendering is EX-2b); stored to satisfy the `OverviewView`
+    /// protocol so the Controller feed is symmetric with the grid.
+    public var sections: [ProjectedSection] = []
+    /// EX-2: the active lens label (rail consumes it in EX-2b).
+    public var activeLens: String?
     /// Keyboard "browse" cursor — the workspace the centre HERO
     /// previews (←/→ move it, Return commits). Decoupled from
     /// `activeIndex` so browsing doesn't switch until commit. Seeded to

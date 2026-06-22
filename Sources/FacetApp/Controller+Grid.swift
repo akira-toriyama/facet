@@ -67,25 +67,32 @@ extension Controller {
             cols: config.effectiveGridCols,
             labelPosition: config.effectiveGridLabelPosition)
         gv.onPick = { [weak self, bk = backend] pick in
-            // Dispatch the WM action off-main and dismiss in
-            // parallel so the overlay clears immediately — the
-            // workspace-switch animation lands as the overlay fades
-            // out.
+            // EX-2: route every pick through the validated `activateSection`
+            // throughline (updates the currentActiveSection mirror on main,
+            // clears any active lens on a workspace pick) — never
+            // `bk.switchWorkspace` directly. The dismiss runs in parallel so
+            // the overlay clears immediately as the switch animation lands.
             switch pick {
             case .workspace(let ws):
-                // Grid cell click without a specific window — let
-                // the backend auto-focus the destination's
-                // last-touched window (or activate Finder if empty).
-                cliQueue.async {
-                    bk.switchWorkspace(toIndex: ws, autoFocus: true)
+                // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
+                // is 1-based → +1. autoFocus lets the backend focus the
+                // destination's last-touched window (or Finder if empty).
+                self?.activateSection(.workspace(ws + 1), autoFocus: true)
+            case .lens(let label):
+                self?.activateSection(.lens(label), autoFocus: true)
+            case .window(let home, let pid, let id):
+                // `home` is the WINDOW's home WS (0-based), resolved from the
+                // snapshot — correct whether the thumb sat in a workspace OR a
+                // lens cell. Switch there (clears any lens; runs on main, updates
+                // the mirror), then re-assert focus on the pick. Guard home >= 0
+                // so an unresolvable window focuses without a bogus .workspace(0).
+                if home >= 0 {
+                    self?.activateSection(.workspace(home + 1), autoFocus: false)
                 }
-            case .window(let ws, let pid, let id):
                 cliQueue.async {
-                    bk.switchWorkspace(toIndex: ws)
-                    // Re-assert until the WM's post-switch default
-                    // focus settles on our pick. Title is empty —
-                    // the grid doesn't surface titles, so focus
-                    // falls back to serverID match.
+                    // Re-assert until the WM's post-switch default focus settles
+                    // on our pick. Title is empty — the grid doesn't surface
+                    // titles, so focus falls back to serverID match.
                     let win = Window(
                         id: id, pid: pid, appName: "",
                         title: "", isFocused: false,
@@ -105,11 +112,10 @@ extension Controller {
         // -- Present + fade in --
         presentOverview(overlay, view: gv)
 
-        // Initial keyboard selection: active workspace if visible,
-        // else first cell.
-        gv.kbSelectedWS = lastWorkspaces.first(where: {
-            $0.isActive
-        })?.index ?? lastWorkspaces.first?.index
+        // Initial keyboard selection: the active (lit) cell — the active
+        // workspace, or the active lens — else the first cell. (EX-2: seeded by
+        // section id after layout, since cells now include lens sections.)
+        gv.kbSeedToActiveCell()
 
         // -- Local key monitor: the shared overview verbs (Esc / Return
         // / Space / Tab / 'm') + the grid's own 2-D arrow nav. The
