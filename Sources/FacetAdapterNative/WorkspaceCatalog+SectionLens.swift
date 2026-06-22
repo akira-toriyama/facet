@@ -57,9 +57,8 @@ extension WorkspaceCatalog {
     /// Apply the active section-lens across ALL workspaces on the current mac
     /// desktop given the adapter's match verdict. `visibleIDs` is the set of
     /// members (from any workspace) whose live `Window` passes the lens
-    /// `match`; everything else parks. Mirrors the tag-mode `setLens`
-    /// park/restore filter but is string-match driven + cross-workspace scoped
-    /// (EX-1 exclusive model), and idempotent: re-running with an unchanged
+    /// `match`; everything else parks. String-match driven + cross-workspace
+    /// scoped (EX-1 exclusive model), and idempotent: re-running with an unchanged
     /// verdict returns an empty plan (so the continuous re-park can call it
     /// every reconcile cheaply). Sticky / stashed windows are park-exempt
     /// (`isParkEligible`); a user-hidden (Cmd+H) member is left alone (it
@@ -100,7 +99,6 @@ extension WorkspaceCatalog {
 
     /// The cross-workspace union currently shown by the active section-lens:
     /// every tracked, tileable window NOT parked out of the lens. The
-    /// section-model twin of tag-mode's `visibleNonFloatingMembers()`, but the
     /// "in lens" decision is the already-applied `lensParkedMembers` set (the
     /// adapter evaluated the match and parked the rest). Spans ALL workspaces of
     /// the current mac desktop — there is deliberately NO active-workspace clause.
@@ -115,7 +113,7 @@ extension WorkspaceCatalog {
     }
 
     /// Tiled frames for the active section-lens union — one stateless engine over
-    /// the cross-workspace set (the section-model twin of `tagUnionFrames`).
+    /// the cross-workspace set.
     /// `layout` is the lens's resolved stateless engine name (see `LensLayout`).
     func sectionLensUnionFrames(layout: String, in rect: CGRect) -> [WindowID: CGRect] {
         guard let engine = LayoutRegistry.engine(named: layout) else { return [:] }

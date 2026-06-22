@@ -526,9 +526,9 @@ all-`workspace` config converges to the same result. The gate is
 projection overlays the window's workspace name (`ProjectedWindowFields`) so
 `match='workspace=Dev'` resolves at the seam. A malformed match is
 loud-but-non-fatal (skipped + a diagnostic caret), matching the CLI
-philosophy. The tag-mode **lens** mask itself is expressible as a filter
-(`TagModel.lensFilter`, parity-only — the `UInt64` bitmask stays
-authoritative; the filter form is a dead-but-tested read-only projection).
+philosophy. A window's free-form tags surface to the filter as the `tag`
+field, so a lens `match='tag~=web'` shows every window carrying the `web`
+tag (`facet window --tag web`).
 
 ### The mutating read-path (`ApplyResolver`, pure)
 
@@ -548,10 +548,9 @@ exclusive** (EX-0): the catalog anchor-parks the out-of-lens windows across
 ALL workspaces (not just the active one) and the snapshot flags each
 `Window.isLensParked`, so the tree dims + `lens`-badges those rows while
 grid / rail drop their thumbnails — one catalog authority, no view-side
-`match` recompute. The read-path is **LIVE under `[grouping] by =
-"workspace"`**; under `by = "tag"` sections are ignored
-(`effectiveMacDesktopSectionConfigs` clamps to empty — a tag world owns its
-own lens instead).
+`match` recompute. The read-path is the sole window-grouping model: a mac
+desktop with `[[desktop.N.section]]` blocks renders them, and a desktop
+with none degrades 1:1 to the built-in by-workspace tree.
 
 ### Two tiling machineries, one active section
 

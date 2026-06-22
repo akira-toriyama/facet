@@ -127,11 +127,9 @@ extension SidebarView {
     /// the drop target through the workspace order instead of moving
     /// the selection.
     public func kbToggleLift() {
-        // Tag mode is a flat list with no workspace to move a window / swap a
-        // header into — the lift gesture is a no-op there. The section model
-        // DOES support lift (PR8): a window-row lift commits an apply-based
-        // MOVE; a header lift no-ops (header swap stays by-workspace-only).
-        guard !tagModeActive else { return }
+        // The section model supports lift (PR8): a window-row lift commits an
+        // apply-based MOVE; a header lift no-ops (header swap stays
+        // by-workspace-only).
         if kbLifted == nil {
             guard let s = kbSel else { return }
             kbLifted = s

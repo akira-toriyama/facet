@@ -66,7 +66,7 @@ extension WorkspaceCatalog {
                                    ignore: Set<WindowID> = [],
                                    deferred: Set<WindowID> = [],
                                    requireConfirm: Bool = false,
-                                   tags: [WindowID: UInt64] = [:])
+                                   tags: [WindowID: Set<String>] = [:])
         -> ReconcileResult
     {
         let liveByID = Dictionary(uniqueKeysWithValues:
@@ -181,7 +181,7 @@ extension WorkspaceCatalog {
             }
             pendingAddCandidates.remove(id)
             windowMap[id] = WindowSlot(
-                workspace: activeIndex, pid: w.pid, tags: tags[id] ?? 0)
+                workspace: activeIndex, pid: w.pid, tags: tags[id] ?? [])
             examinedIDs.insert(id)
             added += 1
             addedIDs.append(id)

@@ -62,12 +62,7 @@ extension Controller {
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
-                case let s where s.hasPrefix("lens:"):
-                    self.dispatchLensTarget(
-                        String(s.dropFirst("lens:".count)))
-
-                // Section/lens model (PR6) — distinct from the tag-bitmask
-                // `lens:` above: activate / clear the ACTIVE lens (a
+                // Section/lens model: activate / clear the ACTIVE lens (a
                 // `type="lens"` section, keyed by its label). The label can
                 // hold any character (incl. `:`), so the whole remainder is
                 // the label — no further parsing.
@@ -139,7 +134,7 @@ extension Controller {
                     self.runBackendCommand { bk in
                         bk.toggleTagOnFocusedWindow(name) ? nil
                             : "window --toggle-tag \(name): "
-                                + "no focused window / not tag mode"
+                                + "no focused window"
                     }
 
                 case let s where s.hasPrefix("window-tag:"):
@@ -147,7 +142,7 @@ extension Controller {
                     self.runBackendCommand { bk in
                         bk.addTagToFocusedWindow(name) ? nil
                             : "window --tag \(name): "
-                                + "no focused window / not tag mode"
+                                + "no focused window"
                     }
 
                 case let s where s.hasPrefix("window-untag:"):
@@ -180,48 +175,20 @@ extension Controller {
                                 return nil
                             case .noFocus:
                                 return "window --retag \(shown): "
-                                    + "no focused window / not tag mode"
+                                    + "no focused window"
+                            // EX-4: tags are a free-form Set<String> (no
+                            // vocabulary, no cap), so `retagWindow` only ever
+                            // returns `.retagged`/`.noFocus` now — these two
+                            // are unreachable but kept so the switch stays
+                            // exhaustive over `WindowRetagResult`.
                             case .oldUndefined:
                                 return "window --retag \(shown): "
                                     + "no such tag \(parts[0])"
                             case .vocabFull:
                                 return "window --retag \(shown): "
-                                    + "vocabulary full (63 tags)"
+                                    + "vocabulary full"
                             }
                         }
-                    }
-
-                case let s where s.hasPrefix("tag-add:"):
-                    let name = String(s.dropFirst("tag-add:".count))
-                    self.runBackendCommand { bk in
-                        bk.addTag(name) ? nil
-                            : "tag --add \(name): not tag mode, "
-                                + "or vocabulary full (63 tags)"
-                    }
-
-                case let s where s.hasPrefix("tag-remove:"):
-                    let name = String(s.dropFirst("tag-remove:".count))
-                    self.runBackendCommand { bk in
-                        bk.removeTag(name) ? nil
-                            : "tag --remove \(name): no such tag, "
-                                + "or not tag mode"
-                    }
-
-                case let s where s.hasPrefix("tag-rename:"):
-                    // Payload OLD:NEW — neither half can contain ':'
-                    // (the CLI's parseTagName forbids it), so one split
-                    // is unambiguous.
-                    let body = String(s.dropFirst("tag-rename:".count))
-                    let parts = body
-                        .split(separator: ":", maxSplits: 1,
-                               omittingEmptySubsequences: false)
-                        .map(String.init)
-                    let shown = body.replacingOccurrences(of: ":", with: " ")
-                    self.runBackendCommand { bk in
-                        (parts.count == 2
-                            && bk.renameTag(parts[0], to: parts[1])) ? nil
-                            : "tag --rename \(shown): no such tag, "
-                                + "or the new name is already in use"
                     }
 
                 case let s where s.hasPrefix("scratchpad-stash:"):
@@ -365,29 +332,11 @@ extension Controller {
         }
     }
 
-    /// grid / rail are workspace-only surfaces; under `[grouping]
-    /// by="tag"` they must never appear (tag mode shows only the
-    /// tree). The CLI rejects `--view/--hide/--toggle grid|rail`
-    /// (exit 2) and `fatalConfigErrors` rejects a `default-view="grid"`
-    /// startup, so a grid/rail op only reaches a dispatch method here
-    /// via a stale chord or a hand-rolled DNC post that slipped past
-    /// those gates. Returns true → the caller should no-op the op.
-    /// `Log.line` (not `setError`) — it's a should-never-happen
-    /// backstop, not a user-facing error worth a status toast.
-    private func rejectsWorkspaceOnlyView(_ name: String) -> Bool {
-        guard config.effectiveGrouping == .tag,
-              name == "grid" || name == "rail" else { return false }
-        Log.line("\(name) is a workspace-only view — ignored under "
-            + "[grouping] by=\"tag\" (should have been rejected at the CLI)")
-        return true
-    }
-
     /// Open (or activate) ``name``. Idempotent — re-issuing the
     /// same view doesn't toggle it off; use ``dispatchToggle`` /
     /// ``dispatchHide`` for that.
     private func dispatchView(_ name: String, geom: NSRect?,
                               loadingMs: Int? = nil, edge: RailEdge? = nil) {
-        guard !rejectsWorkspaceOnlyView(name) else { return }
         // Views are mutually exclusive: requesting any non-grid view
         // drops the full-screen grid overlay first. This is also how
         // the grid closes on a mac-desktop switch — the chord ctrl+→
@@ -437,7 +386,6 @@ extension Controller {
     }
 
     private func dispatchHide(_ name: String) {
-        guard !rejectsWorkspaceOnlyView(name) else { return }
         switch name {
         case "tree": setHidden(true)
         case "grid": hideGrid()
@@ -487,19 +435,6 @@ extension Controller {
             }
         default:       dispatchWorkspace(Int(arg) ?? 0)
         }
-    }
-
-    /// Route a `lens:` payload (M11-3 tag mode; #228 multi-tag). Parsing
-    /// the `all` / `VERB:CSV` wire form lives in the pure, unit-tested
-    /// `LensSpec.parse`; the backend resolves the names strictly and
-    /// surfaces an unknown-tag error itself, so this just dispatches and
-    /// schedules a repaint.
-    private func dispatchLensTarget(_ arg: String) {
-        guard let spec = LensSpec.parse(arg) else {
-            Log.debug("dispatchLensTarget malformed=\(arg) — ignored")
-            return
-        }
-        runBackendCommand { bk in bk.setLens(spec); return nil }
     }
 
     /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`
@@ -664,7 +599,6 @@ extension Controller {
     }
 
     private func dispatchToggle(_ name: String) {
-        guard !rejectsWorkspaceOnlyView(name) else { return }
         switch name {
         // Toggling ON opens the tree active (same entry as `--view
         // tree`); OFF hides it. Mirrors the show path so a toggle

@@ -408,17 +408,7 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(s[1]?[0].match, "(((unbalanced and ~=~ ???")
     }
 
-    // MARK: - effective accessor (tag-mode clamp)
-
-    func testEffectiveSectionsEmptyInTagMode() {
-        var c = FacetConfig()
-        c.grouping = "tag"
-        c.macDesktopSectionConfigs =
-            [1: [DesktopSection(type: .lens, label: "W", match: "tag~=w")]]
-        XCTAssertTrue(c.effectiveMacDesktopSectionConfigs.isEmpty)
-        // raw is retained (read-through-effective idiom).
-        XCTAssertFalse(c.macDesktopSectionConfigs.isEmpty)
-    }
+    // MARK: - effective accessor
 
     func testEffectiveSectionsPassThroughInWorkspaceMode() {
         var c = FacetConfig()
@@ -427,7 +417,7 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(c.effectiveMacDesktopSectionConfigs[1]?[0].label, "W")
     }
 
-    // MARK: - load() wiring (raw retained; tag-mode loud-log + effective clamp)
+    // MARK: - load() wiring (raw decode → effective pass-through)
 
     private func loadConfig(_ toml: String) -> FacetConfig {
         let path = NSTemporaryDirectory()
@@ -451,25 +441,5 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(c.macDesktopSectionConfigs[1]?[0].label, "Web")
         XCTAssertEqual(c.effectiveMacDesktopSectionConfigs[1]?[0].apply,
                        [.addTag("web")])
-    }
-
-    /// Tag mode RETAINS the raw decode (sections are still parsed into the
-    /// dict — proves load() doesn't drop them at parse) but the effective
-    /// accessor clamps to empty. The load-time loud-log fires on this path.
-    func testLoadTagModeRetainsRawButClampsEffective() {
-        let c = loadConfig("""
-        [grouping]
-        by = "tag"
-        [[tag]]
-        name = "web"
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Web"
-        match = 'tag~=web'
-        """)
-        XCTAssertFalse(c.macDesktopSectionConfigs.isEmpty,
-                       "raw decode retained even in tag mode")
-        XCTAssertTrue(c.effectiveMacDesktopSectionConfigs.isEmpty,
-                      "tag mode clamps sections to empty")
     }
 }

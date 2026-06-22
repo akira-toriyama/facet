@@ -236,12 +236,6 @@ final class Controller: NSObject {
     /// ``exitActive(restore: true)`` can hand focus back.
     var prevApp: NSRunningApplication?
     private let searchDelegate = SearchFieldDelegate()
-    /// Whether `openTagEditor` itself flipped the app to `.regular` + active
-    /// (the panel was passive — right-click path) vs. found it already
-    /// in keyboard nav (the `m` path). Drives `finishTagEditor`: only the former
-    /// reverts the activation policy + restores the previous app; the latter
-    /// re-keys the tree panel to resume keyboard nav. (#4 tag-edit panel.)
-    var tagEditorSelfActivated = false
 
     // MARK: - Subscription / polling
 
@@ -348,12 +342,6 @@ final class Controller: NSObject {
         if isKey {
             if !sidebarView.kbNav { sidebarView.enterKbNav() }
         } else {
-            // The tag-edit checklist (#4) just took key — its own panel is
-            // now key, so the tree resigned. Don't tear down kbNav: it's a
-            // hand-off to our own modal, not a focus loss. `finishTagEditor`
-            // re-keys the tree on close, resuming nav. Without this guard the
-            // panel would self-destruct the moment the editor opened.
-            if TagEditPanel.shared.isOpen { return }
             // Drop kbNav. If we got here via the kb-nav exitActive
             // path, exitKbNav has already run and
             // this is a harmless idempotent call.
@@ -1034,8 +1022,7 @@ final class Controller: NSObject {
                                           macDesktop: macDesktopOrdinal)
         } else {
             contentH = sidebarView.update(wss, titles: titles,
-                                          macDesktop: macDesktopOrdinal,
-                                          tagMode: config.effectiveGrouping == .tag)
+                                          macDesktop: macDesktopOrdinal)
         }
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
@@ -1054,8 +1041,8 @@ final class Controller: NSObject {
     /// event lands. Errors are swallowed: the status file is a
     /// debugging convenience, not a correctness path.
     private func writeStatus(_ wss: [Workspace]) {
-        // P6: the catalog reads (stashedScratchpads / definedTagNames /
-        // currentLens) run on `cliQueue` — the single catalog
+        // P6: the catalog reads (stashedScratchpads / definedTagNames)
+        // run on `cliQueue` — the single catalog
         // serialization point — alongside the file write. `wss` is an
         // immutable value snapshot, so `entries` is catalog-free. The
         // status file is a debugging convenience, so the tiny
@@ -1081,7 +1068,6 @@ final class Controller: NSObject {
                 workspaces: entries,
                 stashed: bk.stashedScratchpads(),
                 tags: bk.definedTagNames(),
-                lens: bk.currentLens(),
                 lastError: lastError,
                 timestamp: ISO8601DateFormatter().string(from: Date()))
             do { try snap.write() } catch {

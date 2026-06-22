@@ -40,30 +40,25 @@ extension NativeAdapter {
     /// top). Floating windows aren't here — they restore to their
     /// recorded original position (handled in `animateSwitch`).
     ///
-    /// EX-0.2 fix: the section-lens and tag-mode union branches mirror
+    /// EX-0.2 fix: the section-lens union branch mirrors
     /// `applyLayout` so the animated paths (`animateSwitch`, `animateRetile`,
     /// `directionalNeighbor`) compute the SAME frame set as the instant path.
     /// Without this the animated path was lens-blind: it computed per-WS frames
     /// while `applyLayout` tiled the cross-workspace union, so with
     /// `[animation] enabled=true` AND an active section lens the two paths
     /// disagreed. Self-corrects via settle reconcile (animation is opt-in), but
-    /// violates トミー's 負債を残さない principle. Both branches ignore `n1Based`
+    /// violates トミー's 負債を残さない principle. The branch ignores `n1Based`
     /// (the union spans all workspaces), symmetric with `applyLayout`.
     func targetFrames(for n1Based: Int, in rect: CGRect)
         -> [WindowID: CGRect]
     {
         // Section-lens union (EX-1 exclusive model): tile the cross-workspace
-        // in-lens set with the lens's stateless engine. Sits BEFORE the tag
-        // branch so section-lens always wins when active, matching `applyLayout`.
+        // in-lens set with the lens's stateless engine when active, matching
+        // `applyLayout`.
         if let label = catalog.activeSectionLens {
             // EX-0.3: resolvedLensLayout honours the runtime override (activeSectionLensLayout).
             return catalog.sectionLensUnionFrames(layout: resolvedLensLayout(forLabel: label),
                                                   in: rect)
-        }
-        // Tag mode (M11-3): one global engine over the visible lens union.
-        // Closes the pre-existing animation bypass for tag mode.
-        if catalog.grouping == .tag {
-            return catalog.tagUnionFrames(in: rect)
         }
         let mode = catalog.mode(of: n1Based)
         switch mode {

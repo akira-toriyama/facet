@@ -76,16 +76,6 @@ public protocol TreeController: AnyObject, Sendable {
                       on window: Window,
                       workspaceIndex: Int)
 
-    /// Open the per-window tag-edit checklist (`TagEditPanel`) for `id` —
-    /// the GUI "Tag" menu item (#4, tag mode). The header mirrors the tree's
-    /// window row: `pid` resolves the app icon, `appName` / `title` are its
-    /// two text lines. `currentTags` seeds the checked rows; `screenPt` is
-    /// where the ops menu was raised (the panel anchors there). The
-    /// Controller owns the floating panel, its key focus + the activation
-    /// policy dance.
-    func openTagEditor(forWindow id: WindowID, pid: Int, appName: String,
-                       title: String, currentTags: [String], at screenPt: CGPoint)
-
     /// Section/lens model (PR6): the user clicked a `type=lens` section
     /// header in the tree. TOGGLE it as the active lens — activate `label`,
     /// or clear if it is already active. The controller validates against
@@ -111,11 +101,4 @@ public protocol TreeController: AnyObject, Sendable {
     /// section it already matched (multi-match). No-op when the dest lens is
     /// drop-inert / the window can't satisfy its `match`.
     func applyAdd(windowID: WindowID, toSectionID: String)
-
-    /// Open the lens selector (`TagEditPanel` lens variant) — the tag-world
-    /// header's "Select tags" item (tag mode). A checklist of the tag
-    /// vocabulary whose checked rows are the current lens; toggling a row
-    /// adds / removes that tag from the lens (`setLens`). The Controller
-    /// owns the floating panel, key focus + the activation-policy dance.
-    func openLensSelector(at screenPt: CGPoint)
 }

@@ -229,7 +229,7 @@ and change **how many** windows share it (`--inc-master` /
 | Drag a workspace header onto another (tree) | swap the two workspaces' contents |
 | Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel (session-only — set `[tree]` geometry in config to pin it) |
 | Double-click the panel header (tree) | reset position + size to the `[tree]` config geometry (or the built-in default) |
-| Right-click (tree) | context menu, by target: window row → actions · workspace header → layout picker (in tag mode the header is the **tag-world** — one menu with **Layout** + **Select tags** to pick the lens) · `Desktop N` band → Search / Manage tags (the `s` / `t` modes) |
+| Right-click (tree) | context menu, by target: window row → actions · workspace header → layout picker · `Desktop N` band → Search (the `s` mode) |
 | Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
@@ -243,7 +243,7 @@ the CLI — see [CLI](#cli) below.
 
 The tree opens directly in keyboard nav — facet takes key focus
 the moment it appears (Spotlight-style), so the arrow keys,
-`Return`, search (`s`) and tag-manage (`t`) work right away.
+`Return` and search (`s`) work right away.
 Trade-off: facet briefly becomes the active app (Dock + Cmd-Tab)
 while the panel is up. Acting on a window — click a row or press
 `Return` on a selection — hands key **back** first, so focusing a
@@ -252,7 +252,7 @@ same-app window still works; facet then drops to the background.
 tree**.
 
 You can also **right-click the `Desktop N` header** for a menu with
-**Search** (`s`) and, under tag grouping, **Manage tags** (`t`).
+**Search** (`s`).
 
 | Key | Action |
 |---|---|
@@ -424,25 +424,15 @@ Frequently-touched keys:
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
   workspaces automatically; **any** present → **opt-in**: facet manages
   only the mac desktops that have a section block; a mac desktop without
-  one is left untouched (windows as-is, panel hidden there). Section model
-  is `by = "workspace"` only (ignored under `by = "tag"`). All three views
+  one is left untouched (windows as-is, panel hidden there). All three views
   render the same section list — lens sections appear as cells in the tree,
   grid, **and** rail, with exactly one section highlighted; on the rail the
   active section is the centre hero (an active lens shows its union there).
-- `[grouping] by` — `workspace` (default) or `tag`. `tag` swaps the
-  per-mac-desktop workspace list for a dwm-style **tag world**: a window
-  can carry multiple tags, and the **lens** (`facet lens`) picks which
-  tag set is shown (windows outside the lens are anchor-parked, same as a
-  hidden workspace). Unknown values clamp to `workspace`. In tag mode the
-  tree is the only view — `grid` / `rail` and `default-view = "grid"`
-  exit `2` (the grid *layout* is still fine). See [Tag mode](#tag-mode).
-- `[[tag]]` tables (`name = "..."`) — the **startup** tag-vocabulary
-  seed for `by = "tag"` mode only (ignored in workspace mode). Declaration
-  order fixes each tag's chip order on a window's row. Tags are assigned
-  at **runtime** (session-only), not in config — there is no static
-  window→tag mapping; edit live with the `facet window --tag` / `facet
-  tag` / `facet lens` verbs ([Tag mode](#tag-mode)). Names starting with
-  `_` are reserved (`_default` is an internal floor every window carries).
+- **Per-window tags** carry no config — they are free-form strings
+  attached at **runtime** (session-only) with `facet window --tag NAME`
+  (and `--untag` / `--toggle-tag` / `--retag`). A `type = "lens"` section
+  whose `match` contains `tag~=NAME` shows every window carrying NAME;
+  `facet query --tags` lists every tag currently in use.
 
 ## CLI
 
@@ -477,10 +467,10 @@ facet window --inc-master|--dec-master       # master window count ±1 (master-*
 
 # --view tree opens directly in keyboard nav: facet takes focus
 # immediately (Spotlight-style) so the arrows / Return / search (s)
-# / tag-manage (t) work at once. Acting on a window (click a row or
-# Return) hands key back first, so same-app focus still works. You
-# can also right-click the "Desktop N" header for Search / Manage
-# tags. (grid is always key/active by construction; rail is passive.)
+# work at once. Acting on a window (click a row or Return) hands key
+# back first, so same-app focus still works. You can also right-click
+# the "Desktop N" header for Search. (grid is always key/active by
+# construction; rail is passive.)
 
 # Workspace ops
 facet workspace --focus N               # switch to workspace N (1-indexed)
@@ -533,11 +523,8 @@ facet query --windows --filter EXPR  # post-filter that array with a
                                   # all windows (exit 0). e.g.:
                                   #   facet query --windows \
                                   #     --filter 'tag~=web and not floating'
-facet query --tags                # defined tag vocabulary as a JSON array
-                                  # (declaration order); [] in workspace mode
-facet query --lens                # current lens as JSON {"tags":[…],
-                                  # "showsAll":bool}; null in workspace mode
-                                  # (showsAll = true for a show-everything lens)
+facet query --tags                # every tag currently in use, as a sorted
+                                  # JSON array ([] until a window is tagged)
 
 # Server controls
 facet --theme NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)
@@ -553,43 +540,20 @@ message — typos fail loudly rather than silently no-op. Shorthand
 (shell aliases / hotkey bindings) is your environment's job, not
 facet's.
 
-### Tag mode
+### Window tags
 
-With `[grouping] by = "tag"` (see [Configuration](#configuration)),
-facet replaces the per-mac-desktop workspace list with a dwm-style
-**tag world**: a window can carry multiple tags, and the **lens**
-picks which tags are shown (windows outside the lens are
-anchor-parked, like a hidden workspace). Tags are assigned at
-runtime and are session-only; `[[tag]]` is just the startup
-vocabulary seed. The tree is the only view in tag mode.
+A window can carry any number of **free-form string tags** — created
+on first use, session-only, attached live from the CLI. They feed lens
+filters: a `type = "lens"` section whose `match` contains `tag~=NAME`
+(see [Configuration](#configuration)) shows every window carrying NAME.
 
 ```sh
-# Tag the focused window (the vocabulary auto-grows if NAME is new)
 facet window --tag NAME           # add a tag to the focused window
 facet window --untag NAME         # remove a tag from the focused window
 facet window --toggle-tag NAME    # flip a tag on the focused window
-facet window --retag OLD NEW      # rename a tag on the focused window
-
-# Lens — which tags the tree shows (NAME is positional, the same verb
-# that activates a lens section in workspace mode)
-facet lens A[,B]                  # show exactly these tags (the old --only)
-facet lens --add A[,B]            # add tags to the shown set
-facet lens --remove A[,B]         # drop tags from the shown set
-facet lens --toggle A[,B]         # flip tags in the shown set
-facet lens --all                  # show every window
-facet lens --clear                # drop the lens → show every window
-                                  # (same result as --all in tag mode)
-
-# Tag vocabulary — the named tags available to assign
-facet tag --add NAME              # define a new tag
-facet tag --remove NAME           # delete a tag (drops it off every window)
-facet tag --rename OLD NEW        # rename a tag across the vocabulary
+facet window --retag OLD NEW      # replace one tag with another on it
+facet query --tags                # every tag currently in use (sorted JSON)
 ```
-
-These are workspace-mode no-ops; tag mode is on only under
-`[grouping] by = "tag"`. Inspect the live state with
-`facet query --tags` (vocabulary) and `facet query --lens` (current
-lens).
 
 ### Hotkey integration
 

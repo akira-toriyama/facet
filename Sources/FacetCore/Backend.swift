@@ -88,48 +88,7 @@ public enum InsertEdge: Sendable, Equatable {
     case left, right, top, bottom
 }
 
-/// A lens command (M11-3 tag mode). The lens is the set of tags
-/// currently shown; these change it. Each verb takes one OR MORE tag
-/// names (#228, comma-joined on the CLI): `only` shows exactly that set
-/// (replace), `add` unions them in, `remove` strips them out, `toggle`
-/// XORs each, `all` shows every tag. Names are resolved STRICTLY — one
-/// undefined name rejects the whole command (no silent drop). User verbs
-/// touch user bits only; emptying the lens falls back to the `_default`
-/// floor (show untagged). Tag-mode only — a no-op under `by =
-/// "workspace"`.
-public enum LensSpec: Sendable, Equatable {
-    case only([String])
-    case add([String])
-    case remove([String])
-    case toggle([String])
-    case all
-
-    /// Parse a `lens:` DNC payload (#228) into a spec. The payload is
-    /// `all` or `VERB:CSV` where VERB ∈ only/add/remove/toggle and CSV is
-    /// a comma-joined tag list. Tag names can't contain `,` or `:` (the
-    /// CLI's `parseTagList` forbids them), so both splits are
-    /// unambiguous. Returns `nil` for a malformed payload (unknown verb,
-    /// empty CSV) — the dispatcher ignores it. Pure, so the wire-format
-    /// round-trip is unit-testable without the server.
-    public static func parse(_ payload: String) -> LensSpec? {
-        if payload == "all" { return .all }
-        let parts = payload
-            .split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-            .map(String.init)
-        guard parts.count == 2 else { return nil }
-        let names = parts[1].split(separator: ",").map(String.init)
-        guard !names.isEmpty else { return nil }
-        switch parts[0] {
-        case "only":   return .only(names)
-        case "add":    return .add(names)
-        case "remove": return .remove(names)
-        case "toggle": return .toggle(names)
-        default:       return nil
-        }
-    }
-}
-
-/// Outcome of `facet window --retag OLD NEW` (#228, tag mode). A 4-way
+/// Outcome of `facet window --retag OLD NEW` (#228). A 4-way
 /// result rather than a `Bool` so the dispatch layer surfaces a precise
 /// error — `Bool` would conflate "no focused window" with "no such tag
 /// OLD" and "vocabulary full".
@@ -138,7 +97,7 @@ public enum WindowRetagResult: Sendable, Equatable {
     /// lacking OLD degrades to a bare add of NEW; `OLD == NEW` is a no-op
     /// success).
     case retagged
-    /// No managed focused window (or not tag mode / unmanaged desktop).
+    /// No managed focused window (or an unmanaged mac desktop).
     case noFocus
     /// OLD isn't a defined tag — Strict-A reject (consistent with
     /// `--untag`), never a silent degrade.
@@ -201,23 +160,8 @@ public protocol WindowBackend: Sendable {
     /// move (memory: facet-cli-dynamic-runtime-model).
     func switchWorkspace(named name: String, autoFocus: Bool)
 
-    /// Change the lens (M11-3 tag mode): which set of tags is shown.
-    /// Windows whose tags leave the lens are parked; windows that enter
-    /// are restored + re-tiled into the visible union. No-op under
-    /// `by = "workspace"` or when the named tag is unknown (the backend
-    /// surfaces the latter as an operational error).
-    ///
-    /// `autoFocus` mirrors `switchWorkspace(toIndex:autoFocus:)`: the CLI
-    /// path (`lens:` DNC, from a hotkey) wants `true` so focus lands in
-    /// the new union, but the in-panel lens selector passes `false` — the
-    /// user is still configuring the view, so stealing key to a window
-    /// would drop the tree / lens panel out of keyboard focus mid-pick
-    /// (memory [[tree-click-crossapp-focus-broken-sequoia]]).
-    func setLens(_ spec: LensSpec, autoFocus: Bool)
-
     /// Activate (or clear, with `nil`) the ACTIVE SECTION-lens — a
-    /// `type="lens"` `[[desktop.N.section]]`, keyed by its `label`. Distinct
-    /// from `setLens` (the tag-mode bitmask lens above): this is the
+    /// `type="lens"` `[[desktop.N.section]]`, keyed by its `label`. This is the
     /// section/lens model's real-hide path (tag-unification Phase 1). The
     /// backend resolves the label to the section's `match`, evaluates it over
     /// the ACTIVE workspace's windows, and parks (anchor sliver) the ones the
@@ -227,10 +171,9 @@ public protocol WindowBackend: Sendable {
     /// per-mac-desktop catalog (session-only + auto-scoped per mac desktop).
     /// No-op outside the section model (`isSectionModelActive`); an unknown
     /// label / malformed `match` is surfaced as an operational error
-    /// (loud-but-non-fatal). `autoFocus` mirrors `setLens`: the CLI / hotkey
-    /// path wants `true` (focus lands in the new visible set), the in-panel
-    /// tree lens-header toggle passes `false` (the tree keeps key focus while
-    /// the user picks).
+    /// (loud-but-non-fatal). `autoFocus`: the CLI / hotkey path wants `true`
+    /// (focus lands in the new visible set), the in-panel tree lens-header
+    /// toggle passes `false` (the tree keeps key focus while the user picks).
     func setSectionLens(_ label: String?, autoFocus: Bool)
 
     /// Activate a section (EX-1 throughline) — a workspace (clears any active
@@ -401,45 +344,38 @@ public protocol WindowBackend: Sendable {
     /// `false` when the name wasn't set (caller surfaces the error).
     func unmark(_ name: String) -> Bool
 
-    /// Add tag `name` to the focused window (`facet window --tag NAME`,
-    /// tag mode). Auto-vivifies an unknown name: creates it in the
-    /// session tag vocabulary, then assigns. Returns `false` when there
-    /// is no managed focused window, the run isn't in tag mode, or the
-    /// vocabulary is full (63 user tags). Caller surfaces the error.
+    /// Add tag `name` to the focused window (`facet window --tag NAME`).
+    /// Tags are a free-form per-window set (EX-4) — `name` is just added,
+    /// no vocabulary, no cap. A `type="lens"` section with `match='tag~=name'`
+    /// then gathers it on the next reconcile. Returns `false` only when there
+    /// is no managed focused window. Caller surfaces the error.
     func addTagToFocusedWindow(_ name: String) -> Bool
 
     /// Remove tag `name` from the focused window
-    /// (`facet window --untag NAME`, tag mode). Strict: rejects an
-    /// unknown name. The `_default` floor is never removed. Returns
-    /// `false` when there is no focused window, the run isn't in tag
-    /// mode, or `name` isn't a defined tag.
+    /// (`facet window --untag NAME`). Returns `false` when there is no
+    /// focused window or the window doesn't carry `name`.
     func removeTagFromFocusedWindow(_ name: String) -> Bool
 
     /// Toggle tag `name` on the focused window
-    /// (`facet window --toggle-tag NAME`, tag mode). Auto-vivifies an
-    /// unknown name (then sets it). Returns `false` for the same
-    /// reasons as `addTagToFocusedWindow`.
+    /// (`facet window --toggle-tag NAME`). Returns `false` only when there
+    /// is no managed focused window.
     func toggleTagOnFocusedWindow(_ name: String) -> Bool
 
-    /// Retag the focused window: replace tag `old` with `new` in a single
-    /// atomic mask write (`facet window --retag OLD NEW`, tag mode).
-    /// `old` must be DEFINED (Strict-A); `new` auto-vivifies. See
-    /// `WindowRetagResult` for the precise outcomes the caller messages.
+    /// Retag the focused window: replace tag `old` with `new` in one write
+    /// (`facet window --retag OLD NEW`). A window lacking `old` just gains
+    /// `new`. See `WindowRetagResult` for the outcomes the caller messages
+    /// (only `.retagged`/`.noFocus` occur now — tags are free-form).
     func retagFocusedWindow(old: String, new: String) -> WindowRetagResult
 
-    /// Add tag `name` to a SPECIFIC window `id` (the GUI tag menu's
-    /// "Tag…" item, tag mode). Like `addTagToFocusedWindow` but targets
-    /// an explicit window — the right-clicked row, which need not be
-    /// focused — so it never changes focus. Auto-vivifies an unknown
-    /// name. Returns `false` when `id` isn't a managed window, the run
-    /// isn't in tag mode, or the vocabulary is full.
+    /// Add tag `name` to a SPECIFIC window `id` (the GUI row tag action).
+    /// Like `addTagToFocusedWindow` but targets an explicit window — the
+    /// right-clicked row, which need not be focused — so it never changes
+    /// focus. Returns `false` when `id` isn't a managed window.
     func addTag(_ name: String, toWindow id: WindowID) -> Bool
 
-    /// Remove tag `name` from a SPECIFIC window `id` (the GUI tag menu's
-    /// "Untag #NAME" item, tag mode). Strict — rejects an unknown or
-    /// reserved name; the `_default` floor is never removed. Returns
-    /// `false` when `id` isn't managed, not tag mode, or `name` isn't a
-    /// defined tag on that window's vocabulary.
+    /// Remove tag `name` from a SPECIFIC window `id` (the GUI row tag
+    /// action). Returns `false` when `id` isn't managed or doesn't carry
+    /// `name`.
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool
 
     // MARK: - Section-model apply/un-apply (PR8)
@@ -462,25 +398,6 @@ public protocol WindowBackend: Sendable {
     /// `false` on unknown window / vocab-full (add) / unknown name (remove).
     func addTagSection(_ name: String, toWindow id: WindowID) -> Bool
     func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool
-
-    /// Define tag `name` in the session vocabulary without attaching it
-    /// to any window (`facet tag --add NAME`, tag mode). Idempotent — a
-    /// defined name is a no-op success. Returns `false` only when not in
-    /// tag mode / unmanaged, or the vocabulary is full (63 user tags).
-    func addTag(_ name: String) -> Bool
-
-    /// Remove tag `name` from the vocabulary, stripping its bit from
-    /// every window (`facet tag --remove NAME`, tag mode). The freed bit
-    /// becomes reusable by a later add; windows keep the `_default`
-    /// floor. Returns `false` when not in tag mode / unmanaged, or
-    /// `name` is unknown / reserved.
-    func removeTag(_ name: String) -> Bool
-
-    /// Rename tag `old` to `new` in place (`facet tag --rename OLD NEW`,
-    /// tag mode) — the bit is unchanged, so windows keep their tag
-    /// membership. Returns `false` when not in tag mode / unmanaged,
-    /// `old` is unknown, or `new` is already a defined tag.
-    func renameTag(_ old: String, to new: String) -> Bool
 
     /// Stash the focused window onto scratchpad shelf `name`, parking
     /// it off-screen (`facet scratchpad --stash NAME`). A named hidden
@@ -507,16 +424,13 @@ public protocol WindowBackend: Sendable {
     /// show in the tree under their workspace. Empty when none.
     func stashedScratchpads() -> [String]
 
-    /// The defined tag VOCABULARY in declaration order (`facet query
-    /// --tags`, #228). `[]` outside tag mode. A cheap main-actor catalog
-    /// read, same risk class as `stashedScratchpads()` — the Controller
-    /// folds it into the status snapshot on reconcile.
+    /// All tags currently applied to any managed window, sorted (`facet
+    /// query --tags`, #228) — the de-facto vocabulary (EX-4: tags are
+    /// free-form per-window, no declared vocabulary). `[]` when no window
+    /// carries a tag. A cheap main-actor catalog read, same risk class as
+    /// `stashedScratchpads()` — the Controller folds it into the status
+    /// snapshot on reconcile.
     func definedTagNames() -> [String]
-
-    /// The current lens (`facet query --lens`, #228). `nil` outside tag
-    /// mode (the lens is a tag-mode concept). Same cheap main-actor
-    /// read as `definedTagNames()`.
-    func currentLens() -> LensStatus?
 
     /// The active SECTION-lens label, or `nil` when none is active / outside
     /// the section model. EX-1: a thread-safe shim over
@@ -607,17 +521,10 @@ public extension WindowBackend {
         switchWorkspace(toIndex: index, autoFocus: false)
     }
 
-    /// Convenience: lens change WITH auto-focus (the CLI default). The
-    /// in-panel selector calls the two-arg form with `autoFocus: false`.
-    func setLens(_ spec: LensSpec) {
-        setLens(spec, autoFocus: true)
-    }
-
     // Default no-ops so backends that don't support a dynamic
     // workspace set (and the unit-test stub) need not implement
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
-    func setLens(_ spec: LensSpec, autoFocus: Bool) {}
     func setSectionLens(_ label: String?, autoFocus: Bool) {}
     func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
     func orphanWindow(_ id: WindowID) {}
@@ -654,15 +561,11 @@ public extension WindowBackend {
     func setMaster(_ id: WindowID, _ master: Bool) { }
     func addTagSection(_ name: String, toWindow id: WindowID) -> Bool { false }
     func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool { false }
-    func addTag(_ name: String) -> Bool { false }
-    func removeTag(_ name: String) -> Bool { false }
-    func renameTag(_ old: String, to new: String) -> Bool { false }
     func stashScratchpad(_ name: String) -> Bool { false }
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }
     func stashedScratchpads() -> [String] { [] }
     func definedTagNames() -> [String] { [] }
-    func currentLens() -> LensStatus? { nil }
     func currentSectionLens() -> String? { nil }
     func currentActiveSection() -> ActiveSection { .workspace(1) }
     func orphanWindows() -> [Window] { [] }

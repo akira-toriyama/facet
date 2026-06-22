@@ -85,15 +85,6 @@ extension FacetApp {
         postControl("workspace:" + target)
     }
 
-    /// Post ``lens:TARGET`` (M11-3 tag mode) where TARGET is
-    /// `only:CSV` / `add:CSV` / `remove:CSV` / `toggle:CSV` / `all`, with
-    /// CSV a comma-joined tag list (#228). The server resolves the names
-    /// STRICTLY — any unknown name leaves the lens unchanged and surfaces
-    /// a "no such tag" error.
-    static func postLens(_ target: String) -> Never {
-        postControl("lens:" + target)
-    }
-
     /// Post ``window-move:N`` (1-indexed). Moves the focused
     /// window to the Nth workspace via the backend.
     static func postWindowMove(_ index: Int) -> Never {

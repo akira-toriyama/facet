@@ -51,37 +51,6 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
     }
 }
 
-/// The current lens as `facet query --lens` reports it (#228, tag mode).
-/// `tags` are the USER-tag names the lens reveals, declaration order
-/// (the `_default` floor is never listed — it isn't a user tag).
-/// `showsAll` is `true` when the lens reveals *every* window — the
-/// floor-only startup/fallback lens or `lens --all` — which a machine
-/// consumer can't otherwise tell from `tags == []` (a floor-only lens
-/// and a lens of zero user tags both yield an empty `tags`, yet the
-/// former shows everything). It is `false` for a lens of specific user
-/// tags. Encoded inside `StatusSnapshot.lens`; the read verb prints it
-/// as standalone JSON.
-public struct LensStatus: Codable, Sendable, Equatable {
-    public let tags: [String]
-    public let showsAll: Bool
-
-    public init(tags: [String], showsAll: Bool) {
-        self.tags = tags
-        self.showsAll = showsAll
-    }
-
-    /// Resolve the lens status from a raw lens mask + the tag
-    /// vocabulary (pure — unit-testable without a backend). `showsAll`
-    /// is true exactly when the lens carries the `_default` floor bit:
-    /// every window carries that bit (it's the never-lost floor), so a
-    /// floor-bearing lens matches them all. `tags` lists only the user
-    /// bits set in the lens (the floor is excluded by `names(in:)`).
-    public static func resolve(lens: UInt64, model: TagModel) -> LensStatus {
-        LensStatus(tags: model.names(in: lens),
-                   showsAll: (lens & TagModel.defaultBit) != 0)
-    }
-}
-
 /// Everything `facet query` shows in one shot. Encoded as JSON
 /// so the file is also greppable / inspectable by other tools.
 public struct StatusSnapshot: Codable, Sendable, Equatable {
@@ -102,10 +71,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
     /// `query --windows` sweep can't supply (a defined-but-unused tag
     /// appears on no window).
     public let tags: [String]
-    /// The current lens (`facet query --lens`, #228). `nil` outside tag
-    /// mode — the lens is a tag-mode concept — which the read verb
-    /// surfaces as JSON `null`.
-    public let lens: LensStatus?
     public let lastError: String?        // nil = no error since startup
     public let timestamp: String         // ISO8601, for staleness check
 
@@ -115,7 +80,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
                 workspaces: [WorkspaceStatusEntry],
                 stashed: [String] = [],
                 tags: [String] = [],
-                lens: LensStatus? = nil,
                 lastError: String?,
                 timestamp: String) {
         self.backend = backend
@@ -124,15 +88,14 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
         self.workspaces = workspaces
         self.stashed = stashed
         self.tags = tags
-        self.lens = lens
         self.lastError = lastError
         self.timestamp = timestamp
     }
 
-    // Tolerate a status file written before `stashed` / `tags` / `lens`
+    // Tolerate a status file written before `stashed` / `tags`
     // existed (a stale `/tmp/facet-status.json` lingering across an
-    // in-place upgrade): a missing array key decodes to [], a missing
-    // `lens` to nil. (`Encodable` stays synthesized.)
+    // in-place upgrade): a missing array key decodes to []. (`Encodable`
+    // stays synthesized.)
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         backend = try c.decode(String.self, forKey: .backend)
@@ -142,7 +105,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
                                   forKey: .workspaces)
         stashed = try c.decodeIfPresent([String].self, forKey: .stashed) ?? []
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
-        lens = try c.decodeIfPresent(LensStatus.self, forKey: .lens)
         lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
         timestamp = try c.decode(String.self, forKey: .timestamp)
     }

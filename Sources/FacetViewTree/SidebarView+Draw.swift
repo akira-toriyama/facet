@@ -129,52 +129,17 @@ extension SidebarView {
                 drawGrip(in: NSRect(x: rowPadX, y: capY,
                                     width: headerGripW, height: capH),
                          hot: c.hot || hoverIdx == i)
-                // Line 1: WS name / lens label (accent when active). In tag
-                // mode this is the lens (a tag concept) → `secondary` to
-                // match the tag colour scheme (item 14/17); workspace names
-                // stay `primary`. Line 2 (layout) is `primary` either way, so
-                // the two lines never collide on the same accent.
+                // Line 1: WS name / lens label (accent when active). Line 2
+                // (layout) is `primary` too, so the two lines never collide on
+                // the same accent.
                 let nameH: CGFloat = 18
-                let nameColor = c.hot
-                    ? (tagModeActive ? pal.secondary : pal.primary)
-                    : pal.muted
+                let nameColor = c.hot ? pal.primary : pal.muted
                 let nameX0 = rowPadX + gripSpace
                 let nameAttrs: [NSAttributedString.Key: Any] = [
                     .font: uiFont(headerFontSize, nameWeight),
                     .foregroundColor: nameColor,
                     .kern: 0.6, .paragraphStyle: hp]
-                if tagModeActive {
-                    // Tag mode: a `tag` glyph PER tag name (2+ tags each get
-                    // their own icon), so "web chat" → 🏷 web 🏷 chat. The
-                    // "All tags" show-everything label is a single status
-                    // word → one leading glyph. (Tag names carry no spaces,
-                    // so the adapter's space-join splits cleanly.)
-                    let tags = c.text == "All tags"
-                        ? [c.text]
-                        : c.text.split(separator: " ").map(String.init)
-                    let rightEdge = bounds.width - rowPadX
-                    var x = nameX0
-                    for tag in tags where x < rightEdge {
-                        if let tagIcon = IconResolver.resolve(
-                            "SF:tag", pointSize: 13, color: nameColor,
-                            scale: .medium) {
-                            let ih = min(tagIcon.size.height, 14)
-                            let iw = tagIcon.size.width
-                                * (ih / max(tagIcon.size.height, 1))
-                            tagIcon.draw(in: NSRect(
-                                x: x, y: capY + (nameH - ih) / 2,
-                                width: iw, height: ih))
-                            x += iw + 4
-                        }
-                        let tw = ceil((tag as NSString)
-                            .size(withAttributes: nameAttrs).width)
-                        (tag as NSString).draw(
-                            in: NSRect(x: x, y: capY,
-                                       width: min(tw, rightEdge - x), height: nameH),
-                            withAttributes: nameAttrs)
-                        x += tw + 10        // gap before the next tag's glyph
-                    }
-                } else if c.isLens {
+                if c.isLens {
                     // Lens section (section model): a leading filter glyph +
                     // the label, no layout sub-line — distinguishes a
                     // saved-filter section from a workspace at a glance. The

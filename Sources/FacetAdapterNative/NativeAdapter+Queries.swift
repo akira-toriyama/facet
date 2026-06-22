@@ -179,9 +179,6 @@ extension NativeAdapter {
                              hidden: hideResult.hidden,
                              revealed: hideResult.revealed,
                              macDesktopSwapped: macDesktopSwapped, rect: rect)
-        // Tag mode (M11-3): park the managed windows whose tags don't
-        // intersect the active lens so they don't float over it.
-        parkOutOfLensWindows()
         // Post-close focus redirect. When a managed window closes
         // (Cmd+W, app quit), macOS hands focus to the next
         // z-ordered window of the same app, which often sits in a
@@ -239,11 +236,10 @@ extension NativeAdapter {
     // entry path (`refreshCatalog`), NOT duplicated onto these internal
     // helpers. Behaviour is unchanged from the inlined blocks.
 
-    /// Seed the per-WS default layout mode + the workspace set + (tag
-    /// mode) the tag vocabulary / initial lens from config. Called every
-    /// refresh: `defaultMode` is a cheap value-type set so a config
-    /// hot-reload takes; `seed` / `seedTags` are idempotent (first-call
-    /// only), so the catalog's runtime set / lens stay authoritative.
+    /// Seed the per-WS default layout mode + the workspace set from config.
+    /// Called every refresh: `defaultMode` is a cheap value-type set so a
+    /// config hot-reload takes; `seed` is idempotent (first-call only), so
+    /// the catalog's runtime set stays authoritative.
     private func seedCatalogFromConfig() {
         // nil-ordinal seed-taint recovery: a prior refresh may have seeded
         // THIS (per-mac-desktop) catalog while the active-space ordinal was
@@ -279,18 +275,6 @@ extension NativeAdapter {
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
             forMacDesktopOrdinal: activeMacDesktopOrdinal))
-        // Tag mode (M11-3): seed the tag vocabulary + initial lens once.
-        // The initial lens is the `_default` floor (show-all, nothing
-        // pre-selected) — there is no static window→tag assignment
-        // (`[[assign]]` retired in #191; runtime `facet window --tag` /
-        // `facet tag` own tagging). `seedTags` is idempotent — it only
-        // takes on the first call, so a later refresh won't reset the
-        // user's lens.
-        if config.effectiveGrouping == .tag {
-            catalog.seedTags(grouping: .tag,
-                             model: config.effectiveTagModel,
-                             lens: TagModel.defaultBit)
-        }
     }
 
     /// Heal (mac-desktop drift): a window can leak into this catalog's WS
@@ -376,24 +360,6 @@ extension NativeAdapter {
             }
         } else {
             applyLayout(workspace: catalog.activeIndex, rect: rect)
-        }
-    }
-
-    /// Tag mode (M11-3): applyLayout tiled the visible lens union; park the
-    /// managed windows whose tags DON'T intersect the lens so they don't
-    /// float over it. `parkAnchor` is guarded (`shouldParkAnchor`) so
-    /// re-running every refresh is a no-op for already-parked windows.
-    /// Sticky / stashed / hidden / float windows are exempt. The restore
-    /// half (un-park on lens entry) rides the lens-switch plan.
-    private func parkOutOfLensWindows() {
-        guard catalog.grouping == .tag else { return }
-        for (id, slot) in catalog.windowMap
-        where (slot.tags & catalog.lens) == 0
-            && !catalog.floatingWindows.contains(id)
-            && !catalog.hiddenMembers.contains(id)
-            && !catalog.stashedWindows.contains(id)
-            && catalog.shouldParkAnchor(id) {
-            parkAnchor(WindowRef(id: id, pid: slot.pid))
         }
     }
 
@@ -487,7 +453,7 @@ extension NativeAdapter {
             // inherit produces, EX-3) would show the window in the tree but
             // never physically gather/park it. workspace name is overlaid too
             // (nil → "" for an orphan, so `not workspace` matches it).
-            let tagged = w.withTags(catalog.tagModel.names(in: slot.tags))
+            let tagged = w.withTags(slot.tags.sorted())
             // nil workspace name = NO assignment (orphan) so `not workspace`
             // matches; an assigned window passes its name (even "" when
             // unnamed) so `not workspace` excludes it.
@@ -683,19 +649,19 @@ extension NativeAdapter {
     /// `deferred` ids are skipped this tick and re-probed next time.
     private func classifyNewWindows(live: [Window])
         -> (autoFloat: Set<WindowID>, ignore: Set<WindowID>,
-            deferred: Set<WindowID>, tags: [WindowID: UInt64],
+            deferred: Set<WindowID>, tags: [WindowID: Set<String>],
             probedAX: [WindowID: AXUIElement])
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
-        // Tag mode (M11-3): compute each new window's tag bitmask
-        // (`tagsForNewWindow` — lens-derived, no probe needed). The
-        // probe below is built for the `[[exclude]]` action lookup,
-        // the sole consumer of the resolved AX role/subrole now that
-        // `[[assign]]` is retired (#191). The catalog applies the mask
-        // when the window joins `windowMap`.
-        let tagMode = config.effectiveGrouping == .tag
-        var tagMasks: [WindowID: UInt64] = [:]
+        // New windows start with no tags (the `tags` map stays empty). A
+        // window opened while a `type="lens"` section is active inherits that
+        // lens's `apply` tags later in `refreshCatalog`
+        // (`activeSectionLensApplyTags`), so no per-window seed is needed here.
+        // The probe below is built for the `[[exclude]]` action lookup, the
+        // sole consumer of the resolved AX role/subrole now that `[[assign]]`
+        // is retired (#191).
+        let tagMasks: [WindowID: Set<String>] = [:]
         var autoFloat: Set<WindowID> = []
         var ignore: Set<WindowID> = []
         var deferred: Set<WindowID> = []
@@ -777,7 +743,6 @@ extension NativeAdapter {
             let probe = WindowProbe(bundleId: w.bundleId, title: w.title,
                                     role: role, subrole: subrole,
                                     size: w.frame?.size)
-            if tagMode { tagMasks[w.id] = catalog.tagsForNewWindow() }
             switch rules.action(for: probe) {
             case .manage:
                 Log.debug("native: rule=manage wsid=\(w.id.serverID) "

@@ -180,107 +180,30 @@ final class StatusTests: XCTestCase {
             "last error: Window 7: AX permission failed"))
     }
 
-    // MARK: - Tag / lens projections (#228)
+    // MARK: - Tag projection (#228; `facet query --tags`)
 
-    /// work=0b001, web=0b010, media=0b100; the floor is bit 63.
-    private let model = TagModel(["work", "web", "media"])
-
-    func testLensResolveFloorOnlyShowsAllWithNoUserTags() {
-        // The startup / fallback lens is the floor alone: every window
-        // carries the floor, so it shows them all — `showsAll` true even
-        // though no USER tag is in the lens (`tags` is empty).
-        let s = LensStatus.resolve(lens: TagModel.defaultBit, model: model)
-        XCTAssertEqual(s.tags, [])
-        XCTAssertTrue(s.showsAll)
-    }
-
-    func testLensResolveAllShowsAllWithEveryUserTag() {
-        // `lens --all` = every user tag | floor → shows everything AND
-        // lists every user tag.
-        let all = model.allMask | TagModel.defaultBit
-        let s = LensStatus.resolve(lens: all, model: model)
-        XCTAssertEqual(s.tags, ["work", "web", "media"])
-        XCTAssertTrue(s.showsAll)
-    }
-
-    func testLensResolveSingleUserTagDoesNotShowAll() {
-        let s = LensStatus.resolve(lens: 0b010, model: model)   // web
-        XCTAssertEqual(s.tags, ["web"])
-        XCTAssertFalse(s.showsAll)
-    }
-
-    func testLensResolveMultipleUserTagsDoesNotShowAll() {
-        let s = LensStatus.resolve(lens: 0b011, model: model)   // work|web
-        XCTAssertEqual(s.tags, ["work", "web"])
-        XCTAssertFalse(s.showsAll)
-    }
-
-    func testLensResolveUserTagPlusFloorShowsAll() {
-        // A lens that carries the floor bit alongside a user tag (e.g.
-        // toggling one tag off from `--all`) still shows every window —
-        // `showsAll` is true while `tags` lists the remaining user tag.
-        let s = LensStatus.resolve(lens: 0b010 | TagModel.defaultBit,
-                                   model: model)
-        XCTAssertEqual(s.tags, ["web"])
-        XCTAssertTrue(s.showsAll)
-    }
-
-    func testLensResolveZeroMaskShowsNothing() {
-        // A zero lens (workspace-mode catalog before any seed) has no
-        // floor → not show-all, no tags.
-        let s = LensStatus.resolve(lens: 0, model: model)
-        XCTAssertEqual(s.tags, [])
-        XCTAssertFalse(s.showsAll)
-    }
-
-    func testSnapshotRoundTripsTagsAndLens() throws {
+    func testSnapshotRoundTripsTags() throws {
         let snap = StatusSnapshot(
             backend: "native", theme: "terminal", defaultView: "tree",
             workspaces: [], stashed: [],
             tags: ["work", "web", "media"],
-            lens: LensStatus(tags: ["web"], showsAll: false),
             lastError: nil, timestamp: "ts")
         let data = try JSONEncoder().encode(snap)
         let back = try JSONDecoder().decode(StatusSnapshot.self, from: data)
         XCTAssertEqual(back, snap)
         XCTAssertEqual(back.tags, ["work", "web", "media"])
-        XCTAssertEqual(back.lens, LensStatus(tags: ["web"], showsAll: false))
     }
 
-    func testSnapshotRoundTripsNilLens() throws {
-        // Workspace mode: no lens. nil must survive the round-trip so
-        // `query --lens` prints `null`.
-        let snap = StatusSnapshot(
-            backend: "native", theme: "terminal", defaultView: nil,
-            workspaces: [], stashed: [], tags: [], lens: nil,
-            lastError: nil, timestamp: "ts")
-        let data = try JSONEncoder().encode(snap)
-        let back = try JSONDecoder().decode(StatusSnapshot.self, from: data)
-        XCTAssertNil(back.lens)
-        XCTAssertEqual(back.tags, [])
-    }
-
-    func testSnapshotDecodesMissingTagsAndLens() throws {
-        // A status file written by a pre-#228 server (no `tags` / `lens`
-        // keys) must decode to [] / nil rather than throw, so `facet
-        // query` survives an in-place upgrade until the next reconcile.
+    func testSnapshotDecodesMissingTags() throws {
+        // A status file written by a pre-#228 server (no `tags` key) must
+        // decode to [] rather than throw, so `facet query` survives an
+        // in-place upgrade until the next reconcile.
         let json = Data("""
         {"backend":"native","theme":"terminal","defaultView":"tree",
          "workspaces":[],"timestamp":"ts"}
         """.utf8)
         let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
         XCTAssertEqual(snap.tags, [])
-        XCTAssertNil(snap.lens)
-    }
-
-    func testLensStatusEncodesBothKeys() throws {
-        // The JSON `query --lens` emits always carries both keys (so a
-        // consumer can read `.showsAll` even when `tags` is empty).
-        let data = try JSONEncoder().encode(
-            LensStatus(tags: [], showsAll: true))
-        let s = String(decoding: data, as: UTF8.self)
-        XCTAssertTrue(s.contains("\"tags\""))
-        XCTAssertTrue(s.contains("\"showsAll\""))
     }
 
     // MARK: - Helpers

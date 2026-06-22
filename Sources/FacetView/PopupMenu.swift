@@ -87,13 +87,13 @@ public final class PopupMenuView: NSView {
     static let labelPt: CGFloat = 14
 
     /// Filter box (the `m` / keyboard path): when on, a `⌕` box sits between
-    /// the header and the rows and the menu becomes type-to-filter, matching
-    /// the `t` tag panel. `allItems` is the full list, `items` the filtered
+    /// the header and the rows and the menu becomes type-to-filter.
+    /// `allItems` is the full list, `items` the filtered
     /// subset shown, `rowMap` maps a shown row back to its index in `allItems`
     /// (what `onPick` reports). `filter` is the typed string, accumulated by
     /// `PopupMenu`'s key monitor — there is NO real `NSTextField`: a filterable
     /// menu must not take key focus or the tree panel resigns key and its
-    /// kbNav tears down (only `TagEditPanel` is guarded in `handlePanelKeyChange`).
+    /// kbNav tears down.
     /// The labels are ASCII menu verbs, so the drawn box (no caret blink / IME)
     /// is indistinguishable in use.
     public var filterable = false

@@ -36,13 +36,9 @@
 //               / --focus up|down|left|right / --move up|down|left|right
 //               / --tag NAME / --untag NAME / --toggle-tag NAME
 //               / --retag OLD NEW
-//                 (tag mode only — [grouping] by="tag")
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
-//   Lens      : facet lens NAME / --clear  (both modes; NAME adapts)
-//               / --add/--remove/--toggle A[,B,…] / --all  (tag mode only)
-//   Tag       : facet tag --add NAME / --remove NAME / --rename OLD NEW
-//               (tag mode only — edits the tag vocabulary)
+//   Lens      : facet lens NAME (activate a type="lens" section) / --clear
 //
 // ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
 // every view op must specify NAME explicitly. Shell aliases handle
@@ -104,17 +100,12 @@ enum FacetApp {
           facet --hide NAME                  close NAME
           facet --toggle NAME                toggle NAME
 
-          In tag mode ([grouping] by="tag") the tree is the only view —
-          grid / rail aren't available, so --view / --hide / --toggle
-          with grid|rail exit 2.
-
           --view tree opens directly in keyboard nav: facet takes key
           focus immediately (Spotlight-style) so the arrow keys,
-          Enter, search (s) and tag-manage (t) work the moment it
-          appears. Acting on a window — click a row or Enter a
-          selection — hands key back first, so same-app focus still
-          works. (Right-clicking the "Desktop N" header also opens
-          Search / Manage tags.)
+          Enter and search (s) work the moment it appears. Acting on a
+          window — click a row or Enter a selection — hands key back
+          first, so same-app focus still works. (Right-clicking the
+          "Desktop N" header also opens Search.)
 
           --edge top|bottom|left|right is a --view rail modifier:
           dock the rail's workspace strip against that screen edge
@@ -181,41 +172,14 @@ enum FacetApp {
                                              position N (reorder)
 
         LENS                                 (the active visibility filter;
-                                             one surface, adapts to [grouping])
-          facet lens NAME                    activate the lens NAME —
-                                             tag mode: show exactly these tag(s)
-                                             (CSV A[,B,…]); section model:
-                                             activate the `type="lens"` section
-                                             labelled NAME (out-of-lens windows
-                                             in the current workspace are
-                                             anchor-parked; one label — a comma
-                                             list exits 2, CSV is tag-mode-only;
-                                             an unknown tag / label is rejected)
-          facet lens --clear                 drop the active lens → show the
-                                             full current scope (BOTH modes —
-                                             tag mode: every window; section
-                                             model: clear the active lens)
-          facet lens --add A[,B,…]           union these into the shown set
-          facet lens --remove A[,B,…]        drop these from the shown set
-          facet lens --toggle A[,B,…]        flip each tag in / out
-          facet lens --all                   show every window
-                                             (tag mode only — by="tag": multiple
-                                             tags = comma-joined; one unknown
-                                             name rejects the whole command.
-                                             --all/--add/--remove/--toggle exit
-                                             2 in the section model)
-
-        TAG                                  (tag mode: the tag vocabulary)
-          facet tag --add NAME               declare tag NAME (no window
-                                             touched; idempotent)
-          facet tag --remove NAME            delete NAME — strips it from
-                                             every window; its bit is freed
-                                             for a later tag to reuse
-          facet tag --rename OLD NEW         rename OLD to NEW in place
-                                             (windows keep the tag); rejects
-                                             an unknown OLD or an NEW that
-                                             already exists
-                                             (requires [grouping] by="tag")
+                                             exclusive section model)
+          facet lens NAME                    activate the `type="lens"` section
+                                             labelled NAME — its cross-workspace
+                                             union is gathered into view and the
+                                             out-of-lens windows are anchor-parked
+                                             (an unknown label is rejected)
+          facet lens --clear                 deactivate the active lens →
+                                             back to the active workspace
 
         WINDOW                               (focused window)
           facet window --move-to N           move it to workspace N
@@ -225,14 +189,15 @@ enum FacetApp {
           facet window --focus-mark NAME     jump focus to the marked
                                              window (switches WS if needed)
           facet window --unmark NAME         remove a mark
-          facet window --tag NAME            add tag NAME (tag mode;
-                                             creates NAME if new; #-prefix
-                                             ok, e.g. --tag #190)
+          facet window --tag NAME            add tag NAME (creates NAME if
+                                             new; #-prefix ok, e.g. --tag
+                                             #190). Tags are a free-form
+                                             window attribute used by lens
+                                             `match='tag~=NAME'`.
           facet window --untag NAME          remove tag NAME (rejects an
                                              unknown tag)
           facet window --toggle-tag NAME     add / remove tag NAME
                                              (creates NAME if new)
-                                             (requires [grouping] by="tag")
           facet window --retag OLD NEW       replace tag OLD with NEW in
                                              one step (OLD must exist;
                                              creates NEW; OLD==NEW is a
@@ -311,14 +276,8 @@ enum FacetApp {
                                                  --filter 'tag~=web and not floating'
           facet query --tags                 print the defined tag
                                              vocabulary as a JSON array
-                                             (declaration order); [] in
-                                             workspace mode.
-          facet query --lens                 print the current lens as
-                                             JSON {"tags":[…],
-                                             "showsAll":bool}; null in
-                                             workspace mode. showsAll is
-                                             true for a show-everything
-                                             lens (floor-only or --all).
+                                             (declaration order); [] when
+                                             no tags are defined.
 
         SERVER CONTROLS
           facet --theme NAME                 13 themes: terminal, chomp,
@@ -421,24 +380,6 @@ enum FacetApp {
         exit(3)
     }
 
-    /// Fail Fast (M11-3, design Q7): reject a subject that doesn't match
-    /// the configured grouping mode. The `workspace` switch / layout /
-    /// management verbs are workspace-mode-only (tag mode has no workspaces —
-    /// running them would scramble the catalog's park state); the `tag`
-    /// vocabulary verbs are tag-mode-only. (`lens` no longer gates as a whole
-    /// here: tag-unification Phase 1 made `lens NAME` / `--clear` mode-ADAPTIVE
-    /// and only the tag-composition verbs / `--all` tag-only, so `runLensCommand`
-    /// does its own per-verb check off `effectiveGrouping`.) Reads the same
-    /// config the server seeded from; a mismatch exits 2 (usage) rather than
-    /// silently no-opping server-side.
-    static func requireGrouping(_ want: Grouping, subject: String) {
-        let have = FacetConfig.load().effectiveGrouping
-        guard have == want else {
-            die("facet \(subject) requires [grouping] by=\"\(want.rawValue)\""
-                + " — current config is \(have.rawValue) mode")
-        }
-    }
-
     /// Enforce exactly-one-action for a subject-verb subcommand. `count`
     /// = number of set action flags; loud-rejects (exit 2) on zero or
     /// multiple, byte-identically to the per-runner guards it replaces.
@@ -531,19 +472,11 @@ enum FacetApp {
         if argv.first == "scratchpad" {
             runScratchpadCommand(Array(argv.dropFirst()))
         }
-        // `facet lens <flag>` — tag-mode visibility (only / toggle /
-        // all). A new subject: the lens selects which tags are shown,
-        // the tag-mode analog of `workspace --focus`.
+        // `facet lens <flag>` — the active visibility filter (exclusive
+        // section model): `facet lens NAME` activates the `type="lens"`
+        // section labelled NAME, `facet lens --clear` deactivates it.
         if argv.first == "lens" {
             runLensCommand(Array(argv.dropFirst()))
-        }
-        // `facet tag <flag>` — tag-vocabulary management (add / remove /
-        // rename). A new subject: it edits the tag SET itself, the
-        // tag-mode analog of `workspace --add/--remove/--rename`.
-        // (`window --tag` attaches a tag to the focused window; `tag
-        // --add` declares one with no window.)
-        if argv.first == "tag" {
-            runTagCommand(Array(argv.dropFirst()))
         }
         // Read-only query sub-command. Plain noun (no `--`) because it
         // returns data rather than triggering a verb. (#227: renamed
@@ -651,21 +584,6 @@ enum FacetApp {
                 + "(got \(count)/4)")
         }
 
-        // grid / rail are workspace-only surfaces — there is no grid or
-        // rail under `[grouping] by="tag"` (tag mode shows the tree
-        // only). Reject any view op that names them loudly (exit 2)
-        // BEFORE the server-alive check, so the usage error wins over a
-        // "server not running" (exit 3) — the op is wrong regardless of
-        // server state. Symmetric across --view / --hide / --toggle
-        // (clig.dev consistency): naming grid|rail is the same mistake
-        // whichever verb wraps it.
-        for (flag, value) in [("--view", viewArg), ("--hide", hideArg),
-                              ("--toggle", toggleArg)] {
-            if let v = value, v == "grid" || v == "rail" {
-                requireGrouping(.workspace, subject: "\(flag) \(v)")
-            }
-        }
-
         // Any client-mode action is about to fire — make sure a
         // server is actually listening, otherwise the DNC post
         // would silently broadcast to nobody and exit 0,
@@ -699,11 +617,11 @@ enum FacetApp {
         FacetConfig.installSchema()
 
         let cfg = FacetConfig.load()
-        // Fail Fast (M11-3): refuse to start on an incoherent config
-        // — `[grouping] by = "tag"` with no `[[tag]]`, or with a
-        // workspace-only default layout (`bsp`/`stack`), or a `by` typo.
-        // Loud `exit 2` (usage error) rather than silently running the
-        // default grouping. No-op in the (default) workspace mode.
+        // Fail Fast (Rule of Repair): refuse to start on an incoherent
+        // config with a loud `exit 2` (usage error) rather than silently
+        // running a degraded default. No fatal checks remain today, but
+        // the seam is kept so a future check lands without re-wiring the
+        // entry point.
         let configErrors = cfg.fatalConfigErrors()
         if !configErrors.isEmpty {
             for e in configErrors {

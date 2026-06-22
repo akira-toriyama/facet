@@ -215,7 +215,7 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | ワークスペース header を別 header にドラッグ (tree) | 2 ワークスペースの中身を swap |
 | 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 (session 限り — 固定は `[tree]` geometry を config に書く) |
 | パネルヘッダをダブルクリック (tree) | 位置・サイズを `[tree]` config geometry (未設定なら既定) にリセット |
-| 右クリック (tree) | 対象別コンテキストメニュー: window 行 → アクション ・ workspace header → layout 切替 (tag mode ではヘッダが **tag-world** ＝ **Layout** + **Select tags**〔lens 選択〕の 1 枚メニュー) ・「Desktop N」バンド → Search / Manage tags (`s` / `t` モード) |
+| 右クリック (tree) | 対象別コンテキストメニュー: window 行 → アクション ・ workspace header → layout 切替 ・「Desktop N」バンド → Search (`s` モード) |
 | window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
@@ -228,15 +228,14 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 ### キーボードナビ
 
 tree は最初からキーボードナビで開く — 出た瞬間に facet が key focus を取る
-(Spotlight 風) ので、 矢印キー・`Return`・検索 (`s`)・tag 管理 (`t`) が
+(Spotlight 風) ので、 矢印キー・`Return`・検索 (`s`) が
 すぐ使える。 代償: パネル表示中は facet が一時的に active app になる
 (Dock + Cmd-Tab に表示)。 窓に作用する時 — 行をクリック か選択行で
 `Return` — は先に key を**手放す**ので、 同一 app の別窓への focus も効く;
 その後 facet は背景に戻る。 `Esc` は検索 / コンテキストメニューを 1 段
 戻すだけで **tree からは抜けない**。
 
-**「Desktop N」ヘッダの右クリック**でも **Search** (`s`)、 tag grouping
-なら **Manage tags** (`t`) のメニューが開く。
+**「Desktop N」ヘッダの右クリック**でも **Search** (`s`) のメニューが開く。
 
 | キー | アクション |
 |---|---|
@@ -397,24 +396,15 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの
   ある mac desktop だけ facet が管理し、 無い mac desktop は完全に
-  ノータッチ（窓そのまま・パネル非表示）。 section モデルは
-  `by = "workspace"` 専用 (`by = "tag"` では無視)。 3 view すべてが同じ
+  ノータッチ（窓そのまま・パネル非表示）。 3 view すべてが同じ
   section リストを描画する — lens section は tree・grid・**rail** でセルとして
   並び、 ちょうど 1 つだけハイライト。 rail では active section が中央の hero
   になる（active な lens はそこに union を描く）。
-- `[grouping] by` — `workspace` (デフォルト) か `tag`。 `tag` は
-  per-mac-desktop の workspace 一覧を dwm 流の **tag world** に差し替える:
-  1 窓が複数 tag を持て、 **lens** (`facet lens`) でどの tag セットを
-  表示するか選ぶ (lens 外の窓は anchor park — 隠れた workspace と同じ)。
-  不明値は `workspace` にクランプ。 tag mode では tree だけが view —
-  `grid` / `rail` と `default-view = "grid"` は exit `2` (grid *layout*
-  は引き続き使える)。 [Tag mode](#tag-mode) 参照。
-- `[[tag]]` テーブル (`name = "..."`) — `by = "tag"` モード**のみ**の
-  **起動時** tag 語彙シード (workspace モードでは無視)。 宣言順が窓の行に
-  並ぶ chip 順を決める。 tag は config ではなく **実行時** (session 限り)
-  に割り当てる — 静的な 窓→tag マッピングは無い。 `facet window --tag` /
-  `facet tag` / `facet lens` 系でライブ編集 ([Tag mode](#tag-mode))。
-  `_` 始まりの名前は予約 (`_default` は全窓が持つ内部フロア)。
+- **per-window tag** は config を持たない — **実行時** (session 限り) に
+  `facet window --tag NAME` (および `--untag` / `--toggle-tag` / `--retag`)
+  で付ける自由記述の文字列。 `match` に `tag~=NAME` を含む `type = "lens"`
+  section が NAME を持つ全窓を表示する。 `facet query --tags` でいま使われて
+  いる全 tag を一覧。
 
 ## CLI
 
@@ -446,10 +436,10 @@ facet window --grow-master|--shrink-master   # master 幅 ±0.05 (master-* engin
 facet window --inc-master|--dec-master       # master 窓数 ±1 (master-* engine)
 
 # --view tree は最初からキーボードナビで開く: facet が即 focus 取得
-# (Spotlight 風) なので 矢印 / Return / 検索 (s) / tag 管理 (t) が
+# (Spotlight 風) なので 矢印 / Return / 検索 (s) が
 # すぐ効く。 窓に作用する時 (行クリック か Return) は先に key を手放す
 # ので同一 app focus も効く。「Desktop N」ヘッダ右クリックでも
-# Search / Manage tags に入れる。 (grid は常に key/active・rail は passive)
+# Search に入れる。 (grid は常に key/active・rail は passive)
 
 # Workspace 操作
 facet workspace --focus N               # workspace N に切替 (1-indexed)
@@ -498,11 +488,9 @@ facet query --windows --filter EXPR  # その配列を facet filter 式
                                   # 出し全窓表示 (exit 0)。例:
                                   #   facet query --windows \
                                   #     --filter 'tag~=web and not floating'
-facet query --tags               # 定義済みタグ語彙を JSON 配列で
-                                  # (宣言順)。workspace モードでは []
-facet query --lens               # 現 lens を JSON で {"tags":[…],
-                                  # "showsAll":bool}。tag モード外は null
-                                  # (showsAll = 全窓表示の lens なら true)
+facet query --tags               # いま使われている全 tag を sorted な
+                                  # JSON 配列で (窓を 1 つもタグ付けする
+                                  # まで [])
 
 # Server 制御
 facet --theme NAME                # 全13テーマ + random (terminal, chomp, …, catppuccin-latte; config.toml 参照)
@@ -517,40 +505,20 @@ facet --help                      # 完全リファレンス
 typo は silent fail せず明示エラー。 短縮 (シェル alias / hotkey
 バインド) は各自の環境の領分で、 facet 側では扱わない。
 
-### Tag mode
+### Window tag
 
-`[grouping] by = "tag"` ([設定](#設定) 参照) にすると、 facet は
-per-mac-desktop の workspace 一覧を dwm 流の **tag world** に差し替える:
-1 窓が複数 tag を持て、 **lens** で表示する tag を選ぶ (lens 外の窓は
-anchor park — 隠れた workspace と同じ)。 tag は実行時に割り当てる
-session 限りの状態で、 `[[tag]]` は起動時の語彙シードにすぎない。 tag
-mode では tree だけが view。
+1 窓は **自由記述の文字列 tag** を好きなだけ持てる — 初出で自動生成・
+session 限り・CLI でライブに付ける。 lens フィルタの材料になる: `match`
+に `tag~=NAME` を含む `type = "lens"` section ([設定](#設定) 参照) が
+NAME を持つ全窓を表示する。
 
 ```sh
-# focus 中の窓にタグ付け (NAME が新規なら語彙が自動で増える)
 facet window --tag NAME           # focus 中の窓に tag を付ける
 facet window --untag NAME         # focus 中の窓から tag を外す
 facet window --toggle-tag NAME    # focus 中の窓の tag を flip
-facet window --retag OLD NEW      # focus 中の窓の tag を改名
-
-# Lens — tree に表示する tag (NAME は positional・workspace モードで
-# lens section を有効化するのと同じ動詞)
-facet lens A[,B]                  # この tag だけ表示 (旧 --only)
-facet lens --add A[,B]            # 表示セットに tag を足す
-facet lens --remove A[,B]         # 表示セットから tag を外す
-facet lens --toggle A[,B]         # 表示セットの tag を flip
-facet lens --all                  # 全窓表示
-facet lens --clear                # lens 解除 → 全窓表示 (tag モードでは --all と同結果)
-
-# タグ語彙 — 割り当て可能な名前付き tag
-facet tag --add NAME              # 新しい tag を定義
-facet tag --remove NAME           # tag を削除 (全窓から外れる)
-facet tag --rename OLD NEW        # 語彙全体で tag を改名
+facet window --retag OLD NEW      # 窓の tag を別の tag に置換
+facet query --tags                # いま使われている全 tag (sorted JSON)
 ```
-
-これらは workspace モードでは no-op; tag mode は `[grouping] by =
-"tag"` の時だけ有効。 ライブ状態は `facet query --tags` (語彙) と
-`facet query --lens` (現 lens) で確認できる。
 
 ### ホットキー連携
 

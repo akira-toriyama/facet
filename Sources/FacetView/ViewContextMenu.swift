@@ -108,19 +108,11 @@ public enum ViewContextMenu {
         workspaceIndex ws: Int,
         workspaces: [Workspace],
         palette: ResolvedPalette,
-        filterable: Bool = false,
-        tagMode: Bool = false
+        filterable: Bool = false
     ) {
-        // Tag mode shows ONE global layout for the tag-world's lens union;
-        // only tag-compatible modes apply (float + stateless engines —
-        // bsp / stack are workspace-only). Filter them out so the picker
-        // never offers a mode `setLayoutMode` would reject.
-        let modes = tagMode
-            ? backend.layoutModes.filter {
-                LayoutGrouping.isCompatible(mode: $0, with: .tag) }
-            : backend.layoutModes
+        let modes = backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
-        let header = tagMode ? "Tag-world" : "WS\(ws + 1)"
+        let header = "WS\(ws + 1)"
         let entries = modes.map { mode in
             Entry(label: mode, icon: layoutModeIcon(mode),
                   section: "Layout", checked: mode == cur) {
@@ -134,68 +126,24 @@ public enum ViewContextMenu {
     /// Panel-level menu for the pinned "Desktop N" band — the third
     /// right-click surface (scope hierarchy: panel ▸ workspace ▸ window).
     /// Exposes the tree-wide keyboard modes that are otherwise reachable
-    /// only by entering keyboard nav: Search (the `s` key) always, and Manage
-    /// tags (the `t` key) only under tag grouping. Picking an item runs its
-    /// callback, which self-activates facet — no window is focused, so the
-    /// #66 same-app-focus invariant and the never-steal-focus contract both
-    /// hold (contrast a window-row click, which must NOT grab key).
+    /// only by entering keyboard nav: Search (the `s` key). Picking an item
+    /// runs its callback, which self-activates facet — no window is focused,
+    /// so the #66 same-app-focus invariant and the never-steal-focus contract
+    /// both hold (contrast a window-row click, which must NOT grab key).
     public static func showDesktop(
         at scr: NSPoint,
         palette: ResolvedPalette,
-        tagManage: Bool,
         ordinal: Int? = nil,
-        onSearch: @escaping () -> Void,
-        onTagManage: @escaping () -> Void
+        onSearch: @escaping () -> Void
     ) {
-        var entries: [Entry] = [
+        let entries: [Entry] = [
             Entry(label: "Search", icon: "SF:magnifyingglass",
                   section: "Find", run: onSearch),
         ]
-        if tagManage {
-            entries.append(Entry(label: "Manage tags", icon: "SF:tag",
-                                 section: "Tags", run: onTagManage))
-        }
         // Title carries the mac-desktop number (matching the pinned
         // "Desktop N" band the menu pops from); bare "Desktop" if unknown.
         let header = ordinal.map { "Desktop \($0)" } ?? "Desktop"
         present(at: scr, header: header, palette: palette, entries: entries)
-    }
-
-    /// Tag-world header menu (tag mode). Title-less (item 13 — the section
-    /// labels carry the context) and type-to-filter like the other context
-    /// menus (item 11). Grouped sections:
-    ///
-    ///     LAYOUT          ← section (primary accent)
-    ///     float · grid · master-… (the tag-compatible modes, current ✓)
-    ///     TAGS            ← section (secondary accent)
-    ///     Select tags     → opens the lens checklist
-    ///     All tags        → lens = every tag (show everything; item 15/16)
-    ///
-    /// `layoutModes` is already filtered to tag-compatible engines. The
-    /// workspace-header menu (`showLayout`) stays the bare layout picker
-    /// (no lens in workspace mode).
-    public static func showTagWorld(
-        at scr: NSPoint,
-        layoutModes: [String],
-        currentLayout: String?,
-        palette: ResolvedPalette,
-        onPickLayout: @escaping (String) -> Void,
-        onSelectTags: @escaping () -> Void,
-        onAllTags: @escaping () -> Void
-    ) {
-        var entries = layoutModes.map { mode in
-            Entry(label: mode, icon: layoutModeIcon(mode),
-                  section: "Layout", checked: mode == currentLayout) {
-                onPickLayout(mode)
-            }
-        }
-        entries.append(Entry(label: "Select tags",
-                             icon: "SF:line.3.horizontal.decrease.circle",
-                             section: "Tags", run: onSelectTags))
-        entries.append(Entry(label: "All tags", icon: "SF:tag",
-                             section: "Tags", run: onAllTags))
-        present(at: scr, header: "", palette: palette,
-                filterable: true, entries: entries)
     }
 
     /// Window-ops menu for a window (close / float / master / stack /
@@ -211,13 +159,9 @@ public enum ViewContextMenu {
         windowID id: WindowID,
         title: String,
         palette: ResolvedPalette,
-        tagMode: Bool = false,
         filterable: Bool = false,
         addToLensTargets: [(label: String, sectionID: String)] = [],
         onApplyAdd: ((_ sectionID: String) -> Void)? = nil,
-        onOpenTagEditor: ((_ id: WindowID, _ pid: Int, _ appName: String,
-                           _ title: String, _ currentTags: [String],
-                           _ anchor: NSPoint) -> Void)? = nil,
         runOps: @escaping (_ ops: [WindowAction], _ window: Window, _ ws: Int) -> Void
     ) {
         let wsModel = workspaces.first { $0.index == ws }
@@ -251,17 +195,6 @@ public enum ViewContextMenu {
             }
         }
         var entries = menu.filter { $0.section == "Layout" }.map(makeEntry)
-        // Tag mode (#4): a single "Tag" item under its own TAGS section that
-        // opens the per-window tag-edit checklist (`TagEditPanel`). Grid /
-        // rail are workspace-only in tag mode, so they never set `tagMode`
-        // and this item never appears there.
-        if tagMode {
-            entries.append(Entry(label: "Tag", icon: "SF:tag",
-                                 section: "Tags") {
-                onOpenTagEditor?(id, pid, win?.appName ?? "",
-                                 win?.title ?? title, win?.tags ?? [], scr)
-            })
-        }
         // Section model (PR8): "Add to <lens>" items — apply-only ADD
         // (multi-match: the window joins the lens, staying in every section it
         // already matched). Their own section so they read as a group. Grid /
