@@ -214,7 +214,7 @@ In `RailView` stored props:
   /// this, not `cells` (which appends a wrap-peek ghost).
   private var sectionOrder: [String] = []
   ```
-- Re-key hover: `private var hoverWS: Int?` → `private var hoverID: String?` (keep the `didSet { needsDisplay }`); `var hoverHeaderWS: Int?` → `var hoverHeaderID: String?`.
+- Re-key hover — **both** properties migrate together (RailView.swift:132 `hoverWS` + :137 `hoverHeaderWS`; RailHeader.swift:17 reads `hoverHeaderWS`, so a half-rename is build-red): `private var hoverWS: Int? { didSet … }` → `private var hoverID: String? { didSet { needsDisplay = true } }` (keep the didSet); `var hoverHeaderWS: Int?` → `var hoverHeaderID: String?`. (Plan-review should-fix #2.)
 - Callbacks: **replace** `onPick: ((Int) -> Void)?` **and** `onPickWindow: ((_ ws:Int,_ pid:Int,_ id:WindowID)->Void)?` with a single:
   ```swift
   /// Pick a section cell / window thumb / commit a keyboard browse →
@@ -530,11 +530,12 @@ if kbSelectedWindowIdx == -1 {
 } else if let h = hero, kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < h.windows.count {
     let w = h.windows[kbSelectedWindowIdx]
     let ws = windowHomeWS[w.id] ?? cell.wsIndex
+    guard ws >= 0 else { return }                   // unresolved (lens, no home) → no menu
     // … railWinMenu(scr, backend, ws: ws, w: w) …
 }
 ```
 
-`rightMouseDown` — header lens guard + window home WS (mirror grid's whole-branch fix):
+`rightMouseDown` — header lens guard + window home WS, **guarded `home >= 0`** so a lens cell's `wsIndex == −1` never reaches `ViewContextMenu.showWindow(workspaceIndex:)` (plan-review should-fix #1; mirror grid's whole-branch fix):
 ```swift
 if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
     guard !cell.isLens else { return }              // lens header → no layout picker
@@ -542,11 +543,15 @@ if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
     return
 }
 if let w = heroWinAt(p), let h = hero {
-    railWinMenu(scr, backend: backend, ws: windowHomeWS[w.id] ?? h.wsIndex, w: w); return
+    let home = windowHomeWS[w.id] ?? h.wsIndex
+    guard home >= 0 else { return }                 // unresolved (lens, no home) → no menu
+    railWinMenu(scr, backend: backend, ws: home, w: w); return
 }
 if inStrip, let cell = cells.first(where: { $0.rect.contains(p) }),
    let w = cell.windows.reversed().first(where: { $0.rect.contains(p) }) {
-    railWinMenu(scr, backend: backend, ws: windowHomeWS[w.id] ?? cell.wsIndex, w: w)
+    let home = windowHomeWS[w.id] ?? cell.wsIndex
+    guard home >= 0 else { return }
+    railWinMenu(scr, backend: backend, ws: home, w: w)
 }
 ```
 
