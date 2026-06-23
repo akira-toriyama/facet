@@ -292,6 +292,43 @@
       },
       "type" : "object"
     },
+    "rule" : {
+      "items" : {
+        "additionalProperties" : false,
+        "description" : "Adopt-rules (#282 Phase 3): a NEW window matching `match` (a facet filter WHERE-clause) gets these facets set on creation — the declarative successor to the retired `[[assign]]`. The keys after `match` are the section `apply` vocabulary, flat here.",
+        "properties" : {
+          "floating" : {
+            "description" : "Force a matched window floating (or tiled = false).",
+            "type" : "boolean"
+          },
+          "master" : {
+            "description" : "Make a matched window the layout master.",
+            "type" : "boolean"
+          },
+          "match" : {
+            "description" : "facet filter WHERE-clause selecting the windows to adopt (e.g. `app=Safari and not floating`).",
+            "type" : "string"
+          },
+          "sticky" : {
+            "description" : "Pin a matched window across mac-desktop / workspace switches.",
+            "type" : "boolean"
+          },
+          "tags" : {
+            "description" : "Tags to add to a matched window.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "workspace" : {
+            "description" : "Move a matched window to this named workspace.",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "type" : "array"
+    },
     "theme" : {
       "additionalProperties" : false,
       "description" : "App-default palette.",

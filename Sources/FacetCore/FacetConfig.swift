@@ -182,6 +182,13 @@ public struct FacetConfig: Sendable {
     /// it's filled by `load`, not `from(toml:)`.
     public var exclusionRules: [ExclusionRule]?
 
+    /// `[[rule]]` adopt-rules (#282/#286 Phase 3) — a new window matching a
+    /// rule's `match` gets the rule's facets set on adoption (the declarative
+    /// successor to `[[assign]]`, #191). Global (not per-mac-desktop). `nil`
+    /// when none configured. Parsed from the raw TOML text (array-of-tables)
+    /// by `load`, like `exclusionRules`. Read through `effectiveRules`.
+    public var rules: [Rule]?
+
     /// `[window] raise-on-open` — how a freshly-opened floating window
     /// (sheet / dialog / palette / `[[exclude]]` `action="float"`) is
     /// surfaced on first sight. Raw; read `effectiveRaiseOnOpen`.
@@ -566,6 +573,10 @@ public struct FacetConfig: Sendable {
     public var effectiveExclusionRules: ExclusionRules {
         ExclusionRules(exclusionRules ?? [])
     }
+
+    /// Effective `[[rule]]` adopt-rule set (empty when none configured).
+    /// Always read through this, never the raw Optional.
+    public var effectiveRules: [Rule] { rules ?? [] }
 
     /// Effective `[[desktop.N.section]]` definitions (the section/lens
     /// model). Always read through this, never the raw dict.

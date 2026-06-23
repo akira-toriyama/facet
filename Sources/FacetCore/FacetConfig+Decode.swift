@@ -107,6 +107,26 @@ extension FacetConfig {
         return out
     }
 
+    /// Build `[Rule]` from the raw TOML text's `[[rule]]` array-of-tables
+    /// (the Phase 3 adopt-rules — #282/#286). Each table: `match` (a facet
+    /// filter WHERE-clause string) + the FLAT apply keys (`workspace` /
+    /// `tags` / `floating` / `sticky` / `master`) read by the shared
+    /// `ApplyOp.list` over the whole row (it ignores `match` + any unknown
+    /// key, in canonical op order). A table missing `match` / with a blank
+    /// `match`, or whose flat keys yield no usable `apply` op (it would adopt
+    /// nothing), is DROPPED — a bad rule never breaks the others. The `match`
+    /// GRAMMAR is NOT validated here (parse-only stays total); the consumer
+    /// compiles it loud + non-fatal at eval time, like a `type="lens"` match.
+    public static func decodeRuleSections(fromTOML text: String) -> [Rule] {
+        parseTOMLArrayOfTables(text, table: "rule").compactMap { t in
+            guard case .string(let match)? = t["match"],
+                  !match.trimmingCharacters(in: .whitespaces).isEmpty
+            else { return nil }
+            let apply = ApplyOp.list(from: .table(t))
+            return apply.isEmpty ? nil : Rule(match: match, apply: apply)
+        }
+    }
+
     // MARK: - Disk
 
     public static var defaultPath: String {
@@ -133,6 +153,8 @@ extension FacetConfig {
             if !rules.isEmpty { c.exclusionRules = rules }
             let sections = decodeDesktopSectionSections(fromTOML: text)
             if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
+            let adoptRules = decodeRuleSections(fromTOML: text)
+            if !adoptRules.isEmpty { c.rules = adoptRules }
             return c
         }
         FileHandle.standardError.write(Data(

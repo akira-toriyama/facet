@@ -484,6 +484,37 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
+# Adopt-rules  [[rule]]   (the declarative successor to [[assign]])
+# -----------------------------------------------------------------
+# When a NEW window matches `match` (a facet filter WHERE-clause), the
+# rule's facets are set on it the moment facet adopts it. Global (applies
+# on every mac desktop), evaluated in declaration order; a window picks up
+# every matching rule's facets.
+#
+#   match    — facet filter WHERE-clause: `field op value` joined by
+#              `and`/`or`/`not`/`()`. ops: `=` `~=`(token) `^=`(prefix)
+#              `$=`(suffix) `*=`(substring). Bare field = presence
+#              (`floating`, `not tag`). Fields: app, title, bundleId,
+#              workspace, tag, floating, sticky, master, scratchpad,
+#              desktop, onscreen, focused. A malformed match is loud +
+#              non-fatal (that rule is skipped; the rest still run).
+#   workspace — move the matched window to this named workspace.
+#   tags      — tags to add (feeds lens filters; same as `facet window --tag`).
+#   floating / sticky / master — set the matching facet (true / false).
+#
+# Examples — uncomment / adapt:
+#
+# [[rule]]                          # Safari windows → tagged "web", floated
+# match = "app=Safari"
+# tags = ["web"]
+# floating = true
+#
+# [[rule]]                          # any window titled like a PR → "review"
+# match = "title*=Pull Request or title*=PR"
+# tags = ["review"]
+
+
+# -----------------------------------------------------------------
 # Per-window tags (no config key — assigned at RUNTIME only)
 # -----------------------------------------------------------------
 # A window can carry any number of free-form string tags. There is no
