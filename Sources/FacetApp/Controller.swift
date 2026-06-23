@@ -62,6 +62,16 @@ final class Controller: NSObject {
     /// overview degrades to `lastWorkspaces`. Snapshot-on-show seeds from these.
     var lastSections: [ProjectedSection] = []
     var lastActiveLens: String?
+    /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
+    /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
+    /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
+    /// ids (`"ws:<index>"` / `"section:<declOrder>:<label>"`). Applied to the
+    /// PROJECTED result in `apply()` via `SectionOrder` so tree/grid/rail all
+    /// reflect it; NEVER written to disk (config.toml stays read-only) and
+    /// NEVER touches the backend (display-only — windows don't move). A
+    /// relaunch resets to config order. See `SectionOrder` for the why
+    /// (reorder the OUTPUT, not the input `[DesktopSection]`).
+    var macDesktopSectionOrder: [Int: [String]] = [:]
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -830,6 +840,15 @@ final class Controller: NSObject {
         // active-lens narrow all key off it — read ONCE here so they agree
         // within this main-actor turn. 0 = SkyLight unavailable → no name.
         let macDesktopOrdinal = currentMacDesktopOrdinal()
+        // Session-only display-order override for this mac desktop (drag-to-
+        // reorder). `displaySectionOrder` permutes the PROJECTED section list
+        // (section path) and `displayWss` the degrade-path workspace list —
+        // DISPLAY-ONLY (routing/landing key off `ws.index` / `sourceWorkspace
+        // Index`, not array position, so windows never move). `lastWorkspaces`
+        // (set above) stays index-ascending for routing/snapshot; only the
+        // copies handed to the views are reordered. Empty override ⇒ identity.
+        let displaySectionOrder = macDesktopSectionOrder[macDesktopOrdinal ?? -1]
+        let displayWss = SectionOrder.applyWorkspaces(displaySectionOrder, to: wss)
         // Tag-unification + EX-0.4 (exclusive model) + EX-1 (ActiveSection):
         // the active section is held per-mac-desktop in the catalog (the
         // authority); `currentActiveSection` is only the view's highlight MIRROR.
@@ -889,7 +908,11 @@ final class Controller: NSObject {
                 orphans: backend.orphanWindows())
             logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
                                    against: &loggedSectionDiagnostics)
-            lastSections = projected.sections
+            // Apply the session-only reorder to the PROJECTED result (never
+            // the config input — see `SectionOrder`). Flows for free into
+            // tree/grid/rail since all three read `lastSections`.
+            lastSections = SectionOrder.apply(displaySectionOrder,
+                                              to: projected.sections)
         } else {
             lastSections = []
         }
@@ -899,7 +922,7 @@ final class Controller: NSObject {
         // thumbnails themselves) — no view-side recompute. `wss` stays the
         // UNFILTERED set; only the parked windows on the active WS are dropped.
         if let g = gridView {
-            g.workspaces = wss
+            g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
             g.activeLens = lastActiveLens      // EX-2: active lens for single-highlight
@@ -914,7 +937,7 @@ final class Controller: NSObject {
             let oldActiveID = activeSectionID(activeLens: rv.activeLens,
                                               activeIndex: rv.activeIndex,
                                               sections: rv.sections)
-            rv.workspaces = wss
+            rv.workspaces = displayWss         // reorder: degrade-path cell order
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
             rv.activeLens = lastActiveLens      // EX-2: active lens for single-highlight
@@ -1021,7 +1044,7 @@ final class Controller: NSObject {
                                           titles: titles,
                                           macDesktop: macDesktopOrdinal)
         } else {
-            contentH = sidebarView.update(wss, titles: titles,
+            contentH = sidebarView.update(displayWss, titles: titles,
                                           macDesktop: macDesktopOrdinal)
         }
         panelHost.layout(contentHeight: contentH,

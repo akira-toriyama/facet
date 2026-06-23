@@ -116,6 +116,10 @@ extension RailView {
         lastDrop = nil
         lastSwap = nil
         layoutSuppressed = false
+        reorderDrag = false
+        dragSectionID = nil
+        reorderInsertAt = nil
+        reorderLine = nil
         needsDisplay = true
     }
 }

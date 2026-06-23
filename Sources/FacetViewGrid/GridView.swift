@@ -77,6 +77,13 @@ public final class GridView: NSView {
     public var onSwap: ((_ srcWS: Int, _ dstWS: Int,
                          _ srcIDs: [WindowID],
                          _ dstIDs: [WindowID]) -> Void)?
+    /// Section drag-to-reorder commit (display-only, session-only): move the
+    /// section `sectionID` to insertion BOUNDARY `boundary` (current cell/
+    /// section-order coords; `0` = before first, `count` = after last). The
+    /// Controller mutates the per-mac-desktop order override + re-renders all
+    /// three views — no window moves, no config write. Mirrors the tree's
+    /// `reorderSection`. Replaces the mouse header-SWAP (which moved windows).
+    public var onReorder: ((_ sectionID: String, _ toBoundary: Int) -> Void)?
 
     // MARK: - Per-cell snapshot
 
@@ -94,10 +101,19 @@ public final class GridView: NSView {
     // The backend's workspace index never changes; only the windows
     // trade. Theme A: the grabbed target (not a modifier key) decides.
     private var pendingDown: (point: NSPoint, hit: MiniWindowHit, ws: Int)?
-    // Header band pressed: a workspace drag-or-switch candidate
-    // (Theme A). Promoted to a `.workspace` swap drag past threshold,
-    // else resolved as a WS switch on mouseUp.
-    private var pendingHeaderDown: (point: NSPoint, ws: Int)?
+    // Header band pressed: a section drag-or-switch candidate. Promoted to a
+    // `.workspace`-kind REORDER drag past threshold (mouse path — `reorderDrag`
+    // gates it from the keyboard swap), else resolved as a switch / lens toggle
+    // on mouseUp. Carries `sectionID` so a LENS header (wsIndex == -1, ambiguous)
+    // is identifiable.
+    private var pendingHeaderDown: (point: NSPoint, ws: Int, sectionID: String)?
+    // Mouse section-reorder (the `.workspace`-kind drag is a display-only
+    // reorder, NOT the keyboard's content swap): the dragged section id, the
+    // live insertion boundary, and the gate that tells draw/commit "reorder,
+    // not swap". The keyboard header-lift leaves `reorderDrag == false`.
+    private var dragSectionID: String?
+    private var reorderInsertAt: Int?
+    private var reorderDrag = false
     // The section id of the cell whose header the pointer is hovering —
     // brightens the header band + grip (mirrors the tree header hover). EX-2:
     // keyed on sectionID, NOT wsIndex (lens cells all share wsIndex=-1, so a
@@ -582,8 +598,14 @@ public final class GridView: NSView {
                 xRadius: gridCellCornerRadius,
                 yRadius: gridCellCornerRadius)
             let isDrop = (cell.wsIndex == dropTarget)
-            let isSwapSource = (dragKind == .workspace
-                                && cell.wsIndex == dragSourceWS)
+            // Dim the lifted SOURCE cell: reorder keys by sectionID (a lens
+            // source has wsIndex −1, shared by all lenses); the keyboard swap
+            // keys by wsIndex. `dropTarget` is nil during a reorder, so the
+            // swap drop-highlight never fires here.
+            let isSwapSource = dragKind == .workspace
+                && (reorderDrag
+                    ? cell.sectionID == dragSectionID
+                    : cell.wsIndex == dragSourceWS)
             if isDrop {
                 switch dragKind {
                 case .workspace:
@@ -702,6 +724,25 @@ public final class GridView: NSView {
                 }
             }
         }
+        // Section reorder: a vertical insertion LINE with end caps at the drop
+        // boundary (the 2-D analogue of the tree's horizontal line). `b` is a
+        // cell/section index: a line at cell `b`'s left edge, or past the last
+        // cell's right edge for `b == count`.
+        if reorderDrag, let b = reorderInsertAt, !cells.isEmpty {
+            let cell = b < cells.count ? cells[b] : cells[cells.count - 1]
+            let lineX = b < cells.count ? cell.rect.minX : cell.rect.maxX
+            pal.primary.setStroke()
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: lineX, y: cell.rect.minY))
+            line.line(to: NSPoint(x: lineX, y: cell.rect.maxY))
+            line.lineWidth = 3
+            line.stroke()
+            pal.primary.setFill()
+            for ey in [cell.rect.minY, cell.rect.maxY] {
+                NSBezierPath(ovalIn: NSRect(x: lineX - 3, y: ey - 3,
+                                            width: 6, height: 6)).fill()
+            }
+        }
     }
 
     // MARK: - Hover (header highlight)
@@ -802,11 +843,12 @@ public final class GridView: NSView {
     public override func mouseDown(with e: NSEvent) {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
         let p = convert(e.locationInWindow, from: nil)
-        // Header band → workspace drag (swap) or click (switch). A LENS cell's
-        // header is a click target only (no swap handle) → activate the lens.
+        // Header band → section REORDER drag (past threshold) or click
+        // (workspace switch / lens toggle, resolved on mouseUp). BOTH workspace
+        // and lens headers are reorder-draggable now; the click still
+        // switches / toggles.
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            if cell.isLens { onPick?(.lens(label: cell.label)); return }
-            pendingHeaderDown = (point: p, ws: cell.wsIndex)
+            pendingHeaderDown = (point: p, ws: cell.wsIndex, sectionID: cell.sectionID)
             return
         }
         // No cell under cursor → backdrop click → immediate dismiss.
@@ -841,17 +883,21 @@ public final class GridView: NSView {
                 if (dx * dx + dy * dy) < pointerDragThreshold * pointerDragThreshold {
                     return
                 }
+                // Identify by sectionID (a lens header's wsIndex is −1).
                 guard let srcCell = cells.first(where: {
-                    $0.wsIndex == ph.ws
+                    $0.sectionID == ph.sectionID
                 }) else { return }
                 drag = OverviewDrag(
                     sourceWS: ph.ws,
                     kind: .workspace,
                     pid: -1, id: WindowID(serverID: -1),
                     sourceRect: srcCell.rect,
-                    srcIDs: srcCell.windows.map(\.id),   // visible lifted set (display); the actual swap set is recomputed at commit
+                    srcIDs: srcCell.windows.map(\.id),
                     current: p,
                     dropTargetWS: nil)
+                dragSectionID = ph.sectionID    // mouse path = display-only REORDER
+                reorderDrag = true
+                reorderInsertAt = nil
                 layoutSuppressed = true
                 installWorkspaceGhost(for: srcCell)
                 NSCursor.closedHand.set()
@@ -877,16 +923,39 @@ public final class GridView: NSView {
         }
         guard var d = drag else { return }
         d.current = p
-        // A lens cell is never a move/swap target (no source workspace) — skip
-        // it so a drag can't land on it (EX-2, MUST-FIX #2 mouse path).
-        d.dropTargetWS = cells.first(where: {
-            ($0.rect.contains(p) || $0.headerRect.contains(p)) && !$0.isLens
-        })
-            .map(\.wsIndex)
-            .flatMap { $0 == d.sourceWS ? nil : $0 }
+        if reorderDrag {
+            // Section reorder: insertion BOUNDARY from the cell under the cursor
+            // (left half → before it, right half → after) — any cell, lens
+            // included. dropTargetWS stays nil (the swap drop-highlight is off).
+            reorderInsertAt = reorderBoundary(at: p)
+        } else {
+            // A lens cell is never a move target (no source workspace) — skip
+            // it so a window drag can't land on it (EX-2, MUST-FIX #2).
+            d.dropTargetWS = cells.first(where: {
+                ($0.rect.contains(p) || $0.headerRect.contains(p)) && !$0.isLens
+            })
+                .map(\.wsIndex)
+                .flatMap { $0 == d.sourceWS ? nil : $0 }
+        }
         drag = d
         positionDragGhost(at: p)
         needsDisplay = true
+    }
+
+    /// The section-reorder insertion boundary for cursor point `p` — the cell
+    /// under the cursor (left half → insert before it, right half → after).
+    /// `nil` when off all cells or on the dragged section's own slot (no-op).
+    /// Boundary coords match `cells` order (= the projected section order the
+    /// Controller reorders).
+    private func reorderBoundary(at p: NSPoint) -> Int? {
+        guard let t = cells.firstIndex(where: {
+            $0.rect.contains(p) || $0.headerRect.contains(p)
+        }) else { return nil }
+        let b = p.x < cells[t].rect.midX ? t : t + 1
+        if let id = dragSectionID,
+           let s = cells.firstIndex(where: { $0.sectionID == id }),
+           b == s || b == s + 1 { return nil }    // own slot → no-op
+        return b
     }
 
     public override func mouseUp(with e: NSEvent) {
@@ -900,7 +969,13 @@ public final class GridView: NSView {
                                 pid: pd.hit.pid,
                                 windowID: pd.hit.id))
             } else if let ph = pendingHeaderDown {
-                onPick?(.workspace(workspaceIndex: ph.ws))
+                // Header click: switch to the workspace, or toggle the lens.
+                if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
+                   cell.isLens {
+                    onPick?(.lens(label: cell.label))
+                } else {
+                    onPick?(.workspace(workspaceIndex: ph.ws))
+                }
             }
             return
         }
@@ -913,6 +988,19 @@ public final class GridView: NSView {
         // mouseUp). `drag` is cleared in `layoutCells` (commit-
         // landed path) or `cleanupDrag` (cancel path).
         guard let d = drag else { return }
+        if reorderDrag {
+            // Section reorder commit (display-only, session-only): the
+            // Controller mutates the per-mac-desktop order override + re-renders
+            // all three views. No backend round-trip → clear the drag now (the
+            // reconcile re-lays-out with the new order; a no-op drop just
+            // re-renders unchanged). `reorderInsertAt` is nil on a no-op.
+            if let id = dragSectionID, let at = reorderInsertAt {
+                onReorder?(id, at)
+            }
+            cleanupDrag()
+            needsDisplay = true
+            return
+        }
         if let dst = d.dropTargetWS,
            let dstCell = cells.first(where: { $0.wsIndex == dst })
         {
@@ -1070,6 +1158,9 @@ public final class GridView: NSView {
         // commitContentSwap via lastSwap).
         drag = nil
         lastSwap = nil
+        reorderDrag = false
+        dragSectionID = nil
+        reorderInsertAt = nil
         needsDisplay = true
     }
 

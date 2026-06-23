@@ -89,6 +89,21 @@ extension SidebarView {
                 o.stroke()
             }
         }
+        // Section reorder (mode 4): a thin insertion LINE with end caps at the
+        // drop boundary (dnd-kit style) — "the dragged section lands here".
+        if let ly = reorderLineY {
+            pal.primary.setStroke()
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: rowPadX, y: ly))
+            line.line(to: NSPoint(x: bounds.width - rowPadX, y: ly))
+            line.lineWidth = 2.5
+            line.stroke()
+            pal.primary.setFill()
+            for ex in [rowPadX, bounds.width - rowPadX] {
+                NSBezierPath(ovalIn: NSRect(x: ex - 3, y: ly - 3,
+                                            width: 6, height: 6)).fill()
+            }
+        }
         let para = NSMutableParagraphStyle()
         // No tail-truncation (no "…"): rows are laid out at the natural
         // content width (see update's pre-pass) and the panel scrolls

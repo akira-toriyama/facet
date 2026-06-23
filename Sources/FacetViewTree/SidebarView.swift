@@ -156,6 +156,11 @@ public final class SidebarView: NSView {
     // dragged onto another (mouseDown loop `mode == 3`). Parallel to
     // `draggingWid`; drop trades the two workspaces' contents.
     var draggingWS: Int?
+    // Section reorder (mouseDown loop `mode == 4`, section model only): the
+    // flipped-y of the live insertion line (nil = no valid drop / no-op). The
+    // dragged section is NOT tracked via `draggingWS` so `dragContext` stays
+    // nil — the reorder paints an insertion LINE, not a drop-band highlight.
+    var reorderLineY: CGFloat?
     // Keyboard DnD: the row lifted with Space (window = move, header
     // = WS-swap). `kbDropWS` is the current aim target; arrows walk
     // it through the workspace order, Return/Space commits, Esc

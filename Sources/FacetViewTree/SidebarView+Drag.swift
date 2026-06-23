@@ -76,6 +76,19 @@ extension SidebarView {
                     if let tgt, tgt != dragWS {
                         performSwap(sourceWS: dragWS, targetWS: tgt)
                     }
+                } else if mode == 4 {
+                    // Section reorder commit (display-only, session-only): the
+                    // insertion boundary is the top/bottom half of the band
+                    // under the cursor. The Controller mutates the per-mac-
+                    // desktop order override + re-renders all three views; a
+                    // no-op drop commits nothing (`reorderSection` guards).
+                    if let hit = wsBands.first(where: { $0.value.contains(cp.y) }),
+                       dragGroup < lastSections.count {
+                        let mid = (hit.value.lowerBound + hit.value.upperBound) / 2
+                        let boundary = cp.y < mid ? hit.key : hit.key + 1
+                        controller?.reorderSection(
+                            move: lastSections[dragGroup].id, toBoundary: boundary)
+                    }
                 } else if let row, row.rect.contains(cp) {
                     // #66 safety belt: drop key/active BEFORE acting on
                     // the row, mirroring the Enter path (kbActivate).
@@ -130,30 +143,38 @@ extension SidebarView {
                             lastDropWS = nil
                             prevApp = NSWorkspace.shared.frontmostApplication
                             NSApp.activate(ignoringOtherApps: true)
-                        case .header(let g, .some)?:
-                            // Theme A: header drag = swap this WS's
-                            // contents with the drop-target WS. Panel
-                            // move retreats to ⌘+drag / empty space. (Only
-                            // reachable in the by-workspace path, where
-                            // group == ws.index == the swap target.) In the
-                            // section model a workspace-section header is NOT
-                            // swap-draggable (header swap stays by-workspace-
-                            // only); it falls back to panel-move.
+                        case .header(let g, let wsi)?:
+                            // Section model: a header grip-drag REORDERS the
+                            // section list (display-only, session-only — the
+                            // whole row lifts; the threshold above already
+                            // separated this from a plain click that
+                            // toggles/switches). Both workspace AND lens
+                            // headers reorder. By-workspace degrade keeps Theme
+                            // A header-swap (a lens header can't occur there).
+                            // Panel move retreats to ⌘+drag / empty space.
                             if sectionModeActive {
-                                mode = 1
-                            } else {
+                                mode = 4
+                                dragGroup = g
+                                // ⑨ richer ghost: lift the whole section
+                                // (header + windows) as a snapshot card. NOTE:
+                                // do NOT set `draggingWS` — that would paint a
+                                // swap drop-band; reorder paints a line.
+                                if !showDragCard(rect: dragRect(forGroup: g)) {
+                                    showChip(reorderChipLabel(for: g))
+                                }
+                                lastDropWS = nil
+                                reorderLineY = nil
+                            } else if wsi != nil {
                                 mode = 3
                                 dragWS = g
                                 draggingWS = g
-                                // ⑨ richer ghost: lift the whole WS section
-                                // (header + windows) as a snapshot card.
                                 if !showDragCard(rect: dragRect(forGroup: g)) {
                                     showChip(swapChipLabel(for: g))
                                 }
                                 lastDropWS = nil
+                            } else {
+                                mode = 1               // lens header (degrade) → move
                             }
-                        case .header(_, .none)?:
-                            mode = 1                   // lens header → move
                         }
                     }
                 }
@@ -199,6 +220,25 @@ extension SidebarView {
                         lastDropWS = dropWS
                         needsDisplay = true
                     }
+                } else if mode == 4 {
+                    // Section reorder: the insertion BOUNDARY is the top/bottom
+                    // half of the band under the cursor (flipped y: top half →
+                    // before that section, bottom half → after). A drop on the
+                    // dragged section's own slot edge is a no-op (no line).
+                    var lineY: CGFloat? = nil
+                    if let hit = wsBands.first(where: { $0.value.contains(cp.y) }) {
+                        let mid = (hit.value.lowerBound + hit.value.upperBound) / 2
+                        let boundary = cp.y < mid ? hit.key : hit.key + 1
+                        if boundary != dragGroup && boundary != dragGroup + 1 {
+                            lineY = wsBands[boundary]?.lowerBound
+                                ?? wsBands.values.map(\.upperBound).max()
+                        }
+                    }
+                    NSCursor.closedHand.set()
+                    if lineY == nil { NSCursor.arrow.set() }
+                    moveDragGhost(to: cp)
+                    tiltDragGhost(deltaX: ev.deltaX)
+                    if lineY != reorderLineY { reorderLineY = lineY; needsDisplay = true }
                 }
             default:
                 break
@@ -206,7 +246,7 @@ extension SidebarView {
         }
 
         draggingWid = nil; draggingWS = nil; dropWS = nil; dragLabel = nil
-        lastDropWS = nil
+        lastDropWS = nil; reorderLineY = nil
         hideDragGhosts()
         NSCursor.arrow.set()
         // Restore the previously-frontmost app. A tree drag activates
@@ -335,6 +375,18 @@ extension SidebarView {
     }
 
     private func swapChipLabel(for ws: Int) -> String { "⇄ \(wsName(ws))" }
+
+    /// Drag-ghost fallback chip for a section reorder (mode 4) — the section's
+    /// friendly name (workspace emoji label or lens label) with a reorder
+    /// glyph. Used only when the snapshot drag-card can't be built.
+    private func reorderChipLabel(for g: Int) -> String {
+        guard g < lastSections.count else { return "⇅" }
+        let s = lastSections[g]
+        let nm = s.sectionType == .lens
+            ? s.label
+            : workspaceShortLabel(name: s.label, idx: s.sourceWorkspaceIndex ?? 0)
+        return "⇅ \(nm)"
+    }
 
     func wsOf(windowID id: WindowID) -> Int? {
         lastWorkspaces.first { $0.windows.contains { $0.id == id } }?.index
