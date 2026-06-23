@@ -23,8 +23,12 @@
   - test: WorkspaceNamingTests に displayLabel/words 4本追加（CI 実行）
   - 検証: `swift build` ✅ ／ CLI（focus 🐶・query）はクロード ／ 実機目視はトミー
 
-- [ ] **2. config.toml「迷子」ラベルの英語化**
-  - 「迷子」（日本語）をやめ、他（Web / Code / Chat）と揃えて英語に
+- [x] **2. config.toml「迷子」ラベルの英語化** ✅ 完了（→ **"Orphans"**）
+  - 英単語: **"Orphans"**（コードベース既存の "orphan" 用語に合わせる）
+  - 変更（user-facing「迷子」を英語化）:
+    - **両 config.toml**（repo + `~/.config/facet/`）: lens `label = "Orphans"` ＋ 受け皿コメント英語化
+    - 実行表示: `facet query` の orphan 表示 [NativeAdapter+QueryCommand.swift:140](Sources/FacetAdapterNative/NativeAdapter+QueryCommand.swift#L140) → `workspace: "Orphans"`
+  - 📌 **未対応（内部・暗黙にしない）**: dev ログ文字列（Tagging/NativeAdapter）・schema 説明（FacetConfig+Spec → config.schema.json）・~20 の内部コメント「EX-3 迷子」・glossary/README/architecture の用語「迷子(orphan)」・test fixture の "迷子" ラベル。**= 内部の概念名**。これらも英語化するか別途確認（item 2-b 候補）
 
 - [ ] **3. workspace の DnD**
   - workspace 自体を DnD できるようにする（ウィンドウ DnD は既に可）

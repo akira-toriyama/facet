@@ -649,18 +649,19 @@ action = "ignore"
 #                    master    = true    mark / unmark as layout master
 #                  Omit `apply` → the lens is drop-inert (a drop snaps back).
 #
-#   迷子 (orphan) receptacle — a window can belong to NO workspace
+#   Orphans receptacle — a window can belong to NO workspace
 #       (`workspace = 0 or 1`, EX-3): dragging it onto a lens RELOCATES it out
-#       of its workspace ("全部移動"), so when no matching lens is active it is
-#       a 迷子 — invisible-but-logged, never auto-homed. Surface them with a
-#       plain `type = "lens"` whose `match` catches "no workspace assignment":
+#       of its workspace (a full move), so when no matching lens is active it
+#       is an orphan — invisible-but-logged, never auto-homed. Surface them
+#       with a plain `type = "lens"` whose `match` catches "no workspace
+#       assignment":
 #         [[desktop.1.section]]
 #         type = "lens"
-#         label = "迷子"
+#         label = "Orphans"
 #         match = 'not workspace'          # every window not filed in a workspace
 #       (`'not workspace and not tag'` for strictly tagless ones). RECOMMENDED:
 #       keep one per desktop so a stray window is never lost. There is no
-#       special "unassigned" type — the 迷子 receptacle is just a lens.
+#       special "unassigned" type — the orphan receptacle is just a lens.
 #
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess).
@@ -675,12 +676,12 @@ action = "ignore"
 # with `facet lens "Web"` (it parks the non-Web windows); clear it with
 # `facet lens --clear`.
 
-# 推奨!! — the 迷子 (orphan) receptacle. A window dragged onto a lens leaves
+# Recommended!! — the Orphans (orphan) receptacle. A window dragged onto a lens leaves
 # its workspace; with no matching lens active it would be invisible. This
 # catch-all lens surfaces every such window so nothing is ever lost. Keep one.
 [[desktop.1.section]]
 type = "lens"
-label = "迷子"
+label = "Orphans"
 match = 'not workspace'
 
 [[desktop.1.section]]
