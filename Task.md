@@ -53,16 +53,57 @@
 
 - [ ] **5. grid のウィンドウが offscreen に居座る（park/restore リグレッション）**
   - **症状**: grid を開いて閉じた後、**アクティブ workspace の窓が画面の一部だけ（右 ~65%・左半分が黒）に居座り復帰しない**。再起動/手動操作まで戻らない。
-  - **トミーの見立て**: section reorder とは**無関係の別バグ**・おそらく **filter pivot 対応で壊れた**。今回の reorder 変更（窓位置/park に未介入）が原因でもない。
-  - **証拠（2026-06-23 動画 `画面収録 21.10.30.mov` + `/tmp/facet.log`）**:
-    - `native: switchWorkspace 2 -> 1 autoFocus=true` → `anchor parked=0 restored=1` の後、
-    - `native: classify ... onscreen=0 offscreen=4` が継続 = **アクティブ WS の窓まで offscreen 扱いのまま on-screen 復帰していない**。
-  - **疑い箇所（着手は systematic-debug で file:line 追跡）**:
-    - lens 解除 / workspace 切替時の **anchor park → restore** の復元漏れ（`reconcileHidden` / `revealWindow` / lens-clear 経路）
-    - もしくは **float レイアウト**時の位置復元（float 窓は park 後に元 frame を戻す主体が誰か）
-    - grid を閉じる際の最終 reconcile が park 状態を on-screen に戻し切れていない可能性
-  - **再現待ち（要トミー補足）**: grid で具体的にどの操作か（lens セルをクリック？ 窓サムネを別 WS へドラッグ？ ただ開閉？）。トリガを1つに絞れると一気に詰まる。
+  - **トミーの見立て（的中）**: section reorder とは**無関係の別バグ**・**filter pivot（EX-1 union-tile）で壊れた**。今回の reorder 変更は無関係。
+  - **✅ ROOT CAUSE 確定**（並行調査 workflow + ログ `section-lens-union frames=1 applied=0 rect=(0,0,5120,2160)` ループ）— 4連鎖:
+    1. lens active 中、`applyLayout` は workspace layout を無視し union タイル（[NativeAdapter+Scratchpad.swift:519](Sources/FacetAdapterNative/NativeAdapter+Scratchpad.swift#L519)）。**float モード home の窓も除外されず**（除外はリテラル floating のみ・[WorkspaceCatalog+SectionLens.swift:106-113](Sources/FacetAdapterNative/WorkspaceCatalog+SectionLens.swift#L106-L113)）→ float 窓が partial-width タイルに**リサイズ**される（master系で右0.65＝「右65%・左黒」）。
+    2. anchor park/restore は **position のみ・size 非保存**（[WorkspaceCatalog.swift:156](Sources/FacetAdapterNative/WorkspaceCatalog.swift#L156) / [NativeAdapter+Anchor.swift:42-48](Sources/FacetAdapterNative/NativeAdapter+Anchor.swift#L42-L48)）。
+    3. lens 解除時、float の `applyLayout` は **完全 NO-OP**（float にエンジン無し）→ 縮んだ frame が**永久凍結**。
+    4. マッチ窓は park されない（park は非マッチのみ [WorkspaceCatalog+SectionLens.swift:80-85](Sources/FacetAdapterNative/WorkspaceCatalog+SectionLens.swift#L80-L85)）→ 復元用保存 frame が**どこにも無い**。
+    - 引き金 = lens の activate/clear（grid セルクリック→`activateSection→switchWorkspace`）。grid 開閉自体は無実。条件 = **同じ窓が `type=workspace`(float) と `type=lens` に居る multi-match**（トミー仮説どおり）。
+  - **🔧 FIX（採用案 A・破壊的変更OK）**: **lens は各窓の home layout 契約を尊重** — `sectionLensUnionMembers` に「**float モード home の窓を除外**」を追加（リテラル floating 除外の対称拡張）。float では lens=可視性フィルタ（マッチ窓は元位置表示・非マッチは park）。tiled(bsp/stack/master系) home はリサイズ可逆なので従来通り union タイル。orphan は home 無しなので union 維持。
+    - 実装: [WorkspaceCatalog+SectionLens.swift](Sources/FacetAdapterNative/WorkspaceCatalog+SectionLens.swift) `isFloatModeHome` 除外 ＋ CI test 2本（[SectionLensCatalogTests.swift](Tests/FacetAdapterNativeTests/SectionLensCatalogTests.swift)）。`swift build` ✅
+    - ✅ **実機検証 PASS（2026-06-23 自動操作）**: float WS に `facet lens Web` 当て→ Chrome 3窓の frame が activate→clear 通して**完全不変**・`visible=3 parked=4`→`cleared restored=4`（park/restore 正常）・**`section-lens-union` 無発火**（float-home 完全除外）。
+    - ⚠️ 既に凍結中の1窓は**手動リサイズで1回戻す**必要あり（A は復元パスを足さない方針）。今後は二度と発生しない。
+    - 残課題(別item候補): anchor park/restore が position-only な根本的脆さ（size 喪失の温床）は A では触れず温存。必要なら別途。
 
 ---
 
-_補足: 上記 1–4 は内部で feasibility 調査済み（着手箇所を把握）。聞き取り完了後に提示する。_
+## 🧭 親トラッカー: filter-pivot 統合の退行回収（regression recovery）
+
+> **背景（トミー 2026-06-23）**: filter pivot で workspace+tag を **section/lens モデルに統合**した。
+> 統合自体は完了したが、その過程で **バグの混入・機能の欠落（暗黙のドロップ）が多い**。
+> それらを体系的に **修正 / 復活** させる。本セクションがその親トラッカー（item 3/5 等はその実例）。
+
+### 起点（origin）
+
+- **Epic**: `#282`「filter pivot」（Phase 0–3）。
+- **commit 範囲**: `51dc740`（#287・2026-06-17 facet filter AST/parser＝起点）→ `004bba9`（#321・2026-06-23 Phase 3＝現行終端）。
+- **破壊的な統合の節目**:
+  - `fa3b6ba`（#312・**BREAKING**）`[desktop.N]` seed 廃止 → section モデルに**一本化**。
+  - `f5eea8f`（#319・**BREAKING**）EX-4 tag mode **純削除** + window tags `UInt64→Set<String>`。
+  - `b777aa9`（#301）section apply/un-apply DnD（**header-swap を section mode で無効化** → reorder 喪失の起点）。
+  - `1222793`（#311・**BREAKING**）`--active` flag 廃止。
+- 既存 memory: `[[facet-filter-pivot-epic-282]]`（epic 経緯）/ `[[facet-tag-unification-design]]`（統合コア設計）。
+
+### 退行・欠落の回収リスト（随時追記。トミー曰く「多い」＝オープン）
+
+- [x] **R1. section の DnD（並び替え）復活** — header-swap が section mode で殺された（#301）まま reorder も無し → **display-only reorder として復活**（tree/grid/rail）。**PR #323 merged**。= 本ファイル item 3。
+- [x] **R2. grid: lens union が float 窓を凍結** — float 窓を union リサイズ→復元不能。**案A（float-home を union 除外）実装＋CI test＋実機検証 PASS**。= 本ファイル item 5。（PR マージ待ち）
+- [ ] **R3. キーボード Space のヘッダ持ち上げが旧 swap のまま**（reorder 化されていない）— マウスは reorder 済み。整合のため要追従。
+- [ ] **R4.（候補・温存）anchor park/restore が position-only**（size 非保存）— item 5 の根因の一部。union/park で size を失う構造的脆さ。
+- [ ] **R6.（候補・深い問い）lens の cross-workspace union-TILING は正しい意味か？** — R2 で float を除外した結果「inactive WS の float マッチ窓は lens に集約されない」トレードオフが出た。そもそも lens（＝可視性フィルタ／SQL VIEW）が**マッチ窓を再タイルして集約する**のが正しいのか、**可視性のみ（非マッチを park・マッチは元位置表示）**が筋ではないか。EX-1 の union-tile は post-pivot 追加分で、トミー曰く「あやしい」。要 0ベース再検討。
+- [ ] **R5+. （未特定）** — トミーが挙げる他のバグ/欠落をここに追記して潰していく。
+
+### 📌 R2 の副産物メモ（学び）
+- **CI が旧バグ挙動の固定テストを検出**: float-home 除外で `TargetFramesLensTests`/`SetLayoutModeLensTests`/`SectionLensCatalogTests` の3本が RED（**デフォルト float WS** で「union が窓を含む」を検証していた＝まさに直したバグ挙動を固定していた）。→ WS を tiled 明示に更新（cross-WS union の意図は tiled で保つ・float 除外は新テストが担保）。**= post-pivot テストも「あやしい」側だった実例**。
+- **トレードオフ**: Option A は inactive WS の float マッチ窓を集約しない（float を動かさない方針の帰結・トミー config は WS2=stack で無影響）。→ R6 で本質を問う。
+
+### 進め方
+
+- 各回収は **1 item = 1 PR**（gitmoji+Conventional・squash）。root cause を systematic-debug で file:line 特定 → 最小修正 → 実機検証 → Task.md 更新。
+- **指針（トミー 2026-06-23）**: **filter pivot 以降の修正はあやしい**。コード/テスト/設計に**違和感を感じたら、後方互換を気にせず振り返って是正してOK**（破壊的変更OK）。テストが「旧バグ挙動」を固定している場合は test 側を正す（R2 がその実例）。
+- 「正本はこの Task.md 一本」。GitHub issue 化したい場合は roadmap board(#5) に起票（トミー判断）。
+
+---
+
+_補足: 上記 1–4 は内部で feasibility 調査済み（着手箇所を把握）。_

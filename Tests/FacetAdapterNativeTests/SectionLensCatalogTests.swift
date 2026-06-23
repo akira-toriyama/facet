@@ -380,6 +380,10 @@ final class SectionLensCatalogTests: XCTestCase {
         _ = c.setMode(workspace: 1, to: "master-left", in: rect)
         _ = c.moveWindow(wid(20), to: 2, in: rect)
         _ = c.moveWindow(wid(30), to: 2, in: rect)
+        // Tile WS2 too: a FLOAT-mode home window is excluded from the union
+        // (shown in place, never resized), so a cross-workspace-union test
+        // needs the inactive WS tiled to exercise membership.
+        _ = c.setMode(workspace: 2, to: "master-left", in: rect)
         // wid(10) in WS1 (active), wid(20) and wid(30) in WS2 (inactive)
         c.activeSectionLens = "Web"
         _ = c.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect) // wid(30) parks
@@ -415,5 +419,31 @@ final class SectionLensCatalogTests: XCTestCase {
         // Window 20 closes (gone from the live list).
         _ = c.reconcile(live: [window(10), window(30)])
         XCTAssertFalse(c.lensParkedMembers.contains(wid(20)))
+    }
+
+    // MARK: - float-mode home windows are never lens-union-tiled (Task.md item 5)
+
+    /// A window whose HOME workspace is FLOAT mode must NOT join the lens union.
+    /// float = the user owns the geometry, so a lens (a visibility filter) shows
+    /// it IN PLACE rather than resizing it into a tile that float-mode
+    /// `applyLayout` can never restore. Regression guard for the bug where a
+    /// lens froze a float window at a partial-width tile (right ~65%, left black).
+    func testFloatModeHomeWindowsExcludedFromLensUnion() {
+        var c = seededCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: StatefulMode.float, in: rect)
+        XCTAssertTrue(c.sectionLensUnionMembers().isEmpty,
+                      "float-mode home windows must be excluded from the lens union")
+    }
+
+    /// A TILED (bsp) home workspace's windows DO join the union — they re-tile
+    /// on lens lift, so union-tiling them is safe + intended (only float can't
+    /// reflow, which is exactly why float is excluded above).
+    func testTiledHomeWindowsJoinLensUnion() {
+        var c = seededCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setMode(workspace: 1, to: StatefulMode.bsp, in: rect)
+        XCTAssertEqual(c.sectionLensUnionMembers(), [wid(10), wid(20)],
+                       "tiled (bsp) home windows must stay in the lens union")
     }
 }
