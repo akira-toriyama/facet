@@ -107,9 +107,24 @@ extension WorkspaceCatalog {
         windowMap
             .filter { !lensParkedMembers.contains($0.key)
                 && !floatingWindows.contains($0.key)
-                && !hiddenMembers.contains($0.key) }
+                && !hiddenMembers.contains($0.key)
+                && !isFloatModeHome($0.value) }
             .map(\.key)
             .sorted { $0.serverID < $1.serverID }
+    }
+
+    /// A window whose HOME workspace is in FLOAT mode is NEVER union-tiled by a
+    /// lens: `float` means the user owns the geometry, so a lens (a visibility
+    /// filter) shows the window IN PLACE rather than resizing it. This mirrors
+    /// the literal-`floatingWindows` exclusion above — together they keep the
+    /// lens from resizing a window that float-mode `applyLayout` can never
+    /// restore (a lens-tiled float window would freeze at a partial-width tile,
+    /// since float has no engine to reflow it on lift). An orphan
+    /// (`workspace == nil`) has NO home layout, so the lens union IS its only
+    /// layout — it stays a union member.
+    private func isFloatModeHome(_ slot: WindowSlot) -> Bool {
+        guard let ws = slot.workspace else { return false }   // orphan → union-tiled
+        return mode(of: ws) == StatefulMode.float
     }
 
     /// Tiled frames for the active section-lens union — one stateless engine over
