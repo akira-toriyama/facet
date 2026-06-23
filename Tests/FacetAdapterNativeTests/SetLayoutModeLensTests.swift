@@ -71,6 +71,11 @@ final class SetLayoutModeLensTests: XCTestCase {
         a.catalog.reconcile(live: [w10, w20, w30, w40])
         a.catalog.moveWindow(wid(20), to: 2, in: rect)
         a.catalog.moveWindow(wid(40), to: 2, in: rect)
+        // Tile BOTH workspaces so their windows are lens-union-eligible (a
+        // FLOAT-mode home window is excluded from the union — shown in place,
+        // never resized — so these union-frame tests need a tiled home).
+        _ = a.catalog.setMode(workspace: 1, to: "master-left", in: rect)
+        _ = a.catalog.setMode(workspace: 2, to: "master-left", in: rect)
         a.catalog.activeSectionLens = "Web"
         a.catalog.activeSectionLensLayout = nil   // mirror what setSectionLens does
 

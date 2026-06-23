@@ -380,6 +380,10 @@ final class SectionLensCatalogTests: XCTestCase {
         _ = c.setMode(workspace: 1, to: "master-left", in: rect)
         _ = c.moveWindow(wid(20), to: 2, in: rect)
         _ = c.moveWindow(wid(30), to: 2, in: rect)
+        // Tile WS2 too: a FLOAT-mode home window is excluded from the union
+        // (shown in place, never resized), so a cross-workspace-union test
+        // needs the inactive WS tiled to exercise membership.
+        _ = c.setMode(workspace: 2, to: "master-left", in: rect)
         // wid(10) in WS1 (active), wid(20) and wid(30) in WS2 (inactive)
         c.activeSectionLens = "Web"
         _ = c.applySectionLens(visibleIDs: [wid(10), wid(20)], in: rect) // wid(30) parks

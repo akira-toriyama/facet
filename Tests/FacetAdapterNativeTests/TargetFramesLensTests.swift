@@ -63,6 +63,13 @@ final class TargetFramesLensTests: XCTestCase {
         // Move wid(20) to WS2 (the inactive workspace).
         a.catalog.moveWindow(wid(20), to: 2, in: rect)
 
+        // Tile BOTH workspaces so their windows are lens-union-eligible: a
+        // FLOAT-mode home window is intentionally excluded from the union (the
+        // lens shows it in place, never resizes it), so a cross-workspace-union
+        // test must use a tiled home to exercise union membership.
+        _ = a.catalog.setMode(workspace: 1, to: "master-left", in: rect)
+        _ = a.catalog.setMode(workspace: 2, to: "master-left", in: rect)
+
         // Activate the lens label.
         a.catalog.activeSectionLens = "Web"
 
