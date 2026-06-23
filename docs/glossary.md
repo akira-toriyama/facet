@@ -602,6 +602,23 @@ window 上に section を投影し、1 表示単位として `ProjectedSection` 
 - **Don't call it:** group（旧称＝旧型名 `FilterGroup`）, workspace（section は多重所属・filter 由来／
   workspace は 1 窓 1 個・タイル枠）, tab, page, グループ, セクション以外
 
+### rule
+`[[rule]]` adopt-rule（#282/#286 Phase 3）＝**新規窓**が [[match]]（[[facet filter]] の WHERE
+式）に当たると、その窓の adopt 時に [[apply]] facet を設定する宣言的ルール。グローバル（全
+mac desktop・per-desktop でない）で、宣言順に評価し窓は当たった**全 rule** の apply を累積
+（`setWorkspace` は単数値 auto-replace で last-wins）。#191 で撤去された `[[assign]]` の宣言的
+後継を [[facet filter]] 言語で復活させたもの。consumer は facet が窓を adopt した**直後**
+（classify gate の**外**・reconcile 後）に評価する＝malformed [[match]] が role-auto-float を
+乱せない（その rule のみ loud かつ **non-fatal** で skip・他は走る・sheet/dialog は必ず
+float）。wire は兄弟の top-level
+matcher [[exclude]] に倣う **flat キー**（`match` + `workspace`/`tags`/`floating`/`sticky`/
+`master`）＝[[apply]] と同じ `ApplyOp` 語彙だが nested table でなく flat（厳格 schema で typo
+検知・sill `ConfigSchema` に nested-object field 型が無いため）。
+- コード: `Rule` / `FacetConfig.rules` / `FacetConfig.decodeRuleSections` /
+  `effectiveRules`（`FacetCore`）
+- **Don't call it:** assign（旧称・#191 で撤去）, exclude（[[exclude]] は管理可否の**分類**＝別軸）,
+  trigger, hook, automation, ルール以外
+
 ### match
 [[section]]（type=lens）/ [[rule]] が共有する **述語キー**＝当たった窓をその section
 に出す（rule では apply 対象にする）[[facet filter]] の WHERE 式。config には**文字列の

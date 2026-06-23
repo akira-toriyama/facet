@@ -158,6 +158,27 @@ public extension FacetConfig {
                           default: .string("float")),
             ]),
 
+            .init("rule", kind: .arrayOfTables,
+                  doc: "Adopt-rules (#282 Phase 3): a NEW window matching "
+                     + "`match` (a facet filter WHERE-clause) gets these facets "
+                     + "set on creation — the declarative successor to the "
+                     + "retired `[[assign]]`. The keys after `match` are the "
+                     + "section `apply` vocabulary, flat here.",
+                  fields: [
+                .descOnly("match",
+                          doc: "facet filter WHERE-clause selecting the windows "
+                             + "to adopt (e.g. `app=Safari and not floating`)."),
+                .descOnly("workspace",
+                          doc: "Move a matched window to this named workspace."),
+                .descArray("tags", doc: "Tags to add to a matched window."),
+                .descOnly("floating", .boolean,
+                          doc: "Force a matched window floating (or tiled = false)."),
+                .descOnly("sticky", .boolean,
+                          doc: "Pin a matched window across mac-desktop / workspace switches."),
+                .descOnly("master", .boolean,
+                          doc: "Make a matched window the layout master."),
+            ]),
+
             .init("desktop", kind: .dynamicTable,
                   doc: "`[[desktop.N.section]]` ordered per-mac-desktop display "
                      + "sections (N = Mission Control ordinal) — the sole way "
@@ -276,5 +297,13 @@ private extension ConfigSchema.Field where Root == FacetConfig {
                          doc: String? = nil) -> Self {
         .init(key: key, kind: .scalar(scalar), apply: { _, _ in },
               domain: domain, def: def, doc: doc)
+    }
+    /// Schema-only string-array for an `[[array-of-tables]]` row (no decode —
+    /// facet parses those from raw text); a no-op `apply`. The array sibling
+    /// of `descOnly` (e.g. `[[rule]]`'s `tags`).
+    static func descArray(_ key: String, item: [String]? = nil,
+                          doc: String? = nil) -> Self {
+        .init(key: key, kind: .stringArray(item: item), apply: { _, _ in },
+              doc: doc)
     }
 }

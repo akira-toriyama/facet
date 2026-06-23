@@ -140,6 +140,27 @@ extension NativeAdapter {
                 + "hidden=\(hideResult.hidden.count) "
                 + "revealed=\(hideResult.revealed.count)")
         }
+        // [[rule]] adopt-rules (#282/#286 Phase 3): a NEW window matching a
+        // rule's `match` gets that rule's `apply` ops set on adoption — the
+        // declarative successor to the retired `[[assign]]` (#191). Evaluated
+        // POST-adoption (NOT in the classify gate) so a malformed rule can
+        // never disturb role-auto-float; MULTI-MATCH (a window accumulates
+        // every matching rule's ops, in declaration order); matched against the
+        // window's PRE-apply snapshot (rules don't chain on tags they add).
+        // Runs BEFORE the reconcile/retile below AND before the lens-inherit
+        // block, so the facets land in one pass. Global — not gated on the
+        // section model (adopt-apply is useful in by-workspace mode too).
+        if !result.addedIDs.isEmpty, !compiledRules().isEmpty {
+            for id in result.addedIDs {
+                guard let w = liveByID[id], let slot = catalog.windowMap[id]
+                else { continue }
+                let tagged = w.withTags(slot.tags.sorted())
+                let wsName = slot.workspace.map { catalog.workspaceName($0) }
+                for op in ruleApplyOps(for: tagged, inWorkspaceNamed: wsName) {
+                    applyRuleOp(op, to: id, focused: focused, in: rect)
+                }
+            }
+        }
         // EX-3.3 (canon ④⑨ "新規窓 = 開いた世界の apply を継ぐ・必ず見える"): a
         // window launched while a section-lens is active inherits that lens's
         // FORWARD `apply` ops so it JOINS the lens — the `applySectionLensReconcile`
@@ -419,6 +440,79 @@ extension NativeAdapter {
         return section.apply.filter {
             if case .setWorkspace = $0 { return false }
             return true
+        }
+    }
+
+    /// The active `[[rule]]` adopt-rules with their `match` compiled to a
+    /// `FacetFilter` (#282/#286 Phase 3). Parsed once and cached
+    /// (`compiledRulesCache`, dropped on hot-reload); a rule whose `match` is
+    /// malformed is logged LOUD + dropped (non-fatal — the rest still run).
+    /// cliQueue-only.
+    func compiledRules() -> [(rule: Rule, filter: FacetFilter)] {
+        if let c = compiledRulesCache { return c }
+        let compiled: [(rule: Rule, filter: FacetFilter)] =
+            config.effectiveRules.compactMap { rule in
+                guard case .success(let filter) = FacetFilter.parse(rule.match) else {
+                    Log.line("[[rule]] match=\"\(rule.match)\" — malformed filter; "
+                        + "rule skipped")
+                    return nil
+                }
+                return (rule, filter)
+            }
+        compiledRulesCache = compiled
+        return compiled
+    }
+
+    /// The accumulated `[[rule]]` apply ops for a window (#282/#286 Phase 3) —
+    /// EVERY matching rule's `apply`, in declaration order (multi-match). Pure
+    /// over the compiled rules + the window's pre-apply snapshot, so rules
+    /// don't chain on tags they themselves add. The `refreshCatalog` adopt path
+    /// executes the result via `applyRuleOp`.
+    func ruleApplyOps(for window: Window, inWorkspaceNamed wsName: String?) -> [ApplyOp] {
+        var ops: [ApplyOp] = []
+        for (rule, filter) in compiledRules()
+        where LensMembership.matches(window, inWorkspaceNamed: wsName, filter: filter) {
+            ops.append(contentsOf: rule.apply)
+        }
+        return ops
+    }
+
+    /// Execute one `[[rule]]` adopt op on a freshly-adopted window (cliQueue,
+    /// pre-reconcile). Mirrors the section apply executor + the lens-inherit
+    /// loop, but HONOURS `setWorkspace` (a rule may place the window): the
+    /// named workspace is resolved at runtime and skipped + logged if absent
+    /// (workspaces are auto-named — a rule never creates one). `removeTag` is
+    /// never config-authored.
+    private func applyRuleOp(_ op: ApplyOp, to id: WindowID,
+                             focused: WindowID?, in rect: CGRect) {
+        switch op {
+        case .addTag(let t):
+            _ = catalog.addTagToWindow(id, name: t)
+        case .setFloating(let b):
+            _ = catalog.setFloating(id, b, focused: focused, in: rect)
+        case .setSticky(let b):
+            _ = catalog.setSticky(id, b, focused: focused, in: rect)
+        case .setMaster(let b):
+            _ = catalog.setMaster(
+                id, b,
+                workspace: catalog.windowMap[id]?.workspace ?? catalog.activeIndex)
+        case .setWorkspace(let name):
+            guard let idx = catalog.index(ofName: name) else {
+                Log.line("[[rule]] setWorkspace=\"\(name)\" — no such workspace; skipped")
+                return
+            }
+            // Honour the MoveOutcome like the public `moveWindow(toWorkspaceIndex:)`:
+            // a move to an INACTIVE workspace returns `.park`, and the window only
+            // leaves the screen when `applyHide` anchor-parks it — `retileAfterReconcile`
+            // tiles `activeIndex` only, so without this the moved window would ghost
+            // on the current desktop until the next manual switch.
+            switch catalog.moveWindow(id, to: idx, in: rect) {
+            case .park(let ref):    applyHide(toPark: [ref], toRestore: [])
+            case .restore(let ref): applyHide(toPark: [], toRestore: [ref])
+            case .rejected, .stateOnly: break
+            }
+        case .removeTag:
+            break
         }
     }
 

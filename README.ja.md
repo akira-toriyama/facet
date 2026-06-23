@@ -378,6 +378,14 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   escape hatch)。 テンプレには「極小の無名ポップアップを float する」
   デフォルトを 1 件同梱。 (システムの sheet / dialog / palette は AX
   role で自動 float される。)
+- `[[rule]]` adopt ルール — 窓を facet が採用した瞬間に facet を付与。
+  各ルールは `match` (facet filter の WHERE 句。 例:
+  `app=Safari and not floating`) と、 付与する facet: `workspace`
+  (名前付き workspace へ移動)、 `tags`、 `floating` / `sticky` /
+  `master` の組。 `[[exclude]]` と同じ**トップレベルのグローバル**ブロック
+  (全 mac desktop に発火)、 宣言順に評価され窓は一致した全ルールの facet を
+  受け取る。 廃止された `[[assign]]` の宣言的後継。 `match` が不正なら loud +
+  非 fatal (そのルールのみスキップ・他は走る)。
 - `[[desktop.N.section]]` ブロック — mac desktop ごとの section モデル
   (`N` は Mission Control 順の位置)。 順序付き section リストで desktop を
   記述。 各 section は必須の `type` を持つ: `"workspace"` (絵文字で自動命名

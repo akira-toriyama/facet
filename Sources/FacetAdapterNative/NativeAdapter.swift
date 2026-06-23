@@ -113,6 +113,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             self.configLock.lock()
             self._config = config
             self.configLock.unlock()
+            self.compiledRulesCache = nil   // recompile [[rule]] against the new config
             Log.debug("native: config hot-reloaded")
             self.eventContinuation.yield(.refreshNeeded)
         }
@@ -266,6 +267,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// Touched only on `cliQueue` (the eval helpers), like the rest of the
     /// catalog-adjacent state.
     var sectionLensCompiled: (match: String, filter: FacetFilter)?
+
+    /// Compiled `[[rule]]` adopt-rules (#282/#286 Phase 3) — `config.effectiveRules`
+    /// with each `match` parsed to a `FacetFilter`, built once on first use and
+    /// dropped on a config hot-reload (`updateConfig`). A rule whose `match`
+    /// fails to parse is logged LOUD + dropped here (non-fatal), so a bad rule
+    /// never blocks the others. cliQueue-confined, like `sectionLensCompiled`.
+    var compiledRulesCache: [(rule: Rule, filter: FacetFilter)]?
 
     /// Lock-guarded, main-readable mirror of the active catalog's
     /// `activeSection` (EX-1: was a lens-only `String?`). The catalog is

@@ -404,6 +404,15 @@ Frequently-touched keys:
   subrole). The template ships one default that floats tiny unnamed
   popups. (System sheets / dialogs / palettes are auto-floated by AX
   role regardless.)
+- `[[rule]]` adopt-rules — set facets on a window the moment facet
+  adopts it. Each rule is a `match` (a facet filter WHERE-clause, e.g.
+  `app=Safari and not floating`) plus the facets to set: `workspace`
+  (move to a named workspace), `tags`, and `floating` / `sticky` /
+  `master`. A global, top-level block like `[[exclude]]` (fires on
+  every mac desktop), evaluated in declaration order; a window picks up
+  every matching rule's facets. The declarative successor to the
+  retired `[[assign]]`. A malformed `match` is loud + non-fatal (that
+  rule is skipped; the rest still run).
 - `[[desktop.N.section]]` blocks — the per-mac-desktop section model
   (`N` = the mac desktop's Mission Control position). An ordered list of
   sections describes that desktop; each has a required `type`:
