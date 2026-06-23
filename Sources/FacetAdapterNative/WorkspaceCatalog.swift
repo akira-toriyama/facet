@@ -331,7 +331,10 @@ struct WorkspaceCatalog {
     /// The single active-section concept (EX-1): a lens when one is active,
     /// else the active workspace. DERIVED — `activeSectionLens` / `activeIndex`
     /// stay the load-bearing stored fields (the XOR is enforced by `setActive`
-    /// nulling the lens, EX-0.4; field consolidation is deferred to EX-3/EX-4).
+    /// nulling the lens, EX-0.4). The derivation is the final shape: EX-3/EX-4
+    /// shipped without collapsing the two into one stored field — enforcing the
+    /// XOR at the single write (`setActive`) is cheaper than maintaining a
+    /// redundant combined field.
     /// Read by the adapter mirror (`syncSectionLensMirror`) to drive the
     /// Controller's single active-section highlight. `activeIndex` is already
     /// 1-based, matching `ActiveSection.workspace`, so no conversion here.
