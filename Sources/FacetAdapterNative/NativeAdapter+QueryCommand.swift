@@ -131,13 +131,13 @@ extension NativeAdapter {
         // A stashed (off-screen) scratchpad reports no shelf name — only a
         // settled (summoned) one does, matching the snapshot convention.
         let scratchpad = cat.isStashed(id) ? nil : cat.scratchpad(forWindow: id)
-        // orphan (workspace == nil): no home WS — report "迷子" + index 0 (0 is
-        // not a valid 1-based index, the orphan sentinel) and no master/mode
-        // lookup (an orphan is in no layout). It is still reported (distinct),
-        // never silently dropped from `facet query`.
+        // orphan (workspace == nil): no home WS — report "Orphans" + index 0
+        // (0 is not a valid 1-based index, the orphan sentinel) and no
+        // master/mode lookup (an orphan is in no layout). It is still reported
+        // (distinct), never silently dropped from `facet query`.
         guard let ws = slot.workspace else {
             return WindowQueryEntry.FacetWindowState(
-                workspace: "迷子",
+                workspace: "Orphans",
                 workspaceIndex: 0,
                 tags: slot.tags.sorted(),
                 floating: cat.isFloating(id),

@@ -39,6 +39,44 @@ final class WorkspaceNamingTests: XCTestCase {
         }
     }
 
+    // MARK: - display label (emoji + English word; identity stays bare emoji)
+
+    func testWordsArrayMatchesPoolLength() {
+        XCTAssertEqual(WorkspaceNaming.words.count, WorkspaceNaming.pool.count)
+    }
+
+    func testIdentityNamesAreSpaceFree() {
+        // The identity name (what --focus / DNC / match see) must never carry
+        // a space — that is the whole point of the identity/display split.
+        for i in [0, 1, 39, 40, 81] {
+            XCTAssertFalse(WorkspaceNaming.name(forIndex: i).contains(" "))
+        }
+    }
+
+    func testDisplayLabelDecoratesPoolEmoji() {
+        XCTAssertEqual(
+            WorkspaceNaming.displayLabel(forName: WorkspaceNaming.pool[0]),
+            "\(WorkspaceNaming.words[0]) \(WorkspaceNaming.pool[0])")
+        let i = 20
+        XCTAssertEqual(
+            WorkspaceNaming.displayLabel(forName: WorkspaceNaming.pool[i]),
+            "\(WorkspaceNaming.words[i]) \(WorkspaceNaming.pool[i])")
+    }
+
+    func testDisplayLabelKeepsWrapSuffix() {
+        // Identity wrap "<emoji>2" → display "Word2 <emoji>" (emoji last).
+        let wrapped = WorkspaceNaming.name(forIndex: WorkspaceNaming.pool.count)
+        XCTAssertEqual(
+            WorkspaceNaming.displayLabel(forName: wrapped),
+            "\(WorkspaceNaming.words[0])2 \(WorkspaceNaming.pool[0])")
+    }
+
+    func testDisplayLabelPassesThroughNonPoolNames() {
+        XCTAssertEqual(WorkspaceNaming.displayLabel(forName: ""), "")
+        XCTAssertEqual(WorkspaceNaming.displayLabel(forName: "MyProj"), "MyProj")
+        XCTAssertEqual(WorkspaceNaming.displayLabel(forName: "Proj2"), "Proj2")
+    }
+
     // MARK: - section-aware effectiveWorkspaceList
 
     /// A section-managed desktop seeds one slot per `type=workspace` section,

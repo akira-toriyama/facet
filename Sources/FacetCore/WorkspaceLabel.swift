@@ -8,12 +8,15 @@
 // Pure / display-only: the layout picker, CLI, and config keep the full
 // workspace name; only the caption is shortened.
 
-/// Short workspace caption from `name` (or `WS<idx+1>` when empty).
+/// Short workspace caption from `name` (or `WS<idx+1>` when empty). An
+/// auto-named slot (a bare pool emoji) is decorated with its English word
+/// via `WorkspaceNaming.displayLabel` (e.g. "🐶" → "Dog 🐶"); a user-renamed
+/// or non-pool name passes through unchanged.
 public func workspaceShortLabel(name: String, idx: Int) -> String {
     if name.isEmpty { return "WS\(idx + 1)" }
     let lower = name.lowercased()
     if lower.hasPrefix("workspace "), name.count > "workspace ".count {
         return String(name.dropFirst("workspace ".count))
     }
-    return name
+    return WorkspaceNaming.displayLabel(forName: name)
 }
