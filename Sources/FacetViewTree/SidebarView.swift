@@ -350,10 +350,9 @@ public final class SidebarView: NSView {
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (ws, wins) in shown {
-            // Workspace mode uppercases the WS name (matches the header
-            // draw at the Cell).
-            let baseNm = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
-            let nm = baseNm.uppercased()
+            // Friendly caption via the shared helper (bare emoji → "🐶 Dog");
+            // no uppercase — matches lens / grid / rail.
+            let nm = workspaceShortLabel(name: ws.name, idx: ws.index)
             // Measure at the HEAVIEST draw weight (active = .bold name /
             // .semibold layout) so the natural width is a safe upper bound —
             // it must never be narrower than the drawn text or the
@@ -408,10 +407,10 @@ public final class SidebarView: NSView {
             rows.append(TreeRow(rect: hr,
                                 kind: .header(group: ws.index,
                                               workspaceIndex: ws.index)))
-            let t = ws.name.isEmpty ? "WS\(ws.index + 1)" : ws.name
+            let t = workspaceShortLabel(name: ws.name, idx: ws.index)
             cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                               firstHeader: firstHeader, pid: 0, app: "",
-                              title: "", text: t.uppercased(),
+                              title: "", text: t,
                               mode: ws.layoutMode,
                               isMaster: false, isFloating: false,
                               isSticky: false, mark: nil, isHidden: false,
@@ -588,9 +587,10 @@ public final class SidebarView: NSView {
         var naturalW = sidebarWidth
         for (_, sec, wins) in shown {
             let isLens = sec.sectionType == .lens
-            // Lens label as-authored; workspace (auto-emoji) name uppercased,
-            // matching the header draw.
-            let nm = isLens ? sec.label : sec.label.uppercased()
+            // Lens label as-authored; workspace (auto-emoji) name through the
+            // shared friendly helper (bare emoji → "🐶 Dog"), no uppercase.
+            let nm = isLens ? sec.label
+                : workspaceShortLabel(name: sec.label, idx: sec.sourceWorkspaceIndex ?? 0)
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
                 + (isLens ? 22 : 0)   // leading lens glyph
@@ -615,7 +615,8 @@ public final class SidebarView: NSView {
             let src = sec.sourceWorkspaceIndex
             let layout = isLens ? "" : wsLayout(src)
             let active = headerActive(sec)
-            let label = isLens ? sec.label : sec.label.uppercased()
+            let label = isLens ? sec.label
+                : workspaceShortLabel(name: sec.label, idx: src ?? 0)
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
             // Workspace section → click switches to its source WS; lens
