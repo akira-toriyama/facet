@@ -45,6 +45,21 @@ final class RuleEvalTests: XCTestCase {
                        [.addTag("web"), .addTag("browser"), .setSticky(true)])
     }
 
+    func testMultiMatchSetWorkspaceAccumulatesInDeclarationOrder() {
+        // Two rules each placing the window pin the declaration-order
+        // accumulation of `setWorkspace` — the op the glossary's
+        // "setWorkspace は単数値 last-wins" claim names. ruleApplyOps returns
+        // BOTH in order; the executor (applyRuleOp → moveWindow, host-verified)
+        // realizes last-wins by overwriting, so the LAST declared workspace wins.
+        let a = adapter([
+            Rule(match: "app=Safari", apply: [.setWorkspace("A")]),
+            Rule(match: "app~=Safari", apply: [.setWorkspace("B")]),
+        ])
+        let w = window(10, appName: "Safari")   // matches both (exact + token)
+        XCTAssertEqual(a.ruleApplyOps(for: w, inWorkspaceNamed: nil),
+                       [.setWorkspace("A"), .setWorkspace("B")])
+    }
+
     func testMalformedRuleDroppedOthersStillRun() {
         // `tag~web` is malformed (`~` not followed by `=`) → dropped from
         // compiledRules (loud + non-fatal). The valid sibling still matches —
@@ -63,5 +78,21 @@ final class RuleEvalTests: XCTestCase {
         let a = adapter([])
         let w = window(10, appName: "Safari")
         XCTAssertEqual(a.ruleApplyOps(for: w, inWorkspaceNamed: nil), [])
+    }
+
+    /// The role-auto-float HARD guard (#286). `[[rule]]` eval lives in
+    /// `refreshCatalog` AFTER the classify gate (post-adoption), never inside
+    /// it, so a malformed rule cannot disturb role-auto-float of a sheet /
+    /// dialog by construction: it compiles to nothing and yields zero ops for
+    /// ANY window, leaving the gate's float verdict untouched.
+    func testMalformedOnlyRuleSetIsNoOp() {
+        let a = adapter([Rule(match: "tag~web",            // malformed
+                              apply: [.addTag("bad"), .setFloating(false)])])
+        XCTAssertTrue(a.compiledRules().isEmpty,
+                      "a malformed rule is dropped before the adopt loop")
+        XCTAssertEqual(a.ruleApplyOps(for: window(1, appName: "Safari"),
+                                      inWorkspaceNamed: nil), [])
+        XCTAssertEqual(a.ruleApplyOps(for: window(2, appName: "System Settings"),
+                                      inWorkspaceNamed: nil), [])
     }
 }
