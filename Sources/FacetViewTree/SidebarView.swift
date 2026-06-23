@@ -350,7 +350,7 @@ public final class SidebarView: NSView {
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (ws, wins) in shown {
-            // Friendly caption via the shared helper (bare emoji → "🐶 Dog");
+            // Friendly caption via the shared helper (bare emoji → "Dog 🐶");
             // no uppercase — matches lens / grid / rail.
             let nm = workspaceShortLabel(name: ws.name, idx: ws.index)
             // Measure at the HEAVIEST draw weight (active = .bold name /
@@ -588,7 +588,7 @@ public final class SidebarView: NSView {
         for (_, sec, wins) in shown {
             let isLens = sec.sectionType == .lens
             // Lens label as-authored; workspace (auto-emoji) name through the
-            // shared friendly helper (bare emoji → "🐶 Dog"), no uppercase.
+            // shared friendly helper (bare emoji → "Dog 🐶"), no uppercase.
             let nm = isLens ? sec.label
                 : workspaceShortLabel(name: sec.label, idx: sec.sourceWorkspaceIndex ?? 0)
             let nameW = (nm as NSString).size(

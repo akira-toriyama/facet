@@ -56,19 +56,19 @@ final class WorkspaceNamingTests: XCTestCase {
     func testDisplayLabelDecoratesPoolEmoji() {
         XCTAssertEqual(
             WorkspaceNaming.displayLabel(forName: WorkspaceNaming.pool[0]),
-            "\(WorkspaceNaming.pool[0]) \(WorkspaceNaming.words[0])")
+            "\(WorkspaceNaming.words[0]) \(WorkspaceNaming.pool[0])")
         let i = 20
         XCTAssertEqual(
             WorkspaceNaming.displayLabel(forName: WorkspaceNaming.pool[i]),
-            "\(WorkspaceNaming.pool[i]) \(WorkspaceNaming.words[i])")
+            "\(WorkspaceNaming.words[i]) \(WorkspaceNaming.pool[i])")
     }
 
     func testDisplayLabelKeepsWrapSuffix() {
-        // Identity wrap "<emoji>2" → display "<emoji> Word2".
+        // Identity wrap "<emoji>2" → display "Word2 <emoji>" (emoji last).
         let wrapped = WorkspaceNaming.name(forIndex: WorkspaceNaming.pool.count)
         XCTAssertEqual(
             WorkspaceNaming.displayLabel(forName: wrapped),
-            "\(WorkspaceNaming.pool[0]) \(WorkspaceNaming.words[0])2")
+            "\(WorkspaceNaming.words[0])2 \(WorkspaceNaming.pool[0])")
     }
 
     func testDisplayLabelPassesThroughNonPoolNames() {

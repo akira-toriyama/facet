@@ -10,7 +10,7 @@
 // IDENTITY vs DISPLAY: the pool entry IS the identity name — a BARE emoji,
 // space-free — so a workspace stays targetable on the CLI (`facet workspace
 // --focus 🐶`), on the DNC wire, and in `match` / query. The friendly
-// "emoji + English name" caption (e.g. "🐶 Dog") is DISPLAY-ONLY: it is
+// "English name + emoji" caption (e.g. "Dog 🐶") is DISPLAY-ONLY: it is
 // derived at render time by `displayLabel(forName:)` (reached through
 // `workspaceShortLabel`) and is never an identity token.
 //
@@ -66,8 +66,8 @@ public enum WorkspaceNaming {
         return cycle == 0 ? emoji : "\(emoji)\(cycle + 1)"
     }
 
-    /// The DISPLAY caption for an identity `name`: "emoji + English word"
-    /// (e.g. "🐶" → "🐶 Dog"; overflow "🐶2" → "🐶 Dog2"). A name not in the
+    /// The DISPLAY caption for an identity `name`: "English word + emoji"
+    /// (e.g. "🐶" → "Dog 🐶"; overflow "🐶2" → "Dog2 🐶"). A name not in the
     /// pool (user-renamed, empty, or otherwise) is returned VERBATIM — the
     /// friendly word only decorates auto-named slots. Display-only; this
     /// string is never an identity token (it carries a space).
@@ -84,6 +84,6 @@ public enum WorkspaceNaming {
         guard let idx = pool.firstIndex(of: base), idx < words.count else {
             return name
         }
-        return "\(base) \(words[idx])\(suffix)"
+        return "\(words[idx])\(suffix) \(base)"
     }
 }

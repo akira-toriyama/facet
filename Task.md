@@ -30,6 +30,11 @@
     - 実行表示: `facet query` の orphan 表示 [NativeAdapter+QueryCommand.swift:140](Sources/FacetAdapterNative/NativeAdapter+QueryCommand.swift#L140) → `workspace: "Orphans"`
   - 📌 **未対応（内部・暗黙にしない）**: dev ログ文字列（Tagging/NativeAdapter）・schema 説明（FacetConfig+Spec → config.schema.json）・~20 の内部コメント「EX-3 迷子」・glossary/README/architecture の用語「迷子(orphan)」・test fixture の "迷子" ラベル。**= 内部の概念名**。これらも英語化するか別途確認（item 2-b 候補）
 
+- [x] **2.1 workspace ラベルの emoji を最後に** ✅ 完了（`🐶 Dog` → `Dog 🐶`）
+  - [WorkspaceNaming.swift](Sources/FacetCore/WorkspaceNaming.swift) `displayLabel` の並び順を反転（識別子＝素の絵文字は不変・**表示のみ**）
+  - overflow も emoji 最後: 識別子 `🐶2` → 表示 `Dog2 🐶`
+  - tree/grid/rail 全 view に反映（共有 `workspaceShortLabel` 経由）／ test 2本更新
+
 - [ ] **3. workspace の DnD**
   - workspace 自体を DnD できるようにする（ウィンドウ DnD は既に可）
 
