@@ -91,11 +91,17 @@
 - [x] **R2. grid: lens union が float 窓を凍結** — float 窓を union リサイズ→復元不能。**案A（float-home を union 除外）実装＋CI test＋実機検証 PASS**。= 本ファイル item 5。（PR マージ待ち）
 - [ ] **R3. キーボード Space のヘッダ持ち上げが旧 swap のまま**（reorder 化されていない）— マウスは reorder 済み。整合のため要追従。
 - [ ] **R4.（候補・温存）anchor park/restore が position-only**（size 非保存）— item 5 の根因の一部。union/park で size を失う構造的脆さ。
+- [ ] **R6.（候補・深い問い）lens の cross-workspace union-TILING は正しい意味か？** — R2 で float を除外した結果「inactive WS の float マッチ窓は lens に集約されない」トレードオフが出た。そもそも lens（＝可視性フィルタ／SQL VIEW）が**マッチ窓を再タイルして集約する**のが正しいのか、**可視性のみ（非マッチを park・マッチは元位置表示）**が筋ではないか。EX-1 の union-tile は post-pivot 追加分で、トミー曰く「あやしい」。要 0ベース再検討。
 - [ ] **R5+. （未特定）** — トミーが挙げる他のバグ/欠落をここに追記して潰していく。
+
+### 📌 R2 の副産物メモ（学び）
+- **CI が旧バグ挙動の固定テストを検出**: float-home 除外で `TargetFramesLensTests`/`SetLayoutModeLensTests`/`SectionLensCatalogTests` の3本が RED（**デフォルト float WS** で「union が窓を含む」を検証していた＝まさに直したバグ挙動を固定していた）。→ WS を tiled 明示に更新（cross-WS union の意図は tiled で保つ・float 除外は新テストが担保）。**= post-pivot テストも「あやしい」側だった実例**。
+- **トレードオフ**: Option A は inactive WS の float マッチ窓を集約しない（float を動かさない方針の帰結・トミー config は WS2=stack で無影響）。→ R6 で本質を問う。
 
 ### 進め方
 
 - 各回収は **1 item = 1 PR**（gitmoji+Conventional・squash）。root cause を systematic-debug で file:line 特定 → 最小修正 → 実機検証 → Task.md 更新。
+- **指針（トミー 2026-06-23）**: **filter pivot 以降の修正はあやしい**。コード/テスト/設計に**違和感を感じたら、後方互換を気にせず振り返って是正してOK**（破壊的変更OK）。テストが「旧バグ挙動」を固定している場合は test 側を正す（R2 がその実例）。
 - 「正本はこの Task.md 一本」。GitHub issue 化したい場合は roadmap board(#5) に起票（トミー判断）。
 
 ---
