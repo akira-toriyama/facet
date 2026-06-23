@@ -509,8 +509,8 @@ action = "ignore"
 # tags = ["web"]
 # floating = true
 #
-# [[rule]]                          # any window titled like a PR → "review"
-# match = "title*=Pull Request or title*=PR"
+# [[rule]]                          # any window whose title mentions "PR" → "review"
+# match = "title*=PR"               # quote multi-word values: title*="Pull Request"
 # tags = ["review"]
 
 

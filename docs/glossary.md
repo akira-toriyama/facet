@@ -607,9 +607,10 @@ window 上に section を投影し、1 表示単位として `ProjectedSection` 
 式）に当たると、その窓の adopt 時に [[apply]] facet を設定する宣言的ルール。グローバル（全
 mac desktop・per-desktop でない）で、宣言順に評価し窓は当たった**全 rule** の apply を累積
 （`setWorkspace` は単数値 auto-replace で last-wins）。#191 で撤去された `[[assign]]` の宣言的
-後継を [[facet filter]] 言語で復活させたもの。consumer は facet が窓を adopt する classify
-gate（role-auto-float の**前**・順序保存）で評価する（malformed [[match]] は loud かつ
-**non-fatal**＝その rule のみ skip・他は走る・auto-float も生存）。wire は兄弟の top-level
+後継を [[facet filter]] 言語で復活させたもの。consumer は facet が窓を adopt した**直後**
+（classify gate の**外**・reconcile 後）に評価する＝malformed [[match]] が role-auto-float を
+乱せない（その rule のみ loud かつ **non-fatal** で skip・他は走る・sheet/dialog は必ず
+float）。wire は兄弟の top-level
 matcher [[exclude]] に倣う **flat キー**（`match` + `workspace`/`tags`/`floating`/`sticky`/
 `master`）＝[[apply]] と同じ `ApplyOp` 語彙だが nested table でなく flat（厳格 schema で typo
 検知・sill `ConfigSchema` に nested-object field 型が無いため）。
