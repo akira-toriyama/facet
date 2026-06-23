@@ -120,6 +120,11 @@ public final class RailView: NSView {
     /// workspaces' contents (indices stay put).
     public var onSwap: ((_ srcWS: Int, _ dstWS: Int,
                          _ srcIDs: [WindowID], _ dstIDs: [WindowID]) -> Void)?
+    /// Section drag-to-reorder commit (display-only, session-only): move the
+    /// section `sectionID` to insertion BOUNDARY `boundary` in `sectionOrder`
+    /// coords (= the projected section order). No window moves, no config write.
+    /// Mirrors the tree / grid `onReorder`; replaces the mouse header-SWAP.
+    public var onReorder: ((_ sectionID: String, _ toBoundary: Int) -> Void)?
     /// Backend for the shared context menu (③). Set by the Controller.
     public var backend: (any WindowBackend)?
     /// Runs the non-close window-ops a context-menu pick chose (③).
@@ -165,6 +170,16 @@ public final class RailView: NSView {
     var pendingHeaderDown: (point: NSPoint, cellID: String)?
     var drag: OverviewDrag?
     var dragGhost: NSView?
+    // Mouse section-reorder (the `.workspace`-kind drag is a display-only
+    // reorder, NOT the keyboard's content swap): the dragged section id, the
+    // live `sectionOrder` insertion boundary, the gate that tells draw/commit
+    // "reorder, not swap", and the precomputed insertion-line endpoints (the
+    // carousel subset makes a boundary→cell lookup awkward, so the line is
+    // computed at hit-test time). Keyboard header-lift leaves `reorderDrag` false.
+    var dragSectionID: String?
+    var reorderInsertAt: Int?
+    var reorderDrag = false
+    var reorderLine: (a: NSPoint, b: NSPoint)?
     /// Freeze `layoutCells` mid-gesture so the source cell can't shift
     /// under the cursor; released by the landing gate.
     var layoutSuppressed = false
@@ -598,6 +613,19 @@ public final class RailView: NSView {
             t.concat()
         }
         for c in cells { drawCell(c) }
+        // Section reorder: the insertion LINE with end caps at the drop
+        // boundary (mirrors tree/grid). Drawn inside the strip clip so it sits
+        // with the cells.
+        if reorderDrag, let l = reorderLine {
+            pal.primary.setStroke(); pal.primary.setFill()
+            let line = NSBezierPath()
+            line.move(to: l.a); line.line(to: l.b)
+            line.lineWidth = 3; line.stroke()
+            for pt in [l.a, l.b] {
+                NSBezierPath(ovalIn: NSRect(x: pt.x - 3, y: pt.y - 3,
+                                            width: 6, height: 6)).fill()
+            }
+        }
         NSGraphicsContext.restoreGraphicsState()
 
         // Neon border framing the OUTER screen edge (shared BorderFX),
@@ -758,7 +786,11 @@ public final class RailView: NSView {
                 pal.primary.withAlphaComponent(0.28).setFill(); path.fill()
                 pal.primary.setStroke(); path.lineWidth = 2
             }
-        } else if let d = drag, d.kind == .workspace, d.sourceWS == c.wsIndex {
+        } else if let d = drag, d.kind == .workspace,
+                  reorderDrag ? (c.sectionID == dragSectionID)
+                              : (d.sourceWS == c.wsIndex) {
+            // Dim the lifted SOURCE: reorder keys by sectionID (a lens source's
+            // wsIndex −1 is shared); the keyboard swap keys by wsIndex.
             pal.foreground.withAlphaComponent(0.06).setFill(); path.fill()
             pal.foreground.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
         } else if c.isHero {
@@ -884,11 +916,8 @@ public final class RailView: NSView {
         // a LENS header is click-only → activate immediately (no swap arm,
         // no grip — Decision 6).
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            if cell.isLens {
-                commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
-                    self?.onPick?(.lens(label: cell.label)) }
-                return
-            }
+            // BOTH workspace + lens headers arm a reorder drag (past threshold);
+            // a click still switches / toggles the lens (resolved on mouseUp).
             pendingHeaderDown = (p, cell.sectionID); return
         }
         // Window-thumb press → window drag (move) or click (switch + focus).
@@ -986,18 +1015,17 @@ public final class RailView: NSView {
             if let ph = pendingHeaderDown {
                 let dx = p.x - ph.point.x, dy = p.y - ph.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                // Workspace headers only (a lens header fired its pick on
-                // mouseDown without arming a pending) — guard !isLens defensively.
-                guard let src = cells.first(where: { $0.sectionID == ph.cellID }),
-                      !src.isLens else { return }
-                // Source the swap's window set from the LIVE workspace,
-                // not the render-filtered cell thumbs — a frameless /
-                // sub-2pt window has no thumb but must still move.
-                let srcIDs = workspaces.first(where: { $0.index == src.wsIndex })?
-                    .windows.map(\.id) ?? src.windows.map(\.id)
+                // Identify by sectionID (a lens header's wsIndex is −1). BOTH
+                // workspace + lens headers arm a display-only REORDER drag.
+                guard let src = cells.first(where: { $0.sectionID == ph.cellID })
+                else { return }
                 drag = OverviewDrag(sourceWS: src.wsIndex, kind: .workspace, pid: -1,
                             id: WindowID(serverID: -1), sourceRect: src.rect,
-                            srcIDs: srcIDs, current: p, dropTargetWS: nil)
+                            srcIDs: src.windows.map(\.id), current: p, dropTargetWS: nil)
+                dragSectionID = ph.cellID
+                reorderDrag = true
+                reorderInsertAt = nil
+                reorderLine = nil
                 layoutSuppressed = true
                 installWorkspaceGhost(for: src)
                 NSCursor.closedHand.set()
@@ -1018,17 +1046,50 @@ public final class RailView: NSView {
         }
         guard var d = drag else { return }
         d.current = p
-        // Drop targets are strip cells only (not the hero — it's the
-        // active WS, already its own strip cell), and only within the
-        // viewport clip (a rotated-off cell in the margin isn't a target).
-        // A cell == source is not a target (no self-move).
-        // A lens cell is never a drop target (no source WS — Decision 6).
-        let over = stripCellAt(p)
-        d.dropTargetWS = (over?.isLens == true || over?.wsIndex == d.sourceWS)
-            ? nil : over?.wsIndex
+        if reorderDrag {
+            updateReorderTarget(at: p)      // insertion boundary + line
+        } else {
+            // Drop targets are strip cells only (not the hero — it's the
+            // active WS, already its own strip cell), and only within the
+            // viewport clip (a rotated-off cell in the margin isn't a target).
+            // A cell == source is not a target (no self-move).
+            // A lens cell is never a drop target (no source WS — Decision 6).
+            let over = stripCellAt(p)
+            d.dropTargetWS = (over?.isLens == true || over?.wsIndex == d.sourceWS)
+                ? nil : over?.wsIndex
+        }
         drag = d
         positionDragGhost(at: p)
         needsDisplay = true
+    }
+
+    /// Section-reorder hit-test: the insertion BOUNDARY (in `sectionOrder`
+    /// coords = the projected section order) for the strip cell under the
+    /// cursor, before/after decided along the strip axis. Also precomputes the
+    /// insertion-line endpoints. `nil` (no line / no commit) off all cells or
+    /// on the dragged section's own slot.
+    private func updateReorderTarget(at p: NSPoint) {
+        guard let cell = stripCellAt(p),
+              let t = sectionOrder.firstIndex(of: cell.sectionID) else {
+            reorderInsertAt = nil; reorderLine = nil; return
+        }
+        let horizontal = edge.axis == .horizontal
+        let after = horizontal ? (p.x >= cell.rect.midX) : (p.y >= cell.rect.midY)
+        let b = after ? t + 1 : t
+        if let id = dragSectionID, let s = sectionOrder.firstIndex(of: id),
+           b == s || b == s + 1 {
+            reorderInsertAt = nil; reorderLine = nil; return    // own slot → no-op
+        }
+        reorderInsertAt = b
+        if horizontal {
+            let x = after ? cell.rect.maxX : cell.rect.minX
+            reorderLine = (NSPoint(x: x, y: cell.rect.minY),
+                           NSPoint(x: x, y: cell.rect.maxY))
+        } else {
+            let y = after ? cell.rect.maxY : cell.rect.minY
+            reorderLine = (NSPoint(x: cell.rect.minX, y: y),
+                           NSPoint(x: cell.rect.maxX, y: y))
+        }
     }
 
     public override func mouseUp(with event: NSEvent) {
@@ -1052,10 +1113,10 @@ public final class RailView: NSView {
                 }
             } else if let ph = pendingHeaderDown,
                       let cell = cells.first(where: { $0.sectionID == ph.cellID }) {
-                // Workspace header → switch to that WS (lens headers fired on
-                // mouseDown, so this is always a workspace cell).
+                // Header click → switch to that workspace, or toggle the lens.
                 commitSwitch(targetSectionID: ph.cellID) { [weak self] in
-                    self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))
+                    if cell.isLens { self?.onPick?(.lens(label: cell.label)) }
+                    else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
             }
             return
@@ -1063,6 +1124,18 @@ public final class RailView: NSView {
         // Drag path: commit or cancel. Do NOT clear `drag` here — the
         // landing gate (commit) / cancel animation owns the teardown.
         guard let d = drag else { return }
+        if reorderDrag {
+            // Section reorder commit (display-only, session-only): the
+            // Controller mutates the per-mac-desktop order override + re-renders.
+            // No backend round-trip → clear + re-lay now (a no-op drop just
+            // re-lays unchanged; `reorderInsertAt` is nil then).
+            if let id = dragSectionID, let at = reorderInsertAt {
+                onReorder?(id, at)
+            }
+            clearDrag()
+            layoutCells()
+            return
+        }
         if let dst = d.dropTargetWS,
            let dstCell = cells.first(where: { $0.wsIndex == dst }) {
             switch d.kind {

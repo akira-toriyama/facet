@@ -75,6 +75,11 @@ public protocol OverviewView: NSView {
     /// contents (the WM indices stay put; only the windows trade).
     var onSwap: ((_ srcWS: Int, _ dstWS: Int,
                   _ srcIDs: [WindowID], _ dstIDs: [WindowID]) -> Void)? { get set }
+    /// Drag a cell header to a new slot → REORDER the section list (display-
+    /// only, session-only). `boundary` is the insertion index in the projected
+    /// section order. No window moves, no config write. (Mouse path; the
+    /// keyboard header-lift still swaps for now.)
+    var onReorder: ((_ sectionID: String, _ toBoundary: Int) -> Void)? { get set }
 
     // MARK: Lifecycle / feeding
 

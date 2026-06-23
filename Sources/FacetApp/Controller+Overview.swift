@@ -52,6 +52,11 @@ extension Controller {
         v.onSwap = { [weak self] src, dst, srcIDs, dstIDs in
             self?.overviewSwap(from: src, to: dst, srcIDs: srcIDs, dstIDs: dstIDs)
         }
+        // Drag a cell header to a new slot → REORDER the section list (display-
+        // only, session-only) — the same seam the tree uses. No window moves.
+        v.onReorder = { [weak self] sectionID, boundary in
+            self?.reorderSection(move: sectionID, toBoundary: boundary)
+        }
     }
 
     /// Present the overlay + fade it in (identical for both surfaces).

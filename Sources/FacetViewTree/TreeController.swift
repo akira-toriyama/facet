@@ -101,4 +101,11 @@ public protocol TreeController: AnyObject, Sendable {
     /// section it already matched (multi-match). No-op when the dest lens is
     /// drop-inert / the window can't satisfy its `match`.
     func applyAdd(windowID: WindowID, toSectionID: String)
+
+    /// Section drag-to-reorder (display-only, session-only): move the section
+    /// `sectionID` to insertion BOUNDARY `boundary` (current display-list
+    /// coords; `0` = before first, `count` = after last) on the active mac
+    /// desktop. No window moves, no config write — a relaunch resets to config
+    /// order. A no-op drop (own-slot boundary) commits nothing.
+    func reorderSection(move sectionID: String, toBoundary boundary: Int)
 }

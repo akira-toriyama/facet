@@ -35,13 +35,33 @@
   - overflow も emoji 最後: 識別子 `🐶2` → 表示 `Dog2 🐶`
   - tree/grid/rail 全 view に反映（共有 `workspaceShortLabel` 経由）／ test 2本更新
 
-- [ ] **3. workspace の DnD**
-  - workspace 自体を DnD できるようにする（ウィンドウ DnD は既に可）
+- [x] **3. section の DnD（並び替え reorder）** ✅ 完了（tree/grid/rail 実機 Good）
+  - **確定スペック**: section（workspace も lens も）を1単位で掴んで**並び替え**。
+    - **表示順のみ**（窓は動かない・tiling 不変）／ **tree+grid+rail 全部**で掴めて、3 view 一貫反映
+    - **session のみ**（`config.toml` は書かない＝鉄則維持・再起動で config 順に戻る）／ **mac desktop またぎ無し**
+    - 挿入型（insert-between）・型混在 OK（lens の列に workspace を差し込み可）・ドロップ表示は挿入線
+  - **核心**: projection の**出力**（`lastSections`）を session 並び替え。入力 `[DesktopSection]` を並べ替えると workspace の位置束縛（`FilterProjection` wsCursor）で窓が再束縛されるため厳禁。ルーティングは `sourceWorkspaceIndex` 経由なので窓は不動。
+  - 実装:
+    - [SectionOrder.swift](Sources/FacetCore/SectionOrder.swift) 純関数（stable-partition + insert-between・CI test [SectionOrderTests.swift](Tests/FacetCoreTests/SectionOrderTests.swift)）
+    - Controller: session var `macDesktopSectionOrder` + [Controller+Reorder.swift](Sources/FacetApp/Controller+Reorder.swift) `reorderSection` + apply() の単一チョークポイント（`lastSections`）で3 view 反映
+    - tree: [SidebarView+Drag.swift](Sources/FacetViewTree/SidebarView+Drag.swift) mode 4 + 挿入線 / grid: [GridView.swift](Sources/FacetViewGrid/GridView.swift) header-drag→reorder（旧 swap 置換）/ rail: [RailView.swift](Sources/FacetViewRail/RailView.swift) 同上 / 共通 seam [Controller+Overview.swift](Sources/FacetApp/Controller+Overview.swift) `onReorder`
+  - 副次効果: grid/rail のヘッダ掴みが旧 swap（窓移動）→ reorder に置換され、**ヘッダ掴み起因の「窓が動く」は解消**
+  - 📌 **未対応（暗黙にしない）**: キーボード Space のヘッダ持ち上げは旧 swap のまま（マウス reorder を優先実装）。希望あれば reorder 化。
 
 - [ ] **4. tree のキーボード操作が効かない**
   - tree がキーボード操作を受け付けない（再現条件は本人の補足待ち）
 
-- [ ] **5.（追記待ち…）**
+- [ ] **5. grid のウィンドウが offscreen に居座る（park/restore リグレッション）**
+  - **症状**: grid を開いて閉じた後、**アクティブ workspace の窓が画面の一部だけ（右 ~65%・左半分が黒）に居座り復帰しない**。再起動/手動操作まで戻らない。
+  - **トミーの見立て**: section reorder とは**無関係の別バグ**・おそらく **filter pivot 対応で壊れた**。今回の reorder 変更（窓位置/park に未介入）が原因でもない。
+  - **証拠（2026-06-23 動画 `画面収録 21.10.30.mov` + `/tmp/facet.log`）**:
+    - `native: switchWorkspace 2 -> 1 autoFocus=true` → `anchor parked=0 restored=1` の後、
+    - `native: classify ... onscreen=0 offscreen=4` が継続 = **アクティブ WS の窓まで offscreen 扱いのまま on-screen 復帰していない**。
+  - **疑い箇所（着手は systematic-debug で file:line 追跡）**:
+    - lens 解除 / workspace 切替時の **anchor park → restore** の復元漏れ（`reconcileHidden` / `revealWindow` / lens-clear 経路）
+    - もしくは **float レイアウト**時の位置復元（float 窓は park 後に元 frame を戻す主体が誰か）
+    - grid を閉じる際の最終 reconcile が park 状態を on-screen に戻し切れていない可能性
+  - **再現待ち（要トミー補足）**: grid で具体的にどの操作か（lens セルをクリック？ 窓サムネを別 WS へドラッグ？ ただ開閉？）。トリガを1つに絞れると一気に詰まる。
 
 ---
 
