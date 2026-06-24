@@ -318,7 +318,7 @@ public final class SidebarView: NSView {
             + workspaces.map { ws in
                 "\(ws.index)\(headerActive(ws) ? "*" : "")\(ws.layoutMode)|"
                 + ws.windows.map {
-                    "\($0.id.serverID)\(hot($0) ? "f" : "")\($0.isOnscreen ? "" : "h"):\(eff($0))"
+                    "\($0.id.serverID)\((hot($0) && headerActive(ws)) ? "f" : "")\($0.isOnscreen ? "" : "h"):\(eff($0))"
                 }.joined(separator: ",")
             }.joined(separator: ";")
         // Loading skeleton: hold while content is UNCHANGED from when
@@ -383,9 +383,14 @@ public final class SidebarView: NSView {
         // row-height ladder + Cell mapping, so the by-workspace and section
         // paths can never drift). Degrade: group == workspaceIndex ==
         // ws.index, so kbNav / DnD band keys stay byte-identical.
-        func appendWindowRow(_ win: Window, wsIndex: Int) {
+        // `active`: focus highlight is scoped to the ACTIVE workspace — a
+        // window in an inactive (parked) WS never shows as focused, so a
+        // switch to an EMPTY workspace shows no focused row (focus is on the
+        // desktop / Finder, not a window). Same rule as the section path.
+        func appendWindowRow(_ win: Window, wsIndex: Int, active: Bool) {
             y = windowRow(win, group: wsIndex, workspaceIndex: wsIndex,
-                          width: w, y: y, title: eff(win), hot: hot(win))
+                          width: w, y: y, title: eff(win),
+                          hot: hot(win) && active)
         }
 
         // The "Desktop N" grab band is no longer a scrolling row — it's
@@ -423,7 +428,7 @@ public final class SidebarView: NSView {
             firstHeader = false
             y += hh
             for win in wins {
-                appendWindowRow(win, wsIndex: ws.index)
+                appendWindowRow(win, wsIndex: ws.index, active: headerActive(ws))
             }
             wsBands[ws.index] = start...(y + 3)
             y += 3
@@ -559,7 +564,7 @@ public final class SidebarView: NSView {
                 return "\(g):\(sec.id):\(isLens ? "L" : "W")"
                     + "\(active ? "*" : "")\(layout)|"
                     + sec.windows.map {
-                        "\($0.id.serverID)\(hot($0) ? "f" : "")"
+                        "\($0.id.serverID)\((hot($0) && headerActive(sec)) ? "f" : "")"
                         + "\($0.isOnscreen ? "" : "h")\($0.isLensParked ? "p" : "")"
                         + ":\(eff($0))"
                     }.joined(separator: ",")
@@ -640,8 +645,14 @@ public final class SidebarView: NSView {
             y += hh
             for win in wins {
                 let aws = realWS[win.id] ?? src ?? (activeWS ?? 0)
+                // Focus highlight is scoped to the ACTIVE section: a window in a
+                // non-active (parked) section never shows as focused. So a
+                // switch to an EMPTY section shows no focused row — focus has
+                // gone to the desktop (Finder), which isn't a window. (Also
+                // de-dupes a window shown in both its WS and an active lens.)
                 y = windowRow(win, group: g, workspaceIndex: aws,
-                              width: w, y: y, title: eff(win), hot: hot(win))
+                              width: w, y: y, title: eff(win),
+                              hot: hot(win) && headerActive(sec))
             }
             wsBands[g] = start...(y + 3)
             y += 3

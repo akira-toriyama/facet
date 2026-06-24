@@ -75,6 +75,12 @@ extension Controller {
                 case "lens-clear":
                     self.setActiveLens(nil, autoFocus: true)
 
+                // Unified section addressing: `facet section --focus N|LABEL`
+                // → resolve the tree-order index / label to its ActiveSection.
+                case let s where s.hasPrefix("section-focus:"):
+                    self.dispatchSectionFocus(
+                        String(s.dropFirst("section-focus:".count)))
+
                 case "workspace-add":
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
@@ -442,6 +448,76 @@ extension Controller {
             }
         default:       dispatchWorkspace(Int(arg) ?? 0)
         }
+    }
+
+    /// One addressable section in tree order: its display label + the
+    /// `ActiveSection` it activates (nil = an unassigned section, not focusable).
+    private struct SectionAddr { let label: String; let section: ActiveSection? }
+
+    /// The ordered, addressable section list AS THE TREE RENDERS IT. Section
+    /// model → the projected sections (already reorder-applied in `apply()`);
+    /// degrade (no `[[desktop.N.section]]`) → the displayed workspaces with the
+    /// session reorder override applied, each a workspace section. Mirrors
+    /// `Controller.reorderSection`'s two-mode handling so `--focus N` matches
+    /// the numbers the user sees.
+    private func addressableSections() -> [SectionAddr] {
+        if !lastSections.isEmpty {
+            return lastSections.map { ps in
+                switch ps.sectionType {
+                case .workspace:
+                    // sourceWorkspaceIndex is 0-based (== Workspace.index);
+                    // ActiveSection is 1-based → +1 (mirrors Controller+Grid).
+                    return SectionAddr(label: ps.label,
+                        section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) })
+                case .lens:
+                    return SectionAddr(label: ps.label, section: .lens(ps.label))
+                case .unassigned:
+                    return SectionAddr(label: ps.label, section: nil)
+                }
+            }
+        }
+        let key = currentMacDesktopOrdinal() ?? -1
+        return SectionOrder.applyWorkspaces(macDesktopSectionOrder[key],
+                                            to: lastWorkspaces)
+            .map { SectionAddr(label: $0.name, section: .workspace($0.index + 1)) }
+    }
+
+    /// `facet section --focus`: resolve a 1-based tree-order index (`index:N`)
+    /// or a section label (`label:LABEL`) to its `ActiveSection` and activate
+    /// it. Runs on main (DNC). An unknown index / label, or an unassigned
+    /// section (no workspace/lens behind it), is loud-but-non-fatal
+    /// (`setError`, no change) per facet's typo stance.
+    private func dispatchSectionFocus(_ arg: String) {
+        let list = addressableSections()
+        let hit: SectionAddr?
+        if arg.hasPrefix("index:") {
+            let n = Int(arg.dropFirst("index:".count)) ?? 0
+            guard n >= 1, n <= list.count else {
+                let hint = list.isEmpty ? "no sections" : "1..\(list.count)"
+                setError("section --focus \(n): out of range (\(hint))")
+                scheduleReconcile(after: 0.05)
+                return
+            }
+            hit = list[n - 1]
+        } else if arg.hasPrefix("label:") {
+            let label = String(arg.dropFirst("label:".count))
+            guard let h = list.first(where: { $0.label == label }) else {
+                setError("section --focus \(label): no such section")
+                scheduleReconcile(after: 0.05)
+                return
+            }
+            hit = h
+        } else {
+            return      // malformed payload (shouldn't happen)
+        }
+        guard let hit else { return }
+        guard let section = hit.section else {
+            setError("section --focus \"\(hit.label)\": unassigned sections "
+                + "aren't focusable (no workspace or lens behind them)")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        activateSection(section, autoFocus: true)
     }
 
     /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`
