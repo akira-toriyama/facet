@@ -116,6 +116,8 @@
 
 - 各回収は **1 item = 1 PR**（gitmoji+Conventional・squash）。root cause を systematic-debug で file:line 特定 → 最小修正 → 実機検証 → Task.md 更新。
 - **指針（トミー 2026-06-23）**: **filter pivot 以降の修正はあやしい**。コード/テスト/設計に**違和感を感じたら、後方互換を気にせず振り返って是正してOK**（破壊的変更OK）。テストが「旧バグ挙動」を固定している場合は test 側を正す（R2 がその実例）。
+- **フレーミング（トミー 2026-06-24）**: pivot で **workspace 機能と tag 機能を統合** → バグ/不整合が混入。**pivot 以前（`group by = tag|workspace`）は個々で正しく動いていた**はず＝それが正動作の基準。意図せぬ実装は **過去に振り返って確認OK・品質優先**。
+- **pre-pivot 参照 clone（旧正動作の確認用・トミー許可）**: `../facet-prepivot`（= `/Volumes/workspace/github.com/akira-toriyama/facet-prepivot`）@ `130cf93`（pivot 起点 `51dc740`#287 の親＝group-by モデル無傷）。`swift build`/実行で旧挙動を実機比較可。方針詳細 → memory `facet-pivot-regression-recovery`。
 - 「正本はこの Task.md 一本」。GitHub issue 化したい場合は roadmap board(#5) に起票（トミー判断）。
 
 ---
