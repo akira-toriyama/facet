@@ -17,10 +17,11 @@ extension SidebarView {
               let win = window else { return }
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         switch row.kind {
-        case .header(_, let ws):
-            // A lens-section header (workspaceIndex nil) has no layout to
-            // pick; PR6 adds a lens menu. Workspace header → layout picker.
+        case .header(let g, let ws):
+            // Workspace header → full layout picker; lens header → the
+            // stateless-only union layout picker (R9 / Cluster B).
             if let ws { headerMenu(at: scr, workspaceIndex: ws) }
+            else { lensHeaderMenu(at: scr, group: g) }
         case .window(let g, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title, currentGroup: g)
@@ -43,6 +44,23 @@ extension SidebarView {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
                                    palette: pal, filterable: filterable)
+    }
+
+    /// Lens-section header right-click / `m` menu → the stateless-only union
+    /// layout picker (R9). `g` is the render group; `lastSections[g]` is the
+    /// `type=lens` section it came from. Picking routes through the controller,
+    /// which activates the lens then sets its union layout.
+    func lensHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
+        guard g >= 0, g < lastSections.count else { return }
+        let sec = lastSections[g]
+        guard sec.sectionType == .lens else { return }
+        let label = sec.label
+        ViewContextMenu.showLensLayout(
+            at: scr, backend: backend, lensLabel: label,
+            palette: pal, filterable: filterable
+        ) { [weak self] mode in
+            self?.controller?.setLensLayout(label: label, mode: mode)
+        }
     }
 
     func showWindowMenu(at scr: NSPoint,
