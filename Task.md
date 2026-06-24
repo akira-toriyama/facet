@@ -103,7 +103,7 @@
 - [ ] **R6.（候補・深い問い）lens の cross-workspace union-TILING は正しい意味か？** — R2 で float を除外した結果「inactive WS の float マッチ窓は lens に集約されない」トレードオフが出た。そもそも lens（＝可視性フィルタ／SQL VIEW）が**マッチ窓を再タイルして集約する**のが正しいのか、**可視性のみ（非マッチを park・マッチは元位置表示）**が筋ではないか。EX-1 の union-tile は post-pivot 追加分で、トミー曰く「あやしい」。要 0ベース再検討。
 - [ ] **R7. grid / rail のキーボードが怪しい**（トミー実機報告・**別タスク**）— item 4 の敵対レビューでは tree とは**独立経路**（`gridKbMonitor` / `railKbMonitor`・`panel.isKeyWindow` 非依存・`loadingWantsActive` と無関係）で本 bug の影響外と判定。実機で症状を切り分けてから起票。
 - [ ] **R8.（候補・温存）loading skeleton の早期 clear ハードニング** — item 4 Fix A の tail risk。skeleton clear を「content-sig 変化」ではなく「**mac desktop ordinal 変化**」に絞れば、切替の最中の旧 desktop sig 揺れによる早期 activate を構造的に封じられる。flicker mask 本体に触れる＝実機目視が要るので、実際に出てから着手。
-- [x] **R9. lens header にコンテキストメニュー（`m`/右クリック）** 🔧 実装済・**実機メニュー目視待ち（トミー）**（branch `feat/lens-header-menu`・未 commit→commit 予定）。workspace header=全 layout / **lens header=stateless のみ**（`LensLayout.isStateless`・bsp/stack/float 除外＝トミーの「workspace の方が多い」と一致）。選択→`controller.setLensLayout`＝lens を（未 active なら）activate してから union layout セット（cliQueue FIFO で activate→layout 保証）。実装: [ViewContextMenu.showLensLayout](Sources/FacetView/ViewContextMenu.swift) / [TreeController.setLensLayout](Sources/FacetViewTree/TreeController.swift) / [Controller+CLIDispatch.swift](Sources/FacetApp/Controller+CLIDispatch.swift) / dispatch [SidebarView+Menus.swift](Sources/FacetViewTree/SidebarView+Menus.swift)+[SidebarView+KbNav.swift](Sources/FacetViewTree/SidebarView+KbNav.swift)。`swift build`✅ ／ `./run.sh` 起動＋tree 召喚クラッシュ無し✅。📌 **未対応（暗黙にしない）**: ✓（現在 layout 表示）は v1 省略＝active lens の layout を thread-safe に view へ渡す配線が要る小 follow-up（catalog を main から読まない P6 規則のため）。= Phase 9 **Cluster B**。
+- [x] **R9. lens header にコンテキストメニュー（`m`/右クリック）** ✅ **完了（PR #326・main `534201c` マージ済・実機メニュー目視 OK＝トミー確認済）**。workspace header=全 layout / **lens header=stateless のみ**（`LensLayout.isStateless`・bsp/stack/float 除外＝トミーの「workspace の方が多い」と一致）。選択→`controller.setLensLayout`＝lens を（未 active なら）activate してから union layout セット（cliQueue FIFO で activate→layout 保証）。実装: [ViewContextMenu.showLensLayout](Sources/FacetView/ViewContextMenu.swift) / [TreeController.setLensLayout](Sources/FacetViewTree/TreeController.swift) / [Controller+CLIDispatch.swift](Sources/FacetApp/Controller+CLIDispatch.swift) / dispatch [SidebarView+Menus.swift](Sources/FacetViewTree/SidebarView+Menus.swift)+[SidebarView+KbNav.swift](Sources/FacetViewTree/SidebarView+KbNav.swift)。`swift build`✅ ／ `./run.sh` 起動＋tree 召喚クラッシュ無し✅。📌 **未対応（暗黙にしない）**: ✓（現在 layout 表示）は v1 省略＝active lens の layout を thread-safe に view へ渡す配線が要る follow-up（catalog を main から読まない P6 規則のため）。**調査結果: active lens の layout は現状 main 側/Status/snapshot に出ていない（grid/rail も）→ adapter(cliQueue)→main へ通す配線が必要＝想定より小さくないので defer（Task.md でトラッキング継続）**。= Phase 9 **Cluster B**。
 - [ ] **R10. 窓のタグ操作 GUI が欠落（"Add to lens" が代替になっていない）** — pivot 前の per-window タグ 付与/外す/リネーム を GUI で。backend API（`addTagToWindow`/`removeTagFromWindow`/`toggleTagOnWindow`/`retagWindow`）＋CLI（`facet window --tag/--untag/--toggle-tag/--retag`）は**現存**、GUI 未露出。#319 削除の `TagEditPanel` WINDOW モード復活が筋。= Phase 9 **Cluster A**（本命）。
 - [ ] **R11. global `t` タグ管理モード削除（#319）＋ tree から match/apply 編集が無い** — `t` vocab モード復活（C1）＋ 実行時 match/apply 編集・type=workspace の match/apply（C2・要設計・pivot 中核に触れる）。= Phase 9 **Cluster C**。
 - [ ] **R5+. （未特定）** — トミーが挙げる他のバグ/欠落をここに追記して潰していく。
@@ -154,7 +154,17 @@
 3. ⏳ **rename スコープ（per-window retag / global vocabulary）は A 着手時に確定**（未確定で残す）。
 4. ⏳ **「workspace の match/apply」(C2) はまだ固めない** → C 着手時に専用ラウンドで相談（今は intake 記録のみ）。
 
-### 🚧 進行: **B（R9）= lens header メニュー** 🔧 実装済・実機目視待ち → 次は **A（R10）= 窓のタグ編集**
+### 🚧 進行: ✅ **B（R9）= 完了マージ #326** → 着手中 **A（R10）= 窓のタグ編集**（branch `feat/window-tag-edit`）
+
+**A 実装計画（pre-pivot 忠実 + 現モデル適応）**:
+- **窓行メニューの "Add to ＜Lens＞" を廃止**（トミー確定）し、**"Tag…"** を追加 → per-window タグ**チェックリストのキーパネル**を開く。
+- パネル = #319 削除の `TagEditPanel` **WINDOW モード**を pre-pivot clone（`../facet-prepivot` `130cf93`）から復元し、Set<String> モデルへ適応:
+  - 利用可能タグ = snapshot（lastSections/lastWorkspaces の `window.tags`）の和集合＝**view 側で算出**（削除済 `definedTagNames` 不要）。
+  - チェック = その窓の tags。トグル → backend `addTag(_:toWindow:)`/`removeTag(_:fromWindow:)`（**現存**）。
+  - "+ Create" 行 → 新規タグ付与（auto-vivify）。
+  - キー入力可能パネル（KeyablePanel・text field・activation-policy dance）— B と同じ流儀で tree パネル右隣に配置。
+- **rename スコープの決定（トミー flagged）**: **rename/delete は per-window でなく vocabulary 操作 → C（global `t` モード）へ**。pre-pivot でも rename/delete は MANAGE モード（窓非依存）にあり、WINDOW モードは toggle+create のみ。A は **付与/外す/作成**に専念。← この方針で進める（異論あれば C で調整）。
+- 段階: A-1 パネル復元+適応 → A-2 メニュー配線（"Tag…" 追加・"Add to lens" 撤去）→ build → run → 実機目視（トミー）→ PR。
 
 ---
 
