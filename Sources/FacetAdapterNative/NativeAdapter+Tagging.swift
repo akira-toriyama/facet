@@ -165,6 +165,39 @@ extension NativeAdapter {
         }
     }
 
+    // MARK: - Tag-manage mode (`t`) — GLOBAL vocabulary edits
+
+    /// Tag-manage `t` RENAME: replace tag `old` → `new` on EVERY window that
+    /// carries it (vocabulary-wide, not a single window). Re-tiles + requests
+    /// one refresh; an active section lens then re-evaluates membership by the
+    /// new tags on the reconcile. `false` when unmanaged or no window carried
+    /// `old`.
+    public func renameTag(_ old: String, to new: String) -> Bool {
+        guard windowTagReady("rename-tag", "\(old):\(new)") else { return false }
+        guard catalog.renameTagEverywhere(old, to: new) else {
+            Log.debug("native: rename-tag \"\(old)\"->\"\(new)\" — no window carried it")
+            return false
+        }
+        applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
+        Log.debug("native: rename-tag \"\(old)\"->\"\(new)\"")
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
+    /// Tag-manage `t` DELETE: remove tag `name` from EVERY window (the tag then
+    /// ceases to exist). `false` when unmanaged or no window carried it.
+    public func removeTag(_ name: String) -> Bool {
+        guard windowTagReady("delete-tag", name) else { return false }
+        guard catalog.removeTagEverywhere(name) else {
+            Log.debug("native: delete-tag \"\(name)\" — no window carried it")
+            return false
+        }
+        applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
+        Log.debug("native: delete-tag \"\(name)\"")
+        eventContinuation.yield(.refreshNeeded)
+        return true
+    }
+
     /// Managed-desktop gate shared by every runtime window-tag verb
     /// (`window --tag/--untag/--toggle-tag/--retag`). `false` (with a debug
     /// line) when this mac desktop is hands-off.
