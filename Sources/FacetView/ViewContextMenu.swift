@@ -190,8 +190,7 @@ public enum ViewContextMenu {
         title: String,
         palette: ResolvedPalette,
         filterable: Bool = false,
-        addToLensTargets: [(label: String, sectionID: String)] = [],
-        onApplyAdd: ((_ sectionID: String) -> Void)? = nil,
+        onEditTags: ((_ pid: Int, _ id: WindowID, _ title: String) -> Void)? = nil,
         runOps: @escaping (_ ops: [WindowAction], _ window: Window, _ ws: Int) -> Void
     ) {
         let wsModel = workspaces.first { $0.index == ws }
@@ -225,17 +224,15 @@ public enum ViewContextMenu {
             }
         }
         var entries = menu.filter { $0.section == "Layout" }.map(makeEntry)
-        // Section model (PR8): "Add to <lens>" items — apply-only ADD
-        // (multi-match: the window joins the lens, staying in every section it
-        // already matched). Their own section so they read as a group. Grid /
-        // rail pass an empty list → no section appears.
-        if !addToLensTargets.isEmpty, let onApplyAdd {
-            for t in addToLensTargets {
-                entries.append(Entry(label: "Add to \(t.label)", icon: "SF:tag",
-                                     section: "Add to lens") {
-                    onApplyAdd(t.sectionID)
-                })
-            }
+        // Per-window tag editing (R10): a single "Tag…" item opens the tag
+        // checklist panel (add / remove / create a tag ON this window). This
+        // replaces the pivot-era "Add to <lens>" — which only applied a lens's
+        // apply-set, conflating tags with lens membership. Its own "Tags"
+        // section (→ secondary tint). Grid / rail pass nil → no item appears.
+        if let onEditTags {
+            entries.append(Entry(label: "Tag…", icon: "SF:tag", section: "Tags") {
+                onEditTags(pid, id, title)
+            })
         }
         entries += menu.filter { $0.section != "Layout" }.map(makeEntry)
         present(at: scr, header: "Window", palette: palette,

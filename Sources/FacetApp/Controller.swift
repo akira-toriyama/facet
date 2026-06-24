@@ -255,6 +255,11 @@ final class Controller: NSObject {
     /// Frontmost app at the moment ``enterActive`` was called, so
     /// ``exitActive(restore: true)`` can hand focus back.
     var prevApp: NSRunningApplication?
+    /// True when `openTagEditor` itself flipped the activation policy to
+    /// `.regular` (i.e. the tree was passive when the tag panel opened), so
+    /// `finishTagEditor` knows to revert it on close. When the tree was already
+    /// in keyboard nav, this stays false and close just re-keys the tree.
+    var tagEditorSelfActivated = false
     private let searchDelegate = SearchFieldDelegate()
 
     // MARK: - Subscription / polling
@@ -362,6 +367,12 @@ final class Controller: NSObject {
         if isKey {
             if !sidebarView.kbNav { sidebarView.enterKbNav() }
         } else {
+            // The tag-edit checklist (R10) just took key — its own panel is
+            // now key, so the tree resigned. Don't tear down kbNav: it's a
+            // hand-off to our own panel, not a focus loss. `finishTagEditor`
+            // re-keys the tree on close, resuming nav. Without this guard the
+            // tree would self-destruct nav the moment the editor opened.
+            if TagEditPanel.shared.isOpen { return }
             // Drop kbNav. If we got here via the kb-nav exitActive
             // path, exitKbNav has already run and
             // this is a harmless idempotent call.

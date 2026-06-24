@@ -105,11 +105,13 @@ public protocol TreeController: AnyObject, Sendable {
     func applyMove(windowID: WindowID, fromSectionID: String,
                    toSectionID: String, destSourceWorkspaceIndex: Int?)
 
-    /// Section-model ADD (right-click "Add to ▸ <lens>"): apply ONLY (no
-    /// un-apply) so the window joins the dest lens while staying in every
-    /// section it already matched (multi-match). No-op when the dest lens is
-    /// drop-inert / the window can't satisfy its `match`.
-    func applyAdd(windowID: WindowID, toSectionID: String)
+    /// Per-window tag editing (R10): open the tag checklist panel for the
+    /// window `windowID` (the ops-menu "Tag…" item). The controller owns the
+    /// keyable `TagEditPanel` + the activation dance, computes the in-use tag
+    /// union + this window's tags from the live snapshot, and maps the panel's
+    /// toggle / create callbacks to `backend.addTag` / `removeTag`. `pid` /
+    /// `title` feed the panel header. No-op outside the section model.
+    func openTagEditor(pid: Int, windowID: WindowID, title: String)
 
     /// Section drag-to-reorder (display-only, session-only): move the section
     /// `sectionID` to insertion BOUNDARY `boundary` (current display-list

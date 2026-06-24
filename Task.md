@@ -104,7 +104,7 @@
 - [ ] **R7. grid / rail のキーボードが怪しい**（トミー実機報告・**別タスク**）— item 4 の敵対レビューでは tree とは**独立経路**（`gridKbMonitor` / `railKbMonitor`・`panel.isKeyWindow` 非依存・`loadingWantsActive` と無関係）で本 bug の影響外と判定。実機で症状を切り分けてから起票。
 - [ ] **R8.（候補・温存）loading skeleton の早期 clear ハードニング** — item 4 Fix A の tail risk。skeleton clear を「content-sig 変化」ではなく「**mac desktop ordinal 変化**」に絞れば、切替の最中の旧 desktop sig 揺れによる早期 activate を構造的に封じられる。flicker mask 本体に触れる＝実機目視が要るので、実際に出てから着手。
 - [x] **R9. lens header にコンテキストメニュー（`m`/右クリック）** ✅ **完了（PR #326・main `534201c` マージ済・実機メニュー目視 OK＝トミー確認済）**。workspace header=全 layout / **lens header=stateless のみ**（`LensLayout.isStateless`・bsp/stack/float 除外＝トミーの「workspace の方が多い」と一致）。選択→`controller.setLensLayout`＝lens を（未 active なら）activate してから union layout セット（cliQueue FIFO で activate→layout 保証）。実装: [ViewContextMenu.showLensLayout](Sources/FacetView/ViewContextMenu.swift) / [TreeController.setLensLayout](Sources/FacetViewTree/TreeController.swift) / [Controller+CLIDispatch.swift](Sources/FacetApp/Controller+CLIDispatch.swift) / dispatch [SidebarView+Menus.swift](Sources/FacetViewTree/SidebarView+Menus.swift)+[SidebarView+KbNav.swift](Sources/FacetViewTree/SidebarView+KbNav.swift)。`swift build`✅ ／ `./run.sh` 起動＋tree 召喚クラッシュ無し✅。📌 **未対応（暗黙にしない）**: ✓（現在 layout 表示）は v1 省略＝active lens の layout を thread-safe に view へ渡す配線が要る follow-up（catalog を main から読まない P6 規則のため）。**調査結果: active lens の layout は現状 main 側/Status/snapshot に出ていない（grid/rail も）→ adapter(cliQueue)→main へ通す配線が必要＝想定より小さくないので defer（Task.md でトラッキング継続）**。= Phase 9 **Cluster B**。
-- [ ] **R10. 窓のタグ操作 GUI が欠落（"Add to lens" が代替になっていない）** — pivot 前の per-window タグ 付与/外す/リネーム を GUI で。backend API（`addTagToWindow`/`removeTagFromWindow`/`toggleTagOnWindow`/`retagWindow`）＋CLI（`facet window --tag/--untag/--toggle-tag/--retag`）は**現存**、GUI 未露出。#319 削除の `TagEditPanel` WINDOW モード復活が筋。= Phase 9 **Cluster A**（本命）。
+- [x] **R10. 窓のタグ操作 GUI（"Add to lens" → "Tag…" チェックリスト）** 🔧 実装済・**実機目視待ち（トミー）**（branch `feat/window-tag-edit`）。#319 削除の `TagEditPanel` **WINDOW モードのみ**を pre-pivot clone から復元し `Set<String>` 適応（[TagEditPanel.swift](Sources/FacetView/TagEditPanel.swift) 新規）。窓行メニュー: "Add to ＜Lens＞" 撤去 → **"Tag…"**（[ViewContextMenu.swift](Sources/FacetView/ViewContextMenu.swift)）→ `TreeController.openTagEditor`（[Controller+ActiveMode.swift](Sources/FacetApp/Controller+ActiveMode.swift)）。トグル→`backend.addTag`/`removeTag`、"+Create"→addTag。allTags は snapshot から view 側 union（backend 呼び出し無し）。key/IME パネル＋`handlePanelKeyChange` ガード＋`finishTagEditor` 再 key（pre-pivot と同型）。`applyAdd`（右クリック ADD）撤去（drag の `applyMove` は無傷）。`swift build`✅ `./run.sh` 召喚クラッシュ無し✅。**rename/delete は本 PR 対象外＝C（global `t`）へ**（[[facet-pivot-section-lens-model]] 流の per-window=付与/外す・tag 自体=vocabulary 分離）。= Phase 9 **Cluster A**（本命）。
 - [ ] **R11. global `t` タグ管理モード削除（#319）＋ tree から match/apply 編集が無い** — `t` vocab モード復活（C1）＋ 実行時 match/apply 編集・type=workspace の match/apply（C2・要設計・pivot 中核に触れる）。= Phase 9 **Cluster C**。
 - [ ] **R5+. （未特定）** — トミーが挙げる他のバグ/欠落をここに追記して潰していく。
 
@@ -154,7 +154,7 @@
 3. ⏳ **rename スコープ（per-window retag / global vocabulary）は A 着手時に確定**（未確定で残す）。
 4. ⏳ **「workspace の match/apply」(C2) はまだ固めない** → C 着手時に専用ラウンドで相談（今は intake 記録のみ）。
 
-### 🚧 進行: ✅ **B（R9）= 完了マージ #326** → 着手中 **A（R10）= 窓のタグ編集**（branch `feat/window-tag-edit`）
+### 🚧 進行: ✅ **B（R9）#326 merged** → **A（R10）= 窓のタグ編集** 🔧 実装済・実機目視待ち（branch `feat/window-tag-edit`）→ 次は **C（R11）= global `t` + match/apply**
 
 **A 実装計画（pre-pivot 忠実 + 現モデル適応）**:
 - **窓行メニューの "Add to ＜Lens＞" を廃止**（トミー確定）し、**"Tag…"** を追加 → per-window タグ**チェックリストのキーパネル**を開く。

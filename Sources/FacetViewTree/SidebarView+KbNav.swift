@@ -242,10 +242,10 @@ extension SidebarView {
             // stateless-only union layout picker (R9 / Cluster B).
             if let ws { headerMenu(at: scr, workspaceIndex: ws, filterable: true) }
             else { lensHeaderMenu(at: scr, group: g, filterable: true) }
-        case .window(let g, let ws, let pid, let id, let title):
+        case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title,
-                           filterable: true, currentGroup: g)
+                           filterable: true)
         default:
             break
         }
