@@ -378,6 +378,20 @@ public protocol WindowBackend: Sendable {
     /// `name`.
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool
 
+    // MARK: - Tag-manage mode (`t`) — global vocabulary edits
+
+    /// Tag-manage `t` RENAME: replace tag `old` → `new` on EVERY window that
+    /// carries it (vocabulary-wide). Under the free-form `Set<String>` model a
+    /// tag exists only via the windows carrying it, so this is a sweep over
+    /// those windows. Returns `false` when no window carried `old` (or
+    /// unmanaged). No-op default for other backends.
+    func renameTag(_ old: String, to new: String) -> Bool
+
+    /// Tag-manage `t` DELETE: remove tag `name` from EVERY window (the tag then
+    /// ceases to exist). Returns `false` when no window carried it (or
+    /// unmanaged). No-op default for other backends.
+    func removeTag(_ name: String) -> Bool
+
     // MARK: - Section-model apply/un-apply (PR8)
 
     /// ABSOLUTE, focus-free by-`WindowID` mutators driven by the tree's
@@ -556,6 +570,8 @@ public extension WindowBackend {
     }
     func addTag(_ name: String, toWindow id: WindowID) -> Bool { false }
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool { false }
+    func renameTag(_ old: String, to new: String) -> Bool { false }
+    func removeTag(_ name: String) -> Bool { false }
     func setFloating(_ id: WindowID, _ floating: Bool) { }
     func setSticky(_ id: WindowID, _ sticky: Bool) { }
     func setMaster(_ id: WindowID, _ master: Bool) { }

@@ -147,6 +147,8 @@ extension Controller {
         case "h":            sidebarView.kbJumpWS(-1);   return true
         case "m":            sidebarView.kbContextMenu(); return true
         case "s":            enterSearch();              return true
+        case "t" where config.isSectionModelActive(ordinal: currentMacDesktopOrdinal()):
+                             enterTagManage();           return true
         default:             return false
         }
     }
@@ -260,12 +262,48 @@ extension Controller {
         )
     }
 
+    /// Tag-manage mode (`t`, R11/C1): open the tag-VOCABULARY editor — rename /
+    /// delete a tag across ALL windows, not tied to one. The tag list is the
+    /// union of every snapshot window's tags (same main-side derivation as
+    /// `openTagEditor`); rename / delete map to `backend.renameTag` /
+    /// `removeTag` (the global verbs). Anchored beside the tree panel (it's a
+    /// tree-panel-level mode, the `s` twin — vocabulary-wide, not row-specific).
+    /// Shares the activation dance + `finishTagEditor` close with `openTagEditor`.
+    func enterTagManage() {
+        guard config.isSectionModelActive(ordinal: currentMacDesktopOrdinal())
+        else { return }
+        var all = Set<String>()
+        for ws in lastWorkspaces { for w in ws.windows { all.formUnion(w.tags) } }
+        let bk = backend
+        let f = panelHost.panel.frame
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        TagEditPanel.shared.showManage(
+            at: NSPoint(x: f.maxX + 8, y: f.maxY),
+            allTags: all.sorted(),
+            palette: treePaletteBox.pal,
+            onRename: { [weak self] old, new in
+                cliQueue.async { _ = bk.renameTag(old, to: new) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onDelete: { [weak self] name in
+                cliQueue.async { _ = bk.removeTag(name) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onClose: { [weak self] in self?.finishTagEditor() }
+        )
+    }
+
     /// Called once on EVERY tag-panel close path (Esc / outside-click / click
-    /// elsewhere). Undoes exactly what `openTagEditor` did: if it flipped to
-    /// `.regular`, revert to `.accessory` and hand focus back to the previous
-    /// app; otherwise re-key the tree panel so keyboard nav resumes (the tree
-    /// resigned key when the panel took it, but the `handlePanelKeyChange`
-    /// guard kept kbNav alive).
+    /// elsewhere). Undoes exactly what `openTagEditor` / `enterTagManage` did:
+    /// if it flipped to `.regular`, revert to `.accessory` and hand focus back
+    /// to the previous app; otherwise re-key the tree panel so keyboard nav
+    /// resumes (the tree resigned key when the panel took it, but the
+    /// `handlePanelKeyChange` guard kept kbNav alive).
     func finishTagEditor() {
         if tagEditorSelfActivated {
             NSApp.setActivationPolicy(.accessory)

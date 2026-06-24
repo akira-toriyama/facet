@@ -1,4 +1,4 @@
-// Per-window tag-edit checklist panel (Phase 9 / Cluster A — R10).
+// Tag-edit panel — per-window checklist (R10) + tag-manage mode (`t`, R11/C1).
 //
 // The twin of `PopupMenu`: a singleton (`TagEditPanel.shared`) drawn purely
 // with `pal`, flipped at the screen edge, and closed on Esc / outside-click /
@@ -8,17 +8,24 @@
 // a regular, active app around show()/close() (the activation-policy dance the
 // tree panel already uses for keyboard nav).
 //
-// WINDOW mode only: the per-window checklist opened from the window-ops menu
-// "Tag…" item. Header = the window's app icon + name / title; rows are
-// checkboxes (checked = this window carries the tag); a "+ Create" row
-// auto-vivifies + checks a new tag. Toggling calls `onToggle(name, wantOn)`,
-// which the Controller maps to `backend.addTag` / `removeTag`.
+// Two modes share this one UI:
 //
-// This is the restored pre-pivot panel (deleted in #319) trimmed to WINDOW
-// mode and adapted to the `Set<String>` tag model. The pre-pivot MANAGE mode
-// (vocabulary rename / delete, the global `t` key) is NOT carried here — that
-// is tag-vocabulary work and lands in Cluster C. v1 is NAME ONLY (no colour /
-// description).
+//   • WINDOW mode (`show`, R10) — the per-window checklist opened from the
+//     ops-menu "Tag" item. Header = the window's app icon + name / title; rows
+//     are checkboxes (checked = this window carries the tag); a "+ Create" row
+//     auto-vivifies + checks a new tag. Toggling calls `onToggle(name, wantOn)`.
+//
+//   • MANAGE mode (`showManage`, the `t` key, R11/C1) — tag-VOCABULARY editing
+//     not tied to a window. Header = "Tags"; rows are tag names (no checkbox);
+//     a selected row → Enter / right-click → a themed `PopupMenu` [Rename,
+//     Delete]. Rename turns the filter field into an inline editor; Delete is
+//     immediate (no confirm). NO "+ Create": under the free-form `Set<String>`
+//     model a tag exists only while a window carries it, so creating a tag is
+//     the WINDOW mode's job (tagging a window) — an orphan vocabulary entry
+//     would just vanish on the next reconcile.
+//
+// Restored from the pre-pivot panel (deleted in #319) and adapted to the
+// `Set<String>` model. v1 is NAME ONLY (no colour / description).
 
 import AppKit
 import FacetCore
@@ -33,12 +40,15 @@ enum TagEditRow {
 
 /// Draws the rows with `pal`, mirroring `PopupMenuView`'s row / selection
 /// look. Hover and keyboard selection are one highlight (the pick-one-menu
-/// model). Each row carries a checkbox; clicking reports the index.
+/// model). In WINDOW mode each row carries a checkbox; in MANAGE mode rows are
+/// name-only and right-click reports a context request.
 final class TagEditListView: NSView {
     var rows: [TagEditRow] = []
     var sel: Int = 0
     var palette: ResolvedPalette = resolve(.terminal)
+    var manage = false                          // name-only rows (no checkbox)
     var onPick: ((Int) -> Void)?
+    var onContext: ((Int) -> Void)?             // right-click a row (manage)
     var onHover: ((Int) -> Void)?
 
     static let rowH: CGFloat = 28
@@ -60,13 +70,13 @@ final class TagEditListView: NSView {
         para.lineBreakMode = .byTruncatingTail
 
         guard !rows.isEmpty else {
-            // Empty vocabulary + empty filter: a quiet hint, not a blank box.
+            // Empty + empty filter: a quiet hint, not a blank box.
             let a: [NSAttributedString.Key: Any] = [
                 .font: uiFont(12, .regular),
                 .foregroundColor: palette.muted,
                 .paragraphStyle: para,
             ]
-            ("Type to create a tag" as NSString).draw(
+            (manage ? "No tags" as NSString : "Type to create a tag" as NSString).draw(
                 in: NSRect(x: Self.padX, y: 6,
                            width: bounds.width - Self.padX * 2,
                            height: Self.rowH - 6),
@@ -79,10 +89,10 @@ final class TagEditListView: NSView {
             let r = NSRect(x: 0, y: CGFloat(i) * Self.rowH,
                            width: bounds.width, height: Self.rowH)
             if i == sel {
-                // Tag UI uses the `secondary` accent throughout (the selection
-                // outline, the checked box / text, the Create row), matching
-                // the tree's tag chips + the menus' TAGS section, so
-                // "tag-related" reads one colour. Layout stays `primary`.
+                // Tag UI uses the `secondary` accent throughout (selection
+                // outline, checked box / text, the Create row), matching the
+                // tree's tag chips + the menus' TAGS section. Layout stays
+                // `primary`.
                 let pill = r.insetBy(dx: 4, dy: 2)
                 palette.secondary.withAlphaComponent(0.16).setFill()
                 NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
@@ -94,6 +104,8 @@ final class TagEditListView: NSView {
             let boxY = r.minY + (Self.rowH - boxSide) / 2
             let boxRect = NSRect(x: Self.padX, y: boxY,
                                  width: boxSide, height: boxSide)
+            // Text after the checkbox / `+` gutter, EXCEPT a manage-mode tag
+            // row (no checkbox) sits flush left at `padX`.
             func textRect(from x: CGFloat) -> NSRect {
                 NSRect(x: x, y: r.minY + 5,
                        width: r.width - x - Self.padX, height: Self.rowH - 6)
@@ -101,21 +113,23 @@ final class TagEditListView: NSView {
             let gutterX = Self.padX + boxSide + 8
             switch row {
             case let .tag(name, checked):
-                let textRect = textRect(from: gutterX)
-                let box = NSBezierPath(roundedRect: boxRect,
-                                       xRadius: 3, yRadius: 3)
-                if checked {
-                    palette.secondary.setFill(); box.fill()
-                    ("✓" as NSString).draw(
-                        in: boxRect.offsetBy(dx: 2.5, dy: 0.5),
-                        withAttributes: [.font: uiFont(11, .bold),
-                                         .foregroundColor: palette.background ?? .white])
-                } else {
-                    palette.muted.setStroke(); box.lineWidth = 1; box.stroke()
+                let textRect = textRect(from: manage ? Self.padX : gutterX)
+                if !manage {
+                    let box = NSBezierPath(roundedRect: boxRect,
+                                           xRadius: 3, yRadius: 3)
+                    if checked {
+                        palette.secondary.setFill(); box.fill()
+                        ("✓" as NSString).draw(
+                            in: boxRect.offsetBy(dx: 2.5, dy: 0.5),
+                            withAttributes: [.font: uiFont(11, .bold),
+                                             .foregroundColor: palette.background ?? .white])
+                    } else {
+                        palette.muted.setStroke(); box.lineWidth = 1; box.stroke()
+                    }
                 }
                 // A `tag` glyph stands in for the `#` prefix, then the bare
-                // name. Always `secondary` (tags); checked adds weight + the
-                // filled box, not a colour change.
+                // name. Always `secondary` (tags); checked adds weight.
+                let emph = !manage && checked
                 var nameX = textRect.minX
                 if let tagIcon = IconResolver.resolve(
                     "SF:tag", pointSize: 12, color: palette.secondary,
@@ -132,7 +146,7 @@ final class TagEditListView: NSView {
                     in: NSRect(x: nameX, y: textRect.minY,
                                width: textRect.maxX - nameX, height: textRect.height),
                     withAttributes: [
-                        .font: uiFont(13, checked ? .semibold : .regular),
+                        .font: uiFont(13, emph ? .semibold : .regular),
                         .foregroundColor: palette.secondary,
                         .paragraphStyle: para,
                     ])
@@ -171,18 +185,29 @@ final class TagEditListView: NSView {
             onPick?(i)
         }
     }
+
+    override func rightMouseDown(with e: NSEvent) {
+        if let i = rowIndex(at: convert(e.locationInWindow, from: nil)) {
+            onContext?(i)
+        }
+    }
 }
 
 // MARK: - Container (card background + header, hosts field & list)
 
-/// The panel's content view: draws the rounded card, the header (app icon +
-/// app name / title — the tree window-row look), the filter-box outline and
-/// the divider. The filter `NSTextField` and the list scroll view are subviews.
+/// The panel's content view: draws the rounded card, the header, the
+/// filter-box outline and the divider. The filter `NSTextField` and the list
+/// scroll view are subviews. WINDOW header = app icon + app name / title;
+/// MANAGE header = a single "Tags" line. During an inline rename the filter
+/// glyph turns into a pencil.
 final class TagEditContainerView: NSView {
     var appName = ""
     var title = ""
     var icon: NSImage?
     var palette: ResolvedPalette = resolve(.terminal)
+    var manage = false
+    var renaming = false                        // pencil glyph instead of ⌕
+    var hint: String?                           // brief validation hint
 
     static let padX: CGFloat = 12
     static let padV: CGFloat = 10
@@ -191,7 +216,7 @@ final class TagEditContainerView: NSView {
     static let fieldGap: CGFloat = 8
 
     /// Header band height: a single compact title line when there's no app
-    /// icon, the taller icon + two-line block when one resolved.
+    /// icon (manage "Tags"), the taller icon + two-line block in window mode.
     var headerH: CGFloat { icon == nil ? 24 : 40 }
 
     override var isFlipped: Bool { true }
@@ -214,13 +239,16 @@ final class TagEditContainerView: NSView {
         let para = NSMutableParagraphStyle()
         para.lineBreakMode = .byTruncatingTail
 
-        if icon == nil {
-            // No resolvable app icon: a compact app-name title, flush left.
-            (appName as NSString).draw(
+        if manage || icon == nil {
+            // Compact panel TITLE — manage "Tags" (secondary, names the tag
+            // vocabulary) or the window app name when no icon resolved.
+            let titleText = manage ? "Tags" : appName
+            (titleText as NSString).draw(
                 in: NSRect(x: Self.padX, y: Self.padV + (headerH - 18) / 2,
                            width: bounds.width - Self.padX * 2, height: 18),
-                withAttributes: [.font: uiFont(13, .semibold),
-                                 .foregroundColor: palette.foreground,
+                withAttributes: [.font: uiFont(13, manage ? .bold : .semibold),
+                                 .foregroundColor: manage ? palette.secondary
+                                                          : palette.foreground,
                                  .paragraphStyle: para])
         } else {
             // Mirror the tree window row: app icon + app name / title.
@@ -253,14 +281,26 @@ final class TagEditContainerView: NSView {
         let fb = NSBezierPath(roundedRect: fieldBox, xRadius: 7, yRadius: 7)
         (bg.blended(withFraction: 0.06, of: .white) ?? bg).setFill(); fb.fill()
         palette.border.setStroke(); fb.lineWidth = 1; fb.stroke()
-        // The search/filter affordance (matches the tree's SearchBar + the
-        // PopupMenu filter).
+        // SF `pencil` during an inline rename, else `magnifyingglass` — the
+        // search/filter affordance (matches the tree's SearchBar + PopupMenu).
         if let icon = IconResolver.resolve(
-            "SF:magnifyingglass", pointSize: 13, color: palette.muted) {
+            renaming ? "SF:pencil" : "SF:magnifyingglass",
+            pointSize: 13, color: palette.muted) {
             let isz = icon.size
             icon.draw(in: NSRect(x: Self.padX + 8,
                                  y: fieldTop + (Self.fieldH - isz.height) / 2,
                                  width: isz.width, height: isz.height))
+        }
+        if let hint, !hint.isEmpty {
+            let hp = NSMutableParagraphStyle()
+            hp.alignment = .right
+            hp.lineBreakMode = .byTruncatingTail
+            (hint as NSString).draw(
+                in: NSRect(x: Self.padX + 10, y: fieldTop + 9,
+                           width: fieldBox.width - 20, height: 14),
+                withAttributes: [.font: uiFont(10, .regular),
+                                 .foregroundColor: palette.secondary,
+                                 .paragraphStyle: hp])
         }
         // Divider above the list
         let sy = listTop - Self.fieldGap / 2
@@ -285,13 +325,26 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
     private weak var scroll: NSScrollView?
     private var monitors: [Any] = []
 
+    // Shared list state.
+    private var manage = false
+    /// Whether the filter field offers a "+ Create" row. On for window mode;
+    /// OFF for manage (creating an orphan vocabulary tag is meaningless under
+    /// the `Set<String>` model — see the header note).
+    private var allowCreate = true
     private var allTags: [String] = []
-    private var checked: Set<String> = []
+    private var checked: Set<String> = []       // window mode only
     private var palette: ResolvedPalette = resolve(.terminal)
 
+    // Window-mode callbacks (R10).
     private var onToggle: ((String, Bool) -> Void)?
     private var onCreate: ((String) -> Void)?
+    // Manage-mode callbacks (R11/C1).
+    private var onRename: ((String, String) -> Void)?
+    private var onDelete: ((String) -> Void)?
     private var onCloseCB: (() -> Void)?
+
+    // Manage-mode sub-state.
+    private var renaming: String?               // tag being renamed (old name)
     private var closing = false
 
     private static let maxVisibleRows = 10
@@ -300,12 +353,11 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
 
     private override init() { super.init() }
 
-    // MARK: Entry point
+    // MARK: Entry points
 
-    /// WINDOW mode: the per-window checklist anchored at `screenPt`. `allTags`
-    /// is the union of tags currently in use (computed view-side from the
-    /// snapshot); `checkedTags` is the target window's own tags. `onToggle`
-    /// fires on every check/uncheck; `onCreate` on a new-tag "+ Create".
+    /// WINDOW mode (R10): the per-window checklist anchored at `screenPt`.
+    /// `allTags` is the union of tags currently in use; `checkedTags` is the
+    /// target window's own tags.
     public func show(at screenPt: NSPoint,
                      appName: String,
                      title: String,
@@ -317,13 +369,40 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
                      onCreate: @escaping (String) -> Void,
                      onClose: @escaping () -> Void) {
         close()
+        manage = false
+        allowCreate = true
         self.allTags = allTags
         self.checked = checkedTags
         self.palette = palette
         self.onToggle = onToggle
         self.onCreate = onCreate
+        self.onRename = nil
+        self.onDelete = nil
         self.onCloseCB = onClose
         present(at: screenPt, appName: appName, title: title, pid: pid)
+    }
+
+    /// MANAGE mode (`t`, R11/C1): tag-vocabulary editing, no window target.
+    /// Rows are the tags currently in use; Enter / right-click a row →
+    /// [Rename, Delete]. No "+ Create" (allowCreate = false).
+    public func showManage(at screenPt: NSPoint,
+                           allTags: [String],
+                           palette: ResolvedPalette,
+                           onRename: @escaping (String, String) -> Void,
+                           onDelete: @escaping (String) -> Void,
+                           onClose: @escaping () -> Void) {
+        close()
+        manage = true
+        allowCreate = false
+        self.allTags = allTags
+        self.checked = []
+        self.palette = palette
+        self.onToggle = nil
+        self.onCreate = nil
+        self.onRename = onRename
+        self.onDelete = onDelete
+        self.onCloseCB = onClose
+        present(at: screenPt, appName: "", title: "", pid: 0)
     }
 
     /// Build + present the panel from the already-set instance state. `onClose`
@@ -331,15 +410,18 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
     private func present(at screenPt: NSPoint,
                          appName: String, title: String, pid: Int) {
         closing = false
+        renaming = nil
 
         let width = panelWidth(appName: appName, title: title)
         let listW = width - TagEditContainerView.padX * 2
-        // Reserve one extra row so a "+ Create" row stays visible.
-        let visibleRows = min(max(allTags.count, 1) + 1, Self.maxVisibleRows)
+        // Reserve one extra row so a "+ Create" row stays visible (window mode).
+        let extra = allowCreate ? 1 : 0
+        let visibleRows = min(max(allTags.count, 1) + extra, Self.maxVisibleRows)
         let listH = CGFloat(visibleRows) * TagEditListView.rowH
         // Resolve the icon once: the container derives its headerH from
         // `icon == nil`, so the panel-level layout must use the SAME value.
-        let icon: NSImage? = pid == 0 ? nil : AppIcons.icon(forPID: pid)
+        let icon: NSImage? = (manage || pid == 0)
+            ? nil : AppIcons.icon(forPID: pid)
         let headerH: CGFloat = icon == nil ? 24 : 40
         let listTop = TagEditContainerView.padV + headerH
             + TagEditContainerView.fieldGap + TagEditContainerView.fieldH
@@ -365,6 +447,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
 
         let cont = TagEditContainerView(
             frame: NSRect(x: 0, y: 0, width: width, height: height))
+        cont.manage = manage
         cont.appName = appName
         cont.title = title
         cont.icon = icon
@@ -384,7 +467,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         f.font = uiFont(13, .regular)
         f.textColor = palette.foreground
         f.placeholderAttributedString = NSAttributedString(
-            string: "Filter or create…",
+            string: allowCreate ? "Filter or create…" : "Filter…",
             attributes: [.foregroundColor: palette.muted,
                          .font: uiFont(13, .regular)])
         f.delegate = self
@@ -393,7 +476,14 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         let list = TagEditListView(frame: NSRect(
             x: 0, y: 0, width: listW, height: listH))
         list.palette = palette
+        list.manage = manage
         list.onPick = { [weak self] i in self?.activate(i) }
+        list.onContext = { [weak self] i in
+            guard let self, self.manage else { return }
+            self.listView?.sel = i
+            self.listView?.needsDisplay = true
+            self.openContextMenu(forRow: i)
+        }
         list.onHover = { [weak self] i in
             self?.listView?.sel = i
             self?.listView?.needsDisplay = true
@@ -439,8 +529,9 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         listView = nil
         let cb = onCloseCB
         onCloseCB = nil
-        onToggle = nil; onCreate = nil
+        onToggle = nil; onCreate = nil; onRename = nil; onDelete = nil
         allTags = []; checked = []
+        renaming = nil
         if !closing { closing = true; cb?() }
     }
 
@@ -450,8 +541,10 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         (field?.currentEditor() as? NSTextView)?.hasMarkedText() == true
     }
 
-    /// Rebuild the visible rows from the current filter text.
+    /// Rebuild the visible rows from the current filter text. Frozen while an
+    /// inline rename is up (the field text isn't a filter then).
     private func recompute() {
+        guard renaming == nil else { return }
         let raw = field?.stringValue ?? ""
         let trimmed = raw.trimmingCharacters(in: .whitespaces)
         let visible = trimmed.isEmpty
@@ -460,7 +553,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         var rows: [TagEditRow] = visible.map {
             .tag(name: $0, checked: checked.contains($0))
         }
-        if !trimmed.isEmpty, let norm = TagName.normalized(raw),
+        if allowCreate, !trimmed.isEmpty, let norm = TagName.normalized(raw),
            !allTags.contains(norm) {
             rows.append(.create(name: norm))
         }
@@ -474,14 +567,15 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         resizeToFit()
     }
 
-    /// Grow / shrink the panel so the vocabulary fits (capped at
-    /// `maxVisibleRows`, scrolling beyond). Keyed on `allTags` (not the
-    /// filtered rows), so add resizes the panel while plain filtering leaves
-    /// the height steady. The top edge stays pinned; growth extends downward.
+    /// Grow / shrink the panel so the list fits (capped at `maxVisibleRows`,
+    /// scrolling beyond). Keyed on `allTags` (not the filtered rows), so
+    /// add / delete resize the panel while plain filtering leaves the height
+    /// steady. The top edge stays pinned; growth extends downward.
     private func resizeToFit() {
         guard let panel = panel, let cont = container, let scroll = scroll
         else { return }
-        let visibleRows = min(max(allTags.count, 1) + 1, Self.maxVisibleRows)
+        let extra = allowCreate ? 1 : 0
+        let visibleRows = min(max(allTags.count, 1) + extra, Self.maxVisibleRows)
         let listH = CGFloat(visibleRows) * TagEditListView.rowH
         let newHeight = cont.listTop + listH + TagEditContainerView.padV
         if abs(newHeight - panel.frame.height) > 0.5 {
@@ -508,16 +602,20 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         if let s = listView?.sel { activate(s) }
     }
 
-    /// Activate row `i`: toggle a tag, or create + check a new one. The panel
-    /// stays open so several tags can be toggled in one session.
+    /// Activate row `i`. WINDOW: toggle a tag / create + check. MANAGE: open
+    /// the [Rename, Delete] menu on a tag.
     private func activate(_ i: Int) {
         guard let list = listView, i >= 0, i < list.rows.count else { return }
         switch list.rows[i] {
         case let .tag(name, _):
-            let now = !checked.contains(name)
-            if now { checked.insert(name) } else { checked.remove(name) }
-            onToggle?(name, now)
-            recompute()
+            if manage {
+                openContextMenu(forRow: i)
+            } else {
+                let now = !checked.contains(name)
+                if now { checked.insert(name) } else { checked.remove(name) }
+                onToggle?(name, now)
+                recompute()
+            }
         case let .create(name):
             checked.insert(name)
             if !allTags.contains(name) { allTags.append(name) }
@@ -539,14 +637,87 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
             width: list.frame.width, height: TagEditListView.rowH))
     }
 
+    // MARK: - Manage: context menu / rename / delete
+
+    /// Open the themed [Rename, Delete] menu for the tag at row `i`, anchored
+    /// at that row. While it is up the panel's own key / mouse monitors yield
+    /// to `PopupMenu`'s (the `isOpen` guards in `installMonitors`).
+    private func openContextMenu(forRow i: Int) {
+        guard manage, let list = listView, i >= 0, i < list.rows.count,
+              case let .tag(name, _) = list.rows[i] else { return }
+        let rowTop = NSPoint(x: 24, y: CGFloat(i) * TagEditListView.rowH)
+        let inWindow = list.convert(rowTop, to: nil)
+        let scr = list.window?.convertPoint(toScreen: inWindow) ?? inWindow
+        PopupMenu.shared.show(at: scr,
+                              header: "#\(name)",
+                              items: ["Rename", "Delete"],
+                              checkedIndex: nil,
+                              palette: palette,
+                              rowTints: [palette.secondary, palette.secondary],
+                              headerTint: palette.secondary) { [weak self] idx in
+            guard let self else { return }
+            if idx == 0 { self.beginRename(name) } else { self.deleteTag(name) }
+        }
+    }
+
+    /// Delete a tag from every window immediately — no confirmation (the
+    /// "Delete" pick is the deliberate action). The backend strips it from all.
+    private func deleteTag(_ name: String) {
+        onDelete?(name)
+        allTags.removeAll { $0 == name }
+        checked.remove(name)
+        recompute()
+    }
+
+    private func beginRename(_ old: String) {
+        renaming = old
+        container?.renaming = true
+        container?.hint = nil
+        container?.needsDisplay = true
+        field?.stringValue = old
+        if let f = field { panel?.makeFirstResponder(f); f.currentEditor()?.selectAll(nil) }
+    }
+
+    private func commitRename() {
+        guard let old = renaming else { return }
+        let raw = field?.stringValue ?? ""
+        guard let new = TagName.normalized(raw) else {
+            container?.hint = "invalid"; container?.needsDisplay = true; return
+        }
+        if new == old { cancelRename(); return }
+        if allTags.contains(new) {
+            container?.hint = "already exists"; container?.needsDisplay = true; return
+        }
+        onRename?(old, new)
+        if let idx = allTags.firstIndex(of: old) { allTags[idx] = new }
+        finishRename()
+    }
+
+    private func cancelRename() { finishRename() }
+
+    private func finishRename() {
+        renaming = nil
+        container?.renaming = false
+        container?.hint = nil
+        field?.stringValue = ""
+        container?.needsDisplay = true
+        recompute()
+    }
+
     // MARK: - Geometry
 
     private func panelWidth(appName: String, title: String) -> CGFloat {
-        let headerLead = TagEditContainerView.iconSize + 8
-        var w = max(
-            (appName as NSString).size(withAttributes: [.font: uiFont(13, .semibold)]).width,
-            (title as NSString).size(withAttributes: [.font: uiFont(11, .regular)]).width)
-            + headerLead
+        let headerLead = manage ? 0 : TagEditContainerView.iconSize + 8
+        var w: CGFloat
+        if manage {
+            w = ("Tags" as NSString)
+                .size(withAttributes: [.font: uiFont(13, .bold)]).width
+        } else {
+            w = max(
+                (appName as NSString).size(withAttributes: [.font: uiFont(13, .semibold)]).width,
+                (title as NSString).size(withAttributes: [.font: uiFont(11, .regular)]).width)
+                + headerLead
+        }
         let rf = uiFont(13, .regular)
         for t in allTags {
             w = max(w, ("#\(t)" as NSString)
@@ -558,7 +729,8 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
     // MARK: - Event monitors
 
     private func installMonitors() {
-        // Click in another app closes the panel.
+        // Click in another app closes the panel — unless a context menu is up
+        // (then PopupMenu's own monitor handles the outside click).
         monitors.append(NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown],
             handler: { _ in
@@ -572,10 +744,19 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
             matching: [.keyDown, .leftMouseDown, .rightMouseDown]
         ) { [weak self] ev in
             guard let self, let panel = self.panel else { return ev }
+            // A context menu is up: let its monitor own everything.
             if PopupMenu.shared.isOpen { return ev }
             if ev.type == .keyDown {
                 // IME composing: let the field handle everything.
                 if self.isComposing { return ev }
+                // Inline rename: Enter commits, Esc cancels, typing edits.
+                if self.renaming != nil {
+                    switch ev.keyCode {
+                    case 36, 76: self.commitRename(); return nil
+                    case 53:     self.cancelRename();  return nil
+                    default:     return ev
+                    }
+                }
                 let c = ev.charactersIgnoringModifiers?.lowercased()
                 let ctrl = ev.modifierFlags.contains(.control)
                 switch ev.keyCode {
@@ -600,6 +781,7 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
     // MARK: - NSTextFieldDelegate
 
     public func controlTextDidChange(_ note: Notification) {
-        recompute()
+        container?.hint = nil
+        if renaming == nil { recompute() } else { container?.needsDisplay = true }
     }
 }

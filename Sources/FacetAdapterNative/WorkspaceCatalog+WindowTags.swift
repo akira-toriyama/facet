@@ -45,4 +45,35 @@ extension WorkspaceCatalog {
         slot.tags.remove(old); slot.tags.insert(new); windowMap[id] = slot
         return .retagged
     }
+
+    /// Tag-manage mode (`t`) — GLOBAL rename: replace `old` with `new` on
+    /// EVERY window that carries it. Under the free-form `Set<String>` model a
+    /// tag exists only via the windows carrying it, so a "rename the tag" is a
+    /// sweep over those windows (there is no separate vocabulary to update).
+    /// Returns true if any window changed. No-op when `old == new`.
+    @discardableResult
+    mutating func renameTagEverywhere(_ old: String, to new: String) -> Bool {
+        guard old != new else { return false }
+        var changed = false
+        for id in Array(windowMap.keys) {
+            guard var slot = windowMap[id], slot.tags.contains(old) else { continue }
+            slot.tags.remove(old); slot.tags.insert(new); windowMap[id] = slot
+            changed = true
+        }
+        return changed
+    }
+
+    /// Tag-manage mode (`t`) — GLOBAL delete: remove `name` from EVERY window.
+    /// The tag then ceases to exist (no window carries it). Returns true if any
+    /// window carried it.
+    @discardableResult
+    mutating func removeTagEverywhere(_ name: String) -> Bool {
+        var changed = false
+        for id in Array(windowMap.keys) {
+            guard var slot = windowMap[id], slot.tags.contains(name) else { continue }
+            slot.tags.remove(name); windowMap[id] = slot
+            changed = true
+        }
+        return changed
+    }
 }
