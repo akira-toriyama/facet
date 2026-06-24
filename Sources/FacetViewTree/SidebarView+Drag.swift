@@ -23,6 +23,14 @@ extension SidebarView {
         // (Double-click-to-reset-geometry now lives on the pinned
         // HandleBar, not on a scrolling row.)
 
+        // R12: was the tree PASSIVE when this click began? A mac-desktop switch
+        // strips the panel's key (facet never auto-grabs it back — トミー), so
+        // the tree commonly sits visible-but-passive. A plain click then WAKES
+        // it into keyboard nav rather than acting on the row (handled at
+        // leftMouseUp below). Captured up-front so an intervening enterActive
+        // can't flip the decision mid-gesture.
+        let wasPassive = !kbNav
+
         var mode = 0          // 0 undecided · 1 panel-move · 2 window-drag
         var dragWS = 0
         var dragGroup = 0     // section model: the dragged row's render-group ordinal
@@ -89,6 +97,23 @@ extension SidebarView {
                         controller?.reorderSection(
                             move: lastSections[dragGroup].id, toBoundary: boundary)
                     }
+                } else if mode == 0, wasPassive {
+                    // R12 click-to-activate: a plain click on a PASSIVE tree
+                    // (no drag) WAKES it into keyboard nav instead of acting on
+                    // the row. This is the user-initiated recovery トミー asked
+                    // for — facet never grabs key on a mac-desktop switch, but an
+                    // explicit click does (works on every desktop, incl. after a
+                    // round-trip through an unmanaged one). Land the kb cursor on
+                    // the clicked row so nav continues from there; do NOT act —
+                    // a SECOND click (now active) or Enter focuses the window,
+                    // preserving #66 (the acting click drops key first, below).
+                    controller?.enterActive()
+                    switch row?.kind {
+                    case .window(let g, _, _, let id, _)?: kbSel = .win(group: g, id)
+                    case .header(let g, _)?:               kbSel = .hdr(group: g)
+                    default:                                break
+                    }
+                    needsDisplay = true
                 } else if let row, row.rect.contains(cp) {
                     // #66 safety belt: drop key/active BEFORE acting on
                     // the row, mirroring the Enter path (kbActivate).

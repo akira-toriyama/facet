@@ -14,6 +14,13 @@ import FacetCore
 
 @MainActor
 public protocol TreeController: AnyObject, Sendable {
+    /// Enter keyboard-nav mode: make the panel key + flip the app to
+    /// `.regular` so ↑↓ / Enter / s / m fire. Used by the summon path and
+    /// (R12) by an explicit click on a PASSIVE tree — the user-initiated
+    /// recovery after a mac-desktop switch leaves the panel visible but
+    /// keyboard-dead (facet never auto-grabs key on a switch; a click does).
+    func enterActive()
+
     /// Leave keyboard-nav mode. `restore == true` means
     /// the user dismissed without picking anything; the controller
     /// re-focuses the previously-frontmost app. `false` means a
