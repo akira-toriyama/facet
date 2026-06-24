@@ -1,6 +1,6 @@
 # facet
 
-![platform](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey)
+![platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
 ![swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![status](https://img.shields.io/badge/status-alpha-orange)
@@ -215,7 +215,7 @@ master の **リサイズ** (`--grow-master` / `--shrink-master`、 ±0.05) と
 | 空白部分ドラッグ、 または ⌘+ドラッグ (tree) | パネル位置を変更 (session 限り — 固定は `[tree]` geometry を config に書く) |
 | パネルヘッダをダブルクリック (tree) | 位置・サイズを `[tree]` config geometry (未設定なら既定) にリセット |
 | 右クリック (tree) | 対象別コンテキストメニュー: window 行 → アクション ・ workspace header → layout 切替 ・「Desktop N」バンド → Search (`s` モード) |
-| window 行ホバー (tree、 macOS 14+) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
+| window 行ホバー (tree) | ライブプレビュー — デフォルトは row 横の小型ポップオーバー。 `[tree] preview-mode = "mirror"` で実サイズ + WS 切替後の位置に切替可 |
 | セルクリック (grid) | そのワークスペースに切替 |
 | window サムネイルクリック (grid) | 切替 + その window に focus |
 | サムネイルを別セルにドラッグ (grid) | その window を移動 |
@@ -260,7 +260,7 @@ window タイトルは Accessibility (`kAXTitle`、 CGWindowID で
 | `Return` | 持ち上げ中なら確定 / 通常時は切替 |
 | `Esc` | 持ち上げをキャンセル / オーバービューを閉じる |
 
-セルは **ScreenCaptureKit サムネイル** (macOS 14+、 Screen Recording
+セルは **ScreenCaptureKit サムネイル** (Screen Recording
 権限必要) で描画。 バックグラウンド refresh でキャッシュを温めるので、
 オーバービュー初回表示でアイコンフォールバックではなく実スクリーン
 ショットが出る。
@@ -652,7 +652,7 @@ swift test           # XCTest — Xcode 必要 (CLT には入ってない)
 - **multi-display の layout / preview 位置は軽くしかテストして
   いない** — 主開発機がシングルディスプレイ。 multi-monitor 環境
   で挙動がおかしい場合は再現手順付きで issue 報告を。
-- **window preview は macOS 14+** + Screen Recording 権限が必要。
+- **window preview** は Screen Recording 権限が必要。
 - **Ad-hoc 署名は rebuild ごとに Accessibility 再要求**。
   `./setup-signing-cert.sh` を 1 度走らせると persistent な
   self-signed identity ができ、 rebuild 跨ぎで TCC grant が維持

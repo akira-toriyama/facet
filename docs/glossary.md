@@ -90,7 +90,7 @@ flowchart TB
 
 ### FacetCapture
 **画像 capture adapter**（P7）。`ScreenCaptureKit` の唯一の consumer で、
-FacetCore の [[WindowCapturing]] port を実装（`SCKWindowCapture`、macOS 14+）。
+FacetCore の [[WindowCapturing]] port を実装（`SCKWindowCapture`）。
 window 管理（AX/CGS）とは別軸の backend なので [[FacetAdapterNative]] に畳まず
 独立モジュールにする。`FacetView` は capture backend を import しない。
 - 場所: [`Sources/FacetCapture/`](../Sources/FacetCapture/)
@@ -122,7 +122,7 @@ Core と **capture adapter** の間の seam（hexagonal port・P7）。per-windo
 capture（overview サムネ + tree hover preview）を抽象化。[[WindowBackend]] とは
 直交する別軸（window 管理 ではなく描画用 asset の取得）。`CGImage` を返す
 （FacetCore は AppKit-free）＝view 側が `NSImage` に包む。唯一の実装は
-[[FacetCapture]] の `SCKWindowCapture`（ScreenCaptureKit、macOS 14+）。
+[[FacetCapture]] の `SCKWindowCapture`（ScreenCaptureKit）。
 - 定義: [`Sources/FacetCore/WindowCapturing.swift`](../Sources/FacetCore/WindowCapturing.swift)
 - **Don't call it:** preview protocol, screenshot interface, WindowPreview（旧型名）
 

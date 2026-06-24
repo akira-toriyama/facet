@@ -1,6 +1,6 @@
 // ScreenCaptureKit implementation of FacetCore's `WindowCapturing` port
-// (the overview thumbnails + the tree hover preview). macOS 14+; requires
-// the user to grant Screen Recording on first use. Short-TTL cache so
+// (the overview thumbnails + the tree hover preview). Requires the user to
+// grant Screen Recording on first use. Short-TTL cache so
 // repeated requests (hover bounce, grid refresh tick) reuse the latest
 // capture. Stale in-flight requests are dropped via a monotonically
 // increasing token so a moved selection doesn't race the previous
@@ -16,7 +16,6 @@ import CoreGraphics
 import Foundation
 import FacetCore
 
-@available(macOS 14.0, *)
 @MainActor
 public final class SCKWindowCapture: WindowCapturing {
     private var cache: [WindowID: (img: CGImage, frame: CGRect, at: Date)] = [:]

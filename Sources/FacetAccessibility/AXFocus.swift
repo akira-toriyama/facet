@@ -220,15 +220,11 @@ public enum AX {
         guard let target = NSRunningApplication(
                 processIdentifier: pid_t(pid)),
               !target.isActive else { return }
-        if #available(macOS 14.0, *) {
-            if let from = NSWorkspace.shared.frontmostApplication,
-               from.processIdentifier != target.processIdentifier,
-               target.activate(from: from) {
-                return
-            }
-            target.activate()       // no front app / refused hand-off
-        } else {
-            target.activate(options: [.activateIgnoringOtherApps])
+        if let from = NSWorkspace.shared.frontmostApplication,
+           from.processIdentifier != target.processIdentifier,
+           target.activate(from: from) {
+            return
         }
+        target.activate()       // no front app / refused hand-off
     }
 }
