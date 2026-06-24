@@ -13,24 +13,30 @@
 
 ---
 
-## 🔴 優先度【高】macOS 26-only 化 + ローカルテスト環境（2026-06-24 追加・計画済/実装未）
+## macOS 最小サポート見直し（min macOS 14・痛みゼロ範囲で旧 OS 維持）+ ローカルテスト環境（2026-06-24・計画済/実装未）
 
-> トミー要望（2026-06-24）: ①最小対応 OS を **macOS 26 以降のみ** に引き上げ、②ローカルで
-> `swift test` を回せる環境を整える。
-> **隔離が前提**: 別セッションが `feat/window-tag-edit`（R10）で作業中 → この working tree を
-> 汚さず **main 起点の worktree** で進める。実装は別セッション。
+> **方針（トミー確定 2026-06-24・当初の「26-only ハードカットオーバー」から改訂）**:
+> 最新 OS 寄りにしつつ、**痛みの無い範囲で旧 OS をサポート**。**少しでも痛みがあれば切る**。
+> ① 最小 OS = **macOS 14**（version 分岐は 13↔14 境界**だけ**＝13 を切れば痛みが全消、14/15/26 は
+>   コード分岐ゼロでタダ両対応。26 まで上げると 14/15 をタダで切る＝方針に反するので 14 が最適点）。
+>   **= `macOS 26 only` ではない**。② ローカルで `swift test` を回せる環境を整える。
+>
+> **⏱ timing（クロード推奨・トミー確認待ち）**: **バグ修正（Phase 9 退行回収）を先 → OS 整理は後**
+>   （OS 整理は内部都合・新方針で緊急度↓）。ただし **ローカルテスト環境（Xcode 導入）は早め/並行**
+>   が得（`swift test` で退行回収 PR の検証が強くなる・Xcode 導入はトミー手作業ゆえ空き時間に）。
+> **隔離**: R10 はマージ済（#327）＝当初の worktree 隔離の必要は解消。OS 整理は通常ブランチで可。
 
-### 隔離戦略（最優先・全作業の前提）
-- `git worktree add ../facet-macos26 -b feat/macos-26-only origin/main` で隔離。別セッションの
-  checkout（未コミット `Controller.swift` 他7 + 未追跡 `TagEditPanel.swift`）は一切触らない。
-- **`xcode-select -s` 禁止**（global＝別セッションの toolchain も切替わる）。テストは
+### ツールチェーン注意（worktree 隔離は R10 マージで不要に）
+- 当初は別セッション R10 と同居していたため worktree 隔離を前提にしたが、**R10 マージ済（#327）
+  ＝通常ブランチ（`feat/macos-support` 等）で可**。
+- **`xcode-select -s` 禁止**（global＝他作業の toolchain も切替わる）。テストは
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` でコマンド単位に Xcode toolchain を借りる。
-- マージ時 `Controller.swift`/docs で R10 と衝突しうる → PR マージ時に通常解決（開発時の非干渉は worktree が担保）。
 
-### A. macOS 26-only 化（1 PR・worktree 内）
-硬い version 分岐は macOS 13↔14 境界のみ。`#available(macOS 14.0,*)` 4箇所＋`@available`1箇所を全除去:
-- [ ] `Package.swift` L49 `platforms: [.macOS(.v13)]` → `.macOS("26.0")`（文字列形＝Swift 6.1.2
-  toolchain に `.v26` enum が無い可能性。`.v26` が通ればそれでも可）
+### A. min macOS 14 化（痛みのある 13-gate を撤去・1 PR）
+硬い version 分岐は macOS 13↔14 境界**だけ**（それより上に gate 無し）。`#available(macOS 14.0,*)`
+4箇所＋`@available`1箇所を全除去すれば痛み全消＝最小 14 で 14/15/26 をタダ両対応:
+- [ ] `Package.swift` L49 `platforms: [.macOS(.v13)]` → `.macOS(.v14)`（`.v14` は既存 enum＝確実に通る。
+  **26 にはしない**＝14/15 をタダで切らないため）
 - [ ] スライド: [NativeAdapter+Slide.swift](Sources/FacetAdapterNative/NativeAdapter+Slide.swift)
   `stopSlideClock`/`startSlideDriver` の Timer fallback 削除・CADisplayLink 一本化。
   [NativeAdapter.swift](Sources/FacetAdapterNative/NativeAdapter.swift) L218 `slideTimer` 削除・
@@ -42,32 +48,33 @@
   **`winPreview` 非 Optional 化（負債ゼロ・推奨）**: Controller.swift L194 + nil ガード除去
   ([Controller+Overview.swift](Sources/FacetApp/Controller+Overview.swift) L126/144・
   [Controller+Preview.swift](Sources/FacetApp/Controller+Preview.swift) L25/43/89・Controller.swift L819/993)。
-- [ ] docs 同期: [CLAUDE.md](CLAUDE.md) L25 `macOS 13+`→`macOS 26+`／[README.md](README.md)+
-  [README.ja.md](README.ja.md)（バッジ＋window preview `(macOS 14+)` 注記 L233/281/696・L218/263/655）／
+- [ ] docs 同期: [CLAUDE.md](CLAUDE.md) L25 `macOS 13+`→`macOS 14+`／[README.md](README.md)+
+  [README.ja.md](README.ja.md)（バッジは 14+／window preview の `(macOS 14+)` 注記 L233/281/696・
+  L218/263/655 は最小 14 で**常時可**になるので削除）／
   [architecture.md](docs/architecture.md) L42・[references.md](docs/references.md) L166・
   [glossary.md](docs/glossary.md) L93/125 の capture 注記。`docs/superpowers/plans/*` は歴史記録ゆえ触らない。
 
-**事実**: ローカルは CLT/SDK 15.5/Xcode 無し。`swiftc -target …macosx26.0` は exit 0 ＝ deployment
-target 26 でも `swift build` はローカルで通る（macOS14 API は SDK 15.5 に存在・gate 除去は安全）。
-private SLS/`_AXUIElementGetWindow` は dlsym graceful degradation ＝挙動不変。
+**事実**: ローカルは CLT/SDK 15.5/Xcode 無し。min 14 は SDK 15.5 に収まり `swift build` は自明に通る
+（macOS14 API は SDK 15.5 に存在・13-gate 除去は安全）。private SLS/`_AXUIElementGetWindow` は
+dlsym graceful degradation ＝挙動不変。
 
 ### B. ローカルテスト環境
 `swift test` には XCTest＝**Xcode 本体が必要**（CLT に XCTest 無し）。テストは充実（5 target・約915
 メソッド・大半 FacetCore/AdapterNative 純ロジック）:
-- [ ] **Xcode（26系）導入＝トミー手作業**（~15GB・CLT と共存）。副次効果: macOS 26 SDK 同梱→A の
-  26-only ビルドを正規 SDK で検証可。
+- [ ] **Xcode（26系）導入＝トミー手作業**（~15GB・CLT と共存）。副次効果: 新しい SDK 同梱→A の
+  min-14 ビルドを正規 SDK で検証可。
 - [ ] 導入後（クロード実行）: `DEVELOPER_DIR=… swift test` で main baseline → worktree(A 後) 緑確認。
   CLAUDE.md の「test は CI 任せ」記述に「Xcode あれば `DEVELOPER_DIR=… swift test` で local 可」追記（任意）。
 - A（CLT build で先行可）と B（Xcode 待ち）は独立。Xcode が入り次第 `swift test` 緑を確認。
 
 ### 検証
-worktree で `swift build`（必須）／`grep -rn "available(macOS" Sources/` が 0 件／
-`DEVELOPER_DIR=… swift test` 緑／`./run.sh` で実機(26.5.1) スライド・preview・別アプリ focus 目視／
-別セッション working tree 無変更を確認。
+`swift build`（必須）／`grep -rn "available(macOS" Sources/` が 0 件／
+`DEVELOPER_DIR=… swift test` 緑／`./run.sh` で実機(26.5.1) スライド・preview・別アプリ focus 目視。
 
 ### Status
-- 🗓️ **計画済み・実装未着手**（2026-06-24）。別セッション R10 進行中ゆえ実装は別セッションで
-  worktree 隔離。push はトミー OK 後。
+- 🗓️ **計画済み・実装未着手**（2026-06-24・方針を min macOS 14 へ改訂）。R10 マージ済（#327）
+  ＝当初の worktree 隔離は不要・通常ブランチで可。timing はバグ修正後を推奨（トミー確認待ち）。
+  push はトミー OK 後。
 
 ---
 
