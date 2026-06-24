@@ -365,6 +365,7 @@ final class Controller: NSObject {
 
     private func handlePanelKeyChange(isKey: Bool) {
         if isKey {
+            Log.debug("panelKey gained (kbNav=\(sidebarView.kbNav))")
             if !sidebarView.kbNav { sidebarView.enterKbNav() }
         } else {
             // The tag-edit checklist (R10) just took key — its own panel is
@@ -377,7 +378,21 @@ final class Controller: NSObject {
             // path, exitKbNav has already run and
             // this is a harmless idempotent call.
             if sidebarView.kbNav {
+                // Reaching here with kbNav STILL set is an INVOLUNTARY key loss
+                // (a deliberate exitActive clears kbNav first — so a row-click /
+                // Enter never lands here, #66). A mac-desktop switch is the
+                // common trigger: the OS strips key from the shared
+                // `.canJoinAllSpaces` panel. Settle CLEANLY to passive (R12 / ト
+                // ミー: facet must NOT auto-grab focus on a switch).
+                Log.debug("panelKey lost (kbNav-active) → passive")
                 sidebarView.exitKbNav()
+                // Fully relinquish key, not just kbNav: otherwise `wantsKey`
+                // lingers true and the passive panel re-grabs key on the next OS
+                // activation cycle (e.g. switching desktops back), thrashing key
+                // on/off. A later explicit summon (`--view tree` → enterActive →
+                // makeKey) re-arms `wantsKey`. (R12: removing the lingering
+                // wantsKey is what stopped the post-switch focus storm.)
+                panelHost.resignKey()
                 // You leave nav by losing key — clicking another app or
                 // pressing Enter on a window (ESC no longer exits; it stays
                 // in the tree). So this is now the sole revert path for that
@@ -904,6 +919,13 @@ final class Controller: NSObject {
             } else {
                 currentActiveSection = backend.currentActiveSection()   // the authority
             }
+        }
+        // Instrument a real mac-desktop ordinal change (read against the OLD
+        // baseline so the log shows the transition).
+        if macDesktopSwapped {
+            Log.debug("apply: mac-desktop swap "
+                + "\(lastRenderedMacDesktopOrdinal.map(String.init) ?? "nil")"
+                + "→\(macDesktopOrdinal.map(String.init) ?? "nil")")
         }
         hasRenderedMacDesktop = true
         // Advance the baseline only on a real reading so a transient nil can't
