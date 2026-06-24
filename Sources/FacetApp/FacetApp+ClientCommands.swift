@@ -121,6 +121,40 @@ extension FacetApp {
         die("facet lens: dispatch fell through (bug)")
     }
 
+    /// Sub-command parser for ``facet section <flag>`` — address a section
+    /// (workspace OR lens) by its 1-based tree-order index or its label, the
+    /// unified handle over `workspace --focus` / `lens NAME`. Verbs:
+    ///   --focus N|LABEL   activate the section (numeric = index, else label)
+    /// One action per invocation, loud reject on zero / multiple / unknown.
+    static func runSectionCommand(_ args: [String]) -> Never {
+        var focusArg: String?       // payload: "index:N" or "label:LABEL"
+        var cursor = ArgCursor(args)
+        while let a = cursor.next() {
+            switch a {
+            case "--focus":
+                focusArg = parseSectionFocus(cursor.value(for: "section --focus"))
+            default:
+                die("unknown `section` flag \"\(a)\" — see `facet --help`")
+            }
+        }
+        let count = [focusArg != nil].filter { $0 }.count
+        requireExactlyOneAction(count, subject: "section")
+        requireServerAlive()
+        if let f = focusArg { postControl("section-focus:" + f) }
+        die("facet section: dispatch fell through (bug)")
+    }
+
+    /// Parse the value of ``facet section --focus VALUE``. A positive integer
+    /// is a 1-based tree-order index (`index:N`); anything else is a section
+    /// label (`label:LABEL`, kept VERBATIM — section labels are config strings
+    /// that allow spaces / punctuation). Numeric values are always indices —
+    /// label a section non-numerically to reference it by name (yabai-style,
+    /// mirrors `workspace --focus`).
+    static func parseSectionFocus(_ value: String) -> String {
+        if let n = Int(value), n > 0 { return "index:\(n)" }
+        return "label:" + parseLensSectionLabel(value, flag: "section --focus")
+    }
+
     /// Validate the positional NAME of `facet lens NAME` in section mode — a
     /// `type="lens"` section label. Section labels are config-authored TOML
     /// strings, so the policy is loose (spaces and most punctuation are fine,
