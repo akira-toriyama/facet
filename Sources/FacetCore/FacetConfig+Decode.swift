@@ -136,9 +136,7 @@ extension FacetConfig {
     }
 
     /// Read config from `path`. Returns default-init'd config if
-    /// the file is missing or unreadable — the controller then
-    /// enters agent-only mode (no panel) since
-    /// ``effectiveDefaultView == nil``. Read-only by design: the
+    /// the file is missing or unreadable. Read-only by design: the
     /// app never writes to the user's config file. Repo root
     /// `config.toml` is the install template; users `curl` it
     /// into place themselves (see README).

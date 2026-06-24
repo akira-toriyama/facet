@@ -248,7 +248,7 @@ lens は "どの窓集合を見るか"＝直交する別軸。`facet lens NAME` 
 （中央＝選択／下見のみ・hero が追従）・Return/クリックで切替＆閉じ・Esc で閉じ・
 window を WS 間 drag / header drag で swap。WS が `[rail] cells` 数を超えると縮小せず
 **回転**（両端 peek で「まだある」合図）。tree / grid とは役割が違う（速い切替・俯瞰）。
-既定 view にはできない（`effectiveDefaultView` は tree / grid のみ受理）。#109 shipped →
+起動時に自動表示はされない（facet は常に agent-only で起動・どの view も召喚のみ）。#109 shipped →
 M9-3/M9-4 で edge 化 → **2-b でカルーセル化（M9-4 の scroll を置換）**。
 - コード: `RailView`（`FacetViewRail`）/ `railBands`・`railCarouselOffsets`（`FacetCore`、純幾何）
 - **Don't call it:** switcher, expose, mission control, スイッチャー, ミッションコントロール, scroll bar

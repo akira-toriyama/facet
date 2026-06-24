@@ -10,7 +10,6 @@ final class StatusTests: XCTestCase {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
-            defaultView: "tree",
             workspaces: [
                 .init(index: 1, name: "dev",
                       active: true, windowCount: 3),
@@ -33,7 +32,6 @@ final class StatusTests: XCTestCase {
         let snap = StatusSnapshot(
             backend: "stub",
             theme: "dracula",
-            defaultView: nil,
             workspaces: [
                 .init(index: 1, name: "main",
                       active: true, windowCount: 5),
@@ -71,36 +69,21 @@ final class StatusTests: XCTestCase {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
-            defaultView: "tree",
             workspaces: [],
             lastError: nil,
             timestamp: "2026-05-25T12:00:00Z")
         let out = snap.render()
         XCTAssertTrue(out.contains("backend: native"))
         XCTAssertTrue(out.contains("theme: terminal"))
-        XCTAssertTrue(out.contains("default-view: tree"))
         XCTAssertTrue(out.contains("last error: (none)"))
         XCTAssertTrue(out.contains("timestamp: 2026-05-25T12:00:00Z"))
         XCTAssertTrue(out.contains("workspaces:\n  (none)"))
-    }
-
-    func testRenderAgentModeWhenDefaultViewNil() {
-        let snap = StatusSnapshot(
-            backend: "native",
-            theme: "system",
-            defaultView: nil,
-            workspaces: [],
-            lastError: nil,
-            timestamp: "ts")
-        XCTAssertTrue(snap.render().contains("default-view: (agent)"),
-                      "nil defaultView renders as (agent)")
     }
 
     func testRenderMarksActiveAndPluralisesWindowCount() {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
-            defaultView: "grid",
             workspaces: [
                 .init(index: 1, name: "dev",
                       active: true, windowCount: 1),
@@ -124,7 +107,6 @@ final class StatusTests: XCTestCase {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
-            defaultView: "tree",
             workspaces: [
                 .init(index: 1, name: "dev", active: true,
                       windowCount: 3, stickyCount: 1),
@@ -145,8 +127,7 @@ final class StatusTests: XCTestCase {
         // key) must decode to [] rather than throw, so `facet query`
         // survives an in-place upgrade until the next reconcile.
         let json = Data("""
-        {"backend":"native","theme":"terminal","defaultView":"tree",
-         "workspaces":[],"timestamp":"ts"}
+        {"backend":"native","theme":"terminal","workspaces":[],"timestamp":"ts"}
         """.utf8)
         let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
         XCTAssertEqual(snap.stashed, [])
@@ -155,13 +136,13 @@ final class StatusTests: XCTestCase {
 
     func testRenderShowsStashedLineOnlyWhenNonEmpty() {
         let withShelf = StatusSnapshot(
-            backend: "native", theme: "terminal", defaultView: "tree",
+            backend: "native", theme: "terminal",
             workspaces: [], stashed: ["editor", "notes"],
             lastError: nil, timestamp: "ts")
         XCTAssertTrue(withShelf.render().contains("stashed: editor, notes"),
                       "stashed line lists shelf names when non-empty")
         let none = StatusSnapshot(
-            backend: "native", theme: "terminal", defaultView: "tree",
+            backend: "native", theme: "terminal",
             workspaces: [], stashed: [],
             lastError: nil, timestamp: "ts")
         XCTAssertFalse(none.render().contains("stashed:"),
@@ -172,7 +153,6 @@ final class StatusTests: XCTestCase {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
-            defaultView: "tree",
             workspaces: [],
             lastError: "Window 7: AX permission failed",
             timestamp: "ts")
@@ -184,7 +164,7 @@ final class StatusTests: XCTestCase {
 
     func testSnapshotRoundTripsTags() throws {
         let snap = StatusSnapshot(
-            backend: "native", theme: "terminal", defaultView: "tree",
+            backend: "native", theme: "terminal",
             workspaces: [], stashed: [],
             tags: ["work", "web", "media"],
             lastError: nil, timestamp: "ts")
@@ -199,8 +179,7 @@ final class StatusTests: XCTestCase {
         // decode to [] rather than throw, so `facet query` survives an
         // in-place upgrade until the next reconcile.
         let json = Data("""
-        {"backend":"native","theme":"terminal","defaultView":"tree",
-         "workspaces":[],"timestamp":"ts"}
+        {"backend":"native","theme":"terminal","workspaces":[],"timestamp":"ts"}
         """.utf8)
         let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
         XCTAssertEqual(snap.tags, [])

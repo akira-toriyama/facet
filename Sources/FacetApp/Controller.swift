@@ -173,6 +173,16 @@ final class Controller: NSObject {
     /// `showLoading` in Controller+CLIDispatch.swift). Lives here —
     /// extensions can't hold stored properties.
     var loadingTimer: Timer?
+    /// A `--loading` show wants to enter keyboard nav once the skeleton
+    /// gives way to real content. `--view tree` (no loading) calls
+    /// `enterActive` synchronously, but the `--loading` branch returns
+    /// before it so the skeleton never steals key mid-mac-desktop-switch
+    /// (#311). Deferring the activate to the skeleton→content transition
+    /// (= the switch has settled) restores keyboard nav for the chord
+    /// `--view tree --loading` path without the mid-switch focus grab the
+    /// old `--active`+`--loading` loud-error guarded against. Consumed
+    /// once in `apply()`. Memory: [[facet-per-native-space-ws]].
+    var loadingWantsActive = false
 
     // MARK: - Preview (hover overlay + grid thumbnails)
 
@@ -465,7 +475,6 @@ final class Controller: NSObject {
     ///                       value so gaps / animation / layout-default /
     ///                       exclusion-rules / grouping hot-reload
     /// Reload-off (intentionally — restart required):
-    ///   - default-view
     ///   - [[desktop.N.section]] workspace count / layout — the catalog set is
     ///     seed-once / runtime-authoritative (config is the read-only
     ///     seed); a reload won't clobber runtime add/remove/rename.
@@ -1023,6 +1032,11 @@ final class Controller: NSObject {
         }
         if userHidden { return }
         guard !wss.isEmpty, NSScreen.main != nil else {
+            // The loading show resolved to an empty / screenless mac
+            // desktop (panel hidden) — there is nothing to enter keyboard
+            // nav on, so disarm the deferred activate (else it would fire
+            // spuriously when a window later appears here).
+            loadingWantsActive = false
             panelHost.hide(); return
         }
         sidebarView.frame.size.width = panelHost.userWidth
@@ -1050,6 +1064,21 @@ final class Controller: NSObject {
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
+        // Deferred activate for the `--loading` show: the skeleton has now
+        // given way to the new mac desktop's real content (`update`
+        // cleared it on a content-signature change, or the timer-cap path
+        // did). This is the settled moment the old `--active`+`--loading`
+        // mutual-exclusion was protecting — enter keyboard nav here, never
+        // mid-switch. Consume the flag FIRST so the `enterActive` →
+        // `setHidden(false)` → `refresh()` → `apply()` bounce (async, so no
+        // sync re-entry) can't re-trigger. `isSkeleton` guards the held
+        // mid-switch applies, where `update` returned early with the
+        // skeleton still up.
+        if loadingWantsActive, !sidebarView.isSkeleton {
+            loadingWantsActive = false
+            Log.debug("apply: loading settled → enterActive (deferred kb-nav)")
+            enterActive()
+        }
         writeStatus(wss)
         writeQuery()
     }
@@ -1073,7 +1102,6 @@ final class Controller: NSObject {
         // fine (it never tears against the cliQueue mutators).
         let bk = backend
         let theme = config.effectiveTheme
-        let defaultView = config.effectiveDefaultView
         let lastError = self.lastError
         cliQueue.async {
             let entries = wss.map { w in
@@ -1087,7 +1115,6 @@ final class Controller: NSObject {
             let snap = StatusSnapshot(
                 backend: bk.name,
                 theme: theme,
-                defaultView: defaultView,
                 workspaces: entries,
                 stashed: bk.stashedScratchpads(),
                 tags: bk.definedTagNames(),
@@ -1156,6 +1183,7 @@ final class Controller: NSObject {
         Log.debug("setHidden hide=\(hide)")
         userHidden = hide
         if hide {
+            loadingWantsActive = false   // a hide cancels a pending loading-activate
             exitActive(restore: false)
             previewTimer?.invalidate(); previewPool.hideAll()
             panelHost.hide()

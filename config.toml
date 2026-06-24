@@ -22,16 +22,10 @@
 #
 # Out-of-range / unknown values are silently clamped to safe
 # defaults rather than rejected — a typo can't break the layout.
-
-
-# -----------------------------------------------------------------
-# Launch view — the one bare top-level key
-# -----------------------------------------------------------------
-# Which view facet opens on startup. Unset (the default) = agent-only:
-# facet runs headless and shows nothing until a CLI verb asks for a
-# view (`facet --view tree|grid|rail`). Set it to auto-open one view
-# at launch. Values: "tree" | "grid" | "rail".
-# default-view = "tree"
+#
+# facet always launches in agent-only mode (no panel on screen); a
+# view appears only when summoned — `facet --view tree|grid|rail`, a
+# chord hotkey, etc. A summoned tree always enters keyboard nav.
 
 
 # -----------------------------------------------------------------

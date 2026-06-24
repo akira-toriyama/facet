@@ -44,12 +44,6 @@ public extension FacetConfig {
         ConfigSchema.Spec<FacetConfig>(
         title: "facet config.toml",
         sections: [
-            // Top-level (`""` scope) — the one bare key.
-            .init("", fields: [
-                .str("default-view", \.defaultView, enum: ["tree", "grid"],
-                     doc: "Panel shown at launch; unset = agent-only (no panel)."),
-            ]),
-
             .init("theme", doc: "App-default palette.", fields: [
                 .str("name", \.theme, enum: canonicalThemeNames, default: "terminal",
                      doc: "Theme name (sill catalog); `random` picks one per launch."),

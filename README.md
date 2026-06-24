@@ -17,8 +17,8 @@ the layer diagram.
 ## What it does
 
 facet runs as a menu-bar-less agent (`LSUIElement`) and surfaces
-your workspaces through one of its views — tree or grid at startup
-via [`config.toml`](config.toml), plus the on-demand rail overview:
+your workspaces through one of its views — tree, grid, or the rail
+overview, each summoned on demand (`facet --view tree|grid|rail`):
 
 - **Tree** — a translucent always-on-top sidebar listing every
   workspace and its windows as a tree. Click rows to focus, drag a
@@ -336,7 +336,6 @@ Frequently-touched keys:
   `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
   `github-light` / `catppuccin-latte` / `system`, plus `random`
   (picks one at each launch / `--reload`, excluding `system`)
-- `default-view` (top-level) — `tree` / `grid`
 - `[tree]` table — `preview-mode` (`popover` / `mirror`), plus the
   panel geometry seed `pos-x` / `pos-y` / `width` / `height` (screen
   points, **top-left origin**: 0,0 = top-left of the main screen, y

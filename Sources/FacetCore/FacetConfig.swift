@@ -34,9 +34,6 @@ public struct WorkspaceConfig: Sendable, Equatable {
 }
 
 public struct FacetConfig: Sendable {
-    // Top-level
-    public var defaultView: String?         // "tree" | "grid"
-
     // [theme] — the app-default palette. `theme` keys also live in the
     // surface-owning blocks ([tree]/[grid]/[rail], `""` = inherit this
     // one) per the family rule "theme lives with the painted surface".
@@ -197,13 +194,6 @@ public struct FacetConfig: Sendable {
     public init() {}
 
     // MARK: - Effective accessors (defaults + clamping)
-
-    /// Returns the configured view name if valid, else `nil`
-    /// (= agent-only mode). Unknown names treated as missing.
-    public var effectiveDefaultView: String? {
-        guard let raw = defaultView?.lowercased() else { return nil }
-        return ["tree", "grid"].contains(raw) ? raw : nil
-    }
 
     /// Falls back to `"terminal"` for unset or unrecognised values.
     /// The set of valid names is sill's `canonicalThemeNames` (the single
@@ -492,11 +482,6 @@ public struct FacetConfig: Sendable {
         if treeGeometryPartial {
             out.append("config: [tree] geometry needs all of pos-x / "
                 + "pos-y / width / height — partial set ignored")
-        }
-        // Startup view clamps to agent-only mode (nil), not a value.
-        if let raw = defaultView, !raw.isEmpty, effectiveDefaultView == nil {
-            out.append("config: unknown view \"\(raw)\" "
-                + "— starting in agent-only mode (no panel shown)")
         }
         return out
     }
