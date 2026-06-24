@@ -110,7 +110,16 @@
               "ignore",
               "manage"
             ],
-            "type" : "string"
+            "type" : "string",
+            "x-taplo" : {
+              "docs" : {
+                "enumValues" : [
+                  "Float it: still tracked + shown in the tree, just not tiled (default).",
+                  "Drop it entirely: never enters a workspace, never shown.",
+                  "Force-tile it even though the allowlist would otherwise float/ignore it."
+                ]
+              }
+            }
           },
           "app" : {
             "description" : "App-name regex (substring unless anchored).",
@@ -277,7 +286,17 @@
             "left",
             "right"
           ],
-          "type" : "string"
+          "type" : "string",
+          "x-taplo" : {
+            "docs" : {
+              "enumValues" : [
+                "Dock the rail against the top edge (horizontal strip).",
+                "Dock against the bottom edge (horizontal strip; default).",
+                "Dock against the left edge (vertical strip).",
+                "Dock against the right edge (vertical strip)."
+              ]
+            }
+          }
         },
         "strip" : {
           "default" : 30,
@@ -467,7 +486,15 @@
             "popover",
             "mirror"
           ],
-          "type" : "string"
+          "type" : "string",
+          "x-taplo" : {
+            "docs" : {
+              "enumValues" : [
+                "Show the preview next to the source row (default).",
+                "Show the preview at the window's own on-screen frame."
+              ]
+            }
+          }
         },
         "theme" : {
           "default" : "",
@@ -529,7 +556,16 @@
             "activate",
             "off"
           ],
-          "type" : "string"
+          "type" : "string",
+          "x-taplo" : {
+            "docs" : {
+              "enumValues" : [
+                "Lift the float to the front of its own app, without stealing focus (default).",
+                "Bring the owning app frontmost on every fresh float (steals focus each time).",
+                "Do nothing — leave the float where the app placed it."
+              ]
+            }
+          }
         }
       },
       "type" : "object"

@@ -53,7 +53,13 @@ public extension FacetConfig {
 
             .init("window", fields: [
                 .str("raise-on-open", \.raiseOnOpen,
-                     enum: RaiseOnOpen.allCases.map(\.rawValue), default: "raise",
+                     enum: RaiseOnOpen.allCases.map(\.rawValue),
+                     enumDocs: [  // index-aligned to RaiseOnOpen.allCases (raise/activate/off)
+                        "Lift the float to the front of its own app, without stealing focus (default).",
+                        "Bring the owning app frontmost on every fresh float (steals focus each time).",
+                        "Do nothing — leave the float where the app placed it.",
+                     ],
+                     default: "raise",
                      doc: "How a freshly-opened floating window is surfaced."),
             ]),
 
@@ -70,6 +76,12 @@ public extension FacetConfig {
 
             .init("rail", fields: [
                 .str("edge", \.railEdge, enum: RailEdge.allCases.map(\.rawValue),
+                     enumDocs: [  // index-aligned to RailEdge.allCases (top/bottom/left/right)
+                        "Dock the rail against the top edge (horizontal strip).",
+                        "Dock against the bottom edge (horizontal strip; default).",
+                        "Dock against the left edge (vertical strip).",
+                        "Dock against the right edge (vertical strip).",
+                     ],
                      default: "bottom", doc: "Screen edge the rail docks against."),
                 .int("cells", \.railCells, min: 1, max: 20, default: 7,
                      doc: "Max strip cells shown at once."),
@@ -81,6 +93,10 @@ public extension FacetConfig {
 
             .init("tree", fields: [
                 .str("preview-mode", \.treePreviewMode, enum: ["popover", "mirror"],
+                     enumDocs: [
+                        "Show the preview next to the source row (default).",
+                        "Show the preview at the window's own on-screen frame.",
+                     ],
                      default: "popover", doc: "How the hover preview is sized/placed."),
                 .str("theme", \.treeTheme, enum: perViewThemeDomain, default: "",
                      doc: "Per-view theme; `\"\"` inherits `[theme].name`."),
@@ -149,6 +165,11 @@ public extension FacetConfig {
                 .descOnly("max-width", .integer),
                 .descOnly("max-height", .integer),
                 .descOnly("action", enum: ["float", "ignore", "manage"],
+                          enumDocs: [
+                            "Float it: still tracked + shown in the tree, just not tiled (default).",
+                            "Drop it entirely: never enters a workspace, never shown.",
+                            "Force-tile it even though the allowlist would otherwise float/ignore it.",
+                          ],
                           default: .string("float")),
             ]),
 
@@ -235,11 +256,11 @@ public extension FacetConfig {
 
 private extension ConfigSchema.Field where Root == FacetConfig {
     static func str(_ key: String, _ kp: WritableKeyPath<FacetConfig, String?>,
-                    enum domain: [String]? = nil, default def: String? = nil,
-                    doc: String? = nil) -> Self {
+                    enum domain: [String]? = nil, enumDocs: [String?]? = nil,
+                    default def: String? = nil, doc: String? = nil) -> Self {
         .init(key: key, kind: .scalar(.string),
               apply: { c, v in if let s = v.asString { c[keyPath: kp] = s } },
-              domain: domain, def: def.map { .string($0) }, doc: doc)
+              domain: domain, enumDocs: enumDocs, def: def.map { .string($0) }, doc: doc)
     }
     static func int(_ key: String, _ kp: WritableKeyPath<FacetConfig, Int?>,
                     min lo: Double? = nil, max hi: Double? = nil,
@@ -286,11 +307,11 @@ private extension ConfigSchema.Field where Root == FacetConfig {
     /// Schema-only scalar for an `[[array-of-tables]]` row (no decode —
     /// facet parses those from raw text); a no-op `apply`.
     static func descOnly(_ key: String, _ scalar: ConfigSchema.Scalar = .string,
-                         enum domain: [String]? = nil,
+                         enum domain: [String]? = nil, enumDocs: [String?]? = nil,
                          default def: ConfigSchema.DefaultValue? = nil,
                          doc: String? = nil) -> Self {
         .init(key: key, kind: .scalar(scalar), apply: { _, _ in },
-              domain: domain, def: def, doc: doc)
+              domain: domain, enumDocs: enumDocs, def: def, doc: doc)
     }
     /// Schema-only string-array for an `[[array-of-tables]]` row (no decode —
     /// facet parses those from raw text); a no-op `apply`. The array sibling
