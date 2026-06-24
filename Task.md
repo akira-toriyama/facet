@@ -15,14 +15,7 @@
 > **優先基準（トミー 2026-06-24）**: ① 仕様が固い ② 小さい ③ 基盤になる ＝ 高優先。
 > 通し番号＝優先順。括弧内は legacy R-id（memory / commit 参照用に温存）。
 
-### 1. キーボード Space のヘッダ持ち上げを reorder 化（旧 R3・②小）
-
-mouse のヘッダ drag は #323 で display-only reorder 化済みだが、**keyboard Space-lift だけ旧挙動のまま**＝マウスと非対称（section mode＝無音 no-op／by-workspace degrade＝`performSwap` で窓が動く）。
-
-- 修正箇所 ＝ `kbCommitLift` の `.hdr` case 1 つ（[SidebarView+KbNav.swift:211-216](Sources/FacetViewTree/SidebarView+KbNav.swift#L211-L216)）を mouse mode-4 と同じ `controller.reorderSection`（[Controller+Reorder.swift:22](Sources/FacetApp/Controller+Reorder.swift#L22)）へ。Space キー入口は [Controller+ActiveMode.swift:138](Sources/FacetApp/Controller+ActiveMode.swift#L138)（`case 49 → kbToggleLift`）。
-- **micro-design 1 点（要決定）**: keyboard は target group ordinal しか持たない（mouse は cursor band 半分で before/after 判定）→ 挿入境界の意味を決める（例: target の手前に挿入で十分か）。← ここだけ固めれば即実装。
-
-### 2. section ラベル統一（`label` 必須・unique・header 統一）（旧 R13・①固い ③基盤・ただし large / 破壊的）
+### 1. section ラベル統一（`label` 必須・unique・header 統一）（旧 R13・①固い ③基盤・ただし large / 破壊的）
 
 section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`label` で不統一（核心 ＝ [ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115) の `"WS\(ws+1)"` ハードコードが実 `name` を無視）。全 type で `label` を **必須+unique** 化 → header/識別子に使用・emoji 自動命名（`WorkspaceNaming`）**廃止**・CLI `--add LABEL` 必須化・Taplo 検証。将来 `facet section --focus` の前提。
 
@@ -46,6 +39,7 @@ section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`labe
 
 <details><summary>完了項目（PR / commit・新しい順）</summary>
 
+- **keyboard section reorder**（旧 Open #1 / R3）keyboard Space-lift のヘッダが section mode で無音 no-op だった退行を修正＝mouse mode-4 と同じ `controller.reorderSection`（display-only）へ。boundary ＝ `tgt < g ? tgt : tgt+1`（持ち上げた section が aim した target ordinal に着地）。degrade は performSwap 維持（mouse mode-3 と parity）。契約を `SectionOrderTests` に固定（+2 test=917）。実機キー操作の最終確認はトミー（section≥2 要・環境は wss=1）— **#334**（`fix/kb-section-reorder`）
 - **macOS min 14**（旧 Open #1）13-gate 全撤去（OS 下限 13→14・`available(macOS)` 5 hit → 0）+ slide CADisplayLink 一本化（Timer fallback 削除）+ `winPreview` 非 Optional 化 + docs 同期。part B（ローカル `swift test`）も Xcode 26.5 導入で解禁＝915 tests local green — **#333**（`refactor` ＝ no-bump・`feat/macos-min-14`）
 - **R12** mac desktop 切替後 tree キーボード死 — thrash 修正 + click-to-activate — **#330**（`5342aea`）／doc 同期 **#331**
 - **R11-C1** global `t` タグ管理モード（rename/delete across windows） — **#329**

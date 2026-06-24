@@ -128,8 +128,8 @@ extension SidebarView {
     /// the selection.
     public func kbToggleLift() {
         // The section model supports lift (PR8): a window-row lift commits an
-        // apply-based MOVE; a header lift no-ops (header swap stays
-        // by-workspace-only).
+        // apply-based MOVE; a header lift reorders the section list (display-
+        // only). The by-workspace degrade keeps the header swap.
         if kbLifted == nil {
             guard let s = kbSel else { return }
             kbLifted = s
@@ -170,8 +170,9 @@ extension SidebarView {
 
     /// Commit the lift: a window moves to the target WS (a background
     /// move — no switch, no focus-follow — same as the mouse drop
-    /// since M9-1); a header swaps its WS's contents with the target.
-    /// Returns true if a lift was in progress.
+    /// since M9-1). A header reorders the section list in section mode
+    /// (display-only, like the mouse mode-4 path), or swaps WS contents in
+    /// the by-workspace degrade. Returns true if a lift was in progress.
     @discardableResult
     public func kbCommitLift() -> Bool {
         guard let s = kbLifted else { return false }
@@ -209,9 +210,24 @@ extension SidebarView {
                 controller?.scheduleReconcile(after: 0.05)
             }
         case .hdr(let g):
-            // Section model: a workspace-section header swap is not supported
-            // (parity with the mouse path) — a header lift-commit no-ops.
-            if sectionModeActive { return true }
+            if sectionModeActive {
+                // Section model: a header lift-commit REORDERS the section
+                // list (display-only, session-only) — parity with the mouse
+                // mode-4 path. `g` / `tgt` are render-group ordinals; the
+                // lifted section lands at the target ordinal's slot. The
+                // boundary is in the current list's pre-removal coordinate
+                // space (see `SectionOrder.reorder`): aim up → before `tgt`,
+                // aim down → after `tgt`.
+                guard tgt != g, g < lastSections.count, tgt < lastSections.count
+                else { return true }
+                let boundary = tgt < g ? tgt : tgt + 1
+                controller?.reorderSection(
+                    move: lastSections[g].id, toBoundary: boundary)
+                kbSel = .hdr(group: tgt)   // keep the cursor on the moved section
+                return true
+            }
+            // By-workspace degrade: keep the Theme A header-swap (parity with
+            // the mouse mode-3 path; a lens header can't occur here).
             guard g != tgt else { return true }
             performSwap(sourceWS: g, targetWS: tgt)
         }

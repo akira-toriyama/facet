@@ -115,4 +115,41 @@ final class SectionOrderTests: XCTestCase {
         XCTAssertEqual(SectionOrder.reorder(cur, move: "A", toBoundary: 99),
                        ["B", "C", "D", "A"])
     }
+
+    // MARK: - keyboard header-reorder boundary contract
+    //
+    // `SidebarView.kbCommitLift` (.hdr, section mode) maps a lifted section
+    // ordinal `g` + the aimed target ordinal `tgt` to a drop boundary via
+    // `tgt < g ? tgt : tgt + 1`, then calls `reorder`. Contract: the lifted
+    // section lands EXACTLY at `tgt` (aim a slot → land in it), mirroring the
+    // mouse mode-4 drop. These lock that mapping — the @MainActor View code
+    // can't run under `swift test`, so the contract it relies on is pinned here.
+
+    /// The keyboard ordinal→boundary rule, mirrored from `kbCommitLift`.
+    private func kbBoundary(g: Int, tgt: Int) -> Int { tgt < g ? tgt : tgt + 1 }
+
+    func testKeyboardReorderLandsAtTargetOrdinal() {
+        let n = cur.count
+        for g in 0..<n {
+            for tgt in 0..<n where tgt != g {
+                let out = SectionOrder.reorder(
+                    cur, move: cur[g], toBoundary: kbBoundary(g: g, tgt: tgt))
+                XCTAssertEqual(out.firstIndex(of: cur[g]), tgt,
+                    "lift \(g) aim \(tgt): \(cur[g]) should land at index \(tgt), got \(out)")
+                XCTAssertEqual(out.sorted(), cur.sorted(),    // totality
+                               "lift \(g) aim \(tgt) must stay a permutation")
+            }
+        }
+    }
+
+    func testKeyboardReorderAdjacentMoves() {
+        // Aim one slot down: A(0) → tgt 1 lands A at index 1 (past B).
+        XCTAssertEqual(
+            SectionOrder.reorder(cur, move: "A", toBoundary: kbBoundary(g: 0, tgt: 1)),
+            ["B", "A", "C", "D"])
+        // Aim one slot up: D(3) → tgt 2 lands D at index 2.
+        XCTAssertEqual(
+            SectionOrder.reorder(cur, move: "D", toBoundary: kbBoundary(g: 3, tgt: 2)),
+            ["A", "B", "D", "C"])
+    }
 }
