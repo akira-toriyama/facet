@@ -22,7 +22,6 @@ extension Controller {
     /// background capture; cells fall back to icons momentarily on
     /// each grid open).
     func rescheduleThumbnailTimer() {
-        guard winPreview != nil else { return }   // no capturer (macOS 13) → no timer
         let want = config.effectiveThumbnailRefreshInterval
         if thumbnailTimerInterval == want { return }
         thumbnailTimer?.invalidate()
@@ -38,9 +37,9 @@ extension Controller {
 
     /// Touch the capture cache for every known window so captures stay
     /// fresh in the background. Cheap when within TTL (one dict lookup per
-    /// window, no capture work). No-op when there's no capturer (macOS 13).
+    /// window, no capture work).
     func refreshThumbnailCache() {
-        guard let wp = winPreview else { return }
+        let wp = winPreview
         for ws in lastWorkspaces {
             for win in ws.windows {
                 wp.request(win.id) { _, _, _ in /* warm only */ }
@@ -86,7 +85,7 @@ extension Controller {
     /// the sidebar's hover / kb-selection currently points at.
     func previewTargetChanged() {
         previewTimer?.invalidate()
-        guard let wp = winPreview else { return }
+        let wp = winPreview
         let targets = sidebarView.previewTargets()
         let ids = Set(targets.map(\.window))
         if ids.isEmpty {

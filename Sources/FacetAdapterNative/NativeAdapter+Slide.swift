@@ -1,5 +1,5 @@
 // 枠 E: workspace-switch slide animation — per-frame driver
-// (CADisplayLink / Timer), easing, and the animate* entry points
+// (CADisplayLink), easing, and the animate* entry points
 // for switch / retile / stack-cycle. Extracted unchanged from
 // NativeAdapter.swift (#182 phase 4) — same-module extension, no
 // logic change. Stored state (slide clock / anims / hints) stays on
@@ -19,8 +19,7 @@ import FacetCore
 final class SlideTicker: NSObject {
     weak var adapter: NativeAdapter?
     init(_ adapter: NativeAdapter) { self.adapter = adapter; super.init() }
-    // `Any` (not CADisplayLink) so the signature stays available on
-    // macOS 13; the link arg is unused. The 14+ display link calls it.
+    // `Any` keeps the @objc selector simple; the link arg is unused.
     @objc func tick(_ sender: Any) { adapter?.slideTick() }
 }
 
@@ -74,14 +73,10 @@ extension NativeAdapter {
         }
     }
 
-    /// Stop the per-frame driver (display link / timer). Doesn't settle.
+    /// Stop the per-frame driver (display link). Doesn't settle.
     private func stopSlideClock() {
-        if #available(macOS 14.0, *), let link = displayLink as? CADisplayLink {
-            link.invalidate()
-        }
+        displayLink?.invalidate()
         displayLink = nil
-        slideTimer?.invalidate()
-        slideTimer = nil
     }
 
     /// Run the in-flight slide's settle now (on normal completion, or a
@@ -119,9 +114,9 @@ extension NativeAdapter {
     }
 
     /// One animation frame: advance progress and write each window's
-    /// origin. Runs on the main runloop (CADisplayLink on macOS 14+,
-    /// else a 120 Hz timer). fileprivate so the SlideTicker shim can
-    /// call it; a late tick after settle no-ops on the nil slideStart.
+    /// origin. Runs on the main runloop (CADisplayLink). fileprivate so
+    /// the SlideTicker shim can call it; a late tick after settle no-ops
+    /// on the nil slideStart.
     fileprivate func slideTick() {
         guard let begin = slideStart else { return }
         let raw = min(1.0, -begin.timeIntervalSinceNow / slideDuration)
@@ -180,27 +175,27 @@ extension NativeAdapter {
     }
 
     /// Start the per-frame driver for an already-populated `slideAnims`.
-    /// Prefers a vsync CADisplayLink (macOS 14+); Timer fallback on 13.
-    /// `settle` runs once on completion (or interrupt via
-    /// finishSlideIfRunning).
+    /// Drives a vsync CADisplayLink off the main runloop. `settle` runs
+    /// once on completion (or interrupt via finishSlideIfRunning).
     private func startSlideDriver(_ settle: @escaping () -> Void) {
         let preset = resolveAnimPreset()
         slideCurve = preset.curve
         slideStart = Date()
         slideDuration = preset.duration
         slideFinish = settle
-        if #available(macOS 14.0, *), let screen = NSScreen.main {
-            let link = screen.displayLink(target: slideTicker,
-                                          selector: #selector(SlideTicker.tick(_:)))
-            link.add(to: .main, forMode: .common)
-            displayLink = link
-        } else {
-            let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) {
-                [weak self] _ in self?.slideTick()
-            }
-            RunLoop.main.add(timer, forMode: .common)
-            slideTimer = timer
+        // A screen is needed to vend the display link. If somehow none is
+        // available (headless / mid display-reconfig), settle now so
+        // `slideInProgress` can't latch true with no driver to clear it.
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            slideStart = nil
+            slideFinish = nil
+            settle()
+            return
         }
+        let link = screen.displayLink(target: slideTicker,
+                                      selector: #selector(SlideTicker.tick(_:)))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
     }
 
     /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace

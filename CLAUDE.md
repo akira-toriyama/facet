@@ -22,7 +22,7 @@ Adding or renaming a term lands in the same PR as the code change.
 `facet` — Swift workspace + window manager for macOS. Multiple
 views (`--view tree|grid|rail`), native AX/CGS backend
 (`FacetAdapterNative`, sole backend since v2.0.0). SIP-on,
-public API + AX only. Swift 6, macOS 13+.
+public API + AX only. Swift 6, macOS 14+.
 
 ## Build / run
 
@@ -32,10 +32,14 @@ swift test                 # tests — needs Xcode (XCTest); fails on CLT
 .build/debug/facet         # raw client (use ./run.sh for the .app bundle)
 ```
 
-`swift test` does NOT work on CommandLineTools-only setups (`no such
-module 'XCTest'`); tests run in CI
-([build workflow lands in M2 step 7](docs/architecture.md)). Locally,
-`swift build` is the bar; let CI cover XCTest.
+`swift test` needs Xcode — XCTest isn't in CommandLineTools (`no such
+module 'XCTest'`). With Xcode installed (`xcode-select -p` →
+`Xcode.app`), `swift test` runs locally (915 tests, ~2.4 s); CI runs it
+too ([build workflow](docs/architecture.md)). On a CLT-only box,
+`swift build` is the bar and CI covers XCTest. (Don't `xcode-select -s`
+to switch the global toolchain mid-task — borrow Xcode per-command with
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test`
+if CLT is the active default.)
 
 `@main enum FacetApp` lives in
 [Sources/FacetApp/Main.swift](Sources/FacetApp/Main.swift) (NOT

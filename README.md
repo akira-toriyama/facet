@@ -1,6 +1,6 @@
 # facet
 
-![platform](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey)
+![platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
 ![swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![status](https://img.shields.io/badge/status-alpha-orange)
@@ -230,7 +230,7 @@ and change **how many** windows share it (`--inc-master` /
 | Drag empty space, or ⌘-drag anywhere (tree) | reposition the panel (session-only — set `[tree]` geometry in config to pin it) |
 | Double-click the panel header (tree) | reset position + size to the `[tree]` config geometry (or the built-in default) |
 | Right-click (tree) | context menu, by target: window row → actions · workspace header → layout picker · `Desktop N` band → Search (the `s` mode) |
-| Hover a window row (tree, macOS 14+) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
+| Hover a window row (tree) | live preview — small popover next to the row by default; switch to `mirror` in `[tree] preview-mode` for full-size at the would-be on-screen frame |
 | Click a cell (grid) | switch to that workspace |
 | Click a window thumb (grid) | switch + focus that window |
 | Drag a thumb to another cell (grid) | move that window to that workspace |
@@ -278,8 +278,8 @@ stay compact. Requires Accessibility (same grant as clicks).
 | `Return` | commit a lift / switch when not lifted |
 | `Esc` | cancel a lift / dismiss the overlay |
 
-Cells paint with **ScreenCaptureKit thumbnails** (macOS 14+,
-Screen Recording grant); a background refresh keeps them warm
+Cells paint with **ScreenCaptureKit thumbnails** (Screen Recording
+grant); a background refresh keeps them warm
 so the overlay opens with real screenshots, not icon fallbacks.
 
 ### Rail switcher keyboard
@@ -693,7 +693,7 @@ swift test           # XCTest — needs Xcode (CLT has none)
 - **Multi-display layout / preview positioning is lightly tested**
   — the primary dev box is single-display. File issues with repro
   steps if you hit oddness on multi-monitor setups.
-- **Window preview is macOS 14+** and needs Screen Recording.
+- **Window preview** needs Screen Recording.
 - **Ad-hoc signed builds re-prompt** for Accessibility on every
   rebuild. Run `./setup-signing-cert.sh` once for a persistent
   self-signed identity that keeps the TCC grant stable across

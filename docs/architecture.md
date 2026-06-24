@@ -39,9 +39,9 @@ implementation today (`FacetAdapterNative`), seam preserved for
 unit-test stubs (`StubBackend` in `BackendTests`) — and
 `WindowCapturing` (per-window image capture for the overview
 thumbnails + tree hover preview), implemented by `SCKWindowCapture`
-(ScreenCaptureKit, macOS 14+) in the `FacetCapture` adapter. Capture
+(ScreenCaptureKit) in the `FacetCapture` adapter. Capture
 is a distinct backend axis (different OS framework, separate Screen
-Recording grant, optional / version-gated), so it lives in its own
+Recording grant), so it lives in its own
 module rather than folded into `FacetAdapterNative`. Returning a
 `CGImage` (not `NSImage`) keeps the port AppKit-free; the view layer
 wraps it for drawing — so `FacetView` imports no OS capture backend.

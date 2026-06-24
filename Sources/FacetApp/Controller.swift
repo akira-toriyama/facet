@@ -187,11 +187,10 @@ final class Controller: NSObject {
     // MARK: - Preview (hover overlay + grid thumbnails)
 
     let previewPool = PreviewOverlayPool()
-    /// The capture port (`WindowCapturing`, FacetCore). `nil` on macOS 13
-    /// — the sole implementation (`SCKWindowCapture`, ScreenCaptureKit) is
-    /// macOS 14+, so it simply stays unset there and every capture call
-    /// site short-circuits on the `nil` check.
-    var winPreview: (any WindowCapturing)?
+    /// The capture port (`WindowCapturing`, FacetCore) — always present.
+    /// The sole implementation (`SCKWindowCapture`, ScreenCaptureKit) is
+    /// built once in `init`; capture call sites use it unconditionally.
+    let winPreview: any WindowCapturing
     var previewTimer: Timer?
     var thumbnailTimer: Timer?
     var thumbnailTimerInterval: TimeInterval?
@@ -288,6 +287,7 @@ final class Controller: NSObject {
             backend: backend)
         self.sidebarView = view
         self.panelHost = PanelHost(view: view, paletteBox: treePaletteBox)
+        self.winPreview = SCKWindowCapture()
         super.init()
         view.controller = self
         // PR-B: each surface's chrome shares its box. Tree chrome is wired
@@ -301,7 +301,6 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
-        if #available(macOS 14.0, *) { winPreview = SCKWindowCapture() }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
                 self?.sidebarView.setQuery(q)
@@ -835,24 +834,21 @@ final class Controller: NSObject {
         // compares against these to spot in-place moves / retiles. Only
         // the active WS reports a live frame (inactive WSs report a
         // would-be tile slot that doesn't track real pixels), so we
-        // capture only the active set, and only when a preview surface
-        // exists (skipped entirely on macOS 13).
+        // capture only the active set.
         // Also remember which WS each window lived in, to spot a
         // cross-workspace move (trigger 3 below).
         var prevActiveFrames: [WindowID: CGRect] = [:]
         var prevWSofWindow: [WindowID: Int] = [:]
         var prevOnscreen: [WindowID: Bool] = [:]
-        if winPreview != nil {
-            let oldActiveIdx = lastWorkspaces.first(where: { $0.isActive })?.index
-            for ws in lastWorkspaces {
-                let active = ws.index == oldActiveIdx
-                for w in ws.windows {
-                    prevWSofWindow[w.id] = ws.index
-                    // Capture for ALL windows (any WS): a hide-reclaim
-                    // reveal can land on an inactive WS too (trigger 4).
-                    prevOnscreen[w.id] = w.isOnscreen
-                    if active, let f = w.frame { prevActiveFrames[w.id] = f }
-                }
+        let oldActiveIdx = lastWorkspaces.first(where: { $0.isActive })?.index
+        for ws in lastWorkspaces {
+            let active = ws.index == oldActiveIdx
+            for w in ws.windows {
+                prevWSofWindow[w.id] = ws.index
+                // Capture for ALL windows (any WS): a hide-reclaim
+                // reveal can land on an inactive WS too (trigger 4).
+                prevOnscreen[w.id] = w.isOnscreen
+                if active, let f = w.frame { prevActiveFrames[w.id] = f }
             }
         }
         let prevActive = prevActiveWSIndex
@@ -996,7 +992,7 @@ final class Controller: NSObject {
             rv.layoutCells()      // refresh open rail on backend events
         }
         if firstRealApply {
-            refreshThumbnailCache()    // no-op without a capturer (macOS 13)
+            refreshThumbnailCache()
         }
         // Event-driven preview refresh — the geometry / visibility half
         // that the ~4 s background timer (content freshness) can't react
@@ -1023,45 +1019,44 @@ final class Controller: NSObject {
         // Invalidate drops the stale cache for every surface (tree
         // re-captures lazily on the next hover); the open grid / rail
         // then gets a fresh capture pushed via `pushFreshThumbnails`.
-        if let wp = winPreview {
-            let newActive = wss.first(where: { $0.isActive })
-            var stale: [WindowID] = []
-            if newActive?.index != prevActive {                  // (1) switch
-                stale.append(contentsOf: newActive?.windows.map(\.id) ?? [])
-            }
-            if let active = newActive {                          // (2) in-place
-                for w in active.windows {
-                    guard let nf = w.frame, let of = prevActiveFrames[w.id]
-                    else { continue }
-                    // 2 pt epsilon: ignore sub-pixel / mid-animation
-                    // jitter, catch real moves (tens of points).
-                    if abs(of.minX - nf.minX) > 2 || abs(of.minY - nf.minY) > 2
-                        || abs(of.width - nf.width) > 2
-                        || abs(of.height - nf.height) > 2 {
-                        stale.append(w.id)
-                    }
-                }
-            }
-            for ws in wss {                                      // (3) cross-WS move
-                for w in ws.windows where prevWSofWindow[w.id].map({
-                    $0 != ws.index
-                }) == true {
+        let wp = winPreview
+        let newActive = wss.first(where: { $0.isActive })
+        var stale: [WindowID] = []
+        if newActive?.index != prevActive {                  // (1) switch
+            stale.append(contentsOf: newActive?.windows.map(\.id) ?? [])
+        }
+        if let active = newActive {                          // (2) in-place
+            for w in active.windows {
+                guard let nf = w.frame, let of = prevActiveFrames[w.id]
+                else { continue }
+                // 2 pt epsilon: ignore sub-pixel / mid-animation
+                // jitter, catch real moves (tens of points).
+                if abs(of.minX - nf.minX) > 2 || abs(of.minY - nf.minY) > 2
+                    || abs(of.width - nf.width) > 2
+                    || abs(of.height - nf.height) > 2 {
                     stale.append(w.id)
                 }
             }
-            for ws in wss {                                      // (4) reveal
-                for w in ws.windows
-                    where prevOnscreen[w.id] == false && w.isOnscreen {
-                    stale.append(w.id)
-                }
+        }
+        for ws in wss {                                      // (3) cross-WS move
+            for w in ws.windows where prevWSofWindow[w.id].map({
+                $0 != ws.index
+            }) == true {
+                stale.append(w.id)
             }
-            if !stale.isEmpty {
-                let ids = Array(Set(stale))
-                for id in ids { wp.invalidate(id) }   // all surfaces; tree = lazy
-                pushFreshThumbnails(ids, wp)          // no-op if no overview open
-                Log.debug("preview-refresh: \(ids.count) window(s) "
-                    + "(switch=\(newActive?.index != prevActive))")
+        }
+        for ws in wss {                                      // (4) reveal
+            for w in ws.windows
+                where prevOnscreen[w.id] == false && w.isOnscreen {
+                stale.append(w.id)
             }
+        }
+        if !stale.isEmpty {
+            let ids = Array(Set(stale))
+            for id in ids { wp.invalidate(id) }   // all surfaces; tree = lazy
+            pushFreshThumbnails(ids, wp)          // no-op if no overview open
+            Log.debug("preview-refresh: \(ids.count) window(s) "
+                + "(switch=\(newActive?.index != prevActive))")
         }
         if userHidden { return }
         guard !wss.isEmpty, NSScreen.main != nil else {

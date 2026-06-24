@@ -3,9 +3,9 @@
 // view / app layers depend on the SEAM, not the OS capture backend —
 // the same hexagonal split as `WindowBackend` (AX / CGS): "crossing
 // layers always means there's a missing protocol", and this is it for
-// capture. The sole implementation, `SCKWindowCapture` (ScreenCaptureKit,
-// macOS 14+), lives in the `FacetCapture` adapter; FacetView no longer
-// imports ScreenCaptureKit.
+// capture. The sole implementation, `SCKWindowCapture` (ScreenCaptureKit),
+// lives in the `FacetCapture` adapter; FacetView no longer imports
+// ScreenCaptureKit.
 //
 // The callback delivers a `CGImage` (CoreGraphics — FacetCore is
 // AppKit-free) plus the window's logical frame; the consumer wraps it in

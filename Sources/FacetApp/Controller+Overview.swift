@@ -123,7 +123,7 @@ extension Controller {
     /// and rail are mutually exclusive, so this matches feeding the one
     /// shown — same shape as `pushFreshThumbnails`.
     func startOverviewCaptures() {
-        guard let wp = winPreview else { return }
+        let wp = winPreview
         for ws in lastWorkspaces {
             for win in ws.windows {
                 captureAndPushToOverview(win.id, wp)
@@ -141,8 +141,8 @@ extension Controller {
     /// feels "right after"; under 30 ms grabs the pre-move frame on BSP.
     func refreshOverviewThumbnails(forWSIndices indices: [Int],
                                    in wss: [Workspace]) {
-        guard let wp = winPreview,
-              gridView != nil || railView != nil else { return }
+        guard gridView != nil || railView != nil else { return }
+        let wp = winPreview
         let want = Set(indices)
         let ids: [WindowID] = wss
             .filter { want.contains($0.index) }

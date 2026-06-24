@@ -15,21 +15,14 @@
 > **優先基準（トミー 2026-06-24）**: ① 仕様が固い ② 小さい ③ 基盤になる ＝ 高優先。
 > 通し番号＝優先順。括弧内は legacy R-id（memory / commit 参照用に温存）。
 
-### 1. macOS 最小サポート min 14 ＝ 13-gate 撤去（①固い ②小1PR ③基盤）
-
-macOS 13 の version gate を全撤去し OS 下限を 14 に統一。`#available(macOS 14.0)` **4 箇所**＋`@available` **1 箇所**（`grep -rn "available(macOS" Sources/` ＝ **5 hit**）＋ `Package.swift` `.v13 → .v14`。`winPreview` を非 Optional 化・slide を CADisplayLink 一本化で 13/14 分岐負債を一掃（新 API ゼロ・現状 `swift build` green）。**詳細・チェックリスト → 付録 A。**
-
-- ✅ 全基準クリア（**固い**: 全 gate を file:line 特定済／**小**: 機械的・1 PR／**基盤**: OS 下限統一＋負債削減＋ローカル `swift test` 環境への布石）。
-- ⚠️ **トミー旧フラグ**: 当初 timing は「バグ修正の後」。新基準では最上位だが **着手可否は要確認**（純バグ退治を優先するなら後ろでも可）。
-
-### 2. キーボード Space のヘッダ持ち上げを reorder 化（旧 R3・②小）
+### 1. キーボード Space のヘッダ持ち上げを reorder 化（旧 R3・②小）
 
 mouse のヘッダ drag は #323 で display-only reorder 化済みだが、**keyboard Space-lift だけ旧挙動のまま**＝マウスと非対称（section mode＝無音 no-op／by-workspace degrade＝`performSwap` で窓が動く）。
 
 - 修正箇所 ＝ `kbCommitLift` の `.hdr` case 1 つ（[SidebarView+KbNav.swift:211-216](Sources/FacetViewTree/SidebarView+KbNav.swift#L211-L216)）を mouse mode-4 と同じ `controller.reorderSection`（[Controller+Reorder.swift:22](Sources/FacetApp/Controller+Reorder.swift#L22)）へ。Space キー入口は [Controller+ActiveMode.swift:138](Sources/FacetApp/Controller+ActiveMode.swift#L138)（`case 49 → kbToggleLift`）。
 - **micro-design 1 点（要決定）**: keyboard は target group ordinal しか持たない（mouse は cursor band 半分で before/after 判定）→ 挿入境界の意味を決める（例: target の手前に挿入で十分か）。← ここだけ固めれば即実装。
 
-### 3. section ラベル統一（`label` 必須・unique・header 統一）（旧 R13・①固い ③基盤・ただし large / 破壊的）
+### 2. section ラベル統一（`label` 必須・unique・header 統一）（旧 R13・①固い ③基盤・ただし large / 破壊的）
 
 section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`label` で不統一（核心 ＝ [ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115) の `"WS\(ws+1)"` ハードコードが実 `name` を無視）。全 type で `label` を **必須+unique** 化 → header/識別子に使用・emoji 自動命名（`WorkspaceNaming`）**廃止**・CLI `--add LABEL` 必須化・Taplo 検証。将来 `facet section --focus` の前提。
 
@@ -53,6 +46,7 @@ section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`labe
 
 <details><summary>完了項目（PR / commit・新しい順）</summary>
 
+- **macOS min 14**（旧 Open #1）13-gate 全撤去（OS 下限 13→14・`available(macOS)` 5 hit → 0）+ slide CADisplayLink 一本化（Timer fallback 削除）+ `winPreview` 非 Optional 化 + docs 同期。part B（ローカル `swift test`）も Xcode 26.5 導入で解禁＝915 tests local green — **#333**（`refactor` ＝ no-bump・`feat/macos-min-14`）
 - **R12** mac desktop 切替後 tree キーボード死 — thrash 修正 + click-to-activate — **#330**（`5342aea`）／doc 同期 **#331**
 - **R11-C1** global `t` タグ管理モード（rename/delete across windows） — **#329**
 - **R10** 窓のタグ操作 GUI（"Add to lens" → "Tag" チェックリスト） — **#327**
@@ -71,7 +65,9 @@ section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`labe
 
 ---
 
-## 📎 付録 A: macOS 最小サポート min 14（詳細計画・Open #1）
+## 📎 付録 A: macOS 最小サポート min 14（詳細計画・✅完了→Done）
+
+> **✅ 実装完了**（`feat/macos-min-14`・#333）: part A 全 Step（floor→slide→@available→AXFocus→winPreview→docs）実装済・`available(macOS)` 0 件・`swift build` green・`swift test` 915/0 fail（ローカル Xcode 26.5）。part B も Xcode 導入済で解禁＝ローカル `swift test` 稼働確認済（CLAUDE.md にローカルテスト手順を追記）。以下は実装時の詳細計画（記録として保持）。
 
 > **方針（トミー確定 2026-06-24・当初の「26-only ハードカットオーバー」から改訂）**:
 > 最新 OS 寄りにしつつ、**痛みの無い範囲で旧 OS をサポート**。**少しでも痛みがあれば切る**。

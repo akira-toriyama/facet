@@ -207,15 +207,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     var pidToBundleId: [pid_t: String] = [:]
 
     // (Slide — in-flight animation state)
-    // P6: the slide CLOCK (timer / anims / settle / clock fields below) is
-    // touched ONLY on the main runloop — by `startSlide`, `slideTick`, and
-    // the settle, all main. The COMMAND that starts a slide runs on
-    // `cliQueue`: it commits the catalog there, then hands a *value* plan to
-    // `startSlide` via a single `DispatchQueue.main.async`. The settle is
-    // AX-only (no catalog access) so the slide never re-touches catalog off
+    // P6: the slide CLOCK (display link / anims / settle / clock fields
+    // below) is touched ONLY on the main runloop — by `startSlide`,
+    // `slideTick`, and the settle, all main. The COMMAND that starts a slide
+    // runs on `cliQueue`: it commits the catalog there, then hands a *value*
+    // plan to `startSlide` via a single `DispatchQueue.main.async`. The settle
+    // is AX-only (no catalog access) so the slide never re-touches catalog off
     // the cliQueue serialization point. See NativeAdapter+Slide.swift.
-    /// In-flight slide clock + its settle. Touched on main only.
-    var slideTimer: Timer?
+    /// In-flight slide's settle. Touched on main only.
     var slideFinish: (() -> Void)?
     /// Resolved AX elements + from/to origins for the in-flight slide.
     /// Resolved ONCE (not per frame): the per-frame AX window lookup was
@@ -240,9 +239,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// frame-fight that self-heals on the settle's refresh — never catalog
     /// corruption (the catalog was already committed on cliQueue).
     var slideInProgress = false
-    /// CADisplayLink (macOS 14+) driving the slide; `AnyObject?` keeps
-    /// the stored type available on macOS 13. nil = Timer fallback.
-    var displayLink: AnyObject?
+    /// CADisplayLink driving the slide; nil when idle.
+    var displayLink: CADisplayLink?
     lazy var slideTicker = SlideTicker(self)
 
     /// Direction for the next switch's slide: +1 forward, -1 back, nil =
