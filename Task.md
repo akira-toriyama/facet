@@ -15,12 +15,12 @@
 > **優先基準（トミー 2026-06-24）**: ① 仕様が固い ② 小さい ③ 基盤になる ＝ 高優先。
 > 通し番号＝優先順。括弧内は legacy R-id（memory / commit 参照用に温存）。
 
-### 1. section ラベル統一（`label` 必須・unique・header 統一）（旧 R13・①固い ③基盤・ただし large / 破壊的）
+### 1. section ラベル統一（index アドレス + label 任意・header 統一）（旧 R13・①固い ③基盤・large / 破壊的・多段PR）
 
-section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`label` で不統一（核心 ＝ [ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115) の `"WS\(ws+1)"` ハードコードが実 `name` を無視）。全 type で `label` を **必須+unique** 化 → header/識別子に使用・emoji 自動命名（`WorkspaceNaming`）**廃止**・CLI `--add LABEL` 必須化・Taplo 検証。将来 `facet section --focus` の前提。
+section ヘッダの右クリック/`m` が workspace＝「WS1」ハードコード・lens＝`label` で不統一（核心 ＝ [ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115) の `"WS\(ws+1)"` が実 `name` を無視）。**識別子と表示名を分離**して統一する: **index = 常設ハンドル**（1始まり・tree 表示順・macOS Desktop 式）／**label = 任意**（全 type 共通・unique は warn+先勝ち）。`facet section --focus N|"label"` 両対応・表示は `index` or `index (label)`・`WorkspaceNaming` 絵文字命名廃止・**tree から runtime rename**。
 
-- spec は異例に固い（全 WHAT+WHERE が file:line 確定・`CLIName`/`validateWorkspaceName` 既存ヘルパ再利用可）＋ 基盤性最強（workspace/lens を単一 label identity に統一・`WorkspaceNaming` 負債削除）。
-- ただし **8 サブ項目 A–H が Core / View / App / Adapter / CLI 署名 / config / schema / docs / test を横断＝1 PR 不可・段階的**。**詳細設計 → 付録 B。**
+- **2026-06-25 壁打ちで required → optional に改訂**（required は「とりあえず作る」摩擦が強い／label を CLI 参照に兼用すると lens が `facet lens 🐶` で打てず致命的 → index を主ハンドルに分離して解決）。**詳細設計 → 付録 B**（旧 required 版を supersede）。
+- 既存シーム（`ActiveSection`/`activateSection`・`TagEditPanel` rename）再利用で低リスクだが、**Core / View / App / Adapter / CLI / config / schema / docs / test を横断＝1 PR 不可・relay 多段**。実装はトミー在席時。
 
 ---
 
@@ -94,43 +94,39 @@ section ヘッダの右クリック/`m` が workspace＝「WS1」・lens＝`labe
 
 ---
 
-## 📎 付録 B: section ラベル統一 Phase-1 設計（詳細・Open #3 / 旧 R13）
+## 📎 付録 B: section ラベル統一 設計（index アドレス + label 任意・Open #1 / 旧 R13）
 
-> **依頼（トミー 2026-06-24）**: section ヘッダの右クリック/`m` で workspace は「WS1/WS2」・lens は `label` と不統一 → **統一**したい。手段: `config.toml` に `label` を**必須**化し header に使用 → emoji 名「Dog」廃止・**CLI 動的追加も `label` 必須**。
-> 拡張方針: **label = section（lens も workspace も）を一意特定する識別子**（unique）。**理想形は `facet section --focus xxx`**（workspace/lens を “section” として統一アドレッシング・破壊的変更 OK・段階的）。Taplo（JSON schema）検証も入れる。
-> **plan ファイル**: `~/.claude/plans/task-md-cuddly-creek.md`（承認済）。
+> **改訂（トミー 2026-06-25 壁打ち）**: 旧 required 設計（`label` 必須・CLI `--add LABEL` 必須）を **supersede**。required は「とりあえず作る」摩擦が強く、label を CLI 参照の識別子に兼用すると lens が `facet lens 🐶` で打てず致命的 → **識別子=index / 表示名=label（任意）に分離**する新モデルへ。
+> **plan ファイル**: `~/.claude/plans/task-md-graceful-milner.md`（承認済・2026-06-25）。旧 `task-md-cuddly-creek.md` は required 版＝旧版扱い。
 
-### feasibility = 問題なし（破壊的変更だが clean）
-- **「WS1/WS2」の核心** ＝ menu タイトルが [ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115) `let header = "WS\(ws + 1)"` ハードコード（実 `workspaces[].name` を無視）。lens は [:152](Sources/FacetView/ViewContextMenu.swift#L152) で `label` 使用 → **この非対称が症状**。
-- **emoji 命名** [WorkspaceNaming.swift](Sources/FacetCore/WorkspaceNaming.swift) の production 参照は 2 箇所だけ（seed [FacetConfig.swift:514](Sources/FacetCore/FacetConfig.swift#L514)・add [NativeAdapter+DynamicWS.swift:37](Sources/FacetAdapterNative/NativeAdapter+DynamicWS.swift#L37)）＋display 経路 [WorkspaceLabel.swift:21](Sources/FacetCore/WorkspaceLabel.swift#L21) → label 置換で **丸ごと削除可**（負債ゼロ）。
-- 窓 routing は **index ベース**（`sourceWorkspaceIndex`）→ label にスペースが入っても不変。
-- **統一の核が既存**: `ActiveSection`(.workspace(n)/.lens(label)) + `backend.activateSection` [Controller+CLIDispatch.swift:534](Sources/FacetApp/Controller+CLIDispatch.swift#L534) → 将来 `facet section --focus` は **CLI 表層 + label 解決のみ**（低リスク）。
-- **既存ヘルパ再利用で低リスク**: `CLIName.isClean`/`CLIName.sanitized`（[CLIName.swift](Sources/FacetCore/CLIName.swift)・TagName が既に再利用）と `validateWorkspaceName`（[FacetApp+ClientCommands.swift:367](Sources/FacetApp/FacetApp+ClientCommands.swift#L367) 定義・:49 呼出）。
-- ⚠️ **CLAUDE.md「Workspaces are never named from config」を反転** → docs/memory 更新が必須。
+### 確定した新設計（壁打ち全合意 2026-06-25）
+1. **index = 常設ハンドル**: 1始まり・**tree 表示順**（reorder override 反映後）。全 section に必ず付く。macOS Desktop 番号と同発想。
+2. **label = 任意**: workspace / lens / unassigned 全 type 共通。未指定可。
+3. **label unique（warn + 先勝ち）**: 1 mac desktop 内で重複は loud warn し先勝ち（layout を壊さない）。
+4. **アドレッシング**: `facet section --focus N`（index）／ `--focus "label"`（付いていれば）。両対応。
+5. **表示**: 無 → `index`（`1`）／ 有 → `index (label)`（`1 (Web)`）。全 type・全 view 共通。
+6. **`WorkspaceNaming` 絵文字命名は廃止**（未命名は index 表示）。
+7. **header の `WS\(ws+1)` ハードコード除去** → `index (label?)`。
+8. **tree から label を runtime rename**（作成は摩擦ゼロ・命名は後付け）。
+9. lens の **`match` は必須維持**（label のみ optional 化）。
 
-### 確定した設計判断（Q&A 反映）
-1. **label = section の一意識別子**。全 type（workspace/lens/unassigned）で `label` 必須・**1 mac desktop 内で unique**。
-2. **形式 = CLIName-clean トークン**（非空・スペース無・`=,:`無・先頭`-`無）を**全 section label** に適用（lens label も現状「非空のみ」から tighten）。← `facet section --focus LABEL` を無クォートで通す＋一意識別。自由形式（スペース可）は不採用。
-3. **label 欠落 = loud ドロップ**（`type` 必須・lens label 必須と同作法）。ある desktop の workspace セクションが全て欠落 → section model 無効化 → 既定 5 WS に縮退（config 更新を促す）。
-4. **unique 違反 = loud warn + 先勝ち**（layout を壊さない total 動作・runtime 担保。JSON schema は cross-row unique 表現不可）。
-5. **Taplo**: `[[desktop.N.section]]` 各行に `type`+`label` 必須を schema 表現。**caveat**: desktop-section は現状「記述のみ」→ 構造付与が要（sill `ConfigSchema` の dynamic-table item 表現可否を着手時確認・不可なら schema fragment 手当て）。
-6. **zero-config（section ブロック皆無）**: label 要求不可 → 既定 `WS1..WS5` 表示を維持（強制・不変）。
+### feasibility = 低リスク（破壊的だが既存シーム再利用）
+- **統一シーム既存**: `ActiveSection`(.workspace(n)/.lens(label)) [ActiveSection.swift](Sources/FacetCore/ActiveSection.swift) + `Controller.activateSection` [Controller+CLIDispatch.swift:534](Sources/FacetApp/Controller+CLIDispatch.swift#L534) + `NativeAdapter.activateSection` [NativeAdapter.swift:506](Sources/FacetAdapterNative/NativeAdapter.swift#L506) → `facet section --focus` は「index→ActiveSection 解決層 + CLI verb」追加のみ。
+- **窓 routing は index ベース**（`sourceWorkspaceIndex`）→ label が空でも不変。
+- **rename 流用**: `TagEditPanel`（[TagEditPanel.swift:388](Sources/FacetView/TagEditPanel.swift#L388)）+ `enterTagManage`（[Controller+ActiveMode.swift:272](Sources/FacetApp/Controller+ActiveMode.swift#L272)）の rename フローを section rename へ転用。
+- ⚠️ **CLAUDE.md「Workspaces are never named from config」を反転**（label 任意で命名可へ）→ docs/memory 更新必須。
+- ⚠️ **index は tree 表示順（reorder override 反映）**＝Controller `lastSections`（main）。`--focus N` 解決は main hop で読む（or config 順許容を要判断）。
 
-### Phase 1 実装設計（A–H）
-- **A パース/モデル**（FacetCore）: [DesktopSection.swift:195-204](Sources/FacetCore/DesktopSection.swift#L195-L204) `.workspace` を label 必須+CLIName-clean+`label` 格納へ（破棄をやめる・`match` は implicit のまま caveat warn 継続）／lens・unassigned も CLIName-clean（共通ヘルパ化）／[FacetConfig+Decode.swift:65-108](Sources/FacetCore/FacetConfig+Decode.swift#L65-L108) `decodeDesktopSectionSections` に **desktop 内 unique 検証を追加**（※現状そこに unique チェックは無い＝新規追加）／[FacetConfig.swift:514](Sources/FacetCore/FacetConfig.swift#L514) `effectiveWorkspaceList` を `WorkspaceNaming.name` → `s.label`。
-- **B 命名廃止**（FacetCore）: [WorkspaceNaming.swift](Sources/FacetCore/WorkspaceNaming.swift) を**丸ごと削除**・[WorkspaceLabel.swift](Sources/FacetCore/WorkspaceLabel.swift) `workspaceShortLabel` は `name.isEmpty ? "WS<n>" : name`（"workspace " prefix strip は維持）。
-- **C メニュー統一**（FacetView）: [ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115) を `workspaceShortLabel(name: workspaces.first{$0.index==ws}?.name ?? "", idx: ws)` へ（tree/grid/rail 共通・lens と一致）。
-- **D CLI 動的追加**（FacetApp+Adapter+protocol）: `facet workspace --add LABEL`（[FacetApp+ClientCommands.swift:44](Sources/FacetApp/FacetApp+ClientCommands.swift#L44) `case "--add"` を値消費へ・**既存** `validateWorkspaceName`（:367）を再利用）→ `workspace-add:LABEL` → [NativeAdapter+DynamicWS.swift:29-42](Sources/FacetAdapterNative/NativeAdapter+DynamicWS.swift#L29-L42) `addWorkspace(label:)`（現状 `addWorkspace()` は無引数＝シグネチャ変更・emoji 命名除去）・`WindowBackend` 更新。
-- **E config.toml**: 全 `type="workspace"` セクションに `label` 追加・大コメントから「auto-named emoji 🐶🍎🍕 / you can't name from config」を除去 → 「label 必須・unique・全 type 共通」へ。
-- **F schema/Taplo**: [FacetConfig+Spec.swift](Sources/FacetCore/FacetConfig+Spec.swift) 更新 → `--emit-schema` で `config.schema.json` 再生成 + per-row 必須（上記 caveat 5）。
-- **G docs/memory**: [CLAUDE.md](CLAUDE.md) ルール反転・[glossary.md](docs/glossary.md)/[README.md](README.md)/[README.ja.md](README.ja.md)/[architecture.md](docs/architecture.md)・memory `[[facet-per-native-space-ws]]`。
-- **H テスト**: [WorkspaceNamingTests.swift](Tests/FacetCoreTests/WorkspaceNamingTests.swift) 削除・SectionDecodeTests（label 必須+carried・unique・CLIName-clean）・WorkspaceLabelTests・[SectionLensCatalogTests.swift:58-59](Tests/FacetAdapterNativeTests/SectionLensCatalogTests.swift#L58-L59) 更新。CLT は `swift test` 不可 → `swift build` を bar・テストは CI。
-
-### 将来フェーズ（記録のみ・本タスク非対象）
-**`facet section --focus LABEL`（理想形・要設計ラウンド）**: workspace/lens を “section” として統一アドレッシング。内部 `ActiveSection`/`activateSection` が既に統一済みゆえ CLI verb 追加 + 「label → `.workspace(n)`(switch) / `.lens(label)`(activate)」解決のみ。`facet workspace --focus NAME` / `facet lens NAME` の retire 是非・曖昧解消・DNC routing は別途壁打ち。Phase 1 の unique label がこの前提を満たす。
+### 実装アウトライン（relay 多段・各 PR で build/test green 維持）
+- **A Core: モデル/一意性** — `DesktopSection.parse`（lens [:183](Sources/FacetCore/DesktopSection.swift#L183)/unassigned [:207](Sources/FacetCore/DesktopSection.swift#L207) の label 必須 guard 除去・workspace [:202](Sources/FacetCore/DesktopSection.swift#L202) の label 破棄をやめ保持）で **全 type label optional**・lens `match` は必須維持／`decodeDesktopSectionSections`（[FacetConfig+Decode.swift:65](Sources/FacetCore/FacetConfig+Decode.swift#L65)）に desktop 内 **label unique（warn+先勝ち）** 新規追加／`effectiveWorkspaceList`（[FacetConfig.swift:514](Sources/FacetCore/FacetConfig.swift#L514)）を `s.label`（空可）へ。
+- **B Core: 命名廃止** — [WorkspaceNaming.swift](Sources/FacetCore/WorkspaceNaming.swift) 廃止、参照 3 箇所（[FacetConfig:514](Sources/FacetCore/FacetConfig.swift#L514)/[DynamicWS:37](Sources/FacetAdapterNative/NativeAdapter+DynamicWS.swift#L37)/[WorkspaceLabel:21](Sources/FacetCore/WorkspaceLabel.swift#L21)）を index ベースへ。`addWorkspace` emoji 命名除去（label 空で作成）。
+- **C CLI: `facet section --focus N|label`** — verb（FacetApp+ClientCommands）+ DNC post（FacetApp+Client）+ `section:` dispatch（Controller+CLIDispatch）。index→ActiveSection は `lastSections[N-1]` 解決。index/label 判定は `parseWorkspaceFocus`（[FacetApp+Client.swift:186](Sources/FacetApp/FacetApp+Client.swift#L186)）流用。`facet lens`/`workspace --focus` は当面残す。
+- **D 表示統一** — 新 `sectionDisplayLabel(index:label:)`（[WorkspaceLabel.swift](Sources/FacetCore/WorkspaceLabel.swift)）= `label.isEmpty ? "\(index)" : "\(index) (\(label))"`。`"WS\(ws+1)"` 除去・lens と共通化（[ViewContextMenu.swift:115](Sources/FacetView/ViewContextMenu.swift#L115)/:152）・tree([SidebarView.swift:623](Sources/FacetViewTree/SidebarView.swift#L623))/grid([GridView.swift:463](Sources/FacetViewGrid/GridView.swift#L463))/rail([RailHeader.swift:69](Sources/FacetViewRail/RailHeader.swift#L69))。
+- **E tree rename** — `SectionEditPanel`（TagEditPanel 同型）+ `enterSectionLabelManage` + 入口（キー/ヘッダメニュー）+ `WindowBackend.renameSectionLabel(index:to:)`（runtime・session-only or `facet section --rename`）。
+- **F config/schema/docs/test** — [config.toml](config.toml) を label optional 例へ・[FacetConfig+Spec.swift](Sources/FacetCore/FacetConfig+Spec.swift)→`--emit-schema`・CLAUDE.md ルール反転+glossary/README+memory・`WorkspaceNamingTests` 削除/`SectionDecodeTests`(optional+unique)/`WorkspaceLabelTests`(`sectionDisplayLabel`)。
 
 ### 検証
-`grep -rn "WorkspaceNaming" Sources` ＝ 0 件／`swift build`／実機で workspace ヘッダ右クリックが label 表示（lens と統一）。
+`grep -rn "WorkspaceNaming" Sources` = 0／`swift build`／`swift test`（ローカル Xcode 26.5）／実機 `./run.sh` で `facet section --focus 1` 移動・`index (label)` 表示・tree rename。
 
 ---
 
