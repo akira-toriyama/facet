@@ -17,9 +17,8 @@ native 実装、 外部依存なし。 レイヤー図は
 ## 何ができるか
 
 facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
-ワークスペースを view で見せる。 起動 view (tree / grid) は
-[`config.toml`](config.toml) の `default-view` で選び、 加えて
-オンデマンドの rail オーバービューがある:
+ワークスペースを view で見せる。 view は tree / grid / rail の
+いずれもオンデマンドで召喚する (`facet --view tree|grid|rail`):
 
 - **Tree** — 半透明・常時最前面のサイドバー。 各ワークスペースと
   その windows をツリー表示。 行クリックで focus、 window 行ドラッグで
@@ -318,7 +317,6 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
   `github-light` / `catppuccin-latte` / `system`、加えて `random`
   (起動/`--reload` ごとにランダム選択・`system` は除外)
-- `default-view` (トップレベル) — `tree` / `grid`
 - `[tree]` テーブル — `preview-mode` (`popover` / `mirror`) と、パネル
   geometry シード `pos-x` / `pos-y` / `width` / `height` (画面 pt・**左上
   原点**: 0,0 = メイン画面の左上・y は下方向・4つ全て必須)。毎起動 /

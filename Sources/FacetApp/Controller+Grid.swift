@@ -107,6 +107,12 @@ extension Controller {
 
         // -- Hide tree panel, remember pre-show state --
         treeWasHidden = userHidden
+        // The grid is taking over the screen, so cancel any pending
+        // loading-activate (a `--view tree --loading` armed it, then the
+        // user opened the grid inside the skeleton window) — else the
+        // tree's `apply` would enterActive + re-show the panel under the
+        // grid once the skeleton settles.
+        loadingWantsActive = false
         if panelHost.isVisible { panelHost.hide() }
 
         // -- Present + fade in --

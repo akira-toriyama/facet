@@ -7,21 +7,6 @@ final class FacetConfigTests: XCTestCase {
 
     // MARK: - effective accessors
 
-    func testEffectiveDefaultViewAcceptsTreeAndGrid() {
-        var c = FacetConfig()
-        c.defaultView = "tree"
-        XCTAssertEqual(c.effectiveDefaultView, "tree")
-        c.defaultView = "GRID"
-        XCTAssertEqual(c.effectiveDefaultView, "grid",
-                       "case-insensitive")
-        c.defaultView = "panel"
-        XCTAssertNil(c.effectiveDefaultView,
-                     "unknown name treated as agent-only mode")
-        c.defaultView = nil
-        XCTAssertNil(c.effectiveDefaultView,
-                     "missing key → agent-only mode")
-    }
-
     func testEffectiveRailEdgeClampsToBottom() {
         var c = FacetConfig()
         XCTAssertEqual(c.effectiveRailEdge, .bottom, "unset → bottom")
@@ -203,8 +188,6 @@ final class FacetConfigTests: XCTestCase {
 
     func testFromTOMLMapsAllRecognisedKeys() {
         let parsed = parseTOMLSubset("""
-            default-view = "tree"
-
             [theme]
             name = "dracula"
 
@@ -215,7 +198,6 @@ final class FacetConfigTests: XCTestCase {
             theme = "github-light"
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.effectiveDefaultView, "tree")
         XCTAssertEqual(c.effectiveTheme, "dracula")
         XCTAssertEqual(c.effectiveGridTheme, "github-light",
                        "per-view override parses")
@@ -254,7 +236,6 @@ final class FacetConfigTests: XCTestCase {
 
     func testEmptyTOMLYieldsAllDefaults() {
         let c = FacetConfig.from(toml: [:])
-        XCTAssertNil(c.effectiveDefaultView)
         XCTAssertEqual(c.effectiveTheme, "terminal")
         XCTAssertEqual(c.effectiveGridCols, 4)
     }
@@ -269,8 +250,8 @@ final class FacetConfigTests: XCTestCase {
             try? FileManager.default.removeItem(atPath: dir)
         }
         let c = FacetConfig.load(path: tmp)
-        XCTAssertNil(c.effectiveDefaultView,
-                     "missing config → agent-only mode by default")
+        XCTAssertEqual(c.effectiveTheme, "terminal",
+                       "missing config → default-init'd config")
     }
 
     // MARK: - unknownValueWarnings (silent-clamp surfacing)
@@ -288,7 +269,6 @@ final class FacetConfigTests: XCTestCase {
         c.treePreviewMode = "mirror"
         c.animationCurve = "spring"
         c.gridLabelPosition = "down"
-        c.defaultView = "grid"
         XCTAssertTrue(c.unknownValueWarnings().isEmpty,
                       "all recognised → no warnings")
     }
@@ -312,16 +292,6 @@ final class FacetConfigTests: XCTestCase {
         XCTAssertTrue(w[0].contains("layout"), "names the key")
         XCTAssertTrue(w[0].contains("tall"), "echoes the written value")
         XCTAssertTrue(w[0].contains("float"), "names the fallback")
-    }
-
-    func testUnknownViewWarnsAgentOnly() {
-        var c = FacetConfig()
-        c.defaultView = "panel"
-        let w = c.unknownValueWarnings()
-        XCTAssertEqual(w.count, 1)
-        XCTAssertTrue(w[0].contains("view"))
-        XCTAssertTrue(w[0].contains("agent-only"),
-                      "unknown view degrades to agent-only mode, not a value")
     }
 
     func testMultipleUnknownsEachWarnOnce() {

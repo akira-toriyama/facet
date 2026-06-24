@@ -56,7 +56,6 @@ public struct WorkspaceStatusEntry: Codable, Sendable, Equatable {
 public struct StatusSnapshot: Codable, Sendable, Equatable {
     public let backend: String           // e.g. "native"
     public let theme: String             // e.g. "terminal", "dracula"
-    public let defaultView: String?      // "tree" / "grid" / nil = agent
     public let workspaces: [WorkspaceStatusEntry]
     /// Names of currently *stashed* scratchpad shelves — hidden,
     /// off-screen windows summonable with `facet scratchpad
@@ -76,7 +75,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
 
     public init(backend: String,
                 theme: String,
-                defaultView: String?,
                 workspaces: [WorkspaceStatusEntry],
                 stashed: [String] = [],
                 tags: [String] = [],
@@ -84,7 +82,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
                 timestamp: String) {
         self.backend = backend
         self.theme = theme
-        self.defaultView = defaultView
         self.workspaces = workspaces
         self.stashed = stashed
         self.tags = tags
@@ -100,7 +97,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         backend = try c.decode(String.self, forKey: .backend)
         theme = try c.decode(String.self, forKey: .theme)
-        defaultView = try c.decodeIfPresent(String.self, forKey: .defaultView)
         workspaces = try c.decode([WorkspaceStatusEntry].self,
                                   forKey: .workspaces)
         stashed = try c.decodeIfPresent([String].self, forKey: .stashed) ?? []
@@ -149,7 +145,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
         var lines: [String] = []
         lines.append("backend: \(backend)")
         lines.append("theme: \(theme)")
-        lines.append("default-view: \(defaultView ?? "(agent)")")
         lines.append("workspaces:")
         if workspaces.isEmpty {
             lines.append("  (none)")

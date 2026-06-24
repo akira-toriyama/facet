@@ -7,8 +7,8 @@
 //
 //   2. **Server mode** — no CLI flags. Wake the AppKit run loop,
 //      load config, build the native adapter + Controller, and
-//      apply ``default-view`` from config (omitted → agent-only,
-//      no panel until the CLI asks).
+//      boot in agent-only mode (no panel until the CLI asks for a
+//      view).
 //
 // ``@main enum FacetApp`` (NOT top-level code in main.swift) so
 // XCTest can ``@testable import FacetApp`` once tests land without
@@ -290,13 +290,11 @@ enum FacetApp {
                                              only; edit config.toml
           facet --quit                       terminate the server
           facet --reload                     re-read config.toml + apply
-                                             (theme / preview-mode).
-                                             default-view needs a real
-                                             restart. The server also
-                                             auto-reloads on file edits
-                                             via FSEvents — this flag is
-                                             the explicit trigger for
-                                             scripts that want a
+                                             (theme / preview-mode). The
+                                             server also auto-reloads on
+                                             file edits via FSEvents — this
+                                             flag is the explicit trigger
+                                             for scripts that want a
                                              deterministic moment.
           facet --resign                     re-sign Facet.app with the
                                              persistent "facet Local
@@ -661,22 +659,17 @@ enum FacetApp {
         let controller = Controller(backend: backend, config: cfg)
         controller.start()
 
-        // Apply config's default-view. nil → agent-only mode (no
-        // panel, no overlay); facet stays running and waits for a
-        // ``facet --view tree`` / ``facet --view grid`` to bring
-        // something on screen. See memory config-default-behavior.
-        switch cfg.effectiveDefaultView {
-        case "grid":
-            controller.showGrid()
-        case "tree":
-            // Boot-show is passive (no enterActive): facet must not
-            // steal key/focus the instant it launches or restarts. A
-            // `--view tree` summon opens active; this is just the
-            // resting state the tree settles into after any interaction.
-            controller.setHidden(false)
-        default:
-            controller.setHidden(true)
-        }
+        // facet always boots in agent-only mode: no panel, no overlay,
+        // running and waiting for a ``facet --view tree|grid|rail`` (or a
+        // chord summon) to bring something on screen. There is no
+        // auto-open-at-launch config — a panel only ever appears via an
+        // explicit summon, which always enters keyboard nav, so "the tree
+        // is showing but the keyboard is dead" is now unrepresentable.
+        // (The old `default-view` key opened a panel at launch but could
+        // only do so PASSIVELY — facet must not steal focus the instant
+        // it starts — which made it keyboard-dead; removing it dissolves
+        // that whole class of bug. See memory config-default-behavior.)
+        controller.setHidden(true)
 
         app.run()
     }

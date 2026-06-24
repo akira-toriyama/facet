@@ -48,8 +48,17 @@
   - 副次効果: grid/rail のヘッダ掴みが旧 swap（窓移動）→ reorder に置換され、**ヘッダ掴み起因の「窓が動く」は解消**
   - 📌 **未対応（暗黙にしない）**: キーボード Space のヘッダ持ち上げは旧 swap のまま（マウス reorder を優先実装）。希望あれば reorder 化。
 
-- [ ] **4. tree のキーボード操作が効かない**
-  - tree がキーボード操作を受け付けない（再現条件は本人の補足待ち）
+- [ ] **4. tree のキーボード操作が効かない** 🔧 実装済・実機検証待ち
+  - **症状**: tree が ↑↓/Enter/`s`/`m` 等を受け付けない。※ `t` は別件（#319 で tag mode を純削除済＝設計通り。復活の是非は調査済み・別途）。
+  - **✅ ROOT CAUSE（2経路・コード確定＋敵対レビュー3レンズ通過）**:
+    1. **chord `--loading` 経路が enterActive を素通り**。chord は `facet --view=tree --loading=2000`（`~/.config/chord/config.toml`）で起動。`dispatchView` の `--loading` 分岐が `showLoading(); return` で [enterActive()](Sources/FacetApp/Controller+CLIDispatch.swift) に到達せず → panel が key にならず `handleKbKey` の `guard panel.isKeyWindow`（[Controller+ActiveMode.swift:70](Sources/FacetApp/Controller+ActiveMode.swift#L70)）が常に false → 全キー死。**#311（`--active` 廃止）が「`--view tree` は常に active」へ集約した際、loading 分岐だけ取りこぼした回帰**。
+    2. **boot `default-view = "tree"` が passive 固定**。#311 が「launch で focus を奪わない」ため意図的に passive show。passive panel は構造上 key になれず（`wantsKey=false`）keyboard 不可。
+  - **🔧 FIX（破壊的変更・トミー判断）**:
+    1. **Fix A: loading 解決後に自動 enterActive**。`loadingWantsActive` フラグを `showLoading` で arm し、`apply()` で skeleton→実コンテンツ遷移時（＝mac desktop 切替が落ち着いた瞬間）に1回だけ `enterActive`。**切替の最中は撃たない**（旧 `--active`+`--loading` の排他制約を「順序づけ」で解消）。grid takeover / user-hide / empty space で解除。[Controller.swift](Sources/FacetApp/Controller.swift) / [Controller+CLIDispatch.swift](Sources/FacetApp/Controller+CLIDispatch.swift) / [Controller+Grid.swift](Sources/FacetApp/Controller+Grid.swift)。
+    2. **`default-view` を廃止＋関連コード全削除**。boot は**常に agent-only**（panel を出さない）。view は summon した時のみ出現＝必ず active → 「**表示されてるのに keyboard 死**」を構造的に不能化。削除: `FacetConfig`(field/`effectiveDefaultView`/validation)・`FacetConfig+Spec`・`Status`(`defaultView` field)・`Controller`(caller)・`Main`(boot switch/help)・`config.toml`・`config.schema.json`(再生成)・docs(CLAUDE/README 日英/glossary/rail-design)・tests(FacetConfig/Status)。
+  - 敵対レビュー: **blocker 無し**。tail risk（切替の最中に旧 desktop の content-sig が揺れると skeleton が早期 clear → 旧 desktop で activate・**低**・skeleton 機構の pivot 前からの既存特性）は YAGNI で温存（実機で実際に出たら別 item＝R8 候補で ordinal-gate ハードニング）。
+  - `swift build` ✅（CLT なので test は CI）。実機検証＝トミー: chord ctrl+→/← で keyboard 復活／boot は agent-only（panel 出ない）。
+  - 📌 **user 対応**: `~/.config/facet/config.toml` の `default-view = "tree"` は不要に（unknown key は無視＝無害だが削除推奨）。
 
 - [ ] **5. grid のウィンドウが offscreen に居座る（park/restore リグレッション）**
   - **症状**: grid を開いて閉じた後、**アクティブ workspace の窓が画面の一部だけ（右 ~65%・左半分が黒）に居座り復帰しない**。再起動/手動操作まで戻らない。
@@ -92,6 +101,8 @@
 - [ ] **R3. キーボード Space のヘッダ持ち上げが旧 swap のまま**（reorder 化されていない）— マウスは reorder 済み。整合のため要追従。
 - [ ] **R4.（候補・温存）anchor park/restore が position-only**（size 非保存）— item 5 の根因の一部。union/park で size を失う構造的脆さ。
 - [ ] **R6.（候補・深い問い）lens の cross-workspace union-TILING は正しい意味か？** — R2 で float を除外した結果「inactive WS の float マッチ窓は lens に集約されない」トレードオフが出た。そもそも lens（＝可視性フィルタ／SQL VIEW）が**マッチ窓を再タイルして集約する**のが正しいのか、**可視性のみ（非マッチを park・マッチは元位置表示）**が筋ではないか。EX-1 の union-tile は post-pivot 追加分で、トミー曰く「あやしい」。要 0ベース再検討。
+- [ ] **R7. grid / rail のキーボードが怪しい**（トミー実機報告・**別タスク**）— item 4 の敵対レビューでは tree とは**独立経路**（`gridKbMonitor` / `railKbMonitor`・`panel.isKeyWindow` 非依存・`loadingWantsActive` と無関係）で本 bug の影響外と判定。実機で症状を切り分けてから起票。
+- [ ] **R8.（候補・温存）loading skeleton の早期 clear ハードニング** — item 4 Fix A の tail risk。skeleton clear を「content-sig 変化」ではなく「**mac desktop ordinal 変化**」に絞れば、切替の最中の旧 desktop sig 揺れによる早期 activate を構造的に封じられる。flicker mask 本体に触れる＝実機目視が要るので、実際に出てから着手。
 - [ ] **R5+. （未特定）** — トミーが挙げる他のバグ/欠落をここに追記して潰していく。
 
 ### 📌 R2 の副産物メモ（学び）

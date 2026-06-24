@@ -221,10 +221,13 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   The panel settles back to passive — the resting state — after
   any interaction. The ``Desktop N`` header right-click (Search /
   Manage tags → ``enterSearchFromMenu`` / ``enterTagManage``)
-  still self-activates. **Boot-time ``default-view = "tree"`` shows
-  PASSIVE** (no ``enterActive``) so facet never steals focus on
-  launch. Grid is always key/active by construction; the rail is
-  always passive. Memory: [[facet-same-app-window-focus-skylight]].
+  still self-activates. **facet boots agent-only** — no panel at
+  launch (the ``default-view`` config key was removed): a tree
+  appears only via an explicit summon (``--view tree`` / a chord
+  hotkey), which always ``enterActive``s, so facet never steals
+  focus at launch *and* a shown tree is never keyboard-dead. Grid
+  is always key/active by construction; the rail is always
+  passive. Memory: [[facet-same-app-window-focus-skylight]].
 - **``--edge top|bottom|left|right`` is a modifier too** (M9-3),
   only meaningful with ``--view rail`` (becomes ``view:rail+edge:NAME``
   on the DNC); ``--edge`` without ``--view rail`` is a loud

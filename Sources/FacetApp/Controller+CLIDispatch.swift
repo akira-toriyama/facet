@@ -311,6 +311,13 @@ extension Controller {
         if userHidden || isGridVisible { return }
         let ms = max(0, durationMs)
         Log.debug("controller: showLoading \(ms)ms (skeleton)")
+        // The chord `--view tree --loading` path opens the tree to mask a
+        // mac-desktop switch and used to leave it passive forever (the
+        // `--loading` early-return in `dispatchView` skips `enterActive`).
+        // Arm a deferred activate: `apply()` flips the tree into keyboard
+        // nav the moment the skeleton gives way to the new mac desktop's
+        // real content — after the switch settles, never during it.
+        loadingWantsActive = true
         sidebarView.frame.size.width = panelHost.userWidth
         sidebarView.showSkeleton()
         panelHost.layout(contentHeight: sidebarView.skeletonHeight,
