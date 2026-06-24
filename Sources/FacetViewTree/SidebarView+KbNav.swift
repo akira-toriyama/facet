@@ -237,10 +237,11 @@ extension SidebarView {
         // Keyboard path → type-to-filter menu (the tree panel keeps key, so
         // PopupMenu's key monitor receives the typed query).
         switch rows[i].kind {
-        case .header(_, let ws):
-            // A lens-section header has no layout to pick (PR6 adds a lens
-            // menu); only a workspace header opens the layout picker.
+        case .header(let g, let ws):
+            // Workspace header → full layout picker; lens header → the
+            // stateless-only union layout picker (R9 / Cluster B).
             if let ws { headerMenu(at: scr, workspaceIndex: ws, filterable: true) }
+            else { lensHeaderMenu(at: scr, group: g, filterable: true) }
         case .window(let g, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title,

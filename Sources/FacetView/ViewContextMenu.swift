@@ -123,6 +123,36 @@ public enum ViewContextMenu {
                 filterable: filterable, entries: entries)
     }
 
+    /// Layout-engine picker for a `type="lens"` section header — the lens
+    /// analog of `showLayout`. A lens union-tiles a CROSS-WORKSPACE set, which
+    /// only a STATELESS engine can represent (the stateful bsp / stack thread a
+    /// per-workspace tree and are rejected by the backend), so this offers a
+    /// strictly SMALLER set than the workspace picker: `layoutModes` filtered by
+    /// `LensLayout.isStateless`. Picking calls `onPick(mode)` — the view routes
+    /// it to the Controller, which activates the lens (if not already active) so
+    /// the backend's `setLayoutMode` lens branch targets THIS lens's union, then
+    /// sets the union layout. `current` marks the ✓ row when known (nil = no
+    /// checkmark; the active lens's live layout isn't threaded to the view yet).
+    public static func showLensLayout(
+        at scr: NSPoint,
+        backend: any WindowBackend,
+        lensLabel: String,
+        current: String? = nil,
+        palette: ResolvedPalette,
+        filterable: Bool = false,
+        onPick: @escaping (_ mode: String) -> Void
+    ) {
+        let modes = backend.layoutModes.filter { LensLayout.isStateless($0) }
+        let entries = modes.map { mode in
+            Entry(label: mode, icon: layoutModeIcon(mode),
+                  section: "Layout", checked: mode == current) {
+                onPick(mode)
+            }
+        }
+        present(at: scr, header: lensLabel, palette: palette,
+                filterable: filterable, entries: entries)
+    }
+
     /// Panel-level menu for the pinned "Desktop N" band — the third
     /// right-click surface (scope hierarchy: panel ▸ workspace ▸ window).
     /// Exposes the tree-wide keyboard modes that are otherwise reachable

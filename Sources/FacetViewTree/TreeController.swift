@@ -83,6 +83,15 @@ public protocol TreeController: AnyObject, Sendable {
     /// so the active lens's header lights up. No-op outside the section model.
     func toggleActiveLens(_ label: String)
 
+    /// Section/lens model: the user picked a union layout from a `type=lens`
+    /// header's `m` / right-click menu. ACTIVATE the lens `label` (if it isn't
+    /// already the active section) so the backend's `setLayoutMode` lens branch
+    /// targets THIS lens's cross-workspace union, then set `mode` as the union
+    /// layout (session-only, like the CLI). `mode` is always one the view took
+    /// from the stateless-only lens picker; the backend re-clamps regardless.
+    /// No-op outside the section model.
+    func setLensLayout(label: String, mode: String)
+
     /// Section-model apply/un-apply MOVE (PR8): un-apply the SOURCE section's
     /// additive tags, then apply the DEST section's ops (workspace dest → move
     /// by index; lens dest → addTag / setFloating / setSticky / setMaster).

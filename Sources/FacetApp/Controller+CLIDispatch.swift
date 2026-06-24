@@ -508,6 +508,23 @@ extension Controller {
         apply(lastWorkspaces)                // re-render: light up its header
     }
 
+    /// TreeController (R9): a union layout was picked from a `type=lens`
+    /// header's menu. ACTIVATE the lens first (if not already the active
+    /// section) so the adapter's `setLayoutMode` lens branch targets THIS
+    /// lens's cross-workspace union — `activateSection` and the layout command
+    /// both ride `runBackendCommand`'s serial `cliQueue`, so the activate lands
+    /// before the layout override (FIFO). `workspaceIndex` is ignored by the
+    /// lens branch; pass `0`. The backend re-clamps `mode` to a stateless engine
+    /// regardless of what the view sent.
+    func setLensLayout(label: String, mode: String) {
+        if currentActiveSection != .lens(label) {
+            activateSection(.lens(label), autoFocus: false)
+        }
+        runBackendCommand { bk in
+            bk.setLayoutMode(workspaceIndex: 0, mode: mode); return nil
+        }
+    }
+
     /// EX-1 Controller-side activation throughline: route to the validated
     /// per-kind entry — lens → `setActiveLens` (label lookup, idempotent guard,
     /// section-model gate); workspace → `dispatchWorkspace` (P6 range check).
