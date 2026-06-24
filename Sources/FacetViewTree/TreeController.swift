@@ -110,8 +110,10 @@ public protocol TreeController: AnyObject, Sendable {
     /// keyable `TagEditPanel` + the activation dance, computes the in-use tag
     /// union + this window's tags from the live snapshot, and maps the panel's
     /// toggle / create callbacks to `backend.addTag` / `removeTag`. `pid` /
-    /// `title` feed the panel header. No-op outside the section model.
-    func openTagEditor(pid: Int, windowID: WindowID, title: String)
+    /// `title` feed the panel header. `anchor` is the menu's screen point (the
+    /// row's level — the `m` height), so the panel opens where the context menu
+    /// was. No-op outside the section model.
+    func openTagEditor(pid: Int, windowID: WindowID, title: String, at anchor: CGPoint)
 
     /// Section drag-to-reorder (display-only, session-only): move the section
     /// `sectionID` to insertion BOUNDARY `boundary` (current display-list

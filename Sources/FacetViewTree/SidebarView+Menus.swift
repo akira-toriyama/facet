@@ -74,10 +74,11 @@ extension SidebarView {
         // the activation dance). Section model only — `applyAdd`'s pivot-era
         // "Add to <lens>" is retired in favour of editing the window's tags
         // directly.
-        let onEditTags: ((Int, WindowID, String) -> Void)? =
+        let onEditTags: ((Int, WindowID, String, NSPoint) -> Void)? =
             sectionModeActive
-            ? { [weak self] pid, id, title in
-                  self?.controller?.openTagEditor(pid: pid, windowID: id, title: title)
+            ? { [weak self] pid, id, title, anchor in
+                  self?.controller?.openTagEditor(pid: pid, windowID: id,
+                                                  title: title, at: anchor)
               }
             : nil
         ViewContextMenu.showWindow(

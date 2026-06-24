@@ -221,7 +221,7 @@ extension Controller {
     /// policy — `tagEditorSelfActivated` stays false), and `finishTagEditor`
     /// re-keys the tree on close. The `handlePanelKeyChange` guard keeps the
     /// tree's kbNav alive while the panel holds key.
-    func openTagEditor(pid: Int, windowID id: WindowID, title: String) {
+    func openTagEditor(pid: Int, windowID id: WindowID, title: String, at anchor: CGPoint) {
         guard config.isSectionModelActive(ordinal: currentMacDesktopOrdinal()),
               let (win, _) = findRenderedWindow(id) else { return }
         // The implicit tag vocabulary = the union of every rendered window's
@@ -230,7 +230,6 @@ extension Controller {
         var all = Set<String>()
         for ws in lastWorkspaces { for w in ws.windows { all.formUnion(w.tags) } }
         let bk = backend
-        let f = panelHost.panel.frame
         tagEditorSelfActivated = !sidebarView.kbNav
         if tagEditorSelfActivated {
             prevApp = NSWorkspace.shared.frontmostApplication
@@ -238,7 +237,7 @@ extension Controller {
             NSApp.activate(ignoringOtherApps: true)
         }
         TagEditPanel.shared.show(
-            at: NSPoint(x: f.maxX + 8, y: f.maxY),
+            at: anchor,
             appName: win.appName,
             title: title,
             pid: pid,

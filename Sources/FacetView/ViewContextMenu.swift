@@ -190,7 +190,7 @@ public enum ViewContextMenu {
         title: String,
         palette: ResolvedPalette,
         filterable: Bool = false,
-        onEditTags: ((_ pid: Int, _ id: WindowID, _ title: String) -> Void)? = nil,
+        onEditTags: ((_ pid: Int, _ id: WindowID, _ title: String, _ anchor: NSPoint) -> Void)? = nil,
         runOps: @escaping (_ ops: [WindowAction], _ window: Window, _ ws: Int) -> Void
     ) {
         let wsModel = workspaces.first { $0.index == ws }
@@ -230,8 +230,10 @@ public enum ViewContextMenu {
         // apply-set, conflating tags with lens membership. Its own "Tags"
         // section (→ secondary tint). Grid / rail pass nil → no item appears.
         if let onEditTags {
-            entries.append(Entry(label: "Tag…", icon: "SF:tag", section: "Tags") {
-                onEditTags(pid, id, title)
+            // Open the tag panel at the SAME anchor the menu used (`scr` =
+            // level with the row, the `m` height), not beside the tree top.
+            entries.append(Entry(label: "Tag", icon: "SF:tag", section: "Tags") {
+                onEditTags(pid, id, title, scr)
             })
         }
         entries += menu.filter { $0.section != "Layout" }.map(makeEntry)
