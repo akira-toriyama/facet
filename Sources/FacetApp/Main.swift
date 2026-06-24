@@ -39,6 +39,7 @@
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
 //   Lens      : facet lens NAME (activate a type="lens" section) / --clear
+//   Section   : facet section --focus N|LABEL (index|label, workspace or lens)
 //
 // ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
 // every view op must specify NAME explicitly. Shell aliases handle
@@ -180,6 +181,10 @@ enum FacetApp {
                                              (an unknown label is rejected)
           facet lens --clear                 deactivate the active lens →
                                              back to the active workspace
+          facet section --focus N            focus the Nth section in tree
+                                             order (1-based; workspace or lens)
+          facet section --focus LABEL        focus the section labelled LABEL
+                                             (numeric = index; else label)
 
         WINDOW                               (focused window)
           facet window --move-to N           move it to workspace N
@@ -475,6 +480,12 @@ enum FacetApp {
         // section labelled NAME, `facet lens --clear` deactivates it.
         if argv.first == "lens" {
             runLensCommand(Array(argv.dropFirst()))
+        }
+        // `facet section <flag>` — address a section (workspace OR lens) by its
+        // 1-based tree-order index or its label: `facet section --focus N|LABEL`.
+        // The unified handle over `workspace --focus` / `lens NAME`.
+        if argv.first == "section" {
+            runSectionCommand(Array(argv.dropFirst()))
         }
         // Read-only query sub-command. Plain noun (no `--`) because it
         // returns data rather than triggering a verb. (#227: renamed

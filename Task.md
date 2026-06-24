@@ -118,6 +118,10 @@ section ヘッダの右クリック/`m` が workspace＝「WS1」ハードコー
 - ⚠️ **index は tree 表示順（reorder override 反映）**＝Controller `lastSections`（main）。`--focus N` 解決は main hop で読む（or config 順許容を要判断）。
 
 ### 実装アウトライン（relay 多段・各 PR で build/test green 維持）
+
+> 進捗: **C ✅着手済**（`facet section --focus N|label`・追加的・#337）。残り A/B/D/E/F は破壊的ゆえ段階投入。
+
+
 - **A Core: モデル/一意性** — `DesktopSection.parse`（lens [:183](Sources/FacetCore/DesktopSection.swift#L183)/unassigned [:207](Sources/FacetCore/DesktopSection.swift#L207) の label 必須 guard 除去・workspace [:202](Sources/FacetCore/DesktopSection.swift#L202) の label 破棄をやめ保持）で **全 type label optional**・lens `match` は必須維持／`decodeDesktopSectionSections`（[FacetConfig+Decode.swift:65](Sources/FacetCore/FacetConfig+Decode.swift#L65)）に desktop 内 **label unique（warn+先勝ち）** 新規追加／`effectiveWorkspaceList`（[FacetConfig.swift:514](Sources/FacetCore/FacetConfig.swift#L514)）を `s.label`（空可）へ。
 - **B Core: 命名廃止** — [WorkspaceNaming.swift](Sources/FacetCore/WorkspaceNaming.swift) 廃止、参照 3 箇所（[FacetConfig:514](Sources/FacetCore/FacetConfig.swift#L514)/[DynamicWS:37](Sources/FacetAdapterNative/NativeAdapter+DynamicWS.swift#L37)/[WorkspaceLabel:21](Sources/FacetCore/WorkspaceLabel.swift#L21)）を index ベースへ。`addWorkspace` emoji 命名除去（label 空で作成）。
 - **C CLI: `facet section --focus N|label`** — verb（FacetApp+ClientCommands）+ DNC post（FacetApp+Client）+ `section:` dispatch（Controller+CLIDispatch）。index→ActiveSection は `lastSections[N-1]` 解決。index/label 判定は `parseWorkspaceFocus`（[FacetApp+Client.swift:186](Sources/FacetApp/FacetApp+Client.swift#L186)）流用。`facet lens`/`workspace --focus` は当面残す。
