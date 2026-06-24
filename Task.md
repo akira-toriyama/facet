@@ -11,6 +11,66 @@
 > - **各 item のルーティン**: ① 修正 → ② `swift build` → ③ Task.md 更新 →
 >   ④ commit（stack・**push は許可があるまでしない**）→ ⑤ **`./run.sh` 必須**（実機反映）。
 
+---
+
+## 🔴 優先度【高】macOS 26-only 化 + ローカルテスト環境（2026-06-24 追加・計画済/実装未）
+
+> トミー要望（2026-06-24）: ①最小対応 OS を **macOS 26 以降のみ** に引き上げ、②ローカルで
+> `swift test` を回せる環境を整える。
+> **隔離が前提**: 別セッションが `feat/window-tag-edit`（R10）で作業中 → この working tree を
+> 汚さず **main 起点の worktree** で進める。実装は別セッション。
+
+### 隔離戦略（最優先・全作業の前提）
+- `git worktree add ../facet-macos26 -b feat/macos-26-only origin/main` で隔離。別セッションの
+  checkout（未コミット `Controller.swift` 他7 + 未追跡 `TagEditPanel.swift`）は一切触らない。
+- **`xcode-select -s` 禁止**（global＝別セッションの toolchain も切替わる）。テストは
+  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` でコマンド単位に Xcode toolchain を借りる。
+- マージ時 `Controller.swift`/docs で R10 と衝突しうる → PR マージ時に通常解決（開発時の非干渉は worktree が担保）。
+
+### A. macOS 26-only 化（1 PR・worktree 内）
+硬い version 分岐は macOS 13↔14 境界のみ。`#available(macOS 14.0,*)` 4箇所＋`@available`1箇所を全除去:
+- [ ] `Package.swift` L49 `platforms: [.macOS(.v13)]` → `.macOS("26.0")`（文字列形＝Swift 6.1.2
+  toolchain に `.v26` enum が無い可能性。`.v26` が通ればそれでも可）
+- [ ] スライド: [NativeAdapter+Slide.swift](Sources/FacetAdapterNative/NativeAdapter+Slide.swift)
+  `stopSlideClock`/`startSlideDriver` の Timer fallback 削除・CADisplayLink 一本化。
+  [NativeAdapter.swift](Sources/FacetAdapterNative/NativeAdapter.swift) L218 `slideTimer` 削除・
+  L245 `displayLink: AnyObject?`→`CADisplayLink?`。`SlideTicker` のコメント更新。
+- [ ] focus: [AXFocus.swift](Sources/FacetAccessibility/AXFocus.swift) `activateFront` L223-232 の
+  else（macOS 13 `activateIgnoringOtherApps`）削除・14+ 本体を無条件化。
+- [ ] capture: [SCKWindowCapture.swift](Sources/FacetCapture/SCKWindowCapture.swift) L19
+  `@available(macOS 14.0,*)` 削除。[Controller.swift](Sources/FacetApp/Controller.swift) L299 無条件化。
+  **`winPreview` 非 Optional 化（負債ゼロ・推奨）**: Controller.swift L194 + nil ガード除去
+  ([Controller+Overview.swift](Sources/FacetApp/Controller+Overview.swift) L126/144・
+  [Controller+Preview.swift](Sources/FacetApp/Controller+Preview.swift) L25/43/89・Controller.swift L819/993)。
+- [ ] docs 同期: [CLAUDE.md](CLAUDE.md) L25 `macOS 13+`→`macOS 26+`／[README.md](README.md)+
+  [README.ja.md](README.ja.md)（バッジ＋window preview `(macOS 14+)` 注記 L233/281/696・L218/263/655）／
+  [architecture.md](docs/architecture.md) L42・[references.md](docs/references.md) L166・
+  [glossary.md](docs/glossary.md) L93/125 の capture 注記。`docs/superpowers/plans/*` は歴史記録ゆえ触らない。
+
+**事実**: ローカルは CLT/SDK 15.5/Xcode 無し。`swiftc -target …macosx26.0` は exit 0 ＝ deployment
+target 26 でも `swift build` はローカルで通る（macOS14 API は SDK 15.5 に存在・gate 除去は安全）。
+private SLS/`_AXUIElementGetWindow` は dlsym graceful degradation ＝挙動不変。
+
+### B. ローカルテスト環境
+`swift test` には XCTest＝**Xcode 本体が必要**（CLT に XCTest 無し）。テストは充実（5 target・約915
+メソッド・大半 FacetCore/AdapterNative 純ロジック）:
+- [ ] **Xcode（26系）導入＝トミー手作業**（~15GB・CLT と共存）。副次効果: macOS 26 SDK 同梱→A の
+  26-only ビルドを正規 SDK で検証可。
+- [ ] 導入後（クロード実行）: `DEVELOPER_DIR=… swift test` で main baseline → worktree(A 後) 緑確認。
+  CLAUDE.md の「test は CI 任せ」記述に「Xcode あれば `DEVELOPER_DIR=… swift test` で local 可」追記（任意）。
+- A（CLT build で先行可）と B（Xcode 待ち）は独立。Xcode が入り次第 `swift test` 緑を確認。
+
+### 検証
+worktree で `swift build`（必須）／`grep -rn "available(macOS" Sources/` が 0 件／
+`DEVELOPER_DIR=… swift test` 緑／`./run.sh` で実機(26.5.1) スライド・preview・別アプリ focus 目視／
+別セッション working tree 無変更を確認。
+
+### Status
+- 🗓️ **計画済み・実装未着手**（2026-06-24）。別セッション R10 進行中ゆえ実装は別セッションで
+  worktree 隔離。push はトミー OK 後。
+
+---
+
 ## 修正依頼一覧
 
 - [x] **1. workspace emoji の形式** ✅ 完了（caveat ゼロ・退行ゼロで再実装）
@@ -103,8 +163,8 @@
 - [ ] **R6.（候補・深い問い）lens の cross-workspace union-TILING は正しい意味か？** — R2 で float を除外した結果「inactive WS の float マッチ窓は lens に集約されない」トレードオフが出た。そもそも lens（＝可視性フィルタ／SQL VIEW）が**マッチ窓を再タイルして集約する**のが正しいのか、**可視性のみ（非マッチを park・マッチは元位置表示）**が筋ではないか。EX-1 の union-tile は post-pivot 追加分で、トミー曰く「あやしい」。要 0ベース再検討。
 - [ ] **R7. grid / rail のキーボードが怪しい**（トミー実機報告・**別タスク**）— item 4 の敵対レビューでは tree とは**独立経路**（`gridKbMonitor` / `railKbMonitor`・`panel.isKeyWindow` 非依存・`loadingWantsActive` と無関係）で本 bug の影響外と判定。実機で症状を切り分けてから起票。
 - [ ] **R8.（候補・温存）loading skeleton の早期 clear ハードニング** — item 4 Fix A の tail risk。skeleton clear を「content-sig 変化」ではなく「**mac desktop ordinal 変化**」に絞れば、切替の最中の旧 desktop sig 揺れによる早期 activate を構造的に封じられる。flicker mask 本体に触れる＝実機目視が要るので、実際に出てから着手。
-- [x] **R9. lens header にコンテキストメニュー（`m`/右クリック）** 🔧 実装済・**実機メニュー目視待ち（トミー）**（branch `feat/lens-header-menu`・未 commit→commit 予定）。workspace header=全 layout / **lens header=stateless のみ**（`LensLayout.isStateless`・bsp/stack/float 除外＝トミーの「workspace の方が多い」と一致）。選択→`controller.setLensLayout`＝lens を（未 active なら）activate してから union layout セット（cliQueue FIFO で activate→layout 保証）。実装: [ViewContextMenu.showLensLayout](Sources/FacetView/ViewContextMenu.swift) / [TreeController.setLensLayout](Sources/FacetViewTree/TreeController.swift) / [Controller+CLIDispatch.swift](Sources/FacetApp/Controller+CLIDispatch.swift) / dispatch [SidebarView+Menus.swift](Sources/FacetViewTree/SidebarView+Menus.swift)+[SidebarView+KbNav.swift](Sources/FacetViewTree/SidebarView+KbNav.swift)。`swift build`✅ ／ `./run.sh` 起動＋tree 召喚クラッシュ無し✅。📌 **未対応（暗黙にしない）**: ✓（現在 layout 表示）は v1 省略＝active lens の layout を thread-safe に view へ渡す配線が要る小 follow-up（catalog を main から読まない P6 規則のため）。= Phase 9 **Cluster B**。
-- [ ] **R10. 窓のタグ操作 GUI が欠落（"Add to lens" が代替になっていない）** — pivot 前の per-window タグ 付与/外す/リネーム を GUI で。backend API（`addTagToWindow`/`removeTagFromWindow`/`toggleTagOnWindow`/`retagWindow`）＋CLI（`facet window --tag/--untag/--toggle-tag/--retag`）は**現存**、GUI 未露出。#319 削除の `TagEditPanel` WINDOW モード復活が筋。= Phase 9 **Cluster A**（本命）。
+- [x] **R9. lens header にコンテキストメニュー（`m`/右クリック）** ✅ **完了（PR #326・main `534201c` マージ済・実機メニュー目視 OK＝トミー確認済）**。workspace header=全 layout / **lens header=stateless のみ**（`LensLayout.isStateless`・bsp/stack/float 除外＝トミーの「workspace の方が多い」と一致）。選択→`controller.setLensLayout`＝lens を（未 active なら）activate してから union layout セット（cliQueue FIFO で activate→layout 保証）。実装: [ViewContextMenu.showLensLayout](Sources/FacetView/ViewContextMenu.swift) / [TreeController.setLensLayout](Sources/FacetViewTree/TreeController.swift) / [Controller+CLIDispatch.swift](Sources/FacetApp/Controller+CLIDispatch.swift) / dispatch [SidebarView+Menus.swift](Sources/FacetViewTree/SidebarView+Menus.swift)+[SidebarView+KbNav.swift](Sources/FacetViewTree/SidebarView+KbNav.swift)。`swift build`✅ ／ `./run.sh` 起動＋tree 召喚クラッシュ無し✅。📌 **未対応（暗黙にしない）**: ✓（現在 layout 表示）は v1 省略＝active lens の layout を thread-safe に view へ渡す配線が要る follow-up（catalog を main から読まない P6 規則のため）。**調査結果: active lens の layout は現状 main 側/Status/snapshot に出ていない（grid/rail も）→ adapter(cliQueue)→main へ通す配線が必要＝想定より小さくないので defer（Task.md でトラッキング継続）**。= Phase 9 **Cluster B**。
+- [x] **R10. 窓のタグ操作 GUI（"Add to lens" → "Tag" チェックリスト）** ✅ **完了（実機確認 OK＝トミー・branch `feat/window-tag-edit`・PR 作成→マージ）**。#319 削除の `TagEditPanel` **WINDOW モードのみ**を pre-pivot clone から復元し `Set<String>` 適応（[TagEditPanel.swift](Sources/FacetView/TagEditPanel.swift) 新規）。窓行メニュー: "Add to ＜Lens＞" 撤去 → **"Tag"**（[ViewContextMenu.swift](Sources/FacetView/ViewContextMenu.swift)）→ `TreeController.openTagEditor`（[Controller+ActiveMode.swift](Sources/FacetApp/Controller+ActiveMode.swift)）。トグル→`backend.addTag`/`removeTag`、"+Create"→addTag。allTags は snapshot から view 側 union（backend 呼び出し無し）。key/IME パネル＋`handlePanelKeyChange` ガード＋`finishTagEditor` 再 key（pre-pivot と同型）。`applyAdd`（右クリック ADD）撤去（drag の `applyMove` は無傷）。**UI 修正（実機 FB）: パネルはメニューと同じアンカー（行の高さ＝`m` 位置）で開く・ラベルは "Tag"（… 無し）**。`swift build`✅ `./run.sh`✅ 実機 OK。**rename/delete は本 PR 対象外＝C（global `t`）へ**（per-window=付与/外す・tag 自体=vocabulary 分離）。= Phase 9 **Cluster A**（本命）。
 - [ ] **R11. global `t` タグ管理モード削除（#319）＋ tree から match/apply 編集が無い** — `t` vocab モード復活（C1）＋ 実行時 match/apply 編集・type=workspace の match/apply（C2・要設計・pivot 中核に触れる）。= Phase 9 **Cluster C**。
 - [ ] **R5+. （未特定）** — トミーが挙げる他のバグ/欠落をここに追記して潰していく。
 
@@ -154,7 +214,17 @@
 3. ⏳ **rename スコープ（per-window retag / global vocabulary）は A 着手時に確定**（未確定で残す）。
 4. ⏳ **「workspace の match/apply」(C2) はまだ固めない** → C 着手時に専用ラウンドで相談（今は intake 記録のみ）。
 
-### 🚧 進行: **B（R9）= lens header メニュー** 🔧 実装済・実機目視待ち → 次は **A（R10）= 窓のタグ編集**
+### 🚧 進行: ✅ **B（R9）#326 merged** → ✅ **A（R10）実機 OK・マージ**（branch `feat/window-tag-edit`）→ 次は要相談（C / R3 / B✓ / macOS26 など）
+
+**A 実装計画（pre-pivot 忠実 + 現モデル適応）**:
+- **窓行メニューの "Add to ＜Lens＞" を廃止**（トミー確定）し、**"Tag…"** を追加 → per-window タグ**チェックリストのキーパネル**を開く。
+- パネル = #319 削除の `TagEditPanel` **WINDOW モード**を pre-pivot clone（`../facet-prepivot` `130cf93`）から復元し、Set<String> モデルへ適応:
+  - 利用可能タグ = snapshot（lastSections/lastWorkspaces の `window.tags`）の和集合＝**view 側で算出**（削除済 `definedTagNames` 不要）。
+  - チェック = その窓の tags。トグル → backend `addTag(_:toWindow:)`/`removeTag(_:fromWindow:)`（**現存**）。
+  - "+ Create" 行 → 新規タグ付与（auto-vivify）。
+  - キー入力可能パネル（KeyablePanel・text field・activation-policy dance）— B と同じ流儀で tree パネル右隣に配置。
+- **rename スコープの決定（トミー flagged）**: **rename/delete は per-window でなく vocabulary 操作 → C（global `t` モード）へ**。pre-pivot でも rename/delete は MANAGE モード（窓非依存）にあり、WINDOW モードは toggle+create のみ。A は **付与/外す/作成**に専念。← この方針で進める（異論あれば C で調整）。
+- 段階: A-1 パネル復元+適応 → A-2 メニュー配線（"Tag…" 追加・"Add to lens" 撤去）→ build → run → 実機目視（トミー）→ PR。
 
 ---
 

@@ -22,9 +22,9 @@ extension SidebarView {
             // stateless-only union layout picker (R9 / Cluster B).
             if let ws { headerMenu(at: scr, workspaceIndex: ws) }
             else { lensHeaderMenu(at: scr, group: g) }
-        case .window(let g, let ws, let pid, let id, let title):
+        case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
-                           pid: pid, windowID: id, title: title, currentGroup: g)
+                           pid: pid, windowID: id, title: title)
         default:
             break
         }
@@ -68,27 +68,25 @@ extension SidebarView {
                                 pid: Int,
                                 windowID id: WindowID,
                                 title: String,
-                                filterable: Bool = false,
-                                currentGroup: Int? = nil) {
-        // Section model (PR8): "Add to ▸ <lens>" — apply-only ADD (multi-match).
-        // Lens sections only, excluding the row's OWN render group; the
-        // Controller's ApplyResolver no-ops a drop-inert / non-satisfying lens.
-        let lensTargets: [(label: String, sectionID: String)] =
+                                filterable: Bool = false) {
+        // Per-window tag editing (R10): the "Tag…" item opens the tag
+        // checklist panel via the controller (which owns the keyable panel +
+        // the activation dance). Section model only — `applyAdd`'s pivot-era
+        // "Add to <lens>" is retired in favour of editing the window's tags
+        // directly.
+        let onEditTags: ((Int, WindowID, String, NSPoint) -> Void)? =
             sectionModeActive
-            ? lastSections.enumerated().compactMap { (g, sec) in
-                  guard sec.sectionType == .lens, g != currentGroup else { return nil }
-                  return (sec.label, sec.id)
+            ? { [weak self] pid, id, title, anchor in
+                  self?.controller?.openTagEditor(pid: pid, windowID: id,
+                                                  title: title, at: anchor)
               }
-            : []
+            : nil
         ViewContextMenu.showWindow(
             at: scr, backend: backend, workspaceIndex: ws,
             workspaces: lastWorkspaces, pid: pid, windowID: id, title: title,
             palette: pal,
             filterable: filterable,
-            addToLensTargets: lensTargets,
-            onApplyAdd: { [weak self] sid in
-                self?.controller?.applyAdd(windowID: id, toSectionID: sid)
-            }
+            onEditTags: onEditTags
         ) { [weak self] ops, window, ws in
             self?.controller?.runWindowOps(ops, on: window, workspaceIndex: ws)
         }

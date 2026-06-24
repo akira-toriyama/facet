@@ -209,4 +209,71 @@ extension Controller {
             activateSection(.lens(label), autoFocus: false)   // tree keeps key focus
         }
     }
+
+    /// TreeController (R10): open the per-window tag checklist for `windowID`
+    /// (the ops-menu "Tag…" item). Everything the panel needs is derived from
+    /// the live snapshot on main — `allTags` is the union of every window's
+    /// tags (the implicit vocabulary; no backend call), `checkedTags` is this
+    /// window's own tags, and the header reads the window's app name. Toggling
+    /// maps to `backend.addTag` / `removeTag`; "+ Create" auto-vivifies via
+    /// addTag. The panel is a `KeyablePanel` so it takes key + IME: the tree is
+    /// already in keyboard nav when shown (so we don't flip the activation
+    /// policy — `tagEditorSelfActivated` stays false), and `finishTagEditor`
+    /// re-keys the tree on close. The `handlePanelKeyChange` guard keeps the
+    /// tree's kbNav alive while the panel holds key.
+    func openTagEditor(pid: Int, windowID id: WindowID, title: String, at anchor: CGPoint) {
+        guard config.isSectionModelActive(ordinal: currentMacDesktopOrdinal()),
+              let (win, _) = findRenderedWindow(id) else { return }
+        // The implicit tag vocabulary = the union of every rendered window's
+        // tags. `Window.tags` is already in the snapshot, so this is a pure
+        // main-side read (no `definedTagNames()` round-trip).
+        var all = Set<String>()
+        for ws in lastWorkspaces { for w in ws.windows { all.formUnion(w.tags) } }
+        let bk = backend
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        TagEditPanel.shared.show(
+            at: anchor,
+            appName: win.appName,
+            title: title,
+            pid: pid,
+            allTags: all.sorted(),
+            checkedTags: Set(win.tags),
+            palette: treePaletteBox.pal,
+            onToggle: { [weak self] name, on in
+                cliQueue.async {
+                    if on { _ = bk.addTag(name, toWindow: id) }
+                    else  { _ = bk.removeTag(name, fromWindow: id) }
+                }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onCreate: { [weak self] name in
+                // addTag(_:toWindow:) auto-vivifies, so create == add.
+                cliQueue.async { _ = bk.addTag(name, toWindow: id) }
+                self?.scheduleReconcile(after: 0.05)
+            },
+            onClose: { [weak self] in self?.finishTagEditor() }
+        )
+    }
+
+    /// Called once on EVERY tag-panel close path (Esc / outside-click / click
+    /// elsewhere). Undoes exactly what `openTagEditor` did: if it flipped to
+    /// `.regular`, revert to `.accessory` and hand focus back to the previous
+    /// app; otherwise re-key the tree panel so keyboard nav resumes (the tree
+    /// resigned key when the panel took it, but the `handlePanelKeyChange`
+    /// guard kept kbNav alive).
+    func finishTagEditor() {
+        if tagEditorSelfActivated {
+            NSApp.setActivationPolicy(.accessory)
+            if let p = prevApp { p.activate() }
+            prevApp = nil
+        } else {
+            panelHost.makeKey()
+        }
+        tagEditorSelfActivated = false
+    }
 }
