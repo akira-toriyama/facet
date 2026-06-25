@@ -12,11 +12,13 @@
 // (the `type` discriminator), kept strictly apart (see docs/glossary.md):
 //
 //   • type = "workspace" — a permanent SPATIAL substrate (the tiling axis,
-//     the grid/rail cell). AUTO-NAMED (the emoji pool, PR4): the user
-//     neither names nor filters it — its `match` is the implicit
-//     `workspace=<this>` and its `apply` the implicit `setWorkspace(<this>)`,
-//     both resolved internally. Carries only an optional `layout` seed
-//     (per-section, runtime-changeable) + an optional `apply` seed.
+//     the grid/rail cell). The user does NOT filter it — its `match` is the
+//     implicit `workspace=<this>` and its `apply` the implicit
+//     `setWorkspace(<this>)`, both resolved internally — but MAY name it with
+//     an optional `label` (§A reversed the always-auto-named rule); an empty
+//     label falls back to the emoji auto-name (`WorkspaceNaming`). Carries an
+//     optional `layout` seed (per-section, runtime-changeable) + optional
+//     `apply` seed.
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
 //     optional `apply` (the inverse, for drops). Activated at runtime with
@@ -30,7 +32,8 @@
 //     `match` is stored VERBATIM and compiled by the consumer, so a malformed
 //     expression is rejected loud + non-fatal at projection time, never at
 //     config load (parse-only stays total).
-//   • type = "unassigned" — the lost-and-found safety net: `label` only.
+//   • type = "unassigned" — the lost-and-found safety net: an optional
+//     `label` only (§A; no `match` / `apply`).
 //     (Deferred: the projection / tree branch is not built yet — under the
 //     current catalog every managed window has a workspace, so an
 //     AND-defined unassigned set is always empty. The TYPE is kept so the
@@ -129,8 +132,10 @@ public extension ApplyOp {
 public struct DesktopSection: Sendable, Equatable {
     /// The section kind — drives the field rules + the projection semantics.
     public let type: SectionType
-    /// Display header. Always present for `lens` / `unassigned`; `""` for a
-    /// `workspace` section (auto-named — the label is resolved internally).
+    /// Display header — an **optional** name on every `type` (§A): `""` when
+    /// unset. A non-empty workspace label names the workspace from config (the
+    /// old "always auto-named" rule was reversed); an empty one falls back to
+    /// the auto-name. lens / unassigned headers are likewise optional now.
     public let label: String
     /// Raw `facet filter` WHERE-clause — compiled by the consumer, not here.
     /// `""` for `workspace` (implicit `workspace=<this>`) / `unassigned`.
@@ -158,9 +163,11 @@ public struct DesktopSection: Sendable, Equatable {
     ///
     /// `type` is REQUIRED and drives the per-type field rules. An absent or
     /// unrecognised `type` drops the row (`note` set, `section` nil) — never
-    /// a silent clamp (which would mis-route a window's facets). A
-    /// `workspace` section is auto-named, so any authored `label`/`match` is
-    /// ignored with a caveat note (the section still decodes).
+    /// a silent clamp (which would mis-route a window's facets). `label` is
+    /// OPTIONAL on every type (§A); `lens` still REQUIRES a non-empty `match`.
+    /// A `workspace` section's `match` is implicit (`workspace=<this>`), so an
+    /// authored `match` is ignored with a caveat note (the section still
+    /// decodes); its `label`, if set, names the workspace.
     static func parse(fromTOMLRow t: [String: TOMLValue])
         -> (section: DesktopSection?, note: String?)
     {
@@ -180,11 +187,9 @@ public struct DesktopSection: Sendable, Equatable {
 
         switch type {
         case .lens:
-            guard !label.isEmpty else {
-                return (nil, "lens section needs a non-empty `label`")
-            }
+            // §A: `label` is optional (display-only); `match` stays REQUIRED.
             guard !match.isEmpty else {
-                return (nil, "lens section \"\(label)\" needs a non-empty `match`")
+                return (nil, "lens section needs a non-empty `match`")
             }
             var lensLayout: String? = nil
             if case .string(let l)? = t["layout"], !l.isEmpty { lensLayout = l }
@@ -195,18 +200,18 @@ public struct DesktopSection: Sendable, Equatable {
         case .workspace:
             var layout: String? = nil
             if case .string(let l)? = t["layout"], !l.isEmpty { layout = l }
-            // Auto-named + implicit match: authored label/match are ignored.
-            let caveat = (!label.isEmpty || !match.isEmpty)
-                ? "workspace section is auto-named — ignoring `label` / `match`"
+            // §A: `label` (if set) names the workspace from config; the `match`
+            // is implicit (`workspace=<this>`), so an authored one is ignored
+            // with a caveat. The section still decodes either way.
+            let caveat = !match.isEmpty
+                ? "workspace section's `match` is implicit — ignoring authored `match`"
                 : nil
-            return (DesktopSection(type: .workspace, label: "", match: "",
+            return (DesktopSection(type: .workspace, label: label, match: "",
                                    apply: ApplyOp.list(from: t["apply"]),
                                    layout: layout), caveat)
 
         case .unassigned:
-            guard !label.isEmpty else {
-                return (nil, "unassigned section needs a non-empty `label`")
-            }
+            // §A: `label` is optional (display-only).
             return (DesktopSection(type: .unassigned, label: label), nil)
         }
     }

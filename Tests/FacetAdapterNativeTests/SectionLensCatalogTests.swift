@@ -54,9 +54,9 @@ final class SectionLensCatalogTests: XCTestCase {
         // First WORKSPACE section is active (1-based), not the leading lens.
         XCTAssertEqual(c.activeSection, .workspace(1))
         XCTAssertNil(c.activeSectionLens)                    // never a lens at startup
-        // Auto-named by index (config can't name a workspace) — pins order.
-        XCTAssertEqual(c.workspaceNames[0], WorkspaceNaming.name(forIndex: 0))
-        XCTAssertEqual(c.workspaceNames[1], WorkspaceNaming.name(forIndex: 1))
+        // §A: a non-empty workspace `label` names it from config — pins order.
+        XCTAssertEqual(c.workspaceNames[0], "Dev")
+        XCTAssertEqual(c.workspaceNames[1], "Side")
     }
 
     func testActiveSectionReflectsActiveLens() {

@@ -104,6 +104,29 @@ extension FacetConfig {
                 out[ordinal, default: []].append(contentsOf: sections)
             }
         }
+        // §A: within one mac desktop a NON-EMPTY label must be unique (it is a
+        // stable addressing handle: `facet section --focus "label"`). Duplicates
+        // are loud + first-wins — drop the later section so the layout isn't
+        // broken; EMPTY labels may repeat freely. Runs AFTER the merge above so
+        // two header spellings folding into one ordinal (`desktop.1` vs
+        // `desktop.01`) are de-duped together. Decode-time drop keeps the
+        // projection's positional lens ids (`section:<declOrder>:<label>`)
+        // minted off the surviving list. `keys.sorted()` snapshots the keys, so
+        // mutating `out[ordinal]` mid-loop is safe (and the warn order is stable).
+        for ordinal in out.keys.sorted() {
+            guard let sections = out[ordinal] else { continue }
+            var seen: Set<String> = []
+            var kept: [DesktopSection] = []
+            for s in sections {
+                if !s.label.isEmpty, !seen.insert(s.label).inserted {
+                    Log.line("config: [[desktop.\(ordinal).section]]: duplicate "
+                        + "label \"\(s.label)\" — keeping first, dropping this section")
+                    continue
+                }
+                kept.append(s)
+            }
+            if kept.count != sections.count { out[ordinal] = kept }
+        }
         return out
     }
 

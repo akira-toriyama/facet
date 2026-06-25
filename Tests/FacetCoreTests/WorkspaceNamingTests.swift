@@ -99,6 +99,40 @@ final class WorkspaceNamingTests: XCTestCase {
         XCTAssertNil(list[1].config.layout)
     }
 
+    /// §A: a non-empty workspace `label` NAMES the workspace from config (the
+    /// old always-auto-named rule reversed); an empty label still falls back to
+    /// the emoji auto-name.
+    func testSectionWorkspaceListUsesLabelWhenSet() {
+        var c = FacetConfig()
+        c.macDesktopSectionConfigs = [1: [
+            DesktopSection(type: .workspace, label: "Dev", layout: "bsp"),
+            DesktopSection(type: .workspace),   // no label → auto-name
+        ]]
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
+        XCTAssertEqual(list.count, 2)
+        XCTAssertEqual(list[0].config.name, "Dev")          // named from config
+        XCTAssertEqual(list[0].config.layout, "bsp")
+        XCTAssertEqual(list[1].config.name,                 // empty → fallback
+                       WorkspaceNaming.name(forIndex: 1))
+    }
+
+    /// §A edge: an empty-label slot's emoji auto-name DODGES a pool emoji a
+    /// sibling claimed as an explicit `label`, so the two workspaces never
+    /// share an effective name (name→index resolution is first-match).
+    func testEmptyLabelAutoNameDodgesExplicitPoolEmojiLabel() {
+        let emoji0 = WorkspaceNaming.name(forIndex: 0)   // what slot 0 would auto-take
+        var c = FacetConfig()
+        c.macDesktopSectionConfigs = [1: [
+            DesktopSection(type: .workspace),                  // empty → would be emoji0
+            DesktopSection(type: .workspace, label: emoji0),   // explicitly claims emoji0
+        ]]
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
+        XCTAssertEqual(list.count, 2)
+        XCTAssertEqual(list[1].config.name, emoji0)            // explicit label wins
+        XCTAssertNotEqual(list[0].config.name, emoji0)         // slot 0 dodged away
+        XCTAssertEqual(Set(list.map { $0.config.name }).count, 2)   // names unique
+    }
+
     /// DEGRADE: a section-less config (or a desktop without a `type=workspace`
     /// section) takes the default-slot path — emoji naming never engages.
     func testDegradeUsesDefaultSlotsWhenSectionModelInactive() {

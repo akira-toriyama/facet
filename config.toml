@@ -571,8 +571,8 @@ action = "ignore"
 # `[[desktop.N.section]]` (N = Mission Control order, 1-based, user
 # desktops only — fullscreen desktops don't count). This is the ONLY
 # way to configure a desktop —
-# workspaces are auto-named (an emoji 🐶🍎🍕); you can't name them from
-# config (rename at runtime with `facet workspace --rename`). When a
+# a workspace's name is its optional `label` (else an auto-named emoji
+# 🐶🍎🍕); `facet workspace --rename` overrides at runtime. When a
 # desktop has at least one `type = "workspace"` section, the section model
 # becomes AUTHORITATIVE for that desktop: the tree, the grid (`--view grid`),
 # AND the rail (`--view rail`) all render the sections in declaration order —
@@ -603,15 +603,18 @@ action = "ignore"
 # Every section has a required `type` — one of three kinds:
 #
 #   type = "workspace"  — a permanent spatial cell (the tiling unit, the
-#       grid/rail cell). AUTO-NAMED (an emoji 🐶🍎🍕), so you neither name
-#       nor filter it. Optional `layout` seeds its tiling engine. The COUNT
-#       of workspace sections is that desktop's live workspace count; each
-#       section's `layout` is that workspace's startup layout. Having at
-#       least one workspace section is what turns the section model ON for
-#       the desktop — a desktop with ONLY lens / unassigned sections falls
-#       back to the default 5 workspaces (and its lenses stay inert).
+#       grid/rail cell). Named by an optional `label` (else an auto-named
+#       emoji 🐶🍎🍕); a non-empty `label` must be unique on the desktop
+#       (dup → loud warn + first-wins). You don't filter it. Optional
+#       `layout` seeds its tiling engine. The COUNT of workspace sections
+#       is that desktop's live workspace count; each section's `layout` is
+#       that workspace's startup layout. Having at least one workspace
+#       section is what turns the section model ON for the desktop — a
+#       desktop with ONLY lens / unassigned sections falls back to the
+#       default 5 workspaces (and its lenses stay inert).
 #         [[desktop.1.section]]
 #         type = "workspace"
+#         label = "Dev"     # optional; omit for an auto-named emoji
 #         layout = "bsp"
 #
 #   type = "lens"  — a saved visibility filter (an SQL VIEW), orthogonal
@@ -622,7 +625,8 @@ action = "ignore"
 #       using this lens's `layout`; switching to any workspace clears the
 #       lens automatically; `facet lens --clear` lifts it and restores all
 #       parked windows. Keys:
-#         label  — the lens's header in the view (required).
+#         label  — the lens's header in the view (optional; non-empty
+#                  labels must be unique on the desktop).
 #         match  — a facet filter WHERE-clause (required; the same mini-
 #                  language as `facet query --windows --filter`), e.g.
 #                    'tag~=web or app=Safari'
