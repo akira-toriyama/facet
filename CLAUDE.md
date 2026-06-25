@@ -418,8 +418,8 @@ family 共通ポリシー。正典 → https://github.com/akira-toriyama/atelier
 facet の作業タスク（バックログ・設計メモ・引き継ぎ）の**正本は private repo
 [`akira-toriyama/projects`](https://github.com/akira-toriyama/projects)**（自作 furrow 製・
 plain-text の `.furrow/` = JSON index + per-task markdown body）。`facet` ラベルで絞る:
-`furrow ls -l facet` / 次の着手は `furrow next -l facet` / `furrow show <id>`。Project #5
-はその公開ミラー（手動）。**repo-root の `Task.md` は 2026-06-25 に退役**し projects へ移行
+`furrow ls -l facet`（着手候補 = ready / in-progress）/ `furrow show <id>`。`furrow next`
+は全 repo の actionable を出す（label 絞りは無く `-n` のみ）。Project #5 はその公開ミラー（手動）。**repo-root の `Task.md` は 2026-06-25 に退役**し projects へ移行
 済み（`furrow migrate --label facet`）。furrow 未導入なら
 `brew install akira-toriyama/tap/furrow` か
 `go install github.com/akira-toriyama/furrow/cmd/furrow@latest`、最悪 `.furrow/`
