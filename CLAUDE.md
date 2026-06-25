@@ -68,6 +68,18 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   human pilots the panel (clicks / drags / keys) and reports; the
   agent drives build + relaunch. (This pairs with: the agent reads
   `/tmp/facet*.log` directly rather than asking for pasted output.)
+- **Host-PC GUI verification needs consent; a Tart VM is free.**
+  Building, relaunching, and reading logs are always fine — but
+  *driving facet's GUI on the host to verify it* (launching panels,
+  `screencapture`, `osascript`-driven clicks — it takes over the
+  screen + key focus) **requires the human's OK first**. In a **Tart
+  VM** (clean-environment testing — References → *Sandbox / VM
+  testing*) verify freely, no consent needed. Two follow-ons for any
+  **host** GUI run: (1) when done, **return the working window — the
+  VSCode / Claude Code window driving the task — to a clear, visible
+  position** so the human can resume; (2) keep a single unattended
+  automated GUI sequence to **~10 minutes** as a guideline —
+  checkpoint with the human rather than running longer.
 - **GUI bugs: observe before theorising.** A screen recording can
   be frame-extracted (`ffmpeg -i in.mov -vf fps=3 f_%02d.png`) and
   the PNGs read directly; `FACET_DEBUG` logs every Controller / Adapter
