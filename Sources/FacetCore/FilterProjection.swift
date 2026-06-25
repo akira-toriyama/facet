@@ -10,8 +10,8 @@
 //
 // PER-TYPE SEMANTICS (the section/lens model body):
 //   • type = workspace — the spatial substrate. IMPLICIT match resolved by
-//     INDEX, not name (the auto-name is a pure function of index, so keying
-//     on index avoids any emoji-collision ambiguity): the k-th workspace
+//     INDEX, not name (a workspace's name is its optional `label` / "" when
+//     unnamed, so keying on index avoids any name-collision ambiguity): the k-th workspace
 //     section maps onto the k-th live workspace (the backend emits them
 //     index-ascending) and takes its windows VERBATIM (no filter eval). The
 //     id / sourceWorkspaceIndex come from `ws.index` (the wire index), not
@@ -127,9 +127,9 @@ public enum FilterProjection {
         // workspace section ↔ workspaces[k]) — the backend already emits them
         // index-ascending, so array order == index order. The section's id /
         // sourceWorkspaceIndex come from `ws.index` (the 0-based WIRE index),
-        // NOT the array position or the auto-name — so a workspace section's
+        // NOT the array position or the label — so a workspace section's
         // implicit `workspace=<this>` resolves by index, never by a
-        // (possibly-colliding) emoji label, and `--focus` / `--move-to` stay
+        // (possibly-empty / non-unique) label, and `--focus` / `--move-to` stay
         // correct. Array order (not a re-sort) keeps the degrade byte-
         // identical to today.
         func wsSection(_ ws: Workspace) -> ProjectedSection {

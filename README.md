@@ -415,9 +415,9 @@ Frequently-touched keys:
 - `[[desktop.N.section]]` blocks — the per-mac-desktop section model
   (`N` = the mac desktop's Mission Control position). An ordered list of
   sections describes that desktop; each has a required `type`:
-  `"workspace"` (a spatial cell named by an optional `label`, else an
-  auto-named emoji, with an optional `layout` seed; the count of these is
-  that desktop's workspace count),
+  `"workspace"` (a spatial cell named by an optional `label`, else unnamed
+  and shown by its 1-based index, with an optional `layout` seed; the count
+  of these is that desktop's workspace count),
   `"lens"` (a saved visibility filter — `label` + `match` + optional
   `layout` + `apply`; activate it with `facet lens NAME` to anchor-park
   every non-matching window across **every** workspace — cross-workspace
@@ -429,8 +429,8 @@ Frequently-touched keys:
   invisible-but-logged (never auto-homed). Surface them with a 迷子 receptacle —
   a `type = "lens"` section whose `match = 'not workspace'` (recommended: keep
   one per desktop). **A workspace is named by its optional `label`** (else
-  an auto-named emoji); `facet workspace --rename` overrides at runtime.
-  Two modes: **no**
+  unnamed, shown by its 1-based index); `facet workspace --rename` overrides
+  at runtime. Two modes: **no**
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
   workspaces automatically; **any** present → **opt-in**: facet manages
   only the mac desktops that have a section block; a mac desktop without

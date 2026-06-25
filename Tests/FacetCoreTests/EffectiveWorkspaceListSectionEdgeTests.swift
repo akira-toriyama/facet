@@ -2,7 +2,7 @@ import XCTest
 @testable import FacetCore
 
 /// `FacetConfig.effectiveWorkspaceList` — the SECTION-INACTIVE edges
-/// complementing `WorkspaceNamingTests` (section-active auto-naming). The
+/// complementing `EffectiveWorkspaceListNamingTests` (section-active naming). The
 /// section model engages ONLY when a desktop carries ≥1 `type = "workspace"`
 /// section (`isSectionModelActive`); a config that has sections but NONE of
 /// the workspace kind — lens-only, unassigned-only, or an empty array — must
@@ -23,8 +23,8 @@ final class EffectiveWorkspaceListSectionEdgeTests: XCTestCase {
             lens("Web", "tag~=web"),
             lens("Mail", "app=Mail"),
         ]]
-        // No workspace section → model off → default unnamed slots (NOT the
-        // emoji auto-name path, NOT an empty list).
+        // No workspace section → model off → default unnamed slots (NOT an
+        // empty list).
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
         XCTAssertTrue(list.allSatisfy { $0.config.name.isEmpty })

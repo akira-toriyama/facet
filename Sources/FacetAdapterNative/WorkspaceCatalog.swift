@@ -107,6 +107,16 @@ struct WorkspaceCatalog {
     /// catalog owns its own set.
     private(set) var workspaceNames: [String] = []
 
+    /// True when this catalog was seeded while the active mac-desktop ordinal
+    /// was UNRESOLVED (nil) — the degenerate `effectiveWorkspaceList(nil)`
+    /// default-slot seed. The adapter gates nil-ordinal seed-taint recovery on
+    /// THIS (not name-emptiness alone): §B made a correctly real-ordinal-seeded
+    /// section desktop of UNNAMED workspaces also all-empty, so
+    /// `holdsOnlyUnnamedSlots` can no longer tell a genuine taint from a healthy
+    /// unnamed desktop — this flag can. Travels with the parked/restored
+    /// catalog (value type). Set only when `seed` actually seeds.
+    private(set) var seededUnderNilOrdinal = false
+
     /// Number of live workspaces (= highest valid 1-based index).
     var workspaceCount: Int { workspaceNames.count }
 
@@ -382,8 +392,10 @@ struct WorkspaceCatalog {
     /// at the compacted position so the first `mode(of:)` returns
     /// the configured value. Runtime `setMode` can still override
     /// for the session (Q7 seed-only semantics).
-    mutating func seed(configs entries: [(index: Int, config: WorkspaceConfig)]) {
+    mutating func seed(configs entries: [(index: Int, config: WorkspaceConfig)],
+                       underNilOrdinal: Bool = false) {
         guard workspaceNames.isEmpty else { return }
+        seededUnderNilOrdinal = underNilOrdinal
         let sorted = entries.sorted { $0.index < $1.index }
         workspaceNames = sorted.isEmpty ? [""] : sorted.map(\.config.name)
         if activeIndex > workspaceNames.count { activeIndex = 1 }

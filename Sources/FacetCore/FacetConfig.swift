@@ -17,10 +17,10 @@ import Palette   // sill's pure (AppKit-free) theme layer — `canonical(_:)`
 import Toml      // sill's pure TOML subset parser (`Toml.Value` accessors)
 
 /// Runtime descriptor for one facet workspace: a display `name` plus an
-/// optional `layout` seed for `facet workspace --layout`. Workspaces are
-/// no longer seeded from config by name — a `[[desktop.N.section]]`
-/// `type = "workspace"` cell is auto-named from the emoji pool
-/// (`WorkspaceNaming`), and `name` is owned at runtime by
+/// optional `layout` seed for `facet workspace --layout`. A
+/// `[[desktop.N.section]]` `type = "workspace"` cell is named by its
+/// optional `label` (§A); an empty label leaves `name == ""` (unnamed —
+/// displayed by its 1-based index, §B). `name` is also owned at runtime by
 /// `facet workspace --rename`. `layout` comes from the section's `layout`
 /// (or the global `[layout] default`); an unknown / mistyped value falls
 /// back to that default at seed time.
@@ -504,38 +504,22 @@ public struct FacetConfig: Sendable {
         // Section model (authoritative when active): the workspace COUNT and
         // per-workspace layout seed come from the `type = "workspace"`
         // sections. §A: a non-empty `label` names the workspace FROM CONFIG
-        // (the old "always auto-named" rule was reversed); an empty label falls
-        // back to the emoji auto-name (`WorkspaceNaming`, index-keyed). Runtime
-        // `facet workspace --rename` still overrides either way.
-        // `isSectionModelActive` guarantees a non-nil ordinal with ≥1 workspace
-        // section, so this list is non-empty.
+        // (the old "always auto-named" rule was reversed). §B: an empty label
+        // leaves the workspace UNNAMED (`name == ""`) — displayed by its
+        // 1-based index, not an emoji. Runtime `facet workspace --rename`
+        // still overrides. `isSectionModelActive` guarantees a non-nil ordinal
+        // with ≥1 workspace section, so this list is non-empty.
         if isSectionModelActive(ordinal: ordinal), let ordinal {
             let wsSections = (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
                 .filter { $0.type == .workspace }
-            // §A: explicit labels (already de-duped at decode) are sacred. An
-            // empty-label slot's emoji auto-name keys on its positional index,
-            // but must DODGE any pool emoji a sibling claimed as an explicit
-            // label — else two workspaces resolve to the same effective NAME
-            // and name→index resolution (`firstIndex(of:)` in `--focus NAME` /
-            // `setWorkspace=NAME` / `section --focus "label"`) silently
-            // mis-targets the later one. Normal word labels never collide, so
-            // the dodge is inert outside the bare-pool-emoji-label edge case.
-            let claimed = Set(wsSections.compactMap {
-                $0.label.isEmpty ? nil : $0.label
-            })
+            // §B: a non-empty `label` names the workspace; an empty one stays
+            // UNNAMED (`name == ""`) and is displayed by its 1-based index
+            // (the view composes it via `sectionDisplayLabel`). No emoji
+            // auto-name — so unnamed slots can't collide on a fabricated name
+            // (`index(ofName:)` nil-guards "" → they're index-addressed only).
+            // The A-2 emoji-dodge is gone with the pool that necessitated it.
             return wsSections.enumerated().map { k, s in
-                guard s.label.isEmpty else {
-                    return (index: k + 1,
-                            config: WorkspaceConfig(name: s.label, layout: s.layout))
-                }
-                var idx = k
-                var name = WorkspaceNaming.name(forIndex: idx)
-                while claimed.contains(name) {        // collides with a sibling label
-                    idx += wsSections.count           // jump past the positional range
-                    name = WorkspaceNaming.name(forIndex: idx)
-                }
-                return (index: k + 1,
-                        config: WorkspaceConfig(name: name, layout: s.layout))
+                (index: k + 1, config: WorkspaceConfig(name: s.label, layout: s.layout))
             }
         }
         return (1...Self.defaultWorkspaceCount).map {

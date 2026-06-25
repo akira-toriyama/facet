@@ -16,9 +16,9 @@
 //     implicit `workspace=<this>` and its `apply` the implicit
 //     `setWorkspace(<this>)`, both resolved internally — but MAY name it with
 //     an optional `label` (§A reversed the always-auto-named rule); an empty
-//     label falls back to the emoji auto-name (`WorkspaceNaming`). Carries an
-//     optional `layout` seed (per-section, runtime-changeable) + optional
-//     `apply` seed.
+//     label leaves it UNNAMED, displayed by its 1-based index (§B retired the
+//     emoji auto-name). Carries an optional `layout` seed (per-section,
+//     runtime-changeable) + optional `apply` seed.
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
 //     optional `apply` (the inverse, for drops). Activated at runtime with

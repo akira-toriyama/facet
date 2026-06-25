@@ -1046,4 +1046,26 @@ final class WorkspaceCatalogTests: XCTestCase {
         XCTAssertFalse(recovered.holdsOnlyUnnamedSlots)
         XCTAssertEqual(recovered.mode(of: 1), "bsp")
     }
+
+    /// §B regression: a section desktop of UNNAMED workspaces seeded under a
+    /// REAL ordinal is all-empty (`holdsOnlyUnnamedSlots`) yet must NOT be
+    /// eligible for nil-ordinal recovery — `seededUnderNilOrdinal` is the
+    /// discriminator. Without it the adapter recovery would re-fire every
+    /// refresh and wipe activeIndex / windowMap / layout for the default config.
+    func testRealOrdinalUnnamedSeedIsNotTaintEligible() {
+        var healthy = WorkspaceCatalog()
+        healthy.seed(configs: (1...3).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        }, underNilOrdinal: false)
+        XCTAssertTrue(healthy.holdsOnlyUnnamedSlots)     // all unnamed (§B default)
+        XCTAssertFalse(healthy.seededUnderNilOrdinal)    // but seeded under a real ordinal
+        // → adapter recovery (flag && holdsOnlyUnnamedSlots) does NOT fire.
+
+        var tainted = WorkspaceCatalog()
+        tainted.seed(configs: (1...5).map {
+            (index: $0, config: WorkspaceConfig(name: ""))
+        }, underNilOrdinal: true)
+        XCTAssertTrue(tainted.seededUnderNilOrdinal)      // genuine nil-ordinal seed
+        XCTAssertTrue(tainted.holdsOnlyUnnamedSlots)
+    }
 }

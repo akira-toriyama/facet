@@ -571,8 +571,8 @@ action = "ignore"
 # `[[desktop.N.section]]` (N = Mission Control order, 1-based, user
 # desktops only — fullscreen desktops don't count). This is the ONLY
 # way to configure a desktop —
-# a workspace's name is its optional `label` (else an auto-named emoji
-# 🐶🍎🍕); `facet workspace --rename` overrides at runtime. When a
+# a workspace's name is its optional `label` (else it's unnamed, shown by
+# its 1-based index); `facet workspace --rename` overrides at runtime. When a
 # desktop has at least one `type = "workspace"` section, the section model
 # becomes AUTHORITATIVE for that desktop: the tree, the grid (`--view grid`),
 # AND the rail (`--view rail`) all render the sections in declaration order —
@@ -603,8 +603,8 @@ action = "ignore"
 # Every section has a required `type` — one of three kinds:
 #
 #   type = "workspace"  — a permanent spatial cell (the tiling unit, the
-#       grid/rail cell). Named by an optional `label` (else an auto-named
-#       emoji 🐶🍎🍕); a non-empty `label` must be unique on the desktop
+#       grid/rail cell). Named by an optional `label` (else unnamed, shown by
+#       its 1-based index); a non-empty `label` must be unique on the desktop
 #       (dup → loud warn + first-wins). You don't filter it. Optional
 #       `layout` seeds its tiling engine. The COUNT of workspace sections
 #       is that desktop's live workspace count; each section's `layout` is
@@ -614,7 +614,7 @@ action = "ignore"
 #       default 5 workspaces (and its lenses stay inert).
 #         [[desktop.1.section]]
 #         type = "workspace"
-#         label = "Dev"     # optional; omit for an auto-named emoji
+#         label = "Dev"     # optional; omit → unnamed (shown by its index)
 #         layout = "bsp"
 #
 #   type = "lens"  — a saved visibility filter (an SQL VIEW), orthogonal
@@ -664,13 +664,13 @@ action = "ignore"
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess).
 #
-# ACTIVE SAMPLE — a 3-desktop dev workflow: 2 auto-named (emoji)
+# ACTIVE SAMPLE — a 3-desktop dev workflow: 2 unnamed (index-shown)
 # workspaces per desktop, plus 3 lenses on desktop 1 (Web / Code / Chat).
 # Because these section blocks exist, facet is OPT-IN: it manages desktops
 # 1–3 and leaves every OTHER mac desktop untouched (panel hidden there).
 # Edit to taste, add `[[desktop.4.section]]` blocks for more desktops, or
 # comment this whole sample out to fall back to the zero-config default
-# (every mac desktop gets 5 emoji workspaces). Activate a lens at runtime
+# (every mac desktop gets 5 unnamed workspaces). Activate a lens at runtime
 # with `facet lens "Web"` (it parks the non-Web windows); clear it with
 # `facet lens --clear`.
 

@@ -38,7 +38,7 @@ final class SectionLensCatalogTests: XCTestCase {
     /// `.workspace(1)` = the first workspace section ("Dev"-position), never
     /// the leading lens, never an empty lens. This pins the full chain the
     /// tag-mode removal (EX-4.2/4.3) perturbs around. (The halves are tested
-    /// in WorkspaceNamingTests.testSectionWorkspaceListAutoNamesByIndex +
+    /// in EffectiveWorkspaceListNamingTests.testSectionWorkspaceListUnnamedSlotsAreEmpty +
     /// SectionLensCatalogTests.testActiveSectionIsWorkspaceOneAtInit; this
     /// chains them through `seed`.)
     func testStartupActiveIsFirstWorkspaceSectionDespiteLeadingLens() {
