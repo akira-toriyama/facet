@@ -40,9 +40,9 @@ final class WindowFieldsFallbackTests: XCTestCase {
         // its name back verbatim as `""` AND is PRESENT (`filterHas == true`),
         // so a `not workspace` lens does NOT catch it — only a true orphan
         // (`nil`) does. This is the deliberate nil-vs-`""` distinction (the
-        // 迷子 receptacle keys off the ASSIGNMENT, never the display name). It
-        // still differs from ApplyPlanWindowFields below, which coalesces the
-        // empty name to `nil` (so `filterHas == false` there).
+        // 迷子 receptacle keys off the ASSIGNMENT, never the display name).
+        // §B: ApplyPlanWindowFields now MIRRORS this (nil = orphan, "" =
+        // assigned-unnamed), so the apply predictor and the tree agree.
         let f = ProjectedWindowFields(window: win(1), workspaceName: "")
         XCTAssertEqual(f.filterValue("workspace"), "")
         XCTAssertTrue(f.filterHas("workspace"))
@@ -60,11 +60,17 @@ final class WindowFieldsFallbackTests: XCTestCase {
 
     // MARK: - ApplyPlanWindowFields — empty / unknown fallbacks
 
-    func testApplyPlanEmptyWorkspaceIsNil() {
-        // Unlike the projection, the apply-plan coalesces an empty name to nil.
-        let f = ApplyPlanWindowFields(base: win(1), workspaceName: "", applying: [])
-        XCTAssertNil(f.filterValue("workspace"))
-        XCTAssertFalse(f.filterHas("workspace"))
+    func testApplyPlanWorkspacePresenceMirrorsProjection() {
+        // §B: the apply-plan now matches ProjectedWindowFields — nil = orphan
+        // (absent), "" = assigned-but-unnamed (present). Previously it coalesced
+        // "" → nil, mispredicting a `not workspace` drop for an unnamed-WS window.
+        let orphan = ApplyPlanWindowFields(base: win(1), workspaceName: nil, applying: [])
+        XCTAssertNil(orphan.filterValue("workspace"))
+        XCTAssertFalse(orphan.filterHas("workspace"))         // orphan → absent
+
+        let unnamed = ApplyPlanWindowFields(base: win(1), workspaceName: "", applying: [])
+        XCTAssertEqual(unnamed.filterValue("workspace"), "")
+        XCTAssertTrue(unnamed.filterHas("workspace"))         // assigned-unnamed → present
     }
 
     func testApplyPlanEmptyTagsAreNil() {

@@ -136,7 +136,7 @@ public enum ApplyResolver {
     /// reconcile evicts it). Authoring a `master=` lens only makes sense on a
     /// master-* engine.
     public static func satisfiesAfterApply(_ window: Window,
-                                           workspaceName: String,
+                                           workspaceName: String?,
                                            applying ops: [ApplyOp],
                                            match: String) -> Bool {
         if match.isEmpty { return true }
@@ -218,7 +218,10 @@ public enum ApplyResolver {
             // satisfaction is tag-only (the common case) is unaffected, but one
             // that referenced the old workspace name would mispredict.
             // Snap back BEFORE any mutation.
-            let matchWSName = relocateSourceToOrphan ? "" : workspaceName
+            // §B: nil = orphan (relocate left the workspace), "" = still
+            // assigned to an UNNAMED workspace (present) — mirror the display
+            // path so a `not workspace` lens predicts what the tree renders.
+            let matchWSName: String? = relocateSourceToOrphan ? nil : workspaceName
             if !satisfiesAfterApply(window, workspaceName: matchWSName,
                                     applying: inverse + forward,
                                     match: destSection!.match) {
@@ -241,7 +244,10 @@ public enum ApplyResolver {
 /// file-private) so `FacetCoreTests` can exercise it directly.
 struct ApplyPlanWindowFields: WindowFields {
     let base: Window
-    let workspaceName: String
+    /// `nil` = orphan (no workspace); `""` = assigned but UNNAMED; else the
+    /// label. Mirrors `ProjectedWindowFields` so `not workspace` predicts the
+    /// SAME result the tree renders (§B made `""` the common assigned state).
+    let workspaceName: String?
     let tags: [String]     // base tags after applying the ordered op list
     let floating: Bool?
     let sticky: Bool?
@@ -252,7 +258,7 @@ struct ApplyPlanWindowFields: WindowFields {
     /// base window IN ORDER, so a tag removed by the inverse and re-added by
     /// the forward (or vice-versa) resolves to the real post-state.
     /// `setFloating` / `setSticky` / `setMaster` are last-writer-wins overlays.
-    init(base: Window, workspaceName: String, applying ops: [ApplyOp]) {
+    init(base: Window, workspaceName: String?, applying ops: [ApplyOp]) {
         self.base = base
         self.workspaceName = workspaceName
         var tags = base.tags
@@ -275,7 +281,7 @@ struct ApplyPlanWindowFields: WindowFields {
 
     func filterValue(_ field: String) -> String? {
         switch field {
-        case "workspace": return workspaceName.isEmpty ? nil : workspaceName
+        case "workspace": return workspaceName
         case "tag":       return tags.isEmpty ? nil : tags.joined(separator: " ")
         case "floating":  return (floating ?? base.isFloating) ? "true" : "false"
         case "sticky":    return (sticky ?? base.isSticky) ? "true" : "false"
@@ -286,7 +292,7 @@ struct ApplyPlanWindowFields: WindowFields {
 
     func filterHas(_ field: String) -> Bool {
         switch field {
-        case "workspace": return !workspaceName.isEmpty
+        case "workspace": return workspaceName != nil
         case "tag":       return !tags.isEmpty
         case "floating":  return floating ?? base.isFloating
         case "sticky":    return sticky ?? base.isSticky

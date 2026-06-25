@@ -289,13 +289,17 @@ extension NativeAdapter {
         // and `seed`'s idempotence guard then blocks the correction for the
         // rest of the session (the catalog is parked by mac-desktop id and
         // restored tainted). Once a real ordinal resolves AND this desktop's
-        // section model is active, discard the degenerate (all-empty) catalog
-        // so the fresh `seed` below lands the configured (emoji) names. Gated
-        // on a REAL ordinal — SkyLight-unavailable single-desktop mode
-        // (`id == 0` → ordinal nil) keeps its unnamed slots — and on all-empty
-        // names, so a runtime rename / add (which makes a name non-empty) is
-        // never clobbered.
+        // section model is active, discard the degenerate catalog so the fresh
+        // `seed` below lands the configured names. Gated on `seededUnderNilOrdinal`
+        // (NOT name-emptiness alone): §B made a correctly real-ordinal-seeded
+        // section desktop of UNNAMED workspaces also all-empty, so keying on
+        // all-empty would re-fire EVERY refresh and wipe activeIndex / windowMap /
+        // layout — the flag tells a genuine nil-ordinal taint from a healthy
+        // unnamed desktop. Still gated on a REAL ordinal (SkyLight-unavailable
+        // single-desktop mode keeps its slots) and on all-empty names, so a
+        // runtime rename / add (a non-empty name) is never clobbered.
         if let ordinal = activeMacDesktopOrdinal,
+           catalog.seededUnderNilOrdinal,
            catalog.holdsOnlyUnnamedSlots,
            config.isSectionModelActive(ordinal: ordinal) {
             Log.debug("native: recovering nil-ordinal seed-taint — "
@@ -314,7 +318,8 @@ extension NativeAdapter {
         // catalog's set is authoritative and runtime add/remove/rename/
         // move own it (config stays the read-only seed).
         catalog.seed(configs: config.effectiveWorkspaceList(
-            forMacDesktopOrdinal: activeMacDesktopOrdinal))
+            forMacDesktopOrdinal: activeMacDesktopOrdinal),
+            underNilOrdinal: activeMacDesktopOrdinal == nil)
     }
 
     /// Heal (mac-desktop drift): a window can leak into this catalog's WS

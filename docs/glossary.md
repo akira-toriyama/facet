@@ -166,13 +166,14 @@ macOS の **native Space**（OS が提供する仮想デスクトップ。Missio
 ### facet workspace
 **facet が定義する Window 集合**。タブのようにグループ化された window 群を
 1 まとまりとして扱う単位。1 つの [[mac desktop]] が複数の facet workspace を
-持つ。**workspace は config から命名できない**（旧 `[desktop.N]` の by-name seed は
-廃止）。**section モデル（[[section]] type=workspace）が active な desktop では
-auto 命名**＝emoji プール（animal→fruit→food・🐶🍎🍕・`WorkspaceNaming`・index キー）。
-それ以外の desktop は既定の無名スロット。名前変更は実行時 `facet workspace --rename`
-のみ（session-only）。workspace は空間スロット＝意味は [[section]] / tag が担う。
-- コード: `WorkspaceCatalog` / `workspaces()` / `WorkspaceNaming`（auto名・FacetCore）
-  / `FacetConfig.effectiveWorkspaceList`（section active 時は auto名スロットを返す）
+持つ。**workspace は任意の `label` で config 命名可**（§A・旧 `[desktop.N]` の
+by-name seed は廃止）。**未命名（label 空）は無名のまま 1始まりの index で表示**
+（§B・emoji 自動命名プール `WorkspaceNaming` は退役）。名前変更は実行時
+`facet workspace --rename` でも可（session-only）。workspace は空間スロット＝
+意味は [[section]] / tag が担う。
+- コード: `WorkspaceCatalog` / `workspaces()` / `FacetConfig.effectiveWorkspaceList`
+  （section active 時：非空 `label` を名前に・空は無名スロット）／表示は
+  `sectionDisplayLabel(index:label:)`（§D・`index` or `index (label)`）
 - **Don't call it:** group, tab, page, desktop, mac desktop, Space, グループ, タブ
 
 ### 迷子 (orphan)
@@ -576,9 +577,10 @@ exit / stderr など副作用を担う。コアへ渡る DNC 制御文字列（`
 config で宣言する **順序付きの表示単位**（pivot・`[[desktop.N.section]]`）。
 per-mac-desktop の順序付き配列で、**配列順 = [[tree view]] の表示順**。各 section は
 必須の `type` で 3 種に分かれる（互いに厳密に区別する）:
-- **type=workspace**: 常設の空間土台（タイル単位・grid/rail のセル）。**auto 命名**
-  （emoji 🐶🍎🍕・ユーザは命名/絞り込み不可）＝暗黙 `match='workspace=<this>'` /
-  暗黙 `apply=setWorkspace(<this>)`。任意の `layout` seed のみ持つ。
+- **type=workspace**: 常設の空間土台（タイル単位・grid/rail のセル）。**任意の
+  `label` で命名・無名は 1始まり index 表示**（絞り込みは不可）＝暗黙
+  `match='workspace=<this>'` / 暗黙 `apply=setWorkspace(<this>)`。任意の
+  `layout` seed も持つ。
 - **type=lens**: workspace に直交する**保存可視性フィルタ**（SQL VIEW・`label` +
   [[match]] + 任意 [[apply]]）。1 window = match に当たった**全** lens に出る
   （multi-match）。lens は「絞る」だけ（束ね直さない）。

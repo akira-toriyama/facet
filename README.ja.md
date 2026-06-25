@@ -387,7 +387,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
 - `[[desktop.N.section]]` ブロック — mac desktop ごとの section モデル
   (`N` は Mission Control 順の位置)。 順序付き section リストで desktop を
   記述。 各 section は必須の `type` を持つ: `"workspace"` (任意の `label` で
-  命名・無ければ絵文字で自動命名される空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
+  命名・無ければ無名で 1始まりの index 表示の空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
   workspace 数)、 `"lens"` (保存フィルタ — `label` + `match` + 任意の
   `layout` + `apply`。 `facet lens NAME` で有効化すると、 match を外れた窓を
   **すべての workspace 横断で** anchor park (cross-workspace exclusive な実 hide)
@@ -397,7 +397,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   **迷子 (orphan)** になる)。 よって窓は**どの workspace にも属さない**ことがあり、
   迷子は invisible-but-logged（WS1 へ auto-home しない）。 **迷子受け皿** =
   `match = 'not workspace'` の `type = "lens"` section で集約（desktop ごとに 1 つ推奨）。
-  **workspace は任意の `label` で config 命名可**（無ければ絵文字で自動命名）—
+  **workspace は任意の `label` で config 命名可**（無ければ無名＝1始まりの index 表示）—
   実行時 `facet workspace --rename` が上書き。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの

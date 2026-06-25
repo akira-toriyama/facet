@@ -120,8 +120,9 @@ is the index. **Do not relitigate** without explicit grill round.
   workspace, 2 dimensions). Window-unit management (not app-rules).
   Default 5 WS per mac desktop; dynamic add/remove/rename/move at
   runtime via `facet workspace --add` / `--remove` / `--rename` /
-  `--move`. Workspaces are auto-named (emoji pool) — there is no
-  config-side naming; `--rename` owns the name at runtime.
+  `--move`. A workspace is named by its optional `[[desktop.N.section]]`
+  `label` (§A); else it's unnamed and shown by its 1-based index (§B
+  retired the emoji pool). `--rename` overrides at runtime.
 - **Per-mac-desktop workspaces**: each mac desktop keeps an
   independent set of facet workspaces (own `WorkspaceCatalog`,
   parked/swapped on mac-desktop switch). The active mac-desktop id + ordinal
@@ -131,7 +132,8 @@ is the index. **Do not relitigate** without explicit grill round.
   (the rejected cross-mac-desktop move was hide 手法4). `[[desktop.N.section]]`
   config customises a mac desktop by Mission-Control ordinal — an ordered
   list of `type = workspace | lens` sections (workspace =
-  auto-named cell + optional `layout`; the count sets the WS count). EX-3:
+  optional `label` + optional `layout` cell — unnamed shows its index;
+  the count sets the WS count). EX-3:
   `WindowSlot.workspace` is `Int?` — a window can belong to NO workspace
   (`workspace = 0 or 1`); dragging it onto a lens relocates it out of its
   workspace (`orphanWindow`), and an orphan (迷子) is invisible-but-logged
@@ -190,10 +192,11 @@ is the index. **Do not relitigate** without explicit grill round.
   (developer has 1 display).
 - **Fullscreen apps**: excluded from facet management, left to
   macOS.
-- **Persistence**: not in facet. WS names are not persisted —
-  workspaces are auto-named (emoji pool); a `[[desktop.N.section]]`
-  block only seeds the WS count + per-WS `layout` (read-only). Runtime
-  rename / layout / catalog mutations are all session-only.
+- **Persistence**: not in facet. WS names are not persisted — a
+  workspace's name is its optional section `label` (§A), else unnamed /
+  index-shown (§B); a `[[desktop.N.section]]` block only seeds the WS
+  count + `label` + per-WS `layout` (read-only). Runtime rename / layout /
+  catalog mutations are all session-only.
 - **Startup**: don't touch existing windows. The first `type=workspace`
   section (or WS index 1 with no section config) is the initial
   [active section](#two-tiling-machineries-one-active-section); no windows
@@ -600,10 +603,10 @@ workspace).
   current active WS; user moves them with `facet window
   --move-to N`.
 - **Persistence of workspace state across restart** — out of
-  scope for facet itself. WS names are not persisted (auto-named
-  emoji); a `[[desktop.N.section]]` block only seeds the WS count +
-  per-WS `layout` (read-only). Runtime rename / layout / catalog
-  mutations are session-only by design.
+  scope for facet itself. WS names are not persisted (optional section
+  `label`, else unnamed / index-shown); a `[[desktop.N.section]]` block
+  only seeds the WS count + `label` + per-WS `layout` (read-only). Runtime
+  rename / layout / catalog mutations are session-only by design.
 - **Plugin / extension system, menubar icon, system notifications,
   theme editor GUI, window snapping, global hotkey reservation,
   screen recording, animation customization, UI translation

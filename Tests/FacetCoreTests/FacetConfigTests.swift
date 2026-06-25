@@ -212,8 +212,9 @@ final class FacetConfigTests: XCTestCase {
 
     func testEffectiveWorkspaceListPerOrdinal() {
         // Desktop 1 has a section model (2 workspace sections); desktop 2 has
-        // none → its own default slots. Names are emoji auto-assigned, not
-        // config-driven (the `[desktop.N]` by-name seed was retired).
+        // none → its own default slots. The workspace sections carry no label,
+        // so their names are EMPTY (unnamed → displayed by 1-based index, §B;
+        // the `[desktop.N]` by-name seed was retired).
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [
             DesktopSection(type: .workspace),
@@ -224,7 +225,7 @@ final class FacetConfigTests: XCTestCase {
         let configured = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertEqual(configured.count, 2)
         XCTAssertEqual(configured.map(\.config.layout), [nil, "bsp"])
-        XCTAssertTrue(configured.allSatisfy { !$0.config.name.isEmpty })  // emoji
+        XCTAssertTrue(configured.allSatisfy { $0.config.name.isEmpty })  // unnamed (§B)
         // Unconfigured ordinal → defaultWorkspaceCount unnamed slots.
         let unconfigured = c.effectiveWorkspaceList(forMacDesktopOrdinal: 2)
         XCTAssertEqual(unconfigured.count, FacetConfig.defaultWorkspaceCount)
