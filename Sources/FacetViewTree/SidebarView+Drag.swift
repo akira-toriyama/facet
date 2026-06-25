@@ -446,14 +446,15 @@ extension SidebarView {
         case .header(let g, let i):
             // Lens-section header (section model): no workspace to switch to —
             // clicking it TOGGLES the active lens (PR6: click the active one
-            // again to clear). The label comes from the rendered group; the
-            // controller validates + re-renders so the lens's header lights up
-            // (`pal.primary`) and (PR7) narrows grid/rail.
+            // again to clear). §A: pass the section's stable id (not the
+            // display label) so the controller toggles the right lens even
+            // with non-unique / empty labels; it re-renders so the lens's
+            // header lights up (`pal.primary`) and (PR7) narrows grid/rail.
             guard let i else {
                 kbSel = .hdr(group: g)
                 if sectionModeActive, g < lastSections.count,
                    lastSections[g].sectionType == .lens {
-                    controller?.toggleActiveLens(lastSections[g].label)
+                    controller?.toggleActiveLens(lastSections[g].id)
                 }
                 return
             }

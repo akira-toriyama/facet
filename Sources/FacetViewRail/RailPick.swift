@@ -14,6 +14,7 @@ import FacetCore
 
 public enum RailPick: Sendable {
     case workspace(workspaceIndex: Int)
-    case lens(label: String)
+    /// §A: keyed by stable section id (`ProjectedSection.id`), mirrors `GridPick`.
+    case lens(sectionID: String)
     case window(homeWorkspaceIndex: Int, pid: Int, windowID: WindowID)
 }

@@ -31,9 +31,11 @@ public final class GridView: NSView {
     /// EX-2: the projected section list (workspace + lens). Empty ⇒ degrade
     /// to the `workspaces` iteration. Fed by the Controller (apply / show).
     public var sections: [ProjectedSection] = []
-    /// EX-2: the active lens label (nil ⇒ a workspace is the active section).
-    /// Gates the single-highlight when building cells.
-    public var activeLens: String?
+    /// EX-2: the active lens's stable section id (`ProjectedSection.id`;
+    /// nil ⇒ a workspace is the active section). Gates the single-highlight
+    /// when building cells. A0/§A keyed this on the id, not the label, so a
+    /// non-unique / empty lens label can't light the wrong cell.
+    public var activeLensID: String?
     /// EX-2: window id → home workspace index (0-based), rebuilt each
     /// `layoutCells` from the unfiltered `workspaces` snapshot. A window thumb
     /// may sit in a LENS cell (`wsIndex == -1`) but still has a real home WS;
@@ -285,7 +287,7 @@ public final class GridView: NSView {
                 CellSource(wsIndex: ws.index, sectionType: .workspace,
                            sectionID: "ws:\(ws.index)", label: ws.name,
                            mode: ws.layoutMode, windows: ws.windows,
-                           isActive: activeLens == nil && ws.isActive)
+                           isActive: activeLensID == nil && ws.isActive)
             }
         }
         return sections.map { sec in
@@ -299,8 +301,8 @@ public final class GridView: NSView {
             //   lens cell lit ⟺ it IS the active lens;
             //   workspace cell lit ⟺ no lens active AND its WS is active.
             let active = isLens
-                ? (activeLens != nil && sec.label == activeLens)
-                : (activeLens == nil && srcWS?.isActive == true)
+                ? (activeLensID != nil && sec.id == activeLensID)
+                : (activeLensID == nil && srcWS?.isActive == true)
             return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
                               sectionType: sec.sectionType, sectionID: sec.id,
                               label: sec.label, mode: mode,
@@ -866,7 +868,7 @@ public final class GridView: NSView {
             pendingDown = (point: p, hit: win,
                            ws: windowHomeWS[win.id] ?? cell.wsIndex)
         } else if cell.isLens {
-            onPick?(.lens(label: cell.label))
+            onPick?(.lens(sectionID: cell.sectionID))
         } else {
             onPick?(.workspace(workspaceIndex: cell.wsIndex))
         }
@@ -972,7 +974,7 @@ public final class GridView: NSView {
                 // Header click: switch to the workspace, or toggle the lens.
                 if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
                    cell.isLens {
-                    onPick?(.lens(label: cell.label))
+                    onPick?(.lens(sectionID: cell.sectionID))
                 } else {
                     onPick?(.workspace(workspaceIndex: ph.ws))
                 }
@@ -1327,7 +1329,7 @@ public final class GridView: NSView {
         // A LENS cell → activate the lens (no WS-zoom transition; a lens has
         // no single workspace to zoom).
         if cell.isLens {
-            onPick?(.lens(label: cell.label))
+            onPick?(.lens(sectionID: cell.sectionID))
             return
         }
         // Return on the selected workspace cell → zoom that cell out to full

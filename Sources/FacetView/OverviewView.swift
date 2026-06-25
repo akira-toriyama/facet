@@ -49,10 +49,12 @@ public protocol OverviewView: NSView {
     /// model is off here ⇒ the surface falls back to iterating `workspaces`
     /// (byte-identical degrade). `workspaces` stays the unfiltered snapshot.
     var sections: [ProjectedSection] { get set }
-    /// The active lens label (EX-2), or nil when a workspace is the active
-    /// section. Gates the single-highlight: when non-nil, workspace cells
-    /// suppress their active accent and only the matching lens cell lights.
-    var activeLens: String? { get set }
+    /// The active lens's stable section id (`ProjectedSection.id`, EX-2 / §A),
+    /// or nil when a workspace is the active section. Gates the single-highlight:
+    /// when non-nil, workspace cells suppress their active accent and only the
+    /// lens cell whose `id` matches lights. Keyed on the id, not the display
+    /// label, so a non-unique / empty label can't light the wrong cell.
+    var activeLensID: String? { get set }
     /// Display frame the windows were measured against; mini-thumb
     /// rects scale from it.
     var screenFrame: CGRect { get set }

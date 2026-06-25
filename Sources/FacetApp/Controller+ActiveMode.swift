@@ -202,18 +202,16 @@ extension Controller {
     /// Section/lens model: TreeController hook — the user clicked a
     /// `type="lens"` section header in the tree. Toggle it as the active section
     /// (clicking the already-active lens clears it back to the active workspace).
-    /// `setActiveLens` validates the label + re-renders; this maps the click to
-    /// activate / clear. Tree click → `autoFocus: false` (the tree keeps key).
-    func toggleActiveLens(_ label: String) {
-        // A0: the tree passes a display label; resolve to the stable id so the
-        // toggle-off comparison + activation are id-keyed. An unresolvable label
-        // (no such lens) is a no-op.
-        let ordinal = currentMacDesktopOrdinal()
-        guard let id = lensID(forLabel: label, ordinal: ordinal) else { return }
-        if currentActiveSection == .lens(id) {
+    /// Tree click → `autoFocus: false` (the tree keeps key).
+    func toggleActiveLens(_ sectionID: String) {
+        // §A: the tree passes the stable section id straight from the rendered
+        // section — no label→id lookup, so the toggle is unambiguous even with
+        // non-unique / empty labels.
+        if currentActiveSection == .lens(sectionID) {
             setActiveLens(nil)                                // toggle off → active workspace
         } else {
-            activateLensID(id, ordinal: ordinal, autoFocus: false)   // tree keeps key focus
+            activateLensID(sectionID, ordinal: currentMacDesktopOrdinal(),
+                           autoFocus: false)                 // tree keeps key focus
         }
     }
 

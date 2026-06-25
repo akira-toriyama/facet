@@ -50,8 +50,10 @@ public final class RailView: NSView {
     /// (rail section rendering is EX-2b); stored to satisfy the `OverviewView`
     /// protocol so the Controller feed is symmetric with the grid.
     public var sections: [ProjectedSection] = []
-    /// EX-2: the active lens label (rail consumes it in EX-2b).
-    public var activeLens: String?
+    /// EX-2b / §A: the active lens's stable section id (`ProjectedSection.id`).
+    /// Keyed on the id, not the label, so a non-unique / empty lens label can't
+    /// light the wrong cell.
+    public var activeLensID: String?
     /// Keyboard "browse" cursor — the SECTION the centre HERO previews
     /// (←/→ rotate it, Return commits). Keyed on the stable
     /// `ProjectedSection.id` (`"ws:<i>"` / `"section:<order>:<label>"`),
@@ -252,7 +254,7 @@ public final class RailView: NSView {
                 CellSource(wsIndex: ws.index, sectionType: .workspace,
                            sectionID: "ws:\(ws.index)", label: ws.name,
                            mode: ws.layoutMode, windows: ws.windows,
-                           isActive: activeLens == nil && ws.isActive)
+                           isActive: activeLensID == nil && ws.isActive)
             }
         }
         return sections.map { sec in
@@ -265,8 +267,8 @@ public final class RailView: NSView {
             // EX-2b single-highlight: lens cell lit ⟺ it IS the active lens;
             // workspace cell lit ⟺ no lens active AND its WS is active.
             let active = isLens
-                ? (activeLens != nil && sec.label == activeLens)
-                : (activeLens == nil && srcWS?.isActive == true)
+                ? (activeLensID != nil && sec.id == activeLensID)
+                : (activeLensID == nil && srcWS?.isActive == true)
             return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
                               sectionType: sec.sectionType, sectionID: sec.id,
                               label: sec.label, mode: mode,
@@ -932,7 +934,7 @@ public final class RailView: NSView {
             } else {
                 // empty cell area → activate+close (zoom if it's the centre)
                 commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
-                    if cell.isLens { self?.onPick?(.lens(label: cell.label)) }
+                    if cell.isLens { self?.onPick?(.lens(sectionID: cell.sectionID)) }
                     else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
             }
@@ -1115,7 +1117,7 @@ public final class RailView: NSView {
                       let cell = cells.first(where: { $0.sectionID == ph.cellID }) {
                 // Header click → switch to that workspace, or toggle the lens.
                 commitSwitch(targetSectionID: ph.cellID) { [weak self] in
-                    if cell.isLens { self?.onPick?(.lens(label: cell.label)) }
+                    if cell.isLens { self?.onPick?(.lens(sectionID: cell.sectionID)) }
                     else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
             }
@@ -1306,7 +1308,7 @@ public final class RailView: NSView {
             }
         } else if cell.isLens {
             commitSwitch(targetSectionID: id) { [weak self] in
-                self?.onPick?(.lens(label: cell.label))    // lens → activate it
+                self?.onPick?(.lens(sectionID: cell.sectionID))  // lens → activate it
             }
         } else {
             commitSwitch(targetSectionID: id) { [weak self] in

@@ -8,8 +8,11 @@ import FacetCore
 
 public enum GridPick: Sendable {
     case workspace(workspaceIndex: Int)
-    /// EX-2: a lens-section cell was picked → activate that lens.
-    case lens(label: String)
+    /// EX-2 / §A: a lens-section cell was picked → activate that lens, keyed
+    /// by its **stable section id** (`ProjectedSection.id`), not the display
+    /// label (which may be empty / non-unique). The Controller routes it
+    /// straight to `activateLensID`, no label→id lookup.
+    case lens(sectionID: String)
     /// A specific window thumb. `homeWorkspaceIndex` is the WINDOW's home WS
     /// (0-based), resolved from the live snapshot — NOT the cell's `wsIndex`
     /// (a window thumb may sit inside a lens cell whose `wsIndex` is −1).

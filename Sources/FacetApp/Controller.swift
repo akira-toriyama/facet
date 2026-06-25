@@ -61,7 +61,11 @@ final class Controller: NSObject {
     /// all three views agree. Empty/nil ⇒ section model off here ⇒ the
     /// overview degrades to `lastWorkspaces`. Snapshot-on-show seeds from these.
     var lastSections: [ProjectedSection] = []
-    var lastActiveLens: String?
+    /// §A: the active lens's stable section id (`ProjectedSection.id`), fed to
+    /// all three views as the single-highlight key. Keyed on the id, not the
+    /// display label, so a non-unique / empty lens label can't light the wrong
+    /// cell. Display labels still come from each cell's own `label`.
+    var lastActiveLensID: String?
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -975,8 +979,8 @@ final class Controller: NSObject {
         if macDesktopOrdinal != nil { lastRenderedMacDesktopOrdinal = macDesktopOrdinal }
         // EX-2: project ONCE here (hoisted above the grid/rail feed AND the
         // tree render) so all three views share one ordered section list. Must
-        // run AFTER the active-section re-read above — `activeLens` reads the
-        // freshly-resolved `currentActiveSection.lensLabel`. Section model off
+        // run AFTER the active-section re-read above — `activeLensID` reads the
+        // freshly-resolved `currentActiveSection.lensID`. Section model off
         // ⇒ empty sections ⇒ the overview degrades to `wss` (byte-identical).
         if config.isSectionModelActive(ordinal: macDesktopOrdinal),
            let ordinal = macDesktopOrdinal {
@@ -1000,7 +1004,7 @@ final class Controller: NSObject {
         } else {
             lastSections = []
         }
-        lastActiveLens = currentActiveSection.lensLabel
+        lastActiveLensID = currentActiveSection.lensID
         // The active section-lens narrows the open grid/rail through the
         // snapshot's per-window `isLensParked` flag (the views drop the parked
         // thumbnails themselves) — no view-side recompute. `wss` stays the
@@ -1009,7 +1013,7 @@ final class Controller: NSObject {
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
-            g.activeLens = lastActiveLens      // EX-2: active lens for single-highlight
+            g.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
             g.layoutCells()       // refresh open grid on backend events
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
@@ -1017,19 +1021,19 @@ final class Controller: NSObject {
         // highlight + window counts track switches and add/close.
         if let rv = railView {
             // EX-2b: the active SECTION id BEFORE the field update (reads the
-            // rail's still-old activeLens/activeIndex/sections).
-            let oldActiveID = activeSectionID(activeLens: rv.activeLens,
+            // rail's still-old activeLensID/activeIndex/sections).
+            let oldActiveID = activeSectionID(activeLensID: rv.activeLensID,
                                               activeIndex: rv.activeIndex,
                                               sections: rv.sections)
             rv.workspaces = displayWss         // reorder: degrade-path cell order
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
-            rv.activeLens = lastActiveLens      // EX-2: active lens for single-highlight
+            rv.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
             // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
             // is open re-centres the strip on the new active SECTION — but
             // only when the user isn't mid-browse (cursor still on the OLD
             // active section), so a manual rotation isn't yanked back.
-            let newActiveID = activeSectionID(activeLens: rv.activeLens,
+            let newActiveID = activeSectionID(activeLensID: rv.activeLensID,
                                               activeIndex: rv.activeIndex,
                                               sections: rv.sections)
             if rv.selectedSectionID == oldActiveID, let n = newActiveID {
@@ -1121,14 +1125,14 @@ final class Controller: NSObject {
         // config's ordered sections — a window shows up in EVERY section it
         // matches. Otherwise the by-workspace / tag path.
         // EX-2: the projection is now HOISTED above the grid/rail feed (see
-        // `lastSections`/`lastActiveLens`), so the tree consumes the SAME
+        // `lastSections`/`lastActiveLensID`), so the tree consumes the SAME
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
         let contentH: CGFloat
         if config.isSectionModelActive(ordinal: macDesktopOrdinal) {
             contentH = sidebarView.update(sections: lastSections,
                                           workspaces: wss,
-                                          activeLens: lastActiveLens,
+                                          activeLensID: lastActiveLensID,
                                           titles: titles,
                                           macDesktop: macDesktopOrdinal)
         } else {

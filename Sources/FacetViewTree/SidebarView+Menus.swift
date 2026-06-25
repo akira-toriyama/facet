@@ -54,12 +54,14 @@ extension SidebarView {
         guard g >= 0, g < lastSections.count else { return }
         let sec = lastSections[g]
         guard sec.sectionType == .lens else { return }
-        let label = sec.label
+        // §A: the menu HEADER uses the display label, but the layout callback
+        // targets the lens by its stable section id (`sec.id`) — display and
+        // identity are split so a non-unique / empty label can't mistarget.
         ViewContextMenu.showLensLayout(
-            at: scr, backend: backend, lensLabel: label,
+            at: scr, backend: backend, lensLabel: sec.label,
             palette: pal, filterable: filterable
         ) { [weak self] mode in
-            self?.controller?.setLensLayout(label: label, mode: mode)
+            self?.controller?.setLensLayout(sectionID: sec.id, mode: mode)
         }
     }
 

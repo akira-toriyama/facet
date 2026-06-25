@@ -93,11 +93,13 @@ public final class SidebarView: NSView {
     /// internal relayouts in `rebuild()` (the projection is recomputed only
     /// on a Controller refresh, not on every search keystroke / resize).
     var lastSections: [ProjectedSection] = []
-    /// The active lens label pushed via `update(sections:activeLens:)` (PR6):
-    /// the `type=lens` section whose header is emphasised (`pal.primary`), or
-    /// nil for none. Reused by `rebuild()` so an internal relayout (search /
+    /// The active lens's stable section id (`ProjectedSection.id`) pushed via
+    /// `update(sections:activeLensID:)` (§A): the `type=lens` section whose
+    /// header is emphasised (`pal.primary`), or nil for none. Keyed on the id,
+    /// not the display label, so a non-unique / empty label can't light the
+    /// wrong header. Reused by `rebuild()` so an internal relayout (search /
     /// optimistic / resize) keeps the highlight. Session-only.
-    var lastActiveLens: String?
+    var lastActiveLensID: String?
 
     var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public internal(set) var signature = ""
@@ -270,7 +272,7 @@ public final class SidebarView: NSView {
     func rebuild() {
         if sectionModeActive {
             _ = update(sections: lastSections, workspaces: lastWorkspaces,
-                       activeLens: lastActiveLens)
+                       activeLensID: lastActiveLensID)
         } else {
             _ = update(lastWorkspaces)
         }
@@ -501,12 +503,12 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(sections: [ProjectedSection],
                        workspaces: [Workspace],
-                       activeLens: String? = nil,
+                       activeLensID: String? = nil,
                        titles: [WindowID: String]? = nil,
                        macDesktop: Int?? = nil) -> CGFloat {
         sectionModeActive = true
         lastSections = sections
-        lastActiveLens = activeLens
+        lastActiveLensID = activeLensID
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         if let macDesktop { macDesktopOrdinal = macDesktop }
@@ -538,8 +540,8 @@ public final class SidebarView: NSView {
         }
         // Header "active" (drives the `pal.primary` accent + the signature's
         // `*` marker): a workspace section follows its source workspace; a
-        // lens section lights up when it IS the active lens (PR6, matched by
-        // label — the CLI / click key). Folding it through `active`
+        // lens section lights up when it IS the active lens (§A, matched by
+        // stable section id — the CLI / click key). Folding it through `active`
         // everywhere means the signature rebuilds whenever the active lens
         // changes, with no separate sig field.
         func headerActive(_ sec: ProjectedSection) -> Bool {
@@ -547,9 +549,10 @@ public final class SidebarView: NSView {
             // lens is active, workspace-section headers go dark (the catalog is
             // already exclusive — `activeLens XOR activeWorkspace`; the view now
             // reflects it) so only the active lens header reads `pal.primary`.
+            // §A: keyed on the stable id, not the label.
             sec.sectionType == .lens
-                ? (activeLens != nil && sec.label == activeLens)
-                : (activeLens == nil && wsActive(sec.sourceWorkspaceIndex))
+                ? (activeLensID != nil && sec.id == activeLensID)
+                : (activeLensID == nil && wsActive(sec.sourceWorkspaceIndex))
         }
 
         let sig = (searching ? "S:\(query);" : "")

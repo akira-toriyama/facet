@@ -28,10 +28,10 @@ public enum ActiveSection: Equatable, Sendable {
     }
 
     /// The active lens's display **label**, parsed out of its stable id, else
-    /// `nil`. Lets display-only readers (`currentSectionLens()`, the tree
-    /// `activeLens` highlight) keep showing a label while identity is keyed on
-    /// the id. `nil` if no lens is active OR the id is malformed (cannot happen
-    /// for an id minted by `FilterProjection`).
+    /// `nil`. Lets display-only readers (`currentSectionLens()`) keep showing a
+    /// label while identity / highlight matching is keyed on the id (§A moved
+    /// the view highlight onto `activeLensID`). `nil` if no lens is active OR
+    /// the id is malformed (cannot happen for an id minted by `FilterProjection`).
     public var lensLabel: String? {
         guard case .lens(let id) = self else { return nil }
         return ApplyResolver.parseSectionID(id)?.label
@@ -47,10 +47,14 @@ public enum ActiveSection: Equatable, Sendable {
 /// `nil` when nothing is lit (no active index, or an active lens with no
 /// matching section). Pure — used by the Controller's persistent-rail
 /// re-centre to follow the active section across reconciles.
-public func activeSectionID(activeLens: String?, activeIndex: Int?,
+///
+/// §A: the active lens is identified by its **stable section id**
+/// (`ProjectedSection.id`), not the display label — a non-unique / empty
+/// label can't re-centre the wrong section.
+public func activeSectionID(activeLensID: String?, activeIndex: Int?,
                             sections: [ProjectedSection]) -> String? {
-    if let lens = activeLens {
-        return sections.first { $0.sectionType == .lens && $0.label == lens }?.id
+    if let id = activeLensID {
+        return sections.contains { $0.id == id } ? id : nil
     }
     guard let idx = activeIndex else { return nil }
     if sections.isEmpty { return "ws:\(idx)" }
