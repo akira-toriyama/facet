@@ -25,7 +25,8 @@ final class NewWindowInheritTests: XCTestCase {
     func testApplyForwardReturnsApplyOpsOfActiveLens() {
         let a = adapter([DesktopSection(type: .lens, label: "Web",
                                         match: "tag~=web", apply: [.addTag("web")])])
-        a.catalog.activeSectionLens = "Web"
+        // A0: the catalog stores the stable id; the single lens is declOrder 0.
+        a.catalog.activeSectionLens = "section:0:Web"
         XCTAssertEqual(a.activeSectionLensApplyForward(), [.addTag("web")])
     }
 
@@ -35,7 +36,7 @@ final class NewWindowInheritTests: XCTestCase {
         let a = adapter([DesktopSection(
             type: .lens, label: "Multi", match: "tag~=a",
             apply: [.addTag("a"), .addTag("b"), .setFloating(true), .setSticky(true)])])
-        a.catalog.activeSectionLens = "Multi"
+        a.catalog.activeSectionLens = "section:0:Multi"
         XCTAssertEqual(
             a.activeSectionLensApplyForward(),
             [.addTag("a"), .addTag("b"), .setFloating(true), .setSticky(true)],
@@ -49,7 +50,7 @@ final class NewWindowInheritTests: XCTestCase {
         let a = adapter([DesktopSection(
             type: .lens, label: "Routed", match: "tag~=r",
             apply: [.setWorkspace("Other"), .addTag("r"), .setFloating(true)])])
-        a.catalog.activeSectionLens = "Routed"
+        a.catalog.activeSectionLens = "section:0:Routed"
         XCTAssertEqual(
             a.activeSectionLensApplyForward(),
             [.addTag("r"), .setFloating(true)],
@@ -61,7 +62,7 @@ final class NewWindowInheritTests: XCTestCase {
         // can't be made to match it (declared gap).
         let a = adapter([DesktopSection(type: .lens, label: "Chrome",
                                         match: "app=Chrome")])
-        a.catalog.activeSectionLens = "Chrome"
+        a.catalog.activeSectionLens = "section:0:Chrome"
         XCTAssertEqual(a.activeSectionLensApplyForward(), [])
     }
 
@@ -84,7 +85,7 @@ final class NewWindowInheritTests: XCTestCase {
         let w10 = window(10, appName: "Chrome")
         let w20 = window(20, appName: "Safari")
         a.catalog.reconcile(live: [w10, w20])
-        a.catalog.activeSectionLens = "Web"
+        a.catalog.activeSectionLens = "section:0:Web"
         // Untagged: nothing matches `tag~=web`.
         XCTAssertEqual(a.sectionLensVisibleIDsAll(live: [w10, w20]) ?? [], [],
                        "no window carries the web tag yet")

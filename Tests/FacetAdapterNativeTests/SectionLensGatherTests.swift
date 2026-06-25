@@ -70,8 +70,9 @@ final class SectionLensGatherTests: XCTestCase {
         // Move wid(20) to WS2 — the inactive workspace.
         a.catalog.moveWindow(wid(20), to: 2, in: rect)
 
-        // Activate the lens.
-        a.catalog.activeSectionLens = "Web"
+        // Activate the lens. A0: the catalog stores the stable id; the single
+        // lens "Web" is declOrder 0 in the config above.
+        a.catalog.activeSectionLens = "section:0:Web"
 
         return (wid(10), wid(20), wid(30), [w10, w20, w30])
     }

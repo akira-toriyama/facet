@@ -45,7 +45,7 @@ final class TargetFramesLensTests: XCTestCase {
     private func seedAndApplyLens(_ a: NativeAdapter)
         -> (ws1Web: WindowID, ws2Web: WindowID, nonMatch: WindowID)
     {
-        // Force the ordinal so lensLayout(forLabel:) resolves against config.
+        // Force the ordinal so the active lens id resolves against config.
         a.activeMacDesktopOrdinal = 1
 
         a.catalog.seed(configs: [
@@ -70,8 +70,8 @@ final class TargetFramesLensTests: XCTestCase {
         _ = a.catalog.setMode(workspace: 1, to: "master-left", in: rect)
         _ = a.catalog.setMode(workspace: 2, to: "master-left", in: rect)
 
-        // Activate the lens label.
-        a.catalog.activeSectionLens = "Web"
+        // Activate the lens. A0: stable id (single lens "Web" is declOrder 0).
+        a.catalog.activeSectionLens = "section:0:Web"
 
         // Apply the lens so lensParkedMembers reflects the match verdict:
         // wid(30) (non-matching) is parked; wid(10) + wid(20) remain visible.
@@ -120,7 +120,7 @@ final class TargetFramesLensTests: XCTestCase {
         _ = seedAndApplyLens(a)
 
         let resolved = LensLayout.resolve(
-            a.lensLayout(forLabel: "Web"),
+            a.lensLayout(),
             globalDefault: a.config.effectiveDefaultLayout)
 
         let expected = a.catalog.sectionLensUnionFrames(layout: resolved, in: rect)

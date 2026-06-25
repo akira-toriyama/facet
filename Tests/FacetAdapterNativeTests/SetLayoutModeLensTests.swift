@@ -76,7 +76,8 @@ final class SetLayoutModeLensTests: XCTestCase {
         // never resized — so these union-frame tests need a tiled home).
         _ = a.catalog.setMode(workspace: 1, to: "master-left", in: rect)
         _ = a.catalog.setMode(workspace: 2, to: "master-left", in: rect)
-        a.catalog.activeSectionLens = "Web"
+        // A0: stable id — adapterWithWebLens has a single lens at declOrder 0.
+        a.catalog.activeSectionLens = "section:0:Web"
         a.catalog.activeSectionLensLayout = nil   // mirror what setSectionLens does
 
         // Apply the lens so lensParkedMembers is correct.
@@ -137,13 +138,14 @@ final class SetLayoutModeLensTests: XCTestCase {
         // Manually set the override (mirrors what setLayoutMode does).
         a.catalog.activeSectionLensLayout = "grid"
 
-        let resolved = a.resolvedLensLayout(forLabel: "Web")
+        let resolved = a.resolvedLensLayout()
         XCTAssertEqual(resolved, "grid",
             "resolvedLensLayout must return the runtime override when set")
 
-        // And when nil, falls back to the config layout ("spiral").
+        // And when nil, falls back to the config layout ("spiral"). This relies
+        // on the active lens id resolving (seedAndActivateLens set section:0:Web).
         a.catalog.activeSectionLensLayout = nil
-        let fallback = a.resolvedLensLayout(forLabel: "Web")
+        let fallback = a.resolvedLensLayout()
         XCTAssertEqual(fallback, "spiral",
             "resolvedLensLayout must fall back to the config layout when override is nil")
     }
@@ -242,7 +244,7 @@ final class SetLayoutModeLensTests: XCTestCase {
     /// `clearSectionLens` must reset `activeSectionLensLayout` to nil.
     func testOverrideResetOnClear() {
         var c = seededCatalog(2)
-        c.activeSectionLens = "Web"
+        c.activeSectionLens = "section:0:Web"   // A0: stable id (catalog stores it opaquely)
         c.activeSectionLensLayout = "grid"
 
         _ = c.clearSectionLens(in: .zero)
@@ -280,9 +282,11 @@ final class SetLayoutModeLensTests: XCTestCase {
         // Set a prior override (as if a --layout command had run).
         a.catalog.activeSectionLensLayout = "grid"
 
-        // Re-activate the "Web" lens via the real adapter path.
+        // Re-activate the "Web" lens via the real adapter path. A0: setSectionLens
+        // takes the stable id — adapterWithWebLensAndWorkspace has the lens at
+        // declOrder 1 (after the workspace section).
         // setSectionLens has dispatchPrecondition(.onQueue(cliQueue)); run on it.
-        cliQueue.sync { a.setSectionLens("Web", autoFocus: false) }
+        cliQueue.sync { a.setSectionLens("section:1:Web", autoFocus: false) }
 
         // The adapter's activate path clears activeSectionLensLayout → nil.
         XCTAssertNil(a.catalog.activeSectionLensLayout,

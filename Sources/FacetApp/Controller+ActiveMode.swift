@@ -205,10 +205,15 @@ extension Controller {
     /// `setActiveLens` validates the label + re-renders; this maps the click to
     /// activate / clear. Tree click → `autoFocus: false` (the tree keeps key).
     func toggleActiveLens(_ label: String) {
-        if currentActiveSection == .lens(label) {
+        // A0: the tree passes a display label; resolve to the stable id so the
+        // toggle-off comparison + activation are id-keyed. An unresolvable label
+        // (no such lens) is a no-op.
+        let ordinal = currentMacDesktopOrdinal()
+        guard let id = lensID(forLabel: label, ordinal: ordinal) else { return }
+        if currentActiveSection == .lens(id) {
             setActiveLens(nil)                                // toggle off → active workspace
         } else {
-            activateSection(.lens(label), autoFocus: false)   // tree keeps key focus
+            activateLensID(id, ordinal: ordinal, autoFocus: false)   // tree keeps key focus
         }
     }
 

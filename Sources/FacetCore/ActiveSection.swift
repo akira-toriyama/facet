@@ -12,15 +12,29 @@ public enum ActiveSection: Equatable, Sendable {
     /// 0-based convention at the seam; the `[Workspace]` snapshot's
     /// `index` is also 0-based, so a `+1` is needed when deriving from it.
     case workspace(Int)
-    /// The active `type="lens"` section, keyed by its config `label`.
+    /// The active `type="lens"` section, keyed by its **stable section id**
+    /// (`"section:<declOrder>:<label>"` — `ProjectedSection.id`). A0 moved the
+    /// lens identity off the raw `label` (which becomes optional / non-unique in
+    /// the section-label campaign) onto the declOrder-embedded id; the label is
+    /// now display-only (derive it with `lensLabel`). The id↔label map is 1:1
+    /// while labels are unique + non-empty, so this stays behaviour-preserving.
     case lens(String)
 
-    /// The lens label when a lens section is active, else `nil`. Lets
-    /// lens-only readers (`currentSectionLens()`, the tree `activeLens`
-    /// highlight) derive their value from the unified concept.
-    public var lensLabel: String? {
-        if case .lens(let label) = self { return label }
+    /// The active lens's stable section id, else `nil`. The raw `.lens` payload
+    /// — the identity used for routing / highlight matching.
+    public var lensID: String? {
+        if case .lens(let id) = self { return id }
         return nil
+    }
+
+    /// The active lens's display **label**, parsed out of its stable id, else
+    /// `nil`. Lets display-only readers (`currentSectionLens()`, the tree
+    /// `activeLens` highlight) keep showing a label while identity is keyed on
+    /// the id. `nil` if no lens is active OR the id is malformed (cannot happen
+    /// for an id minted by `FilterProjection`).
+    public var lensLabel: String? {
+        guard case .lens(let id) = self else { return nil }
+        return ApplyResolver.parseSectionID(id)?.label
     }
 }
 

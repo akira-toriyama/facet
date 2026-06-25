@@ -57,12 +57,18 @@ final class ActiveSectionAdapterTests: XCTestCase {
         XCTAssertNil(a.currentSectionLens())               // shim agrees
     }
 
+    // A0: lens identity is the stable id `section:<declOrder>:<label>`. The
+    // "Web" lens is the 2nd section (declOrder 1) in the config above. The
+    // display label ("Web") still round-trips out of the id via `lensLabel`,
+    // so `currentSectionLens()` (the label shim) is unchanged.
+    private let webLensID = "section:1:Web"
+
     func testActivateLensReflectsInMirror() {
         let a = adapterWithWebLensAndWorkspace()
         seeded(a)
-        cliQueue.sync { a.activateSection(.lens("Web"), autoFocus: false) }
-        XCTAssertEqual(a.currentActiveSection(), .lens("Web"))
-        XCTAssertEqual(a.currentSectionLens(), "Web")      // shim agrees
+        cliQueue.sync { a.activateSection(.lens(webLensID), autoFocus: false) }
+        XCTAssertEqual(a.currentActiveSection(), .lens(webLensID))
+        XCTAssertEqual(a.currentSectionLens(), "Web")      // shim parses label out of id
     }
 
     func testActivateWorkspaceSameIndexClearsActiveLens() {
@@ -70,8 +76,8 @@ final class ActiveSectionAdapterTests: XCTestCase {
         // activeIndex)) must clear the lens explicitly — not leave it stale.
         let a = adapterWithWebLensAndWorkspace()
         seeded(a)
-        cliQueue.sync { a.activateSection(.lens("Web"), autoFocus: false) }
-        XCTAssertEqual(a.currentActiveSection(), .lens("Web"))
+        cliQueue.sync { a.activateSection(.lens(webLensID), autoFocus: false) }
+        XCTAssertEqual(a.currentActiveSection(), .lens(webLensID))
 
         cliQueue.sync { a.activateSection(.workspace(1), autoFocus: false) } // 1 == activeIndex
         XCTAssertEqual(a.currentActiveSection(), .workspace(1))
