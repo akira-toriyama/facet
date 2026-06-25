@@ -20,7 +20,7 @@ extension SidebarView {
         case .header(let g, let ws):
             // Workspace header → full layout picker; lens header → the
             // stateless-only union layout picker (R9 / Cluster B).
-            if let ws { headerMenu(at: scr, workspaceIndex: ws) }
+            if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws) }
             else { lensHeaderMenu(at: scr, group: g) }
         case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
@@ -33,17 +33,34 @@ extension SidebarView {
     // The header (layout) + window (ops) menus are shared with grid /
     // rail via `ViewContextMenu` (FacetView) so all three views show the
     // identical themed popup (③).
-    /// Header right-click / `m` menu → the workspace layout picker.
-    func headerMenu(at scr: NSPoint, workspaceIndex ws: Int,
+    /// Header right-click / `m` menu → the workspace layout picker. `g` is the
+    /// render group (display position) — drives the §D `index (label)` header.
+    func headerMenu(at scr: NSPoint, group g: Int, workspaceIndex ws: Int,
                             filterable: Bool = false) {
-        showLayoutMenu(at: scr, workspaceIndex: ws, filterable: filterable)
+        showLayoutMenu(at: scr, group: g, workspaceIndex: ws, filterable: filterable)
     }
 
-    private func showLayoutMenu(at scr: NSPoint, workspaceIndex ws: Int,
+    private func showLayoutMenu(at scr: NSPoint, group g: Int, workspaceIndex ws: Int,
                                 filterable: Bool = false) {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
+                                   header: sectionHeaderDisplay(group: g),
                                    palette: pal, filterable: filterable)
+    }
+
+    /// §D caption for the header at render group `g`: `index (label)`. Section
+    /// mode → `index = g + 1` (g IS the display position). By-workspace degrade
+    /// → `g == ws.index`, so the display position is `g`'s slot in the
+    /// (reorder-applied) `lastWorkspaces`, NOT `g + 1` — matching the rendered
+    /// row caption and `--focus index:N`.
+    func sectionHeaderDisplay(group g: Int) -> String {
+        if g >= 0, g < lastSections.count {
+            return sectionDisplayLabel(index: g + 1, label: lastSections[g].label)
+        }
+        guard let pos = lastWorkspaces.firstIndex(where: { $0.index == g }) else {
+            return sectionDisplayLabel(index: g + 1, label: "")
+        }
+        return sectionDisplayLabel(index: pos + 1, label: lastWorkspaces[pos].name)
     }
 
     /// Lens-section header right-click / `m` menu → the stateless-only union
@@ -57,8 +74,10 @@ extension SidebarView {
         // §A: the menu HEADER uses the display label, but the layout callback
         // targets the lens by its stable section id (`sec.id`) — display and
         // identity are split so a non-unique / empty label can't mistarget.
+        // §D: the header is the unified `index (label)` caption (e.g. "4 (Web)").
         ViewContextMenu.showLensLayout(
-            at: scr, backend: backend, lensLabel: sec.label,
+            at: scr, backend: backend,
+            lensLabel: sectionDisplayLabel(index: g + 1, label: sec.label),
             palette: pal, filterable: filterable
         ) { [weak self] mode in
             self?.controller?.setLensLayout(sectionID: sec.id, mode: mode)

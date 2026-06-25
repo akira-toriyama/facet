@@ -78,11 +78,3 @@ public func gridWrapIndex(index: Int, dx: Int, dy: Int,
     }
     return i
 }
-
-/// Short label for a workspace cell — delegates to the shared
-/// `workspaceShortLabel` (FacetCore) so grid / rail / tree captions
-/// stay identical. Kept as a thin module-local name for the existing
-/// call sites + `GridMathTests`.
-public func gridLabel(name: String, idx: Int) -> String {
-    workspaceShortLabel(name: name, idx: idx)
-}

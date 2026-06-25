@@ -395,8 +395,14 @@ extension SidebarView {
     // MARK: - Workspace-content swap (header drag / kb header lift)
 
     private func wsName(_ ws: Int) -> String {
-        let w = lastWorkspaces.first { $0.index == ws }
-        return (w?.name.isEmpty == false) ? w!.name : "WS\(ws + 1)"
+        // §D caption `index (label)`. Only reached in the by-workspace degrade
+        // header-swap (mode 3), where the arg is `ws.index`. The display index
+        // is that workspace's slot in the (reorder-applied) `lastWorkspaces`,
+        // NOT `ws + 1` — matching the rendered caption + `--focus index:N`.
+        guard let pos = lastWorkspaces.firstIndex(where: { $0.index == ws }) else {
+            return sectionDisplayLabel(index: ws + 1, label: "")
+        }
+        return sectionDisplayLabel(index: pos + 1, label: lastWorkspaces[pos].name)
     }
 
     private func swapChipLabel(for ws: Int) -> String { "⇄ \(wsName(ws))" }
@@ -406,11 +412,9 @@ extension SidebarView {
     /// glyph. Used only when the snapshot drag-card can't be built.
     private func reorderChipLabel(for g: Int) -> String {
         guard g < lastSections.count else { return "⇅" }
-        let s = lastSections[g]
-        let nm = s.sectionType == .lens
-            ? s.label
-            : workspaceShortLabel(name: s.label, idx: s.sourceWorkspaceIndex ?? 0)
-        return "⇅ \(nm)"
+        // §D caption `index (label)` — index = tree position `g + 1`, same for
+        // workspace + lens.
+        return "⇅ \(sectionDisplayLabel(index: g + 1, label: lastSections[g].label))"
     }
 
     func wsOf(windowID id: WindowID) -> Int? {

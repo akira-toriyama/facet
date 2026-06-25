@@ -101,18 +101,20 @@ public enum ViewContextMenu {
 
     /// Layout-engine picker for a workspace header. `ws` is the 0-based
     /// workspace index; `workspaces` the view's current snapshot (for the
-    /// checkmark on the active mode).
+    /// checkmark on the active mode). `header` is the §D `index (label)`
+    /// caption composed by the caller (display ≠ `ws + 1` once lenses shift
+    /// the section's tree position).
     public static func showLayout(
         at scr: NSPoint,
         backend: any WindowBackend,
         workspaceIndex ws: Int,
         workspaces: [Workspace],
+        header: String,
         palette: ResolvedPalette,
         filterable: Bool = false
     ) {
         let modes = backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
-        let header = "WS\(ws + 1)"
         let entries = modes.map { mode in
             Entry(label: mode, icon: layoutModeIcon(mode),
                   section: "Layout", checked: mode == cur) {

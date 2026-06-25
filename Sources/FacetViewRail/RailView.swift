@@ -237,7 +237,7 @@ public final class RailView: NSView {
         let wsIndex: Int
         let sectionType: SectionType
         let sectionID: String
-        let label: String           // ws.name for a workspace; the bare lens label
+        let label: String           // §D composed caption: `index (label)`
         let mode: String            // layout engine; "" for a lens
         let windows: [Window]
         let isActive: Bool          // single-highlight XOR, baked at build time
@@ -250,14 +250,20 @@ public final class RailView: NSView {
     /// `overviewCellSources` / `SidebarView.headerActive`).
     private func overviewCellSources() -> [CellSource] {
         if sections.isEmpty {
-            return workspaces.map { ws in
+            return workspaces.enumerated().map { (i, ws) in
+                // §D: caption = `index (label)`. Index = 1-based DISPLAY position
+                // (`workspaces` is `displayWss` — reorder-applied), NOT `ws.index`
+                // (a session reorder makes them differ; `--focus index:N`
+                // addresses by this display position).
                 CellSource(wsIndex: ws.index, sectionType: .workspace,
-                           sectionID: "ws:\(ws.index)", label: ws.name,
+                           sectionID: "ws:\(ws.index)",
+                           label: sectionDisplayLabel(index: i + 1,
+                                                      label: ws.name),
                            mode: ws.layoutMode, windows: ws.windows,
                            isActive: activeLensID == nil && ws.isActive)
             }
         }
-        return sections.map { sec in
+        return sections.enumerated().map { (i, sec) in
             let isLens = sec.sectionType == .lens
             // The projection doesn't carry a workspace's live layoutMode; look
             // it up by source index (a lens has no layout engine → "").
@@ -269,9 +275,14 @@ public final class RailView: NSView {
             let active = isLens
                 ? (activeLensID != nil && sec.id == activeLensID)
                 : (activeLensID == nil && srcWS?.isActive == true)
+            // §D: every section type captions as `index (label)` — the
+            // 1-based display index is the section's position in tree order
+            // (this `.enumerated()` `i`), NOT `sourceWorkspaceIndex`.
             return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
                               sectionType: sec.sectionType, sectionID: sec.id,
-                              label: sec.label, mode: mode,
+                              label: sectionDisplayLabel(index: i + 1,
+                                                         label: sec.label),
+                              mode: mode,
                               windows: sec.windows, isActive: active)
         }
     }
@@ -957,7 +968,8 @@ public final class RailView: NSView {
             guard !cell.isLens else { return }       // lens header → no layout picker
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
-                                       workspaces: workspaces, palette: pal)
+                                       workspaces: workspaces,
+                                       header: cell.label, palette: pal)
             return
         }
         if let w = heroWinAt(p), let h = hero {
@@ -984,7 +996,7 @@ public final class RailView: NSView {
                 convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex, workspaces: workspaces,
-                                       palette: pal)
+                                       header: cell.label, palette: pal)
         } else if let h = hero, kbSelectedWindowIdx >= 0,
                   kbSelectedWindowIdx < h.windows.count {
             let w = h.windows[kbSelectedWindowIdx]
