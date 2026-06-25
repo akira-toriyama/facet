@@ -1,9 +1,9 @@
 // Grid-style workspace header for the rail's bottom cells: a grip
 // glyph + the WS name + layout mode on a faint rounded band. The grip
 // + fill read as grabbable (header drag = swap in Phase R3, click =
-// switch). The text-line / label drawing is shared (FacetView
-// `drawTextLine`, FacetCore `workspaceShortLabel`) so the rail matches
-// the grid without importing FacetViewGrid.
+// switch). The text-line drawing is shared (FacetView `drawTextLine`) and
+// the caption is the §D `sectionDisplayLabel` composed upstream, so the
+// rail matches the grid without importing FacetViewGrid.
 
 import AppKit
 import FacetCore
@@ -64,9 +64,9 @@ extension RailView {
                                (hb.height * railHeaderNameFrac).rounded()))
         let nameColor = browseTarget ? pal.secondary
             : (cell.isActive ? pal.primary : pal.foreground)
-        // A lens cell shows its bare label (no WS ordinal); a workspace uses
-        // the shared short caption.
-        let name = cell.isLens ? cell.label : railLabel(cell.label, cell.wsIndex)
+        // §D: `cell.label` is already the composed `index (label)` caption
+        // (built in `overviewCellSources`), identical for workspace + lens.
+        let name = cell.label
 
         if cell.mode.isEmpty || hb.height < railHeaderTwoLineMinH {
             let nameH = nameFont * 1.3
@@ -95,11 +95,5 @@ extension RailView {
                                  .foregroundColor: modeColor,
                                  .paragraphStyle: lp])
         }
-    }
-
-    /// Short WS caption — delegates to the shared `workspaceShortLabel`
-    /// (FacetCore). Thin module-local name for the rail's call sites.
-    func railLabel(_ name: String, _ idx: Int) -> String {
-        workspaceShortLabel(name: name, idx: idx)
     }
 }

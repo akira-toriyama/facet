@@ -41,7 +41,7 @@ extension RailView {
             return MiniThumbSpec(rect: local, content: content)
         }
         let g = makeWorkspaceGhost(cellRect: cell.rect,
-                                   label: railLabel(cell.label, cell.wsIndex),
+                                   label: cell.label,
                                    thumbs: thumbs,
                                    style: railGhostStyle,
                                    pal: pal)     // PR-B: rail's per-view palette

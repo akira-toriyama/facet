@@ -283,14 +283,21 @@ public final class GridView: NSView {
     /// per projected section (workspace + lens), in config order.
     private func overviewCellSources() -> [CellSource] {
         if sections.isEmpty {
-            return workspaces.map { ws in
+            return workspaces.enumerated().map { (i, ws) in
+                // §D: caption = `index (label)`. The index is the cell's 1-based
+                // DISPLAY position (`workspaces` here is `displayWss` — already
+                // reorder-applied), NOT `ws.index`: a session reorder makes them
+                // differ, and `facet section --focus index:N` addresses by this
+                // same display position (Controller `addressableSections`).
                 CellSource(wsIndex: ws.index, sectionType: .workspace,
-                           sectionID: "ws:\(ws.index)", label: ws.name,
+                           sectionID: "ws:\(ws.index)",
+                           label: sectionDisplayLabel(index: i + 1,
+                                                      label: ws.name),
                            mode: ws.layoutMode, windows: ws.windows,
                            isActive: activeLensID == nil && ws.isActive)
             }
         }
-        return sections.map { sec in
+        return sections.enumerated().map { (i, sec) in
             let isLens = sec.sectionType == .lens
             // The projection doesn't carry a workspace's live layoutMode; look
             // it up by source index (a lens has no layout engine → "").
@@ -303,9 +310,15 @@ public final class GridView: NSView {
             let active = isLens
                 ? (activeLensID != nil && sec.id == activeLensID)
                 : (activeLensID == nil && srcWS?.isActive == true)
+            // §D: every section type captions as `index (label)` — the
+            // 1-based display index is the section's position in tree order
+            // (this `.enumerated()` `i`), NOT `sourceWorkspaceIndex` (a lens
+            // shifts later workspaces' display index).
             return CellSource(wsIndex: sec.sourceWorkspaceIndex ?? -1,
                               sectionType: sec.sectionType, sectionID: sec.id,
-                              label: sec.label, mode: mode,
+                              label: sectionDisplayLabel(index: i + 1,
+                                                         label: sec.label),
+                              mode: mode,
                               windows: sec.windows, isActive: active)
         }
     }
@@ -460,17 +473,14 @@ public final class GridView: NSView {
                 : cellRect.minY - labelH - gridLabelGap + 2
             let headerRect = NSRect(x: cellRect.minX, y: headerY,
                                     width: cellRect.width, height: labelH)
-            // A lens cell shows its bare label; a workspace cell decorates it
-            // with the index/emoji like before (gridLabel is workspace-only).
-            let cellLabel = src.sectionType == .lens
-                ? src.label
-                : gridLabel(name: src.label, idx: src.wsIndex)
+            // §D: `src.label` is already the composed `index (label)` caption
+            // (built in `overviewCellSources`), identical for workspace + lens.
             cells.append(OverviewCell(
                 wsIndex: src.wsIndex,
                 rect: cellRect,
                 headerRect: headerRect,
                 isActive: src.isActive,
-                label: cellLabel,
+                label: src.label,
                 mode: src.mode,
                 windows: hits,
                 sectionType: src.sectionType,
@@ -799,7 +809,8 @@ public final class GridView: NSView {
             guard !cell.isLens else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
-                                       workspaces: workspaces, palette: pal)
+                                       workspaces: workspaces,
+                                       header: cell.label, palette: pal)
             return
         }
         if let cell = cells.first(where: { $0.rect.contains(p) }),
@@ -828,7 +839,7 @@ public final class GridView: NSView {
             guard !cell.isLens else { return }
             ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
                                        workspaceIndex: cell.wsIndex, workspaces: workspaces,
-                                       palette: pal)
+                                       header: cell.label, palette: pal)
         } else if kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < cell.windows.count {
             let wh = cell.windows[kbSelectedWindowIdx]
             // Window ops target the window's HOME WS (resolved) — a thumb may

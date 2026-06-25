@@ -1,23 +1,19 @@
-// Short, display-only caption for a workspace cell — shared by the
-// grid, rail, and tree headers so the same name renders identically in
-// every view. Strips a leading "workspace " prefix (case-insensitive)
-// so a user-named "WORKSPACE Q" shows as "Q", matching the Mission
-// Control convention of single-letter cell captions. Empty name →
-// "WS<n>" (1-based).
+// Display caption for a section header / cell — shared by the grid, rail,
+// and tree so the same caption renders identically in every view. The
+// section's 1-based display index (tree order) is ALWAYS shown; an optional
+// label follows in parens. §D: replaces the old `workspaceShortLabel`
+// ("WS<n>" / "workspace " prefix-strip / emoji-pool) — unnamed sections are
+// addressed by their index, named ones read "index (label)". Applies to
+// every section type (workspace / lens / unassigned) so `facet section
+// --focus N` and the on-screen caption agree.
 //
-// Pure / display-only: the layout picker, CLI, and config keep the full
-// workspace name; only the caption is shortened.
+// Pure / display-only: routing / CLI / config keep the section's stable id
+// + raw label; only the caption composes index + label.
 
-/// Short workspace caption from `name` (or `WS<idx+1>` when empty). A
-/// user-named workspace passes through unchanged (§B retired the emoji-pool
-/// decoration). NOTE: §D replaces this helper with
-/// `sectionDisplayLabel(index:label:)` — the `WS<n>` empty-name form is
-/// transitional until then.
-public func workspaceShortLabel(name: String, idx: Int) -> String {
-    if name.isEmpty { return "WS\(idx + 1)" }
-    let lower = name.lowercased()
-    if lower.hasPrefix("workspace "), name.count > "workspace ".count {
-        return String(name.dropFirst("workspace ".count))
-    }
-    return name
+/// `index` (when `label` is empty) or `index (label)`. `index` is the FINAL
+/// 1-based value — callers pass the tree-display position directly (no
+/// internal `+1`); a 0-based source index must be incremented at the call
+/// site.
+public func sectionDisplayLabel(index: Int, label: String) -> String {
+    label.isEmpty ? "\(index)" : "\(index) (\(label))"
 }

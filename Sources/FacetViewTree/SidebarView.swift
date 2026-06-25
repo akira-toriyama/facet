@@ -340,13 +340,19 @@ public final class SidebarView: NSView {
         // Resolve which windows each workspace shows (search filters by
         // window; a zero-match workspace drops out — see #202). Reused for
         // both the width pre-pass and the row build below.
-        let shown: [(ws: Workspace, wins: [Window])] = workspaces.compactMap { ws in
-            let wins = searching
-                ? ws.windows.filter { fuzzyMatch(query, $0.appName + " " + eff($0)) }
-                : ws.windows
-            if searching && wins.isEmpty { return nil }
-            return (ws, wins)
-        }
+        // `pos` = the workspace's 1-based DISPLAY position, captured BEFORE the
+        // search drop (so a filtered-out workspace doesn't renumber survivors).
+        // `workspaces` is `displayWss` (reorder-applied) → `pos` is the §D
+        // caption index, matching `--focus index:N` (degrade addresses by
+        // display position, not `ws.index`).
+        let shown: [(pos: Int, ws: Workspace, wins: [Window])] =
+            workspaces.enumerated().compactMap { (i, ws) in
+                let wins = searching
+                    ? ws.windows.filter { fuzzyMatch(query, $0.appName + " " + eff($0)) }
+                    : ws.windows
+                if searching && wins.isEmpty { return nil }
+                return (i, ws, wins)
+            }
 
         // Horizontal content width = the widest row's NATURAL (untruncated)
         // text width, floored at the visible clip width. Titles draw at
@@ -356,10 +362,10 @@ public final class SidebarView: NSView {
         let clipW = enclosingScrollView?.contentView.bounds.width ?? bounds.width
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
-        for (ws, wins) in shown {
-            // Friendly caption via the shared helper (bare emoji → "Dog 🐶");
-            // no uppercase — matches lens / grid / rail.
-            let nm = workspaceShortLabel(name: ws.name, idx: ws.index)
+        for (pos, ws, wins) in shown {
+            // §D caption `index (label)` — index = 1-based DISPLAY position
+            // (reorder-aware); matches grid / rail + `--focus index:N`.
+            let nm = sectionDisplayLabel(index: pos + 1, label: ws.name)
             // Measure at the HEAVIEST draw weight (active = .bold name /
             // .semibold layout) so the natural width is a safe upper bound —
             // it must never be narrower than the drawn text or the
@@ -410,16 +416,18 @@ public final class SidebarView: NSView {
         // cross-WS list; keeping the grouping is the only behavioural
         // change.
         var firstHeader = true
-        for (ws, wins) in shown {
+        for (pos, ws, wins) in shown {
             let start = y
-            // Section header. Workspace mode: one per workspace ("WS N" /
-            // name) — click switches, right-click / `m` picks the layout.
+            // Section header. Workspace mode: one per workspace (§D caption
+            // `index (label)`) — click switches, right-click / `m` picks layout.
+            // `group`/`workspaceIndex` stay `ws.index` (routing / band keys);
+            // only the visible caption uses the DISPLAY position `pos`.
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
             rows.append(TreeRow(rect: hr,
                                 kind: .header(group: ws.index,
                                               workspaceIndex: ws.index)))
-            let t = workspaceShortLabel(name: ws.name, idx: ws.index)
+            let t = sectionDisplayLabel(index: pos + 1, label: ws.name)
             cells.append(Cell(row: hr, kind: 1, hot: headerActive(ws),
                               firstHeader: firstHeader, pid: 0, app: "",
                               title: "", text: t,
@@ -598,12 +606,13 @@ public final class SidebarView: NSView {
         let clipW = enclosingScrollView?.contentView.bounds.width ?? bounds.width
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
-        for (_, sec, wins) in shown {
+        for (g, sec, wins) in shown {
             let isLens = sec.sectionType == .lens
-            // Lens label as-authored; workspace (auto-emoji) name through the
-            // shared friendly helper (bare emoji → "Dog 🐶"), no uppercase.
-            let nm = isLens ? sec.label
-                : workspaceShortLabel(name: sec.label, idx: sec.sourceWorkspaceIndex ?? 0)
+            // §D caption `index (label)` for every type — index = the section's
+            // 1-based tree position (`g + 1`, invariant across search filter).
+            // MUST byte-match the render-pass label below or horizontal scroll
+            // clips. The leading lens glyph is separate chrome (`+22`).
+            let nm = sectionDisplayLabel(index: g + 1, label: sec.label)
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
                 + (isLens ? 22 : 0)   // leading lens glyph
@@ -628,8 +637,8 @@ public final class SidebarView: NSView {
             let src = sec.sourceWorkspaceIndex
             let layout = isLens ? "" : wsLayout(src)
             let active = headerActive(sec)
-            let label = isLens ? sec.label
-                : workspaceShortLabel(name: sec.label, idx: src ?? 0)
+            // §D caption `index (label)` — byte-identical to the width pre-pass.
+            let label = sectionDisplayLabel(index: g + 1, label: sec.label)
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
             // Workspace section → click switches to its source WS; lens

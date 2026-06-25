@@ -125,27 +125,7 @@ final class GridMathTests: XCTestCase {
         XCTAssertEqual(mapped, .zero)
     }
 
-    // MARK: - gridLabel
-
-    func testGridLabelStripsWorkspacePrefix() {
-        XCTAssertEqual(gridLabel(name: "WORKSPACE Q", idx: 0), "Q")
-        XCTAssertEqual(gridLabel(name: "workspace alpha", idx: 0),
-                       "alpha")
-    }
-
-    func testGridLabelKeepsNonPrefixedNames() {
-        XCTAssertEqual(gridLabel(name: "Code", idx: 3), "Code")
-    }
-
-    func testGridLabelFallsBackToWsN() {
-        XCTAssertEqual(gridLabel(name: "", idx: 0), "WS1")
-        XCTAssertEqual(gridLabel(name: "", idx: 4), "WS5")
-    }
-
-    func testGridLabelDoesNotStripLoneWord() {
-        // "workspace" alone (no following content) → return as-is so
-        // the user's literal name still shows.
-        XCTAssertEqual(gridLabel(name: "workspace", idx: 0),
-                       "workspace")
-    }
+    // §D: the WS caption (`gridLabel`) was retired in favour of the shared
+    // FacetCore `sectionDisplayLabel(index:label:)` — its tests live in
+    // `WorkspaceLabelTests`.
 }
