@@ -534,6 +534,18 @@ final class Controller: NSObject {
                 Log.line("active lens no longer resolves after config reload "
                     + "(id=\(id)) → workspace \(ws)")
                 currentActiveSection = .workspace(ws)
+                // COMPLETE the drop: clear the backend lens too, so the catalog
+                // un-parks the windows the dropped lens was holding. The mirror
+                // alone would leave the catalog's `activeSectionLens` set (its
+                // windows parked) while the Controller shows a workspace —
+                // desynced until the next lens op. Enqueued on `cliQueue` BEFORE
+                // `updateConfig` below (FIFO), so the clear runs against the
+                // still-valid old adapter config (its guards pass; the clear
+                // path only restores parked members, it never re-resolves the
+                // id). Mirrors `setActiveLens(nil)`'s clear.
+                runBackendCommand { bk in
+                    bk.setSectionLens(nil, autoFocus: false); return nil
+                }
             }
         }
         backend.updateConfig(fresh)   // hot-reload the backend's copy
