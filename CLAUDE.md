@@ -410,7 +410,18 @@ Moved out of this file to keep it lean: see
 `external-reference-selection`); re-check on any 6+ month gap.
 
 
-## Roadmap board (GitHub Projects)
+## Roadmap board / task tracker
 
 issue 運用（集約 Project「roadmap」#5・Inbox 既定 / Status フロー / `Closes #N`）は
 family 共通ポリシー。正典 → https://github.com/akira-toriyama/atelier/blob/main/docs/roadmap-board.md
+
+facet の作業タスク（バックログ・設計メモ・引き継ぎ）の**正本は private repo
+[`akira-toriyama/projects`](https://github.com/akira-toriyama/projects)**（自作 furrow 製・
+plain-text の `.furrow/` = JSON index + per-task markdown body）。`facet` ラベルで絞る:
+`furrow ls -l facet` / 次の着手は `furrow next -l facet` / `furrow show <id>`。Project #5
+はその公開ミラー（手動）。**repo-root の `Task.md` は 2026-06-25 に退役**し projects へ移行
+済み（`furrow migrate --label facet`）。furrow 未導入なら
+`brew install akira-toriyama/tap/furrow` か
+`go install github.com/akira-toriyama/furrow/cmd/furrow@latest`、最悪 `.furrow/`
+（index.json + bodies/）を直接読む。`.furrow/index.json` は furrow が機械生成＝手編集禁止・
+`bodies/*.md` は手編集 OK。

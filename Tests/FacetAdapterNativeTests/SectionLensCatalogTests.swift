@@ -421,7 +421,7 @@ final class SectionLensCatalogTests: XCTestCase {
         XCTAssertFalse(c.lensParkedMembers.contains(wid(20)))
     }
 
-    // MARK: - float-mode home windows are never lens-union-tiled (Task.md item 5)
+    // MARK: - float-mode home windows are never lens-union-tiled (R2 / item5)
 
     /// A window whose HOME workspace is FLOAT mode must NOT join the lens union.
     /// float = the user owns the geometry, so a lens (a visibility filter) shows
