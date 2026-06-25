@@ -169,10 +169,16 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   adopt/park, empty `workspaces()` → Controller's empty-list guard
   hides the panel). No `[[desktop.N.section]]` at all → every mac desktop
   managed with the global default. `FacetConfig.isMacDesktopManaged`.
-  **Workspaces are never named from config** (the old `[desktop.N]`
-  by-name seed was retired): a `type = "workspace"` section is auto-named
-  from the emoji pool (`WorkspaceNaming`); naming is runtime-only via
-  `facet workspace --rename`.
+  **A workspace section may be named from config via an optional `label`**
+  (§A / t-0018 reversed the old "never named from config" rule; the old
+  `[desktop.N]` by-name seed stays retired). `type = "workspace"` with a
+  non-empty `label` names the workspace; an empty / absent `label` falls
+  back to the emoji pool (`WorkspaceNaming`). The `label` is OPTIONAL on
+  every section type now (`lens` / `unassigned` too); within one mac
+  desktop a non-empty `label` must be unique (loud warn + first-wins;
+  empty labels may repeat). Runtime `facet workspace --rename` still
+  overrides. (Identity is keyed on the stable section id, not the label —
+  see [[facet-pivot-section-lens-model]].)
 - **Loading skeleton is CLI-triggered, not auto** (`facet --view tree
   --loading MS`): macOS exposes no pre-mac-desktop-switch hook, so
   facet can't detect a switch early enough to mask the flicker.

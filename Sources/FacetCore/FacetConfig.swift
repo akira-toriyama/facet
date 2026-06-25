@@ -494,25 +494,48 @@ public struct FacetConfig: Sendable {
     /// Workspace list for a given mac-desktop ordinal (1-based, Mission
     /// Control order). When the section model is active there (≥1
     /// `type = "workspace"` section), the COUNT and per-workspace layout seed
-    /// come from those sections and names are auto-assigned (emoji pool); else
-    /// `defaultWorkspaceCount` unnamed slots with no layout override. `nil`
-    /// ordinal (SkyLight unavailable / single-desktop mode) → default slots.
+    /// come from those sections; a section's name is its `label` if set, else
+    /// the emoji auto-name (§A). Else `defaultWorkspaceCount` unnamed slots
+    /// with no layout override. `nil` ordinal (SkyLight unavailable /
+    /// single-desktop mode) → default slots.
     public func effectiveWorkspaceList(forMacDesktopOrdinal ordinal: Int?)
         -> [(index: Int, config: WorkspaceConfig)]
     {
         // Section model (authoritative when active): the workspace COUNT and
         // per-workspace layout seed come from the `type = "workspace"`
-        // sections; names are AUTO-assigned (emoji pool, index-keyed — the
-        // user can't name a workspace from config; runtime `facet workspace
-        // --rename` owns the name). `isSectionModelActive` guarantees a
-        // non-nil ordinal with ≥1 workspace section, so this list is non-empty.
+        // sections. §A: a non-empty `label` names the workspace FROM CONFIG
+        // (the old "always auto-named" rule was reversed); an empty label falls
+        // back to the emoji auto-name (`WorkspaceNaming`, index-keyed). Runtime
+        // `facet workspace --rename` still overrides either way.
+        // `isSectionModelActive` guarantees a non-nil ordinal with ≥1 workspace
+        // section, so this list is non-empty.
         if isSectionModelActive(ordinal: ordinal), let ordinal {
             let wsSections = (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
                 .filter { $0.type == .workspace }
+            // §A: explicit labels (already de-duped at decode) are sacred. An
+            // empty-label slot's emoji auto-name keys on its positional index,
+            // but must DODGE any pool emoji a sibling claimed as an explicit
+            // label — else two workspaces resolve to the same effective NAME
+            // and name→index resolution (`firstIndex(of:)` in `--focus NAME` /
+            // `setWorkspace=NAME` / `section --focus "label"`) silently
+            // mis-targets the later one. Normal word labels never collide, so
+            // the dodge is inert outside the bare-pool-emoji-label edge case.
+            let claimed = Set(wsSections.compactMap {
+                $0.label.isEmpty ? nil : $0.label
+            })
             return wsSections.enumerated().map { k, s in
-                (index: k + 1,
-                 config: WorkspaceConfig(name: WorkspaceNaming.name(forIndex: k),
-                                         layout: s.layout))
+                guard s.label.isEmpty else {
+                    return (index: k + 1,
+                            config: WorkspaceConfig(name: s.label, layout: s.layout))
+                }
+                var idx = k
+                var name = WorkspaceNaming.name(forIndex: idx)
+                while claimed.contains(name) {        // collides with a sibling label
+                    idx += wsSections.count           // jump past the positional range
+                    name = WorkspaceNaming.name(forIndex: idx)
+                }
+                return (index: k + 1,
+                        config: WorkspaceConfig(name: name, layout: s.layout))
             }
         }
         return (1...Self.defaultWorkspaceCount).map {

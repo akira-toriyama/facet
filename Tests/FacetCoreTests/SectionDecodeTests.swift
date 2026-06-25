@@ -81,25 +81,34 @@ final class SectionDecodeTests: XCTestCase {
 
     // MARK: - per-type field rules
 
-    /// A workspace section is auto-named: no label/match needed; carries an
-    /// optional layout seed (+ optional apply seed). An authored label/match
-    /// is ignored (accepted, with a caveat note) — never stored.
-    func testWorkspaceSectionMinimalAndIgnoresLabelMatch() {
+    /// A workspace section is minimal: no field is required. §A — a non-empty
+    /// `label` NAMES it (stored, reversing the old always-auto-named rule); the
+    /// `match` is implicit (`workspace=<this>`), so an authored `match` is
+    /// ignored with a caveat. Carries optional layout / apply seeds.
+    func testWorkspaceSectionNamesFromLabelIgnoresMatch() {
         let (bare, n1) = DesktopSection.parse(fromTOMLRow: [
             "type": .string("workspace"),
         ])
         XCTAssertEqual(bare, DesktopSection(type: .workspace))
         XCTAssertNil(n1)
 
+        // label honored (§A); authored match dropped with a caveat.
         let (authored, n2) = DesktopSection.parse(fromTOMLRow: [
             "type": .string("workspace"), "label": .string("Dev"),
             "match": .string("tag~=x"), "layout": .string("stack"),
         ])
         XCTAssertEqual(authored,
-            DesktopSection(type: .workspace, layout: "stack"))
-        XCTAssertEqual(authored?.label, "")     // label discarded
-        XCTAssertEqual(authored?.match, "")     // match discarded
-        XCTAssertNotNil(n2)                      // caveat logged loud
+            DesktopSection(type: .workspace, label: "Dev", layout: "stack"))
+        XCTAssertEqual(authored?.label, "Dev")  // label NAMED (§A reversal)
+        XCTAssertEqual(authored?.match, "")     // match implicit → discarded
+        XCTAssertNotNil(n2)                      // caveat logged loud (match ignored)
+
+        // label set, no match → nothing ignored, so no caveat.
+        let (named, n3) = DesktopSection.parse(fromTOMLRow: [
+            "type": .string("workspace"), "label": .string("Web"),
+        ])
+        XCTAssertEqual(named?.label, "Web")
+        XCTAssertNil(n3)
     }
 
     /// A workspace section may carry an `apply` seed (canonical order).
@@ -112,8 +121,9 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(s[1]?[0].apply, [.addTag("dev"), .setFloating(true)])
     }
 
-    /// A lens section needs both label AND match; either missing → DROP.
-    func testLensSectionNeedsLabelAndMatch() {
+    /// §A: a lens section needs a non-empty `match`; `label` is OPTIONAL
+    /// (empty / missing decodes fine). Only the no-match row drops.
+    func testLensSectionNeedsMatchLabelOptional() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
         type = "lens"
@@ -130,7 +140,12 @@ final class SectionDecodeTests: XCTestCase {
         label = "Good"
         match = 'tag~=good'
         """)
-        XCTAssertEqual(s[1]?.map(\.label), ["Good"])
+        // no-label + empty-label lenses now decode (label ""); only "NoMatch"
+        // (no match) drops. Empty labels are exempt from the uniqueness rule,
+        // so both survive. Decl order: nolabel, emptylabel, Good.
+        XCTAssertEqual(s[1]?.map(\.label), ["", "", "Good"])
+        XCTAssertEqual(s[1]?.map(\.match),
+                       ["tag~=nolabel", "tag~=emptylabel", "tag~=good"])
     }
 
     /// A lens section may carry an optional `layout` seed (EX-1a). The value
@@ -177,8 +192,9 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertNil(section?.layout)
     }
 
-    /// An unassigned section needs only a label.
-    func testUnassignedSectionNeedsLabel() {
+    /// §A: an unassigned section's `label` is optional — a label-less one
+    /// decodes fine (both rows survive; empty labels don't collide).
+    func testUnassignedSectionLabelOptional() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
         type = "unassigned"
@@ -186,7 +202,76 @@ final class SectionDecodeTests: XCTestCase {
         type = "unassigned"
         label = "Other"
         """)
-        XCTAssertEqual(s[1]?.map(\.label), ["Other"])
+        XCTAssertEqual(s[1]?.map(\.label), ["", "Other"])
+    }
+
+    // MARK: - §A label uniqueness (non-empty unique per mac desktop)
+
+    /// Within one mac desktop a NON-EMPTY label must be unique: a duplicate is
+    /// dropped (loud + first-wins), keeping the first.
+    func testDuplicateNonEmptyLabelFirstWins() {
+        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
+        [[desktop.1.section]]
+        type = "lens"
+        label = "Web"
+        match = 'tag~=first'
+        [[desktop.1.section]]
+        type = "lens"
+        label = "Web"
+        match = 'tag~=second'
+        """)
+        XCTAssertEqual(s[1]?.count, 1)            // first-wins
+        XCTAssertEqual(s[1]?[0].match, "tag~=first")
+    }
+
+    /// EMPTY labels are exempt from uniqueness — they may repeat freely.
+    func testEmptyLabelsMayRepeat() {
+        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
+        [[desktop.1.section]]
+        type = "lens"
+        match = 'tag~=a'
+        [[desktop.1.section]]
+        type = "lens"
+        match = 'tag~=b'
+        [[desktop.1.section]]
+        type = "unassigned"
+        """)
+        XCTAssertEqual(s[1]?.count, 3)
+        XCTAssertEqual(s[1]?.map(\.label), ["", "", ""])
+    }
+
+    /// Uniqueness is PER mac desktop — the same label on two desktops is fine.
+    func testSameLabelOnDifferentDesktopsAllowed() {
+        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
+        [[desktop.1.section]]
+        type = "lens"
+        label = "Web"
+        match = 'tag~=a'
+        [[desktop.2.section]]
+        type = "lens"
+        label = "Web"
+        match = 'tag~=b'
+        """)
+        XCTAssertEqual(s[1]?[0].label, "Web")
+        XCTAssertEqual(s[2]?[0].label, "Web")
+    }
+
+    /// The uniqueness pass spans header SPELLINGS that fold into one ordinal:
+    /// `desktop.1` + `desktop.01` are de-duped together (first-wins by sorted
+    /// header order — "01" sorts before "1", so it wins).
+    func testDuplicateLabelDedupedAcrossOrdinalSpellings() {
+        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
+        [[desktop.1.section]]
+        type = "lens"
+        label = "Web"
+        match = 'tag~=plain'
+        [[desktop.01.section]]
+        type = "lens"
+        label = "Web"
+        match = 'tag~=zeropad'
+        """)
+        XCTAssertEqual(s[1]?.count, 1)
+        XCTAssertEqual(s[1]?[0].match, "tag~=zeropad")
     }
 
     // MARK: - ordering / ordinals
