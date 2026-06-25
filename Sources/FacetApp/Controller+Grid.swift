@@ -79,7 +79,10 @@ extension Controller {
                 // destination's last-touched window (or Finder if empty).
                 self?.activateSection(.workspace(ws + 1), autoFocus: true)
             case .lens(let label):
-                self?.activateSection(.lens(label), autoFocus: true)
+                // A0: the view pick carries a display label (view id-migration
+                // is deferred to step A); route through the label-resolving
+                // entry, which validates + resolves to the stable id.
+                self?.setActiveLens(label, autoFocus: true)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved from the
                 // snapshot — correct whether the thumb sat in a workspace OR a

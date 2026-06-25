@@ -169,12 +169,14 @@ public protocol WindowBackend: Sendable {
     /// workspace shows only the lens's windows. The lens PERSISTS across
     /// workspace switches (re-composed for each destination) and lives in the
     /// per-mac-desktop catalog (session-only + auto-scoped per mac desktop).
-    /// No-op outside the section model (`isSectionModelActive`); an unknown
-    /// label / malformed `match` is surfaced as an operational error
-    /// (loud-but-non-fatal). `autoFocus`: the CLI / hotkey path wants `true`
-    /// (focus lands in the new visible set), the in-panel tree lens-header
-    /// toggle passes `false` (the tree keeps key focus while the user picks).
-    func setSectionLens(_ label: String?, autoFocus: Bool)
+    /// No-op outside the section model (`isSectionModelActive`); an `id` that no
+    /// longer resolves to a lens section / a malformed `match` is surfaced as an
+    /// operational error (loud-but-non-fatal). `autoFocus`: the CLI / hotkey path
+    /// wants `true` (focus lands in the new visible set), the in-panel tree
+    /// lens-header toggle passes `false` (the tree keeps key focus while the user
+    /// picks). A0: keyed by the **stable section id** (`"section:<declOrder>:<label>"`),
+    /// not the raw label — the adapter parses the declOrder to find the section.
+    func setSectionLens(_ id: String?, autoFocus: Bool)
 
     /// Activate a section (EX-1 throughline) — a workspace (clears any active
     /// lens, exclusive model) or a `type="lens"` section (cross-workspace
@@ -454,11 +456,12 @@ public protocol WindowBackend: Sendable {
     /// reads it on the main actor without a `cliQueue` hop (like `config`).
     func currentSectionLens() -> String?
 
-    /// The active section (EX-1) — `.lens(label)` when a section-lens is
-    /// active, else `.workspace(activeIndex)`. The unified, main-actor-safe
-    /// read-back the Controller mirrors for the single active-section
-    /// highlight; supersedes `currentSectionLens()` (now a `.lensLabel` shim).
-    /// Lock-guarded mirror of the active catalog's `activeSection`.
+    /// The active section (EX-1) — `.lens(id)` when a section-lens is active
+    /// (A0: keyed by the stable section id, not the raw label), else
+    /// `.workspace(activeIndex)`. The unified, main-actor-safe read-back the
+    /// Controller mirrors for the single active-section highlight; supersedes
+    /// `currentSectionLens()` (now a `.lensLabel` shim that parses the label out
+    /// of the id). Lock-guarded mirror of the active catalog's `activeSection`.
     func currentActiveSection() -> ActiveSection
 
     /// EX-3 迷子: the managed windows assigned to NO workspace
@@ -539,7 +542,7 @@ public extension WindowBackend {
     // workspace set (and the unit-test stub) need not implement
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
-    func setSectionLens(_ label: String?, autoFocus: Bool) {}
+    func setSectionLens(_ id: String?, autoFocus: Bool) {}
     func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
     func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}

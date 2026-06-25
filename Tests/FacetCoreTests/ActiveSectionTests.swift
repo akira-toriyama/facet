@@ -2,26 +2,48 @@ import XCTest
 @testable import FacetCore
 
 /// Pure tests for the `ActiveSection` concept (EX-1): exactly one section is
-/// active — a lens or a workspace — and `lensLabel` derives the lens-only view
-/// existing callers (`currentSectionLens()`, the tree highlight) consume.
+/// active — a lens or a workspace. A0: `.lens` carries the STABLE ID
+/// (`"section:<declOrder>:<label>"`); `lensID` returns it raw and `lensLabel`
+/// parses the display label out of it (the lens-only view existing callers —
+/// `currentSectionLens()`, the tree highlight — consume the label).
 final class ActiveSectionTests: XCTestCase {
-    func testLensLabelExtractsLabel() {
-        XCTAssertEqual(ActiveSection.lens("Web").lensLabel, "Web")
+    func testLensIDReturnsRawPayload() {
+        XCTAssertEqual(ActiveSection.lens("section:2:Web").lensID, "section:2:Web")
+        XCTAssertNil(ActiveSection.workspace(2).lensID)
+    }
+
+    func testLensLabelParsesLabelOutOfID() {
+        XCTAssertEqual(ActiveSection.lens("section:2:Web").lensLabel, "Web")
+        XCTAssertEqual(ActiveSection.lens("section:0:My Lens").lensLabel, "My Lens")
+    }
+
+    func testLensLabelKeepsColonInLabel() {
+        // declOrder runs to the FIRST colon; the label is the remainder, so a
+        // label that itself contains ':' round-trips (mirrors ApplyResolver).
+        XCTAssertEqual(ActiveSection.lens("section:3:a:b").lensLabel, "a:b")
     }
 
     func testLensLabelNilForWorkspace() {
         XCTAssertNil(ActiveSection.workspace(2).lensLabel)
     }
 
+    func testLensLabelNilForMalformedID() {
+        // A non-id payload can't yield a label (never happens for an id minted
+        // by FilterProjection, but the accessor stays total).
+        XCTAssertNil(ActiveSection.lens("Web").lensLabel)
+        XCTAssertNil(ActiveSection.lens("section:x:Web").lensLabel)   // non-numeric declOrder
+    }
+
     func testEqualityDiscriminatesCases() {
-        // A workspace index and a lens label that happen to print the same
-        // must never compare equal (the structural fix for the EX-0.5
-        // stale-mirror swallow: `.workspace(N) != .lens(label)`).
+        // A workspace index and a lens id that happen to print the same must
+        // never compare equal (the structural fix for the EX-0.5 stale-mirror
+        // swallow: `.workspace(N) != .lens(id)`).
         XCTAssertNotEqual(ActiveSection.workspace(1), ActiveSection.lens("1"))
         XCTAssertEqual(ActiveSection.workspace(3), ActiveSection.workspace(3))
         XCTAssertNotEqual(ActiveSection.workspace(2), ActiveSection.workspace(3))
-        XCTAssertEqual(ActiveSection.lens("Web"), ActiveSection.lens("Web"))
-        XCTAssertNotEqual(ActiveSection.lens("Web"), ActiveSection.lens("Code"))
+        XCTAssertEqual(ActiveSection.lens("section:2:Web"), ActiveSection.lens("section:2:Web"))
+        // Same label, different declOrder ⇒ different id ⇒ different section.
+        XCTAssertNotEqual(ActiveSection.lens("section:2:Web"), ActiveSection.lens("section:5:Web"))
     }
 }
 

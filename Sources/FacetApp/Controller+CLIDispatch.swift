@@ -470,7 +470,9 @@ extension Controller {
                     return SectionAddr(label: ps.label,
                         section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) })
                 case .lens:
-                    return SectionAddr(label: ps.label, section: .lens(ps.label))
+                    // A0: identity = the stable id; `--focus index:N` activates
+                    // by id. `label:NAME` addressing stays label-based (display).
+                    return SectionAddr(label: ps.label, section: .lens(ps.id))
                 case .unassigned:
                     return SectionAddr(label: ps.label, section: nil)
                 }
@@ -530,16 +532,17 @@ extension Controller {
     ///
     /// Tag-unification Phase 1: the active section-lens is now a REAL hide,
     /// driven by the backend (the catalog is the authority). This validates
-    /// the label against the LIVE section config (nice error messages) +
-    /// optimistically lights the tree header, then routes the label to the
-    /// `backend.activateSection` throughline on `cliQueue` (where the catalog
+    /// the label against the LIVE section config (nice error messages),
+    /// A0-resolves it to the stable section id, then hands the id to
+    /// `activateLensID` (the id-core: optimistically lights the tree header +
+    /// routes through `backend.activateSection` on `cliQueue`, where the catalog
     /// gathers the matching windows + parks the rest). `currentActiveSection` is
-    /// the view's highlight mirror — set optimistically here to `.lens(label)`
-    /// and read back from the catalog on a mac-desktop swap / WS switch
-    /// (`apply()`). A `nil` CLEAR returns the active section to the spatial
-    /// workspace (`.workspace(N)`) and routes through `setSectionLens(nil)` (a
-    /// clear is a deactivation, not a switch). `autoFocus`: the CLI / hotkey
-    /// path passes `true`; the in-panel tree lens-header toggle passes `false`.
+    /// the view's highlight mirror — set optimistically to `.lens(id)` and read
+    /// back from the catalog on a mac-desktop swap / WS switch (`apply()`). A
+    /// `nil` CLEAR returns the active section to the spatial workspace
+    /// (`.workspace(N)`) and routes through `setSectionLens(nil)` (a clear is a
+    /// deactivation, not a switch). `autoFocus`: the CLI / hotkey path passes
+    /// `true`; the in-panel tree lens-header toggle passes `false`.
     func setActiveLens(_ label: String?, autoFocus: Bool = false) {
         guard let label else {
             if case .lens = currentActiveSection {
@@ -568,18 +571,34 @@ extension Controller {
             scheduleReconcile(after: 0.05)      // surface lastError via status
             return
         }
-        // Idempotent — structurally un-stale now: `.workspace(N) != .lens(label)`,
-        // so a re-activation after a WS switch (which cleared the lens) is never
-        // swallowed (the EX-0.5 double-SSOT bug, fixed at the root by EX-1).
-        guard currentActiveSection != .lens(label) else { return }
-        currentActiveSection = .lens(label)
-        // Sync the swap-detector to the ordinal just validated against, so the
-        // synchronous apply() below (same desktop, no main-actor suspension)
-        // sees no ordinal change and keeps the lens.
+        // A0: the human label is identity-decoupled now — resolve it to the
+        // stable section id (1:1 while labels are unique), then activate by id.
+        // A nil id is defensive (validated above, so it shouldn't happen).
+        guard let id = lensID(forLabel: label, ordinal: ordinal) else {
+            setError("lens \(label): no such lens section")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        activateLensID(id, ordinal: ordinal, autoFocus: autoFocus)
+    }
+
+    /// A0 id-core: activate the lens with the resolved stable `id` — no label
+    /// lookup. The label-validating entry is `setActiveLens` (`facet lens NAME`
+    /// / view picks); the CLI `--focus index:N` path reaches here via
+    /// `activateSection(.lens(id))`. Idempotent — `.workspace(N) != .lens(id)`
+    /// structurally, so a re-activation after a WS switch (which cleared the
+    /// lens) is never swallowed (the EX-0.5 double-SSOT bug, fixed at the root
+    /// by EX-1).
+    func activateLensID(_ id: String, ordinal: Int?, autoFocus: Bool) {
+        guard currentActiveSection != .lens(id) else { return }
+        currentActiveSection = .lens(id)
+        // Sync the swap-detector to the ordinal so the synchronous apply() below
+        // (same desktop, no main-actor suspension) sees no ordinal change and
+        // keeps the lens.
         hasRenderedMacDesktop = true
         lastRenderedMacDesktopOrdinal = ordinal
         runBackendCommand { bk in
-            bk.activateSection(.lens(label), autoFocus: autoFocus); return nil
+            bk.activateSection(.lens(id), autoFocus: autoFocus); return nil
         }
         apply(lastWorkspaces)                // re-render: light up its header
     }
@@ -593,8 +612,12 @@ extension Controller {
     /// lens branch; pass `0`. The backend re-clamps `mode` to a stateless engine
     /// regardless of what the view sent.
     func setLensLayout(label: String, mode: String) {
-        if currentActiveSection != .lens(label) {
-            activateSection(.lens(label), autoFocus: false)
+        // A0: the view passes a display label; resolve to the stable id and
+        // activate by id (activateLensID's idempotent guard no-ops when it's
+        // already the active section).
+        let ordinal = currentMacDesktopOrdinal()
+        if let id = lensID(forLabel: label, ordinal: ordinal) {
+            activateLensID(id, ordinal: ordinal, autoFocus: false)
         }
         runBackendCommand { bk in
             bk.setLayoutMode(workspaceIndex: 0, mode: mode); return nil
@@ -609,7 +632,12 @@ extension Controller {
     /// dispatch and (in EX-2) grid/rail clicks funnel through.
     func activateSection(_ section: ActiveSection, autoFocus: Bool = true) {
         switch section {
-        case .lens(let label):  setActiveLens(label, autoFocus: autoFocus)
+        // A0: `.lens` now carries the resolved stable id (e.g. from
+        // `addressableSections` / `--focus index:N`), so route straight to the
+        // id-core — no label round-trip. The label-validating entry is
+        // `setActiveLens`, which view picks call directly.
+        case .lens(let id):     activateLensID(id, ordinal: currentMacDesktopOrdinal(),
+                                               autoFocus: autoFocus)
         case .workspace(let n): dispatchWorkspace(n, autoFocus: autoFocus)
         }
     }

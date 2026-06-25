@@ -86,17 +86,27 @@ public enum ApplyResolver {
     /// dests via `destWorkspaceIndex`) or any unrecognised / mismatched id.
     public static func section(forSectionID id: String,
                                in sections: [DesktopSection]) -> DesktopSection? {
-        guard id.hasPrefix("section:") else { return nil }
-        // "section:<declOrder>:<label>" — the label may contain ':', so take
-        // the declOrder up to the FIRST colon and the label as the remainder.
-        let body = id.dropFirst("section:".count)
-        guard let colon = body.firstIndex(of: ":"),
-              let declOrder = Int(body[..<colon]) else { return nil }
-        let label = String(body[body.index(after: colon)...])
+        guard let (declOrder, label) = parseSectionID(id) else { return nil }
         guard declOrder >= 0, declOrder < sections.count else { return nil }
         let s = sections[declOrder]
         guard s.type == .lens, s.label == label else { return nil }
         return s
+    }
+
+    /// Split a rendered section id (`"section:<declOrder>:<label>"`) into its
+    /// parts. The `declOrder` runs up to the FIRST colon; the `label` is the
+    /// remainder (it may itself contain ':'). `nil` for a `"ws:<index>"` id or
+    /// any string without the `section:` prefix / a non-numeric declOrder. The
+    /// single owner of the id's wire format — minted in `FilterProjection`
+    /// (`"section:\(declOrder):\(s.label)"`), consumed here and by
+    /// `ActiveSection.lensLabel`.
+    public static func parseSectionID(_ id: String)
+        -> (declOrder: Int, label: String)? {
+        guard id.hasPrefix("section:") else { return nil }
+        let body = id.dropFirst("section:".count)
+        guard let colon = body.firstIndex(of: ":"),
+              let declOrder = Int(body[..<colon]) else { return nil }
+        return (declOrder, String(body[body.index(after: colon)...]))
     }
 
     /// The `removeTag`-only inverse of a forward apply (decision 5: only

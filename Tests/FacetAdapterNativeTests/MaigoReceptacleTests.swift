@@ -27,7 +27,7 @@ final class MaigoReceptacleTests: XCTestCase {
         let w20 = window(20)   // → orphaned below
         a.catalog.reconcile(live: [w10, w20])
         a.catalog.windowMap[wid(20)] = WindowSlot(workspace: nil, pid: 1000)
-        a.catalog.activeSectionLens = "迷子"
+        a.catalog.activeSectionLens = "section:0:迷子"   // A0: stable id (single lens, declOrder 0)
         let visible = a.sectionLensVisibleIDsAll(live: [w10, w20]) ?? []
         XCTAssertEqual(visible, [wid(20)],
                        "only the orphan matches `not workspace`; the Dev window does not")
@@ -44,7 +44,7 @@ final class MaigoReceptacleTests: XCTestCase {
         let w20 = window(20)   // orphaned below
         a.catalog.reconcile(live: [w10, w20])
         a.catalog.windowMap[wid(20)] = WindowSlot(workspace: nil, pid: 1000)
-        a.catalog.activeSectionLens = "迷子"
+        a.catalog.activeSectionLens = "section:0:迷子"   // A0: stable id (single lens, declOrder 0)
         let visible = a.sectionLensVisibleIDsAll(live: [w10, w20]) ?? []
         XCTAssertEqual(visible, [wid(20)],
                        "an unnamed-but-assigned window is NOT an orphan")
@@ -60,7 +60,7 @@ final class MaigoReceptacleTests: XCTestCase {
         a.catalog.reconcile(live: [w10])
         a.catalog.windowMap[wid(10)] = WindowSlot(workspace: nil, pid: 1000)
         _ = a.catalog.addTagToWindow(wid(10), name: "web")   // ws-less but tagged
-        a.catalog.activeSectionLens = "迷子"
+        a.catalog.activeSectionLens = "section:0:迷子"   // A0: stable id (single lens, declOrder 0)
         let visible = a.sectionLensVisibleIDsAll(live: [w10]) ?? []
         XCTAssertEqual(visible, [wid(10)], "a tagged orphan still has no workspace")
     }

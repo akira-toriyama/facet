@@ -516,10 +516,10 @@ extension NativeAdapter {
         // active, tile the CROSS-WORKSPACE union of in-lens windows with the
         // lens's stateless engine instead of the active workspace's per-WS
         // layout. `n1Based` is ignored — the union spans all workspaces.
-        if let label = catalog.activeSectionLens {
+        if catalog.activeSectionLens != nil {
             // EX-0.3: resolvedLensLayout honours the runtime override (activeSectionLensLayout)
             // so --layout retargeting reaches the union here (not silently the WS layout).
-            applyFrames(catalog.sectionLensUnionFrames(layout: resolvedLensLayout(forLabel: label),
+            applyFrames(catalog.sectionLensUnionFrames(layout: resolvedLensLayout(),
                                                        in: rect),
                         label: "section-lens-union", rect: rect, skip: skip,
                         cached: cached)

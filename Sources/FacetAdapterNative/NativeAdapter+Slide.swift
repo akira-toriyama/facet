@@ -54,9 +54,9 @@ extension NativeAdapter {
         // Section-lens union (EX-1 exclusive model): tile the cross-workspace
         // in-lens set with the lens's stateless engine when active, matching
         // `applyLayout`.
-        if let label = catalog.activeSectionLens {
+        if catalog.activeSectionLens != nil {
             // EX-0.3: resolvedLensLayout honours the runtime override (activeSectionLensLayout).
-            return catalog.sectionLensUnionFrames(layout: resolvedLensLayout(forLabel: label),
+            return catalog.sectionLensUnionFrames(layout: resolvedLensLayout(),
                                                   in: rect)
         }
         let mode = catalog.mode(of: n1Based)

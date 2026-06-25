@@ -516,8 +516,8 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             } else {
                 switchWorkspace(toIndex: n - 1, autoFocus: autoFocus)   // 1-based → 0-based
             }
-        case .lens(let label):
-            setSectionLens(label, autoFocus: autoFocus)
+        case .lens(let id):
+            setSectionLens(id, autoFocus: autoFocus)
         }
     }
 
@@ -645,7 +645,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// is a loud-but-non-fatal operational error (the lens is left unchanged,
     /// D2). The catalog (`activeSectionLens`) is the authority; the
     /// main-readable mirror is synced so the view's highlight reads back.
-    public func setSectionLens(_ label: String?, autoFocus: Bool) {
+    public func setSectionLens(_ id: String?, autoFocus: Bool) {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
               config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
@@ -653,7 +653,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let rect = activeDisplayRect()
 
         // Clear.
-        guard let label else {
+        guard let id else {
             guard catalog.activeSectionLens != nil else { return }
             let plan = catalog.clearSectionLens(in: rect)
             sectionLensCompiled = nil
@@ -666,21 +666,21 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             return
         }
 
-        // Activate. Validate the label → resolve + compile its `match`. D2:
-        // an unknown label or a `match` that won't parse rejects LOUD (the
-        // lens is left unchanged — no park decision without a sound filter).
-        guard let ord = activeMacDesktopOrdinal,
-              let section = config.effectiveMacDesktopSectionConfigs[ord]?
-                .first(where: { $0.type == .lens && $0.label == label })
-        else {
-            errorContinuation.yield("lens \(label): no such lens section")
+        // Activate. Resolve the id → its section + compile its `match`. D2: an
+        // id that no longer resolves (declOrder out of range / not a lens —
+        // a hot-reload mid-flight) or a `match` that won't parse rejects LOUD
+        // (the lens is left unchanged — no park decision without a sound
+        // filter). The Controller pre-validates the label → id, so a miss here
+        // is defensive (race against config reload).
+        guard let section = lensSection(forID: id) else {
+            errorContinuation.yield("lens \(id): no such lens section")
             return
         }
         guard case .success = FacetFilter.parse(section.match) else {
-            errorContinuation.yield("lens \(label): malformed match")
+            errorContinuation.yield("lens \(section.label): malformed match")
             return
         }
-        catalog.activeSectionLens = label
+        catalog.activeSectionLens = id
         catalog.activeSectionLensLayout = nil   // EX-0.3: freshly-activated lens starts from config layout
         sectionLensCompiled = nil   // recompile against the (possibly new) match
         syncSectionLensMirror()
@@ -692,7 +692,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // incorrectly parked. See SectionLensGatherTests for the regression pin.
         let visible = sectionLensVisibleIDsAll(live: live) ?? []
         let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
-        Log.debug("native: setSectionLens \"\(label)\" "
+        Log.debug("native: setSectionLens \"\(id)\" "
             + "visible=\(visible.count) parked=\(plan.toPark.count) "
             + "restored=\(plan.toRestore.count)")
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)

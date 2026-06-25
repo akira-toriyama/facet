@@ -65,6 +65,29 @@ final class ApplyResolverTests: XCTestCase {
         XCTAssertEqual(s?.label, "a:b:c")   // split on the FIRST colon only
     }
 
+    // MARK: - parseSectionID (A0: the shared id wire-format split)
+
+    func testParseSectionIDSplitsDeclOrderAndLabel() {
+        let parsed = ApplyResolver.parseSectionID("section:2:Web")
+        XCTAssertEqual(parsed?.declOrder, 2)
+        XCTAssertEqual(parsed?.label, "Web")
+    }
+
+    func testParseSectionIDKeepsColonInLabel() {
+        // declOrder runs to the FIRST colon; the label is the remainder — so
+        // `ActiveSection.lensLabel` and `section(forSectionID:)` share one split.
+        let parsed = ApplyResolver.parseSectionID("section:0:a:b")
+        XCTAssertEqual(parsed?.declOrder, 0)
+        XCTAssertEqual(parsed?.label, "a:b")
+    }
+
+    func testParseSectionIDNilForNonSectionID() {
+        XCTAssertNil(ApplyResolver.parseSectionID("ws:3"))          // workspace id
+        XCTAssertNil(ApplyResolver.parseSectionID("Web"))           // no prefix
+        XCTAssertNil(ApplyResolver.parseSectionID("section:x:Web")) // non-numeric declOrder
+        XCTAssertNil(ApplyResolver.parseSectionID("section:5"))     // no label colon
+    }
+
     // MARK: - inverse(of:)
 
     func testInverseIsRemoveTagOnly() {

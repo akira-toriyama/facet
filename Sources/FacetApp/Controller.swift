@@ -129,19 +129,20 @@ final class Controller: NSObject {
     /// frame.
     private var loggedSectionDiagnostics: [String] = []
     /// Section/lens model (EX-1): the session-only ACTIVE SECTION — a
-    /// `type="lens"` section the user activated (`.lens(label)`) or the active
-    /// workspace (`.workspace(index)`), exactly one at a time. This is the
-    /// VIEW's highlight MIRROR (emphasises the active section's tree header in
-    /// `pal.primary`); the real state — the cross-workspace anchor-park + the
-    /// active workspace — lives in the catalog, which is the authority. Set
-    /// optimistically (lens) via `setActiveLens`; `apply()` re-reads it from
-    /// `backend.currentActiveSection()` (the authority) whenever the active
-    /// section context shifts (a mac-desktop swap reads BACK the destination's
-    /// persisted section; a facet-workspace switch reads back the now-cleared
-    /// lens → `.workspace(N)`, EX-0.4). Carrying the workspace index (not just a
-    /// lens `String?`) is what resolves the EX-0.5 double-source-of-truth: the
-    /// idempotent guard `currentActiveSection != .lens(label)` can never stale-
-    /// swallow a re-activation because `.workspace(N) != .lens(label)` structurally.
+    /// `type="lens"` section the user activated (`.lens(id)`, A0: keyed by the
+    /// stable section id) or the active workspace (`.workspace(index)`), exactly
+    /// one at a time. This is the VIEW's highlight MIRROR (emphasises the active
+    /// section's tree header in `pal.primary`); the real state — the
+    /// cross-workspace anchor-park + the active workspace — lives in the catalog,
+    /// which is the authority. Set optimistically (lens) via `setActiveLens` →
+    /// `activateLensID`; `apply()` re-reads it from `backend.currentActiveSection()`
+    /// (the authority) whenever the active section context shifts (a mac-desktop
+    /// swap reads BACK the destination's persisted section; a facet-workspace
+    /// switch reads back the now-cleared lens → `.workspace(N)`, EX-0.4). Carrying
+    /// the workspace index (not just a lens `String?`) is what resolves the EX-0.5
+    /// double-source-of-truth: the idempotent guard `currentActiveSection != .lens(id)`
+    /// can never stale-swallow a re-activation because `.workspace(N) != .lens(id)`
+    /// structurally.
     var currentActiveSection: ActiveSection = .workspace(1)
 
     /// The **1-based** index of the active workspace from the latest snapshot,
@@ -514,13 +515,26 @@ final class Controller: NSObject {
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
         config = fresh
-        // PR6: drop a now-stale active lens — if the edited config no longer
-        // defines it as a lens section on the current mac desktop, clear it
-        // (else a re-added same-label section would silently auto-light, and a
-        // removed one would keep a dead highlight). Session-only contract.
-        if case .lens(let lens) = currentActiveSection,
-           !lensSectionLabels(ordinal: currentMacDesktopOrdinal()).contains(lens) {
-            currentActiveSection = .workspace(activeWSIndex(in: lastWorkspaces))
+        // PR6 / A0: drop a now-stale active lens — if the edited config no
+        // longer resolves the active lens's stable id (`section:<declOrder>:<label>`)
+        // to a lens section on the current mac desktop, clear it (else a re-added
+        // same-label section would silently auto-light, and a removed one would
+        // keep a dead highlight). Session-only contract.
+        // A0 note: identity is the declOrder-embedded id, so a config **reorder**
+        // (or rename) that moves the lens to a new declOrder no longer resolves
+        // and DROPS — where the old label scan persisted it. Accepted (the drop
+        // is to the always-present workspace; benign + narrow), surfaced via
+        // `Log.line` (which also makes today's silent label-removal drop visible).
+        if case .lens(let id) = currentActiveSection {
+            let stillValid = currentMacDesktopOrdinal()
+                .flatMap { config.effectiveMacDesktopSectionConfigs[$0] }
+                .flatMap { ApplyResolver.section(forSectionID: id, in: $0) } != nil
+            if !stillValid {
+                let ws = activeWSIndex(in: lastWorkspaces)
+                Log.line("active lens no longer resolves after config reload "
+                    + "(id=\(id)) → workspace \(ws)")
+                currentActiveSection = .workspace(ws)
+            }
         }
         backend.updateConfig(fresh)   // hot-reload the backend's copy
         logConfigWarnings()
@@ -565,6 +579,26 @@ final class Controller: NSObject {
         else { return [] }
         return (config.effectiveMacDesktopSectionConfigs[ord] ?? [])
             .filter { $0.type == .lens }.map(\.label)
+    }
+
+    /// A0: resolve a lens section's display `label` to its **stable id**
+    /// (`"section:<declOrder>:<label>"`) on the mac desktop at `ordinal`, or nil
+    /// when no `type="lens"` section there has that label. `declOrder` is the
+    /// index into the FULL section array — the SAME index `FilterProjection`
+    /// mints the id from (`Sources/FacetCore/FilterProjection.swift`) and
+    /// `ApplyResolver.section(forSectionID:)` / the adapter parse back, so the
+    /// round-trip is exact. Config-based (not `lastSections`) so it resolves
+    /// even before the first render (headless CLI). The label↔id map is 1:1
+    /// while labels are unique + non-empty (the A0 invariant). Shared by
+    /// `setActiveLens`, `toggleActiveLens`, `setLensLayout`.
+    func lensID(forLabel label: String, ordinal: Int?) -> String? {
+        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal,
+              let sections = config.effectiveMacDesktopSectionConfigs[ord],
+              let declOrder = sections.firstIndex(where: {
+                  $0.type == .lens && $0.label == label
+              })
+        else { return nil }
+        return "section:\(declOrder):\(label)"
     }
 
     // The grid/rail no longer recompute a lens `match` view-side to narrow

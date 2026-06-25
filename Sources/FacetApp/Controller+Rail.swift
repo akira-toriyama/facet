@@ -72,7 +72,10 @@ extension Controller {
                 // is 1-based → +1. autoFocus → the WS's last-touched window.
                 self.activateSection(.workspace(ws + 1), autoFocus: true)
             case .lens(let label):
-                self.activateSection(.lens(label), autoFocus: true)
+                // A0: the view pick carries a display label (view id-migration
+                // is deferred to step A); route through the label-resolving
+                // entry, which validates + resolves to the stable id.
+                self.setActiveLens(label, autoFocus: true)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the
                 // view's windowHomeWS — correct whether the thumb sat in a

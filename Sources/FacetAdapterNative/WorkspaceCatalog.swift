@@ -321,11 +321,11 @@ struct WorkspaceCatalog {
     /// `currentActiveSection` is a highlight read-back of this (via the
     /// `activeSection` derivation + the adapter mirror). The match
     /// EVALUATION lives adapter-side (the catalog has no live
-    /// `appName`/`title`), so the catalog stores only the opaque label +
-    /// `lensParkedMembers`; the adapter resolves the label → `match` against
-    /// its config and hands `applySectionLens` the visible-id verdict.
-    /// Session-only, and per-mac-desktop for free (this whole catalog is
-    /// swapped per mac desktop).
+    /// `appName`/`title`), so the catalog stores only the opaque **section id**
+    /// (`"section:<declOrder>:<label>"`, A0) + `lensParkedMembers`; the adapter
+    /// resolves the id → its section → `match` against its config and hands
+    /// `applySectionLens` the visible-id verdict. Session-only, and
+    /// per-mac-desktop for free (this whole catalog is swapped per mac desktop).
     var activeSectionLens: String?
 
     /// The single active-section concept (EX-1): a lens when one is active,

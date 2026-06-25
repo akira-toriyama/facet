@@ -405,19 +405,33 @@ extension NativeAdapter {
 
     // MARK: - Section-lens evaluation (tag-unification Phase 1)
 
-    /// Per-section layout for the lens whose label matches `label`, or nil
-    /// when the label has no matching `type="lens"` section on the active mac
-    /// desktop or its `layout` field is absent / empty. Mirrors
-    /// `sectionLensFilter()`'s lookup path: read the live config every call so
-    /// a hot-reload is picked up immediately. `applyLayout` passes the result
-    /// to `LensLayout.resolve` so a nil / stateful name falls back to the
-    /// global default without tiling breaking. Called only when a section lens
-    /// is active (`catalog.activeSectionLens != nil`).
-    func lensLayout(forLabel label: String) -> String? {
-        guard let ord = activeMacDesktopOrdinal else { return nil }
-        return config.effectiveMacDesktopSectionConfigs[ord]?
-            .first(where: { $0.type == .lens && $0.label == label })?
-            .layout
+    /// A0's single id→section seam: resolve a stable section id
+    /// (`"section:<declOrder>:<label>"`) to its `DesktopSection` on the active
+    /// mac desktop, or `nil` when the id no longer resolves (out of range, not
+    /// a lens, label-suffix mismatch — a stale hot-reload). `declOrder` indexes
+    /// the SAME `effectiveMacDesktopSectionConfigs[ord]` array `FilterProjection`
+    /// enumerated to mint the id, so the lookup round-trips exactly. Read the
+    /// live config every call so a hot-reload is picked up immediately.
+    func lensSection(forID id: String) -> DesktopSection? {
+        guard let ord = activeMacDesktopOrdinal,
+              let configs = config.effectiveMacDesktopSectionConfigs[ord]
+        else { return nil }
+        return ApplyResolver.section(forSectionID: id, in: configs)
+    }
+
+    /// The DesktopSection of the ACTIVE section-lens (`catalog.activeSectionLens`
+    /// holds its id, A0), or `nil` when no lens is active / its id no longer
+    /// resolves. The single read all the lens-config queries below share.
+    func activeLensSection() -> DesktopSection? {
+        catalog.activeSectionLens.flatMap(lensSection(forID:))
+    }
+
+    /// Per-section layout for the ACTIVE lens, or nil when no lens is active /
+    /// its `layout` field is absent / empty. `applyLayout` passes the result to
+    /// `LensLayout.resolve` so a nil / stateful name falls back to the global
+    /// default without tiling breaking.
+    func lensLayout() -> String? {
+        activeLensSection()?.layout
     }
 
     /// EX-3.3: the FORWARD `apply` ops in the ACTIVE section-lens (canon ④⑨ — a
@@ -429,14 +443,10 @@ extension NativeAdapter {
     /// `removeTag` is never config-authored). `[]` when no lens is active or the
     /// section has an empty / wholly-stripped `apply` (a pure-condition lens —
     /// the new window can't be made to match, declared gap). Resolved against the
-    /// LIVE config so a hot-reload is honoured (mirrors `lensLayout(forLabel:)` /
+    /// LIVE config so a hot-reload is honoured (mirrors `lensLayout()` /
     /// `sectionLensFilter()`).
     func activeSectionLensApplyForward() -> [ApplyOp] {
-        guard let label = catalog.activeSectionLens,
-              let ord = activeMacDesktopOrdinal,
-              let section = config.effectiveMacDesktopSectionConfigs[ord]?
-                .first(where: { $0.type == .lens && $0.label == label })
-        else { return [] }
+        guard let section = activeLensSection() else { return [] }
         return section.apply.filter {
             if case .setWorkspace = $0 { return false }
             return true
@@ -524,22 +534,19 @@ extension NativeAdapter {
     /// `applyLayout` and `targetFrames` (via `sectionLensUnionFrames`) so the
     /// instant and animated paths can't disagree. Called only when a section
     /// lens is active (`catalog.activeSectionLens != nil`).
-    func resolvedLensLayout(forLabel label: String) -> String {
-        LensLayout.resolve(catalog.activeSectionLensLayout ?? lensLayout(forLabel: label),
+    func resolvedLensLayout() -> String {
+        LensLayout.resolve(catalog.activeSectionLensLayout ?? lensLayout(),
                            globalDefault: config.effectiveDefaultLayout)
     }
 
     /// The active section-lens's compiled filter, or nil when no lens is
-    /// active / the label no longer maps to a lens section / its `match` won't
-    /// parse. The catalog holds the label (authority); this resolves it to the
+    /// active / its id no longer maps to a lens section / its `match` won't
+    /// parse. The catalog holds the id (authority); this resolves it to the
     /// section's `match` against the LIVE config (so a hot-reload is picked up)
     /// and compiles it, caching by the raw string so the WHERE-clause is
     /// parsed once across reconciles rather than every tick.
     private func sectionLensFilter() -> FacetFilter? {
-        guard let label = catalog.activeSectionLens,
-              let ord = activeMacDesktopOrdinal,
-              let match = config.effectiveMacDesktopSectionConfigs[ord]?
-                .first(where: { $0.type == .lens && $0.label == label })?.match
+        guard let match = activeLensSection()?.match
         else { return nil }
         if let c = sectionLensCompiled, c.match == match { return c.filter }
         guard case .success(let filter) = FacetFilter.parse(match) else {
