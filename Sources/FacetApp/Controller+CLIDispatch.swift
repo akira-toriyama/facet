@@ -611,14 +611,12 @@ extension Controller {
     /// before the layout override (FIFO). `workspaceIndex` is ignored by the
     /// lens branch; pass `0`. The backend re-clamps `mode` to a stateless engine
     /// regardless of what the view sent.
-    func setLensLayout(label: String, mode: String) {
-        // A0: the view passes a display label; resolve to the stable id and
-        // activate by id (activateLensID's idempotent guard no-ops when it's
-        // already the active section).
-        let ordinal = currentMacDesktopOrdinal()
-        if let id = lensID(forLabel: label, ordinal: ordinal) {
-            activateLensID(id, ordinal: ordinal, autoFocus: false)
-        }
+    func setLensLayout(sectionID: String, mode: String) {
+        // §A: the view passes the stable section id straight from the rendered
+        // header — activate by id (activateLensID's idempotent guard no-ops when
+        // it's already the active section), no label→id lookup.
+        activateLensID(sectionID, ordinal: currentMacDesktopOrdinal(),
+                       autoFocus: false)
         runBackendCommand { bk in
             bk.setLayoutMode(workspaceIndex: 0, mode: mode); return nil
         }
@@ -635,7 +633,8 @@ extension Controller {
         // A0: `.lens` now carries the resolved stable id (e.g. from
         // `addressableSections` / `--focus index:N`), so route straight to the
         // id-core — no label round-trip. The label-validating entry is
-        // `setActiveLens`, which view picks call directly.
+        // `setActiveLens` (the CLI `facet lens NAME`); §A: grid/rail/tree view
+        // picks now carry the stable id and call `activateLensID` directly.
         case .lens(let id):     activateLensID(id, ordinal: currentMacDesktopOrdinal(),
                                                autoFocus: autoFocus)
         case .workspace(let n): dispatchWorkspace(n, autoFocus: autoFocus)

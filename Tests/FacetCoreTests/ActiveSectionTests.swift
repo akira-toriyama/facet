@@ -47,10 +47,11 @@ final class ActiveSectionTests: XCTestCase {
     }
 }
 
-/// EX-2b: `activeSectionID` resolves the single lit section's stable id,
-/// matching `overviewCellSources`'s XOR (lens label wins; else the active
-/// workspace's section; degrade ⇒ `"ws:<idx>"`). Used by the persistent-rail
-/// re-centre to follow the active section.
+/// EX-2b / §A: `activeSectionID` resolves the single lit section's stable id,
+/// matching `overviewCellSources`'s XOR (the active lens **id** wins; else the
+/// active workspace's section; degrade ⇒ `"ws:<idx>"`). Keyed on the stable id,
+/// not the display label. Used by the persistent-rail re-centre to follow the
+/// active section.
 final class ActiveSectionIDTests: XCTestCase {
     private func ws(_ i: Int) -> ProjectedSection {
         ProjectedSection(id: "ws:\(i)", label: "W\(i)", windows: [],
@@ -63,26 +64,28 @@ final class ActiveSectionIDTests: XCTestCase {
 
     func testLensActiveWins() {
         let secs = [ws(0), ws(1), lens(2, "Web")]
-        XCTAssertEqual(activeSectionID(activeLens: "Web", activeIndex: 0, sections: secs),
-                       "section:2:Web")
+        XCTAssertEqual(activeSectionID(activeLensID: "section:2:Web", activeIndex: 0,
+                                       sections: secs), "section:2:Web")
     }
 
     func testWorkspaceActiveWhenNoLens() {
         let secs = [ws(0), ws(1), lens(2, "Web")]
-        XCTAssertEqual(activeSectionID(activeLens: nil, activeIndex: 1, sections: secs), "ws:1")
+        XCTAssertEqual(activeSectionID(activeLensID: nil, activeIndex: 1, sections: secs), "ws:1")
     }
 
     func testDegradeEmptySections() {
-        XCTAssertEqual(activeSectionID(activeLens: nil, activeIndex: 2, sections: []), "ws:2")
+        XCTAssertEqual(activeSectionID(activeLensID: nil, activeIndex: 2, sections: []), "ws:2")
     }
 
     func testNilIndexNoLensIsNil() {
-        XCTAssertNil(activeSectionID(activeLens: nil, activeIndex: nil, sections: []))
+        XCTAssertNil(activeSectionID(activeLensID: nil, activeIndex: nil, sections: []))
     }
 
     func testUnknownLensFallsBackNil() {
-        // An active lens label not present in the section list ⇒ nothing lit.
-        XCTAssertNil(activeSectionID(activeLens: "Ghost", activeIndex: 0, sections: [lens(1, "Web")]))
-        XCTAssertNil(activeSectionID(activeLens: "Web", activeIndex: 0, sections: [ws(0), ws(1)]))
+        // An active lens id not present in the section list ⇒ nothing lit.
+        XCTAssertNil(activeSectionID(activeLensID: "section:9:Ghost", activeIndex: 0,
+                                     sections: [lens(1, "Web")]))
+        XCTAssertNil(activeSectionID(activeLensID: "section:2:Web", activeIndex: 0,
+                                     sections: [ws(0), ws(1)]))
     }
 }

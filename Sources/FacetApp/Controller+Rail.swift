@@ -71,11 +71,13 @@ extension Controller {
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
                 // is 1-based → +1. autoFocus → the WS's last-touched window.
                 self.activateSection(.workspace(ws + 1), autoFocus: true)
-            case .lens(let label):
-                // A0: the view pick carries a display label (view id-migration
-                // is deferred to step A); route through the label-resolving
-                // entry, which validates + resolves to the stable id.
-                self.setActiveLens(label, autoFocus: true)
+            case .lens(let sectionID):
+                // §A: the pick carries the stable section id (`ProjectedSection.id`)
+                // straight from the live-rendered cell — route to the id-core,
+                // no ambiguous label→id lookup.
+                self.activateLensID(sectionID,
+                                    ordinal: self.currentMacDesktopOrdinal(),
+                                    autoFocus: true)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the
                 // view's windowHomeWS — correct whether the thumb sat in a

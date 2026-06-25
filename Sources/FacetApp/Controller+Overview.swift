@@ -34,8 +34,8 @@ extension Controller {
         // `isLensParked` flag (set in the snapshot) — the view drops the parked
         // thumbnails itself, so there is nothing extra to seed here.
         v.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
-        v.sections = lastSections       // EX-2: section list (empty ⇒ degrade)
-        v.activeLens = lastActiveLens   // EX-2: active lens for single-highlight
+        v.sections = lastSections        // EX-2: section list (empty ⇒ degrade)
+        v.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
         v.screenFrame = screenFrame
         // ③ Context menu: header layout picker + window-ops menu.
         v.backend = backend

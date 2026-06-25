@@ -83,21 +83,21 @@ public protocol TreeController: AnyObject, Sendable {
                       on window: Window,
                       workspaceIndex: Int)
 
-    /// Section/lens model (PR6): the user clicked a `type=lens` section
-    /// header in the tree. TOGGLE it as the active lens — activate `label`,
-    /// or clear if it is already active. The controller validates against
-    /// the live section config (an unknown label is a no-op) and re-renders
-    /// so the active lens's header lights up. No-op outside the section model.
-    func toggleActiveLens(_ label: String)
+    /// Section/lens model (PR6 / §A): the user clicked a `type=lens` section
+    /// header in the tree. TOGGLE it as the active lens — activate the section
+    /// `sectionID` (`ProjectedSection.id`), or clear if it is already active.
+    /// Keyed on the stable id, not the display label, so a non-unique / empty
+    /// label can't toggle the wrong lens. No-op outside the section model.
+    func toggleActiveLens(_ sectionID: String)
 
-    /// Section/lens model: the user picked a union layout from a `type=lens`
-    /// header's `m` / right-click menu. ACTIVATE the lens `label` (if it isn't
-    /// already the active section) so the backend's `setLayoutMode` lens branch
-    /// targets THIS lens's cross-workspace union, then set `mode` as the union
-    /// layout (session-only, like the CLI). `mode` is always one the view took
-    /// from the stateless-only lens picker; the backend re-clamps regardless.
-    /// No-op outside the section model.
-    func setLensLayout(label: String, mode: String)
+    /// Section/lens model (§A): the user picked a union layout from a `type=lens`
+    /// header's `m` / right-click menu. ACTIVATE the lens `sectionID`
+    /// (`ProjectedSection.id`, if it isn't already the active section) so the
+    /// backend's `setLayoutMode` lens branch targets THIS lens's cross-workspace
+    /// union, then set `mode` as the union layout (session-only, like the CLI).
+    /// `mode` is always one the view took from the stateless-only lens picker;
+    /// the backend re-clamps regardless. No-op outside the section model.
+    func setLensLayout(sectionID: String, mode: String)
 
     /// Section-model apply/un-apply MOVE (PR8): un-apply the SOURCE section's
     /// additive tags, then apply the DEST section's ops (workspace dest → move
