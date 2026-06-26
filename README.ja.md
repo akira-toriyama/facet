@@ -396,7 +396,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   元の workspace から外れ**、 lens 経由でのみ存在する＝一致 lens が非 active の間は
   **迷子 (orphan)** になる)。 よって窓は**どの workspace にも属さない**ことがあり、
   迷子は invisible-but-logged（WS1 へ auto-home しない）。 **迷子受け皿** =
-  `match = 'not workspace'` の `type = "lens"` section で集約（desktop ごとに 1 つ推奨）。
+  `match = 'not workspace'` の `type = "lens"` section で集約（desktop ごとに 1 つ推奨）、
+  または `"unassigned"` section（`label` のみ・`match` 無し）— 他のどの section にも
+  出ない**全 leftover 窓**（`not workspace` 迷子に限らない）を拾う opt-in の lost-and-found。
+  lens セルのように並び、 `facet section --focus` で先頭窓を focus、 workspace へ DnD で
+  窓を RESCUE。 最初の 1 つだけ描画。
   **workspace は任意の `label` で config 命名可**（無ければ無名＝1始まりの index 表示）—
   実行時 `facet workspace --rename` が上書き。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
@@ -470,10 +474,11 @@ facet window --unmark NAME        # マークを消す
 facet lens "Web"                  # label が Web の lens を有効化
 facet lens --clear                # active lens を解除 (park した窓が戻る)
 
-# Section —任意の section (workspace でも lens でも) を 1-based の tree index
-# か label で指す。`--focus` は activate (workspace へ切替 / lens を有効化)。
-# `--rename` は表示 label を runtime で変更 (session のみ・relaunch で reset・
-# `facet reload` では消えない・空 label は lens を config の label へ戻す)。
+# Section — 任意の section (workspace / lens / unassigned) を 1-based の tree
+# index か label で指す。`--focus` は activate (workspace へ切替 / lens を有効化 /
+# unassigned は先頭窓を focus)。`--rename` は表示 label を runtime で変更 (session
+# のみ・relaunch で reset・`facet reload` では消えない・空 label は workspace を index
+# へ、lens / unassigned を config の label へ戻す)。
 # tree からも改名可: section ヘッダ右クリック → Section ▸ Rename。
 facet section --focus N            # tree 順で N 番目の section を focus
 facet section --focus LABEL        # label が LABEL の section を focus

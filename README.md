@@ -428,7 +428,13 @@ Frequently-touched keys:
   active). A window can thus belong to **no** workspace; orphans are
   invisible-but-logged (never auto-homed). Surface them with a 迷子 receptacle —
   a `type = "lens"` section whose `match = 'not workspace'` (recommended: keep
-  one per desktop). **A workspace is named by its optional `label`** (else
+  one per desktop), or a
+  `"unassigned"` section (`label` only, no `match`) — an opt-in lost-and-found
+  that collects **every** leftover window (any window shown in no other section,
+  not just `not workspace` orphans), renders like a lens cell, focuses its first
+  window on `facet section --focus`, and rescues a window dragged out onto a
+  workspace; only the first `"unassigned"` section renders. **A workspace is
+  named by its optional `label`** (else
   unnamed, shown by its 1-based index); `facet workspace --rename` overrides
   at runtime. Two modes: **no**
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
@@ -506,12 +512,13 @@ facet window --unmark NAME        # remove a mark
 facet lens "Web"                  # activate the lens labelled Web
 facet lens --clear                # lift the active lens (parked windows return)
 
-# Section — address ANY section (workspace OR lens) by its 1-based tree
-# index or its label. `--focus` activates it (switch to the workspace /
-# activate the lens). `--rename` sets its display label at runtime
-# (session-only — reset on relaunch, NOT on `facet reload`; an empty label
-# reverts a lens to its config label). You can also rename from the tree:
-# right-click a section header → Section ▸ Rename.
+# Section — address ANY section (workspace, lens, or unassigned) by its
+# 1-based tree index or its label. `--focus` activates it (switch to the
+# workspace / activate the lens / focus an unassigned section's first window).
+# `--rename` sets its display label at runtime (session-only — reset on
+# relaunch, NOT on `facet reload`; an empty label reverts a workspace to its
+# bare index, a lens or unassigned section to its config label). You can also
+# rename from the tree: right-click a section header → Section ▸ Rename.
 facet section --focus N            # focus the Nth section in tree order
 facet section --focus LABEL        # focus the section labelled LABEL
 facet section --rename N "label"   # rename the Nth section's display label

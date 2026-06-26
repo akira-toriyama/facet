@@ -183,15 +183,16 @@ by-name seed は廃止）。**未命名（label 空）は無名のまま 1始ま
 "tag も 0" とは限らない）。**迷子は invisible-but-logged**＝一致する lens が active で
 ない限りどの per-workspace view にも出ず（`snapshot` から除外・`facet query` では
 `workspace="迷子"`/index 0）、WS1 へ auto-home し**ない**（ユーザ責任・canon ⑧）。
-**迷子受け皿** = `type="lens"` + `match='not workspace'` の section を config に明示
-記述すると、その lens を active 化して迷子を集約できる（専用 `unassigned` type は
-作らない・canon ⑦ Q20）。「workspace を持つか」は**割当（`Int?` の nil）で判定**＝
-無名 workspace（name `""`）の窓は assigned 扱いで `not workspace` に**出ない**。
+**迷子受け皿**は 2 通り（config に明示記述）: ① `type="unassigned"` section（§G・推奨）＝
+leftover を差分で集約（`not workspace` 窓も無タグ窓も「他に出ない窓」を全部拾う・[[unassigned]]）／
+② `type="lens"` + `match='not workspace'` の section ＝ active 化して `not workspace` 窓だけを
+filter 集約。「workspace を持つか」は**割当（`Int?` の nil）で判定**＝無名 workspace
+（name `""`）の窓は assigned 扱いで `not workspace` に**出ない**。
 - コード: `WindowSlot.workspace: Int?` / `WorkspaceCatalog.setOrphan` /
   `WindowBackend.orphanWindow` / `ProjectedWindowFields.workspaceName: String?`
   （nil=未割当）/ `ApplyResolver.Plan.relocateSourceToOrphan`
-- **Don't call it:** unassigned（type は作らない）, lost window, untagged
-  （無タグ ≠ 迷子）, homeless, デタッチ窓
+- **Don't call it:** lost window, untagged（無タグ ≠ 迷子）, homeless, デタッチ窓
+  （※ [[unassigned]] = 迷子窓を**表示する** section＝別概念。「迷子 = unassigned」と混同しない）
 
 ### per-mac-desktop workspaces
 各 [[mac desktop]]（native Space）ごとに **独立した `WorkspaceCatalog`** を
@@ -584,9 +585,11 @@ per-mac-desktop の順序付き配列で、**配列順 = [[tree view]] の表示
 - **type=lens**: workspace に直交する**保存可視性フィルタ**（SQL VIEW・`label` +
   [[match]] + 任意 [[apply]]）。1 window = match に当たった**全** lens に出る
   （multi-match）。lens は「絞る」だけ（束ね直さない）。
-- **type=unassigned**: 迷子の安全網（`label` のみ）。**現状 defer**（現カタログでは
-  全管理窓が必ず workspace 所属＝AND 定義の unassigned は常に空ゆえ projection/tree
-  分岐は未実装。type は完全性のため維持）。
+- **type=unassigned**: §G の**迷子受け皿**（`label` のみ・`match`/`apply` 無し）。他のどの
+  section にも出ない窓（leftover = 全窓 − 表示済）を集約する OPT-IN section。**LIVE**
+  （§G 出荷済・PR #351）＝最初の 1 つだけ projection し（余剰は warn）、tree/grid/rail に
+  lens セルのように並び、`facet section --focus` で先頭窓を focus、runtime rename 可、
+  ここから workspace へ DnD すると窓を RESCUE（移動）。詳細は [[unassigned]] 参照。
 
 `type` は**必須**＝省略 or 未知値の section は **loud-log で drop**（silent な既定推測
 はしない＝authored match の黙殺を防ぐ・トミー 2026-06-17）。section 未定義の
@@ -596,13 +599,41 @@ window 上に section を投影し、1 表示単位として `ProjectedSection` 
 宣言 `DesktopSection` ↔ 投影結果 `ProjectedSection` を区別する**（後者は旧称 `FilterGroup`
 ＝Phase D で禁止語 group をリネーム）。
 - コード: `DesktopSection`（config 宣言）/ `ProjectedSection`（投影結果＝1 表示単位・
-  `id`〔`"ws:<index>"` / `"section:<declOrder>:<label>"`〕/ `label` / `windows` /
-  `sourceWorkspaceIndex` / `sectionType`・`OverviewModels`）/
+  `id`〔`"ws:<index>"` / `"section:<declOrder>:<label>"` / `"unassigned:<declOrder>"`〕/
+  `label` / `windows` / `sourceWorkspaceIndex` / `sectionType`・`OverviewModels`）/
   `FilterProjection.project`（投影・純）/ `SectionType` /
   `FacetConfig.macDesktopSectionConfigs` / `decodeDesktopSectionSections` /
   `effectiveMacDesktopSectionConfigs`（`FacetCore`）
 - **Don't call it:** group（旧称＝旧型名 `FilterGroup`）, workspace（section は多重所属・filter 由来／
   workspace は 1 窓 1 個・タイル枠）, tab, page, グループ, セクション以外
+
+### unassigned
+§G の**迷子受け皿 section**（`type="unassigned"`・`label` のみ）。他のどの [[section]] にも
+出ない窓 = **leftover**（全窓 − 表示済窓・実質 [[迷子 (orphan)]]）を引き受ける OPT-IN section。
+[[迷子 (orphan)]] が**窓の状態**なのに対し unassigned は**それを表示する section**＝別物として
+区別する。`match` / `apply` は持たない（leftover は filter でなく差分で算出）。**最初の 1 つだけ**
+projection（余剰は warn）。tree/grid/rail に lens セルのように並び、`facet section --focus N|LABEL`
+で**先頭窓を focus**（workspace 切替なし）、`facet section --rename` で session-only rename
+（lens と同じ `sectionLabelOverride`）、ここから workspace へ DnD で窓を RESCUE（移動）。
+- 設定: `[[desktop.N.section]]` の `type = "unassigned"`（`label` 任意）
+- CLI: `facet section --focus N|LABEL`（先頭窓 focus）/ `facet section --rename N "label"`
+- コード: `SectionType.unassigned` / `FilterProjection.project`（id `unassigned:<declOrder>`・
+  Pass 2 で leftover 充填）/ `focusFirstWindow(inSectionID:)` / `ViewContextMenu.showUnassignedMenu`
+- **Don't call it:** orphan section（[[迷子 (orphan)]] は窓状態＝別概念）, catch-all lens
+  （旧 `not workspace` lens 手法＝unassigned が後継）, leftover bucket, ゴミ箱
+
+### facet section
+全 [[section]]（workspace / lens / unassigned）を **1始まりの tree index か label で指す統一
+アドレッシング CLI**。`--focus N|LABEL` で activate（workspace 切替 / lens 有効化 / unassigned は
+[[unassigned]] の先頭窓 focus）、`--rename N "label"` で表示 label を runtime 変更（session-only・
+workspace は catalog 名・lens/unassigned は `sectionLabelOverride`・空 label は revert〔workspace=
+index / lens・unassigned=config label〕・relaunch で reset・`facet reload` では消えない）。GUI twin =
+tree ヘッダ右クリック → Section ▸ Rename。
+- CLI: `facet section --focus N|LABEL` / `facet section --rename N "label"`
+- コード: `addressableSections()` / `dispatchSectionFocus` / `renameSection(indexN1Based:to:)` /
+  `applyLabelOverrides` / `Controller.sectionLabelOverride`（`FacetApp`）
+- **Don't call it:** workspace --focus（旧 per-kind verb・section が統一層）, lens 切替専用,
+  group --focus
 
 ### rule
 `[[rule]]` adopt-rule（#282/#286 Phase 3）＝**新規窓**が [[match]]（[[facet filter]] の WHERE
