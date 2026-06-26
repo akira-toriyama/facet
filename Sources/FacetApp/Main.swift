@@ -39,8 +39,8 @@
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
 //   Lens      : facet lens NAME (activate a type="lens" section) / --clear
-//   Section   : facet section --focus N|LABEL (index|label, workspace or lens)
-//               / --rename N LABEL (session-only display label)
+//   Section   : facet section --focus N|LABEL (index|label; workspace, lens,
+//               or unassigned) / --rename N LABEL (session-only display label)
 //
 // ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
 // every view op must specify NAME explicitly. Shell aliases handle
@@ -183,14 +183,17 @@ enum FacetApp {
           facet lens --clear                 deactivate the active lens →
                                              back to the active workspace
           facet section --focus N            focus the Nth section in tree
-                                             order (1-based; workspace or lens)
+                                             order (1-based; workspace, lens,
+                                             or unassigned — an unassigned
+                                             section focuses its first window)
           facet section --focus LABEL        focus the section labelled LABEL
                                              (numeric = index; else label)
           facet section --rename N LABEL     rename the Nth section's display
                                              label (session-only; workspace →
-                                             catalog name, lens → display
-                                             override; empty LABEL reverts to
-                                             the number / config label)
+                                             catalog name, lens / unassigned →
+                                             display override; empty LABEL
+                                             reverts to the number / config
+                                             label)
 
         WINDOW                               (focused window)
           facet window --move-to N           move it to workspace N
@@ -487,9 +490,11 @@ enum FacetApp {
         if argv.first == "lens" {
             runLensCommand(Array(argv.dropFirst()))
         }
-        // `facet section <flag>` — address a section (workspace OR lens) by its
-        // 1-based tree-order index or its label: `facet section --focus N|LABEL`.
-        // The unified handle over `workspace --focus` / `lens NAME`.
+        // `facet section <flag>` — address a section (workspace, lens, OR
+        // unassigned) by its 1-based tree-order index or its label:
+        // `facet section --focus N|LABEL`. The unified handle over
+        // `workspace --focus` / `lens NAME` (an unassigned section focuses
+        // its first window).
         if argv.first == "section" {
             runSectionCommand(Array(argv.dropFirst()))
         }

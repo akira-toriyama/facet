@@ -678,8 +678,10 @@ action = "ignore"
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess).
 #
-# ACTIVE SAMPLE — a 3-desktop dev workflow: 2 unnamed (index-shown)
-# workspaces per desktop, plus 3 lenses on desktop 1 (Web / Code / Chat).
+# ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: an Orphans receptacle
+# lens + 2 unnamed (index-shown) workspaces + 3 lenses (Web / Code / Chat).
+# Desktop 2: a NAMED "Main" workspace + an unnamed one + a "Stray"
+# lost-and-found (type="unassigned"). Desktop 3: 2 unnamed workspaces.
 # Because these section blocks exist, facet is OPT-IN: it manages desktops
 # 1–3 and leaves every OTHER mac desktop untouched (panel hidden there).
 # Edit to taste, add `[[desktop.4.section]]` blocks for more desktops, or
@@ -723,12 +725,24 @@ label = "Chat"
 match = 'app~=Slack or app=Mail or app~=Discord'
 apply = { tags = ["chat"] }
 
+# Desktop 2 shows a NAMED workspace ("Main", header `1 (Main)`) next to an
+# unnamed one (header `2`), plus a lost-and-found.
 [[desktop.2.section]]
 type = "workspace"
+label = "Main"
 layout = "bsp"
 
 [[desktop.2.section]]
 type = "workspace"
+
+# A type="unassigned" lost-and-found: collects every window on this desktop
+# shown in NO section above (the leftover — in practice the orphans). It
+# renders like a lens cell; click / `facet section --focus` focuses its first
+# window; drag a window out onto a workspace to RESCUE it. Only the first
+# unassigned section renders (extras warn).
+[[desktop.2.section]]
+type = "unassigned"
+label = "Stray"
 
 [[desktop.3.section]]
 type = "workspace"
