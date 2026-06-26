@@ -301,6 +301,85 @@ extension Controller {
         )
     }
 
+    /// Section rename (§E): the user picked the header menu's `SECTION ▸ Rename`
+    /// row (workspace or lens). Resolve the render group `g` to the SAME
+    /// 1-based index + current display label that `SidebarView.sectionHeader
+    /// Display(group:)` shows (for the editor caption / pre-fill), AND capture a
+    /// STABLE handle for the deferred commit, then open the inline editor.
+    /// `unassigned` is guarded out (the projection drops it — no header, so it
+    /// can't reach here, but it's defensive). Shares the activation dance +
+    /// `finishTagEditor` close with `enterTagManage` (the panel is keyable).
+    ///
+    /// The inline editor is long-lived (the user types), so `lastSections` /
+    /// the workspace list can reorder — or be swapped wholesale by a mac-desktop
+    /// change — between open and commit. Routing the commit by a positional
+    /// `index1` would then rename a SHIFTED slot (review E2 LOW/MEDIUM). Instead
+    /// capture the stable identity (section `sec.id` / the degrade workspace's
+    /// `Workspace.index`) plus the current mac-desktop ordinal, and have the
+    /// id-keyed `renameSection` overloads re-resolve to the live position at
+    /// commit (mirrors the lens-layout path; identity = id, campaign rule).
+    func beginSectionRename(group g: Int) {
+        // Resolve g → (1-based index, current label), mirroring
+        // `sectionHeaderDisplay`. Section mode: g IS the display group ordinal
+        // (index = g + 1, label = lastSections[g].label). Degrade: g == the
+        // workspace's `ws.index`; the display index is its position in the
+        // reorder-applied list (the same list `renameSection`'s degrade branch
+        // and `--focus index:N` address by — NOT `g + 1`).
+        let index1: Int
+        let label: String
+        // The stable commit handle resolved alongside the display index.
+        let capturedOrdinal = currentMacDesktopOrdinal()
+        let commit: (String) -> Void
+        if !lastSections.isEmpty {
+            guard g >= 0, g < lastSections.count else { return }
+            let sec = lastSections[g]
+            // unassigned has no header / index → not renameable (Problem U).
+            guard sec.sectionType != .unassigned else { return }
+            index1 = g + 1
+            label = sec.label
+            let secID = sec.id
+            commit = { [weak self] newLabel in
+                self?.renameSection(sectionID: secID,
+                                    capturedOrdinal: capturedOrdinal, to: newLabel)
+            }
+        } else {
+            let key = capturedOrdinal ?? -1
+            let wss = SectionOrder.applyWorkspaces(
+                macDesktopSectionOrder[key], to: lastWorkspaces)
+            guard let pos = wss.firstIndex(where: { $0.index == g }) else { return }
+            index1 = pos + 1
+            label = wss[pos].name
+            let wsIndex = wss[pos].index    // stable 0-based Workspace.index
+            commit = { [weak self] newLabel in
+                self?.renameSection(workspaceIndex: wsIndex,
+                                    capturedOrdinal: capturedOrdinal, to: newLabel)
+            }
+        }
+        let caption = sectionDisplayLabel(index: index1, label: label)
+
+        // Activation dance — identical to `enterTagManage`: a keyable panel
+        // needs the app to be regular + active to take key; if the tree is
+        // already in kbNav it's already regular (flag stays false, close
+        // re-keys the tree instead of reverting policy).
+        let f = panelHost.panel.frame
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        SectionRenamePanel.shared.show(
+            at: NSPoint(x: f.maxX + 8, y: f.maxY),
+            header: caption,
+            initialText: label,
+            palette: treePaletteBox.pal,
+            onCommit: commit,
+            // The close lifecycle is not tag-specific — `finishTagEditor`
+            // reverts the activation policy / re-keys the tree on EVERY close
+            // path, exactly what this panel needs too.
+            onClose: { [weak self] in self?.finishTagEditor() })
+    }
+
     /// Called once on EVERY tag-panel close path (Esc / outside-click / click
     /// elsewhere). Undoes exactly what `openTagEditor` / `enterTagManage` did:
     /// if it flipped to `.regular`, revert to `.accessory` and hand focus back

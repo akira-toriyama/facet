@@ -551,6 +551,52 @@ extension Controller {
     /// workspace; resolve `n` against the reorder-applied workspace list (the
     /// same numbers `--focus` + `sectionHeaderDisplay`'s degrade branch show)
     /// and route to `renameWorkspace`. An out-of-range `n` is loud-but-non-fatal.
+    /// E2 GUI deferred-commit entry (section model): rename the section with
+    /// the STABLE `sectionID` captured when the inline editor opened. The editor
+    /// is long-lived (the user types), so `lastSections` can reorder / gain /
+    /// lose a section — or be replaced by a mac-desktop swap — between open and
+    /// commit. Re-resolve the id to its CURRENT 1-based position right here (and
+    /// confirm the mac desktop captured at open still matches) before delegating
+    /// to the positional `renameSection`, so a shifted slot can't be renamed.
+    /// Gone id / desktop changed → loud `setError`, no rename. Mirrors how the
+    /// lens-layout path targets by `sec.id` (identity = id, campaign rule).
+    func renameSection(sectionID: String, capturedOrdinal: Int?, to label: String) {
+        guard currentMacDesktopOrdinal() == capturedOrdinal else {
+            setError("section rename: mac desktop changed — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        guard let pos0 = lastSections.firstIndex(where: { $0.id == sectionID }) else {
+            setError("section rename: section no longer exists — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        renameSection(indexN1Based: pos0 + 1, to: label)
+    }
+
+    /// E2 GUI deferred-commit entry (degrade — `lastSections` empty): rename the
+    /// workspace identified by its STABLE 0-based `Workspace.index` captured at
+    /// open. Re-resolve to the CURRENT 1-based display position in the
+    /// reorder-applied list at commit (and confirm the captured mac desktop is
+    /// still on screen) so a reorder / swap between open and commit can't
+    /// mistarget. Gone / desktop changed → loud, no rename.
+    func renameSection(workspaceIndex idx: Int, capturedOrdinal: Int?, to label: String) {
+        guard currentMacDesktopOrdinal() == capturedOrdinal else {
+            setError("section rename: mac desktop changed — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        let key = currentMacDesktopOrdinal() ?? -1
+        let wss = SectionOrder.applyWorkspaces(
+            macDesktopSectionOrder[key], to: lastWorkspaces)
+        guard let pos0 = wss.firstIndex(where: { $0.index == idx }) else {
+            setError("section rename: workspace no longer exists — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        renameSection(indexN1Based: pos0 + 1, to: label)
+    }
+
     func renameSection(indexN1Based n: Int, to label: String) {
         let trimmed = label.trimmingCharacters(in: .whitespaces)
         // Degrade path: no section model here → all workspaces.

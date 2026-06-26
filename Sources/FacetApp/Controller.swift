@@ -382,17 +382,31 @@ final class Controller: NSObject {
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
     }
 
+    /// True while ANY of facet's own keyable sibling editors holds key (the
+    /// tag-edit checklist or the section-rename field). Used by
+    /// `handlePanelKeyChange` to distinguish "the tree handed key to our own
+    /// editor" (keep kbNav alive — `finishTagEditor` re-keys on close) from a
+    /// genuine involuntary key loss (a mac-desktop switch). Add every future
+    /// keyable editor here so the #66 hand-back invariant can't silently
+    /// regress.
+    private var anyKeyableEditorOpen: Bool {
+        TagEditPanel.shared.isOpen || SectionRenamePanel.shared.isOpen
+    }
+
     private func handlePanelKeyChange(isKey: Bool) {
         if isKey {
             Log.debug("panelKey gained (kbNav=\(sidebarView.kbNav))")
             if !sidebarView.kbNav { sidebarView.enterKbNav() }
         } else {
-            // The tag-edit checklist (R10) just took key — its own panel is
-            // now key, so the tree resigned. Don't tear down kbNav: it's a
-            // hand-off to our own panel, not a focus loss. `finishTagEditor`
-            // re-keys the tree on close, resuming nav. Without this guard the
-            // tree would self-destruct nav the moment the editor opened.
-            if TagEditPanel.shared.isOpen { return }
+            // The tag-edit checklist (R10) — or the section-rename editor (E2)
+            // — just took key — its own panel is now key, so the tree resigned.
+            // Don't tear down kbNav: it's a hand-off to our own keyable editor,
+            // not a focus loss. `finishTagEditor` re-keys the tree on close,
+            // resuming nav. Without this guard the tree would self-destruct nav
+            // the moment the editor opened. Every keyable sibling editor must be
+            // listed here, so they share one helper (the next one can't silently
+            // regress this #66 invariant).
+            if anyKeyableEditorOpen { return }
             // Drop kbNav. If we got here via the kb-nav exitActive
             // path, exitKbNav has already run and
             // this is a harmless idempotent call.
