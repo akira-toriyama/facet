@@ -187,6 +187,11 @@ extension SidebarView {
                 // render-group ordinals (kbWsOrder / liftSourceWS, same
                 // namespace). The Controller resolves the apply and snaps back
                 // (runs no op) on an inert / non-satisfying drop.
+                // §G RESCUE: a window row under the unassigned section lifts
+                // here (its `g` is the unassigned ordinal, in kbWsOrder); a
+                // commit aimed at a WORKSPACE section runs that workspace's
+                // `setWorkspace` apply → the orphan is rescued. A commit aimed
+                // at unassigned itself is inert (no apply) → no-op.
                 guard tgt != g, g < lastSections.count, tgt < lastSections.count
                 else { return true }
                 controller?.applyMove(
@@ -254,10 +259,17 @@ extension SidebarView {
         // PopupMenu's key monitor receives the typed query).
         switch rows[i].kind {
         case .header(let g, let ws):
-            // Workspace header → full layout picker; lens header → the
-            // stateless-only union layout picker (R9 / Cluster B).
+            // Workspace header → full layout picker; lens → stateless-only union
+            // layout picker (R9); §G unassigned → Rename-only. Same call-site
+            // discrimination as `rightMouseDown` (SidebarView+Menus).
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws, filterable: true) }
-            else { lensHeaderMenu(at: scr, group: g, filterable: true) }
+            else if g >= 0, g < lastSections.count {
+                switch lastSections[g].sectionType {
+                case .lens:       lensHeaderMenu(at: scr, group: g, filterable: true)
+                case .unassigned: unassignedHeaderMenu(at: scr, group: g, filterable: true)
+                case .workspace:  break
+                }
+            }
         case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title,

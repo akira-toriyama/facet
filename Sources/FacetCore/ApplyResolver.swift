@@ -151,7 +151,7 @@ public enum ApplyResolver {
     /// a workspace dest). Total — never throws; an unresolvable / inert drop
     /// returns `isInert == true` with a `reason`.
     public static func plan(window: Window,
-                            workspaceName: String,
+                            workspaceName: String?,
                             fromSectionID: String?,
                             toSectionID: String,
                             destWorkspaceIndex: Int?,
@@ -161,13 +161,17 @@ public enum ApplyResolver {
             return inert("same section")
         }
 
-        // Inverse from the SOURCE section (MOVE only; ADD has no source, and a
-        // workspace source has no additive tag to reverse). Computed FIRST so
-        // the net-effect invariant below can reflect it. A stale source id
+        // Inverse from the SOURCE section (MOVE only). Only a LENS source
+        // (`section:` id) carries an invertible `apply` to reverse; a workspace
+        // (`ws:`) source has no additive tag, and a §G `unassigned:` source is
+        // an apply-less receptacle — both contribute an empty inverse, so the
+        // RESCUE of an orphan out of the unassigned section onto a workspace
+        // must NOT be treated as a stale source. Computed FIRST so the
+        // net-effect invariant below can reflect it. A stale lens source id
         // (config hot-reloaded between render and drop) → inert, matching the
         // stale-dest treatment, so a MOVE never silently degrades to an ADD.
         var inverse: [ApplyOp] = []
-        if let fromSectionID, !fromSectionID.hasPrefix("ws:") {
+        if let fromSectionID, fromSectionID.hasPrefix("section:") {
             guard let src = section(forSectionID: fromSectionID, in: sections) else {
                 return inert("stale source \"\(fromSectionID)\"")
             }

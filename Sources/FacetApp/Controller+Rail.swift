@@ -78,6 +78,11 @@ extension Controller {
                 self.activateLensID(sectionID,
                                     ordinal: self.currentMacDesktopOrdinal(),
                                     autoFocus: true)
+            case .unassigned(let sectionID):
+                // §G: an unassigned cell focuses its FIRST orphan window — no
+                // lens toggle, no workspace switch (the unified focus helper,
+                // shared with the grid pick + CLI --focus + tree header click).
+                self.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the
                 // view's windowHomeWS — correct whether the thumb sat in a

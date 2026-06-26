@@ -90,11 +90,19 @@ extension Controller {
     /// the resolver needs the window's current workspace for the lens match
     /// invariant. Internal (not private): `openTagEditor` reuses it to read the
     /// window's app name + current tags.
-    func findRenderedWindow(_ id: WindowID) -> (Window, String)? {
+    func findRenderedWindow(_ id: WindowID) -> (Window, String?)? {
         for ws in lastWorkspaces {
             if let w = ws.windows.first(where: { $0.id == id }) {
-                return (w, ws.name)
+                return (w, ws.name)        // assigned: the ws name (may be "")
             }
+        }
+        // §G rescue: a window shown under the unassigned receptacle is a TRUE
+        // orphan (in no workspace → absent from `lastWorkspaces`). Find it in
+        // the orphan set so a drop onto a workspace resolves a real move plan.
+        // `nil` name = orphan (no assignment), distinct from `""` (assigned to
+        // an unnamed workspace) — the resolver's `not workspace` invariant.
+        if let w = backend.orphanWindows().first(where: { $0.id == id }) {
+            return (w, nil)
         }
         return nil
     }

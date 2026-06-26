@@ -89,4 +89,35 @@ final class ApplyResolverOrphanTests: XCTestCase {
                        "post-orphan name '' satisfies `not workspace`, so the move is accepted")
         XCTAssertTrue(p.relocateSourceToOrphan)
     }
+
+    // MARK: - §G RESCUE: orphan dragged OUT of the unassigned receptacle → workspace
+
+    /// The headline §G use case: a TRUE orphan (in no workspace, `workspaceName
+    /// == nil`) shown under the `type="unassigned"` receptacle, dragged onto a
+    /// workspace. The source id is `"unassigned:<declOrder>"` (NOT `section:`),
+    /// which carries no apply → empty inverse, and must NOT be treated as a
+    /// stale source. The plan moves it via `destWorkspaceIndex`, no relocation.
+    func testUnassignedToWorkspaceRescue() {
+        let secs = [wsSec(), wsSec(),
+                    DesktopSection(type: .unassigned, label: "Lost")]
+        let p = ApplyResolver.plan(
+            window: win(9, app: "Chrome"), workspaceName: nil,   // orphan
+            fromSectionID: "unassigned:2", toSectionID: "ws:1",
+            destWorkspaceIndex: 1, in: secs)
+        XCTAssertFalse(p.isInert, "rescue from unassigned must NOT snap back as a stale source")
+        XCTAssertFalse(p.relocateSourceToOrphan, "moving INTO a workspace never orphans")
+        XCTAssertEqual(p.inverse, [], "the unassigned receptacle has no apply to reverse")
+        XCTAssertEqual(p.destWorkspaceIndex, 1)
+    }
+
+    /// Dropping a window BACK onto the unassigned receptacle is inert (it is a
+    /// passive lost-and-found, not an apply target) → snap-back.
+    func testDropOntoUnassignedIsInert() {
+        let secs = [wsSec(), DesktopSection(type: .unassigned, label: "Lost")]
+        let p = ApplyResolver.plan(
+            window: win(1), workspaceName: "Dev",
+            fromSectionID: "ws:0", toSectionID: "unassigned:1",
+            destWorkspaceIndex: nil, in: secs)
+        XCTAssertTrue(p.isInert, "the unassigned receptacle is drop-inert (no apply)")
+    }
 }

@@ -174,6 +174,27 @@ public enum ViewContextMenu {
                 filterable: filterable, entries: entries)
     }
 
+    /// §G unassigned-section header menu — the orphan receptacle has no layout
+    /// engine (no source workspace), so unlike `showLayout` / `showLensLayout`
+    /// it offers ONLY `SECTION ▸ Rename` (the same row both pickers put above
+    /// their LAYOUT group). `header` is the §D `index (label)` caption.
+    public static func showUnassignedMenu(
+        at scr: NSPoint,
+        header: String,
+        palette: ResolvedPalette,
+        filterable: Bool = false,
+        onRename: @escaping () -> Void
+    ) {
+        // §E: SECTION ▸ Rename, identical shape to the layout pickers' rename
+        // row (`present()` gives the single row its own dim "SECTION" caption).
+        let entries: [Entry] = [
+            Entry(label: "Rename", icon: "SF:pencil",
+                  section: "Section", run: onRename),
+        ]
+        present(at: scr, header: header, palette: palette,
+                filterable: filterable, entries: entries)
+    }
+
     /// Panel-level menu for the pinned "Desktop N" band — the third
     /// right-click surface (scope hierarchy: panel ▸ workspace ▸ window).
     /// Exposes the tree-wide keyboard modes that are otherwise reachable

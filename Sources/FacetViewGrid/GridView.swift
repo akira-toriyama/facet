@@ -298,18 +298,32 @@ public final class GridView: NSView {
             }
         }
         return sections.enumerated().map { (i, sec) in
-            let isLens = sec.sectionType == .lens
             // The projection doesn't carry a workspace's live layoutMode; look
-            // it up by source index (a lens has no layout engine → "").
+            // it up by source index (a lens / unassigned section has no source
+            // workspace → nil → no layout engine).
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
-            let mode = isLens ? "" : (srcWS?.layoutMode ?? "")
-            // EX-2 single-highlight — mirror of SidebarView.headerActive XOR:
-            //   lens cell lit ⟺ it IS the active lens;
-            //   workspace cell lit ⟺ no lens active AND its WS is active.
-            let active = isLens
-                ? (activeLensID != nil && sec.id == activeLensID)
-                : (activeLensID == nil && srcWS?.isActive == true)
+            // §G three-way: workspace cells carry their source WS's layout +
+            // active highlight; a lens cell has no layout engine (mode = "") and
+            // lights only when it IS the active lens; an unassigned cell is like
+            // a lens for rendering (mode = "", wsIndex = -1) but is NEVER the
+            // active highlight (no "active unassigned" concept).
+            let mode: String
+            let active: Bool
+            switch sec.sectionType {
+            case .workspace:
+                mode = srcWS?.layoutMode ?? ""
+                // EX-2 single-highlight — mirror of SidebarView.headerActive XOR:
+                // a workspace cell lights ⟺ no lens active AND its WS is active.
+                active = activeLensID == nil && srcWS?.isActive == true
+            case .lens:
+                mode = ""
+                // A lens cell lights ⟺ it IS the active lens.
+                active = activeLensID != nil && sec.id == activeLensID
+            case .unassigned:
+                mode = ""
+                active = false
+            }
             // §D: every section type captions as `index (label)` — the
             // 1-based display index is the section's position in tree order
             // (this `.enumerated()` `i`), NOT `sourceWorkspaceIndex` (a lens
@@ -780,9 +794,10 @@ public final class GridView: NSView {
             hoverWSID = anyCell?.sectionID
             needsDisplay = true
         }
-        // The open-hand (drag) cursor only over a SWAPPABLE header — a lens
-        // cell header is a click target, not a drag handle.
-        (headerCell.map { !$0.isLens } == true
+        // The open-hand (drag) cursor only over a SWAPPABLE header — i.e. a
+        // WORKSPACE header. A lens / unassigned (§G) cell header is a click
+        // target, not a drag handle (neither has a source workspace to swap).
+        (headerCell.map { $0.sectionType == .workspace } == true
             ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
@@ -804,9 +819,10 @@ public final class GridView: NSView {
         let p = convert(e.locationInWindow, from: nil)
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            // A lens cell has no per-WS layout picker (it spans workspaces) —
-            // mirror kbContextMenu's guard.
-            guard !cell.isLens else { return }
+            // Only a WORKSPACE cell has a per-WS layout picker — a lens spans
+            // workspaces and an unassigned cell (§G) has no layout engine at
+            // all. Mirror kbContextMenu's guard.
+            guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
                                        workspaces: workspaces,
@@ -835,8 +851,9 @@ public final class GridView: NSView {
             win.convertPoint(toScreen: convert(NSPoint(x: r.minX + 12, y: r.minY), to: nil))
         }
         if kbSelectedWindowIdx == -1 {
-            // A lens cell has no per-WS layout picker (it spans workspaces).
-            guard !cell.isLens else { return }
+            // Only a WORKSPACE cell has a per-WS layout picker — a lens spans
+            // workspaces, an unassigned cell (§G) has no layout engine.
+            guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
                                        workspaceIndex: cell.wsIndex, workspaces: workspaces,
                                        header: cell.label, palette: pal)
@@ -880,6 +897,11 @@ public final class GridView: NSView {
                            ws: windowHomeWS[win.id] ?? cell.wsIndex)
         } else if cell.isLens {
             onPick?(.lens(sectionID: cell.sectionID))
+        } else if cell.sectionType == .unassigned {
+            // §G: an empty-area click on the unassigned cell focuses its first
+            // orphan window (the Controller's unified focus helper) — no lens
+            // toggle, no workspace switch.
+            onPick?(.unassigned(sectionID: cell.sectionID))
         } else {
             onPick?(.workspace(workspaceIndex: cell.wsIndex))
         }
@@ -942,10 +964,12 @@ public final class GridView: NSView {
             // included. dropTargetWS stays nil (the swap drop-highlight is off).
             reorderInsertAt = reorderBoundary(at: p)
         } else {
-            // A lens cell is never a move target (no source workspace) — skip
-            // it so a window drag can't land on it (EX-2, MUST-FIX #2).
+            // A lens / unassigned (§G) cell is never a move target (no source
+            // workspace) — skip both so a window drag can't land on them
+            // (EX-2, MUST-FIX #2). Only workspace cells route a move.
             d.dropTargetWS = cells.first(where: {
-                ($0.rect.contains(p) || $0.headerRect.contains(p)) && !$0.isLens
+                ($0.rect.contains(p) || $0.headerRect.contains(p))
+                    && $0.sectionType == .workspace
             })
                 .map(\.wsIndex)
                 .flatMap { $0 == d.sourceWS ? nil : $0 }
@@ -982,10 +1006,14 @@ public final class GridView: NSView {
                                 pid: pd.hit.pid,
                                 windowID: pd.hit.id))
             } else if let ph = pendingHeaderDown {
-                // Header click: switch to the workspace, or toggle the lens.
+                // Header click: switch to the workspace, toggle the lens, or
+                // (§G) focus the unassigned section's first window.
                 if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
                    cell.isLens {
                     onPick?(.lens(sectionID: cell.sectionID))
+                } else if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
+                          cell.sectionType == .unassigned {
+                    onPick?(.unassigned(sectionID: cell.sectionID))
                 } else {
                     onPick?(.workspace(workspaceIndex: ph.ws))
                 }
@@ -1247,9 +1275,10 @@ public final class GridView: NSView {
 
     private func syncKbDragToSelection() {
         guard var d = drag, let cell = kbSelectedCell else { return }
-        // EX-2 MUST-FIX #2: a lens cell is never a valid drop target (no source
-        // workspace) — a keyboard-lifted window/workspace can't commit onto it.
-        d.dropTargetWS = (cell.isLens || cell.wsIndex == d.sourceWS)
+        // EX-2 MUST-FIX #2 + §G: a lens OR unassigned cell is never a valid drop
+        // target (no source workspace) — a keyboard-lifted window/workspace can
+        // only commit onto a WORKSPACE cell that isn't the source.
+        d.dropTargetWS = (cell.sectionType != .workspace || cell.wsIndex == d.sourceWS)
             ? nil : cell.wsIndex
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         d.current = at
@@ -1273,9 +1302,11 @@ public final class GridView: NSView {
     /// identically to a mouse-initiated drag.
     public func kbLift() {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
-        // A window inside a lens cell is not move-draggable (its cell has no
-        // source workspace — `wsIndex == -1`). Lifting works in workspace cells.
-        guard drag == nil, let s = kbSelectedWindow(), !s.cell.isLens else { return }
+        // A window inside a lens / unassigned (§G) cell is not move-draggable
+        // (no source workspace — `wsIndex == -1`). Lifting works only from a
+        // WORKSPACE cell.
+        guard drag == nil, let s = kbSelectedWindow(),
+              s.cell.sectionType == .workspace else { return }
         let at = NSPoint(x: s.cell.rect.midX, y: s.cell.rect.midY)
         drag = OverviewDrag(
             sourceWS: s.cell.wsIndex,
@@ -1297,8 +1328,10 @@ public final class GridView: NSView {
     /// might intend "move WS-X's contents here, leaving X empty in
     /// return".
     public func kbLiftWorkspace() {
-        // A lens cell cannot be lifted for a swap (it has no source workspace).
-        guard drag == nil, let cell = kbSelectedCell, !cell.isLens else { return }
+        // Only a WORKSPACE cell can be lifted for a swap — a lens / unassigned
+        // (§G) cell has no source workspace.
+        guard drag == nil, let cell = kbSelectedCell,
+              cell.sectionType == .workspace else { return }
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         drag = OverviewDrag(
             sourceWS: cell.wsIndex,
@@ -1341,6 +1374,21 @@ public final class GridView: NSView {
         // no single workspace to zoom).
         if cell.isLens {
             onPick?(.lens(sectionID: cell.sectionID))
+            return
+        }
+        // §G: an UNASSIGNED cell. A keyboard-selected orphan thumb focuses
+        // THAT window (emit `.window`, no zoom — a cross-workspace cell has no
+        // single WS to zoom; the Controller focuses it via its resolved home,
+        // mirroring the mouse thumb-click). With no window selected, the header
+        // action focuses the section's FIRST window via the `.unassigned` pick.
+        if cell.sectionType == .unassigned {
+            if let s = kbSelectedWindow() {
+                onPick?(.window(
+                    homeWorkspaceIndex: windowHomeWS[s.hit.id] ?? -1,
+                    pid: s.hit.pid, windowID: s.hit.id))
+            } else {
+                onPick?(.unassigned(sectionID: cell.sectionID))
+            }
             return
         }
         // Return on the selected workspace cell → zoom that cell out to full

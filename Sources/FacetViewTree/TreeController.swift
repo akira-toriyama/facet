@@ -90,6 +90,15 @@ public protocol TreeController: AnyObject, Sendable {
     /// label can't toggle the wrong lens. No-op outside the section model.
     func toggleActiveLens(_ sectionID: String)
 
+    /// §G: the user clicked an `type=unassigned` section header (or its grid /
+    /// rail cell, or `section --focus`d it). FOCUS ITS FIRST orphan window — no
+    /// lens toggle, no workspace switch (unassigned has neither behind it). The
+    /// Controller looks the section up by stable id, reveals + focuses
+    /// `.windows.first` via the existing window path; an empty / missing
+    /// section is loud-but-non-fatal. The unified §G focus helper, shared with
+    /// the grid/rail `.unassigned` picks + the CLI `--focus` path.
+    func focusFirstWindow(inSectionID id: String)
+
     /// Section/lens model (§A): the user picked a union layout from a `type=lens`
     /// header's `m` / right-click menu. ACTIVATE the lens `sectionID`
     /// (`ProjectedSection.id`, if it isn't already the active section) so the
@@ -127,9 +136,9 @@ public protocol TreeController: AnyObject, Sendable {
     /// controller resolves `g` to the same 1-based index + current display
     /// label `sectionHeaderDisplay(group:)` shows, opens the keyable inline
     /// editor pre-filled with that label, and on commit routes to the shared
-    /// rename entry (workspace → backend name; lens → display-only override;
-    /// empty → revert). Guards `unassigned` (no header → unreachable). No-op
-    /// for an out-of-range group. `anchor` is the right-click screen point
+    /// rename entry (workspace → backend name; lens / §G unassigned →
+    /// display-only override; empty → revert). No-op for an out-of-range
+    /// group. `anchor` is the right-click screen point
     /// (the clicked header's height) — the editor opens beside the tree at
     /// that y, not pinned to the tree top.
     func beginSectionRename(group g: Int, at anchor: CGPoint)
