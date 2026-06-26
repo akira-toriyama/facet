@@ -49,22 +49,26 @@ public final class SidebarView: NSView {
         let isLensParked: Bool // window: parked OUT of the active lens → dim + lens badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
         let tags: [String]       // window: tag names → `#tag` chips (per-window, sorted)
-        /// header (section model, PR5): this is a `lens` section, not a
-        /// workspace — drawn with a leading lens glyph + no layout sub-line.
-        let isLens: Bool
+        /// header (section model, PR5 / §G): which section kind this header
+        /// renders — `.workspace` (layout sub-line), `.lens` (leading funnel
+        /// glyph, no sub-line), or `.unassigned` (leading archivebox glyph, no
+        /// sub-line). Drives the 3-way header draw in SidebarView+Draw. The
+        /// by-workspace degrade path passes `.workspace`.
+        let sectionType: SectionType
 
         init(row: NSRect, kind: Int, hot: Bool, firstHeader: Bool, pid: Int,
              app: String, title: String, text: String, mode: String,
              isMaster: Bool, isFloating: Bool, isSticky: Bool, mark: String?,
              isHidden: Bool, scratchpad: String?, tags: [String],
-             isLensParked: Bool = false, isLens: Bool = false) {
+             isLensParked: Bool = false, sectionType: SectionType = .workspace) {
             self.row = row; self.kind = kind; self.hot = hot
             self.firstHeader = firstHeader; self.pid = pid; self.app = app
             self.title = title; self.text = text; self.mode = mode
             self.isMaster = isMaster; self.isFloating = isFloating
             self.isSticky = isSticky; self.mark = mark; self.isHidden = isHidden
             self.isLensParked = isLensParked
-            self.scratchpad = scratchpad; self.tags = tags; self.isLens = isLens
+            self.scratchpad = scratchpad; self.tags = tags
+            self.sectionType = sectionType
         }
     }
     var cells: [Cell] = []
@@ -557,10 +561,15 @@ public final class SidebarView: NSView {
             // lens is active, workspace-section headers go dark (the catalog is
             // already exclusive — `activeLens XOR activeWorkspace`; the view now
             // reflects it) so only the active lens header reads `pal.primary`.
-            // §A: keyed on the stable id, not the label.
-            sec.sectionType == .lens
-                ? (activeLensID != nil && sec.id == activeLensID)
-                : (activeLensID == nil && wsActive(sec.sourceWorkspaceIndex))
+            // §A: keyed on the stable id, not the label. §G: an unassigned
+            // section is NEVER active (a passive orphan receptacle, no
+            // highlight concept) — it always renders dim.
+            switch sec.sectionType {
+            case .lens:       return activeLensID != nil && sec.id == activeLensID
+            case .unassigned: return false
+            case .workspace:  return activeLensID == nil
+                                  && wsActive(sec.sourceWorkspaceIndex)
+            }
         }
 
         let sig = (searching ? "S:\(query);" : "")
@@ -569,10 +578,20 @@ public final class SidebarView: NSView {
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
             + sections.enumerated().map { (g, sec) in
-                let isLens = sec.sectionType == .lens
+                // §G: 3-way type code — W(orkspace) / L(ens) / U(nassigned).
+                // Only a workspace section carries a layout sub-line; lens AND
+                // unassigned have none. Keep this byte-identical to the width
+                // pre-pass + render pass or the horizontal scroll clips.
+                let typeCode: String
+                switch sec.sectionType {
+                case .workspace:  typeCode = "W"
+                case .lens:       typeCode = "L"
+                case .unassigned: typeCode = "U"
+                }
                 let active = headerActive(sec)
-                let layout = isLens ? "" : wsLayout(sec.sourceWorkspaceIndex)
-                return "\(g):\(sec.id):\(isLens ? "L" : "W")"
+                let layout = sec.sectionType == .workspace
+                    ? wsLayout(sec.sourceWorkspaceIndex) : ""
+                return "\(g):\(sec.id):\(typeCode)"
                     + "\(active ? "*" : "")\(layout)|"
                     + sec.windows.map {
                         "\($0.id.serverID)\((hot($0) && headerActive(sec)) ? "f" : "")"
@@ -607,16 +626,19 @@ public final class SidebarView: NSView {
         let gripSpace = headerGripW + 6
         var naturalW = sidebarWidth
         for (g, sec, wins) in shown {
-            let isLens = sec.sectionType == .lens
             // §D caption `index (label)` for every type — index = the section's
             // 1-based tree position (`g + 1`, invariant across search filter).
             // MUST byte-match the render-pass label below or horizontal scroll
-            // clips. The leading lens glyph is separate chrome (`+22`).
+            // clips. The leading glyph (lens funnel / §G unassigned archivebox)
+            // is separate chrome (`+22`); only a WORKSPACE section has a layout
+            // sub-line.
+            let hasGlyph = sec.sectionType != .workspace
             let nm = sectionDisplayLabel(index: g + 1, label: sec.label)
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
-                + (isLens ? 22 : 0)   // leading lens glyph
-            let layout = isLens ? "" : wsLayout(sec.sourceWorkspaceIndex)
+                + (hasGlyph ? 22 : 0)   // leading lens / unassigned glyph
+            let layout = sec.sectionType == .workspace
+                ? wsLayout(sec.sourceWorkspaceIndex) : ""
             let modeW = layout.isEmpty ? 0
                 : (layoutBadgeLabel(layout) as NSString).size(
                     withAttributes: [.font: uiFont(subheadFontSize, .semibold)]).width
@@ -633,26 +655,30 @@ public final class SidebarView: NSView {
         var firstHeader = true
         for (g, sec, wins) in shown {
             let start = y
-            let isLens = sec.sectionType == .lens
             let src = sec.sourceWorkspaceIndex
-            let layout = isLens ? "" : wsLayout(src)
+            // §G: only a WORKSPACE section has a layout sub-line; lens AND
+            // unassigned have none.
+            let layout = sec.sectionType == .workspace ? wsLayout(src) : ""
             let active = headerActive(sec)
             // §D caption `index (label)` — byte-identical to the width pre-pass.
             let label = sectionDisplayLabel(index: g + 1, label: sec.label)
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
-            // Workspace section → click switches to its source WS; lens
-            // section → no workspace to switch to (PR6 activates the lens),
-            // so the header's action target is nil.
+            // Workspace section → click switches to its source WS; a lens
+            // section (PR6 activates the lens) or §G unassigned section (focus
+            // first window) has no workspace to switch to, so the header's
+            // action target is nil (handleClick discriminates by sectionType).
             rows.append(TreeRow(rect: hr,
                                 kind: .header(group: g,
-                                              workspaceIndex: isLens ? nil : src)))
+                                              workspaceIndex: sec.sectionType == .workspace
+                                                  ? src : nil)))
             cells.append(Cell(row: hr, kind: 1, hot: active,
                               firstHeader: firstHeader, pid: 0, app: "",
                               title: "", text: label, mode: layout,
                               isMaster: false, isFloating: false,
                               isSticky: false, mark: nil, isHidden: false,
-                              scratchpad: nil, tags: [], isLens: isLens))
+                              scratchpad: nil, tags: [],
+                              sectionType: sec.sectionType))
             firstHeader = false
             y += hh
             for win in wins {

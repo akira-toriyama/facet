@@ -34,10 +34,9 @@
 //     config load (parse-only stays total).
 //   • type = "unassigned" — the lost-and-found safety net: an optional
 //     `label` only (§A; no `match` / `apply`).
-//     (Deferred: the projection / tree branch is not built yet — under the
-//     current catalog every managed window has a workspace, so an
-//     AND-defined unassigned set is always empty. The TYPE is kept so the
-//     model is complete; an "unplaced window" concept trips it later.)
+//     PROJECTED (§G): an opt-in receptacle that, when present, collects the
+//     LEFTOVER (universe − shown) — the windows that land in NO other emitted
+//     section. Only the first emits; extras warn.
 //
 // `type` is REQUIRED. An absent or unrecognised `type` DROPS the row with a
 // loud reason — never a silent clamp to a default, which would mis-route a

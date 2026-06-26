@@ -301,14 +301,16 @@ extension Controller {
         )
     }
 
-    /// Section rename (§E): the user picked the header menu's `SECTION ▸ Rename`
-    /// row (workspace or lens). Resolve the render group `g` to the SAME
-    /// 1-based index + current display label that `SidebarView.sectionHeader
-    /// Display(group:)` shows (for the editor caption / pre-fill), AND capture a
-    /// STABLE handle for the deferred commit, then open the inline editor.
-    /// `unassigned` is guarded out (the projection drops it — no header, so it
-    /// can't reach here, but it's defensive). Shares the activation dance +
-    /// `finishTagEditor` close with `enterTagManage` (the panel is keyable).
+    /// Section rename (§E / §G): the user picked the header menu's
+    /// `SECTION ▸ Rename` row (workspace, lens, OR unassigned). Resolve the
+    /// render group `g` to the SAME 1-based index + current display label that
+    /// `SidebarView.sectionHeaderDisplay(group:)` shows (for the editor caption /
+    /// pre-fill), AND capture a STABLE handle for the deferred commit, then open
+    /// the inline editor. §G: `.unassigned` renames via the SAME id-keyed
+    /// session-only override path as `.lens` (`renameSection(sectionID:…)` →
+    /// `applyLabelOverrides`), so the section-model branch handles all three
+    /// kinds uniformly. Shares the activation dance + `finishTagEditor` close
+    /// with `enterTagManage` (the panel is keyable).
     ///
     /// The inline editor is long-lived (the user types), so `lastSections` /
     /// the workspace list can reorder — or be swapped wholesale by a mac-desktop
@@ -333,8 +335,9 @@ extension Controller {
         if !lastSections.isEmpty {
             guard g >= 0, g < lastSections.count else { return }
             let sec = lastSections[g]
-            // unassigned has no header / index → not renameable (Problem U).
-            guard sec.sectionType != .unassigned else { return }
+            // §G: workspace / lens / unassigned all rename by the same stable-id
+            // deferred-commit path — `renameSection(sectionID:…)` routes by kind
+            // (workspace → catalog; lens / unassigned → session override).
             index1 = g + 1
             label = sec.label
             let secID = sec.id

@@ -25,11 +25,13 @@
 //     over EVERY window (multi-match: a window in two lens sections appears
 //     in both). `id = "section:<declOrder>:<label>"`,
 //     `sourceWorkspaceIndex = nil`, `sectionType = .lens`.
-//   • type = unassigned — DEFERRED (トミー 2026-06-17): under the current
-//     catalog every managed window has a workspace, so the AND-defined
-//     unassigned set is always empty (dead UI). The TYPE decodes (parse) but
-//     the projection emits NO section for it yet; an "unplaced window" concept
-//     trips it later.
+//   • type = unassigned — PROJECTED (§G): the opt-in lost-and-found
+//     receptacle. When present, it collects the LEFTOVER (universe − shown):
+//     the windows that landed in NO emitted workspace / lens section — the
+//     genuinely invisible windows it rescues. `id = "unassigned:<declOrder>"`,
+//     `sourceWorkspaceIndex = nil`, `sectionType = .unassigned`. Only the
+//     FIRST unassigned section emits; extras warn (the leftover set is
+//     singular, so a second receptacle is always empty).
 //
 // CRITICAL DEGRADE — by-workspace stays a first-class citizen: when no
 // sections are configured for the mac desktop, each `Workspace` maps 1:1 to
@@ -104,10 +106,11 @@ public enum FilterProjection {
     ///   `sectionType = .workspace`.
     /// - otherwise → one `ProjectedSection` per `workspace` / `lens` section in
     ///   config-declaration order (= display order), with the per-type
-    ///   semantics in the file header. `unassigned` is deferred (no section).
-    ///   Extra live workspaces append at the tail of the workspace-section
-    ///   run; surplus workspace sections + malformed lens matches are noted
-    ///   in `diagnostics`.
+    ///   semantics in the file header. An `unassigned` section (§G) emits the
+    ///   leftover receptacle (universe − shown); only the first emits, extras
+    ///   warn. Extra live workspaces append at the tail of the workspace-
+    ///   section run; surplus workspace sections + malformed lens matches are
+    ///   noted in `diagnostics`.
     ///
     /// `orphans` (EX-3 迷子): windows that belong to NO workspace
     /// (`WindowSlot.workspace == nil`), so the backend's `[Workspace]` snapshot
@@ -148,6 +151,7 @@ public enum FilterProjection {
         var wsCursor = 0            // next live workspace to fill a workspace section
         var sawWorkspaceSection = false
         var insertExtrasAt = 0      // tail of the workspace-section run, in `out`
+        var sawUnassigned = false   // §G: only the FIRST unassigned section emits
 
         for (declOrder, s) in sections.enumerated() {
             switch s.type {
@@ -201,7 +205,22 @@ public enum FilterProjection {
                 }
 
             case .unassigned:
-                continue   // deferred — the type decodes but emits no section
+                // §G: the lost-and-found receptacle for windows shown in NO
+                // other section. Emit a PLACEHOLDER at its declaration position
+                // (empty `.windows`); Pass 2 below fills it with the leftover
+                // once every workspace + lens section's membership is known.
+                // Only the FIRST unassigned section is shown — extras are
+                // loud-but-non-fatal (the "leftover" set is singular, so a
+                // second receptacle would always be empty).
+                if sawUnassigned {
+                    diags.append("config: unassigned section #\(declOrder + 1) "
+                        + "ignored (only the first unassigned section is shown)")
+                    continue
+                }
+                sawUnassigned = true
+                out.append(ProjectedSection(
+                    id: "unassigned:\(declOrder)", label: s.label, windows: [],
+                    sourceWorkspaceIndex: nil, sectionType: .unassigned))
             }
         }
 
@@ -215,6 +234,34 @@ public enum FilterProjection {
             let extras = workspaces[wsCursor...].map(wsSection)
             out.insert(contentsOf: extras, at: insertExtrasAt)
         }
+
+        // §G Pass 2 — fill the unassigned receptacle with the LEFTOVER: the
+        // windows that landed in NO emitted section. `universe` = every
+        // workspace window + the orphans (deduped by id, in that order);
+        // `shown` = the union of every emitted workspace / lens section's
+        // windows (the placeholder is still empty here, so it contributes
+        // nothing). `leftover` = universe − shown, in universe order. A
+        // workspace window is always shown in its own workspace section, so in
+        // practice the leftover is the orphans no lens caught — the genuinely
+        // invisible windows the receptacle rescues.
+        if sawUnassigned {
+            var shown = Set<WindowID>()
+            for sec in out where sec.sectionType != .unassigned {
+                for w in sec.windows { shown.insert(w.id) }
+            }
+            var seen = Set<WindowID>()
+            var leftover: [Window] = []
+            for w in workspaces.flatMap(\.windows) + orphans {
+                guard seen.insert(w.id).inserted else { continue }   // dedup universe
+                if !shown.contains(w.id) { leftover.append(w) }
+            }
+            out = out.map { sec in
+                guard sec.sectionType == .unassigned else { return sec }
+                return ProjectedSection(id: sec.id, label: sec.label,
+                                        windows: leftover, sourceWorkspaceIndex: nil,
+                                        sectionType: .unassigned)
+            }
+        }
         return Result(sections: out, diagnostics: diags)
     }
 }
@@ -223,14 +270,15 @@ public enum FilterProjection {
 /// list. Pure + backend-neutral so it is unit-tested in `FacetCoreTests` and
 /// the production seam (`Controller.apply()`) calls it once before the reorder.
 ///
-/// Only `type="lens"` sections are relabeled — a workspace section's display
-/// name comes from the catalog (`workspaceNames`), so a workspace rename routes
-/// to `renameWorkspace` and never reaches here (any workspace-id key in
-/// `overrides` is ignored). The map is keyed by the section's STABLE id
-/// (`"section:<declOrder>:<label>"`); an absent key leaves the section
-/// untouched, so an orphaned override (after a config edit) is a no-op. The
-/// id is NEVER changed — only the display `label` — so identity (used for
-/// `--focus index:N` routing + the active-lens highlight) is invariant.
+/// lens AND `type="unassigned"` sections are relabeled (§G) — a workspace
+/// section's display name comes from the catalog (`workspaceNames`), so a
+/// workspace rename routes to `renameWorkspace` and never reaches here (any
+/// workspace-id key in `overrides` is ignored). The map is keyed by the
+/// section's STABLE id (`"section:<declOrder>:<label>"` /
+/// `"unassigned:<declOrder>"`); an absent key leaves the section untouched, so
+/// an orphaned override (after a config edit) is a no-op. The id is NEVER
+/// changed — only the display `label` — so identity (used for `--focus index:N`
+/// routing + the active-lens highlight) is invariant.
 ///
 /// Empty-value semantics are the CALLER's job: a "revert to config" is a
 /// DELETED key, not a stored `""`, so this function maps only the keys it is
@@ -240,7 +288,10 @@ public func applyLabelOverrides(_ sections: [ProjectedSection],
                                to overrides: [String: String]) -> [ProjectedSection] {
     guard !overrides.isEmpty else { return sections }
     return sections.map { ps in
-        guard ps.sectionType == .lens, let newLabel = overrides[ps.id] else {
+        // §E + §G: lens AND unassigned sections carry a session-only display
+        // override (a workspace label lives in the catalog). The id is frozen.
+        guard ps.sectionType == .lens || ps.sectionType == .unassigned,
+              let newLabel = overrides[ps.id] else {
             return ps
         }
         return ProjectedSection(id: ps.id, label: newLabel, windows: ps.windows,

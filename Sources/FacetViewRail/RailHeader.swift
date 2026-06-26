@@ -44,8 +44,8 @@ extension RailView {
         }
 
         // Grip (left) — only for WORKSPACE cells (the swap grab affordance).
-        // A lens cell is click-only (activate, no swap), so it shows no grip.
-        if !cell.isLens {
+        // A lens / unassigned (§G) cell is click-only (no swap), so no grip.
+        if cell.sectionType == .workspace {
             drawGripDots(in: NSRect(x: hb.minX + 4, y: hb.minY,
                                     width: railHeaderGripW, height: hb.height),
                          tallExtent: 18,

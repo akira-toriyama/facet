@@ -18,10 +18,19 @@ extension SidebarView {
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         switch row.kind {
         case .header(let g, let ws):
-            // Workspace header → full layout picker; lens header → the
-            // stateless-only union layout picker (R9 / Cluster B).
+            // Workspace header → full layout picker; a no-workspace header is
+            // either a lens (stateless-only union layout picker, R9 / Cluster B)
+            // or §G unassigned (Rename-only — no layout engine). Discriminate by
+            // section type at the CALL SITE so each menu builder's own guard
+            // can't fail silently on the wrong kind.
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws) }
-            else { lensHeaderMenu(at: scr, group: g) }
+            else if g >= 0, g < lastSections.count {
+                switch lastSections[g].sectionType {
+                case .lens:       lensHeaderMenu(at: scr, group: g)
+                case .unassigned: unassignedHeaderMenu(at: scr, group: g)
+                case .workspace:  break   // workspace headers carry ws != nil
+                }
+            }
         case .window(_, let ws, let pid, let id, let title):
             showWindowMenu(at: scr, workspaceIndex: ws,
                            pid: pid, windowID: id, title: title)
@@ -96,6 +105,27 @@ extension SidebarView {
         ) { [weak self] mode in
             self?.controller?.setLensLayout(sectionID: sec.id, mode: mode)
         }
+    }
+
+    /// §G unassigned-section header right-click / `m` menu → Rename ONLY (the
+    /// orphan receptacle has no layout engine). `g` is the render group;
+    /// `lastSections[g]` is the `type=unassigned` section. Mirrors
+    /// `lensHeaderMenu`'s SECTION ▸ Rename wiring (`beginSectionRename(group:)`,
+    /// which now renames unassigned via the id-keyed session override).
+    func unassignedHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
+        guard g >= 0, g < lastSections.count else { return }
+        let sec = lastSections[g]
+        guard sec.sectionType == .unassigned else { return }
+        // §D: the header is the unified `index (label)` caption.
+        ViewContextMenu.showUnassignedMenu(
+            at: scr,
+            header: sectionDisplayLabel(index: g + 1, label: sec.label),
+            palette: pal, filterable: filterable,
+            // §E: SECTION ▸ Rename → controller resolves `g` to index + label.
+            // `scr` = the header's screen point → editor opens at its height.
+            onRename: { [weak self] in
+                self?.controller?.beginSectionRename(group: g, at: scr)
+            })
     }
 
     func showWindowMenu(at scr: NSPoint,

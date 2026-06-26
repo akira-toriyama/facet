@@ -647,6 +647,19 @@ action = "ignore"
 #                    master    = true    mark / unmark as layout master
 #                  Omit `apply` → the lens is drop-inert (a drop snaps back).
 #
+#   type = "unassigned"  — (§G) the lost-and-found receptacle: an OPT-IN
+#       section that collects every window shown in NO other section (the
+#       "leftover" — in practice the orphans no lens caught). No `match` /
+#       `apply` (the "leftover" is computed by subtraction, not a filter);
+#       just an optional `label`. Only the FIRST unassigned section renders
+#       (extras warn). It shows in tree/grid/rail like a lens cell, focuses
+#       its first window on click / `--focus`, can be runtime-renamed, and a
+#       window dragged out of it onto a workspace is RESCUED (moved there).
+#       Add one so a stray window is never invisible:
+#         [[desktop.1.section]]
+#         type = "unassigned"
+#         label = "Lost & Found"   # optional
+#
 #   Orphans receptacle — a window can belong to NO workspace
 #       (`workspace = 0 or 1`, EX-3): dragging it onto a lens RELOCATES it out
 #       of its workspace (a full move), so when no matching lens is active it
@@ -658,8 +671,9 @@ action = "ignore"
 #         label = "Orphans"
 #         match = 'not workspace'          # every window not filed in a workspace
 #       (`'not workspace and not tag'` for strictly tagless ones). RECOMMENDED:
-#       keep one per desktop so a stray window is never lost. There is no
-#       special "unassigned" type — the orphan receptacle is just a lens.
+#       keep one per desktop so a stray window is never lost. (Or use a
+#       `type = "unassigned"` section above — it catches EVERY leftover window,
+#       not just `not workspace` orphans, and needs no `match`.)
 #
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess).

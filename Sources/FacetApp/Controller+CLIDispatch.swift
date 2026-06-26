@@ -464,9 +464,17 @@ extension Controller {
         }
     }
 
-    /// One addressable section in tree order: its display label + the
-    /// `ActiveSection` it activates (nil = an unassigned section, not focusable).
-    private struct SectionAddr { let label: String; let section: ActiveSection? }
+    /// One addressable section in tree order: its display label, the
+    /// `ActiveSection` it activates (nil = an unassigned section — §G — which
+    /// has no workspace/lens behind it), plus the stable `ProjectedSection.id`
+    /// (nil only on the degrade-workspace path, which addresses by index). §G:
+    /// an unassigned hit (`section == nil`) FOCUSES ITS FIRST WINDOW via the
+    /// `sectionID` rather than erroring — see `dispatchSectionFocus`.
+    private struct SectionAddr {
+        let label: String
+        let section: ActiveSection?
+        let sectionID: String?
+    }
 
     /// The ordered, addressable section list AS THE TREE RENDERS IT. Section
     /// model → the projected sections (already reorder-applied in `apply()`);
@@ -482,20 +490,27 @@ extension Controller {
                     // sourceWorkspaceIndex is 0-based (== Workspace.index);
                     // ActiveSection is 1-based → +1 (mirrors Controller+Grid).
                     return SectionAddr(label: ps.label,
-                        section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) })
+                        section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) },
+                        sectionID: ps.id)
                 case .lens:
                     // A0: identity = the stable id; `--focus index:N` activates
                     // by id. `label:NAME` addressing stays label-based (display).
-                    return SectionAddr(label: ps.label, section: .lens(ps.id))
+                    return SectionAddr(label: ps.label, section: .lens(ps.id),
+                                       sectionID: ps.id)
                 case .unassigned:
-                    return SectionAddr(label: ps.label, section: nil)
+                    // §G: no workspace/lens behind it → `section: nil`, but the
+                    // stable id lets `dispatchSectionFocus` focus its FIRST
+                    // WINDOW instead of erroring (the unified focus helper).
+                    return SectionAddr(label: ps.label, section: nil,
+                                       sectionID: ps.id)
                 }
             }
         }
         let key = currentMacDesktopOrdinal() ?? -1
         return SectionOrder.applyWorkspaces(macDesktopSectionOrder[key],
                                             to: lastWorkspaces)
-            .map { SectionAddr(label: $0.name, section: .workspace($0.index + 1)) }
+            .map { SectionAddr(label: $0.name,
+                               section: .workspace($0.index + 1), sectionID: nil) }
     }
 
     /// `facet section --focus`: resolve a 1-based tree-order index (`index:N`)
@@ -528,12 +543,61 @@ extension Controller {
         }
         guard let hit else { return }
         guard let section = hit.section else {
+            // §G: an unassigned section has no workspace/lens to activate, but
+            // it DOES hold orphan windows — focus its first one (the unified
+            // focus helper, shared with the grid/rail .unassigned picks + the
+            // tree header click). A truly non-focusable nil (no id — the
+            // degrade path never emits one) keeps the loud error.
+            if let id = hit.sectionID {
+                focusFirstWindow(inSectionID: id)
+                return
+            }
             setError("section --focus \"\(hit.label)\": unassigned sections "
                 + "aren't focusable (no workspace or lens behind them)")
             scheduleReconcile(after: 0.05)
             return
         }
         activateSection(section, autoFocus: true)
+    }
+
+    /// §G unified focus helper: focus the FIRST window of the section with
+    /// stable id `id` (an `.unassigned` receptacle in practice — its orphan
+    /// windows have no workspace/lens to switch to). Looks the section up in
+    /// `lastSections`, takes `.windows.first`, and reveals + focuses it via the
+    /// SAME window path the tree window-row click uses (`revealWindow` then
+    /// `focusWindow(postSwitch: false)`) — NO workspace switch, ActiveSection
+    /// unchanged (per plan: an orphan's home WS is the active one, or none).
+    /// Backs THREE surfaces: `dispatchSectionFocus` (CLI), the grid/rail
+    /// `.unassigned` pick routing, and the tree header click. A missing /
+    /// empty section is loud-but-non-fatal (nothing to focus).
+    func focusFirstWindow(inSectionID id: String) {
+        guard let sec = lastSections.first(where: { $0.id == id }),
+              let w = sec.windows.first else {
+            setError("section is empty — nothing to focus")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        // Mirror SidebarView+Drag.handleClick's window case EXACTLY — all three
+        // branches (an unassigned orphan can be in any of these states):
+        //   • lens-PARKED (an active lens is parking it off to a 1×41 anchor
+        //     sliver — `isOnscreen` STAYS true, so the isOnscreen test below
+        //     would wrongly just focus the sliver): clear the lens + focus via
+        //     `revealLensParked`. An orphan never has a workspace to switch to,
+        //     so the "active-WS only" precondition holds (no switch needed).
+        //   • HIDDEN (Cmd+H'd / minimized, `isOnscreen == false`): `revealWindow`
+        //     un-hides AND focuses. NOT an unconditional `revealWindow` — that
+        //     whole-app `unhide()`s an already-visible orphan.
+        //   • on-screen: just focus (`postSwitch: false` → `Focus.withRetry`).
+        // No workspace switch in any branch — ActiveSection unchanged (plan §4).
+        Log.debug("focusFirstWindow: section=\(id) → window \(w.id.serverID)")
+        if w.isLensParked {
+            revealLensParked(w)
+        } else if w.isOnscreen == false {
+            let bk = backend
+            cliQueue.async { bk.revealWindow(w.id) }
+        } else {
+            focusWindow(w, postSwitch: false)
+        }
     }
 
     /// §E: rename the section at 1-based tree-order index `n` to `label`,
@@ -546,7 +610,10 @@ extension Controller {
     ///     never the backend): a non-empty `label` SETS it; an empty / all-
     ///     whitespace `label` DELETES the key (revert to the config label —
     ///     storing `""` would blank the header). Re-render via `apply`.
-    ///   • unassigned → unreachable (the projection drops it), loud just in case.
+    ///   • unassigned → §G: SAME session-only override path as lens (id =
+    ///     `"unassigned:<declOrder>"`, a valid override key — `applyLabelOverrides`
+    ///     relabels `.unassigned` too). Non-empty SETS, empty REVERTS to the
+    ///     config label.
     /// Section-model OFF (degrade — `lastSections` empty) → every slot is a
     /// workspace; resolve `n` against the reorder-applied workspace list (the
     /// same numbers `--focus` + `sectionHeaderDisplay`'s degrade branch show)
@@ -640,16 +707,19 @@ extension Controller {
             runBackendCommand { bk in
                 bk.renameWorkspace(at: pos1, to: trimmed); return nil
             }
-        case .lens:
+        case .lens, .unassigned:
+            // §G: lens AND unassigned share the SAME session-only display-label
+            // override (`applyLabelOverrides` relabels both; the ids
+            // `"section:…"` / `"unassigned:…"` are equally valid override keys).
             // The override READ (the projection seam in `apply()`) is gated
             // behind a non-nil mac-desktop ordinal, so it NEVER consults a -1
             // bucket. Writing under `?? -1` here would land the override in a
             // bucket the projection can't read → a silent no-op during a
             // transient SkyLight nil-ordinal blip, plus an orphaned -1 entry.
-            // Refuse loudly instead: reaching `.lens` means the section model
-            // was active (non-nil ordinal) moments ago, so a nil here is a
-            // transient the user can simply retry. (The degrade path above
-            // keeps `?? -1` — its `macDesktopSectionOrder` read DOES consult -1.)
+            // Refuse loudly instead: reaching here means the section model was
+            // active (non-nil ordinal) moments ago, so a nil here is a transient
+            // the user can simply retry. (The degrade path above keeps `?? -1` —
+            // its `macDesktopSectionOrder` read DOES consult -1.)
             guard let key = currentMacDesktopOrdinal() else {
                 setError("section --rename \(n): mac desktop unknown (try again)")
                 scheduleReconcile(after: 0.05)
@@ -662,21 +732,16 @@ extension Controller {
                 if sectionLabelOverride[key]?.isEmpty == true {
                     sectionLabelOverride.removeValue(forKey: key)
                 }
-                Log.debug("renameSection: n=\(n) lens id=\(sec.id) → revert config")
+                Log.debug("renameSection: n=\(n) section id=\(sec.id) → revert config")
             } else {
                 // Store the TRIMMED label so a padded label (`"  Web  "`)
-                // renders identically for lens + workspace sections — the
-                // workspace branch passes `trimmed` too (the revert gesture is
+                // renders identically for lens / unassigned / workspace sections —
+                // the workspace branch passes `trimmed` too (the revert gesture is
                 // already keyed on `trimmed.isEmpty` above).
                 sectionLabelOverride[key, default: [:]][sec.id] = trimmed
-                Log.debug("renameSection: n=\(n) lens id=\(sec.id) → \"\(trimmed)\"")
+                Log.debug("renameSection: n=\(n) section id=\(sec.id) → \"\(trimmed)\"")
             }
             apply(lastWorkspaces)       // re-render with the new display label
-        case .unassigned:
-            // The projection drops unassigned (no header / index), so this is
-            // unreachable — loud just in case the projection ever emits one.
-            setError("section --rename \(n): unassigned sections can't be renamed")
-            scheduleReconcile(after: 0.05)
         }
     }
 

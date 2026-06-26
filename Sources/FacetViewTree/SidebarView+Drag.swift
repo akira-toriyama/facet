@@ -55,6 +55,12 @@ extension SidebarView {
                         // Controller resolves the apply via the live config +
                         // ApplyResolver and snaps back (runs no op) on an inert
                         // / non-satisfying drop — the row was never hidden.
+                        // §G RESCUE: an orphan row under the unassigned section
+                        // is a valid drag SOURCE here (its `dragGroup` is the
+                        // unassigned ordinal, a real `wsBands` key), and dropping
+                        // it on a WORKSPACE band runs that workspace's
+                        // `setWorkspace` apply → the orphan is rescued. Dropping
+                        // ON unassigned is inert (no apply) → snap-back.
                         if let tgt, tgt != dragGroup,
                            dragGroup < lastSections.count, tgt < lastSections.count {
                             controller?.applyMove(
@@ -448,17 +454,23 @@ extension SidebarView {
         case .search:
             break
         case .header(let g, let i):
-            // Lens-section header (section model): no workspace to switch to —
-            // clicking it TOGGLES the active lens (PR6: click the active one
-            // again to clear). §A: pass the section's stable id (not the
-            // display label) so the controller toggles the right lens even
-            // with non-unique / empty labels; it re-renders so the lens's
-            // header lights up (`pal.primary`) and (PR7) narrows grid/rail.
+            // A lens / unassigned header carries `workspaceIndex == nil` (no
+            // workspace to switch to) — discriminate by section type:
+            //   • lens (PR6 / §A): TOGGLE the active lens — pass the section's
+            //     stable id (not the display label) so the right lens toggles
+            //     even with non-unique / empty labels; the re-render lights its
+            //     header (`pal.primary`) + (PR7) narrows grid/rail.
+            //   • unassigned (§G): FOCUS ITS FIRST orphan window (the unified
+            //     focus helper) — no toggle, no switch.
             guard let i else {
                 kbSel = .hdr(group: g)
-                if sectionModeActive, g < lastSections.count,
-                   lastSections[g].sectionType == .lens {
-                    controller?.toggleActiveLens(lastSections[g].id)
+                if sectionModeActive, g < lastSections.count {
+                    let sec = lastSections[g]
+                    switch sec.sectionType {
+                    case .lens:       controller?.toggleActiveLens(sec.id)
+                    case .unassigned: controller?.focusFirstWindow(inSectionID: sec.id)
+                    case .workspace:  break   // workspace always has i != nil
+                    }
                 }
                 return
             }

@@ -42,9 +42,10 @@ extension GridView {
             ho.lineWidth = 1.5
             ho.stroke()
         }
-        // Grip dots = the swap-drag affordance. A lens cell header is a
-        // click-only target (no swap), so suppress them for lens cells.
-        if !cell.isLens {
+        // Grip dots = the swap-drag affordance. Only a WORKSPACE cell header
+        // is a swap target; a lens AND a §G unassigned cell are click-only
+        // (no source workspace → no swap), so suppress the grip for both.
+        if cell.sectionType == .workspace {
             drawGripDots(
                 in: NSRect(x: hb.minX + 4, y: hb.minY,
                            width: gridHeaderGripW, height: hb.height),

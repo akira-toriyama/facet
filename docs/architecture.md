@@ -137,8 +137,9 @@ is the index. **Do not relitigate** without explicit grill round.
   `WindowSlot.workspace` is `Int?` — a window can belong to NO workspace
   (`workspace = 0 or 1`); dragging it onto a lens relocates it out of its
   workspace (`orphanWindow`), and an orphan (迷子) is invisible-but-logged
-  until a `type = "lens"` receptacle (`match = 'not workspace'`) gathers it
-  (no `unassigned` type — that's deferred). Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
+  until a `type = "lens"` receptacle (`match = 'not workspace'`) gathers it —
+  or, more simply, an opt-in `type = "unassigned"` section (§G) rescues every
+  leftover window (in no other section). Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
   none → all mac desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the
@@ -513,9 +514,12 @@ Per-type semantics:
 - **lens** — a saved filter. Its `match` compiles to a `facet filter` and is
   evaluated over *every* window (multi-match: a window in two lens sections
   appears in both). A lens narrows; it never re-bundles.
-- **unassigned** — deferred (every managed window currently has a workspace,
-  so the AND-defined unassigned set is always empty); the type decodes but
-  the projection emits no section for it yet.
+- **unassigned** (§G) — the opt-in lost-and-found receptacle. When present it
+  collects the *leftover* (universe − shown — every window in no other emitted
+  section, in practice the orphans no lens caught); only the first emits,
+  extras warn; `id = "unassigned:<declOrder>"`. Rendered in tree/grid/rail,
+  focuses its first window, rescuable by DnD / Space-lift, and runtime-
+  renamable (a session-only display override, like a lens).
 
 **Degrade is a first-class citizen**: a mac desktop with no sections projects
 1:1 to by-workspace, byte-identical to the pre-pivot tree, and an

@@ -16,5 +16,10 @@ public enum RailPick: Sendable {
     case workspace(workspaceIndex: Int)
     /// §A: keyed by stable section id (`ProjectedSection.id`), mirrors `GridPick`.
     case lens(sectionID: String)
+    /// §G: an unassigned-section cell was picked → FOCUS ITS FIRST WINDOW (or
+    /// do nothing if empty). Keyed by stable section id like lens; the
+    /// Controller routes it to `focusFirstWindow(inSectionID:)` — mirrors
+    /// `GridPick.unassigned`.
+    case unassigned(sectionID: String)
     case window(homeWorkspaceIndex: Int, pid: Int, windowID: WindowID)
 }

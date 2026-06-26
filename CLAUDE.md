@@ -228,21 +228,23 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``Main.canonicalViews`` + matching cases in
   ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
   don't reintroduce per-view bespoke flags.
-- **``facet section`` addresses ANY section (workspace OR lens) by its
-  1-based tree-order index or its label** — the unified addressing layer
+- **``facet section`` addresses ANY section (workspace, lens, OR unassigned)
+  by its 1-based tree-order index or its label** — the unified addressing layer
   over the older per-kind verbs. ``--focus N|LABEL`` activates it (switch
-  workspace / activate lens; resolves via ``addressableSections()`` reading
-  ``lastSections``). ``--rename N "label"`` sets the display label at
-  runtime (§E): workspace → catalog ``renameWorkspace``; lens → session-only
+  workspace / activate lens / — §G — focus an unassigned section's FIRST window
+  via the unified ``focusFirstWindow(inSectionID:)``; resolves via
+  ``addressableSections()`` reading ``lastSections``). ``--rename N "label"``
+  sets the display label at runtime (§E): workspace → catalog
+  ``renameWorkspace``; lens AND unassigned (§G) → session-only
   ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection
   seam by the pure ``applyLabelOverrides``); empty → revert (workspace = bare
-  index, lens = config label). Identity stays on the stable section id — the
-  override never mutates ``ProjectedSection.id``. Session-only: reset on
-  relaunch, NOT on ``facet reload`` (mirrors ``macDesktopSectionOrder``). GUI
+  index, lens/unassigned = config label). Identity stays on the stable section
+  id — the override never mutates ``ProjectedSection.id``. Session-only: reset
+  on relaunch, NOT on ``facet reload`` (mirrors ``macDesktopSectionOrder``). GUI
   twin = the tree header right-click ``Section ▸ Rename`` (``beginSectionRename``
-  → ``SectionRenamePanel``). Unassigned sections aren't renameable (not
-  projected — no header). Wire ``section-rename:<index>:<label>`` splits once
-  so a label may contain ``:``.
+  → ``SectionRenamePanel``; unassigned gets a Rename-only
+  ``ViewContextMenu.showUnassignedMenu`` — no layout). Wire
+  ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
 - **The tree opens in keyboard-nav (active) mode directly** —
   there is **no ``--active`` modifier** (it was folded into
   ``--view tree`` itself; the flag, the ``view:tree+active`` DNC

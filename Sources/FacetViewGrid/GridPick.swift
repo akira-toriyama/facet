@@ -13,6 +13,11 @@ public enum GridPick: Sendable {
     /// label (which may be empty / non-unique). The Controller routes it
     /// straight to `activateLensID`, no label→id lookup.
     case lens(sectionID: String)
+    /// §G: an unassigned-section cell was picked → FOCUS ITS FIRST WINDOW (or
+    /// do nothing if empty). Keyed by stable section id like lens, but the
+    /// Controller routes it to `focusFirstWindow(inSectionID:)` — no lens
+    /// toggle, no workspace switch (unassigned has neither behind it).
+    case unassigned(sectionID: String)
     /// A specific window thumb. `homeWorkspaceIndex` is the WINDOW's home WS
     /// (0-based), resolved from the live snapshot — NOT the cell's `wsIndex`
     /// (a window thumb may sit inside a lens cell whose `wsIndex` is −1).

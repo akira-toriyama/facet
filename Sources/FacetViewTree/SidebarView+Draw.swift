@@ -154,7 +154,8 @@ extension SidebarView {
                     .font: uiFont(headerFontSize, nameWeight),
                     .foregroundColor: nameColor,
                     .kern: 0.6, .paragraphStyle: hp]
-                if c.isLens {
+                switch c.sectionType {
+                case .lens:
                     // Lens section (section model): a leading filter glyph +
                     // the label, no layout sub-line — distinguishes a
                     // saved-filter section from a workspace at a glance. The
@@ -178,7 +179,37 @@ extension SidebarView {
                                    width: bounds.width - rowPadX - lx,
                                    height: nameH),
                         withAttributes: nameAttrs)
-                } else {
+                case .unassigned:
+                    // §G unassigned (orphan receptacle): a leading archivebox
+                    // glyph + the label, no layout sub-line — same chrome shape
+                    // as a lens (cross-workspace, click-only) but a distinct
+                    // glyph so the lost-and-found bin reads apart from a saved
+                    // filter. Never the active highlight, so `nameColor` is
+                    // always `pal.muted` here (headerActive returns false for
+                    // unassigned). The 13pt size / color / scale match the lens
+                    // funnel above.
+                    var lx = nameX0
+                    if let icon = IconResolver.resolve(
+                        "SF:archivebox", pointSize: 13,
+                        color: nameColor, scale: .medium) {
+                        let ih = min(icon.size.height, 14)
+                        let iw = icon.size.width * (ih / max(icon.size.height, 1))
+                        icon.draw(in: NSRect(x: lx, y: capY + (nameH - ih) / 2,
+                                             width: iw, height: ih))
+                        lx += iw + 5
+                    }
+                    // Kind prefix: "unassigned · " + the (optional) label, the
+                    // パートナー to the lens / workspace prefixes. An unnamed
+                    // unassigned section shows the bare kind word (no dangling
+                    // "· "), like an unnamed workspace.
+                    let unLabel = c.text.isEmpty
+                        ? "unassigned" : "unassigned · " + c.text
+                    (unLabel as NSString).draw(
+                        in: NSRect(x: lx, y: capY,
+                                   width: bounds.width - rowPadX - lx,
+                                   height: nameH),
+                        withAttributes: nameAttrs)
+                case .workspace:
                     // Workspace header: spell "workspace" out too (パートナー
                     // to the lens prefix). An unnamed default slot has no name,
                     // so show the bare kind word rather than a dangling "· ".

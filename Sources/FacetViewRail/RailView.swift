@@ -264,17 +264,30 @@ public final class RailView: NSView {
             }
         }
         return sections.enumerated().map { (i, sec) in
-            let isLens = sec.sectionType == .lens
             // The projection doesn't carry a workspace's live layoutMode; look
-            // it up by source index (a lens has no layout engine → "").
+            // it up by source index (a lens / unassigned section has no source
+            // workspace → nil → no layout engine).
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
-            let mode = isLens ? "" : (srcWS?.layoutMode ?? "")
-            // EX-2b single-highlight: lens cell lit ⟺ it IS the active lens;
-            // workspace cell lit ⟺ no lens active AND its WS is active.
-            let active = isLens
-                ? (activeLensID != nil && sec.id == activeLensID)
-                : (activeLensID == nil && srcWS?.isActive == true)
+            // §G three-way (mirrors GridView): workspace cells carry layout +
+            // active highlight; a lens cell has no layout engine and lights only
+            // when active; an unassigned cell renders like a lens (mode = "",
+            // wsIndex = -1) but is NEVER the active highlight.
+            let mode: String
+            let active: Bool
+            switch sec.sectionType {
+            case .workspace:
+                mode = srcWS?.layoutMode ?? ""
+                // EX-2b single-highlight: a workspace cell lights ⟺ no lens
+                // active AND its WS is active.
+                active = activeLensID == nil && srcWS?.isActive == true
+            case .lens:
+                mode = ""
+                active = activeLensID != nil && sec.id == activeLensID
+            case .unassigned:
+                mode = ""
+                active = false
+            }
             // §D: every section type captions as `index (label)` — the
             // 1-based display index is the section's position in tree order
             // (this `.enumerated()` `i`), NOT `sourceWorkspaceIndex`.
@@ -866,8 +879,10 @@ public final class RailView: NSView {
         if hh != hoverHeaderID { hoverHeaderID = hh; needsDisplay = true }
         // The overlay is key, so the cursor sticks: an open hand over a
         // WORKSPACE header advertises the grab (header drag = swap, Phase R3).
-        // A lens header is click-only (no swap), so it keeps the arrow.
-        (headerCell?.isLens == false ? NSCursor.openHand : NSCursor.arrow).set()
+        // A lens / unassigned (§G) header is click-only (no swap), so it keeps
+        // the arrow.
+        (headerCell?.sectionType == .workspace
+            ? NSCursor.openHand : NSCursor.arrow).set()
     }
 
     public override func mouseExited(with event: NSEvent) {
@@ -943,10 +958,13 @@ public final class RailView: NSView {
             if let w = cell.windows.reversed().first(where: { $0.rect.contains(p) }) {
                 pendingDown = (p, w, cell.sectionID)
             } else {
-                // empty cell area → activate+close (zoom if it's the centre)
+                // empty cell area → activate+close (zoom if it's the centre).
+                // §G: an unassigned cell focuses its first orphan window.
                 commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
                     if cell.isLens { self?.onPick?(.lens(sectionID: cell.sectionID)) }
-                    else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
+                    else if cell.sectionType == .unassigned {
+                        self?.onPick?(.unassigned(sectionID: cell.sectionID))
+                    } else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
             }
             return
@@ -965,7 +983,9 @@ public final class RailView: NSView {
         let scr = win.convertPoint(toScreen: event.locationInWindow)
         let inStrip = stripRect.isEmpty || stripRect.contains(p)
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            guard !cell.isLens else { return }       // lens header → no layout picker
+            // Only a WORKSPACE header has a layout picker — a lens / unassigned
+            // (§G) cell has no layout engine.
+            guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
                                        workspaces: workspaces,
@@ -991,7 +1011,9 @@ public final class RailView: NSView {
         guard let backend, let win = window, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
         if kbSelectedWindowIdx == -1 {
-            guard !cell.isLens else { return }       // lens has no layout engine
+            // Only a WORKSPACE cell has a layout engine — a lens / unassigned
+            // (§G) cell has none.
+            guard cell.sectionType == .workspace else { return }
             let scr = win.convertPoint(toScreen:
                 convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
             ViewContextMenu.showLayout(at: scr, backend: backend,
@@ -1046,10 +1068,11 @@ public final class RailView: NSView {
             } else if let pd = pendingDown {
                 let dx = p.x - pd.point.x, dy = p.y - pd.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                // A window inside a LENS cell has no source workspace → not
-                // move-draggable (Decision 6). Resolve the cell + reject lens.
+                // A window inside a LENS / unassigned (§G) cell has no source
+                // workspace → not move-draggable (Decision 6). Resolve the cell
+                // + require it to be a WORKSPACE cell.
                 guard let cell = cells.first(where: { $0.sectionID == pd.cellID }),
-                      !cell.isLens else { return }
+                      cell.sectionType == .workspace else { return }
                 drag = OverviewDrag(sourceWS: cell.wsIndex, kind: .window, pid: pd.hit.pid,
                             id: pd.hit.id, sourceRect: pd.hit.rect, srcIDs: [],
                             current: p, dropTargetWS: nil)
@@ -1067,9 +1090,10 @@ public final class RailView: NSView {
             // active WS, already its own strip cell), and only within the
             // viewport clip (a rotated-off cell in the margin isn't a target).
             // A cell == source is not a target (no self-move).
-            // A lens cell is never a drop target (no source WS — Decision 6).
+            // A lens / unassigned (§G) cell is never a drop target (no source
+            // WS — Decision 6); only a WORKSPACE cell routes a move.
             let over = stripCellAt(p)
-            d.dropTargetWS = (over?.isLens == true || over?.wsIndex == d.sourceWS)
+            d.dropTargetWS = (over?.sectionType != .workspace || over?.wsIndex == d.sourceWS)
                 ? nil : over?.wsIndex
         }
         drag = d
@@ -1127,10 +1151,13 @@ public final class RailView: NSView {
                 }
             } else if let ph = pendingHeaderDown,
                       let cell = cells.first(where: { $0.sectionID == ph.cellID }) {
-                // Header click → switch to that workspace, or toggle the lens.
+                // Header click → switch to that workspace, toggle the lens, or
+                // (§G) focus the unassigned section's first window.
                 commitSwitch(targetSectionID: ph.cellID) { [weak self] in
                     if cell.isLens { self?.onPick?(.lens(sectionID: cell.sectionID)) }
-                    else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
+                    else if cell.sectionType == .unassigned {
+                        self?.onPick?(.unassigned(sectionID: cell.sectionID))
+                    } else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
             }
             return
@@ -1236,9 +1263,11 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWindow() {
-        // A window inside a LENS hero is not move-liftable (no source WS,
-        // Decision 6) — guard `!h.isLens` so `h.wsIndex` below is a real WS.
-        guard drag == nil, let h = hero, !h.isLens, let sel = kbSelectedWindow() else { return }
+        // A window inside a LENS / unassigned (§G) hero is not move-liftable
+        // (no source WS, Decision 6) — require a WORKSPACE hero so `h.wsIndex`
+        // below is a real WS.
+        guard drag == nil, let h = hero, h.sectionType == .workspace,
+              let sel = kbSelectedWindow() else { return }
         // Lift from the BOTTOM cell's window (small) so the ghost matches
         // the rail's bottom-row size, not the big hero. Fall back to the
         // hero window if that window has no thumb in the bottom cell.
@@ -1255,9 +1284,11 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWorkspace() {
-        // A lens cell cannot be lifted for a swap (no source WS — Decision 6).
+        // Only a WORKSPACE cell can be lifted for a swap — a lens / unassigned
+        // (§G) cell has no source WS (Decision 6).
         guard drag == nil, let id = selectedSectionID,
-              let cell = cells.first(where: { $0.sectionID == id }), !cell.isLens else { return }
+              let cell = cells.first(where: { $0.sectionID == id }),
+              cell.sectionType == .workspace else { return }
         let ws = cell.wsIndex
         // Live workspace windows (not the render-filtered thumbs).
         let srcIDs = workspaces.first(where: { $0.index == ws })?.windows.map(\.id)
@@ -1277,9 +1308,11 @@ public final class RailView: NSView {
     private func syncRailDragToSelection() {
         guard var d = drag, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
-        // Aiming at a lens cell → no valid drop (lens isn't a swap/move
-        // destination); the ghost still teleports so the rotation reads.
-        d.dropTargetWS = (cell.isLens || cell.wsIndex == d.sourceWS) ? nil : cell.wsIndex
+        // Aiming at a lens / unassigned (§G) cell → no valid drop (neither is a
+        // swap/move destination); the ghost still teleports so the rotation
+        // reads. Only a WORKSPACE cell (≠ source) is a target.
+        d.dropTargetWS = (cell.sectionType != .workspace || cell.wsIndex == d.sourceWS)
+            ? nil : cell.wsIndex
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
         d.current = at
         drag = d
@@ -1321,6 +1354,11 @@ public final class RailView: NSView {
         } else if cell.isLens {
             commitSwitch(targetSectionID: id) { [weak self] in
                 self?.onPick?(.lens(sectionID: cell.sectionID))  // lens → activate it
+            }
+        } else if cell.sectionType == .unassigned {
+            // §G: unassigned hero → focus its first orphan window.
+            commitSwitch(targetSectionID: id) { [weak self] in
+                self?.onPick?(.unassigned(sectionID: cell.sectionID))
             }
         } else {
             commitSwitch(targetSectionID: id) { [weak self] in
