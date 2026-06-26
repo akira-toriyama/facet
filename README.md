@@ -506,6 +506,16 @@ facet window --unmark NAME        # remove a mark
 facet lens "Web"                  # activate the lens labelled Web
 facet lens --clear                # lift the active lens (parked windows return)
 
+# Section — address ANY section (workspace OR lens) by its 1-based tree
+# index or its label. `--focus` activates it (switch to the workspace /
+# activate the lens). `--rename` sets its display label at runtime
+# (session-only — reset on relaunch, NOT on `facet reload`; an empty label
+# reverts a lens to its config label). You can also rename from the tree:
+# right-click a section header → Section ▸ Rename.
+facet section --focus N            # focus the Nth section in tree order
+facet section --focus LABEL        # focus the section labelled LABEL
+facet section --rename N "label"   # rename the Nth section's display label
+
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
 facet scratchpad --stash NAME     # park the focused window onto a named
                                   # shelf (hides it off-screen)

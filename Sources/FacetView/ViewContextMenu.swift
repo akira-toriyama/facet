@@ -40,9 +40,11 @@ public enum ViewContextMenu {
     private static func sectionTint(_ section: String,
                                     _ palette: ResolvedPalette) -> NSColor? {
         switch section {
-        case "Layout": return palette.primary
-        case "Tags":   return palette.secondary
-        default:       return nil
+        case "Layout":  return palette.primary
+        // The section-rename row (header menus, §E) shares the per-window
+        // Tags treatment — `secondary` — so non-layout actions read alike.
+        case "Tags", "Section": return palette.secondary
+        default:        return nil
         }
     }
 
@@ -111,11 +113,20 @@ public enum ViewContextMenu {
         workspaces: [Workspace],
         header: String,
         palette: ResolvedPalette,
-        filterable: Bool = false
+        filterable: Bool = false,
+        onRename: (() -> Void)? = nil
     ) {
         let modes = backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
-        let entries = modes.map { mode in
+        // §E: SECTION ▸ Rename above LAYOUT ▸ … (確定事項 #1). `present()`
+        // inserts the dim group header when the section name changes, so the
+        // single Rename row gets its own "SECTION" caption.
+        var entries: [Entry] = []
+        if let onRename {
+            entries.append(Entry(label: "Rename", icon: "SF:pencil",
+                                 section: "Section", run: onRename))
+        }
+        entries += modes.map { mode in
             Entry(label: mode, icon: layoutModeIcon(mode),
                   section: "Layout", checked: mode == cur) {
                 cliQueue.async { backend.setLayoutMode(workspaceIndex: ws, mode: mode) }
@@ -142,10 +153,18 @@ public enum ViewContextMenu {
         current: String? = nil,
         palette: ResolvedPalette,
         filterable: Bool = false,
+        onRename: (() -> Void)? = nil,
         onPick: @escaping (_ mode: String) -> Void
     ) {
         let modes = backend.layoutModes.filter { LensLayout.isStateless($0) }
-        let entries = modes.map { mode in
+        // §E: SECTION ▸ Rename above LAYOUT ▸ … (確定事項 #1), same shape as
+        // the workspace picker.
+        var entries: [Entry] = []
+        if let onRename {
+            entries.append(Entry(label: "Rename", icon: "SF:pencil",
+                                 section: "Section", run: onRename))
+        }
+        entries += modes.map { mode in
             Entry(label: mode, icon: layoutModeIcon(mode),
                   section: "Layout", checked: mode == current) {
                 onPick(mode)

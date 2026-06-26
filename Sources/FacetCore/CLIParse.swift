@@ -90,3 +90,58 @@ public func validateGeom(posX: Int?, posY: Int?,
         return .partial(count: provided)
     }
 }
+
+/// §E: validate a section DISPLAY label (the LABEL of `facet section
+/// --rename N LABEL`). LOOSE like the lens-section label policy: section
+/// labels are config-authored display strings, so spaces and most
+/// punctuation (including `:`) are fine and kept VERBATIM.
+///
+/// One deliberate asymmetry: a TRULY EMPTY string (`""`) is ALLOWED — it is
+/// the explicit "revert to the number / config label" gesture the server's
+/// resolver acts on (workspace → number, lens → drop override). An ALL-
+/// WHITESPACE value (`"   "`) is REJECTED as a typo (it would blank the
+/// header without the revert intent), as is ANY value whose trimmed form
+/// starts with `-`: `--rename`'s LABEL is consumed unconditionally (strict
+/// consumption), so a mistyped flag in the LABEL slot (`facet section
+/// --rename 2 --focus`) reaches here as the value — reject it loudly rather
+/// than silently renaming the section to a flag string. This mirrors the
+/// leading-dash guard in `parseLensSectionLabel` / `CLIName.isClean` (the
+/// flag-guard convention every sibling two-value flag follows). Pure (no exit
+/// / stderr) so it is unit-testable; the FacetApp wrapper translates
+/// `.failure` into a loud exit(2). The success value is kept VERBATIM
+/// (untrimmed) — normalization (the trim) happens at the server's store site.
+public func validateSectionLabel(_ value: String)
+        -> Result<String, CLIParseError> {
+    if value.isEmpty { return .success(value) }     // explicit revert gesture
+    let trimmed = value.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else {
+        return .failure(.unknownValue(value: value, expected: []))
+    }
+    return .success(value)
+}
+
+/// §E: the wire payload for `facet section --rename` —
+/// `section-rename:<index>:<label>`. The index is a colon-free Int and the
+/// label is kept VERBATIM (it may contain `:`), so the server splits ONCE on
+/// the first `:`. Pure helper shared by the client (encode) and tests; the
+/// server-side decode mirrors `decodeSectionRename`.
+public func encodeSectionRename(index: Int, label: String) -> String {
+    "section-rename:\(index):\(label)"
+}
+
+/// §E: decode the `section-rename:<index>:<label>` wire payload (the body
+/// AFTER the `section-rename:` prefix is already stripped by the caller, OR
+/// the full payload — both are accepted). Splits ONCE so a label containing
+/// `:` survives verbatim. Returns `nil` for a malformed index (`< 1` /
+/// non-integer) or a missing `:`. Pure → unit-testable round-trip with
+/// `encodeSectionRename`.
+public func decodeSectionRename(_ payload: String) -> (index: Int, label: String)? {
+    let body = payload.hasPrefix("section-rename:")
+        ? String(payload.dropFirst("section-rename:".count))
+        : payload
+    let parts = body
+        .split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        .map(String.init)
+    guard parts.count == 2, let n = Int(parts[0]), n >= 1 else { return nil }
+    return (n, parts[1])
+}

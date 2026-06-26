@@ -40,6 +40,7 @@
 //               / --release NAME
 //   Lens      : facet lens NAME (activate a type="lens" section) / --clear
 //   Section   : facet section --focus N|LABEL (index|label, workspace or lens)
+//               / --rename N LABEL (session-only display label)
 //
 // ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
 // every view op must specify NAME explicitly. Shell aliases handle
@@ -185,6 +186,11 @@ enum FacetApp {
                                              order (1-based; workspace or lens)
           facet section --focus LABEL        focus the section labelled LABEL
                                              (numeric = index; else label)
+          facet section --rename N LABEL     rename the Nth section's display
+                                             label (session-only; workspace →
+                                             catalog name, lens → display
+                                             override; empty LABEL reverts to
+                                             the number / config label)
 
         WINDOW                               (focused window)
           facet window --move-to N           move it to workspace N

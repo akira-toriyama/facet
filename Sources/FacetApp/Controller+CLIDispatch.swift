@@ -81,6 +81,20 @@ extension Controller {
                     self.dispatchSectionFocus(
                         String(s.dropFirst("section-focus:".count)))
 
+                // §E: `facet section --rename N LABEL` → runtime (session-only)
+                // display-label rename. Wire = `section-rename:<index>:<label>`.
+                // The index is a colon-free Int; the label may contain ':', so
+                // `decodeSectionRename` splits ONCE and keeps the label verbatim
+                // (same wire form as `window-retag`, but the label half is loose).
+                case let s where s.hasPrefix("section-rename:"):
+                    guard let (n, label) = decodeSectionRename(s) else {
+                        Log.debug("section-rename: malformed \"\(s)\"")
+                        self.setError("section --rename: malformed")
+                        self.scheduleReconcile(after: 0.05)
+                        break
+                    }
+                    self.renameSection(indexN1Based: n, to: label)
+
                 case "workspace-add":
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
@@ -520,6 +534,150 @@ extension Controller {
             return
         }
         activateSection(section, autoFocus: true)
+    }
+
+    /// §E: rename the section at 1-based tree-order index `n` to `label`,
+    /// the runtime (session-only) twin of `--focus N`. Runs on main (DNC).
+    /// Branch on the addressed section's kind (same tree order `--focus`
+    /// resolves through):
+    ///   • workspace → route to `backend.renameWorkspace(at:to:)` (the catalog
+    ///     owns workspace names — `""` reverts to the number).
+    ///   • lens → a DISPLAY-only override on `sectionLabelOverride` (id-keyed,
+    ///     never the backend): a non-empty `label` SETS it; an empty / all-
+    ///     whitespace `label` DELETES the key (revert to the config label —
+    ///     storing `""` would blank the header). Re-render via `apply`.
+    ///   • unassigned → unreachable (the projection drops it), loud just in case.
+    /// Section-model OFF (degrade — `lastSections` empty) → every slot is a
+    /// workspace; resolve `n` against the reorder-applied workspace list (the
+    /// same numbers `--focus` + `sectionHeaderDisplay`'s degrade branch show)
+    /// and route to `renameWorkspace`. An out-of-range `n` is loud-but-non-fatal.
+    /// E2 GUI deferred-commit entry (section model): rename the section with
+    /// the STABLE `sectionID` captured when the inline editor opened. The editor
+    /// is long-lived (the user types), so `lastSections` can reorder / gain /
+    /// lose a section — or be replaced by a mac-desktop swap — between open and
+    /// commit. Re-resolve the id to its CURRENT 1-based position right here (and
+    /// confirm the mac desktop captured at open still matches) before delegating
+    /// to the positional `renameSection`, so a shifted slot can't be renamed.
+    /// Gone id / desktop changed → loud `setError`, no rename. Mirrors how the
+    /// lens-layout path targets by `sec.id` (identity = id, campaign rule).
+    func renameSection(sectionID: String, capturedOrdinal: Int?, to label: String) {
+        guard currentMacDesktopOrdinal() == capturedOrdinal else {
+            setError("section rename: mac desktop changed — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        guard let pos0 = lastSections.firstIndex(where: { $0.id == sectionID }) else {
+            setError("section rename: section no longer exists — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        renameSection(indexN1Based: pos0 + 1, to: label)
+    }
+
+    /// E2 GUI deferred-commit entry (degrade — `lastSections` empty): rename the
+    /// workspace identified by its STABLE 0-based `Workspace.index` captured at
+    /// open. Re-resolve to the CURRENT 1-based display position in the
+    /// reorder-applied list at commit (and confirm the captured mac desktop is
+    /// still on screen) so a reorder / swap between open and commit can't
+    /// mistarget. Gone / desktop changed → loud, no rename.
+    func renameSection(workspaceIndex idx: Int, capturedOrdinal: Int?, to label: String) {
+        guard currentMacDesktopOrdinal() == capturedOrdinal else {
+            setError("section rename: mac desktop changed — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        let key = currentMacDesktopOrdinal() ?? -1
+        let wss = SectionOrder.applyWorkspaces(
+            macDesktopSectionOrder[key], to: lastWorkspaces)
+        guard let pos0 = wss.firstIndex(where: { $0.index == idx }) else {
+            setError("section rename: workspace no longer exists — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        renameSection(indexN1Based: pos0 + 1, to: label)
+    }
+
+    func renameSection(indexN1Based n: Int, to label: String) {
+        let trimmed = label.trimmingCharacters(in: .whitespaces)
+        // Degrade path: no section model here → all workspaces.
+        guard !lastSections.isEmpty else {
+            let key = currentMacDesktopOrdinal() ?? -1
+            let wss = SectionOrder.applyWorkspaces(
+                macDesktopSectionOrder[key], to: lastWorkspaces)
+            guard n >= 1, n <= wss.count else {
+                let hint = wss.isEmpty ? "no sections" : "1..\(wss.count)"
+                setError("section --rename \(n): out of range (\(hint))")
+                scheduleReconcile(after: 0.05)
+                return
+            }
+            let pos1 = wss[n - 1].index + 1     // 1-based wire position
+            Log.debug("renameSection: degrade n=\(n) → workspace \(pos1) "
+                + "→ \"\(trimmed)\"")
+            runBackendCommand { bk in
+                bk.renameWorkspace(at: pos1, to: trimmed); return nil
+            }
+            return
+        }
+        guard n >= 1, n <= lastSections.count else {
+            setError("section --rename \(n): out of range "
+                + "(1..\(lastSections.count))")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        let sec = lastSections[n - 1]
+        switch sec.sectionType {
+        case .workspace:
+            // sourceWorkspaceIndex is 0-based (== Workspace.index); the backend
+            // wants a 1-based position (mirrors `addressableSections`). nil is
+            // defensive (a workspace section always carries one).
+            guard let src = sec.sourceWorkspaceIndex else {
+                setError("section --rename \(n): no workspace behind it")
+                scheduleReconcile(after: 0.05)
+                return
+            }
+            let pos1 = src + 1
+            Log.debug("renameSection: n=\(n) workspace \(pos1) → \"\(trimmed)\"")
+            runBackendCommand { bk in
+                bk.renameWorkspace(at: pos1, to: trimmed); return nil
+            }
+        case .lens:
+            // The override READ (the projection seam in `apply()`) is gated
+            // behind a non-nil mac-desktop ordinal, so it NEVER consults a -1
+            // bucket. Writing under `?? -1` here would land the override in a
+            // bucket the projection can't read → a silent no-op during a
+            // transient SkyLight nil-ordinal blip, plus an orphaned -1 entry.
+            // Refuse loudly instead: reaching `.lens` means the section model
+            // was active (non-nil ordinal) moments ago, so a nil here is a
+            // transient the user can simply retry. (The degrade path above
+            // keeps `?? -1` — its `macDesktopSectionOrder` read DOES consult -1.)
+            guard let key = currentMacDesktopOrdinal() else {
+                setError("section --rename \(n): mac desktop unknown (try again)")
+                scheduleReconcile(after: 0.05)
+                return
+            }
+            if trimmed.isEmpty {
+                // Empty → revert to the config label by DELETING the override
+                // key (storing "" would blank the header).
+                sectionLabelOverride[key]?.removeValue(forKey: sec.id)
+                if sectionLabelOverride[key]?.isEmpty == true {
+                    sectionLabelOverride.removeValue(forKey: key)
+                }
+                Log.debug("renameSection: n=\(n) lens id=\(sec.id) → revert config")
+            } else {
+                // Store the TRIMMED label so a padded label (`"  Web  "`)
+                // renders identically for lens + workspace sections — the
+                // workspace branch passes `trimmed` too (the revert gesture is
+                // already keyed on `trimmed.isEmpty` above).
+                sectionLabelOverride[key, default: [:]][sec.id] = trimmed
+                Log.debug("renameSection: n=\(n) lens id=\(sec.id) → \"\(trimmed)\"")
+            }
+            apply(lastWorkspaces)       // re-render with the new display label
+        case .unassigned:
+            // The projection drops unassigned (no header / index), so this is
+            // unreachable — loud just in case the projection ever emits one.
+            setError("section --rename \(n): unassigned sections can't be renamed")
+            scheduleReconcile(after: 0.05)
+        }
     }
 
     /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`

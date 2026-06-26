@@ -45,7 +45,15 @@ extension SidebarView {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
                                    header: sectionHeaderDisplay(group: g),
-                                   palette: pal, filterable: filterable)
+                                   palette: pal, filterable: filterable,
+                                   // §E: SECTION ▸ Rename → controller resolves
+                                   // `g` to the 1-based index + current label
+                                   // (same logic as `sectionHeaderDisplay`).
+                                   // `scr` = the header's screen point, so the
+                                   // editor opens at the clicked header's height.
+                                   onRename: { [weak self] in
+                                       self?.controller?.beginSectionRename(group: g, at: scr)
+                                   })
     }
 
     /// §D caption for the header at render group `g`: `index (label)`. Section
@@ -78,7 +86,13 @@ extension SidebarView {
         ViewContextMenu.showLensLayout(
             at: scr, backend: backend,
             lensLabel: sectionDisplayLabel(index: g + 1, label: sec.label),
-            palette: pal, filterable: filterable
+            palette: pal, filterable: filterable,
+            // §E: SECTION ▸ Rename → controller resolves `g` to index + label
+            // (same `sectionHeaderDisplay` logic; passes the SAME `g`).
+            // `scr` = the header's screen point → editor opens at its height.
+            onRename: { [weak self] in
+                self?.controller?.beginSectionRename(group: g, at: scr)
+            }
         ) { [weak self] mode in
             self?.controller?.setLensLayout(sectionID: sec.id, mode: mode)
         }
