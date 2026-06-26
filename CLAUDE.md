@@ -472,7 +472,9 @@ origin/main`・複数の人/エージェントが同時に触るため）。② 
 だが fast-forward only**（PR 不要・push 前 `git pull --rebase origin main`・`pre-push` hook =
 `git config core.hooksPath scripts/hooks` で有効化）。③ commit 前に `furrow lint`・commit 規約 =
 gitmoji + conventional（`:card_file_box: chore(furrow): …`）。④ task id は **衝突しない
-ランダム id**（furrow#18 で `.furrow/seq` を廃止・`t-k3m9p` 形式）。**⚠️ 古い seq ベースの
-furrow バイナリだと並行 `add` で id が衝突する**（`furrow version` が #18 より前なら）→
-`go install github.com/akira-toriyama/furrow/cmd/furrow@latest`（または
-`brew install akira-toriyama/tap/furrow`）で更新。
+ランダム id**（furrow#18 で `.furrow/seq` を廃止・`t-3q17` 形式）。**furrow は開発活発なので
+install せず source から使うのが安全**（常に最新挙動・install 版は stale 化する）: furrow source
+= `/Volumes/workspace/github.com/akira-toriyama/furrow` を `go build -o /tmp/furrow-dev ./cmd/furrow`
+（or `go run ./cmd/furrow <args>`）。**⚠️ 古い install 版（seq ベース・`furrow version` が #18 前）
+だと並行 `add` で id 衝突**（実際に発生）→ source ビルド版を使う（or `go install …/cmd/furrow@latest`
+で更新）。
