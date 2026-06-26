@@ -218,3 +218,33 @@ public enum FilterProjection {
         return Result(sections: out, diagnostics: diags)
     }
 }
+
+/// §E: overlay session-only DISPLAY-LABEL overrides onto a projected section
+/// list. Pure + backend-neutral so it is unit-tested in `FacetCoreTests` and
+/// the production seam (`Controller.apply()`) calls it once before the reorder.
+///
+/// Only `type="lens"` sections are relabeled — a workspace section's display
+/// name comes from the catalog (`workspaceNames`), so a workspace rename routes
+/// to `renameWorkspace` and never reaches here (any workspace-id key in
+/// `overrides` is ignored). The map is keyed by the section's STABLE id
+/// (`"section:<declOrder>:<label>"`); an absent key leaves the section
+/// untouched, so an orphaned override (after a config edit) is a no-op. The
+/// id is NEVER changed — only the display `label` — so identity (used for
+/// `--focus index:N` routing + the active-lens highlight) is invariant.
+///
+/// Empty-value semantics are the CALLER's job: a "revert to config" is a
+/// DELETED key, not a stored `""`, so this function maps only the keys it is
+/// handed (a stored `""` would, by contract, blank the header — but the caller
+/// never stores one).
+public func applyLabelOverrides(_ sections: [ProjectedSection],
+                               to overrides: [String: String]) -> [ProjectedSection] {
+    guard !overrides.isEmpty else { return sections }
+    return sections.map { ps in
+        guard ps.sectionType == .lens, let newLabel = overrides[ps.id] else {
+            return ps
+        }
+        return ProjectedSection(id: ps.id, label: newLabel, windows: ps.windows,
+                                sourceWorkspaceIndex: ps.sourceWorkspaceIndex,
+                                sectionType: ps.sectionType)
+    }
+}

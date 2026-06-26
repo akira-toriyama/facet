@@ -76,6 +76,21 @@ final class Controller: NSObject {
     /// relaunch resets to config order. See `SectionOrder` for the why
     /// (reorder the OUTPUT, not the input `[DesktopSection]`).
     var macDesktopSectionOrder: [Int: [String]] = [:]
+    /// §E: session-only DISPLAY-LABEL override for `type="lens"` sections.
+    /// Keyed by mac-desktop ordinal (`currentMacDesktopOrdinal() ?? -1`),
+    /// then by the section's stable id (`"section:<declOrder>:<label>"`),
+    /// value = the new display label. Applied to the PROJECTED result at the
+    /// single seam in `apply()` (via `applyLabelOverrides`), so tree/grid/rail
+    /// all reflect it; NEVER written to disk (config.toml stays read-only) and
+    /// NEVER touches the backend (display-only — windows / ids don't move).
+    /// Same lifetime as `macDesktopSectionOrder`: per-mac-desktop, non-
+    /// persisted, a relaunch resets to config order. Keyed on the FULL stable
+    /// id (not declOrder alone) so a config edit that changes declOrder/label
+    /// naturally orphans a stale override (the self-heal `activeSectionLens`
+    /// uses); a reorder leaves the id unchanged so the override follows its
+    /// section. Workspace labels live in the catalog (`workspaceNames`), so a
+    /// workspace rename routes to `renameWorkspace` and never lands here.
+    var sectionLabelOverride: [Int: [String: String]] = [:]
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -996,11 +1011,18 @@ final class Controller: NSObject {
                 orphans: backend.orphanWindows())
             logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
                                    against: &loggedSectionDiagnostics)
+            // §E: overlay the session-only lens DISPLAY-LABEL override BEFORE
+            // the reorder — display-only, id-preserving (identity is invariant
+            // so `--focus index:N` + the active-lens highlight stay correct),
+            // and lens-only (a workspace label comes from the catalog). Flows
+            // into all three views via `lastSections`.
+            let relabeled = applyLabelOverrides(projected.sections,
+                                                to: sectionLabelOverride[ordinal] ?? [:])
             // Apply the session-only reorder to the PROJECTED result (never
             // the config input — see `SectionOrder`). Flows for free into
             // tree/grid/rail since all three read `lastSections`.
             lastSections = SectionOrder.apply(displaySectionOrder,
-                                              to: projected.sections)
+                                              to: relabeled)
         } else {
             lastSections = []
         }

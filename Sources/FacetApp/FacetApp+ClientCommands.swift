@@ -124,24 +124,55 @@ extension FacetApp {
     /// Sub-command parser for ``facet section <flag>`` — address a section
     /// (workspace OR lens) by its 1-based tree-order index or its label, the
     /// unified handle over `workspace --focus` / `lens NAME`. Verbs:
-    ///   --focus N|LABEL   activate the section (numeric = index, else label)
+    ///   --focus N|LABEL    activate the section (numeric = index, else label)
+    ///   --rename N LABEL   rename the Nth section (session-only display label)
     /// One action per invocation, loud reject on zero / multiple / unknown.
     static func runSectionCommand(_ args: [String]) -> Never {
-        var focusArg: String?       // payload: "index:N" or "label:LABEL"
+        var focusArg: String?           // payload: "index:N" or "label:LABEL"
+        var renameArg: (Int, String)?   // (1-based index, new display label)
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
             case "--focus":
                 focusArg = parseSectionFocus(cursor.value(for: "section --focus"))
+            case "--rename":
+                // Positional-2: INDEX then LABEL (same shape as
+                // `workspace --rename` / `window --retag`). The index must be a
+                // positive integer; the LABEL is loose (display string, spaces /
+                // ':' OK — kept verbatim). Each value is consumed
+                // unconditionally and validated; a missing one is a loud reject.
+                let n = parsePositiveInt(
+                    cursor.value(for: "section --rename INDEX"),
+                    flag: "section --rename INDEX")
+                let label = validateSectionLabelArg(
+                    cursor.value(for: "section --rename LABEL"),
+                    flag: "section --rename LABEL")
+                renameArg = (n, label)
             default:
                 die("unknown `section` flag \"\(a)\" — see `facet --help`")
             }
         }
-        let count = [focusArg != nil].filter { $0 }.count
+        let count = [focusArg != nil, renameArg != nil].filter { $0 }.count
         requireExactlyOneAction(count, subject: "section")
         requireServerAlive()
-        if let f = focusArg { postControl("section-focus:" + f) }
+        if let f = focusArg  { postControl("section-focus:" + f) }
+        if let r = renameArg { postControl(encodeSectionRename(index: r.0, label: r.1)) }
         die("facet section: dispatch fell through (bug)")
+    }
+
+    /// FacetApp wrapper over the pure `validateSectionLabel` (FacetCore): loud-
+    /// exit(2) on the all-whitespace / leading-dash reject, else return the
+    /// label VERBATIM (loose — spaces / `:` / punctuation are fine for a display
+    /// label). Mirrors `parseLensSectionLabel`'s leading-dash flag-guard; the
+    /// one intended difference is that a TRULY EMPTY `""` is allowed here (the
+    /// `--rename` revert gesture), which `parseLensSectionLabel` rejects.
+    static func validateSectionLabelArg(_ value: String, flag: String) -> String {
+        switch validateSectionLabel(value) {
+        case .success(let label):
+            return label
+        case .failure:
+            die("\(flag): expected a non-empty section label, got \"\(value)\"")
+        }
     }
 
     /// Parse the value of ``facet section --focus VALUE``. A positive integer
