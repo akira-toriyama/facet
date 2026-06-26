@@ -318,7 +318,7 @@ extension Controller {
     /// `Workspace.index`) plus the current mac-desktop ordinal, and have the
     /// id-keyed `renameSection` overloads re-resolve to the live position at
     /// commit (mirrors the lens-layout path; identity = id, campaign rule).
-    func beginSectionRename(group g: Int) {
+    func beginSectionRename(group g: Int, at anchor: CGPoint) {
         // Resolve g → (1-based index, current label), mirroring
         // `sectionHeaderDisplay`. Section mode: g IS the display group ordinal
         // (index = g + 1, label = lastSections[g].label). Degrade: g == the
@@ -368,8 +368,11 @@ extension Controller {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
         }
+        // Anchor the editor at the clicked header's height (`anchor.y`), to the
+        // RIGHT of the tree (`f.maxX + 8`) — not pinned to the tree top — so it
+        // lines up with the section being renamed.
         SectionRenamePanel.shared.show(
-            at: NSPoint(x: f.maxX + 8, y: f.maxY),
+            at: NSPoint(x: f.maxX + 8, y: anchor.y),
             header: caption,
             initialText: label,
             palette: treePaletteBox.pal,

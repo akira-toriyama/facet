@@ -129,8 +129,10 @@ public protocol TreeController: AnyObject, Sendable {
     /// editor pre-filled with that label, and on commit routes to the shared
     /// rename entry (workspace → backend name; lens → display-only override;
     /// empty → revert). Guards `unassigned` (no header → unreachable). No-op
-    /// for an out-of-range group.
-    func beginSectionRename(group g: Int)
+    /// for an out-of-range group. `anchor` is the right-click screen point
+    /// (the clicked header's height) — the editor opens beside the tree at
+    /// that y, not pinned to the tree top.
+    func beginSectionRename(group g: Int, at anchor: CGPoint)
 
     /// Section drag-to-reorder (display-only, session-only): move the section
     /// `sectionID` to insertion BOUNDARY `boundary` (current display-list
