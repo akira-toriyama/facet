@@ -3,9 +3,10 @@ import XCTest
 
 /// `FilterProjection` — `[Workspace]` → `[ProjectedSection]` (the section/lens
 /// model body). workspace sections map positionally to live workspaces (id
-/// from the wire index), lens sections multi-match, unassigned is deferred.
-/// Degrade (no sections) stays byte-identical to by-workspace. Pure; CI-only
-/// (CLT can't run `swift test`).
+/// from the wire index), lens sections multi-match, and an opt-in `unassigned`
+/// section (§G) rescues the leftover (universe − shown — windows in no other
+/// emitted section; first emits, extras warn). Degrade (no sections) stays
+/// byte-identical to by-workspace. Pure; CI-only (CLT can't run `swift test`).
 final class FilterProjectionTests: XCTestCase {
 
     // MARK: - fixtures
@@ -25,6 +26,9 @@ final class FilterProjectionTests: XCTestCase {
     private func wsSec() -> DesktopSection { DesktopSection(type: .workspace) }
     private func lens(_ label: String, _ match: String) -> DesktopSection {
         DesktopSection(type: .lens, label: label, match: match)
+    }
+    private func unassigned(_ label: String) -> DesktopSection {
+        DesktopSection(type: .unassigned, label: label)
     }
 
     // MARK: - degrade (no sections → 1:1 by-workspace, byte-identical)
@@ -214,16 +218,121 @@ final class FilterProjectionTests: XCTestCase {
         XCTAssertEqual(r.sections.map(\.id), ["section:0:First", "ws:0", "section:2:Third"])
     }
 
-    // MARK: - unassigned is deferred (no section)
+    // MARK: - unassigned receptacle (§G: leftover = universe − shown)
 
-    func testUnassignedSectionEmitsNoSection() {
+    /// The unassigned section emits at its declaration position as a
+    /// receptacle. A workspace window is shown in its own workspace section, so
+    /// with no orphans the receptacle is EMPTY (no leftover) — but the section
+    /// itself is present (id/label/type carried through).
+    func testUnassignedSectionEmitsReceptacle() {
         let wss = [ws(0, name: "A", windows: [win(1)])]
         let r = FilterProjection.project(workspaces: wss, sections: [
-            wsSec(), DesktopSection(type: .unassigned, label: "Other"),
+            wsSec(), unassigned("Other"),
         ])
-        // Only the workspace section; the unassigned section is skipped.
-        XCTAssertEqual(r.sections.map(\.id), ["ws:0"])
+        XCTAssertEqual(r.sections.map(\.id), ["ws:0", "unassigned:1"])
+        XCTAssertEqual(r.sections[1].sectionType, .unassigned)
+        XCTAssertEqual(r.sections[1].id, "unassigned:1")
+        XCTAssertEqual(r.sections[1].label, "Other")
+        XCTAssertEqual(r.sections[1].windows.map(\.id.serverID), [])  // win(1) shown in ws:0
         XCTAssertTrue(r.diagnostics.isEmpty)
+    }
+
+    /// A leftover orphan (no workspace, matched by no lens) is RESCUED into the
+    /// unassigned receptacle. A workspace-resident window is NOT in it.
+    func testLeftoverOrphanRescuedIntoUnassigned() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(
+            workspaces: wss,
+            sections: [wsSec(), lens("Web", "tag~=web"), unassigned("Lost")],
+            orphans: [win(9, tags: ["code"])])   // matches no lens
+        let recept = r.sections.first { $0.id == "unassigned:2" }
+        XCTAssertEqual(recept?.windows.map(\.id.serverID), [9])
+        XCTAssertFalse(recept?.windows.map(\.id.serverID).contains(1) ?? true)
+    }
+
+    /// A workspace window is ALWAYS shown in its own workspace section, so it
+    /// can never be leftover — never in the unassigned receptacle.
+    func testWorkspaceWindowNeverInUnassigned() {
+        let wss = [ws(0, name: "Dev", windows: [win(1), win(2)])]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), unassigned("Lost")])
+        let recept = r.sections.first { $0.id == "unassigned:1" }
+        XCTAssertEqual(recept?.windows.map(\.id.serverID), [])
+    }
+
+    /// An orphan caught by a lens is SHOWN there → not leftover, so the
+    /// unassigned receptacle does not also contain it.
+    func testOrphanMatchedByLensNotInUnassigned() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(
+            workspaces: wss,
+            sections: [wsSec(), lens("Web", "tag~=web"), unassigned("Lost")],
+            orphans: [win(9, tags: ["web"])])   // shown in the lens
+        let recept = r.sections.first { $0.id == "unassigned:2" }
+        XCTAssertFalse(recept?.windows.map(\.id.serverID).contains(9) ?? true)
+    }
+
+    /// All windows shown elsewhere → the receptacle is emitted but empty.
+    func testUnassignedEmptyWhenNoLeftover() {
+        let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["web"])])]
+        let r = FilterProjection.project(
+            workspaces: wss,
+            sections: [wsSec(), lens("Web", "tag~=web"), unassigned("Lost")])
+        let recept = r.sections.first { $0.id == "unassigned:2" }
+        XCTAssertNotNil(recept)
+        XCTAssertEqual(recept?.windows.map(\.id.serverID), [])
+    }
+
+    /// The id encodes the DECLARATION order, not the position among unassigned
+    /// sections or the emitted-section count.
+    func testUnassignedIdUsesDeclOrder() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(workspaces: wss, sections: [
+            wsSec(), lens("Web", "tag~=web"), unassigned("Lost"),
+        ])
+        XCTAssertEqual(r.sections.last?.id, "unassigned:2")
+    }
+
+    /// Extra live workspaces insert at the tail of the workspace-section run —
+    /// BEFORE the receptacle (which keeps its declaration-position id).
+    func testUnassignedPlacedAfterExtraWorkspaces() {
+        let wss = [
+            ws(0, name: "A", windows: []),
+            ws(1, name: "B", windows: []),
+            ws(2, name: "C", windows: []),
+        ]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), unassigned("L")],
+            orphans: [win(99)])   // no lens → leftover
+        XCTAssertEqual(r.sections.map(\.id), ["ws:0", "ws:1", "ws:2", "unassigned:1"])
+        XCTAssertEqual(r.sections.last?.windows.map(\.id.serverID), [99])
+    }
+
+    /// Only the FIRST unassigned section emits; a second one warns (the
+    /// leftover set is singular, so a second receptacle is always empty).
+    func testMultipleUnassignedOnlyFirstEmitsWithDiag() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(workspaces: wss, sections: [
+            wsSec(), unassigned("A"), unassigned("B"),
+        ])
+        let recepts = r.sections.filter { $0.sectionType == .unassigned }
+        XCTAssertEqual(recepts.count, 1)
+        XCTAssertEqual(recepts[0].id, "unassigned:1")
+        XCTAssertEqual(recepts[0].label, "A")
+        XCTAssertEqual(r.diagnostics.count, 1)
+        XCTAssertTrue(r.diagnostics[0].contains("unassigned section #3 ignored"))
+    }
+
+    /// The receptacle preserves universe order (workspace windows then orphans,
+    /// in their snapshot order) for the leftover.
+    func testUnassignedLeftoverPreservesUniverseOrder() {
+        let wss = [ws(0, name: "Dev", windows: [win(1)])]
+        let r = FilterProjection.project(
+            workspaces: wss,
+            sections: [wsSec(), lens("Web", "tag~=web"), unassigned("Lost")],
+            orphans: [win(8), win(9)])   // both unmatched, in order
+        let recept = r.sections.first { $0.id == "unassigned:2" }
+        XCTAssertEqual(recept?.windows.map(\.id.serverID), [8, 9])
     }
 
     // MARK: - loud-but-non-fatal

@@ -37,7 +37,8 @@ import Foundation
 public struct ProjectedSection: Sendable {
     /// Stable, unique identity for view signatures / cell tracking.
     /// Degrade / workspace section: `"ws:<index>"`. Lens section:
-    /// `"section:<declOrder>:<label>"`.
+    /// `"section:<declOrder>:<label>"`. Unassigned section (§G):
+    /// `"unassigned:<declOrder>"`.
     public let id: String
     public let label: String
     public let windows: [Window]

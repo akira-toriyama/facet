@@ -2,8 +2,9 @@ import XCTest
 @testable import FacetCore
 
 /// §E: `applyLabelOverrides` — the PURE display-label overlay at the heart of
-/// the runtime section rename. Invariants under test: only `.lens` sections are
-/// relabeled; the section `id` is NEVER changed (identity stays stable for
+/// the runtime section rename. Invariants under test: only `.lens` and
+/// `.unassigned` sections are relabeled (§G; a workspace label comes from the
+/// catalog); the section `id` is NEVER changed (identity stays stable for
 /// `--focus index:N` + the active-lens highlight); an absent key leaves the
 /// section untouched; a present key swaps only the `label`. Pure → headless
 /// (no Xcode needed for the logic; `swift test` still needs XCTest on the box).
@@ -24,6 +25,12 @@ final class ApplyLabelOverridesTests: XCTestCase {
                        windows: [Window] = []) -> ProjectedSection {
         ProjectedSection(id: id, label: label, windows: windows,
                          sourceWorkspaceIndex: src, sectionType: .workspace)
+    }
+
+    private func unassignedSec(id: String, label: String,
+                               windows: [Window] = []) -> ProjectedSection {
+        ProjectedSection(id: id, label: label, windows: windows,
+                         sourceWorkspaceIndex: nil, sectionType: .unassigned)
     }
 
     // MARK: - empty override is a no-op
@@ -85,6 +92,33 @@ final class ApplyLabelOverridesTests: XCTestCase {
             to: ["ws:0": "Nope", "section:1:Web": "Browser"])
         XCTAssertEqual(out[0].label, "Dev")                 // workspace ignored
         XCTAssertEqual(out[1].label, "Browser")             // lens applied
+    }
+
+    // MARK: - §G: unassigned sections are relabeled (id frozen)
+
+    func testPresentKeyRelabelsUnassignedKeepingID() {
+        let secs = [unassignedSec(id: "unassigned:2", label: "Lost",
+                                  windows: [win(1)]),
+                    lensSec(id: "section:0:Web", label: "Web"),
+                    wsSec(id: "ws:0", label: "Dev", src: 0)]
+        let out = applyLabelOverrides(secs, to: ["unassigned:2": "その他"])
+        XCTAssertEqual(out[0].id, "unassigned:2")            // id NEVER changes
+        XCTAssertEqual(out[0].label, "その他")               // display swapped
+        XCTAssertEqual(out[0].sectionType, .unassigned)
+        XCTAssertEqual(out[0].windows.map(\.id.serverID), [1])  // windows intact
+        XCTAssertEqual(out[1].label, "Web")                  // sibling lens untouched
+        XCTAssertEqual(out[2].label, "Dev")                  // sibling workspace untouched
+    }
+
+    func testWorkspaceStillNeverRelabeled() {
+        // A workspace-id key is ignored even alongside an unassigned relabel.
+        let secs = [wsSec(id: "ws:0", label: "Dev", src: 0),
+                    unassignedSec(id: "unassigned:1", label: "Lost")]
+        let out = applyLabelOverrides(secs,
+            to: ["ws:0": "Nope", "unassigned:1": "Misc"])
+        XCTAssertEqual(out[0].label, "Dev")                  // workspace ignored
+        XCTAssertEqual(out[1].label, "Misc")                 // unassigned applied
+        XCTAssertEqual(out[1].id, "unassigned:1")            // id frozen
     }
 
     // MARK: - a stored empty value blanks a lens header (caller never stores it)

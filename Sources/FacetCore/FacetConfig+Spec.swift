@@ -207,9 +207,10 @@ public extension FacetConfig {
                      + "bsp / stack clamp to the [layout] default), and apply = "
                      + "`{ workspace, tags = [], floating, sticky, master }` "
                      + "set on a window routed in. (unassigned = `{ type, label }` "
-                     + "still decodes but is DEFERRED/emits nothing — the EX-3 "
-                     + "迷子/orphan receptacle is just a lens with "
-                     + "`match = 'not workspace'`.) Array order = tree display order. "
+                     + "— an opt-in lost-and-found that, when present, collects "
+                     + "windows shown in no other section (leftover = universe − "
+                     + "shown); only the first emits, extras warn.) "
+                     + "Array order = tree display order. "
                      + "Any section block makes facet opt-in (manages only "
                      + "configured desktops)."),
         ]
