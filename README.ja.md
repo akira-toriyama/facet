@@ -470,6 +470,15 @@ facet window --unmark NAME        # マークを消す
 facet lens "Web"                  # label が Web の lens を有効化
 facet lens --clear                # active lens を解除 (park した窓が戻る)
 
+# Section —任意の section (workspace でも lens でも) を 1-based の tree index
+# か label で指す。`--focus` は activate (workspace へ切替 / lens を有効化)。
+# `--rename` は表示 label を runtime で変更 (session のみ・relaunch で reset・
+# `facet reload` では消えない・空 label は lens を config の label へ戻す)。
+# tree からも改名可: section ヘッダ右クリック → Section ▸ Rename。
+facet section --focus N            # tree 順で N 番目の section を focus
+facet section --focus LABEL        # label が LABEL の section を focus
+facet section --rename N "label"   # N 番目の section の表示 label を改名
+
 # Scratchpad — 名前付きの隠し棚 (ドロップダウン端末 / メモ用途)
 facet scratchpad --stash NAME     # focus 中の window を名前付き棚へしまう (画面外へ隠す)
 facet scratchpad --toggle NAME    # 今いる WS にフロート overlay として呼ぶ —
