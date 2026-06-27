@@ -1,0 +1,17 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/workflows/task-status.yml
+name: task-status
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    uses: akira-toriyama/.github/.github/workflows/sync-task-status.yml@main
+    secrets: inherit
