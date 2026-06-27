@@ -386,12 +386,25 @@ public final class GridView: NSView {
         // cursor mid-gesture. The next pass after the drop applies
         // fresh cells with the moved window in its new home.
         if layoutSuppressed { return }
-        // Snapshot the prior window rects so we can FLIP-animate
-        // any id that ends up in a different rect after the
-        // re-layout (drop, refresh, manual backend move, …).
-        var oldRects: [WindowID: NSRect] = [:]
+        // Snapshot the prior thumb rects so we can FLIP-animate any thumb that
+        // ends up in a different rect after the re-layout (drop, manual backend
+        // move, …). Keyed PER CELL-INSTANCE (sectionID + window id), NOT by bare
+        // window id: under the section model a single window appears in BOTH its
+        // home-workspace cell AND every lens cell it matches (lenses are
+        // cross-workspace). A bare-id key collapses those duplicates to whichever
+        // cell is written last, so the OTHER instance always reads as "moved" and
+        // the FLIP tween slides it clear across the grid on every refresh — the
+        // t-3q17 entrance jitter. The composite key compares each thumb against
+        // its OWN previous rect in the SAME cell.
+        var oldRects: [String: NSRect] = [:]
+        // The prior CELL scaffold (sectionID → rect): a structural re-layout
+        // (sections added / reordered / resized — cold-start degrade→section,
+        // a mac-desktop swap, a reorder) must SNAP, not slide, since every
+        // thumb's rect delta is then a re-layout artifact, not a move.
+        var oldCellRects: [String: NSRect] = [:]
         for cell in cells {
-            for w in cell.windows { oldRects[w.id] = w.rect }
+            for w in cell.windows { oldRects[flipKey(cell.sectionID, w.id)] = w.rect }
+            oldCellRects[cell.sectionID] = cell.rect
         }
         cells.removeAll()
         // EX-2: window → home workspace index (0-based), from the unfiltered
@@ -514,11 +527,22 @@ public final class GridView: NSView {
         // Building FLIP tweens for all of them would slide a dozen
         // thumbs across the grid simultaneously. Suppress.
         let skipTweens = swapLanded
+        // A structural re-layout (the cell scaffold itself changed — sections
+        // added / reordered / resized) snaps; only a thumb that moved WITHIN a
+        // stable scaffold (a drop's neighbour reflow, a live retile) slides.
+        let newCellRects = Dictionary(
+            cells.map { ($0.sectionID, $0.rect) },
+            uniquingKeysWith: { a, _ in a })
+        let cellLayoutChanged = newCellRects != oldCellRects
         for cell in cells {
             for w in cell.windows {
                 if skipTweens { continue }
+                if cellLayoutChanged { continue }   // structural re-layout → snap
                 if droppedLanded, lastDrop?.id == w.id { continue }
-                guard let old = oldRects[w.id], old != w.rect
+                // Compare against this thumb's OWN prior rect in THIS cell (the
+                // composite key) so a window duplicated across a workspace + lens
+                // cell doesn't read as moved (t-3q17).
+                guard let old = oldRects[flipKey(cell.sectionID, w.id)], old != w.rect
                 else { continue }
                 // Mid-flight tweens: continue from the current
                 // interpolated rect so a second event doesn't snap
@@ -556,6 +580,14 @@ public final class GridView: NSView {
     }
 
     // MARK: - FLIP reorder helpers
+
+    /// Per-cell-instance key for the FLIP rect snapshot. A window can render in
+    /// several cells at once under the section model (its home workspace + each
+    /// lens it matches), so the snapshot must distinguish those instances —
+    /// keying by bare window id collapses them and fakes a move (t-3q17).
+    private func flipKey(_ sectionID: String, _ id: WindowID) -> String {
+        "\(sectionID)#\(id.serverID)"
+    }
 
     private func interpolatedRect(for id: WindowID) -> NSRect? {
         guard let t = reordering[id] else { return nil }
