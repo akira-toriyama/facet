@@ -73,26 +73,9 @@ final class NewWindowInheritTests: XCTestCase {
         XCTAssertEqual(a.activeSectionLensApplyForward(), [])
     }
 
-    /// The enabling fix: `sectionLensVisibleIDsAll` overlays the catalog's tag
-    /// names onto the live (tag-less) window so a `tag~=X` lens GATHERS by the
-    /// assigned tag — the data path EX-3.3 (inherit) + EX-3.5 (DnD) rely on.
-    /// Without the overlay a tagged window would show in the tree but never be
-    /// physically gathered/parked.
-    func testTagBasedLensGathersByCatalogTag() {
-        let a = adapter([DesktopSection(type: .lens, label: "Web",
-                                        match: "tag~=web", apply: [.addTag("web")])])
-        a.catalog.seed(configs: [(index: 1, config: WorkspaceConfig(name: ""))])
-        let w10 = window(10, appName: "Chrome")
-        let w20 = window(20, appName: "Safari")
-        a.catalog.reconcile(live: [w10, w20])
-        a.catalog.activeSectionLens = "section:0:Web"
-        // Untagged: nothing matches `tag~=web`.
-        XCTAssertEqual(a.sectionLensVisibleIDsAll(live: [w10, w20]) ?? [], [],
-                       "no window carries the web tag yet")
-        // Assign the tag (as a DnD apply / new-window inherit would).
-        _ = a.catalog.addTagToWindow(wid(10), name: "web")
-        // The overlay lets the gather see the catalog tag → w10 is included.
-        XCTAssertEqual(a.sectionLensVisibleIDsAll(live: [w10, w20]) ?? [], [wid(10)],
-                       "the tagged window is gathered by the catalog tag overlay")
-    }
+    // (t-0021) The `tag~=X` lens DISPLAY by an assigned tag is pinned at the
+    // projection layer now (`FilterProjectionTests.testLensMatchSelectsWindows
+    // AcrossWorkspaces` + the snapshot's tag overlay) — a lens is a pure VIEW,
+    // so there is no adapter-side gather/park to test here. This file pins only
+    // the surviving inheritance resolver (`activeSectionLensApplyForward`).
 }

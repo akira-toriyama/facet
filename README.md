@@ -418,11 +418,11 @@ Frequently-touched keys:
   `"workspace"` (a spatial cell named by an optional `label`, else unnamed
   and shown by its 1-based index, with an optional `layout` seed; the count
   of these is that desktop's workspace count),
-  `"lens"` (a saved visibility filter — `label` + `match` + optional
-  `layout` + `apply`; activate it with `facet lens NAME` to anchor-park
-  every non-matching window across **every** workspace — cross-workspace
-  exclusive — and union-tile the matches; switching to any workspace clears
-  the lens, `facet lens --clear` lifts it and restores the parked windows;
+  `"lens"` (a saved visibility filter / view — `label` + `match` + optional
+  `layout` + `apply`; activate it with `facet lens NAME` to DISPLAY the
+  matches aggregated across **every** workspace on the current mac desktop (a
+  lens never moves a real window); switching to any workspace clears the
+  lens, `facet lens --clear` drops the view;
   **dragging a window onto a lens relocates it out of its workspace** — it now
   lives only via the lens, becoming a 迷子 (orphan) when no matching lens is
   active). A window can thus belong to **no** workspace; orphans are
@@ -443,7 +443,8 @@ Frequently-touched keys:
   one is left untouched (windows as-is, panel hidden there). All three views
   render the same section list — lens sections appear as cells in the tree,
   grid, **and** rail, with exactly one section highlighted; on the rail the
-  active section is the centre hero (an active lens shows its union there).
+  active section is the centre hero (an active lens shows its aggregated
+  matches there).
 - **Per-window tags** carry no config — they are free-form strings
   attached at **runtime** (session-only) with `facet window --tag NAME`
   (and `--untag` / `--toggle-tag` / `--retag`). A `type = "lens"` section
@@ -506,11 +507,11 @@ facet window --unmark NAME        # remove a mark
                                   # session-only, per mac desktop.
 
 # Lens (section model) — activate a type="lens" [[desktop.N.section]] by its
-# label; non-matching windows are anchor-parked across EVERY workspace
-# (cross-workspace exclusive — a real hide) and the matches union-tile.
+# label; the matches are shown aggregated across EVERY workspace
+# (display only — a lens never moves a window).
 # Switching to any workspace clears the lens. Persists across mac-desktop swaps.
 facet lens "Web"                  # activate the lens labelled Web
-facet lens --clear                # lift the active lens (parked windows return)
+facet lens --clear                # clear the active lens view
 
 # Section — address ANY section (workspace, lens, or unassigned) by its
 # 1-based tree index or its label. `--focus` activates it (switch to the

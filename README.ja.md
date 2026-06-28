@@ -388,11 +388,11 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   (`N` は Mission Control 順の位置)。 順序付き section リストで desktop を
   記述。 各 section は必須の `type` を持つ: `"workspace"` (任意の `label` で
   命名・無ければ無名で 1始まりの index 表示の空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
-  workspace 数)、 `"lens"` (保存フィルタ — `label` + `match` + 任意の
-  `layout` + `apply`。 `facet lens NAME` で有効化すると、 match を外れた窓を
-  **すべての workspace 横断で** anchor park (cross-workspace exclusive な実 hide)
-  し、 一致した窓を union タイルする。 どれかの workspace に切り替えると lens は
-  自動解除・`facet lens --clear` で park した窓が戻る。 **窓を lens に DnD すると
+  workspace 数)、 `"lens"` (保存フィルタ / view — `label` + `match` + 任意の
+  `layout` + `apply`。 `facet lens NAME` で有効化すると、 現在の mac desktop の
+  **すべての workspace 横断で**一致した窓を集約表示する（lens は実窓を一切動かさない）。
+  どれかの workspace に切り替えると lens は
+  自動解除・`facet lens --clear` で lens 表示を解除。 **窓を lens に DnD すると
   元の workspace から外れ**、 lens 経由でのみ存在する＝一致 lens が非 active の間は
   **迷子 (orphan)** になる)。 よって窓は**どの workspace にも属さない**ことがあり、
   迷子は invisible-but-logged（WS1 へ auto-home しない）。 **迷子受け皿** =
@@ -409,7 +409,7 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   ノータッチ（窓そのまま・パネル非表示）。 3 view すべてが同じ
   section リストを描画する — lens section は tree・grid・**rail** でセルとして
   並び、 ちょうど 1 つだけハイライト。 rail では active section が中央の hero
-  になる（active な lens はそこに union を描く）。
+  になる（active な lens はそこに集約した一致窓を描く）。
 - **per-window tag** は config を持たない — **実行時** (session 限り) に
   `facet window --tag NAME` (および `--untag` / `--toggle-tag` / `--retag`)
   で付ける自由記述の文字列。 `match` に `tag~=NAME` を含む `type = "lens"`
@@ -468,11 +468,10 @@ facet window --unmark NAME        # マークを消す
                                   # 旧窓から外れる。session のみ・mac desktop ごと。
 
 # Lens (section モデル) — type="lens" の [[desktop.N.section]] を label で
-# 有効化。match を外れた窓を全 workspace 横断で anchor park
-# (cross-workspace exclusive な実 hide) し、一致した窓を union タイル。
+# 有効化。一致した窓を全 workspace 横断で集約表示（実窓は動かさない）。
 # どれかの workspace に切り替えると lens は自動解除。mac desktop 切替を跨いで持続。
 facet lens "Web"                  # label が Web の lens を有効化
-facet lens --clear                # active lens を解除 (park した窓が戻る)
+facet lens --clear                # active lens 表示を解除
 
 # Section — 任意の section (workspace / lens / unassigned) を 1-based の tree
 # index か label で指す。`--focus` は activate (workspace へ切替 / lens を有効化 /

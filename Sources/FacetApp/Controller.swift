@@ -635,7 +635,7 @@ final class Controller: NSObject {
     /// round-trip is exact. Config-based (not `lastSections`) so it resolves
     /// even before the first render (headless CLI). The label↔id map is 1:1
     /// while labels are unique + non-empty (the A0 invariant). Shared by
-    /// `setActiveLens`, `toggleActiveLens`, `setLensLayout`.
+    /// `setActiveLens`, `toggleActiveLens`.
     func lensID(forLabel label: String, ordinal: Int?) -> String? {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal,
               let sections = config.effectiveMacDesktopSectionConfigs[ord],
@@ -646,11 +646,10 @@ final class Controller: NSObject {
         return "section:\(declOrder):\(label)"
     }
 
-    // The grid/rail no longer recompute a lens `match` view-side to narrow
-    // their thumbnails. The active section-lens is a REAL park now (Phase 1):
-    // the catalog parks the out-of-lens windows and the snapshot marks each
-    // `Window.isLensParked`, which the views drop directly — so the catalog is
-    // the single authority and there is no view-side recompute to drift from it.
+    // The grid/rail don't recompute a lens `match` view-side. A lens is a pure
+    // VIEW (t-0021): `FilterProjection` builds each section's window list (a
+    // lens section lists its matched windows) and the views render that — one
+    // display authority, no view-side recompute to drift from it.
 
     /// Surface any named-enum config value that silently clamped to a
     /// default (e.g. a layout name carried across a breaking rename:
@@ -970,8 +969,8 @@ final class Controller: NSObject {
         //     a re-activation of the SAME lens after a switch.
         //   • a genuine mac-desktop swap — the catalog (and its persisted lens)
         //     swaps in; READ BACK the destination's lens rather than blanket-nil
-        //     (the grid/rail thumbnail narrow rides the catalog's `isLensParked`,
-        //     which swaps automatically).
+        //     (the grid/rail display rides the swapped-in catalog's active lens,
+        //     which `FilterProjection` re-projects automatically).
         // The catalog's mirror — read ordinal-independently via
         // `backend.currentActiveSection()` — is the authority, so on a WS switch
         // we re-read it EVEN IF SkyLight momentarily can't name the desktop
@@ -1041,10 +1040,10 @@ final class Controller: NSObject {
             lastSections = []
         }
         lastActiveLensID = currentActiveSection.lensID
-        // The active section-lens narrows the open grid/rail through the
-        // snapshot's per-window `isLensParked` flag (the views drop the parked
-        // thumbnails themselves) — no view-side recompute. `wss` stays the
-        // UNFILTERED set; only the parked windows on the active WS are dropped.
+        // A lens is a pure VIEW (t-0021): the open grid/rail show whatever
+        // `FilterProjection` projects (a lens section lists its matched
+        // windows) — no park-flag narrowing, no view-side recompute. `wss`
+        // stays the full set.
         if let g = gridView {
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
@@ -1365,20 +1364,6 @@ extension Controller: TreeController {
                 Focus.withRetry(window)
             }
         }
-    }
-
-    func revealLensParked(_ window: Window) {
-        Log.debug("revealLensParked id=\(window.id.serverID): clear lens + focus")
-        // Drop the active lens (clearSectionLens restores + re-tiles every
-        // parked window) then focus the clicked one. Both enqueue on the
-        // serial cliQueue in this order, so the restore lands first. Called
-        // ONLY for a parked window on the ACTIVE workspace (no switch needed):
-        // EX-0's cross-workspace lens means a parked row can live in an inactive
-        // WS, but `SidebarView.handleClick` routes that case through the
-        // workspace-switch path instead (the switch clears the lens + makes the
-        // window visible), so this method never has to switch.
-        setActiveLens(nil)
-        focusWindow(window, postSwitch: false)
     }
 
     func runWindowOps(_ ops: [WindowAction],

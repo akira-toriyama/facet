@@ -15,28 +15,9 @@ extension NativeAdapter {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         let target = index + 1
         let rect = activeDisplayRect()
-        // EX-0.3: Section-lens union branch. When a `type="lens"` section is
-        // active, --layout must target the LENS UNION, not the underlying
-        // active workspace (which tiles no windows on its own while the lens
-        // is active). `index` is ignored — the union spans all workspaces.
-        if catalog.activeSectionLens != nil {
-            // Stateful engines (bsp / stack) thread a per-WS tree and can't
-            // represent a cross-workspace union — reject loudly, mirroring
-            // the CLI's incompatible-layout check. Use `LensLayout.isStateless`
-            // (public, canonical predicate).
-            guard LensLayout.isStateless(mode) else {
-                errorContinuation.yield(
-                    "layout \(mode): not available while a lens is active "
-                    + "(bsp / stack are workspace-only)")
-                return
-            }
-            catalog.activeSectionLensLayout = mode.lowercased()
-            Log.debug("native: setLayoutMode section-lens-union -> "
-                + "\(catalog.activeSectionLensLayout ?? "")")
-            applyLayout(workspace: catalog.activeIndex, rect: rect)
-            eventContinuation.yield(.refreshNeeded)
-            return
-        }
+        // A lens is a pure VIEW (t-0021) and never tiles real windows, so
+        // `facet workspace --layout` always targets the active workspace —
+        // even with a lens active it just retiles the workspace underneath.
         // BSP → Stack migration parks all but the focused window
         // at the anchor sliver. The catalog's setMode discards
         // layoutTrees / stackOrders entries, so we rely on

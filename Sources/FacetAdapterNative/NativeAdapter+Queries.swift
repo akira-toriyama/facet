@@ -163,16 +163,15 @@ extension NativeAdapter {
         }
         // EX-3.3 (canon ④⑨ "新規窓 = 開いた世界の apply を継ぐ・必ず見える"): a
         // window launched while a section-lens is active inherits that lens's
-        // FORWARD `apply` ops so it JOINS the lens — the `applySectionLensReconcile`
-        // immediately below then shows it in the cross-workspace union instead
-        // of parking it. The full forward set is applied (tags + floating/sticky/
-        // master), so a window auto-joining lands in the same facet state as one
-        // dragged into the section; `setWorkspace` is the one op stripped — the
-        // window keeps `workspace = activeIndex` (D-A: never an orphan-on-birth —
-        // orphans arise only from an explicit DnD move). Only the freshly-adopted
-        // ids are touched (not existing windows), and the catalog setters are
-        // idempotent + run BEFORE the reconcile/retile below so the facets land in
-        // one pass (no float-then-tile flicker). An apply-less / wholly-stripped
+        // FORWARD `apply` ops so it JOINS the lens — once it carries the lens's
+        // tags it re-projects into the lens DISPLAY (a lens is a pure VIEW,
+        // t-0021: nothing is parked). The full forward set is applied (tags +
+        // floating/sticky/master), so a window auto-joining lands in the same
+        // facet state as one dragged into the section; `setWorkspace` is the one
+        // op stripped — the window keeps `workspace = activeIndex` (D-A: never an
+        // orphan-on-birth — orphans arise only from an explicit DnD move). Only
+        // the freshly-adopted ids are touched (not existing windows), and the
+        // catalog setters are idempotent. An apply-less / wholly-stripped
         // pure-condition lens that a new window doesn't match leaves it in its
         // home WS (declared gap).
         if !result.addedIDs.isEmpty {
@@ -200,17 +199,11 @@ extension NativeAdapter {
                     + "windows=\(result.addedIDs.count)")
             }
         }
-        // Section-lens (EX-1 cross-workspace model, D3): continuous re-park.
-        // Re-evaluate the active section-lens across ALL workspaces on the
-        // current mac desktop (`applySectionLensReconcile` → `sectionLensVisibleIDsAll`)
-        // and park any member that's now out of the lens (a window just opened
-        // into any WS while a lens is active) / restore one that re-entered.
-        // Runs BEFORE `retileAfterReconcile` so a newly-parked window is
-        // already detached + excluded from `nonFloatingMembers` when the
-        // re-tile computes frames — no tile-then-park flicker. Syncs the
-        // main-readable mirror too (covers a mac-desktop swap that restored a
-        // desktop whose lens persists). No-op when no lens is active.
-        applySectionLensReconcile(live: live, rect: rect)
+        // Section-lens (t-0021): a lens is a pure VIEW — nothing to re-park on
+        // reconcile. A window that opens / whose match flips while a lens is
+        // active simply re-projects (display) on the next snapshot. Keep the
+        // main-readable mirror in lock-step (covers a mac-desktop swap that
+        // restored a desktop whose lens persists).
         syncSectionLensMirror()
         // Event-driven re-tile of the active WS (with open/close reflow
         // animation when applicable). See `retileAfterReconcile`.
@@ -431,14 +424,6 @@ extension NativeAdapter {
         catalog.activeSectionLens.flatMap(lensSection(forID:))
     }
 
-    /// Per-section layout for the ACTIVE lens, or nil when no lens is active /
-    /// its `layout` field is absent / empty. `applyLayout` passes the result to
-    /// `LensLayout.resolve` so a nil / stateful name falls back to the global
-    /// default without tiling breaking.
-    func lensLayout() -> String? {
-        activeLensSection()?.layout
-    }
-
     /// EX-3.3: the FORWARD `apply` ops in the ACTIVE section-lens (canon ④⑨ — a
     /// window launched while this lens is active inherits these so it joins the
     /// lens in the SAME facet state as one dragged in). Everything the section's
@@ -448,8 +433,7 @@ extension NativeAdapter {
     /// `removeTag` is never config-authored). `[]` when no lens is active or the
     /// section has an empty / wholly-stripped `apply` (a pure-condition lens —
     /// the new window can't be made to match, declared gap). Resolved against the
-    /// LIVE config so a hot-reload is honoured (mirrors `lensLayout()` /
-    /// `sectionLensFilter()`).
+    /// LIVE config so a hot-reload is honoured (mirrors `activeLensSection()`).
     func activeSectionLensApplyForward() -> [ApplyOp] {
         guard let section = activeLensSection() else { return [] }
         return section.apply.filter {
@@ -528,92 +512,6 @@ extension NativeAdapter {
             }
         case .removeTag:
             break
-        }
-    }
-
-    /// Resolved stateless layout for the section-lens labelled `label` (EX-0.3).
-    /// Combines the runtime override (`catalog.activeSectionLensLayout`) with the
-    /// section's configured `layout` field: override wins when set, else the
-    /// config layout, with `LensLayout.resolve` providing the stateless clamp +
-    /// globalDefault fallback. The SINGLE source of truth consumed by both
-    /// `applyLayout` and `targetFrames` (via `sectionLensUnionFrames`) so the
-    /// instant and animated paths can't disagree. Called only when a section
-    /// lens is active (`catalog.activeSectionLens != nil`).
-    func resolvedLensLayout() -> String {
-        LensLayout.resolve(catalog.activeSectionLensLayout ?? lensLayout(),
-                           globalDefault: config.effectiveDefaultLayout)
-    }
-
-    /// The active section-lens's compiled filter, or nil when no lens is
-    /// active / its id no longer maps to a lens section / its `match` won't
-    /// parse. The catalog holds the id (authority); this resolves it to the
-    /// section's `match` against the LIVE config (so a hot-reload is picked up)
-    /// and compiles it, caching by the raw string so the WHERE-clause is
-    /// parsed once across reconciles rather than every tick.
-    private func sectionLensFilter() -> FacetFilter? {
-        guard let match = activeLensSection()?.match
-        else { return nil }
-        if let c = sectionLensCompiled, c.match == match { return c.filter }
-        guard case .success(let filter) = FacetFilter.parse(match) else {
-            sectionLensCompiled = nil
-            return nil
-        }
-        sectionLensCompiled = (match, filter)
-        return filter
-    }
-
-    /// Cross-workspace evaluator (EX-0.1 / EX-1 exclusive lens). Returns the
-    /// set of ALL managed windows — across every workspace on the current mac
-    /// desktop — whose live `Window` passes the active section-lens `match`.
-    /// Each window is evaluated against its OWN home-workspace name so a lens
-    /// `match='workspace=Dev'` resolves correctly even for windows in inactive
-    /// workspaces.
-    ///
-    /// `nil` when no lens is active.
-    func sectionLensVisibleIDsAll(live: [Window]) -> Set<WindowID>? {
-        guard let filter = sectionLensFilter() else { return nil }
-        let byID = Dictionary(live.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        var out: Set<WindowID> = []
-        for (id, slot) in catalog.windowMap {
-            guard let w = byID[id] else { continue }
-            // Overlay the catalog's tag NAMES onto the live (tag-less) window so
-            // a `tag~=X` lens resolves in this gather/park path exactly as the
-            // snapshot overlays them for the tree DISPLAY — otherwise a
-            // tag-based section lens (the shape every DnD-to-lens + new-window
-            // inherit produces, EX-3) would show the window in the tree but
-            // never physically gather/park it. workspace name is overlaid too
-            // (nil → "" for an orphan, so `not workspace` matches it).
-            let tagged = w.withTags(slot.tags.sorted())
-            // nil workspace name = NO assignment (orphan) so `not workspace`
-            // matches; an assigned window passes its name (even "" when
-            // unnamed) so `not workspace` excludes it.
-            let wsName = slot.workspace.map { catalog.workspaceName($0) }
-            if LensMembership.matches(tagged, inWorkspaceNamed: wsName,
-                                      filter: filter) {
-                out.insert(id)
-            }
-        }
-        return out
-    }
-
-    /// Section-lens continuous re-park (D3). Re-evaluate the active lens over
-    /// the active workspace and apply the park/restore delta — catches a
-    /// window opened into the active WS while a lens is active (it should be
-    /// hidden) or one whose match flipped. Idempotent: an unchanged verdict
-    /// yields an empty plan and no AX. When a newly-parked window was holding
-    /// focus (e.g. raise-on-open surfaced it), redirect focus off the
-    /// now-off-screen sliver. No-op when no lens is active.
-    private func applySectionLensReconcile(live: [Window], rect: CGRect) {
-        guard catalog.activeSectionLens != nil,
-              let visible = sectionLensVisibleIDsAll(live: live)
-        else { return }
-        let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
-        guard !plan.isEmpty else { return }
-        Log.debug("native: section-lens re-park "
-            + "parked=\(plan.toPark.count) restored=\(plan.toRestore.count)")
-        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
-        if let f = focusedWindow(), plan.toPark.contains(where: { $0.id == f }) {
-            applySectionLensAutoFocus(visibleIDs: visible)
         }
     }
 

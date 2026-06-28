@@ -236,12 +236,7 @@ extension WorkspaceCatalog {
                 // slot — excluding them here makes every stateless engine
                 // and the bsp re-seed reclaim it (memory
                 // `facet-hide-reclaim-decisions`).
-                && !hiddenMembers.contains($0.key)
-                // Section-lens-parked windows (EX-1 exclusive model) give up
-                // their slot the same way — the in-lens windows reclaim it.
-                // `lensParkedMembers` can hold windows from any workspace, so
-                // per-WS preview excludes them exactly where they live.
-                && !lensParkedMembers.contains($0.key) }
+                && !hiddenMembers.contains($0.key) }
             .map(\.key)
             .sorted { $0.serverID < $1.serverID }
     }

@@ -577,22 +577,16 @@ extension Controller {
             scheduleReconcile(after: 0.05)
             return
         }
-        // Mirror SidebarView+Drag.handleClick's window case EXACTLY — all three
-        // branches (an unassigned orphan can be in any of these states):
-        //   • lens-PARKED (an active lens is parking it off to a 1×41 anchor
-        //     sliver — `isOnscreen` STAYS true, so the isOnscreen test below
-        //     would wrongly just focus the sliver): clear the lens + focus via
-        //     `revealLensParked`. An orphan never has a workspace to switch to,
-        //     so the "active-WS only" precondition holds (no switch needed).
+        // Mirror SidebarView+Drag.handleClick's window case EXACTLY — a lens is
+        // a pure VIEW (t-0021) that moves nothing, so only two states remain (an
+        // unassigned orphan can be in either):
         //   • HIDDEN (Cmd+H'd / minimized, `isOnscreen == false`): `revealWindow`
         //     un-hides AND focuses. NOT an unconditional `revealWindow` — that
         //     whole-app `unhide()`s an already-visible orphan.
         //   • on-screen: just focus (`postSwitch: false` → `Focus.withRetry`).
         // No workspace switch in any branch — ActiveSection unchanged (plan §4).
         Log.debug("focusFirstWindow: section=\(id) → window \(w.id.serverID)")
-        if w.isLensParked {
-            revealLensParked(w)
-        } else if w.isOnscreen == false {
+        if w.isOnscreen == false {
             let bk = backend
             cliQueue.async { bk.revealWindow(w.id) }
         } else {
@@ -824,25 +818,6 @@ extension Controller {
             bk.activateSection(.lens(id), autoFocus: autoFocus); return nil
         }
         apply(lastWorkspaces)                // re-render: light up its header
-    }
-
-    /// TreeController (R9): a union layout was picked from a `type=lens`
-    /// header's menu. ACTIVATE the lens first (if not already the active
-    /// section) so the adapter's `setLayoutMode` lens branch targets THIS
-    /// lens's cross-workspace union — `activateSection` and the layout command
-    /// both ride `runBackendCommand`'s serial `cliQueue`, so the activate lands
-    /// before the layout override (FIFO). `workspaceIndex` is ignored by the
-    /// lens branch; pass `0`. The backend re-clamps `mode` to a stateless engine
-    /// regardless of what the view sent.
-    func setLensLayout(sectionID: String, mode: String) {
-        // §A: the view passes the stable section id straight from the rendered
-        // header — activate by id (activateLensID's idempotent guard no-ops when
-        // it's already the active section), no label→id lookup.
-        activateLensID(sectionID, ordinal: currentMacDesktopOrdinal(),
-                       autoFocus: false)
-        runBackendCommand { bk in
-            bk.setLayoutMode(workspaceIndex: 0, mode: mode); return nil
-        }
     }
 
     /// EX-1 Controller-side activation throughline: route to the validated

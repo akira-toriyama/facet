@@ -59,12 +59,11 @@
 /// the `[[desktop.N.section]]` config, so matching on `desktop=` is redundant.
 ///
 /// The seam-overlay every lens-`match` evaluation runs through, wrapped by the
-/// single `LensMembership.matches` predicate that `FilterProjection` (tree) and
-/// the Phase-1 real-hide park path both share — so a window's lens membership is
-/// decided identically on the display and hide paths (grid/rail then drop the
-/// parked windows via the snapshot's `Window.isLensParked` flag). Internal (not
-/// file-private) so `LensMembership` (same module) can construct it; the public
-/// predicate exposes only `Window` + name + filter.
+/// single `LensMembership.matches` predicate. A lens is a pure VIEW (t-0021):
+/// `FilterProjection` is the ONE path that decides a window's lens membership,
+/// for tree/grid/rail alike — there is no separate hide/park path to keep in
+/// sync. Internal (not file-private) so `LensMembership` (same module) can
+/// construct it; the public predicate exposes only `Window` + name + filter.
 struct ProjectedWindowFields: WindowFields {
     let window: Window
     /// The containing workspace's name, or `nil` when the window has NO

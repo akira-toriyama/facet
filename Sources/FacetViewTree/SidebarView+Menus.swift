@@ -88,23 +88,20 @@ extension SidebarView {
         guard g >= 0, g < lastSections.count else { return }
         let sec = lastSections[g]
         guard sec.sectionType == .lens else { return }
-        // §A: the menu HEADER uses the display label, but the layout callback
-        // targets the lens by its stable section id (`sec.id`) — display and
-        // identity are split so a non-unique / empty label can't mistarget.
+        // A lens is a pure VIEW (t-0021): it tiles nothing, so the header offers
+        // ONLY SECTION ▸ Rename (no layout picker) — same shape as the
+        // unassigned receptacle.
         // §D: the header is the unified `index (label)` caption (e.g. "4 (Web)").
-        ViewContextMenu.showLensLayout(
-            at: scr, backend: backend,
-            lensLabel: sectionDisplayLabel(index: g + 1, label: sec.label),
+        ViewContextMenu.showSectionRenameMenu(
+            at: scr,
+            header: sectionDisplayLabel(index: g + 1, label: sec.label),
             palette: pal, filterable: filterable,
             // §E: SECTION ▸ Rename → controller resolves `g` to index + label
             // (same `sectionHeaderDisplay` logic; passes the SAME `g`).
             // `scr` = the header's screen point → editor opens at its height.
             onRename: { [weak self] in
                 self?.controller?.beginSectionRename(group: g, at: scr)
-            }
-        ) { [weak self] mode in
-            self?.controller?.setLensLayout(sectionID: sec.id, mode: mode)
-        }
+            })
     }
 
     /// §G unassigned-section header right-click / `m` menu → Rename ONLY (the
@@ -117,7 +114,7 @@ extension SidebarView {
         let sec = lastSections[g]
         guard sec.sectionType == .unassigned else { return }
         // §D: the header is the unified `index (label)` caption.
-        ViewContextMenu.showUnassignedMenu(
+        ViewContextMenu.showSectionRenameMenu(
             at: scr,
             header: sectionDisplayLabel(index: g + 1, label: sec.label),
             palette: pal, filterable: filterable,

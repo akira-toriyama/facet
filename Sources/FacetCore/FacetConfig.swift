@@ -165,11 +165,10 @@ public struct FacetConfig: Sendable {
     /// tree display) order. `nil`/empty when none configured. Parsed from the
     /// raw TOML text (nested array-of-tables) by `load`, like
     /// `exclusionRules`. Read through `effectiveMacDesktopSectionConfigs`.
-    /// Consumed in production: `FilterProjection` (tree), the `facet lens`
-    /// active filter (the adapter parks out-of-lens windows; grid/rail drop
-    /// them via `Window.isLensParked`), `ApplyResolver` (DnD apply/un-apply),
-    /// and `effectiveWorkspaceList` (workspace count + layout). Shipped
-    /// #296–#301.
+    /// Consumed in production: `FilterProjection` (the single display path for
+    /// tree/grid/rail — a `facet lens` is a pure VIEW that lists its matched
+    /// windows, t-0021), `ApplyResolver` (DnD apply/un-apply), and
+    /// `effectiveWorkspaceList` (workspace count + layout). Shipped #296–#301.
     public var macDesktopSectionConfigs: [Int: [DesktopSection]] = [:]
 
     /// `[[exclude]]` rules — windows matching one are floated or

@@ -1,14 +1,13 @@
 import XCTest
 @testable import FacetCore
 
-/// `LensMembership.matches` — the SINGLE per-window lens-`match` predicate
-/// shared by the tree display read-path (`FilterProjection`) and the Phase-1
-/// real-hide park path (grid/rail then drop the parked windows via the
-/// snapshot's `Window.isLensParked` flag). These lock the two behaviours the
-/// shared predicate must guarantee: (1) it agrees with `FacetFilter.matches`
-/// for ordinary window fields, and (2) it overlays the workspace NAME so
-/// `workspace=` resolves (a bare `Window` can't). Pure; CI-only (CLT can't run
-/// `swift test`).
+/// `LensMembership.matches` — the SINGLE per-window lens-`match` predicate.
+/// A lens is a pure VIEW (t-0021): `FilterProjection` reads this to build the
+/// tree/grid/rail display — there is no separate park path to keep in sync.
+/// These lock the two behaviours the predicate must guarantee: (1) it agrees
+/// with `FacetFilter.matches` for ordinary window fields, and (2) it overlays
+/// the workspace NAME so `workspace=` resolves (a bare `Window` can't). Pure;
+/// CI-only (CLT can't run `swift test`).
 final class LensMembershipTests: XCTestCase {
 
     // MARK: - fixtures
@@ -103,6 +102,25 @@ final class LensMembershipTests: XCTestCase {
     func testEmptyWorkspaceNameNoMatchesWorkspaceField() {
         let f = filter("workspace=Dev")
         XCTAssertFalse(LensMembership.matches(win(1), inWorkspaceNamed: "", filter: f))
+    }
+
+    /// 迷子 receptacle (`match='not workspace'`): presence is the assignment,
+    /// not the display name. An orphan (NO workspace → `inWorkspaceNamed: nil`)
+    /// matches; an ASSIGNED window — even one in an UNNAMED workspace (name "")
+    /// — does NOT. The predicate behind the receptacle; t-0021 made the lens a
+    /// pure VIEW, so `FilterProjection` reads this same predicate for display
+    /// (no separate adapter gather to keep in sync).
+    func testNotWorkspaceMatchesOrphanNotAssigned() {
+        let f = filter("not workspace")
+        XCTAssertTrue(LensMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),
+                      "an orphan (no workspace) matches `not workspace`")
+        XCTAssertFalse(LensMembership.matches(win(2), inWorkspaceNamed: "", filter: f),
+                       "an unnamed-but-assigned window is NOT an orphan")
+        XCTAssertFalse(LensMembership.matches(win(3), inWorkspaceNamed: "Dev", filter: f),
+                       "a named-workspace window is NOT an orphan")
+        XCTAssertTrue(
+            LensMembership.matches(win(4, tags: ["web"]), inWorkspaceNamed: nil, filter: f),
+            "a tagged orphan still has no workspace")
     }
 
     /// `desktop=` stays a no-match even through the overlay (sections are

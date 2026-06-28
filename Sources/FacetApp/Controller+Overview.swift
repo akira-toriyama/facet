@@ -30,9 +30,9 @@ extension Controller {
         v.paletteBox = paletteBox
         v.autoresizingMask = [.width, .height]
         v.workspaces = lastWorkspaces
-        // The active section-lens narrows the overview through each window's
-        // `isLensParked` flag (set in the snapshot) — the view drops the parked
-        // thumbnails itself, so there is nothing extra to seed here.
+        // A lens is a pure VIEW (t-0021): the overview shows whatever the
+        // sections project (a lens section lists its matched windows) — no
+        // park-flag narrowing, nothing extra to seed here.
         v.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         v.sections = lastSections        // EX-2: section list (empty ⇒ degrade)
         v.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight

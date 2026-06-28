@@ -120,6 +120,19 @@ struct WorkspaceCatalog {
     /// Number of live workspaces (= highest valid 1-based index).
     var workspaceCount: Int { workspaceNames.count }
 
+    /// Display name of the 1-based workspace `n1Based`, or `""` for an
+    /// out-of-range index OR `nil` (a 迷子 / orphan with no workspace — the
+    /// "show the number" / empty sentinel). Used when evaluating a lens / rule
+    /// `match='workspace=Dev'` (`LensMembership` / `ProjectedWindowFields`): an
+    /// orphan resolves to "" so `filterHas("workspace")` is false →
+    /// `match='not workspace'` (the 迷子 receptacle) matches it, and
+    /// `workspace=Dev` does not.
+    func workspaceName(_ n1Based: Int?) -> String {
+        guard let n1Based, n1Based >= 1, n1Based <= workspaceNames.count
+        else { return "" }
+        return workspaceNames[n1Based - 1]
+    }
+
     /// The live set as `(index, name)` pairs for `snapshot` / status.
     var workspaceEntries: [(index: Int, name: String)] {
         workspaceNames.enumerated().map {
@@ -332,10 +345,12 @@ struct WorkspaceCatalog {
     /// `activeSection` derivation + the adapter mirror). The match
     /// EVALUATION lives adapter-side (the catalog has no live
     /// `appName`/`title`), so the catalog stores only the opaque **section id**
-    /// (`"section:<declOrder>:<label>"`, A0) + `lensParkedMembers`; the adapter
-    /// resolves the id → its section → `match` against its config and hands
-    /// `applySectionLens` the visible-id verdict. Session-only, and
-    /// per-mac-desktop for free (this whole catalog is swapped per mac desktop).
+    /// (`"section:<declOrder>:<label>"`, A0); the adapter resolves the id → its
+    /// section → `match` against its config. A lens is a pure VIEW (t-0021):
+    /// activating one changes only what the tree/grid/rail DISPLAY (the matched
+    /// windows, via `FilterProjection`) — it never moves a real window.
+    /// Session-only, and per-mac-desktop for free (this whole catalog is swapped
+    /// per mac desktop).
     var activeSectionLens: String?
 
     /// The single active-section concept (EX-1): a lens when one is active,
@@ -351,29 +366,6 @@ struct WorkspaceCatalog {
     var activeSection: ActiveSection {
         activeSectionLens.map(ActiveSection.lens) ?? .workspace(activeIndex)
     }
-
-    /// Runtime layout override for the active section-lens union (EX-0.3).
-    /// `nil` follows the lens section's configured `layout` (→ `LensLayout.resolve`).
-    /// Only stateless engines (master-*/grid/spiral) are ever stored here —
-    /// `setLayoutMode` guards this with `LensLayout.isStateless`.
-    /// Session-only and per-mac-desktop (same as `activeSectionLens`).
-    /// Reset to `nil` whenever the active lens changes or clears so a freshly-
-    /// activated lens always starts from its configured layout.
-    var activeSectionLensLayout: String?
-
-    /// Windows currently parked because they fall OUTSIDE the active
-    /// section-lens. The section-model twin of `hiddenMembers` (Cmd+H):
-    /// excluded from `nonFloatingMembers` so the visible (in-lens) windows
-    /// reclaim the freed tile slot, AND detached from the layout containers
-    /// (`detachFromLayouts`) so bsp / stack drop them too. UNLIKE a hide, they
-    /// ARE anchor-parked (facet moved them to the sliver). In the EX-1
-    /// cross-workspace exclusive model this can hold park-eligible windows from
-    /// ANY workspace on the current mac desktop — an inactive workspace's
-    /// tree/grid preview IS narrowed by the active lens (its out-of-lens windows
-    /// are flagged `isLensParked` in the snapshot). On restore each window
-    /// re-attaches to its own `slot.workspace`, never the active one.
-    /// A subset of `anchorParked`.
-    var lensParkedMembers: Set<WindowID> = []
 
     init() {}
 
@@ -545,34 +537,22 @@ struct WorkspaceCatalog {
     /// nil when target is invalid or already active. Caller applies AX
     /// side-effects against the returned `WindowRef` lists.
     ///
-    /// The lift loop re-attaches every lens-parked window (from any workspace
-    /// under the EX-1 cross-workspace model) to its home layout before clearing
-    /// the set and nulling the lens fields — so `lensParkedMembers` is always
-    /// empty and `activeSectionLens` / `activeSectionLensLayout` are always nil
-    /// after a switch. The destination's own windows are then unconditionally
-    /// restored (no per-lens re-park: the exclusive model requires a fresh
-    /// `setSectionLens` call to re-apply a lens on the new workspace).
+    /// Switching workspace drops any active section-lens (EX-0.4 exclusive
+    /// model): a lens is a pure VIEW that moved nothing, so the lift is just
+    /// nulling the authority field — the catalog is left in a clean no-lens
+    /// state. The destination's own windows are then unconditionally restored.
     ///
-    /// `rect` defaults to `.zero` for no-lens / test call sites; it only feeds
-    /// the lift loop's `attachToLayout` (bsp split-orientation choice), never an
-    /// absolute frame, so the default is safe. Production switches pass
+    /// `rect` defaults to `.zero` for test call sites; it only feeds the
+    /// destination restore's `attachToLayout` (bsp split-orientation choice),
+    /// never an absolute frame, so the default is safe. Production switches pass
     /// `activeDisplayRect()`.
     @discardableResult
     mutating func setActive(_ n1Based: Int, in rect: CGRect = .zero) -> SwitchPlan? {
         guard isValid(n1Based), n1Based != activeIndex else { return nil }
         let old = activeIndex
-        // Lift the lens off the old workspace: re-attach every lens-parked
-        // window to its home layout, then null the lens authority fields so
-        // the catalog is left in a clean no-lens state (EX-0.4).
-        for id in lensParkedMembers {
-            // orphan: no home layout to lift back into — stays parked (it
-            // belongs to no workspace; the cleared lens leaves it invisible).
-            guard let slot = windowMap[id], let ws = slot.workspace else { continue }
-            attachToLayout(id, workspace: ws, focused: nil, in: rect)
-        }
-        lensParkedMembers.removeAll()
+        // Drop the lens authority on a workspace switch (EX-0.4). A lens is a
+        // pure VIEW — nothing was parked, so there is nothing to lift.
         activeSectionLens = nil
-        activeSectionLensLayout = nil
         activeIndex = n1Based
         previousActiveIndex = old
         // Sticky windows stay on-screen across the switch (they're
@@ -584,10 +564,10 @@ struct WorkspaceCatalog {
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
         // Park the old workspace's members AND every orphan (workspace == nil):
-        // an orphan shown in the just-cleared lens union belongs to no
-        // workspace, so it must leave the screen on a switch. An orphan that
-        // was already parked no-ops (`shouldParkAnchor` gates on `anchorParked`),
-        // so listing it unconditionally is safe + idempotent.
+        // an orphan belongs to no workspace, so it must leave the screen on a
+        // switch. An orphan that was already parked no-ops (`shouldParkAnchor`
+        // gates on `anchorParked`), so listing it unconditionally is safe +
+        // idempotent.
         let toPark = windowMap
             .filter { ($0.value.workspace == old || $0.value.workspace == nil)
                 && isParkEligible($0.key) }
@@ -851,7 +831,7 @@ struct WorkspaceCatalog {
     /// accessors — the SINGLE construction site shared by `snapshot` (per-WS,
     /// layout-contextual) and `orphanWindows` (no WS, no layout) so the two
     /// can't drift on the NON-contextual fields (tags / mark / float / sticky /
-    /// scratchpad / isLensParked / focus / onscreen). The CONTEXTUAL fields —
+    /// scratchpad / focus / onscreen). The CONTEXTUAL fields —
     /// `frame` (the per-WS would-be tile slot) and `isMaster` (first in the WS
     /// tiling order) — are computed by the caller and passed in; an orphan, in
     /// no workspace, passes the raw live frame + `isMaster: false`.
@@ -875,29 +855,21 @@ struct WorkspaceCatalog {
                scratchpad: scratchpad(forWindow: w.id),
                tags: populateTags
                    ? (windowMap[w.id]?.tags.sorted() ?? [])
-                   : [],
-               // Section-lens park (EX-1 cross-WS model): authoritative from
-               // the catalog — `lensParkedMembers` spans ALL workspaces on the
-               // current mac desktop, so an inactive-WS out-of-lens window
-               // correctly reads `true` here. Views dim + badge it; no
-               // view-side recompute.
-               isLensParked: lensParkedMembers.contains(w.id))
+                   : [])
     }
 
     /// EX-3 迷子: the managed windows assigned to NO workspace
     /// (`WindowSlot.workspace == nil`), projected as `Window`s for the views'
     /// LENS sections. `snapshot` buckets these under its `-1` sentinel and
     /// drops them (they belong to no `Workspace`), so without this they render
-    /// in no tree/grid/rail section even though the activation path
-    /// (`sectionLensVisibleIDsAll`) gathers them on-screen — the host-verify
-    /// GAP. `Controller.apply` feeds the result to
+    /// in no tree/grid/rail section even though a content lens may `match` them.
+    /// `Controller.apply` feeds the result to
     /// `FilterProjection.project(…, orphans:)`, which appends them into the
     /// `not workspace` receptacle (and any content lens they match) WITHOUT
     /// touching workspace sections.
     ///
     /// Stashed windows are excluded (via `trackedWindows`). Frame = the raw
-    /// live bounds (an orphan has no WS layout — a parked sliver when not
-    /// gathered, real bounds when a 迷子 lens is active); `isMaster: false`.
+    /// live bounds (an orphan has no WS layout); `isMaster: false`.
     /// Built through the SAME `makeWindow` helper as `snapshot`, so the two
     /// can't drift. `trackedWindows` guarantees a `windowMap` entry, so
     /// `workspace == nil` identifies a true orphan (never an unmanaged window).

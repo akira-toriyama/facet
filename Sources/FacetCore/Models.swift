@@ -115,22 +115,6 @@ public struct Window: Sendable {
     /// window's row. Session-only, per-mac-desktop; empty until the window is
     /// tagged. (Stored as `Set<String>` in the adapter; sorted at the seam.)
     public let tags: [String]
-    /// Whether this window is parked OUT of the active section-lens
-    /// (tag-unification EX-1 cross-workspace model). When a `type="lens"`
-    /// `[[desktop.N.section]]` is active, every window across ALL workspaces
-    /// of the current mac desktop that falls outside the lens `match` is really
-    /// hidden (anchor-parked to the sliver + detached from the layout) — the
-    /// section-model twin of a Cmd+H hide. Any window on any workspace on the
-    /// current mac desktop may be `true`: the lens gathers a cross-workspace
-    /// union, so an inactive workspace's preview IS narrowed by the active lens
-    /// (its out-of-lens windows read `true` here). The adapter sets this from
-    /// the catalog's `lensParkedMembers`, which spans all workspaces; it is
-    /// authoritative (no view-side match recompute). Views surface it like a
-    /// hide — the tree dims the row + draws a `lens` badge, and grid / rail
-    /// drop the thumbnail. A window is never both `isLensParked` and
-    /// Cmd+H-hidden (the park path skips already-hidden members), so the two
-    /// treatments don't collide.
-    public let isLensParked: Bool
 
     public init(id: WindowID,
                 pid: Int,
@@ -145,8 +129,7 @@ public struct Window: Sendable {
                 mark: String? = nil,
                 isSticky: Bool = false,
                 scratchpad: String? = nil,
-                tags: [String] = [],
-                isLensParked: Bool = false) {
+                tags: [String] = []) {
         self.id = id
         self.pid = pid
         self.appName = appName
@@ -161,21 +144,20 @@ public struct Window: Sendable {
         self.isSticky = isSticky
         self.scratchpad = scratchpad
         self.tags = tags
-        self.isLensParked = isLensParked
     }
 
     /// EX-3: a copy with `tags` overlaid. A live CGWindow-derived `Window`
     /// carries no tags (the bitmask lives in the adapter's catalog); the
-    /// gather / park path overlays the catalog tag NAMES here so a `tag~=X`
+    /// lens match path overlays the catalog tag NAMES here so a `tag~=X`
     /// lens `match` resolves there exactly as the snapshot already overlays
-    /// tags for the tree DISPLAY — display and hide can't drift on a
+    /// tags for the tree DISPLAY — display and match can't drift on a
     /// tag-based lens.
     public func withTags(_ tags: [String]) -> Window {
         Window(id: id, pid: pid, appName: appName, title: title,
                isFocused: isFocused, isFloating: isFloating, frame: frame,
                isOnscreen: isOnscreen, isMaster: isMaster, bundleId: bundleId,
                mark: mark, isSticky: isSticky, scratchpad: scratchpad,
-               tags: tags, isLensParked: isLensParked)
+               tags: tags)
     }
 }
 
