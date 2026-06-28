@@ -173,7 +173,7 @@ final class OrphanWorkspaceTests: XCTestCase {
         XCTAssertFalse(shown.contains(wid(10)), "orphan is invisible in the snapshot")
     }
 
-    // MARK: - EX-3.2: lens-clear / switch park on-screen orphans
+    // MARK: - EX-3.2: a workspace switch parks on-screen orphans
 
     func testSwitchWorkspaceParksOnScreenOrphan() {
         var c = seededCatalog(3)                    // active = WS1
@@ -184,22 +184,17 @@ final class OrphanWorkspaceTests: XCTestCase {
         XCTAssertTrue(plan.toPark.contains { $0.id == wid(99) },
                       "a switch parks every orphan (it belongs to no workspace)")
     }
-
-    func testClearSectionLensParksOnScreenOrphan() {
-        var c = seededCatalog(3)
-        c.activeSectionLens = "X"                   // a lens is active
-        makeOrphan(&c, 99)                          // shown in the union (not parked)
-        let plan = c.clearSectionLens(in: .zero)
-        XCTAssertTrue(plan.toPark.contains { $0.id == wid(99) },
-                      "clearing a lens parks the orphans it was showing")
-    }
+    // (t-0021) The old `testClearSectionLensParksOnScreenOrphan` is retired: a
+    // lens is a pure VIEW now — it never showed orphans via a union tile, so
+    // clearing one parks nothing. `clearSectionLens` itself is gone (a lens
+    // clear is just `activeSectionLens = nil`).
 
     // MARK: - EX-3 GAP fix: orphanWindows() projects orphans for lens sections
 
     /// `orphanWindows` returns EXACTLY the managed windows in no workspace —
     /// the input the tree/grid/rail lens sections need (snapshot drops them).
-    /// Closes the host-verify GAP (orphan rendered in no section even though
-    /// the activation path gathered it on-screen).
+    /// A lens is a pure VIEW (t-0021): `FilterProjection` lists these orphans
+    /// in any matching lens section (display only — they aren't moved).
     func testOrphanWindowsReturnsOnlyOrphans() {
         var c = seededCatalog(3)
         _ = c.reconcile(live: [window(10)])        // normal → WS1
@@ -236,7 +231,7 @@ final class OrphanWorkspaceTests: XCTestCase {
 
     /// Tags ride the `populateTags` gate exactly as in `snapshot` (shared
     /// `makeWindow`): on when the section model is live (so a `tag~=X` lens
-    /// gathers the orphan), `[]` otherwise.
+    /// DISPLAYS the orphan via `FilterProjection`), `[]` otherwise.
     func testOrphanWindowsTagsGatedBySectionModel() {
         var c = seededCatalog(3)
         makeOrphan(&c, 99)

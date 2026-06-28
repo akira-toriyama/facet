@@ -258,19 +258,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // live-resize path, so no lock.
     var followAXCache: [WindowID: AXUIElement] = [:]
 
-    // (Section-lens — tag-unification Phase 1)
-    /// Compiled cache for the active section-lens's `match`, keyed by the raw
-    /// string so a config hot-reload (or a lens change) recompiles. Avoids
-    /// re-parsing the WHERE-clause on every reconcile's continuous re-park.
-    /// Touched only on `cliQueue` (the eval helpers), like the rest of the
-    /// catalog-adjacent state.
-    var sectionLensCompiled: (match: String, filter: FacetFilter)?
-
     /// Compiled `[[rule]]` adopt-rules (#282/#286 Phase 3) — `config.effectiveRules`
     /// with each `match` parsed to a `FacetFilter`, built once on first use and
     /// dropped on a config hot-reload (`updateConfig`). A rule whose `match`
     /// fails to parse is logged LOUD + dropped here (non-fatal), so a bad rule
-    /// never blocks the others. cliQueue-confined, like `sectionLensCompiled`.
+    /// never blocks the others. cliQueue-confined, like the rest of the
+    /// catalog-adjacent state.
     var compiledRulesCache: [(rule: Rule, filter: FacetFilter)]?
 
     /// Lock-guarded, main-readable mirror of the active catalog's
@@ -534,10 +527,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let target = index + 1
         let rect = activeDisplayRect()
         // EX-0.4 (exclusive model): workspace switch always clears the active
-        // section-lens — no D1 re-compose on the destination. `setActive`
-        // handles the lift (restores lens-parked windows to their home layouts,
-        // nulls activeSectionLens + activeSectionLensLayout) and returns the
-        // unconditional restore plan for the destination's own members.
+        // section-lens — no D1 re-compose on the destination. A lens is a pure
+        // VIEW (moved nothing), so `setActive` just nulls `activeSectionLens`
+        // and returns the unconditional restore plan for the destination's own
+        // members.
         guard let plan = catalog.setActive(target, in: rect) else { return }
 
         // Leave-snapshot only fires on a real transition: setActive
@@ -618,10 +611,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     func applyAutoFocus(newActiveWS: Int) {
         let wsWindows = enumerateCGWindows().filter {
             catalog.windowMap[$0.id]?.workspace == newActiveWS
-                // Section-lens (Phase 1): a window the active lens parked is
-                // off-screen — never auto-focus it. Empty set in the no-lens
-                // case, so this is a no-op there.
-                && !catalog.lensParkedMembers.contains($0.id)
         }
         guard let pick = catalog.autoFocusTarget(
                 in: newActiveWS, windows: wsWindows)
@@ -634,34 +623,34 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Focus.assert(pick, backend: self)
     }
 
-    // MARK: - Section-lens (tag-unification Phase 1)
+    // MARK: - Section-lens (pure VIEW — t-0021)
 
     /// Activate / clear the active section-lens (`type="lens"` section, by
-    /// `label`): resolve the label → the section's `match`, evaluate it across ALL
-    /// workspaces on the current mac desktop (`sectionLensVisibleIDsAll`),
-    /// park out-of-lens windows everywhere, and gather the cross-workspace
-    /// union for tiling. `nil` clears the lens (restores every parked window).
-    /// No-op outside the section model; an unknown label or malformed `match`
-    /// is a loud-but-non-fatal operational error (the lens is left unchanged,
-    /// D2). The catalog (`activeSectionLens`) is the authority; the
-    /// main-readable mirror is synced so the view's highlight reads back.
+    /// `id`). A lens is a pure VIEW: activating one resolves the id → its
+    /// section, validates the `match` parses, and records the lens as the
+    /// active section — it changes only what the tree/grid/rail DISPLAY (the
+    /// matched windows, via `FilterProjection`), and never moves a real window
+    /// (no park, no tile). The user then clicks a matched window to jump to it
+    /// (the ordinary window-focus path does the workspace switch + focus).
+    /// `nil` clears the lens. No-op outside the section model; an unknown id or
+    /// malformed `match` is a loud-but-non-fatal operational error (the lens is
+    /// left unchanged, D2). The catalog (`activeSectionLens`) is the authority;
+    /// the main-readable mirror is synced so the view's highlight reads back.
+    /// `autoFocus` is unused here (a VIEW never grabs focus); it stays for the
+    /// uniform `activateSection` contract the `.workspace` case honours.
     public func setSectionLens(_ id: String?, autoFocus: Bool) {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
               config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
         else { return }
-        let rect = activeDisplayRect()
 
-        // Clear.
+        // Clear — drop the lens authority. Nothing was parked, so there is
+        // nothing to restore or re-tile.
         guard let id else {
             guard catalog.activeSectionLens != nil else { return }
-            let plan = catalog.clearSectionLens(in: rect)
-            sectionLensCompiled = nil
+            catalog.activeSectionLens = nil
             syncSectionLensMirror()
-            Log.debug("native: setSectionLens cleared "
-                + "(restored=\(plan.toRestore.count))")
-            applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
-            applyLayout(workspace: catalog.activeIndex, rect: rect)
+            Log.debug("native: setSectionLens cleared (view-only)")
             eventContinuation.yield(.refreshNeeded)
             return
         }
@@ -681,54 +670,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             return
         }
         catalog.activeSectionLens = id
-        catalog.activeSectionLensLayout = nil   // EX-0.3: freshly-activated lens starts from config layout
-        sectionLensCompiled = nil   // recompile against the (possibly new) match
         syncSectionLensMirror()
-        let live = enumerateCGWindows()
-        // EX-0.1: evaluate cross-workspace so windows in INACTIVE workspaces
-        // that match the lens are gathered (not mis-parked). A per-WS evaluator
-        // (removed in EX-0.4) only passed windows whose home WS == activeIndex,
-        // so matching inactive-WS windows were absent from the visible set and
-        // incorrectly parked. See SectionLensGatherTests for the regression pin.
-        let visible = sectionLensVisibleIDsAll(live: live) ?? []
-        let plan = catalog.applySectionLens(visibleIDs: visible, in: rect)
-        Log.debug("native: setSectionLens \"\(id)\" "
-            + "visible=\(visible.count) parked=\(plan.toPark.count) "
-            + "restored=\(plan.toRestore.count)")
-        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
-        applyLayout(workspace: catalog.activeIndex, rect: rect)
-        if autoFocus { applySectionLensAutoFocus(visibleIDs: visible) }
+        Log.debug("native: setSectionLens \"\(id)\" (view-only)")
         eventContinuation.yield(.refreshNeeded)
-    }
-
-    /// Auto-focus after a section-lens change. Keep the current focus when its
-    /// window stays visible (passes the lens, or is sticky — never parked) so
-    /// activating a lens that still shows the focused window doesn't yank
-    /// focus; otherwise focus the first in-lens window, or defocus to Finder
-    /// when the lens selects nothing (D2: an empty workspace is allowed).
-    /// Internal so the continuous re-park can reuse it. `visibleIDs` is the
-    /// cross-workspace in-lens id set; the focus pick may target a window whose
-    /// home workspace is inactive — intended, because the union has already been
-    /// tiled on-screen before focus fires.
-    func applySectionLensAutoFocus(visibleIDs: Set<WindowID>) {
-        if let cur = focusedWindow(), let slot = catalog.windowMap[cur],
-           slot.workspace == catalog.activeIndex {
-            let staysVisible = visibleIDs.contains(cur)
-                || catalog.everywhereWindows.contains(cur)
-            if staysVisible { return }
-        }
-        let live = enumerateCGWindows()
-        guard let pick = live.first(where: {
-            visibleIDs.contains($0.id)
-                && !catalog.floatingWindows.contains($0.id)
-        }) ?? live.first(where: { visibleIDs.contains($0.id) })
-        else {
-            activateFinder()
-            return
-        }
-        Log.debug("native: section-lens autoFocus pick=\(pick.id.serverID) "
-            + "app=\(pick.appName)")
-        Focus.assert(pick, backend: self)
     }
 
     /// 2-b defocus: when the destination WS is empty, push the
@@ -781,9 +725,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     /// EX-3: relocate `id` OUT of its workspace → 迷子 (mirrors `moveWindow`'s
     /// outcome handling). A section DnD's ws→lens MOVE routes here (instead of
-    /// `moveWindow`) so the window leaves its workspace. If a lens that matches
-    /// the window is active, the trailing reconcile (`applySectionLensReconcile`)
-    /// re-shows it in the union; otherwise it stays parked (invisible 迷子). The
+    /// `moveWindow`) so the window leaves its workspace. A lens is a pure VIEW
+    /// (t-0021): the orphan stays where it is on screen; if a lens matches it,
+    /// `FilterProjection` lists it in that lens section (display only). The
     /// loud `Log.line` makes the orphaning visible (canon ⑧ invisible-but-logged).
     public func orphanWindow(_ id: WindowID) {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6

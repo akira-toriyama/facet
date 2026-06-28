@@ -136,49 +136,13 @@ public enum ViewContextMenu {
                 filterable: filterable, entries: entries)
     }
 
-    /// Layout-engine picker for a `type="lens"` section header — the lens
-    /// analog of `showLayout`. A lens union-tiles a CROSS-WORKSPACE set, which
-    /// only a STATELESS engine can represent (the stateful bsp / stack thread a
-    /// per-workspace tree and are rejected by the backend), so this offers a
-    /// strictly SMALLER set than the workspace picker: `layoutModes` filtered by
-    /// `LensLayout.isStateless`. Picking calls `onPick(mode)` — the view routes
-    /// it to the Controller, which activates the lens (if not already active) so
-    /// the backend's `setLayoutMode` lens branch targets THIS lens's union, then
-    /// sets the union layout. `current` marks the ✓ row when known (nil = no
-    /// checkmark; the active lens's live layout isn't threaded to the view yet).
-    public static func showLensLayout(
-        at scr: NSPoint,
-        backend: any WindowBackend,
-        lensLabel: String,
-        current: String? = nil,
-        palette: ResolvedPalette,
-        filterable: Bool = false,
-        onRename: (() -> Void)? = nil,
-        onPick: @escaping (_ mode: String) -> Void
-    ) {
-        let modes = backend.layoutModes.filter { LensLayout.isStateless($0) }
-        // §E: SECTION ▸ Rename above LAYOUT ▸ … (確定事項 #1), same shape as
-        // the workspace picker.
-        var entries: [Entry] = []
-        if let onRename {
-            entries.append(Entry(label: "Rename", icon: "SF:pencil",
-                                 section: "Section", run: onRename))
-        }
-        entries += modes.map { mode in
-            Entry(label: mode, icon: layoutModeIcon(mode),
-                  section: "Layout", checked: mode == current) {
-                onPick(mode)
-            }
-        }
-        present(at: scr, header: lensLabel, palette: palette,
-                filterable: filterable, entries: entries)
-    }
-
-    /// §G unassigned-section header menu — the orphan receptacle has no layout
-    /// engine (no source workspace), so unlike `showLayout` / `showLensLayout`
-    /// it offers ONLY `SECTION ▸ Rename` (the same row both pickers put above
-    /// their LAYOUT group). `header` is the §D `index (label)` caption.
-    public static func showUnassignedMenu(
+    /// Rename-only header menu for a `type="lens"` OR `type="unassigned"`
+    /// section. A lens is a pure VIEW (t-0021) — it tiles nothing, so it has no
+    /// layout to pick; the orphan receptacle never had one either. Both headers
+    /// therefore offer ONLY `SECTION ▸ Rename` (the same row the workspace
+    /// `showLayout` puts above its LAYOUT group). `header` is the §D
+    /// `index (label)` caption.
+    public static func showSectionRenameMenu(
         at scr: NSPoint,
         header: String,
         palette: ResolvedPalette,

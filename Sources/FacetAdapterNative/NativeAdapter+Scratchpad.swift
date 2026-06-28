@@ -512,19 +512,8 @@ extension NativeAdapter {
     /// funnels through here.
     func applyLayout(workspace n1Based: Int, rect: CGRect,
                              skip: Set<WindowID> = [], cached: Bool = false) {
-        // EX-0.2 section-lens union branch: when a `type="lens"` section is
-        // active, tile the CROSS-WORKSPACE union of in-lens windows with the
-        // lens's stateless engine instead of the active workspace's per-WS
-        // layout. `n1Based` is ignored — the union spans all workspaces.
-        if catalog.activeSectionLens != nil {
-            // EX-0.3: resolvedLensLayout honours the runtime override (activeSectionLensLayout)
-            // so --layout retargeting reaches the union here (not silently the WS layout).
-            applyFrames(catalog.sectionLensUnionFrames(layout: resolvedLensLayout(),
-                                                       in: rect),
-                        label: "section-lens-union", rect: rect, skip: skip,
-                        cached: cached)
-            return
-        }
+        // A lens is a pure VIEW (t-0021): it never tiles real windows, so even
+        // with a lens active the active workspace tiles normally here.
         let mode = catalog.mode(of: n1Based)
         switch mode {
         case StatefulMode.bsp:   applyTile(workspace: n1Based, rect: rect, skip: skip,

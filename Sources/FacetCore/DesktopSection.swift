@@ -2,8 +2,8 @@
 // drive the pivot's filter-projected views (the section/lens model). This
 // file owns the types + the TOML decode; the parsed sections are consumed
 // in production via `effectiveMacDesktopSectionConfigs` — `FilterProjection`
-// (tree), the adapter's section-lens park (grid/rail drop the parked windows
-// via `Window.isLensParked`), `ApplyResolver` (DnD apply/un-apply), and
+// (the single display path for tree/grid/rail: a lens section lists its
+// matched windows), `ApplyResolver` (DnD apply/un-apply), and
 // `effectiveWorkspaceList` (workspace count + layout). Shipped #296–#301; gated
 // per-desktop by `isSectionModelActive`.
 //
@@ -22,13 +22,12 @@
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
 //     optional `apply` (the inverse, for drops). Activated at runtime with
-//     `facet lens NAME` (tag-unification EX-1 cross-workspace model): the
-//     backend anchor-parks every non-matching window in EVERY workspace on the
-//     current mac desktop (a real hide), gathers the cross-workspace union of
-//     matching windows, and union-tiles them; `facet lens --clear` lifts it.
-//     The grid/rail cell count stays INVARIANT (a lens narrows what's shown
-//     inside each workspace cell by dropping its `Window.isLensParked`
-//     thumbnails, never re-bundles or drops a cell).
+//     `facet lens NAME`. A lens is a pure VIEW (t-0021): activating one only
+//     changes what the tree/grid/rail DISPLAY — `FilterProjection` lists its
+//     matched windows, aggregated across all workspaces on the current mac
+//     desktop — and NEVER moves a real window. The user clicks a matched
+//     window to jump to it (the ordinary window-focus path switches workspace
+//     + focuses); `facet lens --clear` drops the view.
 //     `match` is stored VERBATIM and compiled by the consumer, so a malformed
 //     expression is rejected loud + non-fatal at projection time, never at
 //     config load (parse-only stays total).
@@ -141,9 +140,10 @@ public struct DesktopSection: Sendable, Equatable {
     public let match: String
     /// Facets to set on a window routed into this section. `[]` = drop-inert.
     public let apply: [ApplyOp]
-    /// Per-section layout seed. Set for `workspace` and `lens`; `nil` for
-    /// `unassigned`. Consumed differently: workspace drives stateful tiling;
-    /// lens drives union stateless tiling (see `LensLayout.resolve`).
+    /// Per-section layout seed — meaningful only for `workspace` (drives its
+    /// stateful tiling engine). A lens is a pure VIEW (t-0021) and tiles
+    /// nothing, so a `layout` on a `lens` / `unassigned` section is parsed but
+    /// IGNORED (harmless dead data, per the clamp-don't-reject config rule).
     public let layout: String?
 
     public init(type: SectionType, label: String = "", match: String = "",

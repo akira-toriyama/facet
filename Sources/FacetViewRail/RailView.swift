@@ -569,8 +569,7 @@ public final class RailView: NSView {
     private func scaledWins(_ windows: [Window], _ cell: NSRect,
                             _ screen: CGRect) -> [MiniWindowHit] {
         var out: [MiniWindowHit] = []
-        for win in windows
-        where !win.isLensParked {   // drop out-of-lens parked windows
+        for win in windows {
             guard let f = win.frame else { continue }
             let r = scaledWindowRect(windowFrame: f,
                                      screenFrame: screen,

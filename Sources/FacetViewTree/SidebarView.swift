@@ -46,7 +46,6 @@ public final class SidebarView: NSView {
         let isSticky: Bool     // window: shows a slanted "sticky" badge
         let mark: String?      // window: user mark → right-edge badge
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
-        let isLensParked: Bool // window: parked OUT of the active lens → dim + lens badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
         let tags: [String]       // window: tag names → `#tag` chips (per-window, sorted)
         /// header (section model, PR5 / §G): which section kind this header
@@ -60,13 +59,12 @@ public final class SidebarView: NSView {
              app: String, title: String, text: String, mode: String,
              isMaster: Bool, isFloating: Bool, isSticky: Bool, mark: String?,
              isHidden: Bool, scratchpad: String?, tags: [String],
-             isLensParked: Bool = false, sectionType: SectionType = .workspace) {
+             sectionType: SectionType = .workspace) {
             self.row = row; self.kind = kind; self.hot = hot
             self.firstHeader = firstHeader; self.pid = pid; self.app = app
             self.title = title; self.text = text; self.mode = mode
             self.isMaster = isMaster; self.isFloating = isFloating
             self.isSticky = isSticky; self.mark = mark; self.isHidden = isHidden
-            self.isLensParked = isLensParked
             self.scratchpad = scratchpad; self.tags = tags
             self.sectionType = sectionType
         }
@@ -480,9 +478,9 @@ public final class SidebarView: NSView {
                            title wt: String, hot: Bool) -> CGFloat {
         let hasLabel = win.isMaster || win.isFloating
         // Third line under the title: mark pill (left) + master / float /
-        // hidden / lens / scratchpad / tag-chip badges — present when any holds.
+        // hidden / scratchpad / tag-chip badges — present when any holds.
         let hasThird = hasLabel || (win.mark != nil)
-            || !win.isOnscreen || win.isLensParked || (win.scratchpad != nil)
+            || !win.isOnscreen || (win.scratchpad != nil)
             || !win.tags.isEmpty
         var rh: CGFloat = windowRowH       // compact single line
         if !wt.isEmpty || hasThird {
@@ -500,7 +498,7 @@ public final class SidebarView: NSView {
                           isMaster: win.isMaster, isFloating: win.isFloating,
                           isSticky: win.isSticky, mark: win.mark,
                           isHidden: !win.isOnscreen, scratchpad: win.scratchpad,
-                          tags: win.tags, isLensParked: win.isLensParked))
+                          tags: win.tags))
         return y + rh
     }
 
@@ -595,7 +593,7 @@ public final class SidebarView: NSView {
                     + "\(active ? "*" : "")\(layout)|"
                     + sec.windows.map {
                         "\($0.id.serverID)\((hot($0) && headerActive(sec)) ? "f" : "")"
-                        + "\($0.isOnscreen ? "" : "h")\($0.isLensParked ? "p" : "")"
+                        + "\($0.isOnscreen ? "" : "h")"
                         + ":\(eff($0))"
                     }.joined(separator: ",")
             }.joined(separator: ";")

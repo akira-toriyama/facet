@@ -579,12 +579,14 @@ action = "ignore"
 # lens sections appear as their own cells (a rail carousel cell), and clicking
 # one activates that lens (same as `facet lens NAME`); the active section is the
 # single lit highlight in every view (on the rail it is also the centre hero —
-# an active lens renders its cross-workspace union there). Activating a lens
-# section (`facet lens NAME`) anchor-parks
-# every non-matching window in EVERY workspace (cross-workspace exclusive — a
-# real hide) and union-tiles the matches with that lens's `layout`; switching
-# to any workspace clears the lens automatically; `--clear` lifts it and
-# restores all parked windows. Tree drag-and-drop applies / un-applies a lens's
+# an active lens renders its matched windows there). Activating a lens
+# section (`facet lens NAME`) is a PURE VIEW change: it ONLY changes what
+# tree/grid/rail DISPLAY — they list the lens's matched windows, aggregated
+# across ALL workspaces on the current mac desktop. A lens NEVER moves a real
+# OS window (no park, no tiling, no real hide) — the real desktop is unchanged;
+# you CLICK a matched window to jump to it (workspace switch + focus).
+# Switching to any workspace clears the active lens automatically; `--clear`
+# drops the view. Tree drag-and-drop applies / un-applies a lens's
 # `apply` ops. The section model is facet's canonical configuration.
 #
 # OPT-IN: as soon as ANY [[desktop.N.section]] exists, facet manages ONLY
@@ -617,27 +619,27 @@ action = "ignore"
 #         label = "Dev"     # optional; omit → unnamed (shown by its index)
 #         layout = "bsp"
 #
-#   type = "lens"  — a saved visibility filter (an SQL VIEW), orthogonal
-#       to workspaces; a window shows in EVERY lens whose `match` it
-#       satisfies (multi-match). Activating one with `facet lens NAME`
-#       anchor-parks every non-matching window across ALL workspaces
-#       (cross-workspace exclusive hide) and union-tiles the matching set
-#       using this lens's `layout`; switching to any workspace clears the
-#       lens automatically; `facet lens --clear` lifts it and restores all
-#       parked windows. Keys:
+#   type = "lens"  — a saved visibility filter / VIEW (an SQL VIEW),
+#       orthogonal to workspaces; a window shows in EVERY lens whose `match`
+#       it satisfies (multi-match). Activating one with `facet lens NAME` is a
+#       PURE VIEW change: it ONLY changes what tree/grid/rail DISPLAY, listing
+#       the matched windows aggregated across ALL workspaces on the current
+#       mac desktop. A lens NEVER moves a real OS window (no park, no tiling,
+#       no real hide) — the real desktop is unchanged; you CLICK a matched
+#       window to jump to it (workspace switch + focus). Switching to any
+#       workspace clears the lens automatically; `facet lens --clear` drops
+#       the view. Keys:
 #         label  — the lens's header in the view (optional; non-empty
 #                  labels must be unique on the desktop).
 #         match  — a facet filter WHERE-clause (required; the same mini-
 #                  language as `facet query --windows --filter`), e.g.
 #                    'tag~=web or app=Safari'
 #                    '(tag~=work or tag~=urgent) and not floating'
-#         layout — (optional) the stateless tiling engine for the
-#                  cross-workspace union while this lens is active:
-#                  spiral (default) / master-left / master-right /
-#                  master-top / master-bottom / master-center / grid /
-#                  float. bsp and stack need per-workspace state a union
-#                  can't keep → silently clamped to the global [layout]
-#                  default. Omit → uses the [layout] default.
+#         layout — IGNORED on a lens. A lens tiles nothing (it's a display-
+#                  only view — there is no lens layout); `layout` is
+#                  meaningful only on `type = "workspace"` sections, where it
+#                  seeds the tiling engine. Per the clamp-don't-reject rule an
+#                  authored `layout` here is harmless dead data.
 #         apply  — (optional) facets SET on a window dropped into the lens,
 #                  so the drop "sticks". Inline table; all keys optional:
 #                    workspace = "Dev"   move to that workspace (auto-replace)
@@ -687,8 +689,8 @@ action = "ignore"
 # Edit to taste, add `[[desktop.4.section]]` blocks for more desktops, or
 # comment this whole sample out to fall back to the zero-config default
 # (every mac desktop gets 5 unnamed workspaces). Activate a lens at runtime
-# with `facet lens "Web"` (it parks the non-Web windows); clear it with
-# `facet lens --clear`.
+# with `facet lens "Web"` (it shows only the Web windows in the views — it
+# parks nothing); clear it with `facet lens --clear`.
 
 # Recommended!! — the Orphans (orphan) receptacle. A window dragged onto a lens leaves
 # its workspace; with no matching lens active it would be invisible. This

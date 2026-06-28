@@ -471,14 +471,12 @@ public final class GridView: NSView {
             // Pre-compute window thumb rects in cell-local view
             // coords so hit-testing and drawing agree byte-for-byte. A lens
             // cell lays out its member windows by real frame (declared
-            // cosmetic — they may overlap when the lens is inactive). The
-            // isLensParked filter is a no-op for a lens cell's members (they
-            // match → never parked) and still drops parked windows from a
-            // workspace cell under an active lens.
+            // cosmetic — they may overlap when the lens is inactive). A lens is
+            // a pure VIEW (t-0021): nothing is parked, so every window the
+            // section carries is shown.
             var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
-                for win in src.windows
-                where !win.isLensParked {   // drop out-of-lens parked windows
+                for win in src.windows {
                     guard let f = win.frame else { continue }
                     let wr = gridScaledWindowRect(
                         windowFrame: f,
@@ -1171,20 +1169,13 @@ public final class GridView: NSView {
 
     /// The window ids of workspace `wsIndex` to TRADE in a whole-workspace
     /// swap. A swap is a STRUCTURAL op — it trades the workspaces' full
-    /// contents — so when the cell hides some of its windows (the active WS
-    /// under a lens drops its out-of-lens parked windows, `isLensParked`),
-    /// source from the UNFILTERED `workspaces` so the lens-parked windows
-    /// still move (matching the rail, RailView.mouseDragged / kbLiftWorkspace).
-    /// No lens-parked windows → the (frozen) cell's windows, byte-identical to
-    /// the non-lens path (keeps the existing frame-cull; never widens to
-    /// frameless windows for non-lens users).
+    /// contents. The (frozen) cell's frame-culled windows are the trade set,
+    /// byte-identical to the long-standing non-lens path. (A lens is a pure
+    /// VIEW since t-0021 — it parks nothing — so the cell already shows every
+    /// window the workspace owns; no unfiltered-source special case is needed.)
     private func swapWindowIDs(forWS wsIndex: Int,
                                cellWindows: [MiniWindowHit]) -> [WindowID] {
-        if let full = workspaces.first(where: { $0.index == wsIndex })?.windows,
-           full.contains(where: \.isLensParked) {
-            return full.map(\.id)
-        }
-        return cellWindows.map(\.id)
+        cellWindows.map(\.id)
     }
 
     private func commitContentSwap(sourceWS: Int, dstCell: OverviewCell) {

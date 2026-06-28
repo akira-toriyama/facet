@@ -148,9 +148,9 @@ final class SectionDecodeTests: XCTestCase {
                        ["tag~=nolabel", "tag~=emptylabel", "tag~=good"])
     }
 
-    /// A lens section may carry an optional `layout` seed (EX-1a). The value
-    /// is stored verbatim here; `LensLayout.resolve` clamps it to a stateless
-    /// engine at activation time (the runtime ignores it until EX-1b).
+    /// A lens section may carry an optional `layout` seed. The value is parsed
+    /// + stored verbatim here; a lens is a pure VIEW (t-0021), so the runtime
+    /// IGNORES `layout` on a lens (parsed for total-parse robustness, not used).
     func testLensSectionDecodesLayout() {
         let row: [String: TOMLValue] = [
             "type": .string("lens"),
@@ -164,9 +164,9 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(section?.layout, "spiral")
     }
 
-    /// A forbidden (stateful) layout value such as "bsp" must be stored
-    /// VERBATIM at parse time — the clamp to a stateless engine is deferred
-    /// to `LensLayout.resolve` at activation, not at decode.
+    /// Any `layout` value is stored VERBATIM at parse time (parse stays total —
+    /// it never rejects). On a lens the value is simply ignored at runtime
+    /// (t-0021 pure VIEW); on a workspace it seeds the tiling engine.
     func testLensSectionStoresForbiddenLayoutVerbatim() {
         let row: [String: TOMLValue] = [
             "type": .string("lens"),
@@ -180,7 +180,7 @@ final class SectionDecodeTests: XCTestCase {
 
     /// An empty-string `layout` must be treated as absent (the isEmpty guard)
     /// and stored as nil, so callers see "no layout authored" rather than the
-    /// empty string leaking through to `LensLayout.resolve`.
+    /// empty string leaking through to a layout consumer.
     func testLensSectionEmptyLayoutIsNil() {
         let row: [String: TOMLValue] = [
             "type": .string("lens"),

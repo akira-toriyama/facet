@@ -135,7 +135,7 @@ is the index. **Do not relitigate** without explicit grill round.
   `WindowSlot.workspace` is `Int?` — a window can belong to NO workspace
   (`workspace = 0 or 1`); dragging it onto a lens relocates it out of its
   workspace (`orphanWindow`), and an orphan (迷子) is invisible-but-logged
-  until a `type = "lens"` receptacle (`match = 'not workspace'`) gathers it —
+  until a `type = "lens"` receptacle (`match = 'not workspace'`) DISPLAYS it —
   or, more simply, an opt-in `type = "unassigned"` section (§G) rescues every
   leftover window (in no other section). Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
@@ -548,39 +548,45 @@ non-inert plan's ops on `cliQueue`.
 ### Where it is consumed
 
 The tree (`SidebarView.update(sections:)`) renders `[ProjectedSection]`
-directly. The active section-lens is a REAL hide and **cross-workspace
-exclusive** (EX-0): the catalog anchor-parks the out-of-lens windows across
-ALL workspaces (not just the active one) and the snapshot flags each
-`Window.isLensParked`, so the tree dims + `lens`-badges those rows while
-grid / rail drop their thumbnails — one catalog authority, no view-side
-`match` recompute. The read-path is the sole window-grouping model: a mac
-desktop with `[[desktop.N.section]]` blocks renders them, and a desktop
-with none degrades 1:1 to the built-in by-workspace tree.
+directly. The active section-lens is a **display-only filter** (a pure VIEW,
+t-0021) — it never moves a real OS window (no anchor-park, no "real hide").
+Activating a lens (`facet lens NAME`) only changes what the views DISPLAY:
+`FilterProjection` lists the lens's matched windows aggregated across ALL
+workspaces on the current mac desktop, and the tree / grid / rail show just
+those rows / thumbnails — one projection authority, no view-side `match`
+recompute. The user clicks a matched window to jump to it (workspace switch
++ focus); `facet lens --clear` drops the view. The read-path is the sole
+window-grouping model: a mac desktop with `[[desktop.N.section]]` blocks
+renders them, and a desktop with none degrades 1:1 to the built-in
+by-workspace tree.
 
-### Two tiling machineries, one active section
+### One tiling machinery, one active section
 
 There is always **exactly one** [active section](glossary.md#active-section)
-— `activeSection := activeLens (type=lens) XOR activeWorkspace`. Which kind is
-active selects which tiling machinery runs over the windows:
+— `activeSection := activeLens (type=lens) XOR activeWorkspace`. There is now
+ONE real-window tiling machinery — the per-workspace one; a lens is a
+display-only filter over live windows (t-0021), so it never tiles or moves a
+real OS window:
 
 | | `type=workspace` | `type=lens` |
 |---|---|---|
-| Frames | stateful `applyLayout` on `activeIndex` | stateless `sectionLensUnionFrames(layout:in:)` |
-| Member set | per-WS members (the active workspace's own windows) | cross-WS `sectionLensUnionMembers()` (every matching window in any workspace) |
-| Layout source | per-WS `layoutMode` (stateful — bsp/stack carry tree/order state) | the lens `layout` key (stateless engines only; `bsp` / `stack` clamp to the global `[layout]` default) |
+| Frames | stateful `applyLayout` on `activeIndex` (real-window tiling) | none — display-only (no real-window move) |
+| Member set | per-WS members (the active workspace's own windows) | the matched windows aggregated across every workspace on the current mac desktop (display set) |
+| Effect | tiles + moves the OS windows | only changes what tree / grid / rail show |
 
-`ActiveSection` selects the machinery (`activeSectionLens != nil` → the lens
-union machinery; else the workspace machinery). The catalog enforces the XOR
-structurally — every workspace switch nulls the active lens, so the two
-machineries are never live at once.
+A `type=workspace` active section runs the per-workspace tiling machinery; an
+active lens runs no tiling at all — it just narrows the displayed set. The
+catalog still enforces the XOR structurally — every workspace switch nulls the
+active lens, so the active section is always a single, unambiguous selection.
 
 All **three views render this one ordered section list** (`FilterProjection.project`
 → `[ProjectedSection]`): the tree's section headers, the grid's cells, and the
 rail's carousel cells (with the active/selected section as the centre **hero** —
-an active lens renders its union there). Each lights **exactly one** section, the
-active one — **3-view unified highlight**, completed across tree (EX-1), grid
-(EX-2a), and rail (EX-2b). `OverviewCell.isActive` bakes the single-highlight XOR
-at cell-build time, so the accent draw is identical across surfaces; cell/window
+an active lens renders its aggregated display set there). Each lights **exactly
+one** section, the active one — **3-view unified highlight**, completed across
+tree (EX-1), grid (EX-2a), and rail (EX-2b). `OverviewCell.isActive` bakes the
+single-highlight XOR at cell-build time, so the accent draw is identical across
+surfaces — note the lens lights its section for DISPLAY, not tiling; cell/window
 picks funnel through `WindowBackend.activateSection` (the same throughline the CLI
 + tree use). Lens cells are browsable but never drag/swap targets (no source
 workspace).

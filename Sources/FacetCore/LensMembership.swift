@@ -1,12 +1,8 @@
 // `LensMembership` — the single source of truth for "does this window satisfy
-// a lens `match`?". ONE predicate, shared by the tree display read-path
-// (`FilterProjection`) and — from the tag-unification Phase 1 real-hide work
-// (PR-2) — the anchor-park path that physically hides the windows a lens
-// EXCLUDES within the current workspace. Routing every "is this window in the
-// lens?" decision through here guarantees the tree and the physical park can
-// never disagree about a lens's membership (display and hide stay in lock-step
-// by construction; grid/rail then drop the parked windows via the snapshot's
-// `Window.isLensParked` flag, so they ride the same park verdict too).
+// a lens `match`?". ONE predicate, consumed by `FilterProjection` to build the
+// display for tree/grid/rail alike. A lens is a pure VIEW (t-0021): it never
+// moves a real window, so this membership decision feeds DISPLAY only — there
+// is no separate park/hide path that could disagree with the tree.
 //
 // A lens `match` is a `facet filter` WHERE-clause (`FacetFilter`) evaluated
 // against each window with its workspace NAME overlaid: a bare `Window`

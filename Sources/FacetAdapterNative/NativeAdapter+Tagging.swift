@@ -124,12 +124,11 @@ extension NativeAdapter {
     }
 
     /// Settle a single-window tag change. The tag set changed; re-tile +
-    /// request a refresh. If a section lens is active, the refresh-driven
-    /// `applySectionLensReconcile` re-parks/restores by the new tags (D3
-    /// continuous re-park) — visibility is owned by the section model, so
-    /// there is no synchronous park/restore here. Shared by the
-    /// `window --tag/--untag/--toggle-tag` verbs (`applyWindowRetag`) and
-    /// `window --retag` (#228).
+    /// request a refresh. A lens is a pure VIEW (t-0021): if a lens matches (or
+    /// stops matching) the window by its new tags, the next refresh simply
+    /// re-projects the display (`FilterProjection`) — no park/restore. Shared
+    /// by the `window --tag/--untag/--toggle-tag` verbs (`applyWindowRetag`)
+    /// and `window --retag` (#228).
     private func settleWindowRetag(_ id: WindowID, logDetail: String) {
         applyLayout(workspace: catalog.activeIndex, rect: activeDisplayRect())
         Log.debug("native: \(logDetail)")

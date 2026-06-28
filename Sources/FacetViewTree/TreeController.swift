@@ -53,17 +53,6 @@ public protocol TreeController: AnyObject, Sendable {
     /// know about AX or the backend's post-switch default-focus race.
     func focusWindow(_ window: Window, postSwitch: Bool)
 
-    /// Tag-unification Phase 1 (PR4): the user clicked an out-of-lens
-    /// (parked, dimmed `lens`-badged) window row. Drop the active
-    /// section-lens — restoring EVERY parked window into its layout — then
-    /// focus `window`. Called ONLY for a parked window on the ACTIVE workspace
-    /// (no switch needed); EX-0's cross-workspace lens means a parked row can
-    /// live in an inactive WS, but `handleClick` routes that case through
-    /// `activateSection(.workspace(…))` instead (the switch clears the lens +
-    /// makes the window visible). Reuses the `lens --clear` path; the restore
-    /// and the focus both ride the serial CLI queue, so the window is back in
-    /// its tile before focus lands.
-    func revealLensParked(_ window: Window)
 
     /// Activate a section (EX-1 throughline) — a workspace (clears any active
     /// lens) or a `type=lens` section. The header / cell click routes here
@@ -98,15 +87,6 @@ public protocol TreeController: AnyObject, Sendable {
     /// section is loud-but-non-fatal. The unified §G focus helper, shared with
     /// the grid/rail `.unassigned` picks + the CLI `--focus` path.
     func focusFirstWindow(inSectionID id: String)
-
-    /// Section/lens model (§A): the user picked a union layout from a `type=lens`
-    /// header's `m` / right-click menu. ACTIVATE the lens `sectionID`
-    /// (`ProjectedSection.id`, if it isn't already the active section) so the
-    /// backend's `setLayoutMode` lens branch targets THIS lens's cross-workspace
-    /// union, then set `mode` as the union layout (session-only, like the CLI).
-    /// `mode` is always one the view took from the stateless-only lens picker;
-    /// the backend re-clamps regardless. No-op outside the section model.
-    func setLensLayout(sectionID: String, mode: String)
 
     /// Section-model apply/un-apply MOVE (PR8): un-apply the SOURCE section's
     /// additive tags, then apply the DEST section's ops (workspace dest → move

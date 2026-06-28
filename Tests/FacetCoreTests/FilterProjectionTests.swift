@@ -369,10 +369,10 @@ final class FilterProjectionTests: XCTestCase {
     // MARK: - orphans (EX-3 迷子: in NO workspace, project into lens sections only)
 
     /// An orphan (no workspace assignment) projects into a `not workspace`
-    /// lens section — the 迷子 receptacle. Fixes the host-verify GAP where an
-    /// orphan rendered in NO tree section even though the activation path
-    /// (`sectionLensVisibleIDsAll`) DID gather it on-screen (display ↔ gather
-    /// disagreement, violating EX-2's "3 views = same section list").
+    /// lens section — the 迷子 receptacle. A lens is a pure VIEW (t-0021):
+    /// `FilterProjection` is the single path that lists an orphan in its
+    /// matching lens section, so the tree/grid/rail can't disagree (EX-2's
+    /// "3 views = same section list").
     func testOrphanProjectsIntoNotWorkspaceLens() {
         let wss = [ws(0, name: "Dev", windows: [win(1, tags: ["web"])])]
         let orphan = win(9, app: "Chrome", tags: ["web"])
