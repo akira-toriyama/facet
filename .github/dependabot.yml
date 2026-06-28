@@ -1,42 +1,6 @@
-# Dependabot config for facet.
-#
-# - github-actions: 4 workflows (build / commit-lint / release /
-#   update-tap) pin third-party actions (checkout, setup-xcode,
-#   install-action, etc) by major version. Weekly update PRs keep
-#   them honest without flooding the inbox.
-# - Swift Package Manager: facet's only SwiftPM dependency is
-#   `sill` — its own shared theming foundation (plan atelier), not a
-#   third-party lib (the "dependency policy" in the design-principles
-#   memory permits depending on our own shared lib). The `swift`
-#   block below tracks `sill` now that facet re-pins it by SemVer url
-#   (`.upToNextMinor(from: "0.5.0")`); a new sill minor surfaces as a
-#   weekly bump PR.
-#
-# Commit messages follow the gitmoji + Conventional Commits
-# convention in docs/commit-convention.md so commit-lint.yml stays
-# green on dependabot PRs.
-
 version: 2
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: ":arrow_up: chore"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "github-actions"
-  - package-ecosystem: "swift"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: ":arrow_up: chore"
-      include: "scope"
-    labels:
-      - "dependencies"
-      - "swift"
+      interval: weekly
