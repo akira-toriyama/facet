@@ -62,13 +62,11 @@ wraps it for drawing — so `FacetView` imports no OS capture backend.
 
 ## Milestones
 
-| Phase | Goal | Done when |
-|---|---|---|
-| **M1** | Repo scaffolded, multi-target Package.swift builds | `swift build` / `swift test` green |
-| **M2** | tree + grid views + CLI working (originally via rift adapter, retired at ε) | tree + grid panels render against live backend |
-| **M3** | Homebrew tap entry (under existing `akira-toriyama/homebrew-tap`) | `brew install akira-toriyama/tap/facet` works |
-| **M5** | Native adapter Phase α–ε. All five phases shipped (α/β/γ.1/γ.2/γ.3/δ/ε); v2.0.0 retired rift, native is the only backend | see below |
-| **M6–M11** | **Polish → window mgmt → WS ops → macOS 26 (tag / scrollable).** M6 brushup done; **M7 is a numbering gap**; **M8 window management is code-complete (2026-06-02)** — themes A–D incl. rail (#109), marks / sticky / scratchpad, real-window DnD + resize, cheap tiling verbs; **M9 (WS ops + view unification) shipped (#139 / #140 / #142)**; **M10 is a numbering gap (abolished 2026-06-02)**; **M11 (macOS 26 era)** folds in the tag model (M11-3, **shipped #191**) + scrolling columns (M11-4, not yet shipped) | `facet-future-roadmap` memory is canonical + "Themes A–D" below |
+Milestone / phase status (M1–M11 — what shipped when) lives in the
+**projects tracker** (`akira-toriyama/projects`, label `facet`) and the
+`facet-future-roadmap` memory (both canonical). This doc covers the
+**architecture** — layers, native-adapter phase *scopes*, frozen design
+decisions — and deliberately does not duplicate shipped-status.
 
 ## Native adapter phases
 
