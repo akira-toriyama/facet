@@ -1,0 +1,56 @@
+import XCTest
+@testable import FacetCore
+
+/// `boardTabLayout` (t-wrd2 / W2.4) — the pure left→right frame layout for the
+/// tree board tab bar. Text is measured view-side and passed in as intrinsic
+/// widths; this lays the tabs out. When they all fit at intrinsic width that is
+/// the layout (the v1 2-3 board case); on overflow every tab shrinks to a
+/// uniform width that fits (labels tail-truncate in the view) — a safe fallback
+/// while the rail-carousel ROTATE refinement is deferred (it only matters once
+/// the additive many-board feature lands). Each frame carries its 0-based board
+/// index so a click / wheel maps back to the right board. Pure; CI-only.
+final class BoardTabLayoutTests: XCTestCase {
+
+    func testEmptyWidthsReturnsNoFrames() {
+        XCTAssertEqual(boardTabLayout(widths: [], available: 300, gap: 6), [])
+    }
+
+    func testFittingTabsKeepIntrinsicWidthsLeftToRight() {
+        let f = boardTabLayout(widths: [80, 60], available: 300, gap: 6)
+        XCTAssertEqual(f, [
+            BoardTabFrame(boardIndex: 0, x: 0,  width: 80),
+            BoardTabFrame(boardIndex: 1, x: 86, width: 60),   // 80 + gap 6
+        ])
+    }
+
+    func testThreeFittingTabsAccumulateWithGaps() {
+        let f = boardTabLayout(widths: [50, 50, 50], available: 300, gap: 10)
+        XCTAssertEqual(f.map(\.x), [0, 60, 120])
+        XCTAssertEqual(f.map(\.width), [50, 50, 50])
+        XCTAssertEqual(f.map(\.boardIndex), [0, 1, 2])
+    }
+
+    /// Exactly-fits boundary (sum + gaps == available) still takes the
+    /// intrinsic path (no shrink).
+    func testExactFitUsesIntrinsic() {
+        // 147 + 147 + gap 6 = 300
+        let f = boardTabLayout(widths: [147, 147], available: 300, gap: 6)
+        XCTAssertEqual(f.map(\.width), [147, 147])
+        XCTAssertEqual(f.map(\.x), [0, 153])
+    }
+
+    /// Overflow: tabs shrink to a UNIFORM width that fits, gaps preserved, and
+    /// the run spans exactly `available`.
+    func testOverflowShrinksToUniformFit() {
+        // intrinsic 200+200 + gap 6 = 406 > 300 → uniform: (300-6)/2 = 147
+        let f = boardTabLayout(widths: [200, 200], available: 300, gap: 6)
+        XCTAssertEqual(f.map(\.width), [147, 147])
+        XCTAssertEqual(f.map(\.x), [0, 153])
+        XCTAssertEqual(f.last.map { $0.x + $0.width }, 300)   // spans available
+    }
+
+    func testSingleTabFitsAtIntrinsic() {
+        XCTAssertEqual(boardTabLayout(widths: [120], available: 300, gap: 6),
+                       [BoardTabFrame(boardIndex: 0, x: 0, width: 120)])
+    }
+}

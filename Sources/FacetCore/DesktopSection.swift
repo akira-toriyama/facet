@@ -305,4 +305,19 @@ public struct DesktopTab: Sendable, Equatable {
         self.label = label
         self.sections = sections
     }
+
+    /// The caption the tree tab bar (t-wrd2 / W2.4) shows for this board. A
+    /// named board reads its `label`; an UNNAMED one falls back to a type-
+    /// default (`Workspaces` / `Lenses`) so the tab is never blank and the
+    /// type reads at a glance. The 1-based index is CLI-addressing only
+    /// (`facet board --focus N`) and is never shown here. Display-only / pure —
+    /// identity stays on the board's position, never this caption.
+    public var displayLabel: String {
+        if !label.isEmpty { return label }
+        switch type {
+        case .workspace:  return "Workspaces"
+        case .lens:       return "Lenses"
+        case .unassigned: return "Unassigned"   // unreachable: a board is workspace/lens
+        }
+    }
 }

@@ -358,6 +358,9 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
+        panelHost.boardTabBar.onSelectBoard = { [weak self] idx in
+            self?.selectBoardFromUI(idx)
+        }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
                 self?.sidebarView.setQuery(q)
@@ -1222,6 +1225,20 @@ final class Controller: NSObject {
         } else {
             contentH = sidebarView.update(displayWss, titles: titles,
                                           macDesktop: macDesktopOrdinal)
+        }
+        // Board tab bar (W2.4): feed the tree's board switcher. Shown only with
+        // ≥2 `[[desktop.N.tab]]` boards on this mac desktop — a flat / single-
+        // board config feeds an empty label list, so PanelHost hides the band
+        // and reserves no height (byte-identical chrome). The active index is
+        // clamped, matching the projection's board clamp.
+        let boards = macDesktopOrdinal
+            .flatMap { config.effectiveMacDesktopTabConfigs[$0] } ?? []
+        if boards.count >= 2, let ord = macDesktopOrdinal {
+            panelHost.boardTabBar.boardLabels = boards.map(\.displayLabel)
+            panelHost.boardTabBar.activeBoardIndex =
+                max(0, min(boards.count - 1, selectedBoard[ord] ?? 0))
+        } else {
+            panelHost.boardTabBar.boardLabels = []
         }
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
