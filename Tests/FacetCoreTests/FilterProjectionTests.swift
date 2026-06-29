@@ -28,7 +28,7 @@ final class FilterProjectionTests: XCTestCase {
         DesktopSection(type: .lens, label: label, match: match)
     }
     private func unassigned(_ label: String) -> DesktopSection {
-        DesktopSection(type: .unassigned, label: label)
+        DesktopSection(type: .workspace, label: label, unassigned: true)
     }
 
     // MARK: - degrade (no sections → 1:1 by-workspace, byte-identical)

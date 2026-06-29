@@ -235,7 +235,7 @@ public final class RailView: NSView {
     /// twin of the grid's `CellSource` (that one is `private` to FacetViewGrid).
     private struct CellSource {
         let wsIndex: Int
-        let sectionType: SectionType
+        let sectionType: ProjectedSectionType
         let sectionID: String
         let label: String           // §D composed caption: `index (label)`
         let mode: String            // layout engine; "" for a lens

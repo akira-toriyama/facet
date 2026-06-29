@@ -659,28 +659,33 @@ action = "ignore"
 #                  into the lens tags the window and it then satisfies the match
 #                  (it stays). Omit `apply` → the lens is drop-inert (snaps back).
 #
-#   type = "unassigned"  — (§G) the lost-and-found receptacle, and the
-#       RECOMMENDED safety net: an OPT-IN section that collects every window
-#       shown in NO other section (the "leftover", computed by subtraction).
-#       `match` / `apply` are FORBIDDEN (the leftover is not a filter); just an
-#       optional `label`. Only the FIRST unassigned section renders (extras
-#       warn). It shows in tree/grid/rail like a lens cell, focuses its first
-#       window on click / `--focus`, can be runtime-renamed, and a window
-#       dragged out of it onto a workspace is RESCUED (moved there). KEEP ONE
-#       per desktop — DON'T DELETE IT: without it a stray window that lands in
-#       no section is invisible. In practice it's usually empty (every window
-#       lives in a workspace), so it just sits quietly until needed.
+#   unassigned = true  — (§G / W2.6) the lost-and-found receptacle MARKER, and
+#       the RECOMMENDED safety net. Set `unassigned = true` on a section to make
+#       it collect every window shown in NO other section (the "leftover",
+#       computed by subtraction). It is a MARKER, not a `type`: `type` stays
+#       workspace / lens and is OPTIONAL on a receptacle row (it defaults to
+#       workspace, which is projection-irrelevant for a receptacle). `match` /
+#       `apply` are FORBIDDEN (the leftover is not a filter); just an optional
+#       `label`. Only the FIRST receptacle renders (extras warn). It shows in
+#       tree/grid/rail like a lens cell, focuses its first window on click /
+#       `--focus`, can be runtime-renamed, and a window dragged out of it onto a
+#       workspace is RESCUED (moved there). KEEP ONE per desktop — DON'T DELETE
+#       IT: without it a stray window that lands in no section is invisible. In
+#       practice it's usually empty (every window lives in a workspace), so it
+#       just sits quietly until needed. (The old `type = "unassigned"` spelling
+#       is RETIRED — it now drops as an unknown type.)
 #         [[desktop.1.section]]
-#         type = "unassigned"
+#         unassigned = true
 #         label = "Lost & Found"   # optional
 #
-# `type` is REQUIRED: a section with an absent or unknown `type` is skipped
-# with a loud log (never a silent guess).
+# `type` is REQUIRED on a workspace / lens section (an absent or unknown `type`
+# is skipped with a loud log, never a silent guess); it is OPTIONAL only on an
+# `unassigned = true` receptacle.
 #
 # ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: a Lost & Found
-# receptacle (type="unassigned") + 2 unnamed (index-shown) workspaces + 3
+# receptacle (`unassigned = true`) + 2 unnamed (index-shown) workspaces + 3
 # lenses (Web / Code / Chat). Desktop 2: a NAMED "Main" workspace + an unnamed
-# one + a "Stray" lost-and-found (type="unassigned"). Desktop 3: 2 unnamed
+# one + a "Stray" lost-and-found (`unassigned = true`). Desktop 3: 2 unnamed
 # workspaces. Because these section blocks exist, facet is OPT-IN: it manages
 # desktops 1–3 and leaves every OTHER mac desktop untouched (panel hidden
 # there). Edit to taste, add `[[desktop.4.section]]` blocks for more desktops,
@@ -693,7 +698,7 @@ action = "ignore"
 # up in no section so nothing is ever invisible. Usually empty (every window
 # lives in a workspace); keep one per desktop as a safety net — DON'T DELETE.
 [[desktop.1.section]]
-type = "unassigned"
+unassigned = true
 label = "Lost & Found"
 
 [[desktop.1.section]]
@@ -732,13 +737,13 @@ layout = "bsp"
 [[desktop.2.section]]
 type = "workspace"
 
-# A type="unassigned" lost-and-found: collects every window on this desktop
+# An `unassigned = true` lost-and-found: collects every window on this desktop
 # shown in NO section above (the leftover by subtraction; usually empty). It
 # renders like a lens cell; click / `facet section --focus` focuses its first
 # window; drag a window out onto a workspace to RESCUE it. Only the first
-# unassigned section renders (extras warn).
+# receptacle renders (extras warn).
 [[desktop.2.section]]
-type = "unassigned"
+unassigned = true
 label = "Stray"
 
 [[desktop.3.section]]

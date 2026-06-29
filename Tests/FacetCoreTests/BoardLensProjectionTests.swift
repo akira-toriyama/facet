@@ -46,7 +46,7 @@ final class BoardLensProjectionTests: XCTestCase {
         let r = FilterProjection.project(
             workspaces: wss,
             sections: [lens("Web", "app=Chrome"),
-                       DesktopSection(type: .unassigned, label: "Other")])
+                       DesktopSection(type: .lens, label: "Other", unassigned: true)])
         let other = r.sections.first { $0.sectionType == .unassigned }
         XCTAssertEqual(other?.windows.map(\.id.serverID), [2],
                        "the unassigned receptacle catches the unmatched window")

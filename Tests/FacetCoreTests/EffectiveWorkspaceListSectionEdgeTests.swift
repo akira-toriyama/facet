@@ -33,8 +33,9 @@ final class EffectiveWorkspaceListSectionEdgeTests: XCTestCase {
 
     func testUnassignedOnlySectionsDoNotActivateModel() {
         var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .unassigned,
-                                                         label: "Other")]]
+        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace,
+                                                         label: "Other",
+                                                         unassigned: true)]]
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
         XCTAssertTrue(list.allSatisfy { $0.config.name.isEmpty })

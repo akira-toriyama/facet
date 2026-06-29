@@ -3,7 +3,7 @@ import CoreGraphics
 @testable import FacetCore
 
 final class OverviewModelsTests: XCTestCase {
-    private func cell(_ type: SectionType, id: String) -> OverviewCell {
+    private func cell(_ type: ProjectedSectionType, id: String) -> OverviewCell {
         OverviewCell(wsIndex: -1, rect: .zero, headerRect: .zero,
                      isActive: false, label: "L", mode: "", windows: [],
                      sectionType: type, sectionID: id)

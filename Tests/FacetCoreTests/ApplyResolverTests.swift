@@ -351,7 +351,7 @@ final class ApplyResolverTests: XCTestCase {
     /// there — moved via destWorkspaceIndex, no inverse, never inert.
     func testPlanUnassignedToWorkspaceRescue() {
         let secs = [wsSec(), wsSec(),
-                    DesktopSection(type: .unassigned, label: "Lost")]
+                    DesktopSection(type: .workspace, label: "Lost", unassigned: true)]
         let p = ApplyResolver.plan(
             window: win(9, app: "Chrome"), workspaceName: nil,
             fromSectionID: "unassigned:2", toSectionID: "ws:1",
@@ -366,7 +366,7 @@ final class ApplyResolverTests: XCTestCase {
         // unassigned → lens is cross-type (only unassigned → workspace rescues).
         let secs = [wsSec(),
                     lens("Web", "tag~=web", apply: [.addTag("web")]),
-                    DesktopSection(type: .unassigned, label: "Lost")]
+                    DesktopSection(type: .workspace, label: "Lost", unassigned: true)]
         let p = ApplyResolver.plan(
             window: win(9, app: "Chrome"), workspaceName: nil,
             fromSectionID: "unassigned:2", toSectionID: "section:1:Web",
@@ -378,7 +378,7 @@ final class ApplyResolverTests: XCTestCase {
         // Dropping a window BACK onto the unassigned receptacle is inert (a
         // passive lost-and-found, not an apply target) → snap-back. The
         // "unassigned:" dest never resolves to a lens, so it reads as stale.
-        let secs = [wsSec(), DesktopSection(type: .unassigned, label: "Lost")]
+        let secs = [wsSec(), DesktopSection(type: .workspace, label: "Lost", unassigned: true)]
         let p = ApplyResolver.plan(
             window: win(1), workspaceName: "Dev",
             fromSectionID: "ws:0", toSectionID: "unassigned:1",

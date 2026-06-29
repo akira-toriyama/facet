@@ -18,6 +18,19 @@
 import CoreGraphics
 import Foundation
 
+/// Which kind of section a PROJECTED / rendered overview unit is (W2.6 /
+/// t-wrd2). Distinct from the config `SectionType` ({workspace, lens}): the
+/// rendered side has a THIRD kind, the `.unassigned` lost-and-found receptacle,
+/// which a config section never declares as a `type` — it is produced by
+/// `FilterProjection` from a section's `unassigned = true` MARKER. Keeping the
+/// rendered enum separate lets the config enum stay pure (a receptacle is a
+/// marker, not a type) while the views still pattern-match three rendered kinds.
+public enum ProjectedSectionType: Sendable, Equatable {
+    case workspace
+    case lens
+    case unassigned
+}
+
 /// One projected section — the pivot's unified overview unit
 /// (`FilterProjection`). A `[[desktop.N.section]]` (type=lens) `match`
 /// filter projected over the live windows, OR — in the degrade path (no
@@ -49,11 +62,11 @@ public struct ProjectedSection: Sendable {
     /// as cells in the tree + grid (EX-2), the lit one being the active
     /// section; the rail renders lens cells in EX-2b. Defaulted so the
     /// degrade path + existing 4-arg call sites need no edit.
-    public let sectionType: SectionType
+    public let sectionType: ProjectedSectionType
 
     public init(id: String, label: String, windows: [Window],
                 sourceWorkspaceIndex: Int?,
-                sectionType: SectionType = .workspace) {
+                sectionType: ProjectedSectionType = .workspace) {
         self.id = id
         self.label = label
         self.windows = windows
@@ -96,7 +109,7 @@ public struct OverviewCell {
     /// Which section kind this cell renders — `.workspace` (the spatial
     /// substrate) or `.lens` (a cross-workspace saved-filter section, EX-2).
     /// Defaulted so every existing 8-arg call site compiles unchanged.
-    public let sectionType: SectionType
+    public let sectionType: ProjectedSectionType
     /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /
     /// `"section:<declOrder>:<label>"`) — stable identity for routing /
     /// signatures. Empty for legacy workspace-built cells.
@@ -109,7 +122,7 @@ public struct OverviewCell {
     public init(wsIndex: Int, rect: CGRect, headerRect: CGRect,
                 isActive: Bool, label: String, mode: String,
                 windows: [MiniWindowHit], isHero: Bool = false,
-                sectionType: SectionType = .workspace,
+                sectionType: ProjectedSectionType = .workspace,
                 sectionID: String = "") {
         self.wsIndex = wsIndex
         self.rect = rect

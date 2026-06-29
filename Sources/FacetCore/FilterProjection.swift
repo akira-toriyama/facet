@@ -153,6 +153,27 @@ public enum FilterProjection {
         var sawUnassigned = false   // §G: only the FIRST unassigned section emits
 
         for (declOrder, s) in sections.enumerated() {
+            // W2.6 (t-wrd2): the lost-and-found receptacle is an `unassigned`
+            // MARKER, not a `type` — checked FIRST so it works on a workspace OR
+            // lens section anywhere in the list. Emit a PLACEHOLDER at its
+            // declaration position (empty `.windows`); Pass 2 below fills it with
+            // the leftover once every workspace + lens section's membership is
+            // known. Only the FIRST receptacle is shown — extras are loud-but-
+            // non-fatal (the "leftover" set is singular, so a second receptacle
+            // would always be empty). The section's `type` is projection-
+            // irrelevant here.
+            if s.unassigned {
+                if sawUnassigned {
+                    diags.append("config: unassigned section #\(declOrder + 1) "
+                        + "ignored (only the first unassigned section is shown)")
+                    continue
+                }
+                sawUnassigned = true
+                out.append(ProjectedSection(
+                    id: "unassigned:\(declOrder)", label: s.label, windows: [],
+                    sourceWorkspaceIndex: nil, sectionType: .unassigned))
+                continue
+            }
             switch s.type {
             case .workspace:
                 sawWorkspaceSection = true
@@ -202,24 +223,6 @@ public enum FilterProjection {
                         windows: matched, sourceWorkspaceIndex: nil,
                         sectionType: .lens))
                 }
-
-            case .unassigned:
-                // §G: the lost-and-found receptacle for windows shown in NO
-                // other section. Emit a PLACEHOLDER at its declaration position
-                // (empty `.windows`); Pass 2 below fills it with the leftover
-                // once every workspace + lens section's membership is known.
-                // Only the FIRST unassigned section is shown — extras are
-                // loud-but-non-fatal (the "leftover" set is singular, so a
-                // second receptacle would always be empty).
-                if sawUnassigned {
-                    diags.append("config: unassigned section #\(declOrder + 1) "
-                        + "ignored (only the first unassigned section is shown)")
-                    continue
-                }
-                sawUnassigned = true
-                out.append(ProjectedSection(
-                    id: "unassigned:\(declOrder)", label: s.label, windows: [],
-                    sourceWorkspaceIndex: nil, sectionType: .unassigned))
             }
         }
 

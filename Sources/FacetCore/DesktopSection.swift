@@ -35,16 +35,20 @@
 //     `match` is stored VERBATIM and compiled by the consumer, so a malformed
 //     expression is rejected loud + non-fatal at projection time, never at
 //     config load (parse-only stays total).
-//   • type = "unassigned" — the lost-and-found safety net: an optional
-//     `label` only (§A; no `match` / `apply`).
-//     PROJECTED (§G): an opt-in receptacle that, when present, collects the
-//     LEFTOVER (universe − shown) — the windows that land in NO other emitted
-//     section. Only the first emits; extras warn.
+// The lost-and-found receptacle is NOT a third type (W2.6): it is an
+// `unassigned = true` MARKER on a workspace/lens section (`DesktopSection.
+// unassigned`). PROJECTED (§G): an opt-in receptacle that, when present,
+// collects the LEFTOVER (universe − shown) — the windows that land in NO other
+// emitted section — with `match` / `apply` forbidden (only an optional `label`).
+// Only the first emits; extras warn. The retired `type = "unassigned"` spelling
+// now drops as an unknown type.
 //
-// `type` is REQUIRED. An absent or unrecognised `type` DROPS the row with a
-// loud reason — never a silent clamp to a default, which would mis-route a
-// section's windows (e.g. discard an authored `match`). トミー 2026-06-17:
-// warn + skip, never default-guess.
+// `type` is REQUIRED on a workspace / lens section (it is OPTIONAL on an
+// `unassigned = true` receptacle, whose type is projection-irrelevant). An
+// absent or unrecognised `type` on a non-receptacle row DROPS it with a loud
+// reason — never a silent clamp to a default, which would mis-route a section's
+// windows (e.g. discard an authored `match`). トミー 2026-06-17: warn + skip,
+// never default-guess.
 //
 // `apply` FROZEN here so PR8's inversion resolver can rely on it. The full
 // op vocabulary still exists for `[[rule]]` (Phase 3 adopt-rules, which may
@@ -65,7 +69,10 @@ import Foundation
 public enum SectionType: String, Sendable, Equatable, CaseIterable {
     case workspace
     case lens
-    case unassigned
+    // W2.6 (t-wrd2): `unassigned` is NO LONGER a `type` — the lost-and-found
+    // receptacle is an `unassigned = true` MARKER on a workspace/lens section
+    // (`DesktopSection.unassigned`). The old `type = "unassigned"` spelling is
+    // retired: it is now an unknown type and drops LOUD on decode.
 }
 
 /// One facet to set on a window routed into a section — the typed `apply`
@@ -150,17 +157,28 @@ public struct DesktopSection: Sendable, Equatable {
     public let apply: [ApplyOp]
     /// Per-section layout seed — meaningful only for `workspace` (drives its
     /// stateful tiling engine). A lens is a pure VIEW (t-0021) and tiles
-    /// nothing, so a `layout` on a `lens` / `unassigned` section is parsed but
+    /// nothing, so a `layout` on a `lens` / receptacle section is parsed but
     /// IGNORED (harmless dead data, per the clamp-don't-reject config rule).
     public let layout: String?
+    /// W2.6 (t-wrd2): the lost-and-found MARKER. `true` makes this section the
+    /// per-board receptacle that collects the LEFTOVER (universe − shown) — the
+    /// windows that land in NO other emitted section — regardless of its `type`
+    /// (which is then projection-irrelevant: `match` / `apply` are ignored). At
+    /// most one per board is honoured; extras warn. Replaces the retired
+    /// `type = "unassigned"` (§G) — `type` stays {workspace, lens}, the
+    /// receptacle is a flag, so a tab child can be a receptacle while still
+    /// inheriting the parent type (no `type` exception).
+    public let unassigned: Bool
 
     public init(type: SectionType, label: String = "", match: String = "",
-                apply: [ApplyOp] = [], layout: String? = nil) {
+                apply: [ApplyOp] = [], layout: String? = nil,
+                unassigned: Bool = false) {
         self.type = type
         self.label = label
         self.match = match
         self.apply = apply
         self.layout = layout
+        self.unassigned = unassigned
     }
 
     /// Parse one `[[desktop.N.section]]` row into a section, OR a
@@ -185,13 +203,6 @@ public struct DesktopSection: Sendable, Equatable {
     static func parse(fromTOMLRow t: [String: TOMLValue])
         -> (section: DesktopSection?, note: String?)
     {
-        guard case .string(let rawType)? = t["type"] else {
-            return (nil, "missing `type` (expected workspace / lens / unassigned)")
-        }
-        guard let type = SectionType(rawValue: rawType.lowercased()) else {
-            return (nil, "unknown `type` \"\(rawType)\" "
-                + "(expected workspace / lens / unassigned)")
-        }
         let label: String = {
             if case .string(let s)? = t["label"] { return s } else { return "" }
         }()
@@ -205,6 +216,39 @@ public struct DesktopSection: Sendable, Equatable {
             if case .table(let at)? = t["apply"] { return !at.isEmpty }
             return false
         }()
+
+        // W2.6 (t-wrd2): the `unassigned = true` MARKER is checked FIRST. A
+        // receptacle is the LEFTOVER by subtraction — neither a filter nor an
+        // apply target — so its `type` is projection-irrelevant and OPTIONAL
+        // here (an explicit workspace/lens type is honoured for symmetry with a
+        // tab child's inherited type; absent ⇒ workspace, a moot default). Both
+        // `match` and `apply` are FORBIDDEN (authored ones ignored with a loud
+        // caveat). This replaces the retired `type = "unassigned"` (§G), which
+        // now falls through to the unknown-type guard below and drops LOUD.
+        if case .bool(true)? = t["unassigned"] {
+            let recType: SectionType = {
+                if case .string(let rt)? = t["type"],
+                   let st = SectionType(rawValue: rt.lowercased()) { return st }
+                return .workspace
+            }()
+            var notes: [String] = []
+            if !match.isEmpty {
+                notes.append("unassigned section can't carry `match` — ignoring it")
+            }
+            if applyAuthored {
+                notes.append("unassigned section can't carry `apply` — ignoring it")
+            }
+            return (DesktopSection(type: recType, label: label, unassigned: true),
+                    notes.isEmpty ? nil : notes.joined(separator: "; "))
+        }
+
+        guard case .string(let rawType)? = t["type"] else {
+            return (nil, "missing `type` (expected workspace / lens)")
+        }
+        guard let type = SectionType(rawValue: rawType.lowercased()) else {
+            return (nil, "unknown `type` \"\(rawType)\" "
+                + "(expected workspace / lens)")
+        }
 
         switch type {
         case .lens:
@@ -259,21 +303,6 @@ public struct DesktopSection: Sendable, Equatable {
             return (DesktopSection(type: .workspace, label: label, match: "",
                                    apply: [], layout: layout),
                     notes.isEmpty ? nil : notes.joined(separator: "; "))
-
-        case .unassigned:
-            // §A / t-qtpx: the lost-and-found receptacle is the LEFTOVER by
-            // subtraction — neither a filter nor an apply target, so both
-            // `match` and `apply` are FORBIDDEN (authored ones ignored with a
-            // loud caveat). Only an optional `label` is meaningful.
-            var notes: [String] = []
-            if !match.isEmpty {
-                notes.append("unassigned section can't carry `match` — ignoring it")
-            }
-            if applyAuthored {
-                notes.append("unassigned section can't carry `apply` — ignoring it")
-            }
-            return (DesktopSection(type: .unassigned, label: label),
-                    notes.isEmpty ? nil : notes.joined(separator: "; "))
         }
     }
 }
@@ -284,9 +313,10 @@ public struct DesktopSection: Sendable, Equatable {
 /// `label` + an ordered list of child `[[desktop.N.tab.section]]` sections.
 ///
 /// The children carry NO `type` of their own — every section in a tab INHERITS
-/// the tab's `type` (mixing is impossible by construction). The one escape is a
-/// child marked `unassigned = true`, the per-tab lost-and-found receptacle,
-/// which decodes to a `.unassigned` section regardless of the parent type.
+/// the tab's `type` (mixing is impossible by construction). A child marked
+/// `unassigned = true` is the per-tab lost-and-found receptacle: it STILL
+/// inherits the parent type (W2.6 — `unassigned` is a marker, not a type, so
+/// there is no type exception), with its `unassigned` flag set.
 ///
 /// PURE DATA + ADDITIVE (t-f19q / Wave 1): this models the nested config so a
 /// later wave can wire boards into the projection / UI. Nothing consumes
@@ -323,7 +353,6 @@ public struct DesktopTab: Sendable, Equatable {
         switch type {
         case .workspace:  return "Workspaces"
         case .lens:       return "Lenses"
-        case .unassigned: return "Unassigned"   // unreachable: a board is workspace/lens
         }
     }
 }
