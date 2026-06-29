@@ -41,6 +41,14 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   向き・サイズが変わっても比は保たれる。 `[rail] cells` は同時表示数の上限で、
   超えた WS は回転（両端 peek 付き）。 `facet --view rail` で呼び出す。
 
+1 つの mac desktop が **board を 2 つ以上**持つと — board は 1 desktop 内で
+section をまとめた**タブ状のグループ**（workspace の集合 / lens の集合。 階層は
+*mac desktop ▸ board ▸ section ▸ window*） — 各 view の上端に **board 切替帯**が
+出る。 タブをクリック / マウスホイールで board を切替える。 表示のみ — 同じ窓を
+グループし直すだけで実窓は一切動かない。 board は `[[desktop.N.tab]]`
+（[設定](#設定)）で記述し、 CLI では `facet board --focus N|"label"` で切替える。
+board が 1 つだけ（または board 未設定）なら帯は出ない。
+
 DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**: window を
 掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を
 swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾
@@ -399,11 +407,12 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   **DnD は同 type 内のみ**: 窓を workspace 間に drag すれば所属移動、 lens 間
   なら付け替え（tag の付与/除去）。 workspace ↔ lens の境界を drag で跨ぐことは
   無い（跨ぐ操作は右クリック / `facet window --tag` / `--move-to`）。
-  `"unassigned"` section（`label` のみ・`match` / `apply` 無し）が**推奨**の
-  opt-in lost-and-found — 他のどの section にも出ない**全 leftover 窓**を拾い、
-  lens セルのように並び、 `facet section --focus` で先頭窓を focus、 workspace
-  へ DnD で窓を RESCUE。 最初の 1 つだけ描画。 通常は空（窓は必ずどれかの
-  workspace に居る）だが、 お守りとして 1 つ残す。
+  `unassigned = true` を付けた section（`type` ではなくマーカー・`label` のみ・
+  `match` / `apply` 無し）が**推奨**の opt-in lost-and-found — 他のどの section
+  にも出ない**全 leftover 窓**を拾い、 lens セルのように並び、 `facet section
+  --focus` で先頭窓を focus、 workspace へ DnD で窓を RESCUE。 最初の 1 つだけ
+  描画。 通常は空（窓は必ずどれかの workspace に居る）だが、 お守りとして 1 つ
+  残す。（旧 `type = "unassigned"` 綴りは退役。）
   **workspace は任意の `label` で config 命名可**（無ければ無名＝1始まりの index 表示）—
   実行時 `facet workspace --rename` が上書き。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
@@ -413,6 +422,17 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   section リストを描画する — lens section は tree・grid・**rail** でセルとして
   並び、 ちょうど 1 つだけハイライト。 rail では active section が中央の hero
   になる（active な lens はそこに集約した一致窓を描く）。
+- `[[desktop.N.tab]]` ブロック — **board**: 上の section 群を 1 mac desktop 内で
+  タブにまとめる（階層 *mac desktop ▸ board ▸ section ▸ window*）。 各 board は
+  必須の `type`（`"workspace"` か `"lens"`）と任意の `label` を持ち、 配下の
+  `[[desktop.N.tab.section]]` 子は `type` を書かず（親 board から継承）他は同じ
+  per-type ルールに従う。 子の 1 つに `unassigned = true` を付ければその board の
+  lost-and-found になる。 board 切替は `facet board --focus N|"label"`。 desktop が
+  board を 2 つ以上持つと各 view 上端に切替帯（click / マウスホイール）が出る。
+  board 切替は表示のみ — 同じ窓をグループし直すだけで実窓は動かない。 board と
+  flat な `[[desktop.N.section]]` は 1 desktop につき排他: 同じ `N` に両方書くと
+  board が勝つ（flat ブロックは無視・load 時にログ）。 flat 形式は fallback として
+  存続。
 - **per-window tag** は config を持たない — **実行時** (session 限り) に
   `facet window --tag NAME` (および `--untag` / `--toggle-tag` / `--retag`)
   で付ける自由記述の文字列。 `match` に `tag~=NAME` を含む `type = "lens"`
@@ -485,6 +505,14 @@ facet lens --clear                # active lens 表示を解除
 facet section --focus N            # tree 順で N 番目の section を focus
 facet section --focus LABEL        # label が LABEL の section を focus
 facet section --rename N "label"   # N 番目の section の表示 label を改名
+
+# Board (section モデル) — どの [[desktop.N.tab]] board を view に出すか切替える。
+# board は 1 mac desktop 内で section をまとめたタブ (workspace の集合 / lens の
+# 集合)。 切替は同じ窓のグループし直し (表示のみ — 窓は動かない)。 `section
+# --focus` の表示双子。 desktop が board を 2 つ以上持つと各 view 上端に切替帯
+# (click / マウスホイール) が出る。
+facet board --focus N              # この mac desktop の board N (1-based) を出す
+facet board --focus "label"        # label が "label" の board を出す
 
 # Scratchpad — 名前付きの隠し棚 (ドロップダウン端末 / メモ用途)
 facet scratchpad --stash NAME     # focus 中の window を名前付き棚へしまう (画面外へ隠す)

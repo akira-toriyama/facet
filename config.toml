@@ -606,7 +606,9 @@ action = "ignore"
 #
 # Each `[[desktop.N.section]]` is one section on the Nth mac desktop
 # (Mission Control order). The array ORDER is the tree's display order.
-# Every section has a required `type` — one of three kinds:
+# A section is one of three shapes — two carry a required `type`
+# (`workspace` / `lens`); the third, the lost-and-found, is the
+# `unassigned = true` MARKER (a bool, not a `type`):
 #
 #   type = "workspace"  — a permanent spatial cell (the tiling unit, the
 #       grid/rail cell). Named by an optional `label` (else unnamed, shown by
@@ -681,6 +683,69 @@ action = "ignore"
 # `type` is REQUIRED on a workspace / lens section (an absent or unknown `type`
 # is skipped with a loud log, never a silent guess); it is OPTIONAL only on an
 # `unassigned = true` receptacle.
+#
+# -----------------------------------------------------------------
+# Boards  [[desktop.N.tab]]  (group sections into tabbed boards)
+# -----------------------------------------------------------------
+# A BOARD groups sections into a TAB within one mac desktop, so the same
+# windows can be viewed two ways: a workspace board (the spatial split) and a
+# lens board (a cross-workspace projection). Hierarchy: mac desktop > board >
+# section > window. Switching boards is a pure DISPLAY re-grouping of the SAME
+# windows — it never moves a real window (like a lens). Boards are optional;
+# the flat `[[desktop.N.section]]` form above is the simpler default.
+#
+# `[[desktop.N.tab]]` is the nesting-aware sibling of `[[desktop.N.section]]`
+# (N = the same Mission Control ordinal). Each board (tab) has:
+#
+#   type   — REQUIRED: "workspace" or "lens". An absent / unknown type
+#       (including "unassigned") DROPS the whole board with a loud log. The
+#       board's child sections all INHERIT this type.
+#   label  — (optional) the board's caption in the switcher. Omit → the type
+#       default ("Workspaces" / "Lenses"). A board is switched at runtime with
+#       `facet board --focus N|"label"` (1-based index, or the label).
+#
+# A board's sections are nested `[[desktop.N.tab.section]]` blocks. They carry
+# NO `type` (each inherits the parent board's) and otherwise obey the SAME
+# per-type field rules as a flat section — a lens needs `match` (and may carry
+# `apply` tags); a workspace forbids `match` / `apply` and may seed a `layout`.
+# A child may set `unassigned = true` to be THAT board's lost-and-found
+# receptacle (one per board; a 2nd is dropped, loud).
+#
+# When the active mac desktop has TWO OR MORE boards, every view (tree / grid /
+# rail) shows a board switcher band at its top — click a tab or scroll the
+# mouse wheel to switch (display only, never moves a window). With one board
+# (or a flat config) the band is hidden.
+#
+# MIGRATION — boards win over flat: declare EITHER `[[desktop.N.section]]`
+# (flat) OR `[[desktop.N.tab]]` (boards) for a given N, not both. If both
+# appear for the same N the BOARDS win and the flat block is ignored (logged at
+# load, so the dropped block isn't a silent surprise). To migrate a flat
+# desktop, wrap its sections under one or more `[[desktop.N.tab]]` parents and
+# delete the children's `type` keys (they inherit). The flat form stays
+# supported as a fallback — boards are purely opt-in.
+#
+# Example — Desktop 4 as two boards: a "Code" workspace board (2 tiled
+# workspaces + a lost-and-found) and a "Web" lens board (2 lenses). Commented
+# out so it doesn't manage a 4th desktop or shadow anything; uncomment to try.
+#   [[desktop.4.tab]]
+#   type = "workspace"
+#   label = "Code"
+#     [[desktop.4.tab.section]]
+#     layout = "bsp"
+#     [[desktop.4.tab.section]]
+#     layout = "stack"
+#     [[desktop.4.tab.section]]
+#     unassigned = true
+#     label = "Lost & Found"
+#   [[desktop.4.tab]]
+#   type = "lens"
+#   label = "Web"
+#     [[desktop.4.tab.section]]
+#     label = "Docs"
+#     match = 'app=Safari or app~=Chrome'
+#     [[desktop.4.tab.section]]
+#     label = "Chat"
+#     match = 'app~=Slack or app~=Discord'
 #
 # ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: a Lost & Found
 # receptacle (`unassigned = true`) + 2 unnamed (index-shown) workspaces + 3
