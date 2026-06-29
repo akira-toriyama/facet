@@ -112,6 +112,22 @@ final class Controller: NSObject {
     /// after a hot-reload that dropped boards self-heals to the nearest
     /// in-range board.
     var selectedBoard: [Int: Int] = [:]
+
+    /// The active board's sections for `ordinal` (t-wrd2 / W2.5) — the board
+    /// SELECTOR keyed by this mac desktop's session-selected board. EVERY
+    /// Controller-side section read goes through this ONE seam so the
+    /// section-id `declOrder` agrees with what the `apply()` projection minted
+    /// (`FilterProjection` enumerates the SAME list) — the W2.5 Risk#1
+    /// guard against a second, stale section SSOT. With no `[[desktop.N.tab]]`
+    /// boards (or no selection) it degrades to the flat `[[desktop.N.section]]`
+    /// list at board 0 — byte-identical to the pre-board reads. `nil` ordinal →
+    /// empty (the config selector keys off the ordinal). (The adapter's own id
+    /// resolution is still flat — board-aware in a later slice.)
+    func selectedBoardSections(forOrdinal ordinal: Int?) -> [DesktopSection] {
+        config.activeBoardSections(
+            forMacDesktopOrdinal: ordinal,
+            board: ordinal.flatMap { selectedBoard[$0] } ?? 0)
+    }
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -580,9 +596,13 @@ final class Controller: NSObject {
         // is to the always-present workspace; benign + narrow), surfaced via
         // `Log.line` (which also makes today's silent label-removal drop visible).
         if case .lens(let id) = currentActiveSection {
-            let stillValid = currentMacDesktopOrdinal()
-                .flatMap { config.effectiveMacDesktopSectionConfigs[$0] }
-                .flatMap { ApplyResolver.section(forSectionID: id, in: $0) } != nil
+            // W2.5: validate against the ACTIVE board's sections (the same list
+            // the projection minted the id from), not the flat list — else a
+            // lens on a board config never re-resolves and is dropped on reload.
+            let stillValid = ApplyResolver.section(
+                forSectionID: id,
+                in: selectedBoardSections(forOrdinal: currentMacDesktopOrdinal())
+            ) != nil
             if !stillValid {
                 let ws = activeWSIndex(in: lastWorkspaces)
                 Log.line("active lens no longer resolves after config reload "
@@ -638,31 +658,33 @@ final class Controller: NSObject {
 
     /// The `type="lens"` section labels on the mac desktop at `ordinal` — the
     /// active-lens domain (empty when the section model isn't active there, or
-    /// it defines no lens sections). Shared by `setActiveLens` (validate) and
-    /// `reloadConfig` (re-validate after an edit). (PR6.)
+    /// it defines no lens sections). Reads the ACTIVE board's sections (W2.5),
+    /// so on a board config the domain is the SELECTED board's lenses. Shared by
+    /// `setActiveLens` (validate) and `reloadConfig` (re-validate after an
+    /// edit). (PR6.)
     func lensSectionLabels(ordinal: Int?) -> [String] {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return [] }
-        return (config.effectiveMacDesktopSectionConfigs[ord] ?? [])
+        return selectedBoardSections(forOrdinal: ord)
             .filter { $0.type == .lens }.map(\.label)
     }
 
     /// A0: resolve a lens section's display `label` to its **stable id**
     /// (`"section:<declOrder>:<label>"`) on the mac desktop at `ordinal`, or nil
     /// when no `type="lens"` section there has that label. `declOrder` is the
-    /// index into the FULL section array — the SAME index `FilterProjection`
-    /// mints the id from (`Sources/FacetCore/FilterProjection.swift`) and
-    /// `ApplyResolver.section(forSectionID:)` / the adapter parse back, so the
-    /// round-trip is exact. Config-based (not `lastSections`) so it resolves
-    /// even before the first render (headless CLI). The label↔id map is 1:1
-    /// while labels are unique + non-empty (the A0 invariant). Shared by
-    /// `setActiveLens`, `toggleActiveLens`.
+    /// index into the ACTIVE board's section array (W2.5) — the SAME index
+    /// `FilterProjection` mints the id from (`FilterProjection.swift`) and
+    /// `ApplyResolver.section(forSectionID:)` parses back, so the round-trip is
+    /// exact (both now read the selected board via `selectedBoardSections`).
+    /// Config-based (not `lastSections`) so it resolves even before the first
+    /// render (headless CLI). The label↔id map is 1:1 while labels are unique +
+    /// non-empty (the A0 invariant). Shared by `setActiveLens`,
+    /// `toggleActiveLens`.
     func lensID(forLabel label: String, ordinal: Int?) -> String? {
-        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal,
-              let sections = config.effectiveMacDesktopSectionConfigs[ord],
-              let declOrder = sections.firstIndex(where: {
-                  $0.type == .lens && $0.label == label
-              })
+        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
+        else { return nil }
+        guard let declOrder = selectedBoardSections(forOrdinal: ord)
+            .firstIndex(where: { $0.type == .lens && $0.label == label })
         else { return nil }
         return "section:\(declOrder):\(label)"
     }
@@ -1035,12 +1057,11 @@ final class Controller: NSObject {
            let ordinal = macDesktopOrdinal {
             // W2.2 (board model): read the section list through the board
             // SELECTOR keyed by the session-selected board for this mac desktop.
-            // With no `[[desktop.N.tab]]` boards (every config today), this
-            // DEGRADES to the flat `[[desktop.N.section]]` list — byte-identical
-            // to the pre-board path (`selectedBoard` is empty ⇒ board 0).
-            let secs = config.activeBoardSections(
-                forMacDesktopOrdinal: ordinal,
-                board: selectedBoard[ordinal] ?? 0)
+            // The SAME `selectedBoardSections` seam every other Controller-side
+            // section read uses (W2.5), so the id `declOrder` minted HERE matches
+            // what the lens/DnD resolvers parse back. With no `[[desktop.N.tab]]`
+            // boards this DEGRADES to the flat list (board 0) — byte-identical.
+            let secs = selectedBoardSections(forOrdinal: ordinal)
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
             // from `wss`) so the projection appends them into the `not
             // workspace` receptacle + any content lens they match. Main-actor-

@@ -35,7 +35,10 @@ extension Controller {
         let ordinal = currentMacDesktopOrdinal()
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return nil }
-        let sections = config.effectiveMacDesktopSectionConfigs[ord] ?? []
+        // W2.5: resolve the plan over the ACTIVE board's sections (the same list
+        // the projection minted the dragged row's id from), not the flat list —
+        // else a DnD on a board config resolves against the wrong/empty array.
+        let sections = selectedBoardSections(forOrdinal: ord)
         guard let (win, wsName) = findRenderedWindow(windowID) else { return nil }
         let plan = ApplyResolver.plan(
             window: win, workspaceName: wsName,
