@@ -1,7 +1,8 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it. The path
+# filter means it only runs when *.toml changes, so it is a harmless no-op on repos
+# without any TOML — no per-repo gating needed. Synced to: .github/workflows/taplo.yml
 name: taplo
-
-# Thin caller — delegates TOML lint to the shared reusable workflow.
-# Logic lives in akira-toriyama/.github/.github/workflows/taplo.yml.
 
 on:
   pull_request:
@@ -12,4 +13,4 @@ on:
 
 jobs:
   taplo:
-    uses: akira-toriyama/.github/.github/workflows/taplo.yml@main
+    uses: akira-toriyama/.github/.github/workflows/taplo.yml@v1
