@@ -18,7 +18,7 @@ on:
 
 jobs:
   bump:
-    uses: akira-toriyama/.github/.github/workflows/update-tap.yml@main
+    uses: akira-toriyama/.github/.github/workflows/update-tap.yml@v1
     with:
       formula: facet
       tag: ${{ github.event.inputs.tag || '' }}
