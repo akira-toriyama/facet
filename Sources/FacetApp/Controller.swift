@@ -1149,6 +1149,10 @@ final class Controller: NSObject {
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
             rv.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+            let prevBoard = rv.activeBoardIndex
+            let railBoard = boardBandInputs()   // keep the open rail's board band in sync
+            rv.boardLabels = railBoard.labels
+            rv.activeBoardIndex = railBoard.selectedIndex
             // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
             // is open re-centres the strip on the new active SECTION — but
             // only when the user isn't mid-browse (cursor still on the OLD
@@ -1159,6 +1163,9 @@ final class Controller: NSObject {
             if rv.selectedSectionID == oldActiveID, let n = newActiveID {
                 rv.selectedSectionID = n
             }
+            // A board switch swaps the whole section set — reset the carousel
+            // slide / crossfade so the old board's animation can't bleed in.
+            if railBoard.selectedIndex != prevBoard { rv.resetCarouselAnimation() }
             rv.layoutCells()      // refresh open rail on backend events
         }
         if firstRealApply {

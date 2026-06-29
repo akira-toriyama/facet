@@ -94,6 +94,30 @@ public final class RailView: NSView {
     /// stays balanced in any orientation / on any display size.
     public var stripPercent: Int = 30
 
+    // MARK: - Board switcher band (t-wrd2)
+
+    /// Board captions in display order; ≥2 shows the band (a thin horizontal
+    /// tab row), < 2 hides it (zero carve ⇒ byte-identical rail). Fed by the
+    /// Controller — the same source as the tree + grid bands. The band is a
+    /// horizontal row pinned to the screen TOP on every edge (a bottom dock keeps
+    /// its strip at the bottom; the band just reserves height off the hero top).
+    public var boardLabels: [String] = [] {
+        didSet { if boardLabels != oldValue { needsLayout = true } }
+    }
+    /// The shown board's 0-based index (drives the active-tab highlight).
+    public var activeBoardIndex: Int = 0 {
+        didSet { if activeBoardIndex != oldValue { needsDisplay = true } }
+    }
+    /// Click / wheel on a board tab → switch board (Controller's
+    /// `selectBoardFromUI`). Display-only; the overlay stays open.
+    public var onSelectBoard: ((Int) -> Void)?
+    /// Band rect + per-board tab rects (drawing-space), recomputed each
+    /// `layoutCells`. Empty when < 2 boards. Read by `RailBoardBand`.
+    var boardBandRect: NSRect = .zero
+    var boardCells: [RailBoardCellFrame] = []
+    /// Accumulated band scroll-wheel delta; one step per `railBoardWheelStep`.
+    var boardWheelAccum: CGFloat = 0
+
     /// The strip band rect (drawing-space) — cells are clipped to it so a
     /// carousel cell rotating past the viewport edge "peeks" (the
     /// both-ends "there's more" cue).
@@ -354,13 +378,31 @@ public final class RailView: NSView {
         //    orientation / on any display size (never the old cross-axis
         //    fraction, which over-thickened the strip in portrait). --
         let shortEdge = min(useScreen.width, useScreen.height)
+        // Board switcher band (t-wrd2): reserve a thin horizontal sliver when
+        // this mac desktop has ≥2 boards, else 0 ⇒ `railInset` is the identity
+        // ⇒ the strip + hero lay out byte-identically to today.
+        let boardBandThick: CGFloat = boardLabels.count >= 2
+            ? min(railBoardBandMaxThick,
+                  max(railBoardBandMinThick, (shortEdge * railBoardBandFrac).rounded()))
+            : 0
+        let railBounds = railInset(bounds, by: boardBandThick)
+        if boardBandThick > 0 {
+            let bb = railBoardBand(in: bounds,
+                                   boardCount: boardLabels.count,
+                                   thickness: boardBandThick,
+                                   tabWidths: boardLabels.map(boardTabIntrinsicWidth),
+                                   gap: railBoardGap, innerPad: railBoardInnerPad)
+            boardBandRect = bb.bandRect; boardCells = bb.cells
+        } else {
+            boardBandRect = .zero; boardCells = []
+        }
         let (edgeFloat, heroGap, outer) = railScaledPads(
             screen: useScreen.size,
             edgeFloatFrac: railEdgeFloatFrac,
             heroGapFrac: railHeroGapFrac,
             outerFrac: railOuterFrac)
         let n = sources.count
-        let alongFull = horizontal ? bounds.width : bounds.height
+        let alongFull = horizontal ? railBounds.width : railBounds.height
         let availAlong = max(1, alongFull - outer * 2)
         // Show every workspace, up to the `[rail] cells` cap; the rest
         // rotate through the carousel.
@@ -416,7 +458,7 @@ public final class RailView: NSView {
         lastSlot = slot   // one rotation slides the strip by one slot (v2)
         let viewportAlong = min(availAlong, CGFloat(visible) * slot + 2 * peek)
 
-        let (strip, heroArea) = railBands(in: bounds, edge: edge,
+        let (strip, heroArea) = railBands(in: railBounds, edge: edge,
                                           thickness: thickness,
                                           outerPad: outer,
                                           heroGap: heroGap)
@@ -527,9 +569,9 @@ public final class RailView: NSView {
             if hCellW / hCellH > aspect { hCellW = hCellH * aspect }
             else { hCellH = hCellW / aspect }
             // Centre on the screen, clamped into the (strip-free) box.
-            let hx = min(max(bounds.midX - hCellW / 2, heroBox.minX),
+            let hx = min(max(railBounds.midX - hCellW / 2, heroBox.minX),
                          heroBox.maxX - hCellW).rounded()
-            let hy = min(max(bounds.midY - hCellH / 2, heroBox.minY),
+            let hy = min(max(railBounds.midY - hCellH / 2, heroBox.minY),
                          heroBox.maxY - hCellH).rounded()
             let hCellRect = NSRect(x: hx, y: hy, width: hCellW, height: hCellH)
             hero = OverviewCell(wsIndex: act.wsIndex, rect: hCellRect,
@@ -653,6 +695,10 @@ public final class RailView: NSView {
         }
         NSGraphicsContext.restoreGraphicsState()
 
+        // Board switcher band (t-wrd2) — its own rect, OUTSIDE the strip clip,
+        // drawn over the cells but under the border.
+        drawBoardBand()
+
         // Neon border framing the OUTER screen edge (shared BorderFX),
         // drawn unclipped over everything — same as the grid overview.
         // Only when an effect is active.
@@ -740,6 +786,16 @@ public final class RailView: NSView {
         slideTimer?.invalidate(); slideTimer = nil; slideStart = nil
         slideProgress = 0
         prevHeroImage = nil          // crossfade done (①)
+    }
+
+    /// Reset the carousel rotation animation in place — called by the Controller
+    /// when a BOARD switch swaps the whole section set, so the prior board's
+    /// slide / hero crossfade can't bleed into the new board's first paint.
+    public func resetCarouselAnimation() {
+        slideOffset = 0
+        scrollAccum = 0
+        stopSlide()                  // also clears prevHeroImage
+        needsDisplay = true
     }
 
     /// Funnel for a switch-and-close commit. If the destination is the
@@ -906,8 +962,14 @@ public final class RailView: NSView {
     /// panel, so, like the browse keys, scroll events are caught at the
     /// app's event monitor rather than the view responder chain.
     public func scrollRotate(_ event: NSEvent) {
-        guard drag == nil, sectionOrder.count > 1,
-              event.momentumPhase == [] else { return }
+        guard drag == nil, event.momentumPhase == [] else { return }
+        // Hit-zone split (t-wrd2): wheel over the board band steps boards; wheel
+        // anywhere else (strip / hero / backdrop) rotates the section carousel.
+        let pt = convert(event.locationInWindow, from: nil)
+        if !boardBandRect.isEmpty, boardBandRect.contains(pt) {
+            scrollBoardBand(event); return
+        }
+        guard sectionOrder.count > 1 else { return }
         var dy = event.scrollingDeltaY
         if dy == 0 { return }
         // The natural-scroll preference already lives in the sign, so
@@ -935,6 +997,16 @@ public final class RailView: NSView {
         // swallows input until it finishes.
         guard !commitZoom.isActive, drag == nil else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // Board switcher band (t-wrd2): a press switches that board (display-
+        // only). The band is disjoint from the strip viewport + hero, so it can
+        // never also be a section / window pick — return immediately.
+        if !boardBandRect.isEmpty, boardBandRect.contains(p) {
+            if let idx = boardCells.first(where: { $0.rect.contains(p) })?.boardIndex,
+               idx != activeBoardIndex {
+                onSelectBoard?(idx)
+            }
+            return
+        }
         // Strip hit-tests are gated by the same viewport clip as hover
         // (`stripRect`), so a press in the clipped outer-pad margin — bare
         // backdrop to the eye — never acts on a rotated-off cell.
