@@ -64,24 +64,17 @@ extension RailView {
     }
 
     /// Wheel over the band → step boards (clamped, one step per
-    /// `railBoardWheelStep`), mirroring the tree band's `scrollWheel`. Called by
+    /// `boardBandWheelStep`), mirroring the tree band's `scrollWheel`. Called by
     /// `scrollRotate`'s hit-zone split (the carousel handles wheel elsewhere).
+    /// Shares the `wheelSteps` math (FacetCore) AND the `boardBandWheelStep`
+    /// threshold (FacetView) with the tree band, NET-applied once; the
+    /// momentum-tail guard lives in the caller (`scrollRotate`).
     func scrollBoardBand(_ e: NSEvent) {
         guard boardLabels.count > 1 else { return }
-        let dy = e.scrollingDeltaY
-        if dy == 0 { return }
-        var step = 0
-        if e.hasPreciseScrollingDeltas {
-            if e.phase.contains(.began) { boardWheelAccum = 0 }
-            boardWheelAccum += dy
-            while abs(boardWheelAccum) >= railBoardWheelStep {
-                let d = boardWheelAccum < 0 ? 1 : -1   // down → next, up → prev
-                boardWheelAccum += CGFloat(d) * railBoardWheelStep
-                step += d
-            }
-        } else {
-            step = dy < 0 ? 1 : -1
-        }
+        let step = wheelSteps(deltaY: e.scrollingDeltaY, accum: &boardWheelAccum,
+                              threshold: boardBandWheelStep,
+                              precise: e.hasPreciseScrollingDeltas,
+                              gestureBegan: e.phase.contains(.began))
         guard step != 0 else { return }
         let next = boardIndexStep(current: activeBoardIndex, by: step,
                                   count: boardLabels.count)
