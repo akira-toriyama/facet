@@ -621,13 +621,14 @@ public struct FacetConfig: Sendable {
     ///
     /// N1 (boards-win is TOTAL): an ordinal that ALSO has `[[desktop.N.tab]]`
     /// boards has its flat sections SHADOWED here — boards already win in
-    /// `activeBoardSections` / `workspaceSubstrateSections`, and leaving the
-    /// flat list visible would let a flat-list resolver (the native adapter's
-    /// `lensSection(forID:)`, still flat until the W2.5-adapter slice) silently
-    /// mis-resolve a board-minted `section:<declOrder>:<label>` id to a
-    /// different flat lens. Shadowing makes that resolver see nothing → it
-    /// loud-rejects instead. No tabs anywhere ⇒ the raw dict verbatim
-    /// (byte-identical to the pre-N1 accessor).
+    /// `activeBoardSections` / `workspaceSubstrateSections`, so a tab-config
+    /// ordinal's flat sections are inert and must not surface as a parallel
+    /// SSOT. The adapter's id resolver (`lensSection(forID:)`) is now board-
+    /// aware (W2.5-adapter — it reads `activeBoardSections`, not this accessor),
+    /// so the shadow no longer guards a flat mis-resolve; it stays as the
+    /// boards-win invariant (a tab-config ordinal is driven entirely by its
+    /// boards). No tabs anywhere ⇒ the raw dict verbatim (byte-identical to the
+    /// pre-N1 accessor).
     public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
         guard !macDesktopTabConfigs.isEmpty else { return macDesktopSectionConfigs }
         return macDesktopSectionConfigs.filter { macDesktopTabConfigs[$0.key] == nil }
