@@ -113,6 +113,17 @@ final class Controller: NSObject {
     /// in-range board.
     var selectedBoard: [Int: Int] = [:]
 
+    /// Per-board remembered active section (t-wrd2 / L1), keyed
+    /// `[ordinal: [board: ActiveSection]]`. A board switch saves the section the
+    /// user was on under the board they LEAVE and restores the destination
+    /// board's — the single `currentActiveSection` would otherwise go stale on a
+    /// switch (`apply()`'s re-read fires on a desktop swap / WS switch, never a
+    /// board switch), leaving the active-lens highlight on the wrong board.
+    /// Session-only, per-mac-desktop, reset on relaunch — same contract as
+    /// `selectedBoard` / `macDesktopSectionOrder`. Written ONLY through
+    /// `commitBoardSelection`.
+    var boardActiveSection: [Int: [Int: ActiveSection]] = [:]
+
     /// The active board's sections for `ordinal` (t-wrd2 / W2.5) — the board
     /// SELECTOR keyed by this mac desktop's session-selected board. EVERY
     /// Controller-side section read goes through this ONE seam so the

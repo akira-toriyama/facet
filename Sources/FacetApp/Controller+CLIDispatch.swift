@@ -590,12 +590,7 @@ extension Controller {
         let labels = config.effectiveMacDesktopTabConfigs[ordinal]?.map(\.label) ?? []
         switch resolveBoardFocus(arg, boardLabels: labels) {
         case .resolved(let boardIndex):
-            // `?? 0` matches the apply() seam's default, so a flat `--focus 1`
-            // (board 0) on an unset selection is a true idempotent no-op.
-            guard (selectedBoard[ordinal] ?? 0) != boardIndex else { return }
-            selectedBoard[ordinal] = boardIndex
-            Log.debug("dispatchBoardFocus: ordinal=\(ordinal) → board \(boardIndex)")
-            apply(lastWorkspaces)       // re-render: re-group into the selected board
+            commitBoardSelection(ordinal: ordinal, to: boardIndex)
         case .outOfRange(let requested, let count):
             let hint = count == 1 ? "only 1 board" : "1..\(count)"
             setError("board --focus \(requested): out of range (\(hint))")
@@ -621,9 +616,41 @@ extension Controller {
     /// already drops a no-op pick, but the equality guard keeps it idempotent.
     func selectBoardFromUI(_ index: Int) {
         guard let ordinal = currentMacDesktopOrdinal() else { return }
-        guard (selectedBoard[ordinal] ?? 0) != index else { return }
-        selectedBoard[ordinal] = index
-        Log.debug("selectBoardFromUI: ordinal=\(ordinal) → board \(index)")
+        commitBoardSelection(ordinal: ordinal, to: index)
+    }
+
+    /// Commit a board switch for `ordinal` — the shared core of the CLI
+    /// (`dispatchBoardFocus`) and GUI (`selectBoardFromUI`) board verbs. A no-op
+    /// when the board is unchanged (so a flat `--focus 1` / board 0 on an unset
+    /// selection stays idempotent, matching the `apply()` seam's `?? 0`).
+    ///
+    /// L1 per-board active-section memory: the section the user was on is saved
+    /// under the board they LEAVE, and the destination board's remembered
+    /// section is restored (default: the spatial workspace). Without this the
+    /// single `currentActiveSection` would go stale after a switch — `apply()`'s
+    /// active-section re-read fires only on a desktop swap / WS switch, not a
+    /// board switch — leaving the active-lens highlight on the wrong board's
+    /// section. The swap-detector is synced (as `activateLensID` does) so the
+    /// synchronous `apply()` below doesn't mistake the switch for a desktop swap
+    /// and clobber the restored section.
+    ///
+    /// The OLD board's backend lens is CLEARED (`setSectionLens(nil)`) — it must
+    /// not bleed into the new board's view. A restored DISPLAY lens highlights
+    /// correctly (a lens is a pure VIEW — its window list comes from
+    /// `FilterProjection`, not the backend), but full per-board BACKEND lens
+    /// re-activation needs the board-aware adapter (W2.5-adapter); until then a
+    /// board config's lens is a display highlight only.
+    func commitBoardSelection(ordinal: Int, to newBoard: Int) {
+        let oldBoard = selectedBoard[ordinal] ?? 0
+        guard oldBoard != newBoard else { return }
+        boardActiveSection[ordinal, default: [:]][oldBoard] = currentActiveSection
+        selectedBoard[ordinal] = newBoard
+        currentActiveSection = boardActiveSection[ordinal]?[newBoard]
+            ?? .workspace(activeWSIndex(in: lastWorkspaces))
+        hasRenderedMacDesktop = true
+        lastRenderedMacDesktopOrdinal = ordinal
+        runBackendCommand { bk in bk.setSectionLens(nil, autoFocus: false); return nil }
+        Log.debug("commitBoardSelection: ordinal=\(ordinal) → board \(newBoard)")
         apply(lastWorkspaces)   // re-render: re-group into the selected board
     }
 

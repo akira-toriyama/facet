@@ -503,11 +503,13 @@ public struct FacetConfig: Sendable {
 
     /// Workspace list for a given mac-desktop ordinal (1-based, Mission
     /// Control order). When the section model is active there (≥1
-    /// `type = "workspace"` section), the COUNT and per-workspace layout seed
-    /// come from those sections; a section's name is its `label` if set, else
-    /// the emoji auto-name (§A). Else `defaultWorkspaceCount` unnamed slots
-    /// with no layout override. `nil` ordinal (SkyLight unavailable /
-    /// single-desktop mode) → default slots.
+    /// `type = "workspace"` section, flat OR in a board), the COUNT and
+    /// per-workspace layout seed come from those sections (via
+    /// `workspaceSubstrateSections`); a section's name is its `label` if set,
+    /// else it stays UNNAMED and is shown by its 1-based index (§B — the
+    /// `WorkspaceNaming` emoji pool was retired). Else `defaultWorkspaceCount`
+    /// unnamed slots with no layout override. `nil` ordinal (SkyLight
+    /// unavailable / single-desktop mode) → default slots.
     public func effectiveWorkspaceList(forMacDesktopOrdinal ordinal: Int?)
         -> [(index: Int, config: WorkspaceConfig)]
     {
@@ -547,12 +549,20 @@ public struct FacetConfig: Sendable {
     /// - `nil` ordinal (SkyLight unavailable / single-desktop mode) is
     ///   always managed.
     ///
-    /// The section signal is read through `effectiveMacDesktopSectionConfigs`.
+    /// The section signal is read through `effectiveMacDesktopSectionConfigs`
+    /// AND `effectiveMacDesktopTabConfigs` (the board model, t-wrd2 / M1): a
+    /// tab-only config opts facet in exactly like a section config. Keying on
+    /// the flat dict alone made an empty flat dict (every tab-only config)
+    /// return `true` for EVERY ordinal — facet would adopt + default-slot-seed
+    /// every unconfigured desktop. The gate is the UNION of the two ordinal
+    /// sets (not substrate presence — a lens-only config is deliberately
+    /// MANAGED-but-model-inactive, see `isSectionModelActive`).
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
-        if sections.isEmpty { return true }
+        let tabs = effectiveMacDesktopTabConfigs
+        if sections.isEmpty && tabs.isEmpty { return true }
         guard let ordinal else { return true }
-        return sections[ordinal] != nil
+        return sections[ordinal] != nil || tabs[ordinal] != nil
     }
 
     /// Whether the section/lens model drives the mac desktop at `ordinal` —
@@ -608,8 +618,19 @@ public struct FacetConfig: Sendable {
 
     /// Effective `[[desktop.N.section]]` definitions (the section/lens
     /// model). Always read through this, never the raw dict.
+    ///
+    /// N1 (boards-win is TOTAL): an ordinal that ALSO has `[[desktop.N.tab]]`
+    /// boards has its flat sections SHADOWED here — boards already win in
+    /// `activeBoardSections` / `workspaceSubstrateSections`, and leaving the
+    /// flat list visible would let a flat-list resolver (the native adapter's
+    /// `lensSection(forID:)`, still flat until the W2.5-adapter slice) silently
+    /// mis-resolve a board-minted `section:<declOrder>:<label>` id to a
+    /// different flat lens. Shadowing makes that resolver see nothing → it
+    /// loud-rejects instead. No tabs anywhere ⇒ the raw dict verbatim
+    /// (byte-identical to the pre-N1 accessor).
     public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
-        macDesktopSectionConfigs
+        guard !macDesktopTabConfigs.isEmpty else { return macDesktopSectionConfigs }
+        return macDesktopSectionConfigs.filter { macDesktopTabConfigs[$0.key] == nil }
     }
 
     /// Effective `[[desktop.N.tab]]` definitions (the board model). Always read

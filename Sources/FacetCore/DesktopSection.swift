@@ -313,7 +313,13 @@ public struct DesktopTab: Sendable, Equatable {
     /// (`facet board --focus N`) and is never shown here. Display-only / pure —
     /// identity stays on the board's position, never this caption.
     public var displayLabel: String {
-        if !label.isEmpty { return label }
+        // Trim so a whitespace-only label is treated as unnamed — `displayLabel`
+        // promises a never-blank caption (N2). `.whitespacesAndNewlines` so a
+        // `"\n"`-only label is caught too. The non-empty label is shown verbatim
+        // (no trim) to match the codebase's no-trim label convention.
+        if !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return label
+        }
         switch type {
         case .workspace:  return "Workspaces"
         case .lens:       return "Lenses"

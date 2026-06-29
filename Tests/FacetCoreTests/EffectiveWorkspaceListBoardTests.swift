@@ -97,4 +97,21 @@ final class EffectiveWorkspaceListBoardTests: XCTestCase {
             c.effectiveWorkspaceList(forMacDesktopOrdinal: 1).map(\.config.name),
             ["Main", "Side"])
     }
+
+    /// N5 (board review follow-up): a LENS-only board MASKS a flat workspace
+    /// section at the same ordinal — boards win once present, so the substrate
+    /// ignores the flat `[[desktop.N.section]]` workspace and degrades to
+    /// default slots. Self-consistent (no double-SSOT: the projection ignores
+    /// the flat list too); pinned here because it is surprising.
+    func testLensOnlyBoardMasksFlatWorkspaceSubstrate() {
+        var c = FacetConfig()
+        c.macDesktopSectionConfigs = [1: [ws("FlatWS")]]
+        c.macDesktopTabConfigs = [1: [
+            DesktopTab(type: .lens, sections: [lens("Web", "tag~=web")]),
+        ]]
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
+        XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount,
+                       "boards win; the flat workspace section is masked")
+        XCTAssertTrue(list.allSatisfy { $0.config.name.isEmpty })
+    }
 }
