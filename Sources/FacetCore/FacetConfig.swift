@@ -592,6 +592,35 @@ public struct FacetConfig: Sendable {
         macDesktopTabConfigs
     }
 
+    /// The section list that drives the overview projection for `ordinal`,
+    /// given the session-selected BOARD index (the board model, t-wrd2 / W2.2).
+    ///
+    /// - With `[[desktop.N.tab]]` boards present, returns the selected board's
+    ///   child sections. `board` is CLAMPED into range, so a stale selection
+    ///   (e.g. a hot-reload dropped boards) lands on the nearest in-range board
+    ///   rather than crashing or blanking the tree.
+    /// - With NO boards (every config today, until the W2.5 migration), DEGRADES
+    ///   to the flat `[[desktop.N.section]]` list — byte-identical to the
+    ///   pre-board path. The board layer is a transparent SELECTOR over the same
+    ///   section model `FilterProjection` already consumes, so projecting a
+    ///   board's sections equals projecting an equivalent flat config (the W2.2
+    ///   byte-一致 invariant).
+    /// - `nil` ordinal (SkyLight unavailable / single-desktop) → empty, like the
+    ///   flat reads keyed off the ordinal.
+    ///
+    /// Pure / read-only: never persists, never touches the backend (a board
+    /// switch re-groups the SAME windows — display only).
+    public func activeBoardSections(forMacDesktopOrdinal ordinal: Int?, board: Int)
+        -> [DesktopSection]
+    {
+        guard let ordinal else { return [] }
+        if let tabs = effectiveMacDesktopTabConfigs[ordinal], !tabs.isEmpty {
+            let b = max(0, min(board, tabs.count - 1))
+            return tabs[b].sections
+        }
+        return effectiveMacDesktopSectionConfigs[ordinal] ?? []
+    }
+
     /// Fatal config errors that should refuse startup (Fail Fast /
     /// Rule of Repair — never silently fall back). Empty = OK to start.
     /// The app entry prints these to stderr and `exit 2`.
