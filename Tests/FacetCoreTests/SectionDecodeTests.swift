@@ -111,14 +111,53 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertNil(n3)
     }
 
-    /// A workspace section may carry an `apply` seed (canonical order).
-    func testWorkspaceSectionCarriesApplySeed() {
+    /// t-qtpx: a workspace section FORBIDS `apply` (it is the exclusive spatial
+    /// substrate, carrying no side-effect). An authored `apply` is dropped with
+    /// a loud caveat; the section still decodes as a bare workspace.
+    func testWorkspaceSectionForbidsApply() {
+        // decode path: the apply is stripped to [].
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
         type = "workspace"
         apply = { tags = ["dev"], floating = true }
         """)
-        XCTAssertEqual(s[1]?[0].apply, [.addTag("dev"), .setFloating(true)])
+        XCTAssertEqual(s[1]?[0].apply, [])
+        // parse path: the loud caveat names `apply`.
+        let (section, note) = DesktopSection.parse(fromTOMLRow: [
+            "type": .string("workspace"),
+            "apply": .table(["tags": .array([.string("dev")]),
+                             "floating": .bool(true)]),
+        ])
+        XCTAssertEqual(section, DesktopSection(type: .workspace))
+        XCTAssertEqual(section?.apply, [])
+        XCTAssertTrue(note?.contains("apply") ?? false)
+    }
+
+    /// A workspace with BOTH an authored `match` and `apply` warns about each
+    /// (joined into one note) and still decodes as a bare workspace.
+    func testWorkspaceSectionForbidsMatchAndApplyBothWarn() {
+        let (section, note) = DesktopSection.parse(fromTOMLRow: [
+            "type": .string("workspace"),
+            "match": .string("tag~=x"),
+            "apply": .table(["tags": .array([.string("x")])]),
+        ])
+        XCTAssertEqual(section, DesktopSection(type: .workspace))
+        XCTAssertTrue(note?.contains("match") ?? false)
+        XCTAssertTrue(note?.contains("apply") ?? false)
+    }
+
+    /// t-qtpx: an unassigned section FORBIDS both `match` and `apply` (it is the
+    /// leftover by subtraction). Authored ones are dropped with a loud caveat;
+    /// the section still decodes (label only).
+    func testUnassignedSectionForbidsMatchAndApply() {
+        let (section, note) = DesktopSection.parse(fromTOMLRow: [
+            "type": .string("unassigned"), "label": .string("Lost"),
+            "match": .string("tag~=x"),
+            "apply": .table(["tags": .array([.string("x")])]),
+        ])
+        XCTAssertEqual(section, DesktopSection(type: .unassigned, label: "Lost"))
+        XCTAssertTrue(note?.contains("match") ?? false)
+        XCTAssertTrue(note?.contains("apply") ?? false)
     }
 
     /// §A: a lens section needs a non-empty `match`; `label` is OPTIONAL
@@ -382,11 +421,13 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(sections[1]?[0].label, "Web")
     }
 
-    // MARK: - apply inline table (canonical order frozen; lens sections)
+    // MARK: - apply inline table (lens sections — t-qtpx: tags-only)
 
-    func testApplyDecodesAllOpsInCanonicalOrder() {
-        // Wire order deliberately scrambled; decode must canonicalise to
-        // setWorkspace → addTag(s) → setFloating → setSticky → setMaster.
+    /// t-qtpx: a lens `apply` may ONLY add tags. The single-valued facets
+    /// (workspace / floating / sticky / master) are warned + dropped; only the
+    /// `addTag`s survive, in array order. (The full-op canonical order is still
+    /// exercised by `RuleDecodeTests` — `[[rule]]` keeps every op.)
+    func testLensApplyKeepsTagsDropsSingleValuedOps() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
         type = "lens"
@@ -394,14 +435,18 @@ final class SectionDecodeTests: XCTestCase {
         match = 'tag~=x'
         apply = { master = true, floating = false, tags = ["a", "b"], sticky = true, workspace = "Dev" }
         """)
-        XCTAssertEqual(s[1]?[0].apply, [
-            .setWorkspace("Dev"),
-            .addTag("a"),
-            .addTag("b"),
-            .setFloating(false),
-            .setSticky(true),
-            .setMaster(true),
+        XCTAssertEqual(s[1]?[0].apply, [.addTag("a"), .addTag("b")])
+        // parse() surfaces the loud caveat naming each dropped op.
+        let (_, note) = DesktopSection.parse(fromTOMLRow: [
+            "type": .string("lens"), "label": .string("Full"),
+            "match": .string("tag~=x"),
+            "apply": .table(["workspace": .string("Dev"),
+                             "tags": .array([.string("a")]),
+                             "floating": .bool(true)]),
         ])
+        XCTAssertNotNil(note)
+        XCTAssertTrue(note?.contains("workspace") ?? false)
+        XCTAssertTrue(note?.contains("floating") ?? false)
     }
 
     func testApplyTagsKeepArrayOrderAndNormalize() {
@@ -433,7 +478,7 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertEqual(s[1]?[1].apply, [])
     }
 
-    func testApplyIgnoresUnknownKeysAndEmptyWorkspace() {
+    func testLensApplyIgnoresUnknownKeysAndDropsNonTagOps() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
         type = "lens"
@@ -441,8 +486,9 @@ final class SectionDecodeTests: XCTestCase {
         match = 'tag~=u'
         apply = { bogus = "x", workspace = "", floating = true }
         """)
-        // empty workspace dropped, unknown key ignored, floating survives.
-        XCTAssertEqual(s[1]?[0].apply, [.setFloating(true)])
+        // unknown key ignored, empty workspace dropped by ApplyOp.list, and
+        // `floating` (single-valued) dropped by the lens tags-only rule → [].
+        XCTAssertEqual(s[1]?[0].apply, [])
     }
 
     func testNonTableApplyIsDropInert() {

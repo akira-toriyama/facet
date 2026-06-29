@@ -208,12 +208,13 @@ public protocol WindowBackend: Sendable {
 
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
 
-    /// EX-3: relocate `id` OUT of its workspace → 迷子 (`workspace = nil`). The
-    /// symmetric-move counterpart of `moveWindow`: a section DnD that drags a
-    /// window from a workspace onto a LENS makes it leave the workspace (canon
-    /// ⑤⑥ "全部移動") so it lives only via the lens's tag. The window parks if
-    /// it was on the active workspace. No-op for a sticky / stashed / already-
-    /// orphan / unknown window.
+    /// Relocate `id` OUT of its workspace → 迷子 (`workspace = nil`); the window
+    /// parks if it was on the active workspace. The orphan primitive, kept as a
+    /// foundation: t-qtpx removed the ws→lens DnD that used to call it (drag is
+    /// same-type only now), so it currently has NO production caller — the §G
+    /// unassigned receptacle + rescue read orphans via `orphanWindows()`, which
+    /// stays wired. No-op for a sticky / stashed / already-orphan / unknown
+    /// window.
     func orphanWindow(_ id: WindowID)
 
     func setLayoutMode(workspaceIndex index: Int, mode: String)

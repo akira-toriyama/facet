@@ -3,13 +3,14 @@ import XCTest
 @testable import FacetCore
 @testable import FacetAdapterNative
 
-// EX-3.1 — nullable `WindowSlot.workspace` foundation. These tests prove the
-// catalog is orphan-safe: a window with `workspace == nil` (a 迷子) never
-// crashes any catalog op, is excluded from every per-workspace projection, and
-// survives workspace mutation untouched — while a normal (workspaced) window's
-// behaviour is byte-identical to before. Orphans are injected directly here
-// (the public path that CREATES them lands in EX-3.2); at this layer nothing
-// else sets nil, so these tests pin the foundation, not new behaviour.
+// Nullable `WindowSlot.workspace` foundation. These tests prove the catalog is
+// orphan-safe: a window with `workspace == nil` (a 迷子) never crashes any
+// catalog op, is excluded from every per-workspace projection, and survives
+// workspace mutation untouched — while a normal (workspaced) window's behaviour
+// is byte-identical to before. Orphans are injected directly here via the
+// `setOrphan` primitive (kept as a foundation — t-qtpx removed the ws→lens DnD
+// that used to be its only production caller); these tests pin the foundation,
+// not new behaviour.
 //
 // CLT can't run XCTest; CI is the gate (memory feedback-swift-tests-only-compile-in-ci).
 final class OrphanWorkspaceTests: XCTestCase {
@@ -105,7 +106,7 @@ final class OrphanWorkspaceTests: XCTestCase {
         XCTAssertTrue(c.nonFloatingMembers(of: 1).contains(wid(10)))
     }
 
-    // MARK: - EX-3.2: setOrphan (workspace → 迷子) primitive
+    // MARK: - setOrphan (workspace → 迷子) primitive
 
     func testSetOrphanFromActiveWorkspaceParks() {
         var c = seededCatalog(3)                    // active = WS1
@@ -173,7 +174,7 @@ final class OrphanWorkspaceTests: XCTestCase {
         XCTAssertFalse(shown.contains(wid(10)), "orphan is invisible in the snapshot")
     }
 
-    // MARK: - EX-3.2: a workspace switch parks on-screen orphans
+    // MARK: - a workspace switch parks on-screen orphans
 
     func testSwitchWorkspaceParksOnScreenOrphan() {
         var c = seededCatalog(3)                    // active = WS1

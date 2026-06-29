@@ -40,14 +40,15 @@ import FacetCore
 /// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
 struct WindowSlot: Equatable, Sendable {
     /// 1-based workspace index, or `nil` for a 迷子 (orphan) — a window
-    /// assigned to NO facet workspace (EX-3 exclusive model: workspace =
-    /// 0 or 1). An orphan lives only via tags/lenses; it is invisible in
-    /// every per-workspace view (excluded by `== n1Based` filters, dropped
-    /// from `snapshot`) until a `type="lens"` receptacle (`match='not
-    /// workspace'`) gathers it. Orphans arise ONLY from an explicit DnD
-    /// move onto a lens (EX-3.2) — reconcile never adopts a nil. This is
-    /// the membership authority; the section model (a `type="lens"`
-    /// section + reconcile) owns visibility, reading `tags` for matching.
+    /// assigned to NO facet workspace. In the orthogonal model a window
+    /// normally belongs to exactly one workspace, so orphans are RARE:
+    /// t-qtpx removed the ws→lens DnD that used to create them (drag is
+    /// same-type only now — ws→ws moves, lens→lens re-tags), and reconcile
+    /// never adopts a nil. An orphan is invisible in every per-workspace view
+    /// (excluded by `== n1Based` filters, dropped from `snapshot`) until the
+    /// §G `type="unassigned"` receptacle surfaces it (a drag out onto a
+    /// workspace rescues it). This is the membership authority; the section
+    /// model owns visibility, reading `tags` for matching.
     let workspace: Int?
     let pid: Int
     /// Free-form per-window tag set (EX-4). Used by lens
@@ -125,7 +126,7 @@ struct WorkspaceCatalog {
     /// "show the number" / empty sentinel). Used when evaluating a lens / rule
     /// `match='workspace=Dev'` (`LensMembership` / `ProjectedWindowFields`): an
     /// orphan resolves to "" so `filterHas("workspace")` is false →
-    /// `match='not workspace'` (the 迷子 receptacle) matches it, and
+    /// `match='not workspace'` (e.g. a 迷子-surfacing lens) matches it, and
     /// `workspace=Dev` does not.
     func workspaceName(_ n1Based: Int?) -> String {
         guard let n1Based, n1Based >= 1, n1Based <= workspaceNames.count
@@ -660,15 +661,16 @@ struct WorkspaceCatalog {
         return .stateOnly
     }
 
-    /// EX-3 symmetric-move counterpart of `moveWindow(to:)`: relocate `id` OUT
-    /// of its workspace → 迷子 (`workspace = nil`). A DnD that drags a window
-    /// from a workspace onto a LENS makes it leave the workspace (canon ⑤⑥
-    /// "全部移動") so it lives only via the lens's tag; it parks if it was on the
-    /// active workspace (now belongs to no visible workspace), else state-only.
-    /// Mirrors `moveWindow`'s incoherence guards: a sticky window is everywhere
-    /// (can't be orphaned), a stashed scratchpad is off-screen, and a window
-    /// that is already orphan / unknown is a no-op. `MoveOutcome.restore` is
-    /// never returned (orphaning never brings a window on-screen).
+    /// Symmetric-move counterpart of `moveWindow(to:)`: relocate `id` OUT of
+    /// its workspace → 迷子 (`workspace = nil`); it parks if it was on the active
+    /// workspace (now belongs to no visible workspace), else state-only. The
+    /// orphan primitive, kept as a foundation: t-qtpx removed the ws→lens DnD
+    /// that used to call it (drag is same-type only now), so it has NO
+    /// production caller today. Mirrors `moveWindow`'s incoherence guards: a
+    /// sticky window is everywhere (can't be orphaned), a stashed scratchpad is
+    /// off-screen, and an already-orphan / unknown window is a no-op.
+    /// `MoveOutcome.restore` is never returned (orphaning never brings a window
+    /// on-screen).
     @discardableResult
     mutating func setOrphan(_ id: WindowID) -> MoveOutcome {
         guard let current = windowMap[id],
@@ -770,8 +772,8 @@ struct WorkspaceCatalog {
         // under the -1 sentinel (no valid 1-based index, never == any
         // entry.index) so it forms no nil key and is naturally dropped from the
         // per-WS emit below (invisible). It surfaces only via `facet query`'s
-        // 迷子 label / a 迷子 receptacle lens. The orphan-CREATION event is
-        // logged at the relocation seam (EX-3.2), not per-snapshot (hot path).
+        // 迷子 label / the §G unassigned receptacle. Orphans are rare now —
+        // t-qtpx removed the ws→lens DnD that created them.
         let byWS = Dictionary(grouping: tracked) { w in
             windowMap[w.id]?.workspace ?? -1
         }
@@ -864,9 +866,9 @@ struct WorkspaceCatalog {
     /// drops them (they belong to no `Workspace`), so without this they render
     /// in no tree/grid/rail section even though a content lens may `match` them.
     /// `Controller.apply` feeds the result to
-    /// `FilterProjection.project(…, orphans:)`, which appends them into the
-    /// `not workspace` receptacle (and any content lens they match) WITHOUT
-    /// touching workspace sections.
+    /// `FilterProjection.project(…, orphans:)`, which appends them into the §G
+    /// `type="unassigned"` receptacle (and any lens whose `match` they satisfy,
+    /// e.g. `not workspace`) WITHOUT touching workspace sections.
     ///
     /// Stashed windows are excluded (via `trackedWindows`). Frame = the raw
     /// live bounds (an orphan has no WS layout); `isMaster: false`.

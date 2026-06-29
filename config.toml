@@ -586,8 +586,12 @@ action = "ignore"
 # OS window (no park, no tiling, no real hide) — the real desktop is unchanged;
 # you CLICK a matched window to jump to it (workspace switch + focus).
 # Switching to any workspace clears the active lens automatically; `--clear`
-# drops the view. Tree drag-and-drop applies / un-applies a lens's
-# `apply` ops. The section model is facet's canonical configuration.
+# drops the view. Tree drag-and-drop is SAME-TYPE ONLY: a window dragged
+# between workspaces changes its membership, and one dragged between lenses
+# re-tags it (applies / un-applies the lenses' `apply` tags) — but a window is
+# never dragged ACROSS the workspace/lens boundary (do that via right-click /
+# `facet window --tag` / `--move-to`). The section model is facet's canonical
+# configuration.
 #
 # OPT-IN: as soon as ANY [[desktop.N.section]] exists, facet manages ONLY
 # the desktops that have a section block. A desktop without one is left
@@ -607,12 +611,16 @@ action = "ignore"
 #   type = "workspace"  — a permanent spatial cell (the tiling unit, the
 #       grid/rail cell). Named by an optional `label` (else unnamed, shown by
 #       its 1-based index); a non-empty `label` must be unique on the desktop
-#       (dup → loud warn + first-wins). You don't filter it. Optional
-#       `layout` seeds its tiling engine. The COUNT of workspace sections
-#       is that desktop's live workspace count; each section's `layout` is
-#       that workspace's startup layout. Having at least one workspace
-#       section is what turns the section model ON for the desktop — a
-#       desktop with ONLY lens / unassigned sections falls back to the
+#       (dup → loud warn + first-wins). You don't filter it — `match` and
+#       `apply` are FORBIDDEN on a workspace (it is the exclusive spatial
+#       substrate, carrying no filter or side-effect; an authored one is
+#       ignored with a warning). Membership changes by DRAG (between
+#       workspaces) or `facet window --move-to N`, never config apply.
+#       Optional `layout` seeds its tiling engine. The COUNT of workspace
+#       sections is that desktop's live workspace count; each section's
+#       `layout` is that workspace's startup layout. Having at least one
+#       workspace section is what turns the section model ON for the desktop —
+#       a desktop with ONLY lens / unassigned sections falls back to the
 #       default 5 workspaces (and its lenses stay inert).
 #         [[desktop.1.section]]
 #         type = "workspace"
@@ -640,65 +648,53 @@ action = "ignore"
 #                  meaningful only on `type = "workspace"` sections, where it
 #                  seeds the tiling engine. Per the clamp-don't-reject rule an
 #                  authored `layout` here is harmless dead data.
-#         apply  — (optional) facets SET on a window dropped into the lens,
-#                  so the drop "sticks". Inline table; all keys optional:
-#                    workspace = "Dev"   move to that workspace (auto-replace)
-#                    tags      = ["web"] add these tags (additive)
-#                    floating  = true    float / unfloat
-#                    sticky    = true    pin / unpin across desktops
-#                    master    = true    mark / unmark as layout master
-#                  Omit `apply` → the lens is drop-inert (a drop snaps back).
+#         apply  — (optional) tags ADDED to a window dropped into the lens, so
+#                  the drop "sticks" (and a drag back out un-tags it). ADDITIVE
+#                  TAGS ONLY — inline table, only `tags` honored:
+#                    tags = ["web"]   add these tags (additive)
+#                  `workspace` / `floating` / `sticky` / `master` are FORBIDDEN
+#                  on a lens (dropped with a warning): workspace membership is
+#                  the workspace axis, window attributes are direct CLI. Pair
+#                  `match = 'tag~=X'` with `apply = { tags = ["X"] }` so a drop
+#                  into the lens tags the window and it then satisfies the match
+#                  (it stays). Omit `apply` → the lens is drop-inert (snaps back).
 #
-#   type = "unassigned"  — (§G) the lost-and-found receptacle: an OPT-IN
-#       section that collects every window shown in NO other section (the
-#       "leftover" — in practice the orphans no lens caught). No `match` /
-#       `apply` (the "leftover" is computed by subtraction, not a filter);
-#       just an optional `label`. Only the FIRST unassigned section renders
-#       (extras warn). It shows in tree/grid/rail like a lens cell, focuses
-#       its first window on click / `--focus`, can be runtime-renamed, and a
-#       window dragged out of it onto a workspace is RESCUED (moved there).
-#       Add one so a stray window is never invisible:
+#   type = "unassigned"  — (§G) the lost-and-found receptacle, and the
+#       RECOMMENDED safety net: an OPT-IN section that collects every window
+#       shown in NO other section (the "leftover", computed by subtraction).
+#       `match` / `apply` are FORBIDDEN (the leftover is not a filter); just an
+#       optional `label`. Only the FIRST unassigned section renders (extras
+#       warn). It shows in tree/grid/rail like a lens cell, focuses its first
+#       window on click / `--focus`, can be runtime-renamed, and a window
+#       dragged out of it onto a workspace is RESCUED (moved there). KEEP ONE
+#       per desktop — DON'T DELETE IT: without it a stray window that lands in
+#       no section is invisible. In practice it's usually empty (every window
+#       lives in a workspace), so it just sits quietly until needed.
 #         [[desktop.1.section]]
 #         type = "unassigned"
 #         label = "Lost & Found"   # optional
 #
-#   Orphans receptacle — a window can belong to NO workspace
-#       (`workspace = 0 or 1`, EX-3): dragging it onto a lens RELOCATES it out
-#       of its workspace (a full move), so when no matching lens is active it
-#       is an orphan — invisible-but-logged, never auto-homed. Surface them
-#       with a plain `type = "lens"` whose `match` catches "no workspace
-#       assignment":
-#         [[desktop.1.section]]
-#         type = "lens"
-#         label = "Orphans"
-#         match = 'not workspace'          # every window not filed in a workspace
-#       (`'not workspace and not tag'` for strictly tagless ones). RECOMMENDED:
-#       keep one per desktop so a stray window is never lost. (Or use a
-#       `type = "unassigned"` section above — it catches EVERY leftover window,
-#       not just `not workspace` orphans, and needs no `match`.)
-#
 # `type` is REQUIRED: a section with an absent or unknown `type` is skipped
 # with a loud log (never a silent guess).
 #
-# ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: an Orphans receptacle
-# lens + 2 unnamed (index-shown) workspaces + 3 lenses (Web / Code / Chat).
-# Desktop 2: a NAMED "Main" workspace + an unnamed one + a "Stray"
-# lost-and-found (type="unassigned"). Desktop 3: 2 unnamed workspaces.
-# Because these section blocks exist, facet is OPT-IN: it manages desktops
-# 1–3 and leaves every OTHER mac desktop untouched (panel hidden there).
-# Edit to taste, add `[[desktop.4.section]]` blocks for more desktops, or
-# comment this whole sample out to fall back to the zero-config default
+# ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: a Lost & Found
+# receptacle (type="unassigned") + 2 unnamed (index-shown) workspaces + 3
+# lenses (Web / Code / Chat). Desktop 2: a NAMED "Main" workspace + an unnamed
+# one + a "Stray" lost-and-found (type="unassigned"). Desktop 3: 2 unnamed
+# workspaces. Because these section blocks exist, facet is OPT-IN: it manages
+# desktops 1–3 and leaves every OTHER mac desktop untouched (panel hidden
+# there). Edit to taste, add `[[desktop.4.section]]` blocks for more desktops,
+# or comment this whole sample out to fall back to the zero-config default
 # (every mac desktop gets 5 unnamed workspaces). Activate a lens at runtime
 # with `facet lens "Web"` (it shows only the Web windows in the views — it
 # parks nothing); clear it with `facet lens --clear`.
 
-# Recommended!! — the Orphans (orphan) receptacle. A window dragged onto a lens leaves
-# its workspace; with no matching lens active it would be invisible. This
-# catch-all lens surfaces every such window so nothing is ever lost. Keep one.
+# Recommended!! — the Lost & Found receptacle. It collects any window that ends
+# up in no section so nothing is ever invisible. Usually empty (every window
+# lives in a workspace); keep one per desktop as a safety net — DON'T DELETE.
 [[desktop.1.section]]
-type = "lens"
-label = "Orphans"
-match = 'not workspace'
+type = "unassigned"
+label = "Lost & Found"
 
 [[desktop.1.section]]
 type = "workspace"
@@ -712,7 +708,6 @@ layout = "stack"
 type = "lens"
 label = "Web"
 match = 'app=Safari or app~=Chrome or app~=Firefox'
-layout = "spiral"
 apply = { tags = ["web"] }
 
 [[desktop.1.section]]
@@ -738,7 +733,7 @@ layout = "bsp"
 type = "workspace"
 
 # A type="unassigned" lost-and-found: collects every window on this desktop
-# shown in NO section above (the leftover — in practice the orphans). It
+# shown in NO section above (the leftover by subtraction; usually empty). It
 # renders like a lens cell; click / `facet section --focus` focuses its first
 # window; drag a window out onto a workspace to RESCUE it. Only the first
 # unassigned section renders (extras warn).

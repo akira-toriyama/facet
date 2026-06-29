@@ -417,24 +417,27 @@ Frequently-touched keys:
   sections describes that desktop; each has a required `type`:
   `"workspace"` (a spatial cell named by an optional `label`, else unnamed
   and shown by its 1-based index, with an optional `layout` seed; the count
-  of these is that desktop's workspace count),
+  of these is that desktop's workspace count — `match` and `apply` are
+  **forbidden** on a workspace, so its membership changes only by drag or
+  `facet window --move-to N`),
   `"lens"` (a saved visibility filter / view — `label` + `match` + optional
-  `layout` + `apply`; activate it with `facet lens NAME` to DISPLAY the
-  matches aggregated across **every** workspace on the current mac desktop (a
-  lens never moves a real window); switching to any workspace clears the
-  lens, `facet lens --clear` drops the view;
-  **dragging a window onto a lens relocates it out of its workspace** — it now
-  lives only via the lens, becoming a 迷子 (orphan) when no matching lens is
-  active). A window can thus belong to **no** workspace; orphans are
-  invisible-but-logged (never auto-homed). Surface them with a 迷子 receptacle —
-  a `type = "lens"` section whose `match = 'not workspace'` (recommended: keep
-  one per desktop), or a
-  `"unassigned"` section (`label` only, no `match`) — an opt-in lost-and-found
-  that collects **every** leftover window (any window shown in no other section,
-  not just `not workspace` orphans), renders like a lens cell, focuses its first
-  window on `facet section --focus`, and rescues a window dragged out onto a
-  workspace; only the first `"unassigned"` section renders. **A workspace is
-  named by its optional `label`** (else
+  `apply`, where **`apply` adds tags only** — `{ tags = [...] }`, additive;
+  `workspace` / `floating` / `sticky` / `master` are forbidden on a lens and
+  dropped; activate it with `facet lens NAME` to DISPLAY the matches
+  aggregated across **every** workspace on the current mac desktop (a lens is
+  a pure VIEW — it never moves a real window, and an authored `layout` is
+  ignored); switching to any workspace clears the lens, `facet lens --clear`
+  drops the view). **Drag-and-drop is same-type only**: dragging a window
+  between workspaces moves it; between lenses re-tags it; the workspace ↔ lens
+  boundary is never crossed by a drag (do cross-axis edits via right-click /
+  `facet window --tag` / `--move-to`), and a
+  `"unassigned"` section (`label` only, no `match` / `apply`) is the
+  **recommended** opt-in lost-and-found — it collects **every** leftover window
+  (any window shown in no other section), renders like a lens cell, focuses its
+  first window on `facet section --focus`, and rescues a window dragged out onto
+  a workspace; only the first `"unassigned"` section renders, and it's usually
+  empty (every window lives in a workspace) — keep one as a safety net.
+  **A workspace is named by its optional `label`** (else
   unnamed, shown by its 1-based index); `facet workspace --rename` overrides
   at runtime. Two modes: **no**
   `[[desktop.N.section]]` anywhere → every mac desktop gets the default
