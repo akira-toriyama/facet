@@ -13,5 +13,5 @@ permissions:
 
 jobs:
   sync:
-    uses: akira-toriyama/.github/.github/workflows/sync-task-status.yml@main
+    uses: akira-toriyama/.github/.github/workflows/sync-task-status.yml@v1
     secrets: inherit

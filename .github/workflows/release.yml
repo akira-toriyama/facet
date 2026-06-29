@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   release:
-    uses: akira-toriyama/.github/.github/workflows/release.yml@main
+    uses: akira-toriyama/.github/.github/workflows/release.yml@v1
     with:
       app: Facet
       dry-run: ${{ github.event.inputs.dry_run == 'true' }}
