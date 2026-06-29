@@ -610,6 +610,23 @@ extension Controller {
         }
     }
 
+    /// Tree tab-bar board switch (t-wrd2 / W2.4) — the GUI twin of
+    /// `facet board --focus`. A click / wheel on `BoardTabBar` hands a 0-based
+    /// board index (already resolved view-side from the laid-out tabs), so this
+    /// skips `resolveBoardFocus`'s label/`index:` parsing and just commits:
+    /// write the session-only `selectedBoard[ordinal]` + re-render (a pure
+    /// DISPLAY re-grouping of the SAME windows — never a real window move). The
+    /// non-nil-ordinal gate mirrors `dispatchBoardFocus` (the projection seam
+    /// reads `selectedBoard` only under the `let ordinal` guard). The view
+    /// already drops a no-op pick, but the equality guard keeps it idempotent.
+    func selectBoardFromUI(_ index: Int) {
+        guard let ordinal = currentMacDesktopOrdinal() else { return }
+        guard (selectedBoard[ordinal] ?? 0) != index else { return }
+        selectedBoard[ordinal] = index
+        Log.debug("selectBoardFromUI: ordinal=\(ordinal) → board \(index)")
+        apply(lastWorkspaces)   // re-render: re-group into the selected board
+    }
+
     /// §G unified focus helper: focus the FIRST window of the section with
     /// stable id `id` (an `.unassigned` receptacle in practice — its orphan
     /// windows have no workspace/lens to switch to). Looks the section up in
