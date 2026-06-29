@@ -141,6 +141,19 @@ final class Controller: NSObject {
             forMacDesktopOrdinal: ordinal,
             board: ordinal.flatMap { selectedBoard[$0] } ?? 0)
     }
+    /// The active mac desktop's board-switcher inputs, shared by the tree band
+    /// feed (`apply`) and the grid / rail overlay bands. Returns the display
+    /// labels in config order + the clamped selected index. < 2 boards (flat /
+    /// single-board config, or `nil` ordinal) ⇒ `([], 0)` ⇒ the caller reserves
+    /// no band height (byte-identical chrome). The clamp matches the projection's
+    /// board clamp in `selectedBoardSections`.
+    func boardBandInputs() -> (labels: [String], selectedIndex: Int) {
+        let ord = currentMacDesktopOrdinal()
+        let boards = ord.flatMap { config.effectiveMacDesktopTabConfigs[$0] } ?? []
+        guard boards.count >= 2, let ord else { return ([], 0) }
+        return (boards.map(\.displayLabel),
+                max(0, min(boards.count - 1, selectedBoard[ord] ?? 0)))
+    }
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -1110,11 +1123,18 @@ final class Controller: NSObject {
         // windows) — no park-flag narrowing, no view-side recompute. `wss`
         // stays the full set.
         if let g = gridView {
+            let prevBoard = g.activeBoardIndex
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
             g.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+            let board = boardBandInputs()      // keep the open grid's board band in sync
+            g.boardLabels = board.labels
+            g.activeBoardIndex = board.selectedIndex
             g.layoutCells()       // refresh open grid on backend events
+            // A board switch swaps the whole section set — re-seed the keyboard
+            // ring onto a valid cell (other backend events keep the selection).
+            if board.selectedIndex != prevBoard { g.kbSeedToActiveCell() }
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
         // grid), so keep it live with every reconcile — the active-WS
@@ -1129,6 +1149,10 @@ final class Controller: NSObject {
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
             rv.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+            let prevBoard = rv.activeBoardIndex
+            let railBoard = boardBandInputs()   // keep the open rail's board band in sync
+            rv.boardLabels = railBoard.labels
+            rv.activeBoardIndex = railBoard.selectedIndex
             // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
             // is open re-centres the strip on the new active SECTION — but
             // only when the user isn't mid-browse (cursor still on the OLD
@@ -1139,6 +1163,9 @@ final class Controller: NSObject {
             if rv.selectedSectionID == oldActiveID, let n = newActiveID {
                 rv.selectedSectionID = n
             }
+            // A board switch swaps the whole section set — reset the carousel
+            // slide / crossfade so the old board's animation can't bleed in.
+            if railBoard.selectedIndex != prevBoard { rv.resetCarouselAnimation() }
             rv.layoutCells()      // refresh open rail on backend events
         }
         if firstRealApply {
@@ -1244,15 +1271,9 @@ final class Controller: NSObject {
         // board config feeds an empty label list, so PanelHost hides the band
         // and reserves no height (byte-identical chrome). The active index is
         // clamped, matching the projection's board clamp.
-        let boards = macDesktopOrdinal
-            .flatMap { config.effectiveMacDesktopTabConfigs[$0] } ?? []
-        if boards.count >= 2, let ord = macDesktopOrdinal {
-            panelHost.boardTabBar.boardLabels = boards.map(\.displayLabel)
-            panelHost.boardTabBar.activeBoardIndex =
-                max(0, min(boards.count - 1, selectedBoard[ord] ?? 0))
-        } else {
-            panelHost.boardTabBar.boardLabels = []
-        }
+        let board = boardBandInputs()
+        panelHost.boardTabBar.boardLabels = board.labels
+        panelHost.boardTabBar.activeBoardIndex = board.selectedIndex
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }

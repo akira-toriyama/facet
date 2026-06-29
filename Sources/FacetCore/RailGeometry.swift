@@ -123,3 +123,52 @@ public func railScaledPads(screen: CGSize,
             (s * heroGapFrac).rounded(),
             (s * outerFrac).rounded())
 }
+
+// MARK: - Board switcher band (t-wrd2 rail slice)
+
+/// One laid-out board tab in the rail's board band, in the rail view's FLIPPED
+/// (y-down) drawing space. `boardIndex` is the 0-based board this tab stands for
+/// (preserved so a click / wheel maps back, like `BoardTabFrame`).
+public struct RailBoardCellFrame: Equatable, Sendable {
+    public let boardIndex: Int
+    public let rect: CGRect
+    public init(boardIndex: Int, rect: CGRect) {
+        self.boardIndex = boardIndex
+        self.rect = rect
+    }
+}
+
+/// Carve the board band's sliver `t` off the TOP of `bounds` so the strip + hero
+/// lay out in the remainder. The band is a horizontal row pinned to the screen
+/// TOP on every edge (a bottom dock keeps its strip at the bottom — the band just
+/// reserves height from the top of the hero; left/right keep their side strip).
+/// `t == 0` returns `bounds` unchanged (the < 2-board degrade ⇒ byte-identical
+/// rail). Pure / testable.
+public func railInset(_ bounds: CGRect, by t: CGFloat) -> CGRect {
+    let t = max(0, t)
+    return CGRect(x: bounds.minX, y: bounds.minY + t,
+                  width: bounds.width, height: max(0, bounds.height - t))
+}
+
+/// The board band's rect + each board tab's rect — a horizontal tab row pinned to
+/// the screen TOP (every edge). `thickness` is the band's height (the same sliver
+/// `railInset` reserved off the top). Tabs lay out via `boardTabLayout` (intrinsic
+/// when they fit, uniform shrink on overflow). `boardCount < 2` or
+/// `thickness <= 0` ⇒ an empty band + no cells (the visibility gate). Pure /
+/// testable.
+public func railBoardBand(in bounds: CGRect, boardCount: Int,
+                          thickness: CGFloat, tabWidths: [CGFloat],
+                          gap: CGFloat, innerPad: CGFloat)
+    -> (bandRect: CGRect, cells: [RailBoardCellFrame]) {
+    guard boardCount >= 2, thickness > 0 else { return (.zero, []) }
+    let bandRect = CGRect(x: bounds.minX, y: bounds.minY,
+                          width: bounds.width, height: thickness)
+    let laid = boardTabLayout(widths: tabWidths,
+                              available: bandRect.width - innerPad * 2, gap: gap)
+    let cells = laid.map {
+        RailBoardCellFrame(boardIndex: $0.boardIndex,
+            rect: CGRect(x: bandRect.minX + innerPad + $0.x, y: bandRect.minY,
+                         width: $0.width, height: bandRect.height))
+    }
+    return (bandRect, cells)
+}
