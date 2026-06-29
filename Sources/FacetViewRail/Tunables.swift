@@ -101,8 +101,8 @@ let railBoardGap: CGFloat = 4
 let railBoardInnerPad: CGFloat = 12
 /// Active-tab pill corner radius.
 let railBoardRadius: CGFloat = 6
-/// Scroll-wheel points accumulated per one board step over the band.
-let railBoardWheelStep: CGFloat = 14
+// Scroll-wheel points per board step: shared with the tree band via FacetView's
+// `boardBandWheelStep` (both bands mirror) — no separate rail copy (t-9amp / R1).
 
 /// Centred label size on an empty-WS swap ghost.
 let railGhostLabelSize: CGFloat = 22

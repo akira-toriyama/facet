@@ -384,7 +384,7 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
-        panelHost.boardTabBar.onSelectBoard = { [weak self] idx in
+        panelHost.boardBand.onSelectBoard = { [weak self] idx in
             self?.selectBoardFromUI(idx)
         }
         searchDelegate.onChange = { [weak self] q in
@@ -1289,8 +1289,8 @@ final class Controller: NSObject {
         // and reserves no height (byte-identical chrome). The active index is
         // clamped, matching the projection's board clamp.
         let board = boardBandInputs()
-        panelHost.boardTabBar.boardLabels = board.labels
-        panelHost.boardTabBar.activeBoardIndex = board.selectedIndex
+        panelHost.boardBand.boardLabels = board.labels
+        panelHost.boardBand.activeBoardIndex = board.selectedIndex
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
