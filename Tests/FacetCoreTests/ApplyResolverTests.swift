@@ -23,12 +23,13 @@ final class ApplyResolverTests: XCTestCase {
         DesktopSection(type: .lens, label: label, match: match, apply: apply)
     }
 
-    /// [0] workspace, [1] "Web" tag~=web → addTag(web), [2] "Float"
-    /// floating=true → setFloating(true), [3] "Empty" app=X (no apply).
+    /// [0] workspace, [1] "Web" tag~=web → addTag(web), [2] "Code"
+    /// tag~=code → addTag(code), [3] "Empty" app=X (no apply). A lens `apply`
+    /// is tags-only (t-qtpx), so every fixture lens applies tags.
     private func sections() -> [DesktopSection] {
         [wsSec(),
          lens("Web", "tag~=web", apply: [.addTag("web")]),
-         lens("Float", "floating=true", apply: [.setFloating(true)]),
+         lens("Code", "tag~=code", apply: [.addTag("code")]),
          lens("Empty", "app=Nope")]
     }
 
@@ -148,28 +149,26 @@ final class ApplyResolverTests: XCTestCase {
     // MARK: - plan() — MOVE / ADD / inert
 
     func testPlanLensToLensMove() {
-        // Web (section:1) → Float (section:2): inverse removeTag(web),
-        // forward setFloating(true), no workspace relocation.
+        // Web (section:1) → Code (section:2): inverse removeTag(web),
+        // forward addTag(code) (lens apply is tags-only), no relocation.
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome", tags: ["web"]), workspaceName: "Dev",
-            fromSectionID: "section:1:Web", toSectionID: "section:2:Float",
+            fromSectionID: "section:1:Web", toSectionID: "section:2:Code",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertFalse(p.isInert)
         XCTAssertEqual(p.inverse, [.removeTag("web")])
-        XCTAssertEqual(p.forward, [.setFloating(true)])
+        XCTAssertEqual(p.forward, [.addTag("code")])
         XCTAssertNil(p.destWorkspaceIndex)
     }
 
-    func testPlanLensToWorkspaceMove() {
-        // Web → workspace ws:0: inverse removeTag(web), forward [], destWS 0.
+    func testPlanLensToWorkspaceIsInert() {
+        // t-qtpx: lens → workspace is a ws↔lens CROSSING — removed from DnD,
+        // so it snaps back (cross-axis edits go via CLI / right-click).
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome", tags: ["web"]), workspaceName: "Dev",
             fromSectionID: "section:1:Web", toSectionID: "ws:0",
             destWorkspaceIndex: 0, in: sections())
-        XCTAssertFalse(p.isInert)
-        XCTAssertEqual(p.inverse, [.removeTag("web")])
-        XCTAssertEqual(p.forward, [])
-        XCTAssertEqual(p.destWorkspaceIndex, 0)
+        XCTAssertTrue(p.isInert)
     }
 
     func testPlanAddHasNoInverse() {
@@ -192,31 +191,38 @@ final class ApplyResolverTests: XCTestCase {
     }
 
     func testPlanEmptyApplyLensIsInert() {
-        // "Empty" (section:3) has no apply → drop-inert.
+        // "Empty" (section:3) has no apply → drop-inert. Source is the "Web"
+        // lens (same-type lens→lens, so the cross-type guard passes and the
+        // empty-apply check is what makes it inert).
         let p = ApplyResolver.plan(
-            window: win(1), workspaceName: "Dev",
-            fromSectionID: "ws:0", toSectionID: "section:3:Empty",
+            window: win(1, app: "Chrome", tags: ["web"]), workspaceName: "Dev",
+            fromSectionID: "section:1:Web", toSectionID: "section:3:Empty",
             destWorkspaceIndex: nil, in: sections())
         XCTAssertTrue(p.isInert)
     }
 
     func testPlanNonSatisfyingIsInert() {
-        // A lens whose apply can't make the window match → snap-back.
+        // A lens whose apply can't make the window match → snap-back. Source is
+        // another lens (same-type lens→lens) so the satisfy invariant — not the
+        // cross-type guard — is what rejects it.
         let secs = [wsSec(),
+                    lens("Play", "tag~=play", apply: [.addTag("play")]),
                     lens("Safari", "app=Safari", apply: [.addTag("s")])]
         let p = ApplyResolver.plan(
-            window: win(1, app: "Chrome"), workspaceName: "Dev",
-            fromSectionID: "ws:0", toSectionID: "section:1:Safari",
+            window: win(1, app: "Chrome", tags: ["play"]), workspaceName: "Dev",
+            fromSectionID: "section:1:Play", toSectionID: "section:2:Safari",
             destWorkspaceIndex: nil, in: secs)
         XCTAssertTrue(p.isInert)
     }
 
     func testPlanStickyToWorkspaceIsInert() {
-        // moveWindow rejects sticky windows → snap-back rather than no-op.
+        // moveWindow rejects sticky windows → snap-back rather than no-op. A
+        // ws→ws MOVE (same-type) reaches the sticky guard; a lens→ws would be
+        // rejected earlier as cross-type.
         let p = ApplyResolver.plan(
             window: win(1, sticky: true), workspaceName: "Dev",
-            fromSectionID: "section:1:Web", toSectionID: "ws:0",
-            destWorkspaceIndex: 0, in: sections())
+            fromSectionID: "ws:0", toSectionID: "ws:1",
+            destWorkspaceIndex: 1, in: sections())
         XCTAssertTrue(p.isInert)
     }
 
@@ -228,23 +234,25 @@ final class ApplyResolverTests: XCTestCase {
         XCTAssertTrue(p.isInert)
     }
 
-    func testPlanWorkspaceSourceHasNoInverse() {
-        // Dragging OUT of a workspace section: no additive tag to reverse.
+    func testPlanWorkspaceToLensIsInert() {
+        // t-qtpx: workspace → lens is a ws↔lens CROSSING — removed from DnD
+        // (this was the EX-3 orphan-on-drop path), so it snaps back.
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome"), workspaceName: "Dev",
             fromSectionID: "ws:0", toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: sections())
-        XCTAssertEqual(p.inverse, [])
-        XCTAssertEqual(p.forward, [.addTag("web")])
+        XCTAssertTrue(p.isInert)
     }
 
     // MARK: - convergence (plan forward → re-project → lands in dest)
 
     func testForwardApplyLandsWindowInDestLens() {
         let secs = sections()
+        // ADD (right-click, fromSectionID nil) onto the Web lens — the
+        // intentional multi-match path (a ws→lens MOVE is now cross-type-inert).
         let p = ApplyResolver.plan(
             window: win(1, app: "Chrome"), workspaceName: "Dev",
-            fromSectionID: "ws:0", toSectionID: "section:1:Web",
+            fromSectionID: nil, toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: secs)
         // Simulate the backend applying the forward op (addTag("web")).
         var tags: [String] = []
@@ -274,11 +282,12 @@ final class ApplyResolverTests: XCTestCase {
     func testPlanNetOverApproveIsInert() {
         // Source "Web" applies the very tag dest "Pinned" still needs; the
         // un-apply strips it, so the window would land in NEITHER lens →
-        // inert (a forward-only check would wrongly let it proceed).
+        // inert (a forward-only check would wrongly let it proceed). Both
+        // lenses are tags-only (t-qtpx).
         let secs = [wsSec(),
                     lens("Web", "tag~=web", apply: [.addTag("web")]),
-                    lens("Pinned", "tag~=web and sticky=true",
-                         apply: [.setSticky(true)])]
+                    lens("Pinned", "tag~=web and tag~=pinned",
+                         apply: [.addTag("pinned")])]
         let p = ApplyResolver.plan(
             window: win(1, tags: ["web"]), workspaceName: "Dev",
             fromSectionID: "section:1:Web", toSectionID: "section:2:Pinned",
@@ -310,6 +319,70 @@ final class ApplyResolverTests: XCTestCase {
             window: win(1, tags: ["web"]), workspaceName: "Dev",
             fromSectionID: "section:9:Gone", toSectionID: "section:1:Web",
             destWorkspaceIndex: nil, in: sections())
+        XCTAssertTrue(p.isInert)
+    }
+
+    // MARK: - SAME-TYPE-ONLY DnD policy (t-qtpx) + §G rescue exception
+
+    func testPlanWorkspaceToWorkspaceMove() {
+        // ws→ws (same-type): a pure membership move via destWorkspaceIndex, no
+        // inverse / forward.
+        let p = ApplyResolver.plan(
+            window: win(1), workspaceName: "Dev",
+            fromSectionID: "ws:0", toSectionID: "ws:1",
+            destWorkspaceIndex: 1, in: sections())
+        XCTAssertFalse(p.isInert)
+        XCTAssertEqual(p.inverse, [])
+        XCTAssertEqual(p.forward, [])
+        XCTAssertEqual(p.destWorkspaceIndex, 1)
+    }
+
+    func testPlanWorkspaceToLensIsCrossType() {
+        // Re-stated for the policy section: ws→lens snaps back.
+        let p = ApplyResolver.plan(
+            window: win(1, app: "Chrome"), workspaceName: "Dev",
+            fromSectionID: "ws:0", toSectionID: "section:1:Web",
+            destWorkspaceIndex: nil, in: sections())
+        XCTAssertTrue(p.isInert)
+    }
+
+    /// §G RESCUE (the cross-type exception): a TRUE orphan (`workspaceName ==
+    /// nil`) dragged OUT of the unassigned receptacle ONTO a workspace is filed
+    /// there — moved via destWorkspaceIndex, no inverse, never inert.
+    func testPlanUnassignedToWorkspaceRescue() {
+        let secs = [wsSec(), wsSec(),
+                    DesktopSection(type: .unassigned, label: "Lost")]
+        let p = ApplyResolver.plan(
+            window: win(9, app: "Chrome"), workspaceName: nil,
+            fromSectionID: "unassigned:2", toSectionID: "ws:1",
+            destWorkspaceIndex: 1, in: secs)
+        XCTAssertFalse(p.isInert,
+            "rescue from the unassigned receptacle onto a workspace is allowed")
+        XCTAssertEqual(p.inverse, [], "the unassigned receptacle has no apply to reverse")
+        XCTAssertEqual(p.destWorkspaceIndex, 1)
+    }
+
+    func testPlanUnassignedToLensIsInert() {
+        // unassigned → lens is cross-type (only unassigned → workspace rescues).
+        let secs = [wsSec(),
+                    lens("Web", "tag~=web", apply: [.addTag("web")]),
+                    DesktopSection(type: .unassigned, label: "Lost")]
+        let p = ApplyResolver.plan(
+            window: win(9, app: "Chrome"), workspaceName: nil,
+            fromSectionID: "unassigned:2", toSectionID: "section:1:Web",
+            destWorkspaceIndex: nil, in: secs)
+        XCTAssertTrue(p.isInert)
+    }
+
+    func testPlanDropOntoUnassignedIsInert() {
+        // Dropping a window BACK onto the unassigned receptacle is inert (a
+        // passive lost-and-found, not an apply target) → snap-back. The
+        // "unassigned:" dest never resolves to a lens, so it reads as stale.
+        let secs = [wsSec(), DesktopSection(type: .unassigned, label: "Lost")]
+        let p = ApplyResolver.plan(
+            window: win(1), workspaceName: "Dev",
+            fromSectionID: "ws:0", toSectionID: "unassigned:1",
+            destWorkspaceIndex: nil, in: secs)
         XCTAssertTrue(p.isInert)
     }
 }

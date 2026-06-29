@@ -13,15 +13,19 @@
 //
 //   • type = "workspace" — a permanent SPATIAL substrate (the tiling axis,
 //     the grid/rail cell). The user does NOT filter it — its `match` is the
-//     implicit `workspace=<this>` and its `apply` the implicit
+//     implicit `workspace=<this>` and its membership the implicit
 //     `setWorkspace(<this>)`, both resolved internally — but MAY name it with
 //     an optional `label` (§A reversed the always-auto-named rule); an empty
 //     label leaves it UNNAMED, displayed by its 1-based index (§B retired the
 //     emoji auto-name). Carries an optional `layout` seed (per-section,
-//     runtime-changeable) + optional `apply` seed.
+//     runtime-changeable). t-qtpx: an authored `match` / `apply` is FORBIDDEN
+//     (a workspace carries no side-effect — membership changes via DnD /
+//     `facet window --move-to N`); an authored one is ignored with a caveat.
 //   • type = "lens" — a SAVED visibility filter orthogonal to workspace
 //     (an SQL VIEW): `label` + `match` (a `facet filter` WHERE-clause) +
-//     optional `apply` (the inverse, for drops). Activated at runtime with
+//     optional `apply` (additive tags only, for drops — t-qtpx: a lens
+//     `apply` may ONLY `tags = [...]`; `workspace` / `floating` / `sticky` /
+//     `master` are forbidden and dropped). Activated at runtime with
 //     `facet lens NAME`. A lens is a pure VIEW (t-0021): activating one only
 //     changes what the tree/grid/rail DISPLAY — `FilterProjection` lists its
 //     matched windows, aggregated across all workspaces on the current mac
@@ -42,13 +46,17 @@
 // section's windows (e.g. discard an authored `match`). トミー 2026-06-17:
 // warn + skip, never default-guess.
 //
-// `apply` FROZEN here so PR8's inversion resolver can rely on it:
+// `apply` FROZEN here so PR8's inversion resolver can rely on it. The full
+// op vocabulary still exists for `[[rule]]` (Phase 3 adopt-rules, which may
+// carry all ops); a `type="lens"` section is the one place a USER-authored
+// `apply` lives, and there it is restricted to `addTag` (t-qtpx):
 //   - addTag is ADDITIVE by default (idempotent — re-adding is a no-op);
 //     removeTag is its inverse (the only op un-apply reverses on a drag).
 //   - setWorkspace is the single-valued special: a window has exactly one
-//     workspace, so applying it AUTO-REPLACES the prior one.
-//   - a section with no `apply` (or one wholly non-invertible) is
-//     drop-INERT: a drop on it snaps back rather than mutating the window.
+//     workspace, so applying it AUTO-REPLACES the prior one. NOT allowed in a
+//     lens `apply` (lenses never relocate); used only by `[[rule]]`.
+//   - a lens with no `apply` (or one wholly non-invertible) is drop-INERT:
+//     a drop on it snaps back rather than mutating the window.
 
 import Foundation
 
@@ -158,15 +166,22 @@ public struct DesktopSection: Sendable, Equatable {
     /// Parse one `[[desktop.N.section]]` row into a section, OR a
     /// human-readable reason it was dropped / a caveat about an accepted
     /// row. The caller logs `note` LOUD (`Log.line`) with the ordinal +
-    /// row index for context.
+    /// row index for context. Multiple per-row caveats are joined with
+    /// `"; "` into the single `note`.
     ///
-    /// `type` is REQUIRED and drives the per-type field rules. An absent or
-    /// unrecognised `type` drops the row (`note` set, `section` nil) — never
-    /// a silent clamp (which would mis-route a window's facets). `label` is
-    /// OPTIONAL on every type (§A); `lens` still REQUIRES a non-empty `match`.
-    /// A `workspace` section's `match` is implicit (`workspace=<this>`), so an
-    /// authored `match` is ignored with a caveat note (the section still
-    /// decodes); its `label`, if set, names the workspace.
+    /// `type` is REQUIRED and drives the per-type field rules (t-qtpx). An
+    /// absent or unrecognised `type` drops the row (`note` set, `section`
+    /// nil) — never a silent clamp (which would mis-route a window's facets).
+    /// `label` is OPTIONAL on every type (§A). Per-type field allowance:
+    ///   • workspace — `match` AND `apply` FORBIDDEN (it is the exclusive
+    ///     spatial substrate, not a filter, with no side-effect); an authored
+    ///     one is ignored with a caveat, the section still decodes. `label`,
+    ///     if set, names the workspace.
+    ///   • lens — `match` REQUIRED; `apply` may ONLY add tags
+    ///     (`apply = { tags = [...] }`). A `workspace` / `floating` / `sticky`
+    ///     / `master` op in a lens `apply` is FORBIDDEN — warned + dropped.
+    ///   • unassigned — `match` AND `apply` FORBIDDEN (leftover by
+    ///     subtraction); authored ones ignored with a caveat.
     static func parse(fromTOMLRow t: [String: TOMLValue])
         -> (section: DesktopSection?, note: String?)
     {
@@ -183,6 +198,13 @@ public struct DesktopSection: Sendable, Equatable {
         let match: String = {
             if case .string(let s)? = t["match"] { return s } else { return "" }
         }()
+        // A non-empty inline `apply = { … }` table was authored on this row
+        // (an `apply = {}` / non-table value never trips a forbidden-apply
+        // caveat — there is nothing to ignore).
+        let applyAuthored: Bool = {
+            if case .table(let at)? = t["apply"] { return !at.isEmpty }
+            return false
+        }()
 
         switch type {
         case .lens:
@@ -192,26 +214,66 @@ public struct DesktopSection: Sendable, Equatable {
             }
             var lensLayout: String? = nil
             if case .string(let l)? = t["layout"], !l.isEmpty { lensLayout = l }
+            // t-qtpx: a lens `apply` is the section's ONLY drop side-effect and
+            // it may ONLY ADD TAGS (additive). The single-valued facets —
+            // `workspace` / `floating` / `sticky` / `master` — are FORBIDDEN on
+            // a lens (workspace membership is the workspace axis; window
+            // attributes are direct CLI). Decode the full op list, KEEP
+            // `addTag`, warn + DROP the rest. (`removeTag` has no wire key, so
+            // it never appears here.)
+            var kept: [ApplyOp] = []
+            var droppedKeys: [String] = []
+            for op in ApplyOp.list(from: t["apply"]) {
+                switch op {
+                case .addTag:       kept.append(op)
+                case .setWorkspace: droppedKeys.append("workspace")
+                case .setFloating:  droppedKeys.append("floating")
+                case .setSticky:    droppedKeys.append("sticky")
+                case .setMaster:    droppedKeys.append("master")
+                case .removeTag:    break
+                }
+            }
+            let note = droppedKeys.isEmpty ? nil
+                : "lens `apply` accepts only `tags` — ignoring "
+                  + droppedKeys.joined(separator: ", ")
             return (DesktopSection(type: .lens, label: label, match: match,
-                                   apply: ApplyOp.list(from: t["apply"]),
-                                   layout: lensLayout), nil)
+                                   apply: kept, layout: lensLayout), note)
 
         case .workspace:
             var layout: String? = nil
             if case .string(let l)? = t["layout"], !l.isEmpty { layout = l }
-            // §A: `label` (if set) names the workspace from config; the `match`
-            // is implicit (`workspace=<this>`), so an authored one is ignored
-            // with a caveat. The section still decodes either way.
-            let caveat = !match.isEmpty
-                ? "workspace section's `match` is implicit — ignoring authored `match`"
-                : nil
+            // t-qtpx: a workspace is the exclusive spatial substrate — NOT a
+            // filter and carrying NO side-effect. Both `match` (its membership
+            // is the implicit `workspace=<this>`) and `apply` are FORBIDDEN; an
+            // authored one is ignored with a loud caveat (membership changes
+            // via DnD / `facet window --move-to N`, never config apply). A
+            // non-empty `label` NAMES the workspace (§A).
+            var notes: [String] = []
+            if !match.isEmpty {
+                notes.append("workspace section's `match` is implicit — "
+                    + "ignoring authored `match`")
+            }
+            if applyAuthored {
+                notes.append("workspace section can't carry `apply` — ignoring it")
+            }
             return (DesktopSection(type: .workspace, label: label, match: "",
-                                   apply: ApplyOp.list(from: t["apply"]),
-                                   layout: layout), caveat)
+                                   apply: [], layout: layout),
+                    notes.isEmpty ? nil : notes.joined(separator: "; "))
 
         case .unassigned:
-            // §A: `label` is optional (display-only).
-            return (DesktopSection(type: .unassigned, label: label), nil)
+            // §A / t-qtpx: the lost-and-found receptacle is the LEFTOVER by
+            // subtraction — neither a filter nor an apply target, so both
+            // `match` and `apply` are FORBIDDEN (authored ones ignored with a
+            // loud caveat). Only an optional `label` is meaningful.
+            var notes: [String] = []
+            if !match.isEmpty {
+                notes.append("unassigned section can't carry `match` — ignoring it")
+            }
+            if applyAuthored {
+                notes.append("unassigned section can't carry `apply` — ignoring it")
+            }
+            return (DesktopSection(type: .unassigned, label: label),
+                    notes.isEmpty ? nil : notes.joined(separator: "; "))
         }
     }
 }

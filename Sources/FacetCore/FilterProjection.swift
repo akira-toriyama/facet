@@ -67,10 +67,10 @@
 struct ProjectedWindowFields: WindowFields {
     let window: Window
     /// The containing workspace's name, or `nil` when the window has NO
-    /// workspace assignment (EX-3 迷子 / orphan). `nil` (assignment absent) is
+    /// workspace assignment (迷子 / orphan). `nil` (assignment absent) is
     /// distinct from `""` (assigned to an unnamed workspace — "show the
-    /// number"): only `nil` makes `not workspace` match, so the 迷子 receptacle
-    /// (`match='not workspace'`) catches orphans WITHOUT also catching windows
+    /// number"): only `nil` makes `not workspace` match, so a `not workspace`
+    /// lens catches orphans WITHOUT also catching windows
     /// in an unnamed workspace. Presence is keyed off the ASSIGNMENT (`Int?`
     /// nil vs not), never the display name — which is WHY an unnamed workspace
     /// (name `""`, but assigned) does not collide with an orphan (`ws=nil`) in

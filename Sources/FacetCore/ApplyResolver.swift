@@ -11,10 +11,14 @@
 // run XCTest; CI covers it, the local bar is `swift build`). Shared with
 // `[[rule]]` (Phase 3), which reuses the same `ApplyOp` vocabulary.
 //
-// GESTURES (model · トミー 2026-06-17):
-//   • drag = MOVE: `un-apply(source) → apply(dest)`. The inverse reverses ONLY
-//     `addTag` (→ `removeTag`); `setWorkspace` / `setFloating` / `setSticky` /
-//     `setMaster` are single-valued (last-writer-wins) and are NEVER un-applied.
+// GESTURES (model · トミー 2026-06-17, restricted by t-qtpx):
+//   • drag = MOVE: `un-apply(source) → apply(dest)`, SAME-TYPE-ONLY — ws→ws
+//     (membership) or lens→lens (re-tag). A ws↔lens crossing is REMOVED from
+//     DnD (cross-axis edits go via right-click / `t` / CLI); the resolver
+//     returns INERT for it. The one cross-type exception is the §G RESCUE:
+//     a TRUE orphan dragged OUT of the unassigned receptacle ONTO a workspace.
+//     The inverse reverses ONLY `addTag` (→ `removeTag`); a lens `apply` is
+//     tags-only (t-qtpx), so the move's facets are just tag add/remove.
 //   • right-click = ADD: `apply` only (no source, no inverse) → multi-match.
 //
 // WORKSPACE vs LENS dest:
@@ -25,9 +29,9 @@
 //     never an emoji NAME (auto-named workspaces collide on label by design).
 //     A workspace `match` is `""` → the invariant is trivially satisfied.
 //   • A `type=lens` section id is `"section:<declOrder>:<label>"`. Its `apply`
-//     (with any authored `setWorkspace` STRIPPED — lenses don't relocate,
-//     "lens は絞るだけ") is the forward list; an empty/wholly-stripped lens
-//     apply is DROP-INERT (snap-back).
+//     (tags-only by decode; any `setWorkspace` STRIPPED defensively — lenses
+//     don't relocate, "lens は絞るだけ") is the forward list; an empty/
+//     wholly-stripped lens apply is DROP-INERT (snap-back).
 
 import Foundation
 
@@ -47,26 +51,17 @@ public enum ApplyResolver {
         public let forward: [ApplyOp]
         /// 0-based wire workspace index for a workspace dest, else `nil`.
         public let destWorkspaceIndex: Int?
-        /// EX-3 (canon ⑤⑥ "全部移動"): `true` ⇒ the MOVE drags a WINDOW out of a
-        /// WORKSPACE source onto a LENS dest, so it must LEAVE its workspace
-        /// (`workspace → nil`, 迷子) — the caller routes a dedicated
-        /// `orphanWindow` primitive instead of `destWorkspaceIndex` (a lens
-        /// never relocates to a workspace). Only `ws→lens` MOVE; never an ADD
-        /// (multi-match is intentional), never `lens→lens` (the source section
-        /// is a tag, not the workspace), never `ws→ws` (that's `destWorkspaceIndex`).
-        public let relocateSourceToOrphan: Bool
         /// `true` ⇒ snap back, run NO backend op.
         public let isInert: Bool
         /// Diagnostic for the inert case (the caller logs it loud).
         public let reason: String?
 
         public init(inverse: [ApplyOp], forward: [ApplyOp],
-                    destWorkspaceIndex: Int?, relocateSourceToOrphan: Bool = false,
+                    destWorkspaceIndex: Int?,
                     isInert: Bool, reason: String?) {
             self.inverse = inverse
             self.forward = forward
             self.destWorkspaceIndex = destWorkspaceIndex
-            self.relocateSourceToOrphan = relocateSourceToOrphan
             self.isInert = isInert
             self.reason = reason
         }
@@ -74,7 +69,7 @@ public enum ApplyResolver {
 
     private static func inert(_ reason: String) -> Plan {
         Plan(inverse: [], forward: [], destWorkspaceIndex: nil,
-             relocateSourceToOrphan: false, isInert: true, reason: reason)
+             isInert: true, reason: reason)
     }
 
     /// Resolve a rendered LENS section id (`"section:<declOrder>:<label>"`) back
@@ -161,15 +156,42 @@ public enum ApplyResolver {
             return inert("same section")
         }
 
+        // Resolve the dest FIRST (a stale lens dest → inert). A "ws:" dest is a
+        // workspace (routed via destWorkspaceIndex); any other id must resolve
+        // to a `type="lens"` section — an "unassigned:" dest never does (the
+        // receptacle is drop-inert), so a drop INTO it snaps back here.
+        let destIsWorkspace = toSectionID.hasPrefix("ws:")
+        let destSection = destIsWorkspace ? nil : section(forSectionID: toSectionID, in: sections)
+        if !destIsWorkspace && destSection == nil {
+            return inert("stale destination \"\(toSectionID)\"")
+        }
+        let destType: SectionType = destIsWorkspace ? .workspace : .lens
+
+        // SAME-TYPE-ONLY (t-qtpx): a MOVE operates within ONE axis — ws→ws
+        // (membership) or lens→lens (re-tag). A ws↔lens crossing is REMOVED
+        // from DnD (cross-axis edits go via right-click / `t` tag-manage / CLI,
+        // never a drag). The lone cross-type exception is the §G RESCUE: a TRUE
+        // orphan dragged OUT of the unassigned receptacle ONTO a workspace. An
+        // ADD (`fromSectionID == nil`, right-click) is exempt — it is the
+        // intentional multi-match path.
+        if let fromSectionID {
+            let fromType: SectionType =
+                fromSectionID.hasPrefix("ws:") ? .workspace
+                : fromSectionID.hasPrefix("unassigned:") ? .unassigned
+                : .lens     // a "section:" lens id
+            let isRescue = fromType == .unassigned && destType == .workspace
+            if fromType != destType && !isRescue {
+                return inert("cross-type DnD (\(fromType) → \(destType)) not allowed")
+            }
+        }
+
         // Inverse from the SOURCE section (MOVE only). Only a LENS source
         // (`section:` id) carries an invertible `apply` to reverse; a workspace
-        // (`ws:`) source has no additive tag, and a §G `unassigned:` source is
-        // an apply-less receptacle — both contribute an empty inverse, so the
-        // RESCUE of an orphan out of the unassigned section onto a workspace
-        // must NOT be treated as a stale source. Computed FIRST so the
-        // net-effect invariant below can reflect it. A stale lens source id
-        // (config hot-reloaded between render and drop) → inert, matching the
-        // stale-dest treatment, so a MOVE never silently degrades to an ADD.
+        // (`ws:`) source has no additive tag, and a §G `unassigned:` rescue
+        // source is an apply-less receptacle — both contribute an empty
+        // inverse. A stale lens source id (config hot-reloaded between render
+        // and drop) → inert, matching the stale-dest treatment, so a MOVE never
+        // silently degrades to an ADD.
         var inverse: [ApplyOp] = []
         if let fromSectionID, fromSectionID.hasPrefix("section:") {
             guard let src = section(forSectionID: fromSectionID, in: sections) else {
@@ -178,23 +200,9 @@ public enum ApplyResolver {
             inverse = ApplyResolver.inverse(of: src.apply)
         }
 
-        let destIsWorkspace = toSectionID.hasPrefix("ws:")
-        let destSection = destIsWorkspace ? nil : section(forSectionID: toSectionID, in: sections)
-        if !destIsWorkspace && destSection == nil {
-            return inert("stale destination \"\(toSectionID)\"")
-        }
-
-        // EX-3 (canon ⑤⑥): a MOVE that drags a window FROM a workspace section
-        // ONTO a lens relocates it OUT of its workspace (`workspace → nil`,
-        // 迷子) — a pure "引っ越し", not 併用. Precisely: source is a workspace
-        // ("ws:" id, a MOVE) and the dest is a lens. NOT an ADD (fromSectionID
-        // == nil → multi-match is intentional), NOT lens→lens (the source
-        // section is a tag, not the workspace), NOT ws→ws (→ destWorkspaceIndex).
-        let fromIsWorkspace = fromSectionID?.hasPrefix("ws:") ?? false
-        let relocateSourceToOrphan = fromIsWorkspace && !destIsWorkspace
-
-        // Forward = dest apply minus setWorkspace (a workspace dest relocates
-        // via destWorkspaceIndex; a lens never relocates).
+        // Forward = dest apply minus setWorkspace. A lens `apply` is tags-only
+        // (t-qtpx decode), so the setWorkspace strip is now defensive; a
+        // workspace dest relocates via destWorkspaceIndex, never via an apply.
         let forward = (destSection?.apply ?? []).filter {
             if case .setWorkspace = $0 { return false }
             return true
@@ -217,16 +225,11 @@ public enum ApplyResolver {
             // can strip a tag the dest match NEEDS (→ window lands in neither
             // lens) or one it EXCLUDES (→ a valid move wrongly refused), so a
             // forward-only check mispredicts. Simulate the NET set, in order.
-            // EX-3: a ws→lens MOVE also leaves the workspace, so the match must
-            // be checked against the POST-orphan name ("") — else a lens whose
-            // satisfaction is tag-only (the common case) is unaffected, but one
-            // that referenced the old workspace name would mispredict.
-            // Snap back BEFORE any mutation.
-            // §B: nil = orphan (relocate left the workspace), "" = still
-            // assigned to an UNNAMED workspace (present) — mirror the display
-            // path so a `not workspace` lens predicts what the tree renders.
-            let matchWSName: String? = relocateSourceToOrphan ? nil : workspaceName
-            if !satisfiesAfterApply(window, workspaceName: matchWSName,
+            // A lens drop is same-type (lens→lens) or an ADD — it NEVER
+            // relocates (t-qtpx removed ws→lens), so the window keeps its
+            // CURRENT workspace name for the match. Snap back BEFORE any
+            // mutation.
+            if !satisfiesAfterApply(window, workspaceName: workspaceName,
                                     applying: inverse + forward,
                                     match: destSection!.match) {
                 return inert("window won't satisfy \"\(destSection!.label)\" after apply")
@@ -235,7 +238,6 @@ public enum ApplyResolver {
 
         return Plan(inverse: inverse, forward: forward,
                     destWorkspaceIndex: destIsWorkspace ? destWorkspaceIndex : nil,
-                    relocateSourceToOrphan: relocateSourceToOrphan,
                     isInert: false, reason: nil)
     }
 }

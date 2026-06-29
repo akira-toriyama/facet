@@ -55,11 +55,14 @@ extension SidebarView {
                         // Controller resolves the apply via the live config +
                         // ApplyResolver and snaps back (runs no op) on an inert
                         // / non-satisfying drop — the row was never hidden.
-                        // §G RESCUE: an orphan row under the unassigned section
-                        // is a valid drag SOURCE here (its `dragGroup` is the
-                        // unassigned ordinal, a real `wsBands` key), and dropping
-                        // it on a WORKSPACE band runs that workspace's
-                        // `setWorkspace` apply → the orphan is rescued. Dropping
+                        // SAME-TYPE-ONLY (t-qtpx): the resolver accepts only
+                        // ws→ws and lens→lens MOVEs; a ws↔lens crossing snaps
+                        // back (do cross-axis edits via right-click / `t` / CLI).
+                        // §G RESCUE is the one cross-type exception: an orphan
+                        // row under the unassigned section is a valid drag SOURCE
+                        // (its `dragGroup` is the unassigned ordinal, a real
+                        // `wsBands` key), and dropping it on a WORKSPACE band runs
+                        // that workspace's move → the orphan is rescued. Dropping
                         // ON unassigned is inert (no apply) → snap-back.
                         if let tgt, tgt != dragGroup,
                            dragGroup < lastSections.count, tgt < lastSections.count {

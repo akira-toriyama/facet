@@ -131,13 +131,17 @@ is the index. **Do not relitigate** without explicit grill round.
   config customises a mac desktop by Mission-Control ordinal — an ordered
   list of `type = workspace | lens` sections (workspace =
   optional `label` + optional `layout` cell — unnamed shows its index;
-  the count sets the WS count). EX-3:
-  `WindowSlot.workspace` is `Int?` — a window can belong to NO workspace
-  (`workspace = 0 or 1`); dragging it onto a lens relocates it out of its
-  workspace (`orphanWindow`), and an orphan (迷子) is invisible-but-logged
-  until a `type = "lens"` receptacle (`match = 'not workspace'`) DISPLAYS it —
-  or, more simply, an opt-in `type = "unassigned"` section (§G) rescues every
-  leftover window (in no other section). Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
+  the count sets the WS count; a workspace's `match`/`apply` are forbidden —
+  t-qtpx — membership changes by drag or `facet window --move-to N`). A lens
+  carries a `match` + an optional `apply` of ADDITIVE TAGS ONLY (t-qtpx); it
+  is a pure VIEW that never moves a real window. Tree DnD is SAME-TYPE ONLY:
+  ws→ws moves a window, lens→lens re-tags it; the ws↔lens boundary is never
+  crossed by a drag. `WindowSlot.workspace` is `Int?` — a window can belong
+  to NO workspace, but normally belongs to exactly one, so orphans (迷子) are
+  rare (t-qtpx removed the ws→lens DnD that created them). An orphan is
+  invisible-but-logged until the opt-in `type = "unassigned"` section (§G)
+  surfaces every leftover window (in no other section) and a drag out onto a
+  workspace rescues it. Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
   none → all mac desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the

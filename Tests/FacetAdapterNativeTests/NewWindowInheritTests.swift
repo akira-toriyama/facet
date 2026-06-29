@@ -30,31 +30,34 @@ final class NewWindowInheritTests: XCTestCase {
         XCTAssertEqual(a.activeSectionLensApplyForward(), [.addTag("web")])
     }
 
-    func testApplyForwardIncludesFloatingSticky() {
-        // C1: the full forward set is inherited (not just addTag) so a window
-        // auto-joining the lens lands in the same facet state as a DnD into it.
+    func testApplyForwardInheritsAllTags() {
+        // t-qtpx: a lens `apply` is tags-only, so a window auto-joining the lens
+        // inherits every tag the lens applies (the same facet state as a DnD
+        // into it), in array order.
         let a = adapter([DesktopSection(
             type: .lens, label: "Multi", match: "tag~=a",
-            apply: [.addTag("a"), .addTag("b"), .setFloating(true), .setSticky(true)])])
+            apply: [.addTag("a"), .addTag("b")])])
         a.catalog.activeSectionLens = "section:0:Multi"
         XCTAssertEqual(
             a.activeSectionLensApplyForward(),
-            [.addTag("a"), .addTag("b"), .setFloating(true), .setSticky(true)],
-            "the full forward apply set is inherited (tags + floating/sticky/master)")
+            [.addTag("a"), .addTag("b")],
+            "all of the lens's tags are inherited, in order")
     }
 
     func testApplyForwardStripsSetWorkspace() {
-        // setWorkspace is the ONE op stripped — a new window keeps
-        // `workspace = activeIndex` (D-A: never an orphan-on-birth). Mirrors the
-        // DnD forward filter (`ApplyResolver` strips setWorkspace identically).
+        // setWorkspace is stripped — a new window keeps `workspace = activeIndex`
+        // (D-A: never an orphan-on-birth). Mirrors the DnD forward filter
+        // (`ApplyResolver` strips setWorkspace identically). t-qtpx forbids
+        // `workspace` in a real lens `apply`, so this exercises the DEFENSIVE
+        // strip on a directly-constructed section.
         let a = adapter([DesktopSection(
             type: .lens, label: "Routed", match: "tag~=r",
-            apply: [.setWorkspace("Other"), .addTag("r"), .setFloating(true)])])
+            apply: [.setWorkspace("Other"), .addTag("r")])])
         a.catalog.activeSectionLens = "section:0:Routed"
         XCTAssertEqual(
             a.activeSectionLensApplyForward(),
-            [.addTag("r"), .setFloating(true)],
-            "setWorkspace is dropped; the remaining forward ops pass through in order")
+            [.addTag("r")],
+            "setWorkspace is dropped; the remaining tag op passes through")
     }
 
     func testApplyForwardEmptyForPureConditionLens() {

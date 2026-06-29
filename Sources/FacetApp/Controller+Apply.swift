@@ -63,14 +63,12 @@ extension Controller {
                     _ = bk.removeTagSection(t, fromWindow: id)
                 }
             }
-            // EX-3: a ws→lens MOVE relocates the window OUT of its workspace
-            // (迷子) via the dedicated primitive; a ws→ws MOVE uses the
-            // 0-based wire index. The two are mutually exclusive (a lens dest
-            // never carries a destWorkspaceIndex), but guard order makes that
-            // explicit. Then the dest section's forward apply (tags etc.).
-            if plan.relocateSourceToOrphan {
-                bk.orphanWindow(id)
-            } else if let dst = plan.destWorkspaceIndex {
+            // A workspace dest (ws→ws membership move, or the §G unassigned→ws
+            // rescue) routes via the 0-based wire index; a lens dest carries no
+            // destWorkspaceIndex. (t-qtpx removed the ws→lens orphaning MOVE, so
+            // there is no orphan-on-drop primitive here any more.) Then the dest
+            // section's forward apply (tags only, for a lens dest).
+            if let dst = plan.destWorkspaceIndex {
                 bk.moveWindow(id, toWorkspaceIndex: dst)
             }
             for op in plan.forward {

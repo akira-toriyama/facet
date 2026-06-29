@@ -388,19 +388,22 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   (`N` は Mission Control 順の位置)。 順序付き section リストで desktop を
   記述。 各 section は必須の `type` を持つ: `"workspace"` (任意の `label` で
   命名・無ければ無名で 1始まりの index 表示の空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
-  workspace 数)、 `"lens"` (保存フィルタ / view — `label` + `match` + 任意の
-  `layout` + `apply`。 `facet lens NAME` で有効化すると、 現在の mac desktop の
-  **すべての workspace 横断で**一致した窓を集約表示する（lens は実窓を一切動かさない）。
-  どれかの workspace に切り替えると lens は
-  自動解除・`facet lens --clear` で lens 表示を解除。 **窓を lens に DnD すると
-  元の workspace から外れ**、 lens 経由でのみ存在する＝一致 lens が非 active の間は
-  **迷子 (orphan)** になる)。 よって窓は**どの workspace にも属さない**ことがあり、
-  迷子は invisible-but-logged（WS1 へ auto-home しない）。 **迷子受け皿** =
-  `match = 'not workspace'` の `type = "lens"` section で集約（desktop ごとに 1 つ推奨）、
-  または `"unassigned"` section（`label` のみ・`match` 無し）— 他のどの section にも
-  出ない**全 leftover 窓**（`not workspace` 迷子に限らない）を拾う opt-in の lost-and-found。
-  lens セルのように並び、 `facet section --focus` で先頭窓を focus、 workspace へ DnD で
-  窓を RESCUE。 最初の 1 つだけ描画。
+  workspace 数。 **workspace では `match` / `apply` は禁止** — 所属は drag
+  または `facet window --move-to N` でのみ変える)、 `"lens"` (保存フィルタ /
+  view — `label` + `match` + 任意の `apply`。 **`apply` は tag 付与のみ** =
+  `{ tags = [...] }`（additive）。 `workspace` / `floating` / `sticky` /
+  `master` は lens では禁止で drop される。 `facet lens NAME` で有効化すると、
+  現在の mac desktop の**すべての workspace 横断で**一致した窓を集約表示する
+  （lens は pure VIEW＝実窓を一切動かさず、 `layout` も無視）。 どれかの
+  workspace に切り替えると lens は自動解除・`facet lens --clear` で解除)。
+  **DnD は同 type 内のみ**: 窓を workspace 間に drag すれば所属移動、 lens 間
+  なら付け替え（tag の付与/除去）。 workspace ↔ lens の境界を drag で跨ぐことは
+  無い（跨ぐ操作は右クリック / `facet window --tag` / `--move-to`）。
+  `"unassigned"` section（`label` のみ・`match` / `apply` 無し）が**推奨**の
+  opt-in lost-and-found — 他のどの section にも出ない**全 leftover 窓**を拾い、
+  lens セルのように並び、 `facet section --focus` で先頭窓を focus、 workspace
+  へ DnD で窓を RESCUE。 最初の 1 つだけ描画。 通常は空（窓は必ずどれかの
+  workspace に居る）だが、 お守りとして 1 つ残す。
   **workspace は任意の `label` で config 命名可**（無ければ無名＝1始まりの index 表示）—
   実行時 `facet workspace --rename` が上書き。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
