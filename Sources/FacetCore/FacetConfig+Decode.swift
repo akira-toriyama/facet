@@ -169,15 +169,19 @@ extension FacetConfig {
                     if case .string(let s)? = raw.tab["label"] { return s }
                     return ""
                 }()
-                // Each child INHERITS the parent type (children carry no `type`);
-                // the sole exception is an `unassigned = true` marker, the per-tab
-                // lost-and-found (≤ 1 — a 2nd is dropped LOUD). The inherited type
-                // is injected into the row so `DesktopSection.parse` re-applies the
-                // per-type field rules (t-qtpx) at the seam.
+                // Each child INHERITS the parent type (children carry no `type`)
+                // — the inherited type is injected into the row so
+                // `DesktopSection.parse` re-applies the per-type field rules
+                // (t-qtpx) at the seam. A child marked `unassigned = true` is the
+                // per-tab lost-and-found receptacle (W2.6): it STILL inherits the
+                // parent type (the preserved `unassigned` key drives `parse`'s
+                // marker branch), and at most one per tab is honoured (a 2nd is
+                // dropped LOUD).
                 var sections: [DesktopSection] = []
                 var sawUnassigned = false
                 for (si, childRow) in raw.sections.enumerated() {
                     var injected = childRow
+                    injected["type"] = .string(parentType.rawValue)
                     if case .bool(true)? = childRow["unassigned"] {
                         if sawUnassigned {
                             Log.line("config: [[desktop.\(ordinal).tab.section]] "
@@ -186,9 +190,6 @@ extension FacetConfig {
                             continue
                         }
                         sawUnassigned = true
-                        injected["type"] = .string(SectionType.unassigned.rawValue)
-                    } else {
-                        injected["type"] = .string(parentType.rawValue)
                     }
                     let (section, note) = DesktopSection.parse(fromTOMLRow: injected)
                     if let note {

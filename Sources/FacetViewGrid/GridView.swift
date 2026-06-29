@@ -270,7 +270,7 @@ public final class GridView: NSView {
     /// tree's `headerActive` XOR, so the accent draw needs no change.
     private struct CellSource {
         let wsIndex: Int
-        let sectionType: SectionType
+        let sectionType: ProjectedSectionType
         let sectionID: String
         let label: String
         let mode: String

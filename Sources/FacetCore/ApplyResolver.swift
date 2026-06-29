@@ -84,7 +84,10 @@ public enum ApplyResolver {
         guard let (declOrder, label) = parseSectionID(id) else { return nil }
         guard declOrder >= 0, declOrder < sections.count else { return nil }
         let s = sections[declOrder]
-        guard s.type == .lens, s.label == label else { return nil }
+        // W2.6: a receptacle (unassigned marker) is never a lens dest, even
+        // though it now carries a lens/workspace type — its id is `unassigned:`,
+        // not `section:`, so a `section:` id landing on its declOrder must miss.
+        guard s.type == .lens, !s.unassigned, s.label == label else { return nil }
         return s
     }
 
@@ -165,7 +168,10 @@ public enum ApplyResolver {
         if !destIsWorkspace && destSection == nil {
             return inert("stale destination \"\(toSectionID)\"")
         }
-        let destType: SectionType = destIsWorkspace ? .workspace : .lens
+        // The dest/from kinds here classify PROJECTED section ids (`ws:` /
+        // `unassigned:` / `section:`), so they use `ProjectedSectionType` (which
+        // keeps `.unassigned`), NOT the config `SectionType` (W2.6 purified it).
+        let destType: ProjectedSectionType = destIsWorkspace ? .workspace : .lens
 
         // SAME-TYPE-ONLY (t-qtpx): a MOVE operates within ONE axis — ws→ws
         // (membership) or lens→lens (re-tag). A ws↔lens crossing is REMOVED
@@ -175,7 +181,7 @@ public enum ApplyResolver {
         // ADD (`fromSectionID == nil`, right-click) is exempt — it is the
         // intentional multi-match path.
         if let fromSectionID {
-            let fromType: SectionType =
+            let fromType: ProjectedSectionType =
                 fromSectionID.hasPrefix("ws:") ? .workspace
                 : fromSectionID.hasPrefix("unassigned:") ? .unassigned
                 : .lens     // a "section:" lens id

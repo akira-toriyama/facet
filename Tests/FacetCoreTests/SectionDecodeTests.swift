@@ -21,7 +21,7 @@ final class SectionDecodeTests: XCTestCase {
         label = "Web"
         match = 'tag~=web'
         [[desktop.1.section]]
-        type = "unassigned"
+        unassigned = true
         label = "Other"
         """)
         XCTAssertEqual(s[1]?.count, 3)
@@ -29,8 +29,10 @@ final class SectionDecodeTests: XCTestCase {
             DesktopSection(type: .workspace, layout: "bsp"))
         XCTAssertEqual(s[1]?[1],
             DesktopSection(type: .lens, label: "Web", match: "tag~=web"))
+        // W2.6: the receptacle is the `unassigned = true` MARKER (type defaults
+        // workspace when none is authored on a flat row — projection-irrelevant).
         XCTAssertEqual(s[1]?[2],
-            DesktopSection(type: .unassigned, label: "Other"))
+            DesktopSection(type: .workspace, label: "Other", unassigned: true))
     }
 
     /// `type` is case-insensitive on the wire (lowercased on decode).
@@ -58,7 +60,7 @@ final class SectionDecodeTests: XCTestCase {
             "label": .string("Web"), "match": .string("tag~=web"),
         ])
         XCTAssertNil(section)
-        XCTAssertEqual(note, "missing `type` (expected workspace / lens / unassigned)")
+        XCTAssertEqual(note, "missing `type` (expected workspace / lens)")
     }
 
     /// Unknown `type` → DROP (clamp-to-default would discard an authored
@@ -146,16 +148,17 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertTrue(note?.contains("apply") ?? false)
     }
 
-    /// t-qtpx: an unassigned section FORBIDS both `match` and `apply` (it is the
-    /// leftover by subtraction). Authored ones are dropped with a loud caveat;
-    /// the section still decodes (label only).
+    /// t-qtpx / W2.6: an `unassigned = true` receptacle FORBIDS both `match` and
+    /// `apply` (it is the leftover by subtraction). Authored ones are dropped
+    /// with a loud caveat; the section still decodes (label only, marker set).
     func testUnassignedSectionForbidsMatchAndApply() {
         let (section, note) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("unassigned"), "label": .string("Lost"),
+            "unassigned": .bool(true), "label": .string("Lost"),
             "match": .string("tag~=x"),
             "apply": .table(["tags": .array([.string("x")])]),
         ])
-        XCTAssertEqual(section, DesktopSection(type: .unassigned, label: "Lost"))
+        XCTAssertEqual(section,
+            DesktopSection(type: .workspace, label: "Lost", unassigned: true))
         XCTAssertTrue(note?.contains("match") ?? false)
         XCTAssertTrue(note?.contains("apply") ?? false)
     }
@@ -231,17 +234,19 @@ final class SectionDecodeTests: XCTestCase {
         XCTAssertNil(section?.layout)
     }
 
-    /// §A: an unassigned section's `label` is optional — a label-less one
-    /// decodes fine (both rows survive; empty labels don't collide).
+    /// §A / W2.6: a receptacle's `label` is optional — a label-less
+    /// `unassigned = true` row decodes fine (both rows survive at the decode
+    /// layer; FilterProjection enforces the ≤1-shown rule, not the decoder).
     func testUnassignedSectionLabelOptional() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "unassigned"
+        unassigned = true
         [[desktop.1.section]]
-        type = "unassigned"
+        unassigned = true
         label = "Other"
         """)
         XCTAssertEqual(s[1]?.map(\.label), ["", "Other"])
+        XCTAssertEqual(s[1]?.map(\.unassigned), [true, true])
     }
 
     // MARK: - §A label uniqueness (non-empty unique per mac desktop)
@@ -273,7 +278,7 @@ final class SectionDecodeTests: XCTestCase {
         type = "lens"
         match = 'tag~=b'
         [[desktop.1.section]]
-        type = "unassigned"
+        unassigned = true
         """)
         XCTAssertEqual(s[1]?.count, 3)
         XCTAssertEqual(s[1]?.map(\.label), ["", "", ""])

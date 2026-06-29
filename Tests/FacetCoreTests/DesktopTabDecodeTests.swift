@@ -16,8 +16,8 @@ import XCTest
 ///     the per-type field rules (`DesktopSection.parse`) re-apply at the
 ///     inheritance seam.
 ///   • a child with `unassigned = true` is the per-tab lost-and-found marker
-///     (NOT a `type` value) — it decodes to a `.unassigned` section
-///     regardless of the parent type; at most one per tab (a 2nd is dropped).
+///     (NOT a `type` value, W2.6) — it STILL inherits the parent type, with its
+///     `unassigned` flag set; at most one per tab (a 2nd is dropped).
 final class DesktopTabDecodeTests: XCTestCase {
 
     // MARK: - tab type + child inheritance
@@ -122,9 +122,9 @@ final class DesktopTabDecodeTests: XCTestCase {
 
     // MARK: - `unassigned = true` per-tab marker
 
-    /// A child with `unassigned = true` decodes to a `.unassigned` section
-    /// regardless of the parent tab's type.
-    func testUnassignedMarkerChildBecomesUnassignedSection() {
+    /// A child with `unassigned = true` inherits the parent tab's type AND
+    /// carries the marker (W2.6 — the receptacle is a flag, not a type).
+    func testUnassignedMarkerChildInheritsTypeWithMarker() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -135,9 +135,10 @@ final class DesktopTabDecodeTests: XCTestCase {
         unassigned = true
         label = "Other"
         """)
-        XCTAssertEqual(t[1]?[0].sections.map(\.type), [.lens, .unassigned])
+        XCTAssertEqual(t[1]?[0].sections.map(\.type), [.lens, .lens])
+        XCTAssertEqual(t[1]?[0].sections.map(\.unassigned), [false, true])
         XCTAssertEqual(t[1]?[0].sections.last,
-                       DesktopSection(type: .unassigned, label: "Other"))
+                       DesktopSection(type: .lens, label: "Other", unassigned: true))
     }
 
     /// At most one `unassigned = true` section per tab; a 2nd is dropped.
@@ -154,7 +155,8 @@ final class DesktopTabDecodeTests: XCTestCase {
         """)
         XCTAssertEqual(t[1]?[0].sections.count, 1)
         XCTAssertEqual(t[1]?[0].sections.first,
-                       DesktopSection(type: .unassigned, label: "First"))
+                       DesktopSection(type: .workspace, label: "First",
+                                      unassigned: true))
     }
 
     /// An `unassigned = true` section forbids `match` / `apply` (leftover by
@@ -170,7 +172,7 @@ final class DesktopTabDecodeTests: XCTestCase {
         apply = { tags = ["x"] }
         """)
         XCTAssertEqual(t[1]?[0].sections.first,
-                       DesktopSection(type: .unassigned, label: "Lost"))
+                       DesktopSection(type: .lens, label: "Lost", unassigned: true))
     }
 
     // MARK: - per-type child rules inherited from `DesktopSection.parse`

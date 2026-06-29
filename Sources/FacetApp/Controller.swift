@@ -682,7 +682,7 @@ final class Controller: NSObject {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return [] }
         return selectedBoardSections(forOrdinal: ord)
-            .filter { $0.type == .lens }.map(\.label)
+            .filter { $0.type == .lens && !$0.unassigned }.map(\.label)   // W2.6: not a receptacle
     }
 
     /// A0: resolve a lens section's display `label` to its **stable id**
@@ -700,7 +700,7 @@ final class Controller: NSObject {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return nil }
         guard let declOrder = selectedBoardSections(forOrdinal: ord)
-            .firstIndex(where: { $0.type == .lens && $0.label == label })
+            .firstIndex(where: { $0.type == .lens && !$0.unassigned && $0.label == label })
         else { return nil }
         return "section:\(declOrder):\(label)"
     }

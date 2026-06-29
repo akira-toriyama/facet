@@ -599,11 +599,17 @@ public struct FacetConfig: Sendable {
     private func workspaceSubstrateSections(forOrdinal ordinal: Int)
         -> [DesktopSection]
     {
+        // W2.6: exclude `unassigned` receptacles — a receptacle now carries a
+        // workspace/lens type (the marker, not a `.unassigned` type), but it is
+        // NOT a spatial substrate, so it must not seed a workspace or flip the
+        // section-model gate.
         if let tabs = effectiveMacDesktopTabConfigs[ordinal], !tabs.isEmpty {
-            return tabs.flatMap { $0.sections.filter { $0.type == .workspace } }
+            return tabs.flatMap {
+                $0.sections.filter { $0.type == .workspace && !$0.unassigned }
+            }
         }
         return (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
-            .filter { $0.type == .workspace }
+            .filter { $0.type == .workspace && !$0.unassigned }
     }
 
     /// Effective `[[exclude]]` rule set (empty when none configured).

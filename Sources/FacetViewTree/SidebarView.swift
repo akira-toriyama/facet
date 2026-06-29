@@ -53,13 +53,13 @@ public final class SidebarView: NSView {
         /// glyph, no sub-line), or `.unassigned` (leading archivebox glyph, no
         /// sub-line). Drives the 3-way header draw in SidebarView+Draw. The
         /// by-workspace degrade path passes `.workspace`.
-        let sectionType: SectionType
+        let sectionType: ProjectedSectionType
 
         init(row: NSRect, kind: Int, hot: Bool, firstHeader: Bool, pid: Int,
              app: String, title: String, text: String, mode: String,
              isMaster: Bool, isFloating: Bool, isSticky: Bool, mark: String?,
              isHidden: Bool, scratchpad: String?, tags: [String],
-             sectionType: SectionType = .workspace) {
+             sectionType: ProjectedSectionType = .workspace) {
             self.row = row; self.kind = kind; self.hot = hot
             self.firstHeader = firstHeader; self.pid = pid; self.app = app
             self.title = title; self.text = text; self.mode = mode
