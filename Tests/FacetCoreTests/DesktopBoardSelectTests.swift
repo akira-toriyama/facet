@@ -64,6 +64,19 @@ final class DesktopBoardSelectTests: XCTestCase {
         return c
     }
 
+    private func threeBoardConfig() -> FacetConfig {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [
+            DesktopTab(type: .workspace, label: "Alpha",
+                       sections: [ws("A1"), ws("A2")]),
+            DesktopTab(type: .workspace, label: "Beta",
+                       sections: [ws("B1")]),
+            DesktopTab(type: .lens, label: "Gamma",
+                       sections: [lens("G", "tag~=g")]),
+        ]]
+        return c
+    }
+
     /// Board 0 (the default) → the first board's child sections.
     func testBoardZeroIsFirstBoardSections() {
         XCTAssertEqual(
@@ -141,5 +154,79 @@ final class DesktopBoardSelectTests: XCTestCase {
                 sections: twoBoardConfig()
                     .activeBoardSections(forMacDesktopOrdinal: 1, board: 1)),
             FilterProjection.project(workspaces: wss, sections: board1Sections))
+    }
+
+    // MARK: - clamp at a MIDDLE / boundary index (T1, t-8p46)
+    //
+    // The 2-board fixtures above only exercise board 0 and board 1 — and with
+    // two boards, board 1 IS the last, so the clamp's internal `min(board,
+    // count - 1)` is only ever hit at its ceiling. A `min(board, count)`
+    // off-by-one would slip through every test above (board 1 of 2 still
+    // resolves). These pin the interior + the one-past-end boundary with THREE
+    // boards, where `count - 1` (= 2) and `count` (= 3) actually differ.
+
+    /// Board 1 of THREE is a genuine MIDDLE index: the clamp returns `board`
+    /// unchanged (not the last), so this exercises `0 ..< count-1` — untrodden
+    /// by the 2-board fixtures. An off-by-one `min(board, count)` would still
+    /// pass here, but `testBoardOnePastEndClampsToLast` catches it.
+    func testMiddleBoardOfThreeSelected() {
+        XCTAssertEqual(
+            threeBoardConfig().activeBoardSections(forMacDesktopOrdinal: 1, board: 1),
+            [ws("B1")])
+    }
+
+    /// `board == count` (one past the end) clamps to the LAST board — NOT off
+    /// the end. This is the test that would CRASH (index out of range) under a
+    /// `min(board, count)` off-by-one, and it pins that `count` and `count - 1`
+    /// resolve to the same last board.
+    func testBoardOnePastEndClampsToLast() {
+        let c = threeBoardConfig()                            // count == 3
+        XCTAssertEqual(c.activeBoardSections(forMacDesktopOrdinal: 1, board: 3),
+                       [lens("G", "tag~=g")])                 // one past end → last
+        XCTAssertEqual(c.activeBoardSections(forMacDesktopOrdinal: 1, board: 2),
+                       [lens("G", "tag~=g")])                 // last in-range → last
+    }
+
+    /// A selected board whose child-section list is EMPTY returns `[]` via the
+    /// BOARD branch — a DIFFERENT path from `testNoBoardsAndNoFlatReturnsEmpty`
+    /// (the no-tabs degrade). Here tabs ARE present (a non-empty tab list), so the
+    /// board branch is taken and returns the selected board's own (empty)
+    /// sections; it never falls through to the flat `?? []`.
+    func testEmptySelectedBoardReturnsEmpty() {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [
+            DesktopTab(type: .workspace, label: "Full", sections: [ws("Main")]),
+            DesktopTab(type: .workspace, label: "Empty", sections: []),
+        ]]
+        XCTAssertEqual(c.activeBoardSections(forMacDesktopOrdinal: 1, board: 1), [])
+        // Board 0 (non-empty) still resolves — proving it's the SELECTION that is
+        // empty, not the whole tab list (which would hit the no-tabs path).
+        XCTAssertEqual(c.activeBoardSections(forMacDesktopOrdinal: 1, board: 0),
+                       [ws("Main")])
+    }
+
+    // MARK: - workspace board: surplus live workspaces tail (T3, t-8p46)
+
+    /// A workspace board declaring FEWER workspace sections than there are live
+    /// workspaces: the surplus live workspace tails the board's workspace-section
+    /// run (the dynamic `facet workspace --add` case). `FilterProjection`'s tail
+    /// is covered for a FLAT list (`FilterProjectionTests`); this pins the board →
+    /// `FilterProjection.project` composition end-to-end — the 3rd live workspace
+    /// tails with its wire `sourceWorkspaceIndex == 2`.
+    func testWorkspaceBoardWithExtraLiveWorkspacesTails() {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [
+            DesktopTab(type: .workspace, label: "Spaces",
+                       sections: [ws("S1"), ws("S2")]),
+        ]]
+        let live = [liveWS(0, "Dev"), liveWS(1, "Web"), liveWS(2, "Extra")]
+        let r = FilterProjection.project(
+            workspaces: live,
+            sections: c.activeBoardSections(forMacDesktopOrdinal: 1, board: 0))
+        XCTAssertEqual(r.sections.count, 3, "2 declared + 1 surplus live = 3")
+        XCTAssertEqual(r.sections.map(\.sourceWorkspaceIndex), [0, 1, 2])
+        XCTAssertEqual(r.sections[2].id, "ws:2")
+        XCTAssertEqual(r.sections[2].label, "Extra")
+        XCTAssertEqual(r.sections[2].sectionType, .workspace)
     }
 }

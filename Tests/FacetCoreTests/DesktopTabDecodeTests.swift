@@ -423,6 +423,30 @@ final class DesktopTabDecodeTests: XCTestCase {
         XCTAssertEqual(g[1]?[1].sections.first?["label"]?.asString, "b1")
     }
 
+    /// `openTab` is keyed PER ORDINAL, so a `.tab.section` binds to the most-recent
+    /// tab of ITS OWN ordinal even when ANOTHER ordinal's tab opened in between
+    /// (the globally-most-recent tab). Interleave: desktop 1 tab → desktop 2 tab →
+    /// desktop 1's child must land on desktop 1's tab, not leak to desktop 2. The
+    /// `…OfSameOrdinal` test only proves the within-one-ordinal case.
+    func testNestedReaderAttachesPerOrdinalAcrossInterleavedDesktops() {
+        let g = parseTOMLNestedTabs("""
+        [[desktop.1.tab]]
+        type = "workspace"
+        label = "D1"
+        [[desktop.2.tab]]
+        type = "workspace"
+        label = "D2"
+        [[desktop.1.tab.section]]
+        label = "d1child"
+        [[desktop.2.tab.section]]
+        label = "d2child"
+        """)
+        XCTAssertEqual(g[1]?.count, 1)
+        XCTAssertEqual(g[2]?.count, 1)
+        XCTAssertEqual(g[1]?[0].sections.map { $0["label"]?.asString }, ["d1child"])
+        XCTAssertEqual(g[2]?[0].sections.map { $0["label"]?.asString }, ["d2child"])
+    }
+
     /// A `.tab.section` with no preceding `.tab` for its ordinal has nowhere to
     /// attach — it is dropped (not promoted to a phantom tab).
     func testNestedReaderOrphanSectionWithoutTabDropped() {
