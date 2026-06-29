@@ -91,6 +91,27 @@ final class Controller: NSObject {
     /// section. Workspace labels live in the catalog (`workspaceNames`), so a
     /// workspace rename routes to `renameWorkspace` and never lands here.
     var sectionLabelOverride: [Int: [String: String]] = [:]
+    /// W2.2 (board model, t-wrd2): the session-only SELECTED BOARD index per
+    /// mac desktop — the view-state twin of `sectionLabelOverride` (a
+    /// PROJECTION-SEAM dict, NOT the degrade-path `macDesktopSectionOrder`).
+    /// Keyed by the NON-NIL mac-desktop ordinal, read ONLY inside the
+    /// `let ordinal = macDesktopOrdinal` guard at the single `apply()`
+    /// projection seam via `config.activeBoardSections(forMacDesktopOrdinal:
+    /// board:)`; the value is the 0-based index of the `[[desktop.N.tab]]`
+    /// board currently SHOWN by tree/grid/rail. Absent ⇒ board 0 (the first
+    /// board, and the flat-degrade path when no boards are configured), so all
+    /// three views agree. Because the read is ordinal-gated it NEVER consults a
+    /// `-1` bucket — a future writer (W2.3 `facet board`) must therefore guard
+    /// on a non-nil `currentMacDesktopOrdinal()` like `sectionLabelOverride`'s
+    /// writer (Controller+CLIDispatch), NOT write under `?? -1` (which would
+    /// orphan the entry in a bucket the seam can't read). NEVER written to disk
+    /// (config.toml stays read-only) and NEVER touches the backend (a board
+    /// switch re-groups the SAME windows — display only). A relaunch resets to
+    /// board 0; a mac-desktop swap reads the destination ordinal's own
+    /// selection for free. The resolver clamps the index, so a stale selection
+    /// after a hot-reload that dropped boards self-heals to the nearest
+    /// in-range board.
+    var selectedBoard: [Int: Int] = [:]
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -1012,7 +1033,14 @@ final class Controller: NSObject {
         // ⇒ empty sections ⇒ the overview degrades to `wss` (byte-identical).
         if config.isSectionModelActive(ordinal: macDesktopOrdinal),
            let ordinal = macDesktopOrdinal {
-            let secs = config.effectiveMacDesktopSectionConfigs[ordinal] ?? []
+            // W2.2 (board model): read the section list through the board
+            // SELECTOR keyed by the session-selected board for this mac desktop.
+            // With no `[[desktop.N.tab]]` boards (every config today), this
+            // DEGRADES to the flat `[[desktop.N.section]]` list — byte-identical
+            // to the pre-board path (`selectedBoard` is empty ⇒ board 0).
+            let secs = config.activeBoardSections(
+                forMacDesktopOrdinal: ordinal,
+                board: selectedBoard[ordinal] ?? 0)
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
             // from `wss`) so the projection appends them into the `not
             // workspace` receptacle + any content lens they match. Main-actor-
