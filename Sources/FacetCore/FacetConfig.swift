@@ -675,6 +675,51 @@ public struct FacetConfig: Sendable {
         return effectiveMacDesktopSectionConfigs[ordinal] ?? []
     }
 
+    /// One pruned per-board remembered lens (B1, t-1rck) — the payload the
+    /// Controller logs when a board's stored `.lens(id)` no longer resolves
+    /// after a config reload.
+    public struct DroppedBoardLens: Equatable, Sendable {
+        public let ordinal: Int
+        public let board: Int
+        public let id: String
+        public init(ordinal: Int, board: Int, id: String) {
+            self.ordinal = ordinal
+            self.board = board
+            self.id = id
+        }
+    }
+
+    /// Prune a per-board remembered-active-section map after a hot-reload: any
+    /// `.lens(id)` whose stable id no longer resolves to a lens section on its
+    /// OWN board (`activeBoardSections(forMacDesktopOrdinal:board:)`) is replaced
+    /// with `fallback`. Pure — the Controller drives its `boardActiveSection`
+    /// sweep through this so a stale lens can't relight as a wrong / missing
+    /// highlight when the user switches BACK to a non-active board whose lens the
+    /// edited config dropped or reordered (B1, t-1rck). The ACTIVE board's live
+    /// `currentActiveSection` is pruned separately by `reloadConfig` (it also
+    /// clears the backend's live lens; a non-active board's lens is not live, so
+    /// this sweep needs no backend op). Returns the pruned map + the dropped
+    /// entries, in a deterministic (ordinal, board)-sorted order so the log and
+    /// the unit tests are stable.
+    public func prunedBoardActiveSections(
+        _ map: [Int: [Int: ActiveSection]],
+        fallback: ActiveSection
+    ) -> (pruned: [Int: [Int: ActiveSection]], dropped: [DroppedBoardLens]) {
+        var pruned = map
+        var dropped: [DroppedBoardLens] = []
+        for ordinal in map.keys.sorted() {
+            for (board, section) in map[ordinal]!.sorted(by: { $0.key < $1.key }) {
+                guard case .lens(let id) = section else { continue }
+                let sections = activeBoardSections(forMacDesktopOrdinal: ordinal, board: board)
+                if ApplyResolver.section(forSectionID: id, in: sections) == nil {
+                    pruned[ordinal]?[board] = fallback
+                    dropped.append(DroppedBoardLens(ordinal: ordinal, board: board, id: id))
+                }
+            }
+        }
+        return (pruned, dropped)
+    }
+
     /// Fatal config errors that should refuse startup (Fail Fast /
     /// Rule of Repair — never silently fall back). Empty = OK to start.
     /// The app entry prints these to stderr and `exit 2`.

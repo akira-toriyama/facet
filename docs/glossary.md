@@ -191,7 +191,9 @@ flat な [[section]] config（`[[desktop.N.section]]`）の上位互換で、同
 - 設定: `[[desktop.N.tab]]`（`type` 必須＝`workspace` / `lens`・`label` 任意）＋配下
   `[[desktop.N.tab.section]]`（`type` を書かず親から継承・`unassigned = true` マーカー可）
 - CLI: `facet board --focus N|"label"`（1始まり index か label で切替・out-of-range /
-  未知 label は loud reject）。`facet section --focus` の双子＝**表示のみ**（窓は動かない）
+  未知 label は loud reject・**無名 board は index 専用**＝band の既定キャプション
+  `Workspaces` / `Lenses` は `--focus` ラベルにならない）。`facet section --focus` の
+  双子＝**表示のみ**（窓は動かない）
 - UI: active な [[mac desktop]] が **2 board 以上の時だけ** tree / grid / rail の上端に
   board 帯（`BoardBand`）を出す（1 board / flat は非表示＝高さ 0）。**click + ホイール**で
   即切替（下見なし・表示のみ）。caption は `label` か型既定名（index は CLI 専用で UI に出さない）

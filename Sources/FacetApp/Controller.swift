@@ -651,6 +651,23 @@ final class Controller: NSObject {
                 }
             }
         }
+        // B1 (t-1rck): the block above re-validates only the ACTIVE board's
+        // live `currentActiveSection`. Sweep the OTHER boards' remembered
+        // selections too — a `.lens(id)` stored in `boardActiveSection` for a
+        // non-active board is never re-read by `apply()`, so without this a
+        // config edit that drops / reorders that board's lens leaves a dead id
+        // that `commitBoardSelection` would later restore as a stale highlight
+        // on the next switch BACK. Pure prune (no backend op — a non-active
+        // board's lens isn't live in the adapter; only the active board's, which
+        // the block above already cleared).
+        let boardPrune = config.prunedBoardActiveSections(
+            boardActiveSection,
+            fallback: .workspace(activeWSIndex(in: lastWorkspaces)))
+        boardActiveSection = boardPrune.pruned
+        for d in boardPrune.dropped {
+            Log.line("remembered lens on board \(d.board) (desktop \(d.ordinal)) "
+                + "no longer resolves after config reload (id=\(d.id)) → workspace")
+        }
         backend.updateConfig(fresh)   // hot-reload the backend's copy
         logConfigWarnings()
         applyBorderFromConfig()
