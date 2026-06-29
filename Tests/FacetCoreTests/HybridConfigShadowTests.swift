@@ -41,4 +41,42 @@ final class HybridConfigShadowTests: XCTestCase {
         XCTAssertEqual(c.effectiveMacDesktopSectionConfigs[1]?.map(\.label), ["A"])
         XCTAssertEqual(c.effectiveMacDesktopSectionConfigs[2]?.map(\.label), ["B"])
     }
+
+    // MARK: - T2 (t-8p46): the hybrid is detected through the real load() path
+
+    private func loadConfig(_ toml: String) -> FacetConfig {
+        let path = NSTemporaryDirectory()
+            + "facet-test-\(UUID().uuidString)/config.toml"
+        let dir = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(
+            atPath: dir, withIntermediateDirectories: true)
+        try? toml.write(toFile: path, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        return FacetConfig.load(path: path)
+    }
+
+    /// The tests above construct a `FacetConfig` directly, which skips `load()`'s
+    /// hybrid-warn branch (`FacetConfig+Decode.swift`). This drives a hybrid
+    /// config through the REAL `load()` — the path that emits the loud warn — and
+    /// asserts the load-level RESULT the warn announces: the boards decode AND the
+    /// same-ordinal flat block is shadowed out of the effective view (so it can
+    /// never render or mis-resolve). The warn itself goes to /tmp/facet.log via
+    /// `Log.line`, so it is observation-only and not directly asserted here.
+    func testHybridConfigDetectedAtLoad() {
+        let c = loadConfig("""
+        [[desktop.1.section]]
+        type = "lens"
+        label = "FlatGhost"
+        match = 'tag~=ghost'
+        [[desktop.1.tab]]
+        type = "workspace"
+        label = "Board"
+        [[desktop.1.tab.section]]
+        label = "Main"
+        """)
+        XCTAssertNotNil(c.macDesktopTabConfigs[1],
+                        "boards are decoded from the hybrid config")
+        XCTAssertNil(c.effectiveMacDesktopSectionConfigs[1],
+                     "the flat block at the same ordinal is shadowed (boards win, N1)")
+    }
 }
