@@ -46,7 +46,7 @@ import PackageDescription
 
 let package = Package(
     name: "facet",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .executable(name: "facet", targets: ["FacetApp"]),
         .library(name: "FacetCore", targets: ["FacetCore"]),
