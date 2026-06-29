@@ -277,3 +277,32 @@ public struct DesktopSection: Sendable, Equatable {
         }
     }
 }
+
+/// One `[[desktop.N.tab]]` — a NAMED grouping of sections within a mac desktop
+/// (the board model, t-wrd2). A tab is a `type` (`workspace` OR `lens` — never
+/// `unassigned`, which is a per-section marker, not a grouping) + an optional
+/// `label` + an ordered list of child `[[desktop.N.tab.section]]` sections.
+///
+/// The children carry NO `type` of their own — every section in a tab INHERITS
+/// the tab's `type` (mixing is impossible by construction). The one escape is a
+/// child marked `unassigned = true`, the per-tab lost-and-found receptacle,
+/// which decodes to a `.unassigned` section regardless of the parent type.
+///
+/// PURE DATA + ADDITIVE (t-f19q / Wave 1): this models the nested config so a
+/// later wave can wire boards into the projection / UI. Nothing consumes
+/// `FacetConfig.macDesktopTabConfigs` yet — the reader is `decodeDesktopTabs`.
+public struct DesktopTab: Sendable, Equatable {
+    /// The tab's kind — `workspace` or `lens`. Every child section inherits it.
+    public let type: SectionType
+    /// Display header — an optional name (`""` when unset), like a section's.
+    public let label: String
+    /// The tab's sections, in config-declaration (= display) order.
+    public let sections: [DesktopSection]
+
+    public init(type: SectionType, label: String = "",
+                sections: [DesktopSection] = []) {
+        self.type = type
+        self.label = label
+        self.sections = sections
+    }
+}

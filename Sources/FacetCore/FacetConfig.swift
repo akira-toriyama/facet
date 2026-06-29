@@ -171,6 +171,17 @@ public struct FacetConfig: Sendable {
     /// `effectiveWorkspaceList` (workspace count + layout). Shipped #296–#301.
     public var macDesktopSectionConfigs: [Int: [DesktopSection]] = [:]
 
+    /// Per-mac-desktop `[[desktop.N.tab]]` definitions (the board model,
+    /// t-wrd2). Outer key is the mac desktop ordinal (1-based); value is that
+    /// desktop's tabs in config-declaration order, each a `type` + optional
+    /// `label` + ordered child sections (which inherit the tab's type). Parsed
+    /// from the raw TOML text (NESTED array-of-tables, via `Toml.Annotated`) by
+    /// `load`, like `macDesktopSectionConfigs`. ADDITIVE / no consumer yet
+    /// (t-f19q / Wave 1 — the nesting-aware reader prerequisite); read through
+    /// `effectiveMacDesktopTabConfigs`. Disjoint from the flat
+    /// `[[desktop.N.section]]` decode — the two read different header shapes.
+    public var macDesktopTabConfigs: [Int: [DesktopTab]] = [:]
+
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
     /// `nil` when the config specifies none. Parsed from the raw TOML
@@ -573,6 +584,12 @@ public struct FacetConfig: Sendable {
     /// model). Always read through this, never the raw dict.
     public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
         macDesktopSectionConfigs
+    }
+
+    /// Effective `[[desktop.N.tab]]` definitions (the board model). Always read
+    /// through this, never the raw dict.
+    public var effectiveMacDesktopTabConfigs: [Int: [DesktopTab]] {
+        macDesktopTabConfigs
     }
 
     /// Fatal config errors that should refuse startup (Fail Fast /
