@@ -407,14 +407,18 @@ extension NativeAdapter {
     /// (`"section:<declOrder>:<label>"`) to its `DesktopSection` on the active
     /// mac desktop, or `nil` when the id no longer resolves (out of range, not
     /// a lens, label-suffix mismatch — a stale hot-reload). `declOrder` indexes
-    /// the SAME `effectiveMacDesktopSectionConfigs[ord]` array `FilterProjection`
-    /// enumerated to mint the id, so the lookup round-trips exactly. Read the
-    /// live config every call so a hot-reload is picked up immediately.
+    /// the SELECTED board's section list (t-wrd2 / W2.5-adapter) — the SAME
+    /// array `FilterProjection` enumerated to mint the id — so the lookup round-
+    /// trips exactly on a board config too. `config.activeBoardSections` reads
+    /// the live config (a hot-reload is picked up immediately) and DEGRADES to
+    /// the flat `[[desktop.N.section]]` list when no `[[desktop.N.tab]]` boards
+    /// exist; the board mirror defaults to 0, so a flat config resolves byte-
+    /// identically to the pre-board accessor.
     func lensSection(forID id: String) -> DesktopSection? {
-        guard let ord = activeMacDesktopOrdinal,
-              let configs = config.effectiveMacDesktopSectionConfigs[ord]
-        else { return nil }
-        return ApplyResolver.section(forSectionID: id, in: configs)
+        guard let ord = activeMacDesktopOrdinal else { return nil }
+        let board = selectedBoardByOrdinal[ord] ?? 0
+        let sections = config.activeBoardSections(forMacDesktopOrdinal: ord, board: board)
+        return ApplyResolver.section(forSectionID: id, in: sections)
     }
 
     /// The DesktopSection of the ACTIVE section-lens (`catalog.activeSectionLens`

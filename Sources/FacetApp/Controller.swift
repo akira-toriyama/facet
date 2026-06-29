@@ -132,8 +132,10 @@ final class Controller: NSObject {
     /// guard against a second, stale section SSOT. With no `[[desktop.N.tab]]`
     /// boards (or no selection) it degrades to the flat `[[desktop.N.section]]`
     /// list at board 0 — byte-identical to the pre-board reads. `nil` ordinal →
-    /// empty (the config selector keys off the ordinal). (The adapter's own id
-    /// resolution is still flat — board-aware in a later slice.)
+    /// empty (the config selector keys off the ordinal). The adapter's own id
+    /// resolution is now board-aware too (W2.5-adapter — the Controller pushes
+    /// the board via `setSelectedBoard`), so both sides resolve a board-minted
+    /// id against the same selected-board section list.
     func selectedBoardSections(forOrdinal ordinal: Int?) -> [DesktopSection] {
         config.activeBoardSections(
             forMacDesktopOrdinal: ordinal,

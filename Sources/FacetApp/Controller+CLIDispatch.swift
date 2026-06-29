@@ -634,12 +634,15 @@ extension Controller {
     /// synchronous `apply()` below doesn't mistake the switch for a desktop swap
     /// and clobber the restored section.
     ///
-    /// The OLD board's backend lens is CLEARED (`setSectionLens(nil)`) — it must
-    /// not bleed into the new board's view. A restored DISPLAY lens highlights
-    /// correctly (a lens is a pure VIEW — its window list comes from
-    /// `FilterProjection`, not the backend), but full per-board BACKEND lens
-    /// re-activation needs the board-aware adapter (W2.5-adapter); until then a
-    /// board config's lens is a display highlight only.
+    /// The backend is told the destination board (`setSelectedBoard`) so its
+    /// id resolver (`lensSection(forID:)`) indexes the right board, then the
+    /// destination board's REMEMBERED lens is re-activated — or cleared, when
+    /// the restored section is a workspace (W2.5-adapter completes the L1
+    /// backend half). The push lands BEFORE `setSectionLens` in the same
+    /// `runBackendCommand` closure (serial on `cliQueue`), so the lens id
+    /// resolves against the new board. A lens stays a pure VIEW for highlight
+    /// (its window list comes from `FilterProjection`), but its real-hide is
+    /// now board-correct.
     func commitBoardSelection(ordinal: Int, to newBoard: Int) {
         let oldBoard = selectedBoard[ordinal] ?? 0
         guard oldBoard != newBoard else { return }
@@ -649,7 +652,12 @@ extension Controller {
             ?? .workspace(activeWSIndex(in: lastWorkspaces))
         hasRenderedMacDesktop = true
         lastRenderedMacDesktopOrdinal = ordinal
-        runBackendCommand { bk in bk.setSectionLens(nil, autoFocus: false); return nil }
+        let restoredLensID = currentActiveSection.lensID
+        runBackendCommand { bk in
+            bk.setSelectedBoard(newBoard, forMacDesktopOrdinal: ordinal)
+            bk.setSectionLens(restoredLensID, autoFocus: false)
+            return nil
+        }
         Log.debug("commitBoardSelection: ordinal=\(ordinal) → board \(newBoard)")
         apply(lastWorkspaces)   // re-render: re-group into the selected board
     }
