@@ -81,6 +81,14 @@ extension Controller {
                     self.dispatchSectionFocus(
                         String(s.dropFirst("section-focus:".count)))
 
+                // Board addressing: `facet board --focus N|LABEL` → select which
+                // `[[desktop.N.tab]]` board the overview shows. The label can hold
+                // any character (incl. `:`), so the whole remainder is the payload
+                // and `resolveBoardFocus` re-splits the `index:`/`label:` prefix.
+                case let s where s.hasPrefix("board-focus:"):
+                    self.dispatchBoardFocus(
+                        String(s.dropFirst("board-focus:".count)))
+
                 // §E: `facet section --rename N LABEL` → runtime (session-only)
                 // display-label rename. Wire = `section-rename:<index>:<label>`.
                 // The index is a colon-free Int; the label may contain ':', so
@@ -558,6 +566,48 @@ extension Controller {
             return
         }
         activateSection(section, autoFocus: true)
+    }
+
+    /// `facet board --focus N|LABEL`: select which `[[desktop.N.tab]]` board the
+    /// overview (tree / grid / rail) shows on the CURRENT mac desktop (t-wrd2 /
+    /// W2.3). A pure DISPLAY re-grouping of the SAME windows — it writes the
+    /// session-only `selectedBoard[ordinal]` and re-renders; it NEVER touches the
+    /// backend or persists. Runs on main (DNC). Resolution is delegated to the
+    /// pure `resolveBoardFocus`; an out-of-range index / unknown label is loud-
+    /// but-non-fatal (`setError`, no change), matching `section --focus`.
+    ///
+    /// Like `renameSection`'s lens/unassigned branch, the `selectedBoard` WRITE
+    /// is gated on a non-nil ordinal: the projection seam READS the dict under
+    /// the `let ordinal = macDesktopOrdinal` guard (never a `-1` bucket), so a
+    /// `?? -1` write would orphan the entry where `apply()` can't see it. A
+    /// transient nil ordinal (SkyLight blip) is a retryable loud reject.
+    private func dispatchBoardFocus(_ arg: String) {
+        guard let ordinal = currentMacDesktopOrdinal() else {
+            setError("board --focus: mac desktop unknown (try again)")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        let labels = config.effectiveMacDesktopTabConfigs[ordinal]?.map(\.label) ?? []
+        switch resolveBoardFocus(arg, boardLabels: labels) {
+        case .resolved(let boardIndex):
+            // `?? 0` matches the apply() seam's default, so a flat `--focus 1`
+            // (board 0) on an unset selection is a true idempotent no-op.
+            guard (selectedBoard[ordinal] ?? 0) != boardIndex else { return }
+            selectedBoard[ordinal] = boardIndex
+            Log.debug("dispatchBoardFocus: ordinal=\(ordinal) → board \(boardIndex)")
+            apply(lastWorkspaces)       // re-render: re-group into the selected board
+        case .outOfRange(let requested, let count):
+            let hint = count == 1 ? "only 1 board" : "1..\(count)"
+            setError("board --focus \(requested): out of range (\(hint))")
+            scheduleReconcile(after: 0.05)
+        case .unknownLabel(let label):
+            setError("board --focus \(label): no such board")
+            scheduleReconcile(after: 0.05)
+        case .malformed:
+            Log.debug("board-focus: malformed \"\(arg)\"")
+            setError("board --focus: malformed")
+            scheduleReconcile(after: 0.05)
+        }
     }
 
     /// §G unified focus helper: focus the FIRST window of the section with
