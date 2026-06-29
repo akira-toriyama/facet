@@ -213,7 +213,14 @@ public extension FacetConfig {
                      + "(leftover = universe − shown); only the first emits, "
                      + "extras warn. Array order = tree display order. Any "
                      + "section block makes facet opt-in (manages only "
-                     + "configured desktops)."),
+                     + "configured desktops). NESTED FORM: "
+                     + "`[[desktop.N.tab]]` `{ type, label }` is a named "
+                     + "grouping whose `type` is workspace / lens ONLY; its "
+                     + "nested `[[desktop.N.tab.section]]` children carry NO "
+                     + "`type` (each INHERITS the tab's), the lone exception "
+                     + "being a child marked `unassigned = true` (the per-tab "
+                     + "lost-and-found, ≤ 1). Parsed today; consumed by a later "
+                     + "wave."),
         ]
         )
     }
