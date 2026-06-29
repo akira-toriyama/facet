@@ -194,6 +194,13 @@ enum FacetApp {
                                              display override; empty LABEL
                                              reverts to the number / config
                                              label)
+          facet board --focus N|LABEL        show board N (1-based) or the board
+                                             labelled LABEL on this mac desktop —
+                                             a [[desktop.N.tab]] view (a workspace-
+                                             set or lens-set). A board switch re-
+                                             groups the SAME windows (display only;
+                                             never moves a window). Out-of-range
+                                             index / unknown label is rejected
 
         WINDOW                               (focused window)
           facet window --move-to N           move it to workspace N
@@ -497,6 +504,14 @@ enum FacetApp {
         // its first window).
         if argv.first == "section" {
             runSectionCommand(Array(argv.dropFirst()))
+        }
+        // `facet board <flag>` — select which `[[desktop.N.tab]]` board (a
+        // workspace-set or lens-set view) the tree / grid / rail show on the
+        // current mac desktop: `facet board --focus N|LABEL`. The display twin
+        // of `section --focus` — a board switch re-groups the SAME windows, it
+        // never moves a real OS window.
+        if argv.first == "board" {
+            runBoardCommand(Array(argv.dropFirst()))
         }
         // Read-only query sub-command. Plain noun (no `--`) because it
         // returns data rather than triggering a verb. (#227: renamed
