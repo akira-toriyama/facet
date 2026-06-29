@@ -67,4 +67,46 @@ final class ManagementGateTests: XCTestCase {
         XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
         XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
     }
+
+    // MARK: - board model (t-wrd2 / W2.5): a tab config activates the gate
+
+    private func wsBoard() -> DesktopTab {
+        DesktopTab(type: .workspace, label: "Spaces", sections: [wsSection()])
+    }
+    private func lensBoard() -> DesktopTab {
+        DesktopTab(type: .lens, label: "Views", sections: [lensSection()])
+    }
+
+    /// A tab-only config (no flat `[[desktop.N.section]]`) with a workspace
+    /// board ACTIVATES the section model. This is the keystone of the visible
+    /// board switch (W2.5): until the gate is board-aware, a tab-only config is
+    /// `gate=false`, so the projection degrades to default slots and a
+    /// `facet board --focus` is invisible.
+    func testWorkspaceBoardActivatesModel() {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [wsBoard(), lensBoard()]]
+        XCTAssertTrue(c.isSectionModelActive(ordinal: 1),
+                      "a workspace board activates the model on a tab-only config")
+        XCTAssertFalse(c.isSectionModelActive(ordinal: 2),
+                       "the board model is a per-ordinal opt-in")
+        XCTAssertFalse(c.isSectionModelActive(ordinal: nil))
+    }
+
+    /// The gate is board-INDEPENDENT — a config property, not the current
+    /// selection. A workspace board ANYWHERE in the tab list activates the
+    /// model, even when it isn't board 0 (the selected board may be a lens
+    /// board, yet the substrate still exists).
+    func testWorkspaceBoardActivatesRegardlessOfOrder() {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [lensBoard(), wsBoard()]]
+        XCTAssertTrue(c.isSectionModelActive(ordinal: 1))
+    }
+
+    /// A tab config with ONLY lens boards (no workspace substrate) does NOT
+    /// activate the model — mirrors the flat lens-only rule.
+    func testLensOnlyBoardsDoNotActivateModel() {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [lensBoard()]]
+        XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
+    }
 }

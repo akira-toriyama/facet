@@ -520,8 +520,7 @@ public struct FacetConfig: Sendable {
         // still overrides. `isSectionModelActive` guarantees a non-nil ordinal
         // with ≥1 workspace section, so this list is non-empty.
         if isSectionModelActive(ordinal: ordinal), let ordinal {
-            let wsSections = (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
-                .filter { $0.type == .workspace }
+            let wsSections = workspaceSubstrateSections(forOrdinal: ordinal)
             // §B: a non-empty `label` names the workspace; an empty one stays
             // UNNAMED (`name == ""`) and is displayed by its 1-based index
             // (the view composes it via `sectionDisplayLabel`). No emoji
@@ -557,17 +556,44 @@ public struct FacetConfig: Sendable {
     }
 
     /// Whether the section/lens model drives the mac desktop at `ordinal` —
-    /// i.e. it has at least one `type = "workspace"` section. This is the
-    /// gate the read path, auto-naming, and the overview/tree consult to
-    /// decide between the section model and the default unnamed slots.
+    /// i.e. it has at least one `type = "workspace"` section in EITHER the flat
+    /// `[[desktop.N.section]]` list OR any `[[desktop.N.tab]]` board (the board
+    /// model, t-wrd2 / W2.5). This is the gate the read path, auto-naming, and
+    /// the overview/tree consult to decide between the section model and the
+    /// default unnamed slots.
+    ///
+    /// Board-INDEPENDENT — a config property, not the current selection: the
+    /// gate is true whenever a workspace substrate is DECLARED, even if the
+    /// session-selected board is a lens board (a display-only switch never
+    /// removes the substrate). Shares `workspaceSubstrateSections` with
+    /// `effectiveWorkspaceList`, so "gate active" and "seed N workspaces" can
+    /// never disagree (the W2.5 SSOT).
     ///
     /// `nil` ordinal (SkyLight unavailable / single-desktop) is `false`: the
     /// section model is a per-ordinal opt-in, and an unresolvable ordinal
     /// falls back to the default-slot path.
     public func isSectionModelActive(ordinal: Int?) -> Bool {
         guard let ordinal else { return false }
-        return effectiveMacDesktopSectionConfigs[ordinal]?
-            .contains { $0.type == .workspace } ?? false
+        return !workspaceSubstrateSections(forOrdinal: ordinal).isEmpty
+    }
+
+    /// The `type = "workspace"` sections that form the spatial substrate for
+    /// `ordinal` — the count + per-workspace layout seed source. Board-
+    /// INDEPENDENT (a display-only board switch never reshapes the tiling):
+    /// boards present → every board's workspace sections in declaration order;
+    /// else the flat `[[desktop.N.section]]` workspace sections. The boards-win
+    /// precedence mirrors `activeBoardSections` so the substrate and the
+    /// projection agree. With no boards this is byte-identical to the
+    /// pre-board flat filter. The shared SSOT for `isSectionModelActive`
+    /// (non-empty?) and `effectiveWorkspaceList` (the actual list).
+    private func workspaceSubstrateSections(forOrdinal ordinal: Int)
+        -> [DesktopSection]
+    {
+        if let tabs = effectiveMacDesktopTabConfigs[ordinal], !tabs.isEmpty {
+            return tabs.flatMap { $0.sections.filter { $0.type == .workspace } }
+        }
+        return (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
+            .filter { $0.type == .workspace }
     }
 
     /// Effective `[[exclude]]` rule set (empty when none configured).
