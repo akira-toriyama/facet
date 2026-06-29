@@ -1,6 +1,6 @@
 # facet
 
-![platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
+![platform](https://img.shields.io/badge/platform-macOS%2015%2B-lightgrey)
 ![swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![status](https://img.shields.io/badge/status-alpha-orange)
