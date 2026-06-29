@@ -115,7 +115,7 @@ public final class RailView: NSView {
     /// `layoutCells`. Empty when < 2 boards. Read by `RailBoardBand`.
     var boardBandRect: NSRect = .zero
     var boardCells: [RailBoardCellFrame] = []
-    /// Accumulated band scroll-wheel delta; one step per `railBoardWheelStep`.
+    /// Accumulated band scroll-wheel delta; one step per `boardBandWheelStep`.
     var boardWheelAccum: CGFloat = 0
 
     /// The strip band rect (drawing-space) — cells are clipped to it so a
@@ -970,24 +970,16 @@ public final class RailView: NSView {
             scrollBoardBand(event); return
         }
         guard sectionOrder.count > 1 else { return }
-        var dy = event.scrollingDeltaY
-        if dy == 0 { return }
-        // The natural-scroll preference already lives in the sign, so
-        // honour it as-is (no inversion) — down → next.
-        if event.hasPreciseScrollingDeltas {
-            // Trackpad / Magic Mouse: accumulate points, one step per
-            // `railScrollStep`; reset at each gesture start.
-            if event.phase.contains(.began) { scrollAccum = 0 }
-            scrollAccum += dy
-            while abs(scrollAccum) >= railScrollStep {
-                let dx = scrollAccum < 0 ? 1 : -1   // down → next, up → prev
-                scrollAccum += CGFloat(dx) * railScrollStep
-                kbMoveSelection(dx: dx)
-            }
-        } else {
-            // Classic notched wheel: one detent → one step.
-            kbMoveSelection(dx: dy < 0 ? 1 : -1)
-        }
+        // Shared `wheelSteps` math (FacetCore); the carousel's own policy is to
+        // emit PER drained step (the eased, one-at-a-time hero re-preview),
+        // unlike the board bands' single net apply. All drains in a call share a
+        // sign, so looping the net reproduces the old per-drain sequence exactly.
+        let steps = wheelSteps(deltaY: event.scrollingDeltaY, accum: &scrollAccum,
+                               threshold: railScrollStep,
+                               precise: event.hasPreciseScrollingDeltas,
+                               gestureBegan: event.phase.contains(.began))
+        let dx = steps < 0 ? -1 : 1                 // down → next, up → prev
+        for _ in 0..<abs(steps) { kbMoveSelection(dx: dx) }
     }
 
     public override func mouseDown(with event: NSEvent) {

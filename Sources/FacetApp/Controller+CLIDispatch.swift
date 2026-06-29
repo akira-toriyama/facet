@@ -605,8 +605,8 @@ extension Controller {
         }
     }
 
-    /// Tree tab-bar board switch (t-wrd2 / W2.4) — the GUI twin of
-    /// `facet board --focus`. A click / wheel on `BoardTabBar` hands a 0-based
+    /// Board band board switch (t-wrd2 / W2.4) — the GUI twin of
+    /// `facet board --focus`. A click / wheel on the `BoardBand` hands a 0-based
     /// board index (already resolved view-side from the laid-out tabs), so this
     /// skips `resolveBoardFocus`'s label/`index:` parsing and just commits:
     /// write the session-only `selectedBoard[ordinal]` + re-render (a pure

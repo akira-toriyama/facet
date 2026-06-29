@@ -37,7 +37,7 @@ let boardBandFontSize: CGFloat = 12       // tab caption — subhead size
 let boardBandPadX: CGFloat = 10           // horizontal padding inside each tab (intrinsic width = text + 2×this)
 let boardBandGap: CGFloat = 4             // gap between adjacent tabs
 let boardBandRadius: CGFloat = 6          // active-tab pill corner radius
-let boardBandWheelStep: CGFloat = 14      // scroll-wheel points accumulated per one board step (≈ a notch / swipe)
+public let boardBandWheelStep: CGFloat = 14  // scroll points per board step (≈ a notch / swipe); public + shared — the rail board band mirrors it (t-9amp)
 let boardBandSidePad: CGFloat = 12        // band's left/right content inset (was the tree's `rowPadX`)
 
 @MainActor
@@ -136,31 +136,17 @@ public final class BoardBand: NSView {
     }
 
     public override func scrollWheel(with e: NSEvent) {
-        // Mirror the rail's `scrollRotate` (RailView): IGNORE the momentum tail
-        // so one trackpad flick can't keep stepping after the fingers lift (M2);
-        // honour natural-scroll as-is (the sign already carries it) — down →
-        // next. Reset the accumulator at each gesture start so a sub-threshold
-        // leftover can't bias the next, unrelated gesture.
+        // IGNORE the momentum tail so one trackpad flick can't keep stepping
+        // after the fingers lift (M2); the precise-vs-notched accumulation is the
+        // shared `wheelSteps` (FacetCore). The band's policy: apply the NET step
+        // ONCE (clamped) so a multi-step swipe is a single commit / re-render
+        // rather than one per intermediate board.
         guard boardLabels.count > 1, e.momentumPhase == [] else { return }
-        let dy = e.scrollingDeltaY
-        if dy == 0 { return }
-        var step = 0
-        if e.hasPreciseScrollingDeltas {
-            // Trackpad / Magic Mouse: accumulate points, one step per
-            // `boardBandWheelStep`.
-            if e.phase.contains(.began) { wheelAccum = 0 }
-            wheelAccum += dy
-            while abs(wheelAccum) >= boardBandWheelStep {
-                let d = wheelAccum < 0 ? 1 : -1            // down → next, up → prev
-                wheelAccum += CGFloat(d) * boardBandWheelStep
-                step += d
-            }
-        } else {
-            step = dy < 0 ? 1 : -1                          // notched wheel: 1 detent = 1 step
-        }
+        let step = wheelSteps(deltaY: e.scrollingDeltaY, accum: &wheelAccum,
+                              threshold: boardBandWheelStep,
+                              precise: e.hasPreciseScrollingDeltas,
+                              gestureBegan: e.phase.contains(.began))
         guard step != 0 else { return }
-        // Apply the NET step once (clamped) so a multi-step swipe is a single
-        // commit / re-render rather than one per intermediate board.
         let next = boardIndexStep(current: activeBoardIndex, by: step,
                                   count: boardLabels.count)
         if next != activeBoardIndex { onSelectBoard?(next) }
