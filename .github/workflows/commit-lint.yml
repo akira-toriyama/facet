@@ -1,12 +1,11 @@
-name: Commit lint
-
-# Thin caller — delegates commit-message validation to the shared
-# reusable workflow. Logic lives in
-# akira-toriyama/.github/.github/workflows/commit-lint.yml.
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/workflows/commit-lint.yml
+name: commit-lint
 
 on:
   pull_request:
 
 jobs:
   lint:
-    uses: akira-toriyama/.github/.github/workflows/commit-lint.yml@main
+    uses: akira-toriyama/.github/.github/workflows/commit-lint.yml@v1
