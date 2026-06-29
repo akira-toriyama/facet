@@ -461,7 +461,8 @@ plain-text の `.furrow/` = JSON index + per-task markdown body）。**local clo
 [`projects/CLAUDE.md`](https://github.com/akira-toriyama/projects/blob/main/CLAUDE.md)**。
 `facet` ラベルで絞る: `furrow ls -l facet`（着手候補 = ready / in-progress）/
 `furrow show <id>`・起票は `furrow add "…" -l facet`（**repo ラベル必須**・無いと exit 2）。
-`furrow next` は全 repo の actionable を出す（label 絞りは無く `-n` のみ）。Project #5 はその
+`furrow next` は actionable（next-lane = ready / in-progress かつ deps 完了）を canonical
+order で出す（`-l facet` で repo 絞り・`-n` で件数制限）。Project #5 はその
 公開ミラー（手動）。**repo-root の `Task.md` は 2026-06-25 に退役**し projects へ移行済み
 （`furrow migrate --label facet`）。`.furrow/index.json` は furrow が機械生成＝手編集禁止・
 `bodies/*.md` は手編集 OK。
