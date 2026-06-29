@@ -139,7 +139,8 @@ is the index. **Do not relitigate** without explicit grill round.
   crossed by a drag. `WindowSlot.workspace` is `Int?` — a window can belong
   to NO workspace, but normally belongs to exactly one, so orphans (迷子) are
   rare (t-qtpx removed the ws→lens DnD that created them). An orphan is
-  invisible-but-logged until the opt-in `type = "unassigned"` section (§G)
+  invisible-but-logged until a section with the opt-in `unassigned = true`
+  marker (§G; the retired `type = "unassigned"` spelling now drops loud)
   surfaces every leftover window (in no other section) and a drag out onto a
   workspace rescues it. Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
@@ -162,8 +163,10 @@ is the index. **Do not relitigate** without explicit grill round.
   keeps `isOnscreen` true, so only user hides trigger this (#131 /
   #132 / #133; memory `facet-hide-reclaim-decisions`).
 - **CLI surface**: `facet workspace --focus N` switch, `facet window
-  --move-to N` move, `--reload` explicit + auto FSEvents watcher,
-  `facet query` for state dump. Subject-verb form since Theme C
+  --move-to N` move, `facet section --focus N|LABEL` / `facet board --focus
+  N|LABEL` (the unified section addressing + its DISPLAY-only board twin —
+  see "The board selection layer"), `--reload` explicit + auto FSEvents
+  watcher, `facet query` for state dump. Subject-verb form since Theme C
   (#81/#82); the α-era top-level `--workspace=N` was deleted. TOML
   atomic write enforced in shipped templates.
   - **Grammar is an isolated seam (#227)**: the CLI uses yabai-style
@@ -500,8 +503,12 @@ unit-tested and the views stay rendering-only.
 diagnostics. Two types are deliberately kept apart:
 
 - **`DesktopSection`** — the *config declaration* (`[[desktop.N.section]]`): a
-  required `type` (`workspace` / `lens` / `unassigned`), an optional `label`,
-  a raw `match` string, and an `apply` op list.
+  required `type` (`SectionType` = `workspace` / `lens` — NO `.unassigned`),
+  an optional `label`, a raw `match` string, an `apply` op list, and an
+  `unassigned = true` `Bool` marker (W2.6 / t-wrd2 — the lost-and-found
+  receptacle is a flag on a `workspace` / `lens` section, NOT a `type`; the
+  retired `type = "unassigned"` spelling is now an unknown type and drops loud
+  on decode).
 - **`ProjectedSection`** — the *projection result*: one rendered unit, with a
   stable `id` (`"ws:<index>"` or `"section:<declOrder>:<label>"`), a `label`,
   the `windows` that landed in it, `sourceWorkspaceIndex` (`nil` for a
@@ -516,7 +523,11 @@ Per-type semantics:
 - **lens** — a saved filter. Its `match` compiles to a `facet filter` and is
   evaluated over *every* window (multi-match: a window in two lens sections
   appears in both). A lens narrows; it never re-bundles.
-- **unassigned** (§G) — the opt-in lost-and-found receptacle. When present it
+- **unassigned** (§G) — the opt-in lost-and-found receptacle. NOT a config
+  `type` (which stays `{workspace, lens}`): a section carries the
+  `unassigned = true` marker and `FilterProjection` mints the render-side
+  `ProjectedSectionType.unassigned` for it (the third *projected* kind a
+  config section never declares). When present it
   collects the *leftover* (universe − shown — every window in no other emitted
   section, in practice the orphans no lens caught); only the first emits,
   extras warn; `id = "unassigned:<declOrder>"`. Rendered in tree/grid/rail,
@@ -560,9 +571,59 @@ workspaces on the current mac desktop, and the tree / grid / rail show just
 those rows / thumbnails — one projection authority, no view-side `match`
 recompute. The user clicks a matched window to jump to it (workspace switch
 + focus); `facet lens --clear` drops the view. The read-path is the sole
-window-grouping model: a mac desktop with `[[desktop.N.section]]` blocks
-renders them, and a desktop with none degrades 1:1 to the built-in
-by-workspace tree.
+window-grouping model, and the section list it renders is the result of the
+**board selection layer** (next subsection): `activeBoardSections` resolves
+the active board's sections through a two-stage degrade — a mac desktop with
+`[[desktop.N.tab]]` boards renders the SELECTED board's sections, one with
+only flat `[[desktop.N.section]]` blocks renders those, and one with neither
+degrades 1:1 to the built-in by-workspace tree.
+
+### The board selection layer
+
+A [board](glossary.md#board) is a browser-tab-style grouping of sections
+inside one mac desktop — the hierarchy is
+**mac desktop > board > section > window**. Boards sit ABOVE the projection
+as a pure *selector*: switching a board re-groups the SAME windows (DISPLAY-
+only, like a lens — it never moves a real OS window), it only changes which
+`[DesktopSection]` list feeds `FilterProjection.project`.
+
+- **`DesktopTab`** (`DesktopSection.swift`) — the config declaration
+  (`[[desktop.N.tab]]`): a `type` (`SectionType` = `workspace` / `lens`), an
+  optional `label` (else `displayLabel` is the type default `Workspaces` /
+  `Lenses`), and the child `sections` (`[[desktop.N.tab.section]]`, which
+  inherit the board's `type`).
+- **`FacetConfig.activeBoardSections(forMacDesktopOrdinal:board:)`**
+  (`FacetConfig.swift`) — the transparent selector, two-stage degrade:
+  (1) *board → flat* — when the ordinal has `[[desktop.N.tab]]` boards it
+  returns the clamped board's `sections`, else the flat
+  `effectiveMacDesktopSectionConfigs[ordinal]` list; (2) *flat → by-workspace*
+  — an empty list makes `FilterProjection.project` map each workspace 1:1
+  (`FilterProjection.swift`). Because it is a *transparent* layer, projecting
+  a board's sections equals projecting an equivalent flat config — the
+  **byte-一致 invariant** (documented on `FacetConfig.activeBoardSections`),
+  so the default, board-less config renders byte-identically to the pre-board
+  tree.
+- **`Controller.selectedBoard`** (`Controller.swift`, `[Int: Int]`) — the
+  session-only, per-mac-desktop-ordinal selection (NEVER persisted, NEVER
+  touches the backend; a relaunch resets to board 0; a mac-desktop swap reads
+  the destination ordinal's own selection). `selectedBoardSections(forOrdinal:)`
+  is the ONE Controller seam that feeds the projection, so the section-id
+  `declOrder` agrees with what `apply()` minted. The per-board remembered
+  active section lives in `boardActiveSection`, written only through
+  `commitBoardSelection`.
+- **`BoardBand`** (`FacetView`) — the GUI switcher, drawn across the top of
+  every view (tree / grid / rail) **only when the active mac desktop has ≥2
+  boards** (`boardBandInputs` returns `([], 0)` below that ⇒ no band, height
+  0); click or wheel switches. Captions are each board's `displayLabel` (the
+  1-based index is CLI-only).
+- **Boards win over flat** — when the same ordinal declares BOTH boards and
+  flat sections, the boards win and the flat blocks are shadowed with a loud
+  warn (the `effectiveMacDesktopSectionConfigs` computed property filters them
+  out; warn in `FacetConfig+Decode.swift`).
+
+CLI / GUI entry point: `facet board --focus N|"label"` (the DISPLAY-only twin
+of `facet section --focus`); an out-of-range index / unknown label is a loud
+reject (pure `resolveBoardFocus`, `CLIParse.swift`).
 
 ### One tiling machinery, one active section
 
