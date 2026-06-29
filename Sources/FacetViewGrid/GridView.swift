@@ -17,7 +17,7 @@ public final class GridView: NSView {
     /// build time; `pal` reads route through it (the grid overlay's own
     /// `[grid].theme`), and the box is shared with the grid's `BorderFX`.
     public var paletteBox: PaletteBox! {
-        didSet { borderFX.paletteBox = paletteBox }
+        didSet { borderFX.paletteBox = paletteBox; boardBand?.paletteBox = paletteBox }
     }
     var pal: ResolvedPalette { paletteBox.pal }
 
@@ -48,6 +48,46 @@ public final class GridView: NSView {
     /// Layout / typography config. Controller updates this if the
     /// config file changes (TBD: M2 step 6 config-file integration).
     public var config: GridConfig = .standard
+
+    // MARK: - Board switcher band (t-wrd2)
+
+    /// The shared FacetView board band (the same view the tree uses), pinned at
+    /// the overlay TOP above the cells. Lazily created when the Controller feeds
+    /// ≥2 board labels; a flat / single-board config feeds none ⇒ no band ⇒ zero
+    /// reserved height ⇒ byte-identical grid. Click + wheel only.
+    private var boardBand: BoardBand?
+    /// Height the band reserves at the top (0 ⇒ no band ⇒ no carve).
+    private var boardBandHeight: CGFloat { boardBand == nil ? 0 : BoardBand.height }
+    /// Board captions in display order. ≥2 shows the band; < 2 removes it.
+    public var boardLabels: [String] = [] {
+        didSet {
+            guard boardLabels != oldValue else { return }
+            if boardLabels.count >= 2 {
+                let b = boardBand ?? makeBoardBand()
+                b.boardLabels = boardLabels
+                b.activeBoardIndex = activeBoardIndex
+            } else if let b = boardBand {
+                b.removeFromSuperview(); boardBand = nil
+            }
+            needsLayout = true        // re-carve the cell area
+        }
+    }
+    /// The shown board's 0-based index (drives the active-tab highlight).
+    public var activeBoardIndex: Int = 0 {
+        didSet { boardBand?.activeBoardIndex = activeBoardIndex }
+    }
+    /// Click / wheel on a board tab → switch board (Controller's
+    /// `selectBoardFromUI`). Display-only; the overlay stays open.
+    public var onSelectBoard: ((Int) -> Void)?
+
+    private func makeBoardBand() -> BoardBand {
+        let b = BoardBand()
+        b.paletteBox = paletteBox
+        b.onSelectBoard = { [weak self] in self?.onSelectBoard?($0) }
+        addSubview(b)
+        boardBand = b
+        return b
+    }
 
     /// Click-outside-cell dismiss + Esc — both go through the same
     /// callback so the Controller owns the actual hide / restore
@@ -422,7 +462,12 @@ public final class GridView: NSView {
         let cols = effectiveCols
         let rows = gridRowCount(wsCount: sources.count, cols: cols)
         let usableW = bounds.width  - 2 * gridOuterPad
-        let usableH = bounds.height - 2 * gridOuterPad
+        // Reserve the board switcher band at the TOP (flipped) when shown;
+        // `boardBandHeight` is 0 with < 2 boards ⇒ this + `originY` below reduce
+        // to the pre-band expressions (byte-identical grid).
+        let usableH = gridUsableHeight(boundsHeight: bounds.height,
+                                       outerPad: gridOuterPad,
+                                       boardBandHeight: boardBandHeight)
         // Aspect from the screen we're being shown on (main display
         // for the Phase 1a MVP). Falls back to 16:9 if NSScreen.main
         // is nil — values just need to be self-consistent.
@@ -456,7 +501,9 @@ public final class GridView: NSView {
         let totalH = (cellSize.height + labelBand) * CGFloat(rows)
             + gridCellGap * CGFloat(rows - 1)
         let originX = (bounds.width  - totalW) / 2
-        let originY = (bounds.height - totalH) / 2
+        let originY = gridOriginY(boundsHeight: bounds.height,
+                                  outerPad: gridOuterPad,
+                                  boardBandHeight: boardBandHeight, totalH: totalH)
         let useScreen = screenFrame.width > 0 ? screenFrame : scr
         for (i, src) in sources.enumerated() {
             let r = i / cols, c = i % cols
@@ -621,7 +668,16 @@ public final class GridView: NSView {
     }
 
     public override func layout() {
-        super.layout(); layoutCells(); updateBorderFrame()
+        super.layout(); layoutCells(); updateBorderFrame(); layoutBoardBand()
+    }
+
+    /// Pin the board band to the overlay top (flipped: small y), inside the
+    /// outer pad, above the cells. No-op when there's no band.
+    private func layoutBoardBand() {
+        guard let band = boardBand else { return }
+        band.frame = NSRect(x: gridOuterPad, y: gridOuterPad,
+                            width: max(0, bounds.width - 2 * gridOuterPad),
+                            height: BoardBand.height)
     }
 
     // MARK: - Draw

@@ -1123,11 +1123,18 @@ final class Controller: NSObject {
         // windows) — no park-flag narrowing, no view-side recompute. `wss`
         // stays the full set.
         if let g = gridView {
+            let prevBoard = g.activeBoardIndex
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
             g.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+            let board = boardBandInputs()      // keep the open grid's board band in sync
+            g.boardLabels = board.labels
+            g.activeBoardIndex = board.selectedIndex
             g.layoutCells()       // refresh open grid on backend events
+            // A board switch swaps the whole section set — re-seed the keyboard
+            // ring onto a valid cell (other backend events keep the selection).
+            if board.selectedIndex != prevBoard { g.kbSeedToActiveCell() }
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
         // grid), so keep it live with every reconcile — the active-WS

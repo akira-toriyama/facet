@@ -125,6 +125,40 @@ final class GridMathTests: XCTestCase {
         XCTAssertEqual(mapped, .zero)
     }
 
+    // MARK: - board band carve (t-wrd2 — gridUsableHeight / gridOriginY)
+
+    /// With no board band (< 2 boards ⇒ height 0) the carve MUST reduce to the
+    /// pre-band vertical placement — the byte-identical guarantee for flat /
+    /// single-board configs.
+    func testBoardBandZeroIsByteIdentical() {
+        let h: CGFloat = 1000, pad = gridOuterPad, totalH: CGFloat = 600
+        XCTAssertEqual(gridUsableHeight(boundsHeight: h, outerPad: pad,
+                                        boardBandHeight: 0),
+                       h - 2 * pad, accuracy: 0.0001)
+        // pre-band origin was exactly `(bounds.height - totalH) / 2`.
+        XCTAssertEqual(gridOriginY(boundsHeight: h, outerPad: pad,
+                                   boardBandHeight: 0, totalH: totalH),
+                       (h - totalH) / 2, accuracy: 0.0001)
+    }
+
+    /// A reserved band shrinks the usable height by exactly its height and
+    /// pushes the centred cell block down by half that (re-centred in the
+    /// smaller area below the band), never intruding into the band region.
+    func testBoardBandReservesHeightAndShiftsDown() {
+        let h: CGFloat = 1000, pad = gridOuterPad, totalH: CGFloat = 600
+        let band: CGFloat = 30
+        XCTAssertEqual(gridUsableHeight(boundsHeight: h, outerPad: pad,
+                                        boardBandHeight: band),
+                       (h - 2 * pad) - band, accuracy: 0.0001)
+        let y0 = gridOriginY(boundsHeight: h, outerPad: pad,
+                             boardBandHeight: 0, totalH: totalH)
+        let yB = gridOriginY(boundsHeight: h, outerPad: pad,
+                             boardBandHeight: band, totalH: totalH)
+        XCTAssertEqual(yB, y0 + band / 2, accuracy: 0.0001)
+        // Flipped view: top = small y; the block's top stays below the band.
+        XCTAssertGreaterThanOrEqual(yB, pad + band - 0.0001)
+    }
+
     // §D: the WS caption (`gridLabel`) was retired in favour of the shared
     // FacetCore `sectionDisplayLabel(index:label:)` — its tests live in
     // `WorkspaceLabelTests`.
