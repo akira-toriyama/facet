@@ -200,7 +200,10 @@ enum FacetApp {
                                              set or lens-set). A board switch re-
                                              groups the SAME windows (display only;
                                              never moves a window). Out-of-range
-                                             index / unknown label is rejected
+                                             index / unknown label is rejected. An
+                                             UNNAMED board is index-only — its band
+                                             caption (Workspaces / Lenses) is a type
+                                             default, not a --focus label
 
         WINDOW                               (focused window)
           facet window --move-to N           move it to workspace N
