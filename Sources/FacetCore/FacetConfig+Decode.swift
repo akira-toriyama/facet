@@ -279,6 +279,16 @@ extension FacetConfig {
             if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
             let tabs = decodeDesktopTabs(fromTOML: text)
             if !tabs.isEmpty { c.macDesktopTabConfigs = tabs }
+            // N1: a desktop declaring BOTH `[[desktop.N.section]]` and
+            // `[[desktop.N.tab]]` is ambiguous — boards win and the flat
+            // sections are shadowed (see `effectiveMacDesktopSectionConfigs`).
+            // Warn loudly once so the dropped flat block isn't a silent
+            // surprise (it would otherwise look configured but never render).
+            for ordinal in tabs.keys.sorted() where sections[ordinal] != nil {
+                Log.line("config: desktop \(ordinal) declares both "
+                    + "[[desktop.\(ordinal).section]] and [[desktop.\(ordinal).tab]]"
+                    + " — boards win; the flat section block is ignored")
+            }
             let adoptRules = decodeRuleSections(fromTOML: text)
             if !adoptRules.isEmpty { c.rules = adoptRules }
             return c

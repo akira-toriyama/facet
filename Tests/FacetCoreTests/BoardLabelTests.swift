@@ -28,4 +28,18 @@ final class BoardLabelTests: XCTestCase {
         XCTAssertEqual(DesktopTab(type: .lens, label: "").displayLabel,
                        "Lenses")
     }
+
+    /// N2 (board review follow-up): a WHITESPACE-only label is treated as
+    /// unnamed too — `displayLabel`'s contract is "never blank", so it trims
+    /// before the emptiness test rather than drawing a blank tab. (Distinct
+    /// from `sectionDisplayLabel`, which always prepends an index and so is
+    /// never blank regardless of label.)
+    func testWhitespaceOnlyLabelFallsBackToTypeDefault() {
+        XCTAssertEqual(DesktopTab(type: .workspace, label: "   ").displayLabel,
+                       "Workspaces")
+        XCTAssertEqual(DesktopTab(type: .lens, label: "\t").displayLabel,
+                       "Lenses")
+        XCTAssertEqual(DesktopTab(type: .workspace, label: "\n").displayLabel,
+                       "Workspaces")
+    }
 }

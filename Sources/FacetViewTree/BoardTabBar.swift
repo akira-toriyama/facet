@@ -2,8 +2,11 @@
 // "Desktop N" HandleBar that switches which `[[desktop.N.tab]]` board the tree
 // shows. Shown ONLY when the active mac desktop has ≥2 boards (a flat / single-
 // board config gets no bar — zero new chrome, byte-identical to today). A board
-// switch is a pure DISPLAY re-grouping of the SAME windows (it routes through
-// the same `facet board --focus` path), never a real window move.
+// switch is a pure DISPLAY re-grouping of the SAME windows — it commits the same
+// session-only `selectedBoard` + re-render as `facet board --focus` (via the
+// Controller's `selectBoardFromUI`, the CLI verb's sibling — they share the
+// EFFECT, not a function), only skipping the label / `index:` parsing — and
+// never moves a real window.
 //
 // Interaction (modelled on the rail, the other facet board-ish switcher):
 //   • click a tab            → switch to that board
@@ -116,15 +119,32 @@ public final class BoardTabBar: NSView {
     }
 
     public override func scrollWheel(with e: NSEvent) {
-        // Accumulate until a full step; a downward / rightward gesture advances
-        // to the NEXT board (matching the rail's wheel direction).
-        wheelAccum += e.scrollingDeltaY + e.scrollingDeltaX
-        let dir: Int
-        if wheelAccum <= -boardTabWheelStep { dir = 1 }       // scroll down → next
-        else if wheelAccum >= boardTabWheelStep { dir = -1 }  // scroll up → prev
-        else { return }
-        wheelAccum = 0
-        let next = boardIndexStep(current: activeBoardIndex, by: dir,
+        // Mirror the rail's `scrollRotate` (RailView): IGNORE the momentum tail
+        // so one trackpad flick can't keep stepping after the fingers lift (M2);
+        // honour natural-scroll as-is (the sign already carries it) — down →
+        // next. Reset the accumulator at each gesture start so a sub-threshold
+        // leftover can't bias the next, unrelated gesture.
+        guard boardLabels.count > 1, e.momentumPhase == [] else { return }
+        let dy = e.scrollingDeltaY
+        if dy == 0 { return }
+        var step = 0
+        if e.hasPreciseScrollingDeltas {
+            // Trackpad / Magic Mouse: accumulate points, one step per
+            // `boardTabWheelStep`.
+            if e.phase.contains(.began) { wheelAccum = 0 }
+            wheelAccum += dy
+            while abs(wheelAccum) >= boardTabWheelStep {
+                let d = wheelAccum < 0 ? 1 : -1            // down → next, up → prev
+                wheelAccum += CGFloat(d) * boardTabWheelStep
+                step += d
+            }
+        } else {
+            step = dy < 0 ? 1 : -1                          // notched wheel: 1 detent = 1 step
+        }
+        guard step != 0 else { return }
+        // Apply the NET step once (clamped) so a multi-step swipe is a single
+        // commit / re-render rather than one per intermediate board.
+        let next = boardIndexStep(current: activeBoardIndex, by: step,
                                   count: boardLabels.count)
         if next != activeBoardIndex { onSelectBoard?(next) }
     }

@@ -53,4 +53,15 @@ final class BoardTabLayoutTests: XCTestCase {
         XCTAssertEqual(boardTabLayout(widths: [120], available: 300, gap: 6),
                        [BoardTabFrame(boardIndex: 0, x: 0, width: 120)])
     }
+
+    /// N4 (board review follow-up): an EXTREME overflow where the gaps alone
+    /// exceed `available` clamps each width to 0 (never negative) — pins the
+    /// `max(0, …)` so a future refactor can't emit negative widths unnoticed.
+    func testExtremeOverflowClampsWidthToZero() {
+        // gaps 6*2 = 12 > available 5 → (5-12)/3 < 0 → clamped to 0.
+        let f = boardTabLayout(widths: [100, 100, 100], available: 5, gap: 6)
+        XCTAssertEqual(f.map(\.width), [0, 0, 0])
+        XCTAssertTrue(f.allSatisfy { $0.width >= 0 && $0.x >= 0 },
+                      "no negative width or x")
+    }
 }
