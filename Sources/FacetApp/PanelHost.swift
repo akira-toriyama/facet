@@ -46,7 +46,7 @@ final class PanelHost: NSObject {
     /// feeds it ≥2 board labels (a flat / single-board config leaves it empty
     /// ⇒ hidden ⇒ no height reserved ⇒ byte-identical chrome). Controller wires
     /// `onSelectBoard`.
-    let boardTabBar = BoardTabBar()
+    let boardTabBar = BoardBand()
 
     /// Outer panel border. Drawn as a layer (never a view) so it can't
     /// intercept clicks; sits above the chrome via `zPosition`, tracks
@@ -418,7 +418,7 @@ final class PanelHost: NSObject {
         // only when the Controller fed ≥2 board labels. Hidden ⇒ 0 height ⇒ the
         // scroll body is unchanged from the pre-board layout (byte-identical).
         let showBoardBar = boardTabBar.boardLabels.count >= 2
-        let bb = showBoardBar ? BoardTabBar.height : 0
+        let bb = showBoardBar ? BoardBand.height : 0
         boardTabBar.isHidden = !showBoardBar
         boardTabBar.frame = NSRect(x: 0, y: f.height - sh - hb - bb,
                                    width: f.width, height: bb)

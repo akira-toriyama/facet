@@ -141,6 +141,19 @@ final class Controller: NSObject {
             forMacDesktopOrdinal: ordinal,
             board: ordinal.flatMap { selectedBoard[$0] } ?? 0)
     }
+    /// The active mac desktop's board-switcher inputs, shared by the tree band
+    /// feed (`apply`) and the grid / rail overlay bands. Returns the display
+    /// labels in config order + the clamped selected index. < 2 boards (flat /
+    /// single-board config, or `nil` ordinal) ⇒ `([], 0)` ⇒ the caller reserves
+    /// no band height (byte-identical chrome). The clamp matches the projection's
+    /// board clamp in `selectedBoardSections`.
+    func boardBandInputs() -> (labels: [String], selectedIndex: Int) {
+        let ord = currentMacDesktopOrdinal()
+        let boards = ord.flatMap { config.effectiveMacDesktopTabConfigs[$0] } ?? []
+        guard boards.count >= 2, let ord else { return ([], 0) }
+        return (boards.map(\.displayLabel),
+                max(0, min(boards.count - 1, selectedBoard[ord] ?? 0)))
+    }
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
     /// snapshot frame is switch-stable by design, so an index change is
@@ -1244,15 +1257,9 @@ final class Controller: NSObject {
         // board config feeds an empty label list, so PanelHost hides the band
         // and reserves no height (byte-identical chrome). The active index is
         // clamped, matching the projection's board clamp.
-        let boards = macDesktopOrdinal
-            .flatMap { config.effectiveMacDesktopTabConfigs[$0] } ?? []
-        if boards.count >= 2, let ord = macDesktopOrdinal {
-            panelHost.boardTabBar.boardLabels = boards.map(\.displayLabel)
-            panelHost.boardTabBar.activeBoardIndex =
-                max(0, min(boards.count - 1, selectedBoard[ord] ?? 0))
-        } else {
-            panelHost.boardTabBar.boardLabels = []
-        }
+        let board = boardBandInputs()
+        panelHost.boardTabBar.boardLabels = board.labels
+        panelHost.boardTabBar.activeBoardIndex = board.selectedIndex
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }

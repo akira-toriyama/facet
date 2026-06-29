@@ -14,14 +14,8 @@ let headerRowH: CGFloat = 64             // workspace section heading (divider a
 let headerFirstRowH: CGFloat = 50        // first workspace: no divider, tighter top, still 2-line caption
 let windowRowH: CGFloat = 28             // window row, no title (compact single line)
 let handleRowH: CGFloat = 42             // top drag-handle band (panel move + mac desktop label); taller so the divider has padding above/below
-let boardTabBarH: CGFloat = 30           // board tab bar band (t-wrd2 / W2.4), below the "Desktop N" handle; shorter than the handle row
-
-// Board tab bar (t-wrd2 / W2.4) metrics.
-let boardTabFontSize: CGFloat = 12       // tab caption — subhead size (subordinate to the "Desktop N" band)
-let boardTabPadX: CGFloat = 10           // horizontal padding inside each tab (intrinsic width = text + 2×this)
-let boardTabGap: CGFloat = 4             // gap between adjacent tabs
-let boardTabRadius: CGFloat = 6          // active-tab pill corner radius
-let boardTabWheelStep: CGFloat = 14      // scroll-wheel points accumulated per one board step (≈ a notch / swipe)
+// The board switcher band (t-wrd2) moved to FacetView as `BoardBand` (promoted
+// for tree + grid reuse) — its metrics live there now (`boardBand*`).
 
 // Typography — ONE ordered scale (14 ▸ 13 ▸ 12 ▸ 11). Every tree text
 // routes through these constants (no bare literals) so the ladder stays
