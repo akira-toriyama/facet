@@ -54,19 +54,30 @@ let package = Package(
     dependencies: [
         // Shared theming foundation (plan atelier). Pinned to a SemVer
         // tag for release/CI reproducibility; `.upToNextMinor` keeps it on
-        // a single minor. Floor 1.26.0 = the `ConfigSchema` module after
+        // a single minor. Floor 1.27.0 = the sill release that moved its OWN
+        // swift-toml-edit floor to 2.0.0 (the breaking `Toml.Row`/source-span
+        // bump, chord#148) — so facet's DIRECT swift-toml-edit 2.x pin below
+        // and sill's transitive one resolve to the same 2.x, never a split
+        // graph. (Pre-2.0.0 it was 1.26.0 = the `ConfigSchema` module after
         // #138 S3 routed `Spec.jsonSchema()` through the shared `SchemaEmit`
-        // lowering and added `Spec.Field.enumDocs` (the per-enum-value taplo
-        // hover this bump unlocks). For local, atomic sill↔facet editing,
-        // temporarily swap this line for `.package(path: "../sill")`.
+        // lowering and added `Spec.Field.enumDocs`.) For local, atomic
+        // sill↔facet editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "1.26.0")),
+                 .upToNextMinor(from: "1.27.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
-        // module name is unchanged, so `import Toml` survives.
+        // module name is unchanged, so `import Toml` survives. Floor 2.0.0:
+        // the family unified on swift-toml-edit 2.x (chord#148). 2.0.0's break
+        // — source spans carried on a typed `Toml.Row`, the synthetic
+        // `__line__` key dropped — is confined to the STRICT nested `parse` /
+        // `Value.arrayOfTables` surface; facet reads only `parseFlat`
+        // (`.tables` / `.arrays`, element type unchanged) and the lossless
+        // `Toml.Annotated` DOM (board nesting, `parseTOMLNestedTabs`), neither
+        // of which 2.0.0 touched — so this is a pin-only bump, no code change.
+        // `.upToNextMajor` mirrors sill's own pin for this bedrock dependency.
         .package(url: "https://github.com/akira-toriyama/swift-toml-edit.git",
-                 .upToNextMinor(from: "1.0.0")),
+                 .upToNextMajor(from: "2.0.0")),
     ],
     targets: [
         // FacetCore links sill's PURE `Palette` module (AppKit-free, so it
