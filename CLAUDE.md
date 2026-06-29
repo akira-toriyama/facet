@@ -9,11 +9,16 @@ All UI / config / code terminology follows
 (`FacetCore`, `FacetAdapterNative`, `WindowBackend`, `mac desktop`,
 `facet workspace`, `facet view`, `lens`, `AX target`, `pal`,
 `loading skeleton`, …), **not** the `Don't call it:` synonyms.
-The 4 core concepts are kept strictly apart: **mac desktop** (= macOS
+The 5 core concepts are kept strictly apart — hierarchy
+**mac desktop > board > section > window**: **mac desktop** (= macOS
 native Space; code `MacDesktops` / `[[desktop.N.section]]`), **facet workspace**
 (facet's window grouping; `WorkspaceCatalog`), **facet view** (UI:
 `tree`/`grid`/`rail`), **lens** (tag display set; M11-3, shipped in
-#176 — `facet lens`, `WorkspaceCatalog.activeSectionLens`). Apple's own SLS /
+#176 — `facet lens`, `WorkspaceCatalog.activeSectionLens`), **board** (a
+browser-tab-style grouping of sections inside one mac desktop; `DesktopTab` /
+`[[desktop.N.tab]]` / `Controller.selectedBoard` / `facet board --focus N|LABEL`;
+DISPLAY-only — switching a board re-groups the SAME windows, it never moves
+one; shipped t-wrd2 / #368). Apple's own SLS /
 `NSWorkspace` API names stay verbatim.
 Adding or renaming a term lands in the same PR as the code change.
 
@@ -176,11 +181,24 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   `activeMacDesktopID == 0` → one shared catalog (pre-feature
   behaviour). `[[desktop.N.section]]` config keys by ordinal; catalog
   state is session-only (never persisted), rebuilt from live windows on
-  restart. **Opt-in rule**: any `[[desktop.N.section]]` block makes facet
+  restart. **Sections may be grouped into boards** — `[[desktop.N.tab]]`
+  is a browser-tab-style grouping (`type` = `workspace` / `lens`; child
+  `[[desktop.N.tab.section]]` blocks inherit that type), and switching a
+  board is DISPLAY-only (re-groups the SAME windows, never moves one).
+  **Boards win over flat**: when the same ordinal `N` declares BOTH
+  `[[desktop.N.tab]]` and flat `[[desktop.N.section]]`, the boards win and
+  the flat blocks are shadowed with a loud warn
+  (the `effectiveMacDesktopSectionConfigs` filter drops them;
+  warn in `FacetConfig+Decode.swift`). No `[[desktop.N.tab]]` → degrade to
+  the flat list, byte-identical (`FacetConfig.activeBoardSections`). See the
+  glossary `### board` + [docs/architecture.md](docs/architecture.md) "The
+  board selection layer". **Opt-in rule**: any `[[desktop.N.section]]` OR
+  `[[desktop.N.tab]]` block makes facet
   manage ONLY configured mac desktops — others are hands-off (no
   adopt/park, empty `workspaces()` → Controller's empty-list guard
-  hides the panel). No `[[desktop.N.section]]` at all → every mac desktop
-  managed with the global default. `FacetConfig.isMacDesktopManaged`.
+  hides the panel). No `[[desktop.N.section]]` / `[[desktop.N.tab]]` at all
+  → every mac desktop managed with the global default (`FacetConfig.isMacDesktopManaged`
+  gates on EITHER form).
   **A workspace section may be named from config via an optional `label`**
   (§A / t-0018 reversed the old "never named from config" rule; the old
   `[desktop.N]` by-name seed stays retired). `type = "workspace"` with a
@@ -245,6 +263,19 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   → ``SectionRenamePanel``; unassigned gets a Rename-only
   ``ViewContextMenu.showUnassignedMenu`` — no layout). Wire
   ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
+- **``facet board --focus N|LABEL`` is the DISPLAY-only twin of
+  ``facet section --focus``** — it selects which `[[desktop.N.tab]]` board
+  (a workspace-set or lens-set grouping of sections) the tree / grid / rail
+  show on the current mac desktop, addressed by 1-based index or label. A
+  board switch RE-GROUPS the same windows (it never moves a real OS window),
+  exactly like a lens. The selection is session-only
+  (``Controller.selectedBoard``, keyed per mac-desktop ordinal, reset on
+  relaunch — mirrors ``macDesktopSectionOrder``); out-of-range index /
+  unknown label is a loud reject (pure ``resolveBoardFocus`` in
+  ``CLIParse.swift`` → ``dispatchBoardFocus``). GUI twin: the board band
+  (``BoardBand``, in ``FacetView``) sits across the top of every view **only
+  when the active mac desktop has ≥2 boards** (1 board / flat config → no
+  band, height 0 — ``boardBandInputs``); click or wheel switches.
 - **The tree opens in keyboard-nav (active) mode directly** —
   there is **no ``--active`` modifier** (it was folded into
   ``--view tree`` itself; the flag, the ``view:tree+active`` DNC
