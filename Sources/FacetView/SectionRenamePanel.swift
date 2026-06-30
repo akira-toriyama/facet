@@ -18,6 +18,24 @@
 
 import AppKit
 
+/// t-0020 (Option B): the panel's verdict on the edited text, computed ON COMMIT
+/// (not live — a live check flickers on every field's first keystrokes, since a
+/// partial field name reads as "unknown"; a flicker-free live indicator needs the
+/// cursor-context machinery of the autocompletion follow-on). Both non-`.ok` cases
+/// BLOCK commit (keep the panel open), differing only in tint:
+///   • `.ok` — commit (an empty predicate is `.ok` → the revert gesture).
+///   • `.warn(msg)` — a SOFT mistake: an unknown field (valid syntax, but no such
+///     filter field → matches nothing). Shown in `tertiary`.
+///   • `.error(msg)` — a hard SYNTAX error. Shown in `error` (red).
+/// The rename panel passes no validator, so it always commits (`.ok` path). The
+/// Controller builds this from `classifyMatchPredicate` (runtime `--match` is
+/// strict — a typo is a loud reject; config stays soft / degrade-don't-crash).
+public enum SectionEditValidation: Equatable {
+    case ok
+    case warn(String)
+    case error(String)
+}
+
 // MARK: - Container (card background + header, hosts the field)
 
 /// The panel's content view: draws the rounded card, the header caption (the
@@ -26,12 +44,23 @@ import AppKit
 final class SectionRenameContainerView: NSView {
     var header = ""
     var palette: ResolvedPalette = resolve(.terminal)
+    /// t-0020 (Option B): when the panel validates its input (the `--match`
+    /// edit), reserve a row below the field for the validation message and draw
+    /// it whenever `messageText` is set. `messageIsError` picks the tint: a
+    /// BLOCKING syntax error is `palette.error` (red), a NON-blocking warning
+    /// (an unknown field — valid but matches nothing) is `palette.tertiary`. The
+    /// rename panel leaves these at their defaults, so its layout is byte-identical.
+    var reservesErrorRow = false
+    var messageText: String?
+    var messageIsError = false
 
     static let padX: CGFloat = 12
     static let padV: CGFloat = 10
     static let headerH: CGFloat = 18
     static let fieldH: CGFloat = 30
     static let fieldGap: CGFloat = 8
+    static let errorGap: CGFloat = 6
+    static let errorH: CGFloat = 16
 
     override var isFlipped: Bool { true }
 
@@ -76,6 +105,21 @@ final class SectionRenameContainerView: NSView {
                                  y: fieldTop + (Self.fieldH - isz.height) / 2,
                                  width: isz.width, height: isz.height))
         }
+
+        // t-0020 (Option B): the validation message in the reserved row below the
+        // field — a BLOCKING syntax error (red, shown on commit) or a NON-blocking
+        // unknown-field warning (tertiary, shown live as you type). Single line
+        // truncated; the full caret goes to the CLI, the inline editor is concise.
+        if reservesErrorRow, let messageText, !messageText.isEmpty {
+            (messageText as NSString).draw(
+                in: NSRect(x: Self.padX,
+                           y: fieldTop + Self.fieldH + Self.errorGap,
+                           width: bounds.width - Self.padX * 2, height: Self.errorH),
+                withAttributes: [.font: uiFont(11, .regular),
+                                 .foregroundColor: messageIsError
+                                     ? palette.error : palette.tertiary,
+                                 .paragraphStyle: para])
+        }
     }
 }
 
@@ -91,6 +135,11 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
 
     private var onCommitCB: ((String) -> Void)?
     private var onCloseCB: (() -> Void)?
+    /// t-0020 (Option B): when set, the edited text is VALIDATED — live (each
+    /// keystroke, to surface a non-blocking `.warn`) and on commit (a `.error`
+    /// keeps the panel open, a `.warn`/`.ok` commits). nil (the rename panel)
+    /// commits unconditionally.
+    private var onValidateCB: ((String) -> SectionEditValidation)?
     private var closing = false
 
     public var isOpen: Bool { panel != nil }
@@ -102,22 +151,49 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// selected (so typing replaces it). `onCommit` fires with the field text
     /// on Enter; `onClose` fires exactly once on any close path (so the
     /// Controller can revert its activation policy / re-key the tree).
+    ///
+    /// t-0020: `validate` (Option B) opts the panel into validation — run live on
+    /// each keystroke (to surface a non-blocking `.warn`, e.g. an unknown field)
+    /// AND on commit (a `.error` shows red + keeps the panel open with key, so an
+    /// invalid `--match` predicate never closes the editor or clobbers the working
+    /// lens; a `.warn`/`.ok` commits). nil keeps the rename panel's
+    /// commit-unconditionally behaviour (and its layout) byte-identical.
     public func show(at screenPt: NSPoint,
                      header: String,
                      initialText: String,
                      palette: ResolvedPalette,
                      onCommit: @escaping (String) -> Void,
-                     onClose: @escaping () -> Void) {
+                     onClose: @escaping () -> Void,
+                     validate: ((String) -> SectionEditValidation)? = nil) {
         close()
         closing = false
         self.onCommitCB = onCommit
         self.onCloseCB = onClose
+        self.onValidateCB = validate
 
-        let width: CGFloat = 280
+        // Auto-fit the width to the content — the prefilled text (a label or, for
+        // `--match`, a `facet filter` predicate that can run long) and the header
+        // caption — clamped to [min, max]. Short content keeps the 280 default
+        // (so a typical rename is unchanged); a long predicate grows the panel so
+        // it is visible without scrolling, capped so it never spans the screen.
+        let minWidth: CGFloat = 280
+        let maxWidth: CGFloat = 600
+        let textW = (initialText as NSString)
+            .size(withAttributes: [.font: uiFont(13, .regular)]).width
+        let headerW = (header as NSString)
+            .size(withAttributes: [.font: uiFont(13, .bold)]).width
+        let fit = max(textW + SectionRenameContainerView.padX * 2 + 32 + 12,
+                      headerW + SectionRenameContainerView.padX * 2)
+        let width = min(maxWidth, max(minWidth, ceil(fit)))
+        // Reserve the error row only when validating (the `--match` edit), so the
+        // plain rename panel keeps its exact height.
+        let errorRowH = validate == nil ? 0
+            : SectionRenameContainerView.errorGap + SectionRenameContainerView.errorH
         let height = SectionRenameContainerView.padV
             + SectionRenameContainerView.headerH
             + SectionRenameContainerView.fieldGap
             + SectionRenameContainerView.fieldH
+            + errorRowH
             + SectionRenameContainerView.padV
 
         let origin = placePopupOrigin(anchor: screenPt,
@@ -141,6 +217,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
             frame: NSRect(x: 0, y: 0, width: width, height: height))
         cont.header = header
         cont.palette = palette
+        cont.reservesErrorRow = validate != nil
 
         let f = NSTextField(frame: NSRect(
             x: SectionRenameContainerView.padX + 24,
@@ -173,11 +250,44 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
 
     /// Commit the current field text and close. Fires `onCommit` (verbatim —
     /// the Controller / E1 owns the empty-revert + trim semantics).
+    ///
+    /// t-0020 (Option B): when a `validate` closure is set, run it FIRST. Both a
+    /// `.error` (syntax) and a `.warn` (unknown field) are rejections — show the
+    /// message (red / tertiary), keep the panel open + key (do NOT fire
+    /// `onCommit` / close), so an invalid `--match` predicate is a no-op the user
+    /// fixes in place. Only `.ok` commits (an empty predicate is `.ok` → the
+    /// revert gesture).
     private func commit() {
         let text = field?.stringValue ?? ""
+        if let validate = onValidateCB {
+            let cont = panel?.contentView as? SectionRenameContainerView
+            switch validate(text) {
+            case .error(let message):
+                cont?.messageText = message; cont?.messageIsError = true
+                cont?.needsDisplay = true
+                return
+            case .warn(let message):
+                cont?.messageText = message; cont?.messageIsError = false
+                cont?.needsDisplay = true
+                return
+            case .ok:
+                break
+            }
+        }
         let cb = onCommitCB
         close()
         cb?(text)
+    }
+
+    /// t-0020 (Option B): validation is COMMIT-time (not live — see
+    /// `SectionEditValidation`), so as the user edits we only CLEAR a stale
+    /// message from the previous rejected commit, so it doesn't linger while they
+    /// fix the predicate. The verdict is recomputed + shown on the next commit.
+    public func controlTextDidChange(_ obj: Notification) {
+        guard let cont = panel?.contentView as? SectionRenameContainerView,
+              cont.messageText != nil else { return }
+        cont.messageText = nil
+        cont.needsDisplay = true
     }
 
     /// Close on any path. Idempotent; fires `onClose` exactly once so the
@@ -189,6 +299,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         panel = nil
         field = nil
         onCommitCB = nil
+        onValidateCB = nil
         let cb = onCloseCB
         onCloseCB = nil
         if !closing { closing = true; cb?() }
@@ -218,6 +329,8 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
                 case 36, 76: self.commit(); return nil   // Return / keypad Enter
                 case 53:     self.close();  return nil   // Esc → cancel
                 default:     return ev                   // typing → field
+                    // (live re-validation runs in `controlTextDidChange`, which
+                    //  clears a stale error + shows a live unknown-field warning)
                 }
             }
             // A click anywhere but our own panel cancels (close, no commit).

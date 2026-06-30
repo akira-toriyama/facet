@@ -550,6 +550,14 @@ facet section --focus N            # focus the Nth section in tree order
 facet section --focus LABEL        # focus the section labelled LABEL
 facet section --rename N "label"   # rename the Nth section's display label
 
+# `--match` live-edits a LENS section's filter (the `facet filter` predicate),
+# session-only (same lifetime as --rename: reset on relaunch, kept on `reload`).
+# Lens-only — a workspace / unassigned section is rejected. An empty PREDICATE
+# reverts to the config match. You can also edit from the tree: right-click a
+# lens header → Section ▸ Edit match (or press `m`).
+facet section --match N "tag~=web" # set the Nth lens's match, re-filters at once
+facet section --match N ""          # revert the Nth lens's match to config
+
 # Board (section model) — switch which [[desktop.N.tab]] board the views show.
 # A board groups sections into a tab (a workspace set or a lens set) within one
 # mac desktop; a switch re-groups the SAME windows (display only — never moves a

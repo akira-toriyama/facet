@@ -310,3 +310,44 @@ public func applyLabelOverrides(_ sections: [ProjectedSection],
                                 sectionType: ps.sectionType)
     }
 }
+
+/// t-0020: overlay session-only `match` overrides onto a CONFIG section list —
+/// the seam-TWIN of `applyLabelOverrides`, with one crucial difference: it runs
+/// on the projection INPUT (`[DesktopSection]`) BEFORE `FilterProjection.project()`,
+/// not on its output. Changing a lens's `match` changes which windows it catches,
+/// so the override must mutate what `project()` reads, not what it produced. Pure
+/// + backend-neutral so it is unit-tested in `FacetCoreTests`; the production seam
+/// (`Controller.apply()`) calls it once, just before `project()`.
+///
+/// Only a `.lens` section that is NOT an `unassigned` receptacle is overridable:
+/// a workspace is the exclusive spatial substrate (no match — its windows come
+/// VERBATIM), and an `unassigned` receptacle is leftover-by-subtraction (no match
+/// either). The map is keyed by the SAME stable id `project()` mints for a lens —
+/// `"section:<declOrder>:<label>"`, where `declOrder` is the section's enumerated
+/// position (this function and `project()` enumerate the SAME array, so the keys
+/// line up exactly). The id is built from `label`, never `match`, so swapping the
+/// match leaves the section's identity invariant — the override key keeps matching
+/// after the swap, and `--focus index:N` / the active-lens highlight stay correct.
+///
+/// Empty-value semantics are the CALLER's job: a "revert to config" is a DELETED
+/// key, not a stored `""` (an empty predicate parses to `.all` = match-everything,
+/// a legitimate value). This maps only the keys it is handed, and stores the new
+/// predicate VERBATIM — validation + normalization happen at the caller's store
+/// site (mirroring the `applyLabelOverrides` contract).
+public func applyMatchOverrides(_ sections: [DesktopSection],
+                               to overrides: [String: String]) -> [DesktopSection] {
+    guard !overrides.isEmpty else { return sections }
+    return sections.enumerated().map { (declOrder, s) in
+        // Only a pure lens is match-overridable; the key is the id `project()`
+        // mints for that lens at this declaration position. `unassigned` is
+        // checked FIRST (mirroring `project()`), so a lens-typed receptacle is
+        // excluded even if its section-shaped key were present.
+        guard s.type == .lens, !s.unassigned,
+              let newMatch = overrides["section:\(declOrder):\(s.label)"] else {
+            return s
+        }
+        return DesktopSection(type: s.type, label: s.label, match: newMatch,
+                              apply: s.apply, layout: s.layout,
+                              unassigned: s.unassigned)
+    }
+}

@@ -123,6 +123,15 @@ public protocol TreeController: AnyObject, Sendable {
     /// that y, not pinned to the tree top.
     func beginSectionRename(group g: Int, at anchor: CGPoint)
 
+    /// t-0020: lens-match live edit — the user picked a LENS header's
+    /// `SECTION ▸ Edit match` row (or pressed `m` on it) at render group `g`.
+    /// The controller opens the same keyable inline editor as `beginSectionRename`,
+    /// pre-filled with the lens's current effective predicate, and on commit sets
+    /// a session-only `match` override (the GUI twin of `facet section --match`);
+    /// the lens re-filters at once. LENS-only (no-op for any other kind / an
+    /// out-of-range group). `anchor` is the header's screen point.
+    func beginSectionMatchEdit(group g: Int, at anchor: CGPoint)
+
     /// Section drag-to-reorder (display-only, session-only): move the section
     /// `sectionID` to insertion BOUNDARY `boundary` (current display-list
     /// coords; `0` = before first, `count` = after last) on the active mac
