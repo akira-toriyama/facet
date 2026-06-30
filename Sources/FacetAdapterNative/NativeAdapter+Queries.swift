@@ -199,6 +199,19 @@ extension NativeAdapter {
                     + "windows=\(result.addedIDs.count)")
             }
         }
+        // Mechanism ② (auto-heal orphan slivers): a window left parked in a
+        // display's bottom-right corner by a PREVIOUS (crashed) facet run is
+        // adopted on relaunch / desktop switch but isn't in THIS session's
+        // `anchorParked`, so facet would otherwise leave it stranded. Move
+        // such windows back on-screen. Gated on `added`/desktop-swap because a
+        // corner orphan can ONLY surface via fresh adoption or swapping into a
+        // restored desktop — a running session's own parks are tracked in
+        // `anchorParked` and excluded. Runs BEFORE the retile so a heal that
+        // precedes an inactive-WS re-park records the on-screen origin, not the
+        // corner. Memory: facet-window-policy / facet-hide-fork-scope.
+        if result.added > 0 || macDesktopSwapped {
+            healOrphanSlivers(live: live, visibleRect: rect)
+        }
         // Section-lens (t-0021): a lens is a pure VIEW — nothing to re-park on
         // reconcile. A window that opens / whose match flips while a lens is
         // active simply re-projects (display) on the next snapshot. Keep the
@@ -268,6 +281,43 @@ extension NativeAdapter {
     // `cliQueue`; the `dispatchPrecondition` guard stays on the public
     // entry path (`refreshCatalog`), NOT duplicated onto these internal
     // helpers. Behaviour is unchanged from the inlined blocks.
+
+    /// Mechanism ② — auto-heal orphan slivers on the active desktop. A
+    /// managed window whose live origin sits at a display's bottom-right
+    /// anchor sliver `(maxX-1, maxY-1)` but is NOT in this session's
+    /// `anchorParked` was stranded there by a previous (crashed) facet run;
+    /// move it back on-screen (approximate — the active display's visible
+    /// frame, cascaded so several heals fan out). Windows THIS session parked
+    /// (intentionally at the corner) are in `anchorParked` and excluded, so
+    /// auto-heal never fights live parking.
+    ///
+    /// Detection uses `Displays.containing` (CGDisplayBounds — no main hop, so
+    /// this stays safe on `cliQueue`); the target reuses the active display's
+    /// already-resolved `visibleRect` rather than reading NSScreen per window.
+    private func healOrphanSlivers(live: [Window], visibleRect: CGRect) {
+        var healed = 0
+        for w in live {
+            guard let origin = w.frame?.origin,
+                  catalog.windowMap[w.id] != nil,
+                  !catalog.anchorParked.contains(w.id)
+            else { continue }
+            let bounds = Displays.containing(origin)
+            guard RescueGeometry.isCornerParked(origin: origin,
+                                                displayBounds: bounds)
+            else { continue }
+            guard let pid = catalog.pid(for: w.id),
+                  let ax = AXGeom.window(for: CGWindowID(w.id.serverID),
+                                         pid: pid_t(pid))
+            else { continue }
+            let cascade = CGFloat(healed) * 32
+            let target = RescueGeometry.rescueTarget(
+                visibleFrame: visibleRect.offsetBy(dx: cascade, dy: cascade))
+            if AXGeom.setPosition(ax, target) { healed += 1 }
+        }
+        if healed > 0 {
+            Log.debug("native: auto-healed \(healed) orphan sliver(s)")
+        }
+    }
 
     /// Seed the per-WS default layout mode + the workspace set from config.
     /// Called every refresh: `defaultMode` is a cheap value-type set so a

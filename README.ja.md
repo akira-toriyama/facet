@@ -548,12 +548,36 @@ facet --reload                    # config.toml 再読込 + 反映
                                   # (theme / preview-mode)
 facet --quit                      # server 終了
 facet --resign                    # Facet.app 再 sign (brew install 後)
+facet --rescue                    # クラッシュで隅に取り残された窓を救出
 facet --help                      # 完全リファレンス
 ```
 
 不明な flag / view / theme 名は exit `2` + stderr メッセージ —
 typo は silent fail せず明示エラー。 短縮 (シェル alias / hotkey
 バインド) は各自の環境の領分で、 facet 側では扱わない。
+
+### クラッシュ時の復旧
+
+facet は窓を隠すとき、画面**右下の隅**に park する (macOS は SIP-off
+なしに窓を完全に画面外へ出せないので、1px の帯を画面内に残す)。
+**正常終了** (`facet --quit` / Cmd+Q) なら park 中の全窓が
+**自動で元の位置に戻る**。だが facet が**クラッシュ**（または `kill`）
+すると、その窓は隅に取り残される。
+
+復旧するには:
+
+```sh
+facet --rescue
+```
+
+隅に取り残された窓を画面内へ戻す。注意点:
+
+- **現在のデスクトップのみ** — macOS はアクティブな Space の窓しか
+  動かせないので、取り残された窓のある各デスクトップで `--rescue` を
+  実行する (そのデスクトップに切り替えれば、facet が見つけ次第
+  自動でも復旧する)。
+- facet の起動有無を問わず動く (server を起動しない一発もの)。
+- 窓は「見える位置」に戻る — クラッシュ前の正確な位置とは限らない。
 
 ### Window tag
 

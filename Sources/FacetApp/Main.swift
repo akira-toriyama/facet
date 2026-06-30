@@ -326,6 +326,12 @@ enum FacetApp {
                                              (run once after `brew install`
                                              / upgrade — Homebrew sandbox
                                              can't set up the cert itself)
+          facet --rescue                     recover after a crash: move
+                                             windows stranded in the
+                                             screen corner back on-screen
+                                             (current desktop only; re-run
+                                             per desktop). A clean quit
+                                             restores them automatically
 
           facet --version                    print the version + exit
           facet --help                       this help
@@ -462,6 +468,15 @@ enum FacetApp {
         // signature for the persistent "facet Local Signing"
         // identity and restarts the daemon, in one step.
         if argv.contains("--resign") { runResign() }
+
+        // `--rescue` is a one-shot crash-recovery: facet is presumed
+        // DEAD (a graceful quit restores parked windows itself). Scan
+        // the active desktop for windows stranded at a display's
+        // bottom-right anchor sliver and move them back on-screen, then
+        // exit — WITHOUT starting the server. Up-front (before the
+        // per-flag dispatcher) like `--resign` so a typo elsewhere
+        // can't shadow it with the loud-reject path.
+        if argv.contains("--rescue") { runRescue() }
 
         // `--emit-schema` is a one-shot: print the `config.toml` JSON
         // Schema (Draft-07) to stdout and exit. Generated from the same
@@ -698,6 +713,15 @@ enum FacetApp {
         let backend: any WindowBackend = NativeAdapter(config: cfg)
         let controller = Controller(backend: backend, config: cfg)
         controller.start()
+
+        // Graceful-quit window rescue (mechanism ①): the delegate's
+        // `applicationShouldTerminate` restores parked windows before the
+        // app exits. `NSApplication.delegate` is unowned, so retain the
+        // delegate for the process lifetime — this `let` lives until
+        // `app.run()` returns (i.e. until quit). See FacetAppDelegate.
+        let appDelegate = FacetAppDelegate()
+        appDelegate.controller = controller
+        app.delegate = appDelegate
 
         // facet always boots in agent-only mode: no panel, no overlay,
         // running and waiting for a ``facet --view tree|grid|rail`` (or a

@@ -537,6 +537,17 @@ public protocol WindowBackend: Sendable {
     /// main actor (set/cleared there too). Defaults to `false` for backends
     /// without animation.
     var isAnimating: Bool { get }
+
+    /// Restore every anchor-parked window to its EXACT recorded
+    /// pre-park position — the graceful-quit rescue (mechanism ①), so
+    /// facet leaves no window stranded in the corner when it exits
+    /// cleanly. Driven once during graceful shutdown (the Controller
+    /// runs it on its catalog-serialization context, then terminates).
+    /// Only the active desktop's windows actually move (public AX is
+    /// Space-scoped); off-desktop windows no-op, and `facet --rescue` /
+    /// the auto-heal cover those later. No-op default for the test stub
+    /// / backends without parked state.
+    func restoreAllParked()
 }
 
 public extension WindowBackend {
@@ -607,4 +618,5 @@ public extension WindowBackend {
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }
+    func restoreAllParked() {}
 }
