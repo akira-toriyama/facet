@@ -42,8 +42,9 @@ re-confirmation.
 
 - [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
   *(reviewed 2026-05-21)* — the commit-message spec facet's
-  [docs/commit-convention.md](docs/commit-convention.md) is
-  built on. ``cliff.toml`` parses ``<type>(<scope>)<!>:
+  account-wide
+  [CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md)
+  is built on. ``cliff.toml`` parses ``<type>(<scope>)<!>:
   <subject>`` per this spec; git-cliff derives the next semver
   from the ``type`` field.
 - [gitmoji](https://gitmoji.dev/)

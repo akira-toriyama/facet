@@ -459,7 +459,7 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 
 - **Commit messages**: gitmoji + Conventional Commits —
   `<:gitmoji:> <type>(<scope>)<!>: <subject>`. Full spec:
-  [docs/commit-convention.md](docs/commit-convention.md). Enable
+  [CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md). Enable
   the local hook: `git config core.hooksPath scripts/hooks` (script
   at [scripts/hooks/commit-msg](scripts/hooks/commit-msg)).
 - **README is bilingual** ([README.md](README.md) English +
