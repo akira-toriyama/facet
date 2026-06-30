@@ -594,6 +594,7 @@ facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode)
 facet --quit                      # terminate the running server
 facet --resign                    # re-sign Facet.app (after brew install)
+facet --rescue                    # recover windows stranded after a crash
 facet --help                      # full reference
 ```
 
@@ -601,6 +602,32 @@ Unknown flag / view / theme names exit `2` with a stderr
 message — typos fail loudly rather than silently no-op. Shorthand
 (shell aliases / hotkey bindings) is your environment's job, not
 facet's.
+
+### Crash recovery
+
+facet hides a window by parking it in the bottom-right **corner of its
+screen** (macOS doesn't allow a window fully off-screen without
+SIP-off, so facet keeps a 1-px sliver on-screen). A **clean quit**
+(`facet --quit` or Cmd+Q) restores every parked window to where it was
+— automatically. But if facet **crashes** (or is `kill`ed), those
+windows stay stranded in the corner.
+
+To recover, run:
+
+```sh
+facet --rescue
+```
+
+It moves any corner-stranded window back on-screen. Notes:
+
+- **Current desktop only** — macOS lets an app move windows on the
+  *active* Space only, so run `--rescue` on each desktop that has a
+  stranded window (switching to a desktop also auto-heals it the moment
+  facet sees it).
+- Works whether or not facet is running (it's a one-shot — it doesn't
+  start the server).
+- Windows return to a visible position, not necessarily their exact
+  pre-crash spot.
 
 ### Window tags
 

@@ -349,6 +349,9 @@ final class Controller: NSObject {
     private var eventTask: Task<Void, Never>?
     private var errorTask: Task<Void, Never>?
     private var pollTimer: Timer?
+    /// One-shot guard so the graceful restore (mechanism ①) runs once
+    /// even if `applicationShouldTerminate` is entered more than once.
+    private var isQuitting = false
     /// Catches backends that don't emit events for some changes
     /// (workspace renames, layout-mode switches via external CLI).
     private let pollInterval: TimeInterval = 2.0
@@ -558,6 +561,50 @@ final class Controller: NSObject {
         installDisplayObserver()
         installRealWindowDrag()
         refresh()
+    }
+
+    // NOTE: facet deliberately does NOT intercept SIGTERM / SIGINT. An
+    // earlier version SIG_IGN'd them and funnelled to a graceful restore;
+    // that made the process UNKILLABLE by SIGTERM whenever the graceful
+    // path stalled (`./stop.sh` / `brew services stop` / launchd send
+    // SIGTERM with no SIGKILL escalation). Graceful restore (mechanism ①)
+    // therefore fires only on `NSApp.terminate` — i.e. `facet --quit`
+    // and Cmd+Q (via `FacetAppDelegate.applicationShouldTerminate`).
+    // `kill` / crash leave parked windows in the corner; mechanism ②
+    // (auto-heal on desktop switch) and `facet --rescue` recover those.
+
+    /// Restore every anchor-parked window to its exact pre-park position,
+    /// then hard-exit the process (mechanism ① on `--quit` / Cmd+Q). The
+    /// caller (`FacetAppDelegate`) returns `.terminateCancel` and lets
+    /// THIS own termination via `exit(0)` — the `.terminateLater` /
+    /// `reply(toApplicationShouldTerminate:)` dance proved unreliable for
+    /// this `.accessory` app (the reply never terminated it), so we exit
+    /// explicitly instead.
+    ///
+    /// Stops the refresh sources (nothing re-parks mid-restore), runs the
+    /// backend restore on `cliQueue` (the catalog serialization point) so
+    /// it can't race a poll-reconcile, then `exit(0)`. Restore reads only
+    /// recorded origins (no NSScreen), and the main run loop stays free,
+    /// so the `cliQueue` hop can't deadlock (window-rescue plan R2). A
+    /// global-queue deadman guarantees exit within 2 s even if `cliQueue`
+    /// wedges — facet must ALWAYS terminate on quit. Idempotent via
+    /// `isQuitting`.
+    func restoreParkedThenExit() {
+        guard !isQuitting else { return }
+        isQuitting = true
+        Log.debug("controller: graceful quit — restoring parked windows then exit")
+        pollTimer?.invalidate()
+        eventTask?.cancel()
+        errorTask?.cancel()
+        // Deadman on a GLOBAL queue (not main / not cliQueue) so a wedged
+        // catalog queue or blocked main run loop can't make facet
+        // unkillable on quit.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { exit(0) }
+        let bk = backend
+        cliQueue.async {
+            bk.restoreAllParked()
+            exit(0)
+        }
     }
 
     /// Spin up the FS watcher on ~/.config/facet/config.toml so
