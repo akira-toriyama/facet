@@ -1,5 +1,5 @@
 # git-cliff — derive next version + release notes from gitmoji + Conventional
-# Commits. Convention: docs/commit-convention.md. Used by
+# Commits. Convention: https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md. Used by
 # .github/workflows/release.yml (rolling-draft model). No CHANGELOG.md is
 # committed; notes are generated on the fly at release time.
 

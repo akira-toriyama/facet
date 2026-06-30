@@ -1,7 +1,7 @@
 #!/bin/sh
 # commit-msg hook: validate gitmoji + Conventional Commits form.
 # Enable:     git config core.hooksPath scripts/hooks
-# Convention: docs/commit-convention.md
+# Convention: https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md
 #
 # Form: <:gitmoji:> <type>(<scope>)<!>: <subject>
 #   e.g. :sparkles: feat(view-tree): add right-click window menu
@@ -35,6 +35,6 @@ cat >&2 <<EOF
         :bug: fix(rift): re-attach subscribe after rift restart
         :boom: feat!: rename product to facet
 
-  details: docs/commit-convention.md
+  details: https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md
 EOF
 exit 1
