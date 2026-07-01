@@ -273,29 +273,39 @@ extension FacetConfig {
         let url = URL(fileURLWithPath: path)
         if let data = try? Data(contentsOf: url),
            let text = String(data: data, encoding: .utf8) {
-            var c = FacetConfig.from(toml: parseTOMLSubset(text))
-            let rules = exclusionRules(fromTOML: text)
-            if !rules.isEmpty { c.exclusionRules = rules }
-            let sections = decodeDesktopSectionSections(fromTOML: text)
-            if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
-            let tabs = decodeDesktopTabs(fromTOML: text)
-            if !tabs.isEmpty { c.macDesktopTabConfigs = tabs }
-            // N1: a desktop declaring BOTH `[[desktop.N.section]]` and
-            // `[[desktop.N.tab]]` is ambiguous — boards win and the flat
-            // sections are shadowed (see `effectiveMacDesktopSectionConfigs`).
-            // Warn loudly once so the dropped flat block isn't a silent
-            // surprise (it would otherwise look configured but never render).
-            for ordinal in tabs.keys.sorted() where sections[ordinal] != nil {
-                Log.line("config: desktop \(ordinal) declares both "
-                    + "[[desktop.\(ordinal).section]] and [[desktop.\(ordinal).tab]]"
-                    + " — boards win; the flat section block is ignored")
-            }
-            let adoptRules = decodeRuleSections(fromTOML: text)
-            if !adoptRules.isEmpty { c.rules = adoptRules }
-            return c
+            return load(source: text)
         }
         FileHandle.standardError.write(Data(
             "facet: could not read \(path)\n".utf8))
         return .init()
+    }
+
+    /// Build a `FacetConfig` from config.toml SOURCE TEXT — the pure
+    /// text→config half of `load(path:)`, factored out so a caller that
+    /// already holds the source (e.g. `facet config --validate`, which reads
+    /// the file itself to tell a missing file from an unreadable one) needn't
+    /// re-read the same bytes off disk. No disk I/O; an empty string yields a
+    /// default-init config (the missing-file case).
+    public static func load(source text: String) -> FacetConfig {
+        var c = FacetConfig.from(toml: parseTOMLSubset(text))
+        let rules = exclusionRules(fromTOML: text)
+        if !rules.isEmpty { c.exclusionRules = rules }
+        let sections = decodeDesktopSectionSections(fromTOML: text)
+        if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
+        let tabs = decodeDesktopTabs(fromTOML: text)
+        if !tabs.isEmpty { c.macDesktopTabConfigs = tabs }
+        // N1: a desktop declaring BOTH `[[desktop.N.section]]` and
+        // `[[desktop.N.tab]]` is ambiguous — boards win and the flat
+        // sections are shadowed (see `effectiveMacDesktopSectionConfigs`).
+        // Warn loudly once so the dropped flat block isn't a silent
+        // surprise (it would otherwise look configured but never render).
+        for ordinal in tabs.keys.sorted() where sections[ordinal] != nil {
+            Log.line("config: desktop \(ordinal) declares both "
+                + "[[desktop.\(ordinal).section]] and [[desktop.\(ordinal).tab]]"
+                + " — boards win; the flat section block is ignored")
+        }
+        let adoptRules = decodeRuleSections(fromTOML: text)
+        if !adoptRules.isEmpty { c.rules = adoptRules }
+        return c
     }
 }

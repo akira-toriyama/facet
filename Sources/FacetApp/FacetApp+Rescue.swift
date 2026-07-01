@@ -14,8 +14,8 @@
 // windows on the current Space only (memory: facet-per-native-space-ws);
 // re-run after switching desktops to rescue another one.
 //
-// Same one-shot shape as `--resign` / `--emit-schema`: a maintenance
-// subcommand that runs before the server and `exit`s.
+// Same one-shot shape as `--resign` / `facet config --emit-schema`: a
+// maintenance subcommand that runs before the server and `exit`s.
 
 import AppKit
 import CoreGraphics

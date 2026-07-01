@@ -1,10 +1,12 @@
 // FacetConfig+Spec — the ONE declarative description of facet's
 // `config.toml` surface. sill's `ConfigSchema.Spec` turns this single
-// source into BOTH:
+// source into ALL THREE:
 //
 //   • the decode (`FacetConfig.from(toml:)` → `configSpec.decode`)
-//   • the JSON Schema (`facet --emit-schema`) taplo uses for editor
+//   • the JSON Schema (`facet config --emit-schema`) taplo uses for editor
 //     completion + validation
+//   • runtime validation (`facet config --validate` → `configSpec.validate`,
+//     sill 1.29.0 bridge — see FacetConfig+Validate.swift)
 //
 // so a key can never be in the parser but missing from the schema (or
 // vice-versa). The `apply` closures reproduce the old hand-written reads
@@ -35,8 +37,9 @@ private let perViewThemeDomain = canonicalThemeNames + [""]
 
 public extension FacetConfig {
 
-    /// The single declarative spec. Drives `from(toml:)` and
-    /// `--emit-schema`. Sections mirror the `[blocks]` in `config.toml`.
+    /// The single declarative spec. Drives `from(toml:)`,
+    /// `config --emit-schema`, and `config --validate`. Sections mirror the
+    /// `[blocks]` in `config.toml`.
     /// Computed (not a stored `let`) so it needn't be `Sendable` — the
     /// `apply` closures capture keypaths; rebuilding ~80 small fields on
     /// the rare config (re)load is free.
@@ -227,7 +230,7 @@ public extension FacetConfig {
 
     // MARK: - JSON Schema (taplo) — emitted from the SAME `configSpec`
 
-    /// The `config.toml` JSON Schema (Draft-07). Drives `facet
+    /// The `config.toml` JSON Schema (Draft-07). Drives `facet config
     /// --emit-schema` and the sidecar install — generated from the one
     /// `configSpec`, so it can never drift from the decode.
     static var jsonSchema: String { configSpec.jsonSchema() }
