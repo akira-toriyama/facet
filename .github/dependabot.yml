@@ -1,6 +1,17 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/dependabot.yml
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    # Batch every action bump into ONE weekly PR (not one PR per action).
+    groups:
+      actions:
+        patterns: ["*"]
+    # gitmoji + Conventional Commits so bot PRs match the house convention
+    # (CONTRIBUTING.md). Bots are exempt from commit-lint, so this is decoration.
+    commit-message:
+      prefix: ":arrow_up: build(deps)"
