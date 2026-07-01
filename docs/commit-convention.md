@@ -7,14 +7,12 @@ truth:
 
 **https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md**
 
-This file used to carry a per-repo copy; it has been reduced to a pointer so the
-convention lives in exactly one place.
+This file is only a pointer, so the convention lives in exactly one place. It is
+distributed fleet-wide from a canonical copy in
+[`akira-toriyama/.github`](https://github.com/akira-toriyama/.github/blob/main/fleet/commit-convention.md);
+edit that copy, not this one — the fleet-sync workflow overwrites this file on
+its next run.
 
-## Local hook
-
-```sh
-git config core.hooksPath scripts/hooks
-```
-
-`scripts/hooks/commit-msg` validates the message format before each commit —
-the same rules CI's `commit-lint.yml` enforces.
+The format is enforced in CI by the shared `commit-lint.yml` workflow, which is
+distributed to every repo the same way, so a non-conforming message fails the
+check on each pull request.
