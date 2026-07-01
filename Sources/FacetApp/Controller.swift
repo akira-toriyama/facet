@@ -91,6 +91,22 @@ final class Controller: NSObject {
     /// section. Workspace labels live in the catalog (`workspaceNames`), so a
     /// workspace rename routes to `renameWorkspace` and never lands here.
     var sectionLabelOverride: [Int: [String: String]] = [:]
+    /// t-0020: the session-only runtime `match` override per mac desktop — the
+    /// live-tuning twin of `sectionLabelOverride`. `[ordinal: [sectionID:
+    /// predicate]]`, keyed by the same stable lens id
+    /// (`"section:<declOrder>:<label>"`). **The seam DIFFERS from
+    /// `sectionLabelOverride`**: a label override relabels the PROJECTED output
+    /// (display-only), but a match override changes which windows a lens catches,
+    /// so it must mutate the projection INPUT — it is applied via
+    /// `applyMatchOverrides` to `selectedBoardSections(...)` BEFORE `project()` in
+    /// `apply()`, not after. Same lifetime as `sectionLabelOverride`: per-mac-
+    /// desktop, NEVER written to disk (config.toml stays read-only), reset on
+    /// relaunch (NOT on `facet reload`). Only PURE lens sections are overridable
+    /// (workspace = exclusive substrate, unassigned = leftover-by-subtraction —
+    /// both forbidden, the writer loud-rejects them). The writer is ordinal-gated
+    /// like `sectionLabelOverride`'s (a non-nil `currentMacDesktopOrdinal()`), so
+    /// it never lands in a `-1` bucket the seam can't read.
+    var sectionMatchOverride: [Int: [String: String]] = [:]
     /// W2.2 (board model, t-wrd2): the session-only SELECTED BOARD index per
     /// mac desktop — the view-state twin of `sectionLabelOverride` (a
     /// PROJECTION-SEAM dict, NOT the degrade-path `macDesktopSectionOrder`).
@@ -1154,7 +1170,14 @@ final class Controller: NSObject {
             // section read uses (W2.5), so the id `declOrder` minted HERE matches
             // what the lens/DnD resolvers parse back. With no `[[desktop.N.tab]]`
             // boards this DEGRADES to the flat list (board 0) — byte-identical.
-            let secs = selectedBoardSections(forOrdinal: ordinal)
+            // t-0020: overlay the session-only runtime `match` override BEFORE
+            // projection (the seam difference from the label override below,
+            // which runs AFTER). A changed `match` changes which windows a lens
+            // catches, so it must mutate `project()`'s INPUT. Lens-only +
+            // id-preserving (the override key is the lens id, built from the
+            // label, so the projected id is unchanged). No override ⇒ identity.
+            let secs = applyMatchOverrides(selectedBoardSections(forOrdinal: ordinal),
+                                           to: sectionMatchOverride[ordinal] ?? [:])
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
             // from `wss`) so the projection appends them into the `not
             // workspace` receptacle + any content lens they match. Main-actor-

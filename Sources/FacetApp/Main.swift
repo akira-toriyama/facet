@@ -194,6 +194,13 @@ enum FacetApp {
                                              display override; empty LABEL
                                              reverts to the number / config
                                              label)
+          facet section --match N PREDICATE  set the Nth section's lens match to
+                                             a `facet filter` predicate, live
+                                             (session-only; LENS-only — workspace
+                                             / unassigned rejected; the lens re-
+                                             filters at once; empty PREDICATE
+                                             reverts to the config match;
+                                             relaunch resets, `reload` keeps)
           facet board --focus N|LABEL        show board N (1-based) or the board
                                              labelled LABEL on this mac desktop —
                                              a [[desktop.N.tab]] view (a workspace-

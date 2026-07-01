@@ -126,10 +126,13 @@ extension FacetApp {
     /// unified handle over `workspace --focus` / `lens NAME`. Verbs:
     ///   --focus N|LABEL    activate the section (numeric = index, else label)
     ///   --rename N LABEL   rename the Nth section (session-only display label)
+    ///   --match N PREDICATE  set the Nth section's lens match (session-only;
+    ///                        lens-only; empty PREDICATE reverts to config)
     /// One action per invocation, loud reject on zero / multiple / unknown.
     static func runSectionCommand(_ args: [String]) -> Never {
         var focusArg: String?           // payload: "index:N" or "label:LABEL"
         var renameArg: (Int, String)?   // (1-based index, new display label)
+        var matchArg: (Int, String)?    // (1-based index, new lens predicate)
         var cursor = ArgCursor(args)
         while let a = cursor.next() {
             switch a {
@@ -148,15 +151,29 @@ extension FacetApp {
                     cursor.value(for: "section --rename LABEL"),
                     flag: "section --rename LABEL")
                 renameArg = (n, label)
+            case "--match":
+                // Positional-2: INDEX then PREDICATE (t-0020). The index must be
+                // a positive integer; the PREDICATE is a `facet filter`
+                // WHERE-clause, parsed client-side so a typo fails fast with the
+                // caret (an EMPTY predicate is the revert-to-config gesture).
+                let n = parsePositiveInt(
+                    cursor.value(for: "section --match INDEX"),
+                    flag: "section --match INDEX")
+                let predicate = parseSectionMatchArg(
+                    cursor.value(for: "section --match PREDICATE"),
+                    flag: "section --match PREDICATE")
+                matchArg = (n, predicate)
             default:
                 die("unknown `section` flag \"\(a)\" — see `facet --help`")
             }
         }
-        let count = [focusArg != nil, renameArg != nil].filter { $0 }.count
+        let count = [focusArg != nil, renameArg != nil, matchArg != nil]
+            .filter { $0 }.count
         requireExactlyOneAction(count, subject: "section")
         requireServerAlive()
         if let f = focusArg  { postControl("section-focus:" + f) }
         if let r = renameArg { postControl(encodeSectionRename(index: r.0, label: r.1)) }
+        if let m = matchArg  { postControl(encodeSectionMatch(index: m.0, predicate: m.1)) }
         die("facet section: dispatch fell through (bug)")
     }
 
@@ -214,6 +231,36 @@ extension FacetApp {
             return label
         case .failure:
             die("\(flag): expected a non-empty section label, got \"\(value)\"")
+        }
+    }
+
+    /// t-0020: validate the PREDICATE of `facet section --match N PREDICATE` — a
+    /// `facet filter` WHERE-clause. An EMPTY `""` is allowed (the revert-to-config
+    /// gesture, mirrors `--rename`'s empty label); a leading `-` is rejected (an
+    /// unrecognised flag that landed in the value slot). Otherwise it is CLASSIFIED
+    /// client-side so a typo fails FAST (exit 2) before it reaches the server —
+    /// defence in depth (the server re-classifies the same way):
+    ///   • malformed SYNTAX → the caret.
+    ///   • an unknown FIELD → rejected too. Runtime `--match` is STRICT (a typo'd
+    ///     field always matches nothing — no legitimate use), unlike a config lens
+    ///     `match` (which stays soft / degrade-don't-crash). This keeps the CLI and
+    ///     the GUI "Edit match" editor consistent (loud typo rejection).
+    /// Returned VERBATIM on `.ok`: the lens compiles the exact string at projection
+    /// time (`"   "` is a valid match-all, kept as authored; only `""` is revert).
+    static func parseSectionMatchArg(_ value: String, flag: String) -> String {
+        if value.isEmpty { return value }            // revert-to-config gesture
+        guard !value.hasPrefix("-") else {
+            die("\(flag): expected a `facet filter` predicate, got \"\(value)\" "
+                + "(looks like a flag — quote it or check the value)")
+        }
+        switch classifyMatchPredicate(value) {
+        case .ok:
+            return value
+        case .unknownField(let fields):
+            die("\(flag): unknown field: \(fields.joined(separator: ", ")) "
+                + "— no such filter field (matches nothing)")
+        case .malformed(let error):
+            die("\(flag): " + error.caret(in: value))
         }
     }
 

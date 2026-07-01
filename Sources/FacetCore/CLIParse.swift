@@ -146,6 +146,35 @@ public func decodeSectionRename(_ payload: String) -> (index: Int, label: String
     return (n, parts[1])
 }
 
+/// t-0020: the wire payload for `facet section --match` —
+/// `section-match:<index>:<predicate>`. The TWIN of `encodeSectionRename`: the
+/// index is a colon-free 1-based Int and the `facet filter` predicate is kept
+/// VERBATIM (it may contain `:` inside a quoted value), so the server splits
+/// ONCE on the first `:`. Pure helper shared by the client (encode) and tests;
+/// the server-side decode mirrors `decodeSectionMatch`. An EMPTY predicate is
+/// the explicit revert-to-config gesture and round-trips intact.
+public func encodeSectionMatch(index: Int, predicate: String) -> String {
+    "section-match:\(index):\(predicate)"
+}
+
+/// t-0020: decode the `section-match:<index>:<predicate>` wire payload (the body
+/// AFTER the `section-match:` prefix is already stripped by the caller, OR the
+/// full payload — both are accepted). Splits ONCE so a predicate containing `:`
+/// survives verbatim, and an EMPTY predicate decodes (it's the revert gesture,
+/// not a malformed input). Returns `nil` for a malformed index (`< 1` /
+/// non-integer) or a missing `:`. Pure → unit-testable round-trip with
+/// `encodeSectionMatch`.
+public func decodeSectionMatch(_ payload: String) -> (index: Int, predicate: String)? {
+    let body = payload.hasPrefix("section-match:")
+        ? String(payload.dropFirst("section-match:".count))
+        : payload
+    let parts = body
+        .split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        .map(String.init)
+    guard parts.count == 2, let n = Int(parts[0]), n >= 1 else { return nil }
+    return (n, parts[1])
+}
+
 /// W2.3 (t-wrd2): the outcome of resolving a `facet board --focus` payload
 /// against one mac desktop's board list. `.resolved` carries the 0-based board
 /// index to select; the others are LOUD-but-non-fatal rejects the Controller

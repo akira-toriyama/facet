@@ -386,6 +386,83 @@ extension Controller {
             onClose: { [weak self] in self?.finishTagEditor() })
     }
 
+    /// t-0020: the GUI twin of `facet section --match` — the user picked a LENS
+    /// header's `SECTION ▸ Edit match` row (or pressed `m` on it). Opens the
+    /// SAME inline editor as `beginSectionRename`, but pre-filled with the lens's
+    /// CURRENT effective predicate and wired for live filter-tuning:
+    ///   • LENS-ONLY — only a lens header offers the row; guard anyway (a stale
+    ///     group after a reorder → no-op).
+    ///   • PREFILL = the session override if set, else the config `match` for
+    ///     this lens (resolved by the SAME id `project()` mints).
+    ///   • COMMIT routes by the STABLE `sec.id` (the editor is long-lived; the
+    ///     section can reorder / a mac-desktop swap can intervene) →
+    ///     `setSectionMatch(sectionID:…)` re-resolves to the live position.
+    ///   • VALIDATE (Option B) keeps the panel open on a malformed predicate so
+    ///     a typo never closes the editor or clobbers the working lens (an empty
+    ///     predicate is the always-allowed revert gesture).
+    func beginSectionMatchEdit(group g: Int, at anchor: CGPoint) {
+        guard g >= 0, g < lastSections.count else { return }
+        let sec = lastSections[g]
+        guard sec.sectionType == .lens else { return }
+        let secID = sec.id
+        let capturedOrdinal = currentMacDesktopOrdinal()
+
+        // Prefill = the CURRENT effective predicate: the session override if set,
+        // else the config `match` for this lens (matched by the id `project()`
+        // mints). A transient nil ordinal prefills empty.
+        let prefill: String = {
+            guard let ordinal = capturedOrdinal else { return "" }
+            if let overridden = sectionMatchOverride[ordinal]?[secID] {
+                return overridden
+            }
+            for (i, s) in selectedBoardSections(forOrdinal: ordinal).enumerated()
+            where s.type == .lens && !s.unassigned
+                && "section:\(i):\(s.label)" == secID {
+                return s.match
+            }
+            return ""
+        }()
+
+        let caption = sectionDisplayLabel(index: g + 1, label: sec.label)
+        let commit: (String) -> Void = { [weak self] newPredicate in
+            self?.setSectionMatch(sectionID: secID,
+                                  capturedOrdinal: capturedOrdinal, to: newPredicate)
+        }
+        // Option B: classify live + on commit (shares the pure
+        // `classifyMatchPredicate` the projection acts on). Malformed syntax →
+        // `.error` (red, blocks commit); an unknown FIELD → `.warn` (tertiary,
+        // non-blocking — the predicate is valid, it just matches nothing, so
+        // Enter still commits); empty / all-known → `.ok`.
+        let validate: (String) -> SectionEditValidation = { text in
+            switch classifyMatchPredicate(text) {
+            case .ok:
+                return .ok
+            case .unknownField(let fields):
+                return .warn("unknown field: \(fields.joined(separator: ", ")) "
+                    + "— matches nothing")
+            case .malformed(let error):
+                return .error(error.message)
+            }
+        }
+
+        // Activation dance — identical to `beginSectionRename` / `enterTagManage`.
+        let f = panelHost.panel.frame
+        tagEditorSelfActivated = !sidebarView.kbNav
+        if tagEditorSelfActivated {
+            prevApp = NSWorkspace.shared.frontmostApplication
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        SectionRenamePanel.shared.show(
+            at: NSPoint(x: f.maxX + 8, y: anchor.y),
+            header: caption,
+            initialText: prefill,
+            palette: treePaletteBox.pal,
+            onCommit: commit,
+            onClose: { [weak self] in self?.finishTagEditor() },
+            validate: validate)
+    }
+
     /// Called once on EVERY tag-panel close path (Esc / outside-click / click
     /// elsewhere). Undoes exactly what `openTagEditor` / `enterTagManage` did:
     /// if it flipped to `.regular`, revert to `.accessory` and hand focus back

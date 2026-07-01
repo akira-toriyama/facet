@@ -103,6 +103,20 @@ extension Controller {
                     }
                     self.renameSection(indexN1Based: n, to: label)
 
+                // t-0020: `facet section --match N PREDICATE` → runtime
+                // (session-only) lens-match live edit. Wire =
+                // `section-match:<index>:<predicate>`; the predicate may contain
+                // ':' (quoted value), so `decodeSectionMatch` splits ONCE and
+                // keeps it verbatim (an empty predicate is a valid revert).
+                case let s where s.hasPrefix("section-match:"):
+                    guard let (n, predicate) = decodeSectionMatch(s) else {
+                        Log.debug("section-match: malformed \"\(s)\"")
+                        self.setError("section --match: malformed")
+                        self.scheduleReconcile(after: 0.05)
+                        break
+                    }
+                    self.setSectionMatch(indexN1Based: n, to: predicate)
+
                 case "workspace-add":
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
@@ -839,6 +853,111 @@ extension Controller {
             }
             apply(lastWorkspaces)       // re-render with the new display label
         }
+    }
+
+    /// t-0020: `facet section --match N PREDICATE` → set the Nth section's
+    /// runtime (session-only) lens `match`, addressed by its 1-based tree-order
+    /// index. The live-tuning twin of `renameSection(indexN1Based:to:)`, but
+    /// MATCH is lens-ONLY, so the seam differs in three ways:
+    ///   1. There is NO workspace / unassigned branch — both are loud-rejected
+    ///      (a workspace is the exclusive substrate; an unassigned receptacle is
+    ///      leftover-by-subtraction). The degrade path (section model off) is all
+    ///      workspaces → also rejected.
+    ///   2. The override mutates the projection INPUT (`sectionMatchOverride`,
+    ///      read via `applyMatchOverrides` BEFORE `project()`), not the output.
+    ///   3. The predicate is VALIDATED (`FacetFilter.parse`) but stored VERBATIM;
+    ///      an invalid predicate keeps the working value and loud-rejects with a
+    ///      caret (never clobbers a good lens with a typo).
+    /// An EMPTY predicate reverts to the config match by DELETING the override
+    /// key (checked BEFORE `parse`, since `parse("")` is `.success(.all)` — an
+    /// empty value is a revert gesture, not a stored match-everything). The
+    /// ordinal gate mirrors the lens branch of `renameSection`: a write under
+    /// `?? -1` would orphan the override in a bucket the seam can't read.
+    /// t-0020 GUI deferred-commit entry: set the lens `match` for the section
+    /// with the STABLE `sectionID` captured when the inline editor opened. The
+    /// editor is long-lived (the user types a predicate), so `lastSections` can
+    /// reorder / a mac-desktop swap can intervene between open and commit;
+    /// re-resolve the id to its CURRENT 1-based position (and confirm the mac
+    /// desktop captured at open still matches) before delegating to the
+    /// positional `setSectionMatch`, so a shifted slot can't be retargeted. Gone
+    /// id / desktop changed → loud `setError`, no change. Mirrors
+    /// `renameSection(sectionID:…)`.
+    func setSectionMatch(sectionID: String, capturedOrdinal: Int?, to predicate: String) {
+        guard currentMacDesktopOrdinal() == capturedOrdinal else {
+            setError("section match: mac desktop changed — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        guard let pos0 = lastSections.firstIndex(where: { $0.id == sectionID }) else {
+            setError("section match: section no longer exists — cancelled")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        setSectionMatch(indexN1Based: pos0 + 1, to: predicate)
+    }
+
+    func setSectionMatch(indexN1Based n: Int, to predicate: String) {
+        // Match is LENS-ONLY: the degrade path (section model off) is all
+        // workspaces, so there is no lens to retarget — loud reject.
+        guard !lastSections.isEmpty else {
+            setError("section --match \(n): no lens sections here "
+                + "(section model off — workspaces only)")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        guard n >= 1, n <= lastSections.count else {
+            setError("section --match \(n): out of range "
+                + "(1..\(lastSections.count))")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        let sec = lastSections[n - 1]
+        guard sec.sectionType == .lens else {
+            let kind = sec.sectionType == .workspace ? "workspace" : "unassigned"
+            setError("section --match \(n): only a lens accepts a match "
+                + "(section \(n) is a \(kind))")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        // Ordinal gate (see `renameSection`'s lens branch): the projection-seam
+        // READ is non-nil-ordinal-gated, so a write under `?? -1` would land in a
+        // bucket the seam can't read. Refuse loudly on a transient nil — retry.
+        guard let key = currentMacDesktopOrdinal() else {
+            setError("section --match \(n): mac desktop unknown (try again)")
+            scheduleReconcile(after: 0.05)
+            return
+        }
+        if predicate.isEmpty {
+            // Empty → revert to the CONFIG match by DELETING the override key.
+            sectionMatchOverride[key]?.removeValue(forKey: sec.id)
+            if sectionMatchOverride[key]?.isEmpty == true {
+                sectionMatchOverride.removeValue(forKey: key)
+            }
+            Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → revert config")
+        } else {
+            // Classify, but store VERBATIM — `FilterProjection` compiles the same
+            // string at projection time. Runtime `--match` is STRICT (unlike a
+            // config lens `match`, which stays soft): a malformed predicate OR an
+            // unknown FIELD is a loud reject that keeps the working lens (a typo'd
+            // field always matches nothing — no legitimate use). Config keeps the
+            // clamp-don't-crash rule; the projection diagnostics still cover a
+            // config typo. Same verdict the client + the GUI editor apply.
+            switch classifyMatchPredicate(predicate) {
+            case .malformed(let error):
+                setError("section --match \(n): " + error.caret(in: predicate))
+                scheduleReconcile(after: 0.05)
+                return
+            case .unknownField(let fields):
+                setError("section --match \(n): unknown field: "
+                    + "\(fields.joined(separator: ", ")) — matches nothing")
+                scheduleReconcile(after: 0.05)
+                return
+            case .ok:
+                sectionMatchOverride[key, default: [:]][sec.id] = predicate
+                Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → \"\(predicate)\"")
+            }
+        }
+        apply(lastWorkspaces)       // re-render: the lens re-filters live
     }
 
     /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`

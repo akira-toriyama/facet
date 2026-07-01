@@ -299,6 +299,39 @@ public extension FacetFilter {
     }
 }
 
+/// t-0020: the outcome of vetting a `facet section --match` predicate for the
+/// live editor (and any CLI live-check). It mirrors `FilterProjection.project`'s
+/// own handling exactly, so the editor's feedback matches what the projection
+/// will actually do:
+///   • `.ok` — parses AND every field is known (an empty predicate parses to
+///     `.all`, so it is `.ok` too — the revert gesture).
+///   • `.unknownField` — parses, but references field name(s) outside
+///     `knownFields`. The predicate is VALID and commits, but matches nothing
+///     (same as a config lens `match = "abc"`) — a NON-fatal warning, not an
+///     error. Fields are sorted for a stable message.
+///   • `.malformed` — a genuine SYNTAX error (the `ParseError`, so the caller
+///     renders either its `.message` inline or its `.caret(in:)` for the CLI).
+public enum MatchPredicateStatus: Equatable, Sendable {
+    case ok
+    case unknownField([String])
+    case malformed(FacetFilter.ParseError)
+}
+
+/// Classify a `facet section --match` predicate — pure, so the GUI validator and
+/// tests share the SAME verdict the projection acts on. Malformed SYNTAX is a
+/// hard error; an unknown FIELD is soft (valid-but-matches-nothing), matching
+/// facet's filter philosophy.
+public func classifyMatchPredicate(_ predicate: String) -> MatchPredicateStatus {
+    switch FacetFilter.parse(predicate) {
+    case .failure(let error):
+        return .malformed(error)
+    case .success(let filter):
+        let unknown = filter.fieldsReferenced()
+            .subtracting(FacetFilter.knownFields).sorted()
+        return unknown.isEmpty ? .ok : .unknownField(unknown)
+    }
+}
+
 extension FacetFilter.Atom {
     func matches(_ window: some WindowFields) -> Bool {
         switch kind {

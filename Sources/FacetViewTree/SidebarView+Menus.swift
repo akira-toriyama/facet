@@ -101,6 +101,12 @@ extension SidebarView {
             // `scr` = the header's screen point → editor opens at its height.
             onRename: { [weak self] in
                 self?.controller?.beginSectionRename(group: g, at: scr)
+            },
+            // t-0020: a lens also offers "Edit match" — live-tune its filter.
+            // Routes to the controller's match-edit panel (the GUI twin of
+            // `facet section --match`); the unassigned header omits it.
+            onEditMatch: { [weak self] in
+                self?.controller?.beginSectionMatchEdit(group: g, at: scr)
             })
     }
 

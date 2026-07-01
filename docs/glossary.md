@@ -260,7 +260,11 @@ WHERE 式・例 `tag~=web or app=Safari`）を満たす窓を、現 mac desktop 
 切り替えると lens は自動解除される。詳細は [[active section]] / [[active lens]] 参照。
 - CLI: `facet lens NAME`（activate・positional・section の `label` で strict 解決）/
   `facet lens --clear`（解除＝view を捨てる）。read は `facet query --tags`（窓に付いて
-  いるタグ語彙を読む）。
+  いるタグ語彙を読む）。lens の `match` 自体を **runtime でライブ編集**するのは
+  `facet section --match N PREDICATE`（t-0020・session-only＝relaunch で reset・`reload`
+  では残る・lens 専用で workspace/unassigned は reject・空 PREDICATE は config へ revert・
+  即 re-filter）。GUI 双子＝tree の lens ヘッダ右クリック → Section ▸ Edit match（`m` キー）。
+  config 値は書き換えない（config.toml は read-only）。
 - **Don't call it:** view（facet view は UI surface の別概念）, tagset, タグビュー, current lens
 
 ### tree view

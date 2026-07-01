@@ -147,14 +147,24 @@ public enum ViewContextMenu {
         header: String,
         palette: ResolvedPalette,
         filterable: Bool = false,
-        onRename: @escaping () -> Void
+        onRename: @escaping () -> Void,
+        onEditMatch: (() -> Void)? = nil
     ) {
         // §E: SECTION ▸ Rename, identical shape to the layout pickers' rename
         // row (`present()` gives the single row its own dim "SECTION" caption).
-        let entries: [Entry] = [
+        var entries: [Entry] = [
             Entry(label: "Rename", icon: "SF:pencil",
                   section: "Section", run: onRename),
         ]
+        // t-0020: a LENS header also offers "Edit match" (live-tune its
+        // filter). No trailing ellipsis — it matches the sibling "Rename" row
+        // (both open the same inline editor). The unassigned receptacle passes
+        // nil — it is leftover-by-subtraction, so it has no match to edit.
+        if let onEditMatch {
+            entries.append(Entry(label: "Edit match",
+                                 icon: "SF:line.3.horizontal.decrease.circle",
+                                 section: "Section", run: onEditMatch))
+        }
         present(at: scr, header: header, palette: palette,
                 filterable: filterable, entries: entries)
     }

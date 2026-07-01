@@ -200,4 +200,57 @@ final class CLIParseTests: XCTestCase {
     func testDecodeSectionRename_RejectsMissingColon() {
         XCTAssertNil(decodeSectionRename("section-rename:2"))
     }
+
+    // MARK: - t-0020 section-match wire encode / decode round-trip
+
+    func testEncodeSectionMatch_BasicForm() {
+        XCTAssertEqual(encodeSectionMatch(index: 2, predicate: "tag~=web"),
+                       "section-match:2:tag~=web")
+    }
+
+    func testDecodeSectionMatch_RoundTrip() {
+        let wire = encodeSectionMatch(index: 3, predicate: "app=Safari")
+        let got = decodeSectionMatch(wire)
+        XCTAssertEqual(got?.index, 3)
+        XCTAssertEqual(got?.predicate, "app=Safari")
+    }
+
+    func testDecodeSectionMatch_PredicateWithColonSurvivesVerbatim() {
+        // A predicate half may contain ':' (e.g. a quoted value) — split ONCE
+        // so it stays intact.
+        let wire = encodeSectionMatch(index: 1, predicate: "title~=\"a: b\"")
+        let got = decodeSectionMatch(wire)
+        XCTAssertEqual(got?.index, 1)
+        XCTAssertEqual(got?.predicate, "title~=\"a: b\"")
+    }
+
+    func testDecodeSectionMatch_EmptyPredicateDecodes() {
+        // Empty predicate is a valid REVERT gesture (the caller deletes the
+        // override); the decoder must round-trip it, not reject it.
+        let got = decodeSectionMatch("section-match:5:")
+        XCTAssertEqual(got?.index, 5)
+        XCTAssertEqual(got?.predicate, "")
+    }
+
+    func testDecodeSectionMatch_AcceptsBodyWithoutPrefix() {
+        let got = decodeSectionMatch("4:tag~=mail")
+        XCTAssertEqual(got?.index, 4)
+        XCTAssertEqual(got?.predicate, "tag~=mail")
+    }
+
+    func testDecodeSectionMatch_RejectsNonIntegerIndex() {
+        XCTAssertNil(decodeSectionMatch("section-match:x:tag~=web"))
+    }
+
+    func testDecodeSectionMatch_RejectsZeroIndex() {
+        XCTAssertNil(decodeSectionMatch("section-match:0:tag~=web"))
+    }
+
+    func testDecodeSectionMatch_RejectsNegativeIndex() {
+        XCTAssertNil(decodeSectionMatch("section-match:-1:tag~=web"))
+    }
+
+    func testDecodeSectionMatch_RejectsMissingColon() {
+        XCTAssertNil(decodeSectionMatch("section-match:2"))
+    }
 }

@@ -506,6 +506,13 @@ facet section --focus N            # tree 順で N 番目の section を focus
 facet section --focus LABEL        # label が LABEL の section を focus
 facet section --rename N "label"   # N 番目の section の表示 label を改名
 
+# `--match` は LENS section の filter (`facet filter` 述語) を runtime 編集
+# (session のみ・`--rename` と同じ寿命: relaunch で reset・`reload` では残る)。
+# lens 専用 — workspace / unassigned は reject。空 PREDICATE は config の match へ戻す。
+# tree からも編集可: lens ヘッダ右クリック → Section ▸ Edit match (`m` キーでも)。
+facet section --match N "tag~=web" # N 番目の lens の match を設定・即 re-filter
+facet section --match N ""          # N 番目の lens の match を config へ revert
+
 # Board (section モデル) — どの [[desktop.N.tab]] board を view に出すか切替える。
 # board は 1 mac desktop 内で section をまとめたタブ (workspace の集合 / lens の
 # 集合)。 切替は同じ窓のグループし直し (表示のみ — 窓は動かない)。 `section
