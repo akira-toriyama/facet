@@ -596,6 +596,15 @@ facet query --windows --filter EXPR  # post-filter that array with a
 facet query --tags                # every tag currently in use, as a sorted
                                   # JSON array ([] until a window is tagged)
 
+# Config — validate ~/.config/facet/config.toml against the schema (the
+# STRICT counterpart to the lenient loader, which clamps out-of-range values
+# and drops typo'd keys at runtime). CI-friendly exit codes: 0 valid, 1 schema
+# violation (wrong type / bad enum / out-of-range / unknown key), 2 unparseable
+# TOML. Valid → a parsed summary + any clamp warnings print to stderr. Driven
+# by the SAME schema that powers editor completion, so "editor green (taplo)"
+# and "loader accepts it" can't diverge.
+facet config --validate           # lint the config file
+
 # Server controls
 facet --theme NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)
 facet --reload                    # re-read config.toml + apply

@@ -344,8 +344,10 @@ enum FacetApp {
           facet --help                       this help
 
         EXIT CODES
-          0   success (DNC posted, server started, or query printed)
-          1   `--resign` codesign failed (see stderr)
+          0   success (DNC posted, server started, or query printed;
+              `config --validate` = structurally valid)
+          1   `--resign` codesign failed, or `config --validate` found
+              schema violations (see stderr)
           2   unknown flag / view / theme name, a bad value, a missing
               argument, or a dropped legacy `--flag=VALUE` form (stderr
               lists what was expected)
@@ -356,6 +358,17 @@ enum FacetApp {
               `./stop.sh && ./run.sh`)
 
         CONFIG
+          facet config --validate            check ~/.config/facet/config.toml
+                                             against the schema (the strict
+                                             counterpart to the lenient load):
+                                             exit 0 valid, 1 schema violation
+                                             (wrong type / bad enum / out-of-
+                                             range / typo'd key — what load()
+                                             silently clamps or drops), 2
+                                             unparseable TOML. Valid → a parsed
+                                             summary + any clamp warnings print
+                                             to stderr.
+
           ~/.config/facet/config.toml is the single source of truth.
           Install template:
           https://github.com/akira-toriyama/facet/blob/main/config.toml
@@ -485,19 +498,6 @@ enum FacetApp {
         // can't shadow it with the loud-reject path.
         if argv.contains("--rescue") { runRescue() }
 
-        // `--emit-schema` is a one-shot: print the `config.toml` JSON
-        // Schema (Draft-07) to stdout and exit. Generated from the same
-        // declarative `configSpec` that decodes the config, so the two
-        // can't drift. The repo regenerates `config.schema.json` with
-        // `facet --emit-schema > config.schema.json`.
-        // Intentionally absent from `facet --help`: it's a repo/dev
-        // regeneration tool, not user surface (the sidecar is auto-written
-        // next to the user config at launch by `installSchema()`).
-        if argv.contains("--emit-schema") {
-            print(FacetConfig.jsonSchema, terminator: "")
-            exit(0)
-        }
-
         // Sub-command dispatch: `facet window <flag>` opens a
         // window-scoped flag namespace so window ops don't share
         // surface area with workspace / view flags. Keeps the door
@@ -546,6 +546,13 @@ enum FacetApp {
         // `facet query --windows` prints the full per-window JSON (#223).
         if argv.first == "query" {
             runQuery(Array(argv.dropFirst()))
+        }
+        // `facet config <flag>` — config-file maintenance one-shots that read
+        // ~/.config/facet/config.toml directly + exit (no server needed):
+        // `--validate` (strict schema check, exit 0/1/2) and `--emit-schema`
+        // (the former bare flag, folded under the subject — no bare alias).
+        if argv.first == "config" {
+            runConfigCommand(Array(argv.dropFirst()))
         }
 
         // Space-separated grammar (#227): each value-bearing flag

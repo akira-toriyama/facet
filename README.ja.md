@@ -599,6 +599,13 @@ facet window --untag NAME         # focus 中の窓から tag を外す
 facet window --toggle-tag NAME    # focus 中の窓の tag を flip
 facet window --retag OLD NEW      # 窓の tag を別の tag に置換
 facet query --tags                # いま使われている全 tag (sorted JSON)
+
+# Config — ~/.config/facet/config.toml を schema 検証する（runtime の
+# 寛容な loader — 範囲外を clamp・typo key を drop — の STRICT な相棒）。
+# CI 向け exit code: 0 valid / 1 schema 違反 (型・enum・範囲・unknown key) /
+# 2 TOML parse 不能。valid なら要約 + clamp 警告を stderr に出す。editor 補完
+# (taplo) と同じ schema 由来なので「editor は green」と「loader が受理」がズレない。
+facet config --validate           # config ファイルを lint
 ```
 
 ### ホットキー連携

@@ -54,16 +54,18 @@ let package = Package(
     dependencies: [
         // Shared theming foundation (plan atelier). Pinned to a SemVer
         // tag for release/CI reproducibility; `.upToNextMinor` keeps it on
-        // a single minor. Floor 1.27.0 = the sill release that moved its OWN
-        // swift-toml-edit floor to 2.0.0 (the breaking `Toml.Row`/source-span
-        // bump, chord#148) — so facet's DIRECT swift-toml-edit 2.x pin below
-        // and sill's transitive one resolve to the same 2.x, never a split
-        // graph. (Pre-2.0.0 it was 1.26.0 = the `ConfigSchema` module after
-        // #138 S3 routed `Spec.jsonSchema()` through the shared `SchemaEmit`
-        // lowering and added `Spec.Field.enumDocs`.) For local, atomic
+        // a single minor. Floor 1.29.0 = the sill release (PR #80, t-0029)
+        // that added the `ConfigSchema.Spec.validate` bridge, so the ONE
+        // `configSpec` now drives decode + `config --emit-schema` + `config
+        // --validate` (see FacetConfig+Validate.swift) — "editor green"
+        // and "loader accepts it" can't diverge. 1.29.0 > 1.27.0, so
+        // sill's OWN swift-toml-edit floor stays 2.0.0 (the breaking
+        // `Toml.Row`/source-span bump, chord#148) — facet's DIRECT
+        // swift-toml-edit 2.x pin below and sill's transitive one resolve
+        // to the same 2.x, never a split graph. For local, atomic
         // sill↔facet editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "1.27.0")),
+                 .upToNextMinor(from: "1.29.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
@@ -88,9 +90,10 @@ let package = Package(
         .target(name: "FacetCore", dependencies: [
             .product(name: "Palette", package: "sill"),
             .product(name: "Toml", package: "swift-toml-edit"),
-            // ConfigSchema: one declarative `Spec` drives BOTH the
-            // config.toml decode and the JSON Schema emitted for taplo
-            // completion (`facet --emit-schema`) — so the two never drift.
+            // ConfigSchema: one declarative `Spec` drives the config.toml
+            // decode, the JSON Schema emitted for taplo completion
+            // (`facet config --emit-schema`), AND `facet config --validate`
+            // (sill 1.29.0 bridge) — so all three never drift.
             .product(name: "ConfigSchema", package: "sill"),
         ]),
         .target(name: "FacetAccessibility", dependencies: ["FacetCore"]),
@@ -120,6 +123,9 @@ let package = Package(
                 "FacetViewTree",
                 "FacetViewGrid",
                 "FacetViewRail",
+                // ConfigSchema: `facet config --validate` surfaces sill's
+                // ValidationError values from FacetConfig.validate (t-0029).
+                .product(name: "ConfigSchema", package: "sill"),
             ]),
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
         .testTarget(name: "FacetAdapterNativeTests",
