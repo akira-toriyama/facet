@@ -14,4 +14,7 @@ permissions:
 jobs:
   sync:
     uses: akira-toriyama/.github/.github/workflows/sync-task-status.yml@v1
-    secrets: inherit
+    # Pass ONLY the tracker-write PAT — least privilege over `secrets: inherit`,
+    # which would expose every caller-repo secret to the reusable workflow.
+    secrets:
+      PROJECTS_WRITE_PAT: ${{ secrets.PROJECTS_WRITE_PAT }}
