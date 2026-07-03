@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
@@ -7,89 +7,89 @@ import XCTest
 /// self-managed workspace state. Every test runs without AX
 /// permission, AppKit, or any OS interaction — that's the point
 /// of having extracted `WorkspaceCatalog` out of `NativeAdapter`.
-final class WorkspaceCatalogTests: XCTestCase {
+struct WorkspaceCatalogTests {
 
     // MARK: - Initial state
 
-    func testInitialActiveIs1() {
-        XCTAssertEqual(seededCatalog().activeIndex, 1)
+    @Test func initialActiveIs1() {
+        #expect(seededCatalog().activeIndex == 1)
     }
 
-    func testInitialMapsAndSetsAreEmpty() {
+    @Test func initialMapsAndSetsAreEmpty() {
         let c = seededCatalog()
-        XCTAssertTrue(c.windowMap.isEmpty)
-        XCTAssertTrue(c.anchorParked.isEmpty)
-        XCTAssertTrue(c.originalPositions.isEmpty)
+        #expect(c.windowMap.isEmpty)
+        #expect(c.anchorParked.isEmpty)
+        #expect(c.originalPositions.isEmpty)
     }
 
     // MARK: - Reconcile
 
-    func testReconcileAssignsNewWindowsToActive() {
+    @Test func reconcileAssignsNewWindowsToActive() {
         var c = seededCatalog()
         let r = c.reconcile(live: [window(10), window(20)])
-        XCTAssertEqual(r.added, 2)
-        XCTAssertEqual(r.removed, 0)
-        XCTAssertEqual(Set(r.addedIDs), [wid(10), wid(20)])
-        XCTAssertEqual(r.removedIDs, [])
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
-        XCTAssertEqual(c.windowMap[wid(20)]?.workspace, 1)
+        #expect(r.added == 2)
+        #expect(r.removed == 0)
+        #expect(Set(r.addedIDs) == [wid(10), wid(20)])
+        #expect(r.removedIDs == [])
+        #expect(c.windowMap[wid(10)]?.workspace == 1)
+        #expect(c.windowMap[wid(20)]?.workspace == 1)
     }
 
-    func testReconcileRecordsPidFromLiveWindow() {
+    @Test func reconcileRecordsPidFromLiveWindow() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 4242)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.pid, 4242)
+        #expect(c.windowMap[wid(10)]?.pid == 4242)
     }
 
-    func testReconcileRefreshesPidWhenItChangesUnderTheSameID() {
+    @Test func reconcileRefreshesPidWhenItChangesUnderTheSameID() {
         // Defensive: if a wsid is ever reused after its owner dies,
         // the fresh pid should win so subsequent AX calls don't
         // target a stale (or now-different) process.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 1000)])
         _ = c.reconcile(live: [window(10, pid: 2000)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.pid, 2000)
+        #expect(c.windowMap[wid(10)]?.pid == 2000)
     }
 
-    func testReconcileNewWindowsLandInCurrentActive() {
+    @Test func reconcileNewWindowsLandInCurrentActive() {
         // Switch to WS 3 first; new windows should land in 3.
         var c = seededCatalog()
         _ = c.setActive(3)
         _ = c.reconcile(live: [window(10)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3)
+        #expect(c.windowMap[wid(10)]?.workspace == 3)
     }
 
-    func testReconcileDropsGoneWindows() {
+    @Test func reconcileDropsGoneWindows() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         let r = c.reconcile(live: [window(10)])
-        XCTAssertEqual(r.added, 0)
-        XCTAssertEqual(r.removed, 1)
-        XCTAssertEqual(r.addedIDs, [])
-        XCTAssertEqual(r.removedIDs, [wid(20)],
+        #expect(r.added == 0)
+        #expect(r.removed == 1)
+        #expect(r.addedIDs == [])
+        #expect(r.removedIDs == [wid(20)],
                        "removed IDs surface the gone window")
-        XCTAssertNil(c.windowMap[wid(20)])
+        #expect(c.windowMap[wid(20)] == nil)
     }
 
     // MARK: - Trusted-new fast-path (two-tick gate)
 
-    func testTwoTickGateDefersUntrustedNewWindow() {
+    @Test func twoTickGateDefersUntrustedNewWindow() {
         // Under requireConfirm a new on-screen window waits for a
         // SECOND sighting before joining the map (swallows the
         // cross-mac-desktop `isOnscreen` flip during a mac-desktop switch).
         var c = seededCatalog()
         let r1 = c.reconcile(live: [window(10)], requireConfirm: true)
-        XCTAssertEqual(r1.added, 0)
-        XCTAssertEqual(r1.removed, 0)
-        XCTAssertEqual(r1.addedIDs, [])
-        XCTAssertNil(c.windowMap[wid(10)])
+        #expect(r1.added == 0)
+        #expect(r1.removed == 0)
+        #expect(r1.addedIDs == [])
+        #expect(c.windowMap[wid(10)] == nil)
         let r2 = c.reconcile(live: [window(10)], requireConfirm: true)
-        XCTAssertEqual(r2.added, 1)
-        XCTAssertEqual(r2.addedIDs, [wid(10)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+        #expect(r2.added == 1)
+        #expect(r2.addedIDs == [wid(10)])
+        #expect(c.windowMap[wid(10)]?.workspace == 1)
     }
 
-    func testTrustedNewWindowSkipsGate() {
+    @Test func trustedNewWindowSkipsGate() {
         // A genuinely-new window (kAXWindowCreated → trusted) joins on
         // the FIRST sighting even under requireConfirm — this is the
         // add-latency win.
@@ -97,27 +97,27 @@ final class WorkspaceCatalogTests: XCTestCase {
         let r = c.reconcile(live: [window(10)],
                             trusted: [wid(10)],
                             requireConfirm: true)
-        XCTAssertEqual(r.added, 1)
-        XCTAssertEqual(r.addedIDs, [wid(10)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
+        #expect(r.added == 1)
+        #expect(r.addedIDs == [wid(10)])
+        #expect(c.windowMap[wid(10)]?.workspace == 1)
     }
 
-    func testIgnoreKeepsWindowUnmanaged() {
+    @Test func ignoreKeepsWindowUnmanaged() {
         // Config `action="ignore"` window never enters the map, and
         // stays out on later reconciles (marked examined) even once
         // the ignore hint is no longer supplied.
         var c = seededCatalog()
         let r = c.reconcile(live: [window(10), window(20)],
                             ignore: [wid(20)])
-        XCTAssertEqual(r.added, 1)
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
-        XCTAssertNil(c.windowMap[wid(20)])
+        #expect(r.added == 1)
+        #expect(c.windowMap[wid(10)]?.workspace == 1)
+        #expect(c.windowMap[wid(20)] == nil)
         let r2 = c.reconcile(live: [window(10), window(20)])
-        XCTAssertEqual(r2.added, 0)
-        XCTAssertNil(c.windowMap[wid(20)])
+        #expect(r2.added == 0)
+        #expect(c.windowMap[wid(20)] == nil)
     }
 
-    func testDeferredWindowSkippedButReProbedLater() {
+    @Test func deferredWindowSkippedButReProbedLater() {
         // A window the adapter couldn't classify yet (AX role
         // unresolved — the probe raced a still-creating window or hit
         // the per-call cap) is `deferred`: it does NOT join this tick,
@@ -131,22 +131,22 @@ final class WorkspaceCatalogTests: XCTestCase {
                              trusted: [wid(10), wid(20)],
                              deferred: [wid(20)],
                              requireConfirm: true)
-        XCTAssertEqual(r1.added, 1, "only the resolved window joins")
-        XCTAssertEqual(r1.addedIDs, [wid(10)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1)
-        XCTAssertNil(c.windowMap[wid(20)],
+        #expect(r1.added == 1, "only the resolved window joins")
+        #expect(r1.addedIDs == [wid(10)])
+        #expect(c.windowMap[wid(10)]?.workspace == 1)
+        #expect(c.windowMap[wid(20)] == nil,
                      "deferred window skipped even when trusted")
         // Next tick: AX resolved → no longer deferred → adopted. Proves
         // the defer did NOT mark it examined (contrast: `ignore` does).
         let r2 = c.reconcile(live: [window(10), window(20)])
-        XCTAssertEqual(r2.added, 1)
-        XCTAssertEqual(r2.addedIDs, [wid(20)])
-        XCTAssertEqual(c.windowMap[wid(20)]?.workspace, 1)
+        #expect(r2.added == 1)
+        #expect(r2.addedIDs == [wid(20)])
+        #expect(c.windowMap[wid(20)]?.workspace == 1)
     }
 
     // MARK: - Layout insertion (append, not master)
 
-    func testNewWindowAppendsToStackNotMaster() {
+    @Test func newWindowAppendsToStackNotMaster() {
         // A window joining a master-stack layout appends to the END of
         // the per-WS order (joins the stack) rather than seizing the
         // master slot (order[0]). The first-seen window stays master;
@@ -156,11 +156,11 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.reconcile(live: [window(10)])
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.reconcile(live: [window(10), window(20), window(30)])
-        XCTAssertEqual(c.stackOrders[1], [wid(10), wid(20), wid(30)],
+        #expect(c.stackOrders[1] == [wid(10), wid(20), wid(30)],
                        "new windows append; first-seen stays master")
     }
 
-    func testMoveWindowIntoMasterStackAppendsBehindMaster() {
+    @Test func moveWindowIntoMasterStackAppendsBehindMaster() {
         // Moving a window into a populated master-stack WS appends it
         // behind the existing master — a move-in must not displace the
         // destination WS's established master either.
@@ -169,14 +169,14 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.reconcile(live: [window(10), window(20)])      // both → WS1
         _ = c.setActive(2)
         _ = c.reconcile(live: [window(10), window(20), window(30)]) // 30 → WS2
-        XCTAssertEqual(c.stackOrders[2], [wid(30)])
+        #expect(c.stackOrders[2] == [wid(30)])
         _ = c.moveWindow(wid(10), to: 2, in: displayRect)
         _ = c.moveWindow(wid(20), to: 2, in: displayRect)
-        XCTAssertEqual(c.stackOrders[2], [wid(30), wid(10), wid(20)],
+        #expect(c.stackOrders[2] == [wid(30), wid(10), wid(20)],
                        "moved-in windows append behind the dest master")
     }
 
-    func testNewWindowInStackModeTakesTop() {
+    @Test func newWindowInStackModeTakesTop() {
         // Stack ("one at a time") shows order[0] and parks the rest, so
         // a newly-opened window must take the TOP (index 0) — you see
         // what you just opened. (Contrast: the master-stack engines
@@ -185,11 +185,11 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
         _ = c.reconcile(live: [window(10)])
         _ = c.reconcile(live: [window(10), window(20)])
-        XCTAssertEqual(c.stackOrders[1], [wid(20), wid(10)],
+        #expect(c.stackOrders[1] == [wid(20), wid(10)],
                        "newest is the visible stack top")
     }
 
-    func testTrustedDoesNotOverrideOffScreenDefer() {
+    @Test func trustedDoesNotOverrideOffScreenDefer() {
         // Trusted bypasses only the two-tick gate, not the off-screen
         // defer that runs before it: a window still transiently
         // off-screen mid-creation must NOT slip in.
@@ -201,13 +201,13 @@ final class WorkspaceCatalogTests: XCTestCase {
         let r = c.reconcile(live: [offscreen],
                             trusted: [wid(10)],
                             requireConfirm: true)
-        XCTAssertEqual(r.added, 0)
-        XCTAssertEqual(r.removed, 0)
-        XCTAssertEqual(r.addedIDs, [])
-        XCTAssertNil(c.windowMap[wid(10)])
+        #expect(r.added == 0)
+        #expect(r.removed == 0)
+        #expect(r.addedIDs == [])
+        #expect(c.windowMap[wid(10)] == nil)
     }
 
-    func testReconcileDoesNotMovePreexistingWindow() {
+    @Test func reconcileDoesNotMovePreexistingWindow() {
         // Window assigned to WS 3 must stay there even after
         // active flips back to 1 and reconcile runs.
         var c = seededCatalog()
@@ -215,73 +215,73 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.moveWindow(wid(10), to: 3)
         _ = c.setActive(2)
         _ = c.reconcile(live: [window(10)])
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3,
+        #expect(c.windowMap[wid(10)]?.workspace == 3,
                        "reconcile must not reassign existing windows")
     }
 
-    func testReconcileSweepsParkedSetsAndOriginalPositions() {
+    @Test func reconcileSweepsParkedSetsAndOriginalPositions() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
         c.markAnchorParked(wid(20), originalPosition: .init(x: 3, y: 4))
         // wid(10) disappears (e.g. user closed the window).
         _ = c.reconcile(live: [window(20)])
-        XCTAssertFalse(c.anchorParked.contains(wid(10)))
-        XCTAssertNil(c.originalPositions[wid(10)])
+        #expect(!c.anchorParked.contains(wid(10)))
+        #expect(c.originalPositions[wid(10)] == nil)
         // wid(20) still alive → park state preserved.
-        XCTAssertTrue(c.anchorParked.contains(wid(20)))
-        XCTAssertNotNil(c.originalPositions[wid(20)])
+        #expect(c.anchorParked.contains(wid(20)))
+        #expect(c.originalPositions[wid(20)] != nil)
     }
 
     // MARK: - pid lookup
 
-    func testPidForUnknownWindowIsNil() {
-        XCTAssertNil(seededCatalog().pid(for: wid(10)))
+    @Test func pidForUnknownWindowIsNil() {
+        #expect(seededCatalog().pid(for: wid(10)) == nil)
     }
 
-    func testPidForKnownWindowMatchesLiveValue() {
+    @Test func pidForKnownWindowMatchesLiveValue() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 1234)])
-        XCTAssertEqual(c.pid(for: wid(10)), 1234)
+        #expect(c.pid(for: wid(10)) == 1234)
     }
 
     // MARK: - isValid (contiguous live set)
 
-    func testIsValidAcceptsLiveRange() {
+    @Test func isValidAcceptsLiveRange() {
         let c = seededCatalog()           // 5 contiguous workspaces
-        XCTAssertTrue(c.isValid(1))
-        XCTAssertTrue(c.isValid(5))
+        #expect(c.isValid(1))
+        #expect(c.isValid(5))
     }
 
-    func testIsValidRejectsBeyondCount() {
+    @Test func isValidRejectsBeyondCount() {
         let c = seededCatalog(3)          // positions 1...3
-        XCTAssertTrue(c.isValid(3))
-        XCTAssertFalse(c.isValid(4),
+        #expect(c.isValid(3))
+        #expect(!c.isValid(4),
                        "the live set is contiguous 1...count")
     }
 
-    func testIsValidRejectsZeroAndNegative() {
+    @Test func isValidRejectsZeroAndNegative() {
         let c = seededCatalog()
-        XCTAssertFalse(c.isValid(0))
-        XCTAssertFalse(c.isValid(-1))
+        #expect(!c.isValid(0))
+        #expect(!c.isValid(-1))
     }
 
     // MARK: - setActive
 
-    func testSetActiveReturnsNilForCurrentWorkspace() {
+    @Test func setActiveReturnsNilForCurrentWorkspace() {
         var c = seededCatalog()
-        XCTAssertNil(c.setActive(1),
+        #expect(c.setActive(1) == nil,
                      "switching to current must be a no-op")
-        XCTAssertEqual(c.activeIndex, 1)
+        #expect(c.activeIndex == 1)
     }
 
-    func testSetActiveReturnsNilForInvalidTarget() {
+    @Test func setActiveReturnsNilForInvalidTarget() {
         var c = seededCatalog(3)
-        XCTAssertNil(c.setActive(6), "beyond the live count")
-        XCTAssertEqual(c.activeIndex, 1, "rejected switch must not mutate")
+        #expect(c.setActive(6) == nil, "beyond the live count")
+        #expect(c.activeIndex == 1, "rejected switch must not mutate")
     }
 
-    func testSetActiveReturnsSwitchPlanWithCorrectSets() {
+    @Test func setActiveReturnsSwitchPlanWithCorrectSets() {
         // Three windows: 10 in WS1, 20 in WS2, 30 in WS2.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 100),
@@ -291,174 +291,174 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.moveWindow(wid(30), to: 2)
         // Switching 1 → 2: 10 should park, {20, 30} should restore.
         let plan = c.setActive(2)
-        XCTAssertEqual(plan?.oldActive, 1)
-        XCTAssertEqual(plan?.newActive, 2)
-        XCTAssertEqual(plan?.toPark, [WindowRef(id: wid(10), pid: 100)])
-        XCTAssertEqual(Set(plan?.toRestore ?? []),
+        #expect(plan?.oldActive == 1)
+        #expect(plan?.newActive == 2)
+        #expect(plan?.toPark == [WindowRef(id: wid(10), pid: 100)])
+        #expect(Set(plan?.toRestore ?? []) ==
                        [WindowRef(id: wid(20), pid: 200),
                         WindowRef(id: wid(30), pid: 300)])
-        XCTAssertEqual(c.activeIndex, 2)
+        #expect(c.activeIndex == 2)
     }
 
-    func testSwitchPlanCarriesPidFromCatalog() {
+    @Test func switchPlanCarriesPidFromCatalog() {
         // Specifically asserting the pid threading — even if pid
         // wasn't passed into setActive, the plan must include it
         // so the adapter can dispatch AX directly.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 9999)])
         let plan = c.setActive(2)
-        XCTAssertEqual(plan?.toPark.first?.pid, 9999)
+        #expect(plan?.toPark.first?.pid == 9999)
     }
 
     // MARK: - moveWindow
 
-    func testMoveWindowRejectsUnknownWindow() {
+    @Test func moveWindowRejectsUnknownWindow() {
         var c = seededCatalog()
         let outcome = c.moveWindow(wid(99), to: 2)
-        XCTAssertEqual(outcome, .rejected)
+        #expect(outcome == .rejected)
     }
 
-    func testMoveWindowRejectsInvalidTarget() {
+    @Test func moveWindowRejectsInvalidTarget() {
         var c = seededCatalog(3)
         _ = c.reconcile(live: [window(10)])
         // Target beyond the live workspace count is rejected.
         let outcome = c.moveWindow(wid(10), to: 99)
-        XCTAssertEqual(outcome, .rejected)
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 1,
+        #expect(outcome == .rejected)
+        #expect(c.windowMap[wid(10)]?.workspace == 1,
                        "rejected move must not mutate")
     }
 
-    func testMoveWindowRejectsAlreadyOnTarget() {
+    @Test func moveWindowRejectsAlreadyOnTarget() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         let outcome = c.moveWindow(wid(10), to: 1)
-        XCTAssertEqual(outcome, .rejected)
+        #expect(outcome == .rejected)
     }
 
-    func testMoveAwayFromActiveIsPark() {
+    @Test func moveAwayFromActiveIsPark() {
         // Active = 1, window in 1 → move to 2 → park.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 777)])
         let outcome = c.moveWindow(wid(10), to: 2)
-        XCTAssertEqual(outcome,
+        #expect(outcome ==
                        .park(WindowRef(id: wid(10), pid: 777)))
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 2)
-        XCTAssertEqual(c.windowMap[wid(10)]?.pid, 777,
+        #expect(c.windowMap[wid(10)]?.workspace == 2)
+        #expect(c.windowMap[wid(10)]?.pid == 777,
                        "pid must survive workspace reassignment")
     }
 
-    func testMoveIntoActiveIsRestore() {
+    @Test func moveIntoActiveIsRestore() {
         // Window starts in WS 2 (non-active). Move it to active=1.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10, pid: 555)])
         _ = c.moveWindow(wid(10), to: 2)
         let outcome = c.moveWindow(wid(10), to: 1)
-        XCTAssertEqual(outcome,
+        #expect(outcome ==
                        .restore(WindowRef(id: wid(10), pid: 555)))
     }
 
-    func testMoveBetweenInactiveWorkspacesIsStateOnly() {
+    @Test func moveBetweenInactiveWorkspacesIsStateOnly() {
         // Active = 1. Window in WS 2 → move to WS 3 → invisible to
         // user, only the assignment changes.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.moveWindow(wid(10), to: 2)
         let outcome = c.moveWindow(wid(10), to: 3)
-        XCTAssertEqual(outcome, .stateOnly)
-        XCTAssertEqual(c.windowMap[wid(10)]?.workspace, 3)
+        #expect(outcome == .stateOnly)
+        #expect(c.windowMap[wid(10)]?.workspace == 3)
     }
 
     // MARK: - Anchor park bookkeeping
 
-    func testShouldParkAnchorTrueWhenNotParked() {
+    @Test func shouldParkAnchorTrueWhenNotParked() {
         let c = seededCatalog()
-        XCTAssertTrue(c.shouldParkAnchor(wid(10)))
+        #expect(c.shouldParkAnchor(wid(10)))
     }
 
-    func testShouldParkAnchorFalseAfterMark() {
+    @Test func shouldParkAnchorFalseAfterMark() {
         var c = seededCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
-        XCTAssertFalse(c.shouldParkAnchor(wid(10)),
+        #expect(!c.shouldParkAnchor(wid(10)),
                        "double-park guard")
     }
 
-    func testConsumeAnchorRestoreReturnsAndClearsPosition() {
+    @Test func consumeAnchorRestoreReturnsAndClearsPosition() {
         var c = seededCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
-        XCTAssertEqual(c.consumeAnchorRestore(wid(10)),
+        #expect(c.consumeAnchorRestore(wid(10)) ==
                        .init(x: 5, y: 7))
-        XCTAssertFalse(c.anchorParked.contains(wid(10)))
-        XCTAssertNil(c.originalPositions[wid(10)])
+        #expect(!c.anchorParked.contains(wid(10)))
+        #expect(c.originalPositions[wid(10)] == nil)
     }
 
-    func testConsumeAnchorRestoreReturnsNilForNonParked() {
+    @Test func consumeAnchorRestoreReturnsNilForNonParked() {
         var c = seededCatalog()
-        XCTAssertNil(c.consumeAnchorRestore(wid(10)),
+        #expect(c.consumeAnchorRestore(wid(10)) == nil,
                      "defensive against double-restore")
     }
 
     // MARK: - drop (closeWindow eviction)
 
-    func testDropClearsAllTracesForWindow() {
+    @Test func dropClearsAllTracesForWindow() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         c.markAnchorParked(wid(10), originalPosition: .init(x: 5, y: 7))
         c.drop(wid(10))
-        XCTAssertNil(c.windowMap[wid(10)])
-        XCTAssertFalse(c.anchorParked.contains(wid(10)))
-        XCTAssertNil(c.originalPositions[wid(10)])
+        #expect(c.windowMap[wid(10)] == nil)
+        #expect(!c.anchorParked.contains(wid(10)))
+        #expect(c.originalPositions[wid(10)] == nil)
     }
 
-    func testDropIsIdempotent() {
+    @Test func dropIsIdempotent() {
         // Two paths: drop on a never-known id, and drop twice on
         // the same id. Both must leave the catalog in an empty
         // / consistent state (no crash, no stale entries).
         var c = seededCatalog()
         c.drop(wid(10))
-        XCTAssertNil(c.windowMap[wid(10)])
-        XCTAssertFalse(c.anchorParked.contains(wid(10)))
+        #expect(c.windowMap[wid(10)] == nil)
+        #expect(!c.anchorParked.contains(wid(10)))
 
         _ = c.reconcile(live: [window(20)])
         c.drop(wid(20))
         c.drop(wid(20))
-        XCTAssertNil(c.windowMap[wid(20)])
-        XCTAssertEqual(c.windowMap.count, 0)
+        #expect(c.windowMap[wid(20)] == nil)
+        #expect(c.windowMap.count == 0)
     }
 
     // MARK: - Snapshot (0-based wire convention)
 
-    func testSnapshotTranslatesIndexTo0Based() {
+    @Test func snapshotTranslatesIndexTo0Based() {
         let c = seededCatalog()
         let snap = c.snapshot(
             live: [], focused: nil,
             activeRect: .zero)
-        XCTAssertEqual(snap.map(\.index), [0, 1, 2, 3, 4],
+        #expect(snap.map(\.index) == [0, 1, 2, 3, 4],
                        "snapshot must emit 0-based indexes")
     }
 
-    func testSnapshotMarksActiveWorkspace() {
+    @Test func snapshotMarksActiveWorkspace() {
         var c = seededCatalog()
         _ = c.setActive(3)
         let snap = c.snapshot(
             live: [], focused: nil,
             activeRect: .zero)
-        XCTAssertEqual(snap.filter(\.isActive).map(\.index), [2],
+        #expect(snap.filter(\.isActive).map(\.index) == [2],
                        "0-based index 2 = 1-based 3")
     }
 
-    func testSnapshotPlacesWindowsInAssignedWorkspace() {
+    @Test func snapshotPlacesWindowsInAssignedWorkspace() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.moveWindow(wid(20), to: 3)
         let snap = c.snapshot(
             live: [window(10), window(20)], focused: nil,
             activeRect: .zero)
-        XCTAssertEqual(snap[0].windows.map(\.id), [wid(10)])
-        XCTAssertEqual(snap[2].windows.map(\.id), [wid(20)])
-        XCTAssertEqual(snap[1].windows.count, 0)
+        #expect(snap[0].windows.map(\.id) == [wid(10)])
+        #expect(snap[2].windows.map(\.id) == [wid(20)])
+        #expect(snap[1].windows.count == 0)
     }
 
-    func testSnapshotStampsFocusedFlag() {
+    @Test func snapshotStampsFocusedFlag() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         let snap = c.snapshot(
@@ -466,13 +466,13 @@ final class WorkspaceCatalogTests: XCTestCase {
             focused: wid(20),
             activeRect: .zero)
         let allWindows = snap.flatMap(\.windows)
-        XCTAssertEqual(allWindows.first { $0.id == wid(20) }?.isFocused,
+        #expect(allWindows.first { $0.id == wid(20) }?.isFocused ==
                        true)
-        XCTAssertEqual(allWindows.first { $0.id == wid(10) }?.isFocused,
+        #expect(allWindows.first { $0.id == wid(10) }?.isFocused ==
                        false)
     }
 
-    func testSnapshotSkipsWindowsNotInMap() {
+    @Test func snapshotSkipsWindowsNotInMap() {
         // Live windows that reconcile hasn't accepted (off-screen on
         // first sight, marked pre-existing at startup / mac-desktop change,
         // etc.) are filtered out of the per-WS snapshot. Previously
@@ -483,7 +483,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         let snap = c.snapshot(
             live: [window(99)], focused: nil,
             activeRect: .zero)
-        XCTAssertEqual(snap.flatMap(\.windows).count, 0)
+        #expect(snap.flatMap(\.windows).count == 0)
     }
 
     // MARK: - Phase γ.1 — layout modes + floating + tile
@@ -491,88 +491,88 @@ final class WorkspaceCatalogTests: XCTestCase {
     private let displayRect = CGRect(x: 0, y: 0,
                                      width: 1600, height: 900)
 
-    func testDefaultModeIsFloatForUnsetWorkspace() {
-        XCTAssertEqual(seededCatalog().mode(of: 1), "float")
+    @Test func defaultModeIsFloatForUnsetWorkspace() {
+        #expect(seededCatalog().mode(of: 1) == "float")
     }
 
-    func testSetModeBspCreatesTreeFromCurrentMembers() {
+    @Test func setModeBspCreatesTreeFromCurrentMembers() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
-        XCTAssertEqual(c.mode(of: 1), "bsp")
+        #expect(c.mode(of: 1) == "bsp")
         let frames = c.tiledFrames(for: 1, in: displayRect)
-        XCTAssertEqual(Set(frames.keys), [wid(10), wid(20)])
+        #expect(Set(frames.keys) == [wid(10), wid(20)])
     }
 
-    func testSetModeFloatDiscardsTree() {
+    @Test func setModeFloatDiscardsTree() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
-        XCTAssertNotNil(c.layoutTrees[1])
+        #expect(c.layoutTrees[1] != nil)
         _ = c.setMode(workspace: 1, to: "float", in: displayRect)
-        XCTAssertNil(c.layoutTrees[1])
-        XCTAssertEqual(c.tiledFrames(for: 1, in: displayRect), [:])
+        #expect(c.layoutTrees[1] == nil)
+        #expect(c.tiledFrames(for: 1, in: displayRect) == [:])
     }
 
-    func testSetModeLowercasesInput() {
+    @Test func setModeLowercasesInput() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "BSP", in: displayRect)
-        XCTAssertEqual(c.mode(of: 1), "bsp")
+        #expect(c.mode(of: 1) == "bsp")
     }
 
-    func testReconcileAutoInsertsNewWindowsIntoActiveBspTree() {
+    @Test func reconcileAutoInsertsNewWindowsIntoActiveBspTree() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         let frames = c.tiledFrames(for: 1, in: displayRect)
-        XCTAssertEqual(Set(frames.keys), [wid(10), wid(20)])
+        #expect(Set(frames.keys) == [wid(10), wid(20)])
     }
 
-    func testReconcileSkipsFloatingWindowsFromTree() {
+    @Test func reconcileSkipsFloatingWindowsFromTree() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         c.toggleFloat(wid(10))
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
-        XCTAssertTrue(c.tiledFrames(for: 1, in: displayRect).isEmpty)
+        #expect(c.tiledFrames(for: 1, in: displayRect).isEmpty)
     }
 
-    func testToggleFloatRemovesFromTreeAndReinserts() {
+    @Test func toggleFloatRemovesFromTreeAndReinserts() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         c.toggleFloat(wid(20))
-        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+        #expect(Set(c.tiledFrames(for: 1, in: displayRect).keys) ==
                        [wid(10)])
-        XCTAssertTrue(c.isFloating(wid(20)))
+        #expect(c.isFloating(wid(20)))
         c.toggleFloat(wid(20), focused: wid(10), in: displayRect)
-        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+        #expect(Set(c.tiledFrames(for: 1, in: displayRect).keys) ==
                        [wid(10), wid(20)])
     }
 
-    func testDropAlsoEvictsFromTree() {
+    @Test func dropAlsoEvictsFromTree() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         c.drop(wid(10))
-        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+        #expect(Set(c.tiledFrames(for: 1, in: displayRect).keys) ==
                        [wid(20)])
     }
 
-    func testReconcileGoneSweepHealsTree() {
+    @Test func reconcileGoneSweepHealsTree() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         _ = c.reconcile(live: [window(20)],
                         focused: nil, activeRect: displayRect)
-        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+        #expect(Set(c.tiledFrames(for: 1, in: displayRect).keys) ==
                        [wid(20)])
     }
 
-    func testMoveWindowBetweenBspWorkspacesMaintainsBothTrees() {
+    @Test func moveWindowBetweenBspWorkspacesMaintainsBothTrees() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
@@ -580,72 +580,72 @@ final class WorkspaceCatalogTests: XCTestCase {
                         focused: nil, activeRect: displayRect)
         let outcome = c.moveWindow(wid(20), to: 2,
                                    in: displayRect)
-        XCTAssertEqual(outcome,
+        #expect(outcome ==
                        .park(WindowRef(id: wid(20), pid: 1000)))
-        XCTAssertEqual(Set(c.tiledFrames(for: 1, in: displayRect).keys),
+        #expect(Set(c.tiledFrames(for: 1, in: displayRect).keys) ==
                        [wid(10)])
-        XCTAssertEqual(Set(c.tiledFrames(for: 2, in: displayRect).keys),
+        #expect(Set(c.tiledFrames(for: 2, in: displayRect).keys) ==
                        [wid(20)])
     }
 
-    func testToggleOrientationDelegatesToOwningTree() {
+    @Test func toggleOrientationDelegatesToOwningTree() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         let before = c.tiledFrames(for: 1, in: displayRect)
-        XCTAssertEqual(before[wid(10)]?.width, 800,
+        #expect(before[wid(10)]?.width == 800,
                        "starts vertical-split")
         c.toggleOrientation(of: wid(10))
         let after = c.tiledFrames(for: 1, in: displayRect)
-        XCTAssertEqual(after[wid(10)]?.width, 1600,
+        #expect(after[wid(10)]?.width == 1600,
                        "horizontal-split after flip")
     }
 
-    func testTiledFramesEmptyForFloatMode() {
+    @Test func tiledFramesEmptyForFloatMode() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        XCTAssertEqual(c.tiledFrames(for: 1, in: displayRect), [:])
+        #expect(c.tiledFrames(for: 1, in: displayRect) == [:])
     }
 
-    func testSnapshotPicksModePerWorkspace() {
+    @Test func snapshotPicksModePerWorkspace() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 2, to: "bsp", in: displayRect)
         let snap = c.snapshot(
             live: [], focused: nil,
             activeRect: .zero)
-        XCTAssertEqual(snap[0].layoutMode, "float",
+        #expect(snap[0].layoutMode == "float",
                        "WS 1 unset → float")
-        XCTAssertEqual(snap[1].layoutMode, "bsp",
+        #expect(snap[1].layoutMode == "bsp",
                        "WS 2 set to bsp")
     }
 
     // MARK: - Phase γ.2 — stack mode
 
-    func testSetModeStackCreatesOrderFromCurrentMembers() {
+    @Test func setModeStackCreatesOrderFromCurrentMembers() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(20), window(10)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
         // Members sort by id (deterministic) → [10, 20].
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
+        #expect(c.stackOrder(of: 1) == [wid(10), wid(20)])
     }
 
-    func testSetModeStackSkipsFloatingMembers() {
+    @Test func setModeStackSkipsFloatingMembers() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.toggleFloat(wid(20))
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10)])
+        #expect(c.stackOrder(of: 1) == [wid(10)])
     }
 
-    func testStackOrderEmptyForNonStackMode() {
+    @Test func stackOrderEmptyForNonStackMode() {
         let c = seededCatalog()
-        XCTAssertEqual(c.stackOrder(of: 1), [])
+        #expect(c.stackOrder(of: 1) == [])
     }
 
-    func testReconcileNewWindowBecomesStackTop() {
+    @Test func reconcileNewWindowBecomesStackTop() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "stack",
@@ -653,83 +653,83 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.reconcile(live: [window(10), window(20)],
                         focused: nil, activeRect: displayRect)
         // New window 20 must land at index 0 (Q7c).
-        XCTAssertEqual(c.stackOrder(of: 1).first, wid(20))
+        #expect(c.stackOrder(of: 1).first == wid(20))
     }
 
-    func testCycleStackNextRotatesLeft() {
+    @Test func cycleStackNextRotatesLeft() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
-        XCTAssertEqual(c.stackOrder(of: 1),
+        #expect(c.stackOrder(of: 1) ==
                        [wid(10), wid(20), wid(30)])
         let top = c.cycleStack(workspace: 1, direction: .next)
-        XCTAssertEqual(top, wid(20))
-        XCTAssertEqual(c.stackOrder(of: 1),
+        #expect(top == wid(20))
+        #expect(c.stackOrder(of: 1) ==
                        [wid(20), wid(30), wid(10)])
     }
 
-    func testCycleStackPrevRotatesRight() {
+    @Test func cycleStackPrevRotatesRight() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
         let top = c.cycleStack(workspace: 1, direction: .prev)
-        XCTAssertEqual(top, wid(30))
-        XCTAssertEqual(c.stackOrder(of: 1),
+        #expect(top == wid(30))
+        #expect(c.stackOrder(of: 1) ==
                        [wid(30), wid(10), wid(20)])
     }
 
-    func testCycleStackSingleMemberIsNoop() {
+    @Test func cycleStackSingleMemberIsNoop() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
-        XCTAssertNil(c.cycleStack(workspace: 1, direction: .next))
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10)])
+        #expect(c.cycleStack(workspace: 1, direction: .next) == nil)
+        #expect(c.stackOrder(of: 1) == [wid(10)])
     }
 
-    func testCycleStackEmptyIsNoop() {
+    @Test func cycleStackEmptyIsNoop() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
-        XCTAssertNil(c.cycleStack(workspace: 1, direction: .next))
-        XCTAssertEqual(c.stackOrder(of: 1), [],
+        #expect(c.cycleStack(workspace: 1, direction: .next) == nil)
+        #expect(c.stackOrder(of: 1) == [],
                        "empty order must stay empty post-cycle")
     }
 
-    func testDropEvictsFromStackOrder() {
+    @Test func dropEvictsFromStackOrder() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
         c.drop(wid(10))
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(20)])
+        #expect(c.stackOrder(of: 1) == [wid(20)])
     }
 
-    func testToggleFloatRemovesFromStackAndReadds() {
+    @Test func toggleFloatRemovesFromStackAndReadds() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "stack",
                       in: displayRect)
         c.toggleFloat(wid(20))
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10)])
+        #expect(c.stackOrder(of: 1) == [wid(10)])
         // Unfloat → returns to stack at top.
         c.toggleFloat(wid(20), focused: nil, in: displayRect)
-        XCTAssertEqual(c.stackOrder(of: 1).first, wid(20))
+        #expect(c.stackOrder(of: 1).first == wid(20))
     }
 
-    func testMoveWindowIntoStackPutsItOnTop() {
+    @Test func moveWindowIntoStackPutsItOnTop() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 2, to: "stack",
                       in: displayRect)
         _ = c.reconcile(live: [window(10)])
         // 10 is in WS 1 (active default). Move into WS 2 stack.
         _ = c.moveWindow(wid(10), to: 2, in: displayRect)
-        XCTAssertEqual(c.stackOrder(of: 2), [wid(10)])
+        #expect(c.stackOrder(of: 2) == [wid(10)])
     }
 
-    func testSetModeFlipWithFiveMembersPreservesAllAcrossBspStackBsp() {
+    @Test func setModeFlipWithFiveMembersPreservesAllAcrossBspStackBsp() {
         // Mode flipping a populated WS shouldn't drop members.
         // BSP → Stack → BSP with 5 windows: every id survives,
         // and the final BSP tree contains the same id set.
@@ -737,46 +737,45 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.reconcile(live: (10...14).map { window($0) })
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         let bspIDs = Set(c.tiledFrames(for: 1, in: displayRect).keys)
-        XCTAssertEqual(bspIDs.count, 5)
+        #expect(bspIDs.count == 5)
         _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
-        XCTAssertEqual(Set(c.stackOrder(of: 1)),
+        #expect(Set(c.stackOrder(of: 1)) ==
                        Set((10...14).map(wid)),
                        "stack must inherit all bsp members")
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
         let bspIDs2 = Set(c.tiledFrames(for: 1, in: displayRect).keys)
-        XCTAssertEqual(bspIDs2, bspIDs,
-                       "round-trip bsp→stack→bsp preserves the "
-                       + "id set in the tree")
+        #expect(bspIDs2 == bspIDs,
+                       "round-trip bsp→stack→bsp preserves the id set in the tree")
     }
 
-    func testSetModeFlipReplacesLayoutKind() {
+    @Test func setModeFlipReplacesLayoutKind() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         // BSP → stack: tree gone, order built.
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
-        XCTAssertNotNil(c.layoutTrees[1])
+        #expect(c.layoutTrees[1] != nil)
         _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
-        XCTAssertNil(c.layoutTrees[1])
-        XCTAssertEqual(c.stackOrder(of: 1).sorted { $0.serverID < $1.serverID },
+        #expect(c.layoutTrees[1] == nil)
+        #expect(c.stackOrder(of: 1).sorted { $0.serverID < $1.serverID } ==
                        [wid(10), wid(20)])
         // Stack → BSP: order gone, tree built.
         _ = c.setMode(workspace: 1, to: "bsp", in: displayRect)
-        XCTAssertNil(c.stackOrders[1])
-        XCTAssertNotNil(c.layoutTrees[1])
+        #expect(c.stackOrders[1] == nil)
+        #expect(c.layoutTrees[1] != nil)
     }
 
     // MARK: - Theme B — tall / stateless-engine shared order
 
-    func testSetModeTallSeedsSharedOrderFromMembers() {
+    @Test func setModeTallSeedsSharedOrderFromMembers() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(20), window(10)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         // Stateless engines reuse the stack order; seeded id-sorted.
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
-        XCTAssertNil(c.layoutTrees[1], "tall must discard any tree")
+        #expect(c.stackOrder(of: 1) == [wid(10), wid(20)])
+        #expect(c.layoutTrees[1] == nil, "tall must discard any tree")
     }
 
-    func testReconcileNewWindowDoesNotSeizeTallMaster() {
+    @Test func reconcileNewWindowDoesNotSeizeTallMaster() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
@@ -785,115 +784,123 @@ final class WorkspaceCatalogTests: XCTestCase {
         // New window APPENDS — the established master (10) keeps the
         // slot; the newcomer joins the stack. Master is taken only by
         // the explicit promoteToMaster.
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
-        XCTAssertEqual(c.stackOrder(of: 1).first, wid(10),
+        #expect(c.stackOrder(of: 1) == [wid(10), wid(20)])
+        #expect(c.stackOrder(of: 1).first == wid(10),
                        "first-seen window keeps the master slot")
     }
 
-    func testPromoteToMasterMovesChosenWindowToFront() {
+    @Test func promoteToMasterMovesChosenWindowToFront() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
-        XCTAssertEqual(c.stackOrder(of: 1),
+        #expect(c.stackOrder(of: 1) ==
                        [wid(10), wid(20), wid(30)])
-        XCTAssertTrue(c.promoteToMaster(wid(30), workspace: 1))
-        XCTAssertEqual(c.stackOrder(of: 1),
+        let promoted = c.promoteToMaster(wid(30), workspace: 1)
+        #expect(promoted)
+        #expect(c.stackOrder(of: 1) ==
                        [wid(30), wid(10), wid(20)])
     }
 
-    func testPromoteToMasterAlreadyMasterIsNoop() {
+    @Test func promoteToMasterAlreadyMasterIsNoop() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
-        XCTAssertFalse(c.promoteToMaster(wid(10), workspace: 1),
+        let promoted = c.promoteToMaster(wid(10), workspace: 1)
+        #expect(!promoted,
                        "already at index 0 → no change")
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(10), wid(20)])
+        #expect(c.stackOrder(of: 1) == [wid(10), wid(20)])
     }
 
-    func testPromoteToMasterUnknownWindowIsNoop() {
+    @Test func promoteToMasterUnknownWindowIsNoop() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
-        XCTAssertFalse(c.promoteToMaster(wid(99), workspace: 1))
+        let promoted = c.promoteToMaster(wid(99), workspace: 1)
+        #expect(!promoted)
     }
 
-    func testOrderedMembersReflectsSharedOrder() {
+    @Test func orderedMembersReflectsSharedOrder() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.promoteToMaster(wid(30), workspace: 1)
-        XCTAssertEqual(c.orderedMembers(of: 1),
+        #expect(c.orderedMembers(of: 1) ==
                        [wid(30), wid(10), wid(20)])
     }
 
-    func testTallDropEvictsFromSharedOrder() {
+    @Test func tallDropEvictsFromSharedOrder() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         c.drop(wid(10))
-        XCTAssertEqual(c.stackOrder(of: 1), [wid(20)])
+        #expect(c.stackOrder(of: 1) == [wid(20)])
     }
 
     // MARK: - Theme B — master knobs (ratio / count)
 
-    func testDefaultParamsAreNeutral() {
+    @Test func defaultParamsAreNeutral() {
         let c = seededCatalog()
-        XCTAssertEqual(c.params(of: 1).masterRatio, 0.5)
-        XCTAssertEqual(c.params(of: 1).masterCount, 1)
+        #expect(c.params(of: 1).masterRatio == 0.5)
+        #expect(c.params(of: 1).masterCount == 1)
     }
 
-    func testAdjustMasterRatioNudgesAndClamps() {
+    @Test func adjustMasterRatioNudgesAndClamps() {
         var c = seededCatalog()
-        XCTAssertTrue(c.adjustMasterRatio(workspace: 1, delta: 0.05))
-        XCTAssertEqual(c.params(of: 1).masterRatio, 0.55, accuracy: 1e-9)
+        let nudged = c.adjustMasterRatio(workspace: 1, delta: 0.05)
+        #expect(nudged)
+        #expect(abs(c.params(of: 1).masterRatio - 0.55) < 1e-9)
         // Drive up to the 0.95 clamp; the boundary nudge returns false.
         for _ in 0..<20 { _ = c.adjustMasterRatio(workspace: 1, delta: 0.05) }
-        XCTAssertEqual(c.params(of: 1).masterRatio, 0.95, accuracy: 1e-9)
-        XCTAssertFalse(c.adjustMasterRatio(workspace: 1, delta: 0.05),
+        #expect(abs(c.params(of: 1).masterRatio - 0.95) < 1e-9)
+        let clamped = c.adjustMasterRatio(workspace: 1, delta: 0.05)
+        #expect(!clamped,
                        "no change at the clamp → false (skip re-tile)")
     }
 
-    func testAdjustMasterCountNudgesAndClampsAtOne() {
+    @Test func adjustMasterCountNudgesAndClampsAtOne() {
         var c = seededCatalog()
-        XCTAssertTrue(c.adjustMasterCount(workspace: 1, delta: 1))
-        XCTAssertEqual(c.params(of: 1).masterCount, 2)
-        XCTAssertTrue(c.adjustMasterCount(workspace: 1, delta: -1))
-        XCTAssertEqual(c.params(of: 1).masterCount, 1)
-        XCTAssertFalse(c.adjustMasterCount(workspace: 1, delta: -1),
+        let bumped = c.adjustMasterCount(workspace: 1, delta: 1)
+        #expect(bumped)
+        #expect(c.params(of: 1).masterCount == 2)
+        let lowered = c.adjustMasterCount(workspace: 1, delta: -1)
+        #expect(lowered)
+        #expect(c.params(of: 1).masterCount == 1)
+        let clamped = c.adjustMasterCount(workspace: 1, delta: -1)
+        #expect(!clamped,
                        "clamped at 1 → no change")
     }
 
-    func testParamsPersistAcrossModeFlip() {
+    @Test func paramsPersistAcrossModeFlip() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // → 0.6
         _ = c.setMode(workspace: 1, to: "grid", in: displayRect)
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
-        XCTAssertEqual(c.params(of: 1).masterRatio, 0.6, accuracy: 1e-9,
+        #expect(abs(c.params(of: 1).masterRatio - 0.6) < 1e-9,
                        "ratio remembered across a mode round-trip")
     }
 
-    func testEngineFramesReflectAdjustedRatio() {
+    @Test func engineFramesReflectAdjustedRatio() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         _ = c.setMode(workspace: 1, to: "master-left", in: displayRect)
         _ = c.adjustMasterRatio(workspace: 1, delta: 0.1)   // 0.5 → 0.6
         let frames = c.engineFrames(for: 1, in: displayRect)
         // Master (lower id = order[0]) gets 0.6 * 1600 = 960 wide.
-        XCTAssertEqual(frames[wid(10)]?.width ?? 0, 960, accuracy: 1e-9)
+        #expect(abs((frames[wid(10)]?.width ?? 0) - 960) < 1e-9)
     }
 
     // MARK: - Phase γ.3 — autoFloat reconcile hint
 
-    func testReconcileAutoFloatMarksNewWindowFloating() {
+    @Test func reconcileAutoFloatMarksNewWindowFloating() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)],
                         autoFloat: [wid(10)])
-        XCTAssertTrue(c.isFloating(wid(10)))
+        #expect(c.isFloating(wid(10)))
     }
 
-    func testReconcileAutoFloatSkipsTreeInsert() {
+    @Test func reconcileAutoFloatSkipsTreeInsert() {
         // BSP active WS. A new auto-floating window must NOT
         // enter the tree.
         var c = seededCatalog()
@@ -901,37 +908,36 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.reconcile(live: [window(10)],
                         focused: nil, activeRect: displayRect,
                         autoFloat: [wid(10)])
-        XCTAssertTrue(c.isFloating(wid(10)))
-        XCTAssertTrue(c.tiledFrames(for: 1, in: displayRect).isEmpty)
+        #expect(c.isFloating(wid(10)))
+        #expect(c.tiledFrames(for: 1, in: displayRect).isEmpty)
     }
 
-    func testReconcileAutoFloatSkipsStackInsert() {
+    @Test func reconcileAutoFloatSkipsStackInsert() {
         var c = seededCatalog()
         _ = c.setMode(workspace: 1, to: "stack", in: displayRect)
         _ = c.reconcile(live: [window(10)],
                         focused: nil, activeRect: displayRect,
                         autoFloat: [wid(10)])
-        XCTAssertTrue(c.isFloating(wid(10)))
-        XCTAssertEqual(c.stackOrder(of: 1), [])
+        #expect(c.isFloating(wid(10)))
+        #expect(c.stackOrder(of: 1) == [])
     }
 
-    func testReconcileAutoFloatIsNoopForKnownWindow() {
+    @Test func reconcileAutoFloatIsNoopForKnownWindow() {
         // autoFloat hint must NOT flip floating state on a
         // window the catalog already knows about — user's
         // toggleFloat decision stays authoritative.
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
-        XCTAssertFalse(c.isFloating(wid(10)))
+        #expect(!c.isFloating(wid(10)))
         // Subsequent reconcile with autoFloat set should NOT
         // promote a known-non-floating window to floating.
         _ = c.reconcile(live: [window(10)],
                         autoFloat: [wid(10)])
-        XCTAssertFalse(c.isFloating(wid(10)),
-                       "autoFloat is a first-sight hint, not a "
-                       + "policy override")
+        #expect(!c.isFloating(wid(10)),
+                       "autoFloat is a first-sight hint, not a policy override")
     }
 
-    func testReconcileAutoFloatTakesEffectInNonActiveWorkspace() {
+    @Test func reconcileAutoFloatTakesEffectInNonActiveWorkspace() {
         // Per Phase γ.3: autoFloat applies to every new window
         // regardless of which WS landed it. If the user opens a
         // dialog while not on WS 1 (e.g. they're on WS 3 and
@@ -942,23 +948,23 @@ final class WorkspaceCatalogTests: XCTestCase {
         _ = c.reconcile(live: [window(10)],
                         focused: nil, activeRect: displayRect,
                         autoFloat: [wid(10)])
-        XCTAssertTrue(c.isFloating(wid(10)),
+        #expect(c.isFloating(wid(10)),
                       "autoFloat must work in non-WS-1 contexts")
-        XCTAssertEqual(c.tiledFrames(for: 3, in: displayRect), [:],
+        #expect(c.tiledFrames(for: 3, in: displayRect) == [:],
                        "floating new window must skip the WS3 tree")
     }
 
     // MARK: - Misc state helpers
 
-    func testClearParkedStateDropsAllHideFlags() {
+    @Test func clearParkedStateDropsAllHideFlags() {
         var c = seededCatalog()
         c.markAnchorParked(wid(10), originalPosition: .init(x: 1, y: 2))
         c.clearParkedState(of: wid(10))
-        XCTAssertFalse(c.anchorParked.contains(wid(10)))
-        XCTAssertNil(c.originalPositions[wid(10)])
+        #expect(!c.anchorParked.contains(wid(10)))
+        #expect(c.originalPositions[wid(10)] == nil)
     }
 
-    func testSnapshotStampsIsFloating() {
+    @Test func snapshotStampsIsFloating() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
         c.toggleFloat(wid(10))
@@ -966,13 +972,13 @@ final class WorkspaceCatalogTests: XCTestCase {
             live: [window(10), window(20)], focused: nil,
             activeRect: .zero)
         let allWindows = snap.flatMap(\.windows)
-        XCTAssertEqual(allWindows.first { $0.id == wid(10) }?.isFloating,
+        #expect(allWindows.first { $0.id == wid(10) }?.isFloating ==
                        true)
-        XCTAssertEqual(allWindows.first { $0.id == wid(20) }?.isFloating,
+        #expect(allWindows.first { $0.id == wid(20) }?.isFloating ==
                        false)
     }
 
-    func testSnapshotUsesSeededNamesCompactedToContiguous() {
+    @Test func snapshotUsesSeededNamesCompactedToContiguous() {
         // A sparse seed (1/3/5) compacts to contiguous positions; the
         // snapshot emits 0-based contiguous indices, names preserved
         // in order. (Dynamic model is position-based — sparsity can't
@@ -984,44 +990,44 @@ final class WorkspaceCatalogTests: XCTestCase {
             (index: 5, config: WorkspaceConfig(name: "sns")),
         ])
         let snap = c.snapshot(live: [], focused: nil, activeRect: .zero)
-        XCTAssertEqual(snap.map(\.index), [0, 1, 2])
-        XCTAssertEqual(snap.map(\.name), ["dev", "ide", "sns"])
+        #expect(snap.map(\.index) == [0, 1, 2])
+        #expect(snap.map(\.name) == ["dev", "ide", "sns"])
     }
 
     // MARK: - nil-ordinal seed-taint recovery (fix/desktop-n-nil-ordinal)
 
-    func testHoldsOnlyUnnamedSlotsDistinguishesStates() {
+    @Test func holdsOnlyUnnamedSlotsDistinguishesStates() {
         // Fresh (unseeded) catalog: NOT degenerate (it can still seed).
         let fresh = WorkspaceCatalog()
-        XCTAssertFalse(fresh.holdsOnlyUnnamedSlots)
+        #expect(!fresh.holdsOnlyUnnamedSlots)
 
         // nil-ordinal seed → defaultWorkspaceCount empty-name slots: degenerate.
         var tainted = WorkspaceCatalog()
         tainted.seed(configs: (1...5).map {
             (index: $0, config: WorkspaceConfig(name: ""))
         })
-        XCTAssertTrue(tainted.holdsOnlyUnnamedSlots)
+        #expect(tainted.holdsOnlyUnnamedSlots)
 
         // A catalog with ≥1 real name: NOT degenerate.
         var named = WorkspaceCatalog()
         named.seed(configs: [(index: 1, config: WorkspaceConfig(name: "Dev"))])
-        XCTAssertFalse(named.holdsOnlyUnnamedSlots)
+        #expect(!named.holdsOnlyUnnamedSlots)
     }
 
-    func testUserRenameMakesCatalogIneligibleForReset() {
+    @Test func userRenameMakesCatalogIneligibleForReset() {
         // The recovery predicate must NOT fire after a runtime rename — the
         // user's mutation has to survive (config is only the read-only seed).
         var c = WorkspaceCatalog()
         c.seed(configs: (1...5).map {
             (index: $0, config: WorkspaceConfig(name: ""))
         })
-        XCTAssertTrue(c.holdsOnlyUnnamedSlots)
+        #expect(c.holdsOnlyUnnamedSlots)
         c.renameWorkspace(1, to: "Dev")
-        XCTAssertFalse(c.holdsOnlyUnnamedSlots,
+        #expect(!c.holdsOnlyUnnamedSlots,
                        "a renamed workspace makes the catalog non-degenerate")
     }
 
-    func testFreshReseedAfterNilOrdinalLandsNamesAndLayout() {
+    @Test func freshReseedAfterNilOrdinalLandsNamesAndLayout() {
         // Documents the bug + the fix's recovery shape. `seed` is idempotent,
         // so a tainted catalog cannot self-correct — only the adapter's
         // discard-and-reseed (a FRESH catalog) restores names + layout.
@@ -1031,7 +1037,7 @@ final class WorkspaceCatalogTests: XCTestCase {
         })
         // Idempotence guard: a second seed on the tainted catalog is a no-op.
         tainted.seed(configs: [(index: 1, config: WorkspaceConfig(name: "Dev"))])
-        XCTAssertTrue(tainted.holdsOnlyUnnamedSlots,
+        #expect(tainted.holdsOnlyUnnamedSlots,
                       "seed() alone cannot correct a tainted catalog")
 
         // The fix: discard (fresh catalog), then re-seed with the resolved
@@ -1042,9 +1048,9 @@ final class WorkspaceCatalogTests: XCTestCase {
             (index: 2, config: WorkspaceConfig(name: "Web")),
             (index: 3, config: WorkspaceConfig(name: "Notes")),
         ])
-        XCTAssertEqual(recovered.workspaceNames, ["Dev", "Web", "Notes"])
-        XCTAssertFalse(recovered.holdsOnlyUnnamedSlots)
-        XCTAssertEqual(recovered.mode(of: 1), "bsp")
+        #expect(recovered.workspaceNames == ["Dev", "Web", "Notes"])
+        #expect(!recovered.holdsOnlyUnnamedSlots)
+        #expect(recovered.mode(of: 1) == "bsp")
     }
 
     /// §B regression: a section desktop of UNNAMED workspaces seeded under a
@@ -1052,20 +1058,20 @@ final class WorkspaceCatalogTests: XCTestCase {
     /// eligible for nil-ordinal recovery — `seededUnderNilOrdinal` is the
     /// discriminator. Without it the adapter recovery would re-fire every
     /// refresh and wipe activeIndex / windowMap / layout for the default config.
-    func testRealOrdinalUnnamedSeedIsNotTaintEligible() {
+    @Test func realOrdinalUnnamedSeedIsNotTaintEligible() {
         var healthy = WorkspaceCatalog()
         healthy.seed(configs: (1...3).map {
             (index: $0, config: WorkspaceConfig(name: ""))
         }, underNilOrdinal: false)
-        XCTAssertTrue(healthy.holdsOnlyUnnamedSlots)     // all unnamed (§B default)
-        XCTAssertFalse(healthy.seededUnderNilOrdinal)    // but seeded under a real ordinal
+        #expect(healthy.holdsOnlyUnnamedSlots)     // all unnamed (§B default)
+        #expect(!healthy.seededUnderNilOrdinal)    // but seeded under a real ordinal
         // → adapter recovery (flag && holdsOnlyUnnamedSlots) does NOT fire.
 
         var tainted = WorkspaceCatalog()
         tainted.seed(configs: (1...5).map {
             (index: $0, config: WorkspaceConfig(name: ""))
         }, underNilOrdinal: true)
-        XCTAssertTrue(tainted.seededUnderNilOrdinal)      // genuine nil-ordinal seed
-        XCTAssertTrue(tainted.holdsOnlyUnnamedSlots)
+        #expect(tainted.seededUnderNilOrdinal)      // genuine nil-ordinal seed
+        #expect(tainted.holdsOnlyUnnamedSlots)
     }
 }

@@ -1,11 +1,11 @@
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
 /// Pure tests for relative workspace targeting (Theme C-2):
 /// `previousActiveIndex` tracking + `relativeTarget` resolution over
 /// the catalog's live (contiguous) workspace set.
-final class RelativeWorkspaceTests: XCTestCase {
+struct RelativeWorkspaceTests {
 
     /// Catalog seeded with `n` contiguous, unnamed workspaces.
     private func seeded(_ n: Int) -> WorkspaceCatalog {
@@ -18,68 +18,68 @@ final class RelativeWorkspaceTests: XCTestCase {
 
     // MARK: - previousActiveIndex
 
-    func testPreviousActiveStartsNil() {
-        XCTAssertNil(WorkspaceCatalog().previousActiveIndex)
+    @Test func previousActiveStartsNil() {
+        #expect(WorkspaceCatalog().previousActiveIndex == nil)
     }
 
-    func testSetActiveRecordsPrevious() {
+    @Test func setActiveRecordsPrevious() {
         var c = seeded(3)
         _ = c.setActive(2)
-        XCTAssertEqual(c.previousActiveIndex, 1)
+        #expect(c.previousActiveIndex == 1)
         _ = c.setActive(3)
-        XCTAssertEqual(c.previousActiveIndex, 2)
+        #expect(c.previousActiveIndex == 2)
     }
 
-    func testNoopSwitchKeepsPrevious() {
+    @Test func noopSwitchKeepsPrevious() {
         var c = seeded(3)
         _ = c.setActive(2)   // prev = 1
         _ = c.setActive(2)   // no-op
-        XCTAssertEqual(c.previousActiveIndex, 1,
+        #expect(c.previousActiveIndex == 1,
                        "a no-op switch must not overwrite recent")
     }
 
     // MARK: - relativeTarget: next / prev (wrap)
 
-    func testNextWraps() {
+    @Test func nextWraps() {
         var c = seeded(3)                                   // active 1
-        XCTAssertEqual(c.relativeTarget(.next), 2)
+        #expect(c.relativeTarget(.next) == 2)
         _ = c.setActive(3)
-        XCTAssertEqual(c.relativeTarget(.next), 1)
+        #expect(c.relativeTarget(.next) == 1)
     }
 
-    func testPrevWraps() {
+    @Test func prevWraps() {
         var c = seeded(3)                                   // active 1
-        XCTAssertEqual(c.relativeTarget(.prev), 3)
+        #expect(c.relativeTarget(.prev) == 3)
         _ = c.setActive(2)
-        XCTAssertEqual(c.relativeTarget(.prev), 1)
+        #expect(c.relativeTarget(.prev) == 1)
     }
 
-    func testNextPrevNoopWithSingleWorkspace() {
+    @Test func nextPrevNoopWithSingleWorkspace() {
         let c = seeded(1)
-        XCTAssertNil(c.relativeTarget(.next))
-        XCTAssertNil(c.relativeTarget(.prev))
+        #expect(c.relativeTarget(.next) == nil)
+        #expect(c.relativeTarget(.prev) == nil)
     }
 
     // MARK: - relativeTarget: recent
 
-    func testRecentNilBeforeAnySwitch() {
-        XCTAssertNil(seeded(3).relativeTarget(.recent))
+    @Test func recentNilBeforeAnySwitch() {
+        #expect(seeded(3).relativeTarget(.recent) == nil)
     }
 
-    func testRecentReturnsPreviousActive() {
+    @Test func recentReturnsPreviousActive() {
         var c = seeded(3)
         _ = c.setActive(3)   // prev = 1
-        XCTAssertEqual(c.relativeTarget(.recent), 1)
+        #expect(c.relativeTarget(.recent) == 1)
     }
 
-    func testRecentSurvivesRemoveRemap() {
+    @Test func recentSurvivesRemoveRemap() {
         // `recent` follows the previous workspace through a remove's
         // index shift rather than being lost.
         var c = seeded(4)
         _ = c.setActive(4)   // active 4, prev 1
         _ = c.removeWorkspace(2)            // positions 3,4 shift to 2,3
         // active 4 -> 3, prev 1 unchanged (below the removed slot).
-        XCTAssertEqual(c.activeIndex, 3)
-        XCTAssertEqual(c.relativeTarget(.recent), 1)
+        #expect(c.activeIndex == 3)
+        #expect(c.relativeTarget(.recent) == 1)
     }
 }

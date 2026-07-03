@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
@@ -16,7 +16,7 @@ import XCTest
 /// `setSelectedBoard` / `setSectionLens` carry `dispatchPrecondition(.onQueue(
 /// cliQueue))`, so every mutation is wrapped in `cliQueue.sync { … }` (the CI
 /// debug build aborts otherwise). `currentActiveSection()` is a plain lock read.
-final class BoardAwareLensTests: XCTestCase {
+struct BoardAwareLensTests {
 
     private func ws(_ label: String) -> DesktopSection {
         DesktopSection(type: .workspace, label: label)
@@ -50,46 +50,46 @@ final class BoardAwareLensTests: XCTestCase {
 
     // MARK: - lensSection resolves against the SELECTED board
 
-    func testLensSectionNilOnDefaultBoard() {
+    @Test func lensSectionNilOnDefaultBoard() {
         // Board 0 (default, unset) is the WORKSPACE board — declOrder 0 there is
         // a workspace, not a lens — so the lens id does not resolve (fail-safe:
         // a cross-board lens id is never silently mis-resolved).
         let a = twoBoardAdapter()
         cliQueue.sync {
-            XCTAssertNil(a.lensSection(forID: webLensID))
+            #expect(a.lensSection(forID: webLensID) == nil)
         }
     }
 
-    func testLensSectionResolvesOnSelectedLensBoard() {
+    @Test func lensSectionResolvesOnSelectedLensBoard() {
         let a = twoBoardAdapter()
         cliQueue.sync {
             a.setSelectedBoard(1, forMacDesktopOrdinal: 1)
-            XCTAssertEqual(a.lensSection(forID: webLensID)?.label, "Web")
+            #expect(a.lensSection(forID: webLensID)?.label == "Web")
         }
     }
 
     // MARK: - end-to-end: activating a lens on the selected board
 
-    func testActivateLensOnSelectedBoardReflectsInMirror() {
+    @Test func activateLensOnSelectedBoardReflectsInMirror() {
         let a = twoBoardAdapter()
         cliQueue.sync {
             a.setSelectedBoard(1, forMacDesktopOrdinal: 1)
             a.setSectionLens(webLensID, autoFocus: false)
         }
-        XCTAssertEqual(a.currentActiveSection(), .lens(webLensID))
+        #expect(a.currentActiveSection() == .lens(webLensID))
     }
 
-    func testActivateLensRejectedOnWrongBoard() {
+    @Test func activateLensRejectedOnWrongBoard() {
         // Without selecting the lens board, the board-0 (workspace) scope can't
         // resolve the lens id → loud reject, the lens stays unset.
         let a = twoBoardAdapter()
         cliQueue.sync { a.setSectionLens(webLensID, autoFocus: false) }
-        XCTAssertEqual(a.currentActiveSection(), .workspace(1))
+        #expect(a.currentActiveSection() == .workspace(1))
     }
 
     // MARK: - flat config regression (no boards → board 0 → flat list)
 
-    func testFlatConfigLensStillResolves() {
+    @Test func flatConfigLensStillResolves() {
         var cfg = FacetConfig()
         cfg.macDesktopSectionConfigs = [1: [
             ws("Dev"),
@@ -103,6 +103,6 @@ final class BoardAwareLensTests: XCTestCase {
 
         let flatLensID = "section:1:Web"
         cliQueue.sync { a.setSectionLens(flatLensID, autoFocus: false) }
-        XCTAssertEqual(a.currentActiveSection(), .lens(flatLensID))
+        #expect(a.currentActiveSection() == .lens(flatLensID))
     }
 }

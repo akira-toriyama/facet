@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
@@ -8,7 +8,7 @@ import XCTest
 /// window's state so master vs non-master (and a lone stack window) get
 /// the right items. Every non-sticky window also offers "Sticky"; a
 /// sticky window collapses to "Unstick" + "Close".
-final class WindowMenuTests: XCTestCase {
+struct WindowMenuTests {
 
     private func labels(_ items: [WindowMenuItem]) -> [String] {
         items.map(\.label)
@@ -25,57 +25,57 @@ final class WindowMenuTests: XCTestCase {
 
     // MARK: - Float mode
 
-    func testFloatModeNonFloatingMenu() {
-        XCTAssertEqual(labels(menu("float")),
+    @Test func floatModeNonFloatingMenu() {
+        #expect(labels(menu("float")) ==
                        ["Float", "Sticky", "Close window"])
     }
 
-    func testFloatModeFloatingMenu() {
-        XCTAssertEqual(labels(menu("float", floating: true)),
+    @Test func floatModeFloatingMenu() {
+        #expect(labels(menu("float", floating: true)) ==
                        ["Unfloat", "Sticky", "Close window"])
     }
 
     // MARK: - BSP mode
 
-    func testBspModeNonFloatingMenu() {
+    @Test func bspModeNonFloatingMenu() {
         let items = menu("bsp")
-        XCTAssertEqual(labels(items),
+        #expect(labels(items) ==
                        ["Toggle orientation", "Float",
                         "Sticky", "Close window"])
-        XCTAssertEqual(items[0].ops, [.toggleOrientation])
+        #expect(items[0].ops == [.toggleOrientation])
     }
 
-    func testBspModeFloatingMenu() {
+    @Test func bspModeFloatingMenu() {
         // Floating window in a bsp WS still has no orientation
         // (it's outside the tree) — menu collapses to Unfloat +
         // Sticky + Close.
-        XCTAssertEqual(labels(menu("bsp", floating: true)),
+        #expect(labels(menu("bsp", floating: true)) ==
                        ["Unfloat", "Sticky", "Close window"])
     }
 
     // MARK: - Stack mode
 
-    func testStackModeNonFloatingMenu() {
+    @Test func stackModeNonFloatingMenu() {
         let items = menu("stack", windowCount: 2)
-        XCTAssertEqual(labels(items),
+        #expect(labels(items) ==
                        ["Next stack window",
                         "Previous stack window",
                         "Float", "Sticky",
                         "Close window"])
-        XCTAssertEqual(items[0].ops, [.cycleStackNext])
-        XCTAssertEqual(items[1].ops, [.cycleStackPrev])
+        #expect(items[0].ops == [.cycleStackNext])
+        #expect(items[1].ops == [.cycleStackPrev])
     }
 
-    func testStackModeSingleWindowHidesCycle() {
+    @Test func stackModeSingleWindowHidesCycle() {
         // Nothing to cycle to with one window — cycle items drop out.
-        XCTAssertEqual(labels(menu("stack", windowCount: 1)),
+        #expect(labels(menu("stack", windowCount: 1)) ==
                        ["Float", "Sticky", "Close window"])
     }
 
-    func testStackModeFloatingMenu() {
+    @Test func stackModeFloatingMenu() {
         // Same logic as bsp floating: a floating window in a
         // stack WS isn't on the stack, so cycle items disappear.
-        XCTAssertEqual(labels(menu("stack", floating: true)),
+        #expect(labels(menu("stack", floating: true)) ==
                        ["Unfloat", "Sticky", "Close window"])
     }
 
@@ -88,9 +88,9 @@ final class WindowMenuTests: XCTestCase {
     private let masterModes = ["master-left", "master-right", "master-top",
                                "master-bottom", "master-center"]
 
-    func testMasterNonMasterShowsPromoteNoFlip() {
+    @Test func masterNonMasterShowsPromoteNoFlip() {
         for mode in masterModes {
-            XCTAssertEqual(labels(menu(mode, isMaster: false)),
+            #expect(labels(menu(mode, isMaster: false)) ==
                            ["Promote to master",
                             "Wider master", "Narrower master",
                             "More masters", "Fewer masters",
@@ -99,13 +99,13 @@ final class WindowMenuTests: XCTestCase {
         }
     }
 
-    func testMasterHidesPromote() {
+    @Test func masterHidesPromote() {
         // The master window already holds the slot — no "Promote".
         for mode in masterModes {
             let items = menu(mode, isMaster: true)
-            XCTAssertFalse(labels(items).contains("Promote to master"),
+            #expect(!labels(items).contains("Promote to master"),
                            "mode=\(mode)")
-            XCTAssertEqual(labels(items),
+            #expect(labels(items) ==
                            ["Wider master", "Narrower master",
                             "More masters", "Fewer masters",
                             "Float", "Sticky", "Close window"],
@@ -113,45 +113,45 @@ final class WindowMenuTests: XCTestCase {
         }
     }
 
-    func testNoMasterModeHasFlipItem() {
+    @Test func noMasterModeHasFlipItem() {
         // "Flip wide / tall" was removed in M9-2 for every mode.
         for mode in masterModes {
-            XCTAssertFalse(labels(menu(mode)).contains("Flip wide / tall"),
+            #expect(!labels(menu(mode)).contains("Flip wide / tall"),
                            "mode=\(mode)")
         }
     }
 
-    func testMasterStackFloatingDropsTilingItems() {
+    @Test func masterStackFloatingDropsTilingItems() {
         // A floating window in a master-stack WS gets neither promote
         // nor the master knobs — just Unfloat + Sticky + Close.
         for mode in masterModes {
             let items = menu(mode, floating: true, isMaster: false)
-            XCTAssertEqual(labels(items), ["Unfloat", "Sticky", "Close window"],
+            #expect(labels(items) == ["Unfloat", "Sticky", "Close window"],
                            "mode=\(mode)")
         }
     }
 
     // MARK: - Sticky
 
-    func testStickyWindowShowsUnstickOnly() {
+    @Test func stickyWindowShowsUnstickOnly() {
         // A sticky window is always floating; float-exit = sticky-exit,
         // so the menu collapses to a single "Unstick" (no "Unfloat",
         // no "Sticky") + Close. Layout items are gated out by floating.
         for mode in ["float", "bsp", "stack", "master-left", "master-center"] {
             let items = menu(mode, floating: true, isSticky: true)
-            XCTAssertEqual(labels(items), ["Unstick", "Close window"],
+            #expect(labels(items) == ["Unstick", "Close window"],
                            "mode=\(mode)")
-            XCTAssertEqual(items.first?.ops, [.toggleSticky])
+            #expect(items.first?.ops == [.toggleSticky])
         }
     }
 
-    func testNonStickyOffersStickyToggle() {
+    @Test func nonStickyOffersStickyToggle() {
         // Every non-sticky window — tiled or floating — can be pinned.
         for mode in ["float", "bsp", "stack", "master-left", "master-center"] {
             for floating in [false, true] {
                 let item = menu(mode, floating: floating)
                     .first { $0.label == "Sticky" }
-                XCTAssertEqual(item?.ops, [.toggleSticky],
+                #expect(item?.ops == [.toggleSticky],
                                "mode=\(mode) floating=\(floating)")
             }
         }
@@ -159,34 +159,34 @@ final class WindowMenuTests: XCTestCase {
 
     // MARK: - Universal items
 
-    func testCloseAlwaysLastAndCloseFlagged() {
+    @Test func closeAlwaysLastAndCloseFlagged() {
         for mode in ["float", "bsp", "stack", "master-left", "master-top", "master-center"] {
             for floating in [false, true] {
                 let items = menu(mode, floating: floating)
-                XCTAssertTrue(items.last?.isClose == true,
+                #expect(items.last?.isClose == true,
                               "mode=\(mode) floating=\(floating)")
-                XCTAssertEqual(items.last?.label, "Close window",
+                #expect(items.last?.label == "Close window",
                                "mode=\(mode) floating=\(floating)")
             }
         }
     }
 
-    func testFloatToggleLabelTracksFloatingFlag() {
+    @Test func floatToggleLabelTracksFloatingFlag() {
         for mode in ["float", "bsp", "stack", "master-left"] {
-            XCTAssertTrue(menu(mode, floating: false)
+            #expect(menu(mode, floating: false)
                 .contains { $0.label == "Float" },
                 "mode=\(mode) non-floating → Float item")
-            XCTAssertTrue(menu(mode, floating: true)
+            #expect(menu(mode, floating: true)
                 .contains { $0.label == "Unfloat" },
                 "mode=\(mode) floating → Unfloat item")
         }
     }
 
-    func testUnknownModeFallsBackToFloatShape() {
+    @Test func unknownModeFallsBackToFloatShape() {
         // A typo or future mode that the backend doesn't know
         // about should still produce a usable menu — at minimum
         // Float/Unfloat + Sticky + Close. Same as float mode.
-        XCTAssertEqual(labels(menu("scrolling")),
+        #expect(labels(menu("scrolling")) ==
                        ["Float", "Sticky", "Close window"])
     }
 }

@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
@@ -12,7 +12,7 @@ import XCTest
 /// (AX/CGWindowList — host-verified, not CI); these pin the pure resolver the
 /// inheritance reads. `NativeAdapter(config:)` only does read-only SkyLight
 /// reads in init; the ordinal is forced to 1 for determinism.
-final class NewWindowInheritTests: XCTestCase {
+struct NewWindowInheritTests {
 
     private func adapter(_ sections: [DesktopSection]) -> NativeAdapter {
         var cfg = FacetConfig()
@@ -22,15 +22,15 @@ final class NewWindowInheritTests: XCTestCase {
         return a
     }
 
-    func testApplyForwardReturnsApplyOpsOfActiveLens() {
+    @Test func applyForwardReturnsApplyOpsOfActiveLens() {
         let a = adapter([DesktopSection(type: .lens, label: "Web",
                                         match: "tag~=web", apply: [.addTag("web")])])
         // A0: the catalog stores the stable id; the single lens is declOrder 0.
         a.catalog.activeSectionLens = "section:0:Web"
-        XCTAssertEqual(a.activeSectionLensApplyForward(), [.addTag("web")])
+        #expect(a.activeSectionLensApplyForward() == [.addTag("web")])
     }
 
-    func testApplyForwardInheritsAllTags() {
+    @Test func applyForwardInheritsAllTags() {
         // t-qtpx: a lens `apply` is tags-only, so a window auto-joining the lens
         // inherits every tag the lens applies (the same facet state as a DnD
         // into it), in array order.
@@ -38,13 +38,13 @@ final class NewWindowInheritTests: XCTestCase {
             type: .lens, label: "Multi", match: "tag~=a",
             apply: [.addTag("a"), .addTag("b")])])
         a.catalog.activeSectionLens = "section:0:Multi"
-        XCTAssertEqual(
-            a.activeSectionLensApplyForward(),
+        #expect(
+            a.activeSectionLensApplyForward() ==
             [.addTag("a"), .addTag("b")],
             "all of the lens's tags are inherited, in order")
     }
 
-    func testApplyForwardStripsSetWorkspace() {
+    @Test func applyForwardStripsSetWorkspace() {
         // setWorkspace is stripped — a new window keeps `workspace = activeIndex`
         // (D-A: never an orphan-on-birth). Mirrors the DnD forward filter
         // (`ApplyResolver` strips setWorkspace identically). t-qtpx forbids
@@ -54,26 +54,26 @@ final class NewWindowInheritTests: XCTestCase {
             type: .lens, label: "Routed", match: "tag~=r",
             apply: [.setWorkspace("Other"), .addTag("r")])])
         a.catalog.activeSectionLens = "section:0:Routed"
-        XCTAssertEqual(
-            a.activeSectionLensApplyForward(),
+        #expect(
+            a.activeSectionLensApplyForward() ==
             [.addTag("r")],
             "setWorkspace is dropped; the remaining tag op passes through")
     }
 
-    func testApplyForwardEmptyForPureConditionLens() {
+    @Test func applyForwardEmptyForPureConditionLens() {
         // A lens that matches on a window property with NO apply — a new window
         // can't be made to match it (declared gap).
         let a = adapter([DesktopSection(type: .lens, label: "Chrome",
                                         match: "app=Chrome")])
         a.catalog.activeSectionLens = "section:0:Chrome"
-        XCTAssertEqual(a.activeSectionLensApplyForward(), [])
+        #expect(a.activeSectionLensApplyForward() == [])
     }
 
-    func testApplyForwardEmptyWhenNoLensActive() {
+    @Test func applyForwardEmptyWhenNoLensActive() {
         let a = adapter([DesktopSection(type: .lens, label: "Web",
                                         match: "tag~=web", apply: [.addTag("web")])])
         // activeSectionLens is nil → no inheritance.
-        XCTAssertEqual(a.activeSectionLensApplyForward(), [])
+        #expect(a.activeSectionLensApplyForward() == [])
     }
 
     // (t-0021) The `tag~=X` lens DISPLAY by an assigned tag is pinned at the
