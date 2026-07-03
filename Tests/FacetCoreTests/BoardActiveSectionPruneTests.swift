@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// `FacetConfig.prunedBoardActiveSections(_:fallback:)` — the B1 (t-1rck)
@@ -7,7 +7,7 @@ import XCTest
 /// can't relight when the user switches BACK to that board. It mirrors the
 /// per-id validity the ACTIVE board already gets in `reloadConfig`, extended to
 /// every non-active board. Pure FacetCore; CI-only (CLT can't run `swift test`).
-final class BoardActiveSectionPruneTests: XCTestCase {
+struct BoardActiveSectionPruneTests {
 
     // MARK: - fixtures
 
@@ -34,71 +34,71 @@ final class BoardActiveSectionPruneTests: XCTestCase {
     /// A still-resolving lens is kept; one whose id no longer resolves on its
     /// own board is dropped to the fallback (the exact bug: a stale lens stored
     /// for a non-active board).
-    func testDropsStaleKeepsValid() {
+    @Test func dropsStaleKeepsValid() {
         let c = cfg(board0: [lens("Web")], board1: [lens("Code")])
         let map: [Int: [Int: ActiveSection]] = [1: [
             0: .lens("section:0:Web"),      // resolves on board 0 → kept
             1: .lens("section:9:Gone"),     // decl-order past board 1 → dropped
         ]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.pruned[1]?[0], .lens("section:0:Web"))
-        XCTAssertEqual(out.pruned[1]?[1], fallback)
-        XCTAssertEqual(out.dropped,
+        #expect(out.pruned[1]?[0] == .lens("section:0:Web"))
+        #expect(out.pruned[1]?[1] == fallback)
+        #expect(out.dropped ==
                        [FacetConfig.DroppedBoardLens(ordinal: 1, board: 1,
                                                      id: "section:9:Gone")])
     }
 
     /// A `.lens(id)` whose decl-order now lands on a WORKSPACE section (a config
     /// reorder) is dropped — `ApplyResolver.section` rejects a non-lens slot.
-    func testReorderOntoWorkspaceDrops() {
+    @Test func reorderOntoWorkspaceDrops() {
         let c = cfg(board0: [ws("Main"), lens("Web")], board1: [lens("Code")])
         // decl-order 0 used to be the lens but is now the workspace "Main".
         let map: [Int: [Int: ActiveSection]] = [1: [0: .lens("section:0:Web")]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.pruned[1]?[0], fallback)
-        XCTAssertEqual(out.dropped.count, 1)
+        #expect(out.pruned[1]?[0] == fallback)
+        #expect(out.dropped.count == 1)
     }
 
     /// A renamed lens at the same decl-order (label-suffix mismatch) drops.
-    func testLabelMismatchDrops() {
+    @Test func labelMismatchDrops() {
         let c = cfg(board0: [lens("WebRenamed")], board1: [lens("Code")])
         let map: [Int: [Int: ActiveSection]] = [1: [0: .lens("section:0:Web")]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.pruned[1]?[0], fallback)
+        #expect(out.pruned[1]?[0] == fallback)
     }
 
     /// `.workspace` entries are never validated — only lenses can go stale.
-    func testWorkspaceEntriesUntouched() {
+    @Test func workspaceEntriesUntouched() {
         let c = cfg(board0: [lens("Web")], board1: [lens("Code")])
         let map: [Int: [Int: ActiveSection]] = [1: [0: .workspace(5), 1: .workspace(7)]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.pruned, map)
-        XCTAssertTrue(out.dropped.isEmpty)
+        #expect(out.pruned == map)
+        #expect(out.dropped.isEmpty)
     }
 
     /// An all-valid map is returned unchanged with no drops (no needless churn).
-    func testAllValidUnchanged() {
+    @Test func allValidUnchanged() {
         let c = cfg(board0: [lens("Web")], board1: [lens("Code")])
         let map: [Int: [Int: ActiveSection]] = [1: [
             0: .lens("section:0:Web"),
             1: .lens("section:0:Code"),
         ]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.pruned, map)
-        XCTAssertTrue(out.dropped.isEmpty)
+        #expect(out.pruned == map)
+        #expect(out.dropped.isEmpty)
     }
 
     /// Empty map → empty result.
-    func testEmptyMap() {
+    @Test func emptyMap() {
         let c = cfg(board0: [lens("Web")], board1: [lens("Code")])
         let out = c.prunedBoardActiveSections([:], fallback: fallback)
-        XCTAssertTrue(out.pruned.isEmpty)
-        XCTAssertTrue(out.dropped.isEmpty)
+        #expect(out.pruned.isEmpty)
+        #expect(out.dropped.isEmpty)
     }
 
     /// Drops are reported in deterministic (ordinal, board)-sorted order so the
     /// log line and these assertions stay stable across dictionary iteration.
-    func testDroppedOrderDeterministic() {
+    @Test func droppedOrderDeterministic() {
         let c = cfg(board0: [lens("Web")], board1: [lens("Code")])
         // Insert board 1 before board 0; both ids point past their sections.
         let map: [Int: [Int: ActiveSection]] = [1: [
@@ -106,17 +106,17 @@ final class BoardActiveSectionPruneTests: XCTestCase {
             0: .lens("section:9:Y"),
         ]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.dropped.map(\.board), [0, 1])
+        #expect(out.dropped.map(\.board) == [0, 1])
     }
 
     /// A board with no `[[desktop.N.tab]]` definition degrades to the flat
     /// section list, so a flat lens id still resolves there (no spurious drop).
-    func testFlatDegradeStillResolves() {
+    @Test func flatDegradeStillResolves() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [lens("Web")]]   // flat, no boards
         let map: [Int: [Int: ActiveSection]] = [1: [0: .lens("section:0:Web")]]
         let out = c.prunedBoardActiveSections(map, fallback: fallback)
-        XCTAssertEqual(out.pruned[1]?[0], .lens("section:0:Web"))
-        XCTAssertTrue(out.dropped.isEmpty)
+        #expect(out.pruned[1]?[0] == .lens("section:0:Web"))
+        #expect(out.dropped.isEmpty)
     }
 }

@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// `DesktopTab.displayLabel` (t-wrd2 / W2.4) — the caption the tree tab bar
@@ -7,25 +7,25 @@ import XCTest
 /// (`Workspaces` / `Lenses`) so the tab is never blank and the type reads at a
 /// glance. The 1-based index is CLI-addressing only (`facet board --focus N`),
 /// never shown in the tab. Pure; CI-only (CLT can't run `swift test`).
-final class BoardLabelTests: XCTestCase {
+struct BoardLabelTests {
 
-    func testNamedWorkspaceBoardShowsItsLabel() {
-        XCTAssertEqual(DesktopTab(type: .workspace, label: "Spaces").displayLabel,
+    @Test func namedWorkspaceBoardShowsItsLabel() {
+        #expect(DesktopTab(type: .workspace, label: "Spaces").displayLabel ==
                        "Spaces")
     }
 
-    func testNamedLensBoardShowsItsLabel() {
-        XCTAssertEqual(DesktopTab(type: .lens, label: "Views").displayLabel,
+    @Test func namedLensBoardShowsItsLabel() {
+        #expect(DesktopTab(type: .lens, label: "Views").displayLabel ==
                        "Views")
     }
 
-    func testUnnamedWorkspaceBoardFallsBackToTypeDefault() {
-        XCTAssertEqual(DesktopTab(type: .workspace, label: "").displayLabel,
+    @Test func unnamedWorkspaceBoardFallsBackToTypeDefault() {
+        #expect(DesktopTab(type: .workspace, label: "").displayLabel ==
                        "Workspaces")
     }
 
-    func testUnnamedLensBoardFallsBackToTypeDefault() {
-        XCTAssertEqual(DesktopTab(type: .lens, label: "").displayLabel,
+    @Test func unnamedLensBoardFallsBackToTypeDefault() {
+        #expect(DesktopTab(type: .lens, label: "").displayLabel ==
                        "Lenses")
     }
 
@@ -34,12 +34,12 @@ final class BoardLabelTests: XCTestCase {
     /// before the emptiness test rather than drawing a blank tab. (Distinct
     /// from `sectionDisplayLabel`, which always prepends an index and so is
     /// never blank regardless of label.)
-    func testWhitespaceOnlyLabelFallsBackToTypeDefault() {
-        XCTAssertEqual(DesktopTab(type: .workspace, label: "   ").displayLabel,
+    @Test func whitespaceOnlyLabelFallsBackToTypeDefault() {
+        #expect(DesktopTab(type: .workspace, label: "   ").displayLabel ==
                        "Workspaces")
-        XCTAssertEqual(DesktopTab(type: .lens, label: "\t").displayLabel,
+        #expect(DesktopTab(type: .lens, label: "\t").displayLabel ==
                        "Lenses")
-        XCTAssertEqual(DesktopTab(type: .workspace, label: "\n").displayLabel,
+        #expect(DesktopTab(type: .workspace, label: "\n").displayLabel ==
                        "Workspaces")
     }
 }
