@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// The opt-in management gate (`isMacDesktopManaged`) + the section-model
@@ -6,7 +6,7 @@ import XCTest
 /// section-only config (the model's intended shape — workspaces auto-named,
 /// user writes only sections) must be recognised as managed; the all-empty
 /// default must stay byte-identical. CI-only (CLT can't run `swift test`).
-final class ManagementGateTests: XCTestCase {
+struct ManagementGateTests {
 
     private func wsSection() -> DesktopSection { DesktopSection(type: .workspace) }
     private func lensSection() -> DesktopSection {
@@ -15,30 +15,30 @@ final class ManagementGateTests: XCTestCase {
 
     // MARK: - default (byte-identical degrade)
 
-    func testSectionlessConfigManagedEverywhere() {
+    @Test func sectionlessConfigManagedEverywhere() {
         let c = FacetConfig()  // no [desktop.N], no [[desktop.N.section]]
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 7))
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: nil))
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
-        XCTAssertFalse(c.isSectionModelActive(ordinal: nil))
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(c.isMacDesktopManaged(ordinal: 7))
+        #expect(c.isMacDesktopManaged(ordinal: nil))
+        #expect(!c.isSectionModelActive(ordinal: 1))
+        #expect(!c.isSectionModelActive(ordinal: nil))
     }
 
     // MARK: - section-only opt-in (the BLOCKER fix)
 
-    func testSectionOnlyConfigIsOptIn() {
+    @Test func sectionOnlyConfigIsOptIn() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [wsSection(), lensSection()]]
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1),
-                      "a desktop with sections is managed")
-        XCTAssertFalse(c.isMacDesktopManaged(ordinal: 2),
-                       "section presence makes facet opt-in (desktop 2 untouched)")
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: nil))
-        XCTAssertTrue(c.isSectionModelActive(ordinal: 1),
-                      "a type=workspace section activates the model")
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 2))
-        XCTAssertFalse(c.isSectionModelActive(ordinal: nil),
-                       "section model is a per-ordinal opt-in")
+        #expect(c.isMacDesktopManaged(ordinal: 1),
+                "a desktop with sections is managed")
+        #expect(!c.isMacDesktopManaged(ordinal: 2),
+                "section presence makes facet opt-in (desktop 2 untouched)")
+        #expect(c.isMacDesktopManaged(ordinal: nil))
+        #expect(c.isSectionModelActive(ordinal: 1),
+                "a type=workspace section activates the model")
+        #expect(!c.isSectionModelActive(ordinal: 2))
+        #expect(!c.isSectionModelActive(ordinal: nil),
+                "section model is a per-ordinal opt-in")
     }
 
     /// The opt-in gate keys on per-ordinal MEMBERSHIP, not a `min..max` range
@@ -46,26 +46,26 @@ final class ManagementGateTests: XCTestCase {
     /// gap (2) and the tail (4) unmanaged. Guards against a future
     /// range-based regression (`isMacDesktopManaged` does `sections[ordinal]
     /// != nil`).
-    func testOptInKeysOnPerOrdinalMembership() {
+    @Test func optInKeysOnPerOrdinalMembership() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [wsSection()], 3: [wsSection()]]
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
-        XCTAssertFalse(c.isMacDesktopManaged(ordinal: 2),
-                       "the gap between configured ordinals is hands-off")
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 3))
-        XCTAssertFalse(c.isMacDesktopManaged(ordinal: 4),
-                       "past the highest configured ordinal is hands-off")
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: nil))
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(!c.isMacDesktopManaged(ordinal: 2),
+                "the gap between configured ordinals is hands-off")
+        #expect(c.isMacDesktopManaged(ordinal: 3))
+        #expect(!c.isMacDesktopManaged(ordinal: 4),
+                "past the highest configured ordinal is hands-off")
+        #expect(c.isMacDesktopManaged(ordinal: nil))
     }
 
     /// A desktop with ONLY lens sections (no workspace section) is MANAGED
     /// (opt-in fires on any section), but the section MODEL is not active
     /// (no workspace substrate from sections → falls back to default slots).
-    func testLensOnlySectionManagedButModelInactive() {
+    @Test func lensOnlySectionManagedButModelInactive() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [lensSection()]]
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(!c.isSectionModelActive(ordinal: 1))
     }
 
     // MARK: - board model (t-wrd2 / W2.5): a tab config activates the gate
@@ -82,32 +82,32 @@ final class ManagementGateTests: XCTestCase {
     /// board switch (W2.5): until the gate is board-aware, a tab-only config is
     /// `gate=false`, so the projection degrades to default slots and a
     /// `facet board --focus` is invisible.
-    func testWorkspaceBoardActivatesModel() {
+    @Test func workspaceBoardActivatesModel() {
         var c = FacetConfig()
         c.macDesktopTabConfigs = [1: [wsBoard(), lensBoard()]]
-        XCTAssertTrue(c.isSectionModelActive(ordinal: 1),
-                      "a workspace board activates the model on a tab-only config")
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 2),
-                       "the board model is a per-ordinal opt-in")
-        XCTAssertFalse(c.isSectionModelActive(ordinal: nil))
+        #expect(c.isSectionModelActive(ordinal: 1),
+                "a workspace board activates the model on a tab-only config")
+        #expect(!c.isSectionModelActive(ordinal: 2),
+                "the board model is a per-ordinal opt-in")
+        #expect(!c.isSectionModelActive(ordinal: nil))
     }
 
     /// The gate is board-INDEPENDENT — a config property, not the current
     /// selection. A workspace board ANYWHERE in the tab list activates the
     /// model, even when it isn't board 0 (the selected board may be a lens
     /// board, yet the substrate still exists).
-    func testWorkspaceBoardActivatesRegardlessOfOrder() {
+    @Test func workspaceBoardActivatesRegardlessOfOrder() {
         var c = FacetConfig()
         c.macDesktopTabConfigs = [1: [lensBoard(), wsBoard()]]
-        XCTAssertTrue(c.isSectionModelActive(ordinal: 1))
+        #expect(c.isSectionModelActive(ordinal: 1))
     }
 
     /// A tab config with ONLY lens boards (no workspace substrate) does NOT
     /// activate the model — mirrors the flat lens-only rule.
-    func testLensOnlyBoardsDoNotActivateModel() {
+    @Test func lensOnlyBoardsDoNotActivateModel() {
         var c = FacetConfig()
         c.macDesktopTabConfigs = [1: [lensBoard()]]
-        XCTAssertFalse(c.isSectionModelActive(ordinal: 1))
+        #expect(!c.isSectionModelActive(ordinal: 1))
     }
 
     // MARK: - M1: the opt-in MANAGEMENT gate must see tab configs too
@@ -117,25 +117,25 @@ final class ManagementGateTests: XCTestCase {
     /// hands-off. Before M1, `isMacDesktopManaged` read only the flat dict, so
     /// an empty flat dict made it return `true` for EVERY ordinal — facet would
     /// adopt + default-slot-seed every unconfigured desktop.
-    func testTabOnlyConfigIsOptIn() {
+    @Test func tabOnlyConfigIsOptIn() {
         var c = FacetConfig()
         c.macDesktopTabConfigs = [1: [wsBoard(), lensBoard()]]
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1),
-                      "a desktop with boards is managed")
-        XCTAssertFalse(c.isMacDesktopManaged(ordinal: 2),
-                       "tab presence makes facet opt-in (desktop 2 untouched)")
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: nil))
+        #expect(c.isMacDesktopManaged(ordinal: 1),
+                "a desktop with boards is managed")
+        #expect(!c.isMacDesktopManaged(ordinal: 2),
+                "tab presence makes facet opt-in (desktop 2 untouched)")
+        #expect(c.isMacDesktopManaged(ordinal: nil))
     }
 
     /// Opt-in keys on the UNION of section + tab ordinals: flat on desktop 1,
     /// tabs on desktop 3 → both managed, the gap (2) and tail (4) hands-off.
-    func testManagedKeysOnUnionOfSectionAndTabOrdinals() {
+    @Test func managedKeysOnUnionOfSectionAndTabOrdinals() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [wsSection()]]
         c.macDesktopTabConfigs = [3: [wsBoard()]]
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 1))
-        XCTAssertFalse(c.isMacDesktopManaged(ordinal: 2))
-        XCTAssertTrue(c.isMacDesktopManaged(ordinal: 3))
-        XCTAssertFalse(c.isMacDesktopManaged(ordinal: 4))
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(!c.isMacDesktopManaged(ordinal: 2))
+        #expect(c.isMacDesktopManaged(ordinal: 3))
+        #expect(!c.isMacDesktopManaged(ordinal: 4))
     }
 }

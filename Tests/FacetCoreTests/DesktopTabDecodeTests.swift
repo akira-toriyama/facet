@@ -1,4 +1,5 @@
-import XCTest
+import Testing
+import Foundation
 @testable import FacetCore
 
 /// `[[desktop.N.tab]]` + nested `[[desktop.N.tab.section]]` config decode —
@@ -18,11 +19,11 @@ import XCTest
 ///   • a child with `unassigned = true` is the per-tab lost-and-found marker
 ///     (NOT a `type` value, W2.6) — it STILL inherits the parent type, with its
 ///     `unassigned` flag set; at most one per tab (a 2nd is dropped).
-final class DesktopTabDecodeTests: XCTestCase {
+struct DesktopTabDecodeTests {
 
     // MARK: - tab type + child inheritance
 
-    func testDecodesWorkspaceAndLensTabs() {
+    @Test func decodesWorkspaceAndLensTabs() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
@@ -38,18 +39,18 @@ final class DesktopTabDecodeTests: XCTestCase {
         label = "Web"
         match = 'tag~=web'
         """)
-        XCTAssertEqual(t[1]?.count, 2)
-        XCTAssertEqual(t[1]?[0].type, .workspace)
-        XCTAssertEqual(t[1]?[0].label, "Spaces")
-        XCTAssertEqual(t[1]?[0].sections.map(\.label), ["Main", "Side"])
-        XCTAssertEqual(t[1]?[1].type, .lens)
-        XCTAssertEqual(t[1]?[1].label, "Views")
-        XCTAssertEqual(t[1]?[1].sections.first,
+        #expect(t[1]?.count == 2)
+        #expect(t[1]?[0].type == .workspace)
+        #expect(t[1]?[0].label == "Spaces")
+        #expect(t[1]?[0].sections.map(\.label) == ["Main", "Side"])
+        #expect(t[1]?[1].type == .lens)
+        #expect(t[1]?[1].label == "Views")
+        #expect(t[1]?[1].sections.first ==
                        DesktopSection(type: .lens, label: "Web", match: "tag~=web"))
     }
 
     /// Child sections never author `type`; they inherit the parent tab's type.
-    func testChildSectionsInheritParentType() {
+    @Test func childSectionsInheritParentType() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -60,44 +61,44 @@ final class DesktopTabDecodeTests: XCTestCase {
         label = "B"
         match = 'tag~=b'
         """)
-        XCTAssertEqual(t[1]?[0].sections.map(\.type), [.lens, .lens])
+        #expect(t[1]?[0].sections.map(\.type) == [.lens, .lens])
     }
 
     /// A tab's `type` is case-insensitive on the wire (lowercased on decode).
-    func testTabTypeIsCaseInsensitive() {
+    @Test func tabTypeIsCaseInsensitive() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "WORKSPACE"
         label = "W"
         """)
-        XCTAssertEqual(t[1]?[0].type, .workspace)
+        #expect(t[1]?[0].type == .workspace)
     }
 
     // MARK: - tab type validation (workspace | lens only)
 
-    func testTabMissingTypeIsDropped() {
+    @Test func tabMissingTypeIsDropped() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         label = "NoType"
         [[desktop.1.tab.section]]
         label = "child"
         """)
-        XCTAssertTrue(t.isEmpty)
+        #expect(t.isEmpty)
     }
 
-    func testTabUnknownTypeIsDropped() {
+    @Test func tabUnknownTypeIsDropped() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspce"
         [[desktop.1.tab.section]]
         label = "child"
         """)
-        XCTAssertTrue(t.isEmpty)
+        #expect(t.isEmpty)
     }
 
     /// `unassigned` is NOT a valid tab type (it is a per-section marker, not a
     /// tab grouping) — a tab declaring it is dropped whole.
-    func testTabTypeUnassignedIsDropped() {
+    @Test func tabTypeUnassignedIsDropped() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "unassigned"
@@ -105,26 +106,26 @@ final class DesktopTabDecodeTests: XCTestCase {
         [[desktop.1.tab.section]]
         label = "child"
         """)
-        XCTAssertTrue(t.isEmpty)
+        #expect(t.isEmpty)
     }
 
     /// A valid tab survives even with zero child sections (a grouping the user
     /// may fill later) — keep it, don't silently drop.
-    func testEmptyTabKept() {
+    @Test func emptyTabKept() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
         label = "Empty"
         """)
-        XCTAssertEqual(t[1]?.count, 1)
-        XCTAssertTrue(t[1]?[0].sections.isEmpty ?? false)
+        #expect(t[1]?.count == 1)
+        #expect(t[1]?[0].sections.isEmpty ?? false)
     }
 
     // MARK: - `unassigned = true` per-tab marker
 
     /// A child with `unassigned = true` inherits the parent tab's type AND
     /// carries the marker (W2.6 — the receptacle is a flag, not a type).
-    func testUnassignedMarkerChildInheritsTypeWithMarker() {
+    @Test func unassignedMarkerChildInheritsTypeWithMarker() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -135,14 +136,14 @@ final class DesktopTabDecodeTests: XCTestCase {
         unassigned = true
         label = "Other"
         """)
-        XCTAssertEqual(t[1]?[0].sections.map(\.type), [.lens, .lens])
-        XCTAssertEqual(t[1]?[0].sections.map(\.unassigned), [false, true])
-        XCTAssertEqual(t[1]?[0].sections.last,
+        #expect(t[1]?[0].sections.map(\.type) == [.lens, .lens])
+        #expect(t[1]?[0].sections.map(\.unassigned) == [false, true])
+        #expect(t[1]?[0].sections.last ==
                        DesktopSection(type: .lens, label: "Other", unassigned: true))
     }
 
     /// At most one `unassigned = true` section per tab; a 2nd is dropped.
-    func testSecondUnassignedMarkerDropped() {
+    @Test func secondUnassignedMarkerDropped() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
@@ -153,15 +154,15 @@ final class DesktopTabDecodeTests: XCTestCase {
         unassigned = true
         label = "Second"
         """)
-        XCTAssertEqual(t[1]?[0].sections.count, 1)
-        XCTAssertEqual(t[1]?[0].sections.first,
+        #expect(t[1]?[0].sections.count == 1)
+        #expect(t[1]?[0].sections.first ==
                        DesktopSection(type: .workspace, label: "First",
                                       unassigned: true))
     }
 
     /// An `unassigned = true` section forbids `match` / `apply` (leftover by
     /// subtraction) — authored ones are ignored, the section decodes label-only.
-    func testUnassignedMarkerIgnoresMatchAndApply() {
+    @Test func unassignedMarkerIgnoresMatchAndApply() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -171,7 +172,7 @@ final class DesktopTabDecodeTests: XCTestCase {
         match = 'tag~=x'
         apply = { tags = ["x"] }
         """)
-        XCTAssertEqual(t[1]?[0].sections.first,
+        #expect(t[1]?[0].sections.first ==
                        DesktopSection(type: .lens, label: "Lost", unassigned: true))
     }
 
@@ -179,7 +180,7 @@ final class DesktopTabDecodeTests: XCTestCase {
 
     /// A lens-tab child still needs a non-empty `match` (the lens rule); a
     /// match-less child drops.
-    func testLensChildNeedsMatch() {
+    @Test func lensChildNeedsMatch() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -189,12 +190,12 @@ final class DesktopTabDecodeTests: XCTestCase {
         label = "Good"
         match = 'tag~=g'
         """)
-        XCTAssertEqual(t[1]?[0].sections.map(\.label), ["Good"])
+        #expect(t[1]?[0].sections.map(\.label) == ["Good"])
     }
 
     /// A workspace-tab child forbids `match` / `apply`; authored ones are
     /// ignored and it decodes as a bare workspace section.
-    func testWorkspaceChildForbidsMatchAndApply() {
+    @Test func workspaceChildForbidsMatchAndApply() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
@@ -203,13 +204,13 @@ final class DesktopTabDecodeTests: XCTestCase {
         match = 'tag~=x'
         apply = { tags = ["x"] }
         """)
-        XCTAssertEqual(t[1]?[0].sections.first,
+        #expect(t[1]?[0].sections.first ==
                        DesktopSection(type: .workspace, label: "W"))
     }
 
     /// A lens-tab child's `apply` keeps tags only (t-qtpx) — single-valued ops
     /// are dropped at the inheritance seam, exactly as a flat lens section.
-    func testLensChildApplyKeepsTagsDropsSingleValued() {
+    @Test func lensChildApplyKeepsTagsDropsSingleValued() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -218,12 +219,12 @@ final class DesktopTabDecodeTests: XCTestCase {
         match = 'tag~=x'
         apply = { tags = ["a", "b"], floating = true, workspace = "Dev" }
         """)
-        XCTAssertEqual(t[1]?[0].sections.first?.apply, [.addTag("a"), .addTag("b")])
+        #expect(t[1]?[0].sections.first?.apply == [.addTag("a"), .addTag("b")])
     }
 
     // MARK: - ordinals / coexistence with the flat decoder
 
-    func testMultipleDesktopsKeyedByOrdinal() {
+    @Test func multipleDesktopsKeyedByOrdinal() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
@@ -232,14 +233,14 @@ final class DesktopTabDecodeTests: XCTestCase {
         type = "lens"
         label = "Three"
         """)
-        XCTAssertEqual(Set(t.keys), [1, 3])
-        XCTAssertEqual(t[1]?[0].label, "One")
-        XCTAssertEqual(t[3]?[0].label, "Three")
+        #expect(Set(t.keys) == [1, 3])
+        #expect(t[1]?[0].label == "One")
+        #expect(t[3]?[0].label == "Three")
     }
 
     /// Ordinal spellings fold (`desktop.01` → 1); `0`, missing, and dotted
     /// ordinals are skipped — matching the flat decoder's leniency.
-    func testOrdinalSpellingsFoldAndMalformedSkipped() {
+    @Test func ordinalSpellingsFoldAndMalformedSkipped() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.01.tab]]
         type = "workspace"
@@ -254,25 +255,25 @@ final class DesktopTabDecodeTests: XCTestCase {
         type = "lens"
         label = "Good"
         """)
-        XCTAssertEqual(Set(t.keys), [1, 2])
-        XCTAssertEqual(t[1]?[0].label, "ZeroPad")
-        XCTAssertEqual(t[2]?[0].label, "Good")
+        #expect(Set(t.keys) == [1, 2])
+        #expect(t[1]?[0].label == "ZeroPad")
+        #expect(t[2]?[0].label == "Good")
     }
 
-    func testNoTabsReturnsEmpty() {
+    @Test func noTabsReturnsEmpty() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.section]]
         type = "lens"
         label = "Flat"
         match = 'tag~=f'
         """)
-        XCTAssertTrue(t.isEmpty)
+        #expect(t.isEmpty)
     }
 
     /// The flat `[[desktop.N.section]]` decoder and the nested
     /// `[[desktop.N.tab]]` decoder read DISJOINT header shapes from the same
     /// text — neither pollutes the other.
-    func testFlatAndNestedTabsCoexistIndependently() {
+    @Test func flatAndNestedTabsCoexistIndependently() {
         let text = """
         [[desktop.1.section]]
         type = "lens"
@@ -285,19 +286,19 @@ final class DesktopTabDecodeTests: XCTestCase {
         label = "n1"
         """
         let tabs = FacetConfig.decodeDesktopTabs(fromTOML: text)
-        XCTAssertEqual(Set(tabs.keys), [2])
-        XCTAssertEqual(tabs[2]?[0].sections.map(\.label), ["n1"])
+        #expect(Set(tabs.keys) == [2])
+        #expect(tabs[2]?[0].sections.map(\.label) == ["n1"])
 
         let flat = FacetConfig.decodeDesktopSectionSections(fromTOML: text)
-        XCTAssertEqual(Set(flat.keys), [1])
-        XCTAssertEqual(flat[1]?[0].label, "Flat")
+        #expect(Set(flat.keys) == [1])
+        #expect(flat[1]?[0].label == "Flat")
     }
 
     // MARK: - label uniqueness (mirrors the §A flat rule)
 
     /// Within one mac desktop a NON-EMPTY tab label must be unique (it is the
     /// `facet board --focus "label"` handle) — a duplicate is dropped, first-wins.
-    func testTabLabelUniquenessFirstWins() {
+    @Test func tabLabelUniquenessFirstWins() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
@@ -306,23 +307,23 @@ final class DesktopTabDecodeTests: XCTestCase {
         type = "lens"
         label = "Dup"
         """)
-        XCTAssertEqual(t[1]?.count, 1)
-        XCTAssertEqual(t[1]?[0].type, .workspace)   // first-wins
+        #expect(t[1]?.count == 1)
+        #expect(t[1]?[0].type == .workspace)   // first-wins
     }
 
     /// EMPTY tab labels are exempt from uniqueness — they may repeat freely.
-    func testEmptyTabLabelsMayRepeat() {
+    @Test func emptyTabLabelsMayRepeat() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
         [[desktop.1.tab]]
         type = "lens"
         """)
-        XCTAssertEqual(t[1]?.count, 2)
+        #expect(t[1]?.count == 2)
     }
 
     /// The same tab label on two desktops is fine — uniqueness is PER desktop.
-    func testSameTabLabelOnDifferentDesktopsAllowed() {
+    @Test func sameTabLabelOnDifferentDesktopsAllowed() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "workspace"
@@ -331,12 +332,12 @@ final class DesktopTabDecodeTests: XCTestCase {
         type = "workspace"
         label = "Main"
         """)
-        XCTAssertEqual(t[1]?[0].label, "Main")
-        XCTAssertEqual(t[2]?[0].label, "Main")
+        #expect(t[1]?[0].label == "Main")
+        #expect(t[2]?[0].label == "Main")
     }
 
     /// Within ONE tab a non-empty section label must be unique — first-wins.
-    func testSectionLabelUniquenessWithinTabFirstWins() {
+    @Test func sectionLabelUniquenessWithinTabFirstWins() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -347,12 +348,12 @@ final class DesktopTabDecodeTests: XCTestCase {
         label = "Web"
         match = 'tag~=second'
         """)
-        XCTAssertEqual(t[1]?[0].sections.count, 1)
-        XCTAssertEqual(t[1]?[0].sections.first?.match, "tag~=first")
+        #expect(t[1]?[0].sections.count == 1)
+        #expect(t[1]?[0].sections.first?.match == "tag~=first")
     }
 
     /// Section-label uniqueness is PER tab — the same label in two tabs is fine.
-    func testSameSectionLabelInDifferentTabsAllowed() {
+    @Test func sameSectionLabelInDifferentTabsAllowed() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -367,12 +368,12 @@ final class DesktopTabDecodeTests: XCTestCase {
         label = "Web"
         match = 'tag~=b'
         """)
-        XCTAssertEqual(t[1]?[0].sections.map(\.label), ["Web"])
-        XCTAssertEqual(t[1]?[1].sections.map(\.label), ["Web"])
+        #expect(t[1]?[0].sections.map(\.label) == ["Web"])
+        #expect(t[1]?[1].sections.map(\.label) == ["Web"])
     }
 
     /// Empty section labels may repeat within a tab.
-    func testEmptySectionLabelsMayRepeatWithinTab() {
+    @Test func emptySectionLabelsMayRepeatWithinTab() {
         let t = FacetConfig.decodeDesktopTabs(fromTOML: """
         [[desktop.1.tab]]
         type = "lens"
@@ -381,12 +382,12 @@ final class DesktopTabDecodeTests: XCTestCase {
         [[desktop.1.tab.section]]
         match = 'tag~=b'
         """)
-        XCTAssertEqual(t[1]?[0].sections.count, 2)
+        #expect(t[1]?[0].sections.count == 2)
     }
 
     // MARK: - parseTOMLNestedTabs (syntax-level grouping)
 
-    func testNestedReaderGroupsChildrenUnderTheirTab() {
+    @Test func nestedReaderGroupsChildrenUnderTheirTab() {
         let g = parseTOMLNestedTabs("""
         [[desktop.1.tab]]
         type = "workspace"
@@ -396,16 +397,16 @@ final class DesktopTabDecodeTests: XCTestCase {
         [[desktop.1.tab.section]]
         label = "s2"
         """)
-        XCTAssertEqual(g[1]?.count, 1)
-        XCTAssertEqual(g[1]?[0].tab["type"]?.asString, "workspace")
-        XCTAssertEqual(g[1]?[0].tab["label"]?.asString, "A")
-        XCTAssertEqual(g[1]?[0].sections.count, 2)
-        XCTAssertEqual(g[1]?[0].sections.first?["label"]?.asString, "s1")
+        #expect(g[1]?.count == 1)
+        #expect(g[1]?[0].tab["type"]?.asString == "workspace")
+        #expect(g[1]?[0].tab["label"]?.asString == "A")
+        #expect(g[1]?[0].sections.count == 2)
+        #expect(g[1]?[0].sections.first?["label"]?.asString == "s1")
     }
 
     /// A `.tab.section` attaches to the MOST RECENT `.tab` of the same ordinal
     /// (document order), so a 2nd tab's children don't leak into the 1st.
-    func testNestedReaderAttachesToMostRecentTabOfSameOrdinal() {
+    @Test func nestedReaderAttachesToMostRecentTabOfSameOrdinal() {
         let g = parseTOMLNestedTabs("""
         [[desktop.1.tab]]
         type = "workspace"
@@ -418,9 +419,9 @@ final class DesktopTabDecodeTests: XCTestCase {
         [[desktop.1.tab.section]]
         label = "b1"
         """)
-        XCTAssertEqual(g[1]?.count, 2)
-        XCTAssertEqual(g[1]?[0].sections.first?["label"]?.asString, "a1")
-        XCTAssertEqual(g[1]?[1].sections.first?["label"]?.asString, "b1")
+        #expect(g[1]?.count == 2)
+        #expect(g[1]?[0].sections.first?["label"]?.asString == "a1")
+        #expect(g[1]?[1].sections.first?["label"]?.asString == "b1")
     }
 
     /// `openTab` is keyed PER ORDINAL, so a `.tab.section` binds to the most-recent
@@ -428,7 +429,7 @@ final class DesktopTabDecodeTests: XCTestCase {
     /// (the globally-most-recent tab). Interleave: desktop 1 tab → desktop 2 tab →
     /// desktop 1's child must land on desktop 1's tab, not leak to desktop 2. The
     /// `…OfSameOrdinal` test only proves the within-one-ordinal case.
-    func testNestedReaderAttachesPerOrdinalAcrossInterleavedDesktops() {
+    @Test func nestedReaderAttachesPerOrdinalAcrossInterleavedDesktops() {
         let g = parseTOMLNestedTabs("""
         [[desktop.1.tab]]
         type = "workspace"
@@ -441,15 +442,15 @@ final class DesktopTabDecodeTests: XCTestCase {
         [[desktop.2.tab.section]]
         label = "d2child"
         """)
-        XCTAssertEqual(g[1]?.count, 1)
-        XCTAssertEqual(g[2]?.count, 1)
-        XCTAssertEqual(g[1]?[0].sections.map { $0["label"]?.asString }, ["d1child"])
-        XCTAssertEqual(g[2]?[0].sections.map { $0["label"]?.asString }, ["d2child"])
+        #expect(g[1]?.count == 1)
+        #expect(g[2]?.count == 1)
+        #expect(g[1]?[0].sections.map { $0["label"]?.asString } == ["d1child"])
+        #expect(g[2]?[0].sections.map { $0["label"]?.asString } == ["d2child"])
     }
 
     /// A `.tab.section` with no preceding `.tab` for its ordinal has nowhere to
     /// attach — it is dropped (not promoted to a phantom tab).
-    func testNestedReaderOrphanSectionWithoutTabDropped() {
+    @Test func nestedReaderOrphanSectionWithoutTabDropped() {
         let g = parseTOMLNestedTabs("""
         [[desktop.1.tab.section]]
         label = "orphan"
@@ -458,41 +459,41 @@ final class DesktopTabDecodeTests: XCTestCase {
         [[desktop.1.tab.section]]
         label = "real"
         """)
-        XCTAssertEqual(g[1]?.count, 1)
-        XCTAssertEqual(g[1]?[0].sections.map { $0["label"]?.asString }, ["real"])
+        #expect(g[1]?.count == 1)
+        #expect(g[1]?[0].sections.map { $0["label"]?.asString } == ["real"])
     }
 
     /// The nested reader ignores flat `[[desktop.N.section]]` blocks (handled
     /// by the legacy decoder).
-    func testNestedReaderIgnoresFlatSections() {
+    @Test func nestedReaderIgnoresFlatSections() {
         let g = parseTOMLNestedTabs("""
         [[desktop.1.section]]
         type = "lens"
         match = 'tag~=x'
         """)
-        XCTAssertTrue(g.isEmpty)
+        #expect(g.isEmpty)
     }
 
     /// `Toml.Annotated` parsing is STRICT (throws on a malformed line); the
     /// nested reader is line-drop-lenient by degrading the WHOLE read to
     /// "no tabs" so the rest of config load (which uses the lenient flat
     /// parser) is never broken.
-    func testNestedReaderLenientDegradesToEmptyOnMalformed() {
+    @Test func nestedReaderLenientDegradesToEmptyOnMalformed() {
         let g = parseTOMLNestedTabs("""
         [[desktop.1.tab]]
         type = "workspace"
         broken line no equals
         """)
-        XCTAssertTrue(g.isEmpty)
+        #expect(g.isEmpty)
     }
 
     // MARK: - effective accessor + load() wiring
 
-    func testEffectiveTabConfigsPassThrough() {
+    @Test func effectiveTabConfigsPassThrough() {
         var c = FacetConfig()
         c.macDesktopTabConfigs =
             [1: [DesktopTab(type: .workspace, label: "W")]]
-        XCTAssertEqual(c.effectiveMacDesktopTabConfigs[1]?[0].label, "W")
+        #expect(c.effectiveMacDesktopTabConfigs[1]?[0].label == "W")
     }
 
     private func loadConfig(_ toml: String) -> FacetConfig {
@@ -506,7 +507,7 @@ final class DesktopTabDecodeTests: XCTestCase {
         return FacetConfig.load(path: path)
     }
 
-    func testLoadPopulatesTabConfigs() {
+    @Test func loadPopulatesTabConfigs() {
         let c = loadConfig("""
         [[desktop.1.tab]]
         type = "lens"
@@ -516,8 +517,8 @@ final class DesktopTabDecodeTests: XCTestCase {
         match = 'tag~=web'
         apply = { tags = ["web"] }
         """)
-        XCTAssertEqual(c.macDesktopTabConfigs[1]?[0].label, "Views")
-        XCTAssertEqual(c.effectiveMacDesktopTabConfigs[1]?[0].sections.first?.apply,
+        #expect(c.macDesktopTabConfigs[1]?[0].label == "Views")
+        #expect(c.effectiveMacDesktopTabConfigs[1]?[0].sections.first?.apply ==
                        [.addTag("web")])
     }
 }

@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// N6 (board review follow-up): these test `FilterProjection.project` DIRECTLY
@@ -12,7 +12,7 @@ import XCTest
 /// switching back to the workspace board shows it). These tests PIN that
 /// intended projection behavior so a future change can't silently flip it.
 /// Pure; CI-only (CLT can't run `swift test`).
-final class BoardLensProjectionTests: XCTestCase {
+struct BoardLensProjectionTests {
 
     private func win(_ id: Int, app: String) -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: app, title: "",
@@ -27,28 +27,28 @@ final class BoardLensProjectionTests: XCTestCase {
     }
 
     /// A lens-only board hides a window matching no lens (no workspace tail).
-    func testLensOnlyBoardHidesUnmatchedWindow() {
+    @Test func lensOnlyBoardHidesUnmatchedWindow() {
         let wss = [ws(0, [win(1, app: "Chrome"), win(2, app: "Terminal")])]
         let r = FilterProjection.project(
             workspaces: wss, sections: [lens("Web", "app=Chrome")])
-        XCTAssertEqual(r.sections.count, 1, "exactly the lens — no workspace tail")
-        XCTAssertEqual(r.sections[0].sectionType, .lens)
-        XCTAssertEqual(r.sections[0].windows.map(\.id.serverID), [1])
+        #expect(r.sections.count == 1, "exactly the lens — no workspace tail")
+        #expect(r.sections[0].sectionType == .lens)
+        #expect(r.sections[0].windows.map(\.id.serverID) == [1])
         let shownIDs = r.sections.flatMap { $0.windows.map(\.id.serverID) }
-        XCTAssertFalse(shownIDs.contains(2),
-                       "a window matching no lens is hidden on a lens board")
+        #expect(!shownIDs.contains(2),
+                "a window matching no lens is hidden on a lens board")
     }
 
     /// An `unassigned` receptacle on the lens board catches the unmatched window
     /// (the W2.6 opt-in lost-and-found).
-    func testUnassignedReceptacleCatchesUnmatchedOnLensBoard() {
+    @Test func unassignedReceptacleCatchesUnmatchedOnLensBoard() {
         let wss = [ws(0, [win(1, app: "Chrome"), win(2, app: "Terminal")])]
         let r = FilterProjection.project(
             workspaces: wss,
             sections: [lens("Web", "app=Chrome"),
                        DesktopSection(type: .lens, label: "Other", unassigned: true)])
         let other = r.sections.first { $0.sectionType == .unassigned }
-        XCTAssertEqual(other?.windows.map(\.id.serverID), [2],
-                       "the unassigned receptacle catches the unmatched window")
+        #expect(other?.windows.map(\.id.serverID) == [2],
+                "the unassigned receptacle catches the unmatched window")
     }
 }

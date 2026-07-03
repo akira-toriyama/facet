@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// `resolveBoardFocus(_:boardLabels:)` — the pure resolver behind
@@ -12,87 +12,87 @@ import XCTest
 /// matching `section --focus`). An EMPTY `boardLabels` is the flat-config
 /// degrade case = ONE implicit board (index 1 only, no label). Pure FacetCore;
 /// CI-only (CLT can't run `swift test`).
-final class BoardFocusResolveTests: XCTestCase {
+struct BoardFocusResolveTests {
 
     // MARK: - index addressing
 
-    func testIndexResolvesToZeroBasedBoard() {
-        XCTAssertEqual(resolveBoardFocus("index:2", boardLabels: ["A", "B", "C"]),
+    @Test func indexResolvesToZeroBasedBoard() {
+        #expect(resolveBoardFocus("index:2", boardLabels: ["A", "B", "C"]) ==
                        .resolved(boardIndex: 1))
     }
 
-    func testIndexOneResolvesToFirstBoard() {
-        XCTAssertEqual(resolveBoardFocus("index:1", boardLabels: ["A", "B"]),
+    @Test func indexOneResolvesToFirstBoard() {
+        #expect(resolveBoardFocus("index:1", boardLabels: ["A", "B"]) ==
                        .resolved(boardIndex: 0))
     }
 
     /// An explicit out-of-range index is REJECTED loudly (not clamped) — the
     /// CLI carries user intent; a typo should surface, not silently land on the
     /// last board the way the display selector self-heals a stale state.
-    func testIndexAboveCountIsOutOfRange() {
-        XCTAssertEqual(resolveBoardFocus("index:4", boardLabels: ["A", "B", "C"]),
+    @Test func indexAboveCountIsOutOfRange() {
+        #expect(resolveBoardFocus("index:4", boardLabels: ["A", "B", "C"]) ==
                        .outOfRange(requested: 4, count: 3))
     }
 
     /// A non-positive index (defensive — the client only emits `index:N` for
     /// N > 0) is out of range, mirroring `dispatchSectionFocus`'s `n >= 1` guard.
-    func testIndexZeroIsOutOfRange() {
-        XCTAssertEqual(resolveBoardFocus("index:0", boardLabels: ["A", "B"]),
+    @Test func indexZeroIsOutOfRange() {
+        #expect(resolveBoardFocus("index:0", boardLabels: ["A", "B"]) ==
                        .outOfRange(requested: 0, count: 2))
     }
 
     // MARK: - label addressing
 
-    func testLabelResolvesToItsBoard() {
-        XCTAssertEqual(resolveBoardFocus("label:Views",
-                                         boardLabels: ["Spaces", "Views"]),
+    @Test func labelResolvesToItsBoard() {
+        #expect(resolveBoardFocus("label:Views",
+                                         boardLabels: ["Spaces", "Views"]) ==
                        .resolved(boardIndex: 1))
     }
 
-    func testUnknownLabelIsRejected() {
-        XCTAssertEqual(resolveBoardFocus("label:Nope",
-                                         boardLabels: ["Spaces", "Views"]),
+    @Test func unknownLabelIsRejected() {
+        #expect(resolveBoardFocus("label:Nope",
+                                         boardLabels: ["Spaces", "Views"]) ==
                        .unknownLabel("Nope"))
     }
 
     /// Empty-labeled boards are index-addressed only — a label lookup never
     /// matches them (mirrors the config rule: name resolution targets only
     /// labeled boards; unnamed ones are index-addressed).
-    func testLabelSkipsEmptyLabeledBoards() {
-        XCTAssertEqual(resolveBoardFocus("label:Views",
-                                         boardLabels: ["", "Views"]),
+    @Test func labelSkipsEmptyLabeledBoards() {
+        #expect(resolveBoardFocus("label:Views",
+                                         boardLabels: ["", "Views"]) ==
                        .resolved(boardIndex: 1))
-        XCTAssertEqual(resolveBoardFocus("label:",
-                                         boardLabels: ["", "Views"]),
+        #expect(resolveBoardFocus("label:",
+                                         boardLabels: ["", "Views"]) ==
                        .unknownLabel(""))
     }
 
     // MARK: - flat-config degrade (no boards = one implicit board)
 
-    func testFlatConfigFocusOneIsIdempotent() {
-        XCTAssertEqual(resolveBoardFocus("index:1", boardLabels: []),
+    @Test func flatConfigFocusOneIsIdempotent() {
+        #expect(resolveBoardFocus("index:1", boardLabels: []) ==
                        .resolved(boardIndex: 0))
     }
 
-    func testFlatConfigFocusTwoIsOutOfRange() {
-        XCTAssertEqual(resolveBoardFocus("index:2", boardLabels: []),
+    @Test func flatConfigFocusTwoIsOutOfRange() {
+        #expect(resolveBoardFocus("index:2", boardLabels: []) ==
                        .outOfRange(requested: 2, count: 1))
     }
 
-    func testFlatConfigLabelIsUnknown() {
-        XCTAssertEqual(resolveBoardFocus("label:Spaces", boardLabels: []),
+    @Test func flatConfigLabelIsUnknown() {
+        #expect(resolveBoardFocus("label:Spaces", boardLabels: []) ==
                        .unknownLabel("Spaces"))
     }
 
     // MARK: - malformed
 
-    func testMissingPrefixIsMalformed() {
-        XCTAssertEqual(resolveBoardFocus("Spaces", boardLabels: ["A"]),
+    @Test func missingPrefixIsMalformed() {
+        #expect(resolveBoardFocus("Spaces", boardLabels: ["A"]) ==
                        .malformed)
     }
 
-    func testNonIntegerIndexIsMalformed() {
-        XCTAssertEqual(resolveBoardFocus("index:two", boardLabels: ["A", "B"]),
+    @Test func nonIntegerIndexIsMalformed() {
+        #expect(resolveBoardFocus("index:two", boardLabels: ["A", "B"]) ==
                        .malformed)
     }
 }
