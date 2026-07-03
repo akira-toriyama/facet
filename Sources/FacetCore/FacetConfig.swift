@@ -6,6 +6,13 @@
 // accessors below supply built-in defaults (agent-only mode, no
 // panel).
 //
+// ONE carve-out (t-hdxb): with ``[config] auto-promote = true`` +
+// ``[config] export-path`` set, `bootstrapWithAutoPromote` may, at
+// STARTUP ONLY, overwrite config.toml with a strictly-newer snapshot
+// (the sole sanctioned write). `load` itself stays read-only; the
+// snapshot writer is the pure `ConfigSnapshot`. See CLAUDE.md
+// `### Configuration`.
+//
 // All public fields are *raw* (Optional, as parsed from TOML).
 // `effective*` accessors apply defaults + clamping; consumers
 // should always read through those so a typo can never break the

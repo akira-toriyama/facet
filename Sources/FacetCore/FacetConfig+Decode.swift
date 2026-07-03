@@ -294,7 +294,9 @@ extension FacetConfig {
     /// the file is missing or unreadable. Read-only by design: the
     /// app never writes to the user's config file. Repo root
     /// `config.toml` is the install template; users `curl` it
-    /// into place themselves (see README).
+    /// into place themselves (see README). (The ONE sanctioned write
+    /// to config.toml — startup `auto-promote` — lives in the separate
+    /// `bootstrapWithAutoPromote`, never here.)
     public static func load(path: String = defaultPath) -> FacetConfig {
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else { return .init() }

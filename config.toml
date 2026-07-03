@@ -20,12 +20,61 @@
 # `facet --theme dracula`) apply for the current session only. To
 # make a change stick, edit the value here and restart facet.
 #
+# ONE exception — opt-in config auto-persistence (see [config] below):
+# set `export-path` and facet auto-EXPORTS a live snapshot of your
+# effective config (rename / lens match / layout / tag edits) to that
+# SEPARATE file, leaving config.toml untouched. Add `auto-promote = true`
+# and the NEXT launch promotes a snapshot that is newer than config.toml
+# onto it — the single sanctioned write (a hand-edit between sessions
+# still wins).
+#
 # Out-of-range / unknown values are silently clamped to safe
 # defaults rather than rejected — a typo can't break the layout.
 #
 # facet always launches in agent-only mode (no panel on screen); a
 # view appears only when summoned — `facet --view tree|grid|rail`, a
 # chord hotkey, etc. A summoned tree always enters keyboard nav.
+
+
+# -----------------------------------------------------------------
+# Config auto-persistence (opt-in) — [config]
+# -----------------------------------------------------------------
+# Your session edits (renaming a section / workspace, live-tuning a
+# lens `match`, changing a workspace layout, creating tags) are
+# normally session-only — they vanish on restart. Turn this on and
+# facet keeps them, WITHOUT ever touching config.toml behind your back.
+#
+# How it works (two independent steps):
+#   1. export-path — set it and facet AUTO-EXPORTS: on every session
+#      edit it writes a live snapshot of the full effective config to
+#      THIS file (surgical — comments + formatting preserved; config.toml
+#      itself is left untouched). The snapshot is the "growing" copy.
+#      MUST be a different file from config.toml. `~` and relative
+#      (to this file's dir) paths resolve.
+#   2. auto-promote — opt in and, at the NEXT launch, if the snapshot is
+#      strictly newer than config.toml, facet promotes it: overwrites
+#      config.toml with the snapshot, then loads. This is the ONE
+#      sanctioned write to config.toml. A hand-edit between sessions
+#      always wins (whichever file is newer), so you never lose a manual
+#      change. Off by default — with export-path alone you get the
+#      snapshot but config.toml is never overwritten.
+#
+# There is no UI — it's fully automatic. Watch `FACET_DEBUG` logs for
+# "auto-exported" / "auto-promoted". Uncomment to enable:
+# [config]
+# export-path  = "~/.config/facet/config.snapshot.toml"
+# auto-promote = true
+
+
+# -----------------------------------------------------------------
+# Tag vocabulary — [tags]
+# -----------------------------------------------------------------
+# Names offered as autocomplete in the tree's tag editor (`t`) BEFORE
+# any window carries them — a starter vocabulary. Names only (tag
+# COLORS are runtime). When [config] auto-export is on, this list grows
+# automatically as you create tags. `[]` / omitted = none.
+# [tags]
+# defined = ["web", "code", "chat"]
 
 
 # -----------------------------------------------------------------
