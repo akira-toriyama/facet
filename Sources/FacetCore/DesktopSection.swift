@@ -307,6 +307,38 @@ public struct DesktopSection: Sendable, Equatable {
     }
 }
 
+/// A decoded `[[desktop.N.section]]` section WITH its raw-DOM origin (t-hdxb
+/// B4). The bridge the snapshot writer needs to map a projected section id
+/// (`section:<declOrder>:<label>` / `unassigned:<declOrder>`) back to the exact
+/// `[[desktop.N.section]]` array-of-tables element to edit.
+///
+///   • `declOrder` — the section's position in the SURVIVING (post merge +
+///     dedup) list, i.e. the SAME index `FilterProjection.project` mints ids
+///     from. Not the raw file position.
+///   • `headerName` — the RAW header spelling the section came from
+///     (`desktop.1.section` / `desktop.01.section`); split on `.` it is the
+///     array-of-tables PATH swift-toml-edit addresses.
+///   • `rawOrdinal` — the section's 0-based index among blocks of THAT spelling,
+///     which is exactly swift-toml-edit's array-of-tables ordinal for the path.
+///
+/// The divergence between `declOrder` and `rawOrdinal` (malformed rows dropped,
+/// header spellings merged, duplicate labels dropped) is precisely why the
+/// origin is TRACKED through the decode, not re-derived by index at write time.
+public struct DesktopSectionOrigin: Sendable, Equatable {
+    public let section: DesktopSection
+    public let declOrder: Int
+    public let headerName: String
+    public let rawOrdinal: Int
+
+    public init(section: DesktopSection, declOrder: Int,
+                headerName: String, rawOrdinal: Int) {
+        self.section = section
+        self.declOrder = declOrder
+        self.headerName = headerName
+        self.rawOrdinal = rawOrdinal
+    }
+}
+
 /// One `[[desktop.N.tab]]` — a NAMED grouping of sections within a mac desktop
 /// (the board model, t-wrd2). A tab is a `type` (`workspace` OR `lens` — never
 /// `unassigned`, which is a per-section marker, not a grouping) + an optional

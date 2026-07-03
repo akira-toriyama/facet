@@ -75,9 +75,31 @@ extension FacetConfig {
     public static func decodeDesktopSectionSections(fromTOML text: String)
         -> [Int: [DesktopSection]]
     {
-        var out: [Int: [DesktopSection]] = [:]
+        decodeDesktopSectionOrigins(fromTOML: text, log: true)
+            .mapValues { $0.map(\.section) }
+    }
+
+    /// The origin-tracking core of `decodeDesktopSectionSections` (t-hdxb B4).
+    /// Produces the SAME per-desktop, merged + deduped section lists, but each
+    /// section is wrapped in a `DesktopSectionOrigin` that also carries the RAW
+    /// header spelling it came from and its 0-based position among blocks of
+    /// that spelling. The snapshot writer replays THIS (never a re-implemented
+    /// index) to map a projected section id back to the exact
+    /// `[[desktop.N.section]]` array-of-tables element to edit — so the mapping
+    /// can never drift from the projection's `declOrder`. `log:` mirrors the
+    /// load-path `Log.line` diagnostics (parse notes + dup-label drops); the
+    /// writer passes `false` so re-deriving origins on every snapshot is quiet.
+    public static func decodeDesktopSectionOrigins(fromTOML text: String,
+                                                   log: Bool = true)
+        -> [Int: [DesktopSectionOrigin]]
+    {
         let blocks = parseTOMLArraysOfTables(text) { name in
             name.hasPrefix("desktop.") && name.hasSuffix(".section")
+        }
+        struct Pending {
+            let section: DesktopSection
+            let headerName: String
+            let rawOrdinal: Int
         }
         // Iterate header texts in SORTED order and MERGE into the ordinal
         // bucket (not assign): two distinct spellings can normalize to the
@@ -85,23 +107,25 @@ extension FacetConfig {
         // since `Int` accepts zero-pad / leading `+`). Sorting + appending
         // makes the result independent of per-process Dictionary hash-seed
         // order; file order within one spelling is already preserved by the
-        // parser.
+        // parser. `rawOrdinal` = the row index within THAT spelling's group,
+        // which is exactly swift-toml-edit's array-of-tables ordinal for the
+        // matching header path.
+        var buckets: [Int: [Pending]] = [:]
         for name in blocks.keys.sorted() {
             guard let rows = blocks[name] else { continue }
             // header = "desktop.<N>.section" → pull out N.
             let mid = name.dropFirst("desktop.".count).dropLast(".section".count)
             guard let ordinal = Int(mid), ordinal >= 1 else { continue }
-            var sections: [DesktopSection] = []
             for (i, row) in rows.enumerated() {
                 let (section, note) = DesktopSection.parse(fromTOMLRow: row)
-                if let note {
+                if log, let note {
                     Log.line("config: [[desktop.\(ordinal).section]] "
                         + "#\(i + 1): \(note)")
                 }
-                if let section { sections.append(section) }
-            }
-            if !sections.isEmpty {
-                out[ordinal, default: []].append(contentsOf: sections)
+                if let section {
+                    buckets[ordinal, default: []].append(
+                        Pending(section: section, headerName: name, rawOrdinal: i))
+                }
             }
         }
         // §A: within one mac desktop a NON-EMPTY label must be unique (it is a
@@ -109,23 +133,27 @@ extension FacetConfig {
         // are loud + first-wins — drop the later section so the layout isn't
         // broken; EMPTY labels may repeat freely. Runs AFTER the merge above so
         // two header spellings folding into one ordinal (`desktop.1` vs
-        // `desktop.01`) are de-duped together. Decode-time drop keeps the
-        // projection's positional lens ids (`section:<declOrder>:<label>`)
-        // minted off the surviving list. `keys.sorted()` snapshots the keys, so
-        // mutating `out[ordinal]` mid-loop is safe (and the warn order is stable).
-        for ordinal in out.keys.sorted() {
-            guard let sections = out[ordinal] else { continue }
+        // `desktop.01`) are de-duped together. `declOrder` is assigned over the
+        // SURVIVING list — the same index `FilterProjection` mints ids from.
+        var out: [Int: [DesktopSectionOrigin]] = [:]
+        for ordinal in buckets.keys.sorted() {
+            guard let pend = buckets[ordinal] else { continue }
             var seen: Set<String> = []
-            var kept: [DesktopSection] = []
-            for s in sections {
-                if !s.label.isEmpty, !seen.insert(s.label).inserted {
-                    Log.line("config: [[desktop.\(ordinal).section]]: duplicate "
-                        + "label \"\(s.label)\" — keeping first, dropping this section")
+            var origins: [DesktopSectionOrigin] = []
+            for p in pend {
+                if !p.section.label.isEmpty, !seen.insert(p.section.label).inserted {
+                    if log {
+                        Log.line("config: [[desktop.\(ordinal).section]]: duplicate "
+                            + "label \"\(p.section.label)\" — keeping first, "
+                            + "dropping this section")
+                    }
                     continue
                 }
-                kept.append(s)
+                origins.append(DesktopSectionOrigin(
+                    section: p.section, declOrder: origins.count,
+                    headerName: p.headerName, rawOrdinal: p.rawOrdinal))
             }
-            if kept.count != sections.count { out[ordinal] = kept }
+            out[ordinal] = origins
         }
         return out
     }
