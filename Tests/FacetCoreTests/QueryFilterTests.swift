@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 // `facet query --windows --filter EXPR` post-filter (pivot Phase 1, #284
@@ -9,7 +9,7 @@ import XCTest
 // The matching itself is covered by FacetFilterEvalTests; this pins the
 // glue (degrade, diagnostics, order-preservation). CI-ONLY (CLT cannot run
 // `swift test`); also verified standalone via swiftc.
-final class QueryFilterTests: XCTestCase {
+struct QueryFilterTests {
 
     typealias FWS = WindowQueryEntry.FacetWindowState
 
@@ -41,93 +41,93 @@ final class QueryFilterTests: XCTestCase {
 
     // MARK: clean parse → matching subset, no diagnostics
 
-    func testCleanFilterKeepsMatchesOnly() {
+    @Test func cleanFilterKeepsMatchesOnly() {
         let out = QueryFilter.apply("app=Safari", to: fixture())
-        XCTAssertEqual(out.entries.map(\.id), [1])
-        XCTAssertNil(out.parseErrorCaret)
-        XCTAssertEqual(out.unknownFields, [])
+        #expect(out.entries.map(\.id) == [1])
+        #expect(out.parseErrorCaret == nil)
+        #expect(out.unknownFields == [])
     }
 
-    func testCombinatorAcrossList() {
+    @Test func combinatorAcrossList() {
         let out = QueryFilter.apply("tag~=web or app=Chrome", to: fixture())
-        XCTAssertEqual(out.entries.map(\.id), [1, 2])
-        XCTAssertNil(out.parseErrorCaret)
+        #expect(out.entries.map(\.id) == [1, 2])
+        #expect(out.parseErrorCaret == nil)
     }
 
-    func testEmptyExprKeepsEverything() {
+    @Test func emptyExprKeepsEverything() {
         let out = QueryFilter.apply("   ", to: fixture())   // → .all
-        XCTAssertEqual(out.entries.map(\.id), [1, 2, 3])
-        XCTAssertNil(out.parseErrorCaret)
-        XCTAssertEqual(out.unknownFields, [])
+        #expect(out.entries.map(\.id) == [1, 2, 3])
+        #expect(out.parseErrorCaret == nil)
+        #expect(out.unknownFields == [])
     }
 
-    func testOrderIsPreserved() {
+    @Test func orderIsPreserved() {
         // `not floating` keeps the tiled (non-floating) managed windows in
         // input order; Chrome (floating) and the unmanaged (floating) drop.
         let out = QueryFilter.apply("not floating", to: fixture())
-        XCTAssertEqual(out.entries.map(\.id), [1])
+        #expect(out.entries.map(\.id) == [1])
     }
 
     // MARK: malformed EXPR → show-all degrade + caret (NON-FATAL)
 
-    func testParseErrorDegradesToShowAll() {
+    @Test func parseErrorDegradesToShowAll() {
         let input = fixture()
         let out = QueryFilter.apply("tag~web", to: input)   // missing '=' after '~'
-        XCTAssertEqual(out.entries.map(\.id), input.map(\.id),
-                       "a parse error must show ALL windows, not none")
-        XCTAssertNotNil(out.parseErrorCaret)
-        XCTAssertTrue(out.parseErrorCaret?.contains("^") ?? false,
-                      "caret rendering present")
-        XCTAssertEqual(out.unknownFields, [],
-                       "no fields resolve on a parse error")
+        #expect(out.entries.map(\.id) == input.map(\.id),
+                "a parse error must show ALL windows, not none")
+        #expect(out.parseErrorCaret != nil)
+        #expect(out.parseErrorCaret?.contains("^") ?? false,
+                "caret rendering present")
+        #expect(out.unknownFields == [],
+                "no fields resolve on a parse error")
     }
 
-    func testUnterminatedQuoteDegrades() {
+    @Test func unterminatedQuoteDegrades() {
         let out = QueryFilter.apply("title=\"oops", to: fixture())
-        XCTAssertEqual(out.entries.count, 3)
-        XCTAssertNotNil(out.parseErrorCaret)
+        #expect(out.entries.count == 3)
+        #expect(out.parseErrorCaret != nil)
     }
 
     // MARK: unknown field → subset + warning (NON-FATAL)
 
-    func testUnknownFieldWarnsButFilters() {
+    @Test func unknownFieldWarnsButFilters() {
         // `frob` is unknown → its atom no-matches; the `or app=Chrome`
         // still selects Chrome. The typo surfaces in `unknownFields`.
         let out = QueryFilter.apply("frob=x or app=Chrome", to: fixture())
-        XCTAssertEqual(out.entries.map(\.id), [2])
-        XCTAssertNil(out.parseErrorCaret)
-        XCTAssertEqual(out.unknownFields, ["frob"])
+        #expect(out.entries.map(\.id) == [2])
+        #expect(out.parseErrorCaret == nil)
+        #expect(out.unknownFields == ["frob"])
     }
 
-    func testUnknownFieldsAreSortedAndDeduped() {
+    @Test func unknownFieldsAreSortedAndDeduped() {
         let out = QueryFilter.apply("zeta=1 and alpha=2 and zeta=3",
                                     to: fixture())
-        XCTAssertEqual(out.unknownFields, ["alpha", "zeta"])
+        #expect(out.unknownFields == ["alpha", "zeta"])
         // This is also a clean-parse 0-match (both atoms no-match → and →
         // none): it must stay DISTINCT from the show-all error degrade.
-        XCTAssertEqual(out.entries, [])
-        XCTAssertNil(out.parseErrorCaret)
+        #expect(out.entries == [])
+        #expect(out.parseErrorCaret == nil)
     }
 
     // MARK: the contract boundary — a clean 0-match is NOT the show-all degrade
 
-    func testCleanZeroMatchKeepsNoneNotAll() {
+    @Test func cleanZeroMatchKeepsNoneNotAll() {
         // A valid expression that matches nothing returns an EMPTY array
         // with no caret — the opposite of a malformed expression (which
         // shows ALL windows with a caret). Confusing the two would break
         // the whole loud-but-non-fatal design.
         let out = QueryFilter.apply("app=Nonexistent", to: fixture())
-        XCTAssertEqual(out.entries, [])
-        XCTAssertNil(out.parseErrorCaret)
-        XCTAssertEqual(out.unknownFields, [])
+        #expect(out.entries == [])
+        #expect(out.parseErrorCaret == nil)
+        #expect(out.unknownFields == [])
     }
 
     // MARK: unmanaged-window rule survives the round-trip
 
-    func testUntaggedSelectsUnmanaged() {
+    @Test func untaggedSelectsUnmanaged() {
         let out = QueryFilter.apply("not tag", to: fixture())
         // Chrome (managed, no tags) AND the unmanaged window are untagged.
-        XCTAssertEqual(out.entries.map(\.id), [2, 3])
-        XCTAssertNil(out.parseErrorCaret)
+        #expect(out.entries.map(\.id) == [2, 3])
+        #expect(out.parseErrorCaret == nil)
     }
 }

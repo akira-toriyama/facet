@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 import CoreGraphics
 @testable import FacetCore
 
@@ -8,7 +8,7 @@ import CoreGraphics
 /// `ExclusionRulesTests`. These pin the matching semantics (search-not-
 /// anchored regex, exact role, inclusive size cap, AND, invalid-regex
 /// safety) — each is documented intent in the source, not incidental.
-final class WindowMatcherTests: XCTestCase {
+struct WindowMatcherTests {
 
     private func probe(bundleId: String? = "com.apple.Safari",
                        title: String = "Untitled",
@@ -20,115 +20,115 @@ final class WindowMatcherTests: XCTestCase {
 
     // MARK: - unconstrained guard
 
-    func testUnconstrainedMatcherNeverMatches() {
+    @Test func unconstrainedMatcherNeverMatches() {
         let m = WindowMatcher()
-        XCTAssertFalse(m.isConstrained)
-        XCTAssertFalse(m.matches(probe()))
+        #expect(!m.isConstrained)
+        #expect(!m.matches(probe()))
     }
 
-    func testIsConstrainedTrueWhenAnyKeySet() {
-        XCTAssertTrue(WindowMatcher(app: "x").isConstrained)
-        XCTAssertTrue(WindowMatcher(maxHeight: 1).isConstrained)
+    @Test func isConstrainedTrueWhenAnyKeySet() {
+        #expect(WindowMatcher(app: "x").isConstrained)
+        #expect(WindowMatcher(maxHeight: 1).isConstrained)
     }
 
     // MARK: - app (bundle id regex, search-not-anchored)
 
-    func testAppRegexIsSearchNotAnchored() {
+    @Test func appRegexIsSearchNotAnchored() {
         let m = WindowMatcher(app: "Safari")
-        XCTAssertTrue(m.matches(probe(bundleId: "com.apple.Safari")))
-        XCTAssertTrue(m.matches(probe(bundleId: "Safari")))
+        #expect(m.matches(probe(bundleId: "com.apple.Safari")))
+        #expect(m.matches(probe(bundleId: "Safari")))
     }
 
-    func testAppRegexAnchoredWithCaretDollar() {
+    @Test func appRegexAnchoredWithCaretDollar() {
         let m = WindowMatcher(app: "^com\\.apple\\.Safari$")
-        XCTAssertTrue(m.matches(probe(bundleId: "com.apple.Safari")))
-        XCTAssertFalse(m.matches(probe(bundleId: "com.apple.SafariTech")))
+        #expect(m.matches(probe(bundleId: "com.apple.Safari")))
+        #expect(!m.matches(probe(bundleId: "com.apple.SafariTech")))
     }
 
-    func testAppNilBundleIdTreatedAsEmptyString() {
-        XCTAssertFalse(WindowMatcher(app: "Safari").matches(probe(bundleId: nil)))
-        XCTAssertTrue(WindowMatcher(app: "^$").matches(probe(bundleId: nil)))
+    @Test func appNilBundleIdTreatedAsEmptyString() {
+        #expect(!WindowMatcher(app: "Safari").matches(probe(bundleId: nil)))
+        #expect(WindowMatcher(app: "^$").matches(probe(bundleId: nil)))
     }
 
     // MARK: - title (regex; empty title matched by ^$)
 
-    func testTitleRegexSubstring() {
-        XCTAssertTrue(WindowMatcher(title: "Inbox")
+    @Test func titleRegexSubstring() {
+        #expect(WindowMatcher(title: "Inbox")
             .matches(probe(title: "Inbox — 3 unread")))
-        XCTAssertFalse(WindowMatcher(title: "Inbox").matches(probe(title: "Drafts")))
+        #expect(!WindowMatcher(title: "Inbox").matches(probe(title: "Drafts")))
     }
 
-    func testEmptyTitleMatchedByAnchoredEmpty() {
-        XCTAssertTrue(WindowMatcher(title: "^$").matches(probe(title: "")))
-        XCTAssertFalse(WindowMatcher(title: "^$").matches(probe(title: "x")))
+    @Test func emptyTitleMatchedByAnchoredEmpty() {
+        #expect(WindowMatcher(title: "^$").matches(probe(title: "")))
+        #expect(!WindowMatcher(title: "^$").matches(probe(title: "x")))
     }
 
     // MARK: - role / subrole (exact; nil probe == "")
 
-    func testRoleExactMatchAndUnprobedNoMatch() {
+    @Test func roleExactMatchAndUnprobedNoMatch() {
         let m = WindowMatcher(role: "AXWindow")
-        XCTAssertTrue(m.matches(probe(role: "AXWindow")))
-        XCTAssertFalse(m.matches(probe(role: "AXSheet")))
-        XCTAssertFalse(m.matches(probe(role: nil)))   // unprobed → no match
+        #expect(m.matches(probe(role: "AXWindow")))
+        #expect(!m.matches(probe(role: "AXSheet")))
+        #expect(!m.matches(probe(role: nil)))   // unprobed → no match
     }
 
-    func testSubroleExactMatchAndUnprobedNoMatch() {
+    @Test func subroleExactMatchAndUnprobedNoMatch() {
         let m = WindowMatcher(subrole: "AXDialog")
-        XCTAssertTrue(m.matches(probe(subrole: "AXDialog")))
-        XCTAssertFalse(m.matches(probe(subrole: nil)))
+        #expect(m.matches(probe(subrole: "AXDialog")))
+        #expect(!m.matches(probe(subrole: nil)))
     }
 
-    func testNeedsAXRoleFlag() {
-        XCTAssertFalse(WindowMatcher(app: "x").needsAXRole)
-        XCTAssertTrue(WindowMatcher(role: "AXWindow").needsAXRole)
-        XCTAssertTrue(WindowMatcher(subrole: "AXDialog").needsAXRole)
+    @Test func needsAXRoleFlag() {
+        #expect(!WindowMatcher(app: "x").needsAXRole)
+        #expect(WindowMatcher(role: "AXWindow").needsAXRole)
+        #expect(WindowMatcher(subrole: "AXDialog").needsAXRole)
     }
 
     // MARK: - size caps (≤ limit, inclusive; nil size never satisfies)
 
-    func testMaxWidthInclusiveAndNeedsSize() {
+    @Test func maxWidthInclusiveAndNeedsSize() {
         let m = WindowMatcher(maxWidth: 400)
-        XCTAssertTrue(m.matches(probe(size: CGSize(width: 400, height: 999))))  // inclusive
-        XCTAssertTrue(m.matches(probe(size: CGSize(width: 200, height: 999))))
-        XCTAssertFalse(m.matches(probe(size: CGSize(width: 401, height: 10))))
-        XCTAssertFalse(m.matches(probe(size: nil)))   // unknown size → can't satisfy
+        #expect(m.matches(probe(size: CGSize(width: 400, height: 999))))  // inclusive
+        #expect(m.matches(probe(size: CGSize(width: 200, height: 999))))
+        #expect(!m.matches(probe(size: CGSize(width: 401, height: 10))))
+        #expect(!m.matches(probe(size: nil)))   // unknown size → can't satisfy
     }
 
-    func testMaxHeightInclusiveAndNeedsSize() {
+    @Test func maxHeightInclusiveAndNeedsSize() {
         let m = WindowMatcher(maxHeight: 300)
-        XCTAssertTrue(m.matches(probe(size: CGSize(width: 9, height: 300))))
-        XCTAssertFalse(m.matches(probe(size: CGSize(width: 9, height: 301))))
-        XCTAssertFalse(m.matches(probe(size: nil)))
+        #expect(m.matches(probe(size: CGSize(width: 9, height: 300))))
+        #expect(!m.matches(probe(size: CGSize(width: 9, height: 301))))
+        #expect(!m.matches(probe(size: nil)))
     }
 
     // MARK: - AND semantics (every specified key must hold)
 
-    func testAllKeysMustHold() {
+    @Test func allKeysMustHold() {
         let m = WindowMatcher(app: "Safari", title: "Inbox", maxWidth: 500)
         let ok = probe(bundleId: "com.apple.Safari", title: "Inbox",
                        size: CGSize(width: 400, height: 1))
-        XCTAssertTrue(m.matches(ok))
+        #expect(m.matches(ok))
         // each single-key failure flips the whole match to false
-        XCTAssertFalse(m.matches(probe(bundleId: "com.apple.Safari",
+        #expect(!m.matches(probe(bundleId: "com.apple.Safari",
             title: "Drafts", size: CGSize(width: 400, height: 1))))
-        XCTAssertFalse(m.matches(probe(bundleId: "com.google.Chrome",
+        #expect(!m.matches(probe(bundleId: "com.google.Chrome",
             title: "Inbox", size: CGSize(width: 400, height: 1))))
-        XCTAssertFalse(m.matches(probe(bundleId: "com.apple.Safari",
+        #expect(!m.matches(probe(bundleId: "com.apple.Safari",
             title: "Inbox", size: CGSize(width: 600, height: 1))))
     }
 
     // MARK: - invalid regex (no crash, no match)
 
-    func testInvalidPatternDoesNotCrashOrMatch() {
-        XCTAssertFalse(WindowMatcher.regexMatches("[unterminated", "anything"))
-        XCTAssertFalse(WindowMatcher(app: "[bad(").matches(probe(bundleId: "x")))
+    @Test func invalidPatternDoesNotCrashOrMatch() {
+        #expect(!WindowMatcher.regexMatches("[unterminated", "anything"))
+        #expect(!WindowMatcher(app: "[bad(").matches(probe(bundleId: "x")))
     }
 
     // MARK: - Equatable (value semantics, used by rule dedup / reload diff)
 
-    func testEquatable() {
-        XCTAssertEqual(WindowMatcher(app: "x", maxWidth: 10),
+    @Test func equatable() {
+        #expect(WindowMatcher(app: "x", maxWidth: 10) ==
                        WindowMatcher(app: "x", maxWidth: 10))
-        XCTAssertNotEqual(WindowMatcher(app: "x"), WindowMatcher(app: "y"))
+        #expect(WindowMatcher(app: "x") != WindowMatcher(app: "y"))
     }
 }

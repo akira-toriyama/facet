@@ -1,11 +1,11 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 // Exhaustive grammar table for the `facet filter` parser (pivot Phase 0,
 // #283 PR#1). The parser is the load-bearing foundation for every later
 // phase, so this table is intentionally fat. CI-ONLY: CLT cannot run
 // `swift test` (no XCTest module); the local bar is `swift build`.
-final class FacetFilterParserTests: XCTestCase {
+struct FacetFilterParserTests {
 
     // MARK: helpers
 
@@ -23,8 +23,7 @@ final class FacetFilterParserTests: XCTestCase {
         switch FacetFilter.parse(s) {
         case .success(let f): return f
         case .failure(let e):
-            XCTFail("unexpected parse error at \(e.offset): \(e.message) — for \"\(s)\"",
-                    file: file, line: line)
+            Issue.record("unexpected parse error at \(e.offset): \(e.message) — for \"\(s)\"")
             return .all
         }
     }
@@ -33,8 +32,7 @@ final class FacetFilterParserTests: XCTestCase {
                        _ line: UInt = #line) -> FacetFilter.ParseError {
         switch FacetFilter.parse(s) {
         case .success(let f):
-            XCTFail("expected parse error, got \(f) — for \"\(s)\"",
-                    file: file, line: line)
+            Issue.record("expected parse error, got \(f) — for \"\(s)\"")
             return .init(message: "", offset: 0)
         case .failure(let e): return e
         }
@@ -46,259 +44,259 @@ final class FacetFilterParserTests: XCTestCase {
 
     // MARK: every operator
 
-    func testEveryOperatorParses() {
-        XCTAssertEqual(parsed("tag=web"), cmp("tag", .equals, "web"))
-        XCTAssertEqual(parsed("tag~=web"), cmp("tag", .contains, "web"))
-        XCTAssertEqual(parsed("title^=Inbox"), cmp("title", .prefix, "Inbox"))
-        XCTAssertEqual(parsed("title$=PR"), cmp("title", .suffix, "PR"))
-        XCTAssertEqual(parsed("title*=PR"), cmp("title", .substring, "PR"))
-        XCTAssertEqual(parsed("workspace|=dog"), cmp("workspace", .hierarchical, "dog"))
+    @Test func everyOperatorParses() {
+        #expect(parsed("tag=web") == cmp("tag", .equals, "web"))
+        #expect(parsed("tag~=web") == cmp("tag", .contains, "web"))
+        #expect(parsed("title^=Inbox") == cmp("title", .prefix, "Inbox"))
+        #expect(parsed("title$=PR") == cmp("title", .suffix, "PR"))
+        #expect(parsed("title*=PR") == cmp("title", .substring, "PR"))
+        #expect(parsed("workspace|=dog") == cmp("workspace", .hierarchical, "dog"))
     }
 
-    func testOpRawValuesMatchWire() {
-        XCTAssertEqual(FacetFilter.Op.equals.rawValue, "=")
-        XCTAssertEqual(FacetFilter.Op.contains.rawValue, "~=")
-        XCTAssertEqual(FacetFilter.Op.prefix.rawValue, "^=")
-        XCTAssertEqual(FacetFilter.Op.suffix.rawValue, "$=")
-        XCTAssertEqual(FacetFilter.Op.substring.rawValue, "*=")
-        XCTAssertEqual(FacetFilter.Op.hierarchical.rawValue, "|=")
+    @Test func opRawValuesMatchWire() {
+        #expect(FacetFilter.Op.equals.rawValue == "=")
+        #expect(FacetFilter.Op.contains.rawValue == "~=")
+        #expect(FacetFilter.Op.prefix.rawValue == "^=")
+        #expect(FacetFilter.Op.suffix.rawValue == "$=")
+        #expect(FacetFilter.Op.substring.rawValue == "*=")
+        #expect(FacetFilter.Op.hierarchical.rawValue == "|=")
     }
 
     // MARK: presence + not
 
-    func testBarePresence() {
-        XCTAssertEqual(parsed("tag"), atom("tag"))
-        XCTAssertEqual(parsed("floating"), atom("floating"))
-        XCTAssertEqual(parsed("sticky"), atom("sticky"))
-        XCTAssertEqual(parsed("master"), atom("master"))
+    @Test func barePresence() {
+        #expect(parsed("tag") == atom("tag"))
+        #expect(parsed("floating") == atom("floating"))
+        #expect(parsed("sticky") == atom("sticky"))
+        #expect(parsed("master") == atom("master"))
     }
 
-    func testNotPresence() {
+    @Test func notPresence() {
         // `not tag` is the untagged bucket (old `_default`).
-        XCTAssertEqual(parsed("not tag"), .not(atom("tag")))
-        XCTAssertEqual(parsed("not floating"), .not(atom("floating")))
+        #expect(parsed("not tag") == .not(atom("tag")))
+        #expect(parsed("not floating") == .not(atom("floating")))
     }
 
-    func testNestedNot() {
-        XCTAssertEqual(parsed("not not tag"), .not(.not(atom("tag"))))
+    @Test func nestedNot() {
+        #expect(parsed("not not tag") == .not(.not(atom("tag"))))
     }
 
     // MARK: precedence not > and > or
 
-    func testPrecedenceAndBindsTighterThanOr() {
+    @Test func precedenceAndBindsTighterThanOr() {
         // a or b and c  ==  a or (b and c)
-        XCTAssertEqual(
-            parsed("a~=1 or b~=2 and c~=3"),
+        #expect(
+            parsed("a~=1 or b~=2 and c~=3") ==
             .or([cmp("a", .contains, "1"),
                  .and([cmp("b", .contains, "2"), cmp("c", .contains, "3")])]))
     }
 
-    func testPrecedenceNotBindsTighterThanAnd() {
+    @Test func precedenceNotBindsTighterThanAnd() {
         // not a and b  ==  (not a) and b
-        XCTAssertEqual(
-            parsed("not a~=1 and b~=2"),
+        #expect(
+            parsed("not a~=1 and b~=2") ==
             .and([.not(cmp("a", .contains, "1")), cmp("b", .contains, "2")]))
     }
 
     // MARK: flattening of chains
 
-    func testAndChainFlattens() {
-        XCTAssertEqual(
-            parsed("a~=1 and b~=2 and c~=3"),
+    @Test func andChainFlattens() {
+        #expect(
+            parsed("a~=1 and b~=2 and c~=3") ==
             .and([cmp("a", .contains, "1"),
                   cmp("b", .contains, "2"),
                   cmp("c", .contains, "3")]))
     }
 
-    func testOrChainFlattens() {
-        XCTAssertEqual(
-            parsed("a~=1 or b~=2 or c~=3"),
+    @Test func orChainFlattens() {
+        #expect(
+            parsed("a~=1 or b~=2 or c~=3") ==
             .or([cmp("a", .contains, "1"),
                  cmp("b", .contains, "2"),
                  cmp("c", .contains, "3")]))
     }
 
-    func testLoneAtomIsNotWrapped() {
+    @Test func loneAtomIsNotWrapped() {
         // A single atom must NOT become a 1-element .and / .or.
-        XCTAssertEqual(parsed("tag~=web"), cmp("tag", .contains, "web"))
+        #expect(parsed("tag~=web") == cmp("tag", .contains, "web"))
     }
 
     // MARK: parentheses
 
-    func testParensOverridePrecedence() {
-        XCTAssertEqual(
-            parsed("(a~=1 or b~=2) and c~=3"),
+    @Test func parensOverridePrecedence() {
+        #expect(
+            parsed("(a~=1 or b~=2) and c~=3") ==
             .and([.or([cmp("a", .contains, "1"), cmp("b", .contains, "2")]),
                   cmp("c", .contains, "3")]))
     }
 
-    func testRedundantParens() {
-        XCTAssertEqual(parsed("(tag~=web)"), cmp("tag", .contains, "web"))
-        XCTAssertEqual(parsed("((tag))"), atom("tag"))
+    @Test func redundantParens() {
+        #expect(parsed("(tag~=web)") == cmp("tag", .contains, "web"))
+        #expect(parsed("((tag))") == atom("tag"))
     }
 
     // MARK: quoting + literal symbols
 
-    func testQuotedValueWithSpaces() {
-        XCTAssertEqual(parsed("app=\"Visual Studio Code\""),
+    @Test func quotedValueWithSpaces() {
+        #expect(parsed("app=\"Visual Studio Code\"") ==
                        cmp("app", .equals, "Visual Studio Code"))
     }
 
-    func testQuotedValueKeepsOperatorCharsLiteral() {
+    @Test func quotedValueKeepsOperatorCharsLiteral() {
         // Inside quotes `*` `^` `$` are literal, not operators.
-        XCTAssertEqual(parsed("title*=\"2 * 3\""),
+        #expect(parsed("title*=\"2 * 3\"") ==
                        cmp("title", .substring, "2 * 3"))
-        XCTAssertEqual(parsed("title=\"^PR$\""), cmp("title", .equals, "^PR$"))
+        #expect(parsed("title=\"^PR$\"") == cmp("title", .equals, "^PR$"))
     }
 
-    func testQuotedValueKeepsKeywordsLiteral() {
-        XCTAssertEqual(parsed("title=\"a and b\""),
+    @Test func quotedValueKeepsKeywordsLiteral() {
+        #expect(parsed("title=\"a and b\"") ==
                        cmp("title", .equals, "a and b"))
     }
 
-    func testEmptyQuotedValue() {
-        XCTAssertEqual(parsed("title=\"\""), cmp("title", .equals, ""))
+    @Test func emptyQuotedValue() {
+        #expect(parsed("title=\"\"") == cmp("title", .equals, ""))
     }
 
     // MARK: case-sensitivity flag
 
-    func testCaseInsensitiveByDefault() {
-        XCTAssertEqual(parsed("app=safari"), cmp("app", .equals, "safari", cs: false))
+    @Test func caseInsensitiveByDefault() {
+        #expect(parsed("app=safari") == cmp("app", .equals, "safari", cs: false))
     }
 
-    func testTrailingSFlagIsCaseSensitive() {
-        XCTAssertEqual(parsed("app=safari s"), cmp("app", .equals, "safari", cs: true))
+    @Test func trailingSFlagIsCaseSensitive() {
+        #expect(parsed("app=safari s") == cmp("app", .equals, "safari", cs: true))
     }
 
-    func testCaseFlagThenConnective() {
-        XCTAssertEqual(
-            parsed("app=safari s and tag"),
+    @Test func caseFlagThenConnective() {
+        #expect(
+            parsed("app=safari s and tag") ==
             .and([cmp("app", .equals, "safari", cs: true), atom("tag")]))
     }
 
-    func testTrailingSInValueIsNotFlag() {
+    @Test func trailingSInValueIsNotFlag() {
         // No whitespace → `s` is part of the value.
-        XCTAssertEqual(parsed("app=safaris"), cmp("app", .equals, "safaris"))
+        #expect(parsed("app=safaris") == cmp("app", .equals, "safaris"))
     }
 
     // MARK: keywords as values (position disambiguates)
 
-    func testKeywordInValuePosition() {
-        XCTAssertEqual(parsed("tag=and"), cmp("tag", .equals, "and"))
-        XCTAssertEqual(parsed("mark=or"), cmp("mark", .equals, "or"))
-        XCTAssertEqual(parsed("tag=not"), cmp("tag", .equals, "not"))
+    @Test func keywordInValuePosition() {
+        #expect(parsed("tag=and") == cmp("tag", .equals, "and"))
+        #expect(parsed("mark=or") == cmp("mark", .equals, "or"))
+        #expect(parsed("tag=not") == cmp("tag", .equals, "not"))
     }
 
     // MARK: empty input
 
-    func testEmptyInputIsAll() {
-        XCTAssertEqual(parsed(""), .all)
-        XCTAssertEqual(parsed("   "), .all)
-        XCTAssertEqual(parsed("\t \t"), .all)
+    @Test func emptyInputIsAll() {
+        #expect(parsed("") == .all)
+        #expect(parsed("   ") == .all)
+        #expect(parsed("\t \t") == .all)
     }
 
     // MARK: realistic locked-design examples
 
-    func testDesignExamples() {
-        XCTAssertEqual(
-            parsed("tag~=web and not floating"),
+    @Test func designExamples() {
+        #expect(
+            parsed("tag~=web and not floating") ==
             .and([cmp("tag", .contains, "web"), .not(atom("floating"))]))
-        XCTAssertEqual(
-            parsed("(tag~=work or tag~=urgent) and not tag~=wip"),
+        #expect(
+            parsed("(tag~=work or tag~=urgent) and not tag~=wip") ==
             .and([.or([cmp("tag", .contains, "work"),
                        cmp("tag", .contains, "urgent")]),
                   .not(cmp("tag", .contains, "wip"))]))
-        XCTAssertEqual(
-            parsed("app=Safari and title*=PR"),
+        #expect(
+            parsed("app=Safari and title*=PR") ==
             .and([cmp("app", .equals, "Safari"),
                   cmp("title", .substring, "PR")]))
-        XCTAssertEqual(parsed("not tag"), .not(atom("tag")))
+        #expect(parsed("not tag") == .not(atom("tag")))
     }
 
     // MARK: unknown field parses fine (typo is loud only at eval)
 
-    func testUnknownFieldParsesOK() {
-        XCTAssertEqual(parsed("frobnicate~=x"), cmp("frobnicate", .contains, "x"))
-        XCTAssertEqual(parsed("frob"), atom("frob"))
+    @Test func unknownFieldParsesOK() {
+        #expect(parsed("frobnicate~=x") == cmp("frobnicate", .contains, "x"))
+        #expect(parsed("frob") == atom("frob"))
     }
 
     // MARK: ParseError + caret offsets
 
-    func testOperatorMissingEquals() {
+    @Test func operatorMissingEquals() {
         let s = "tag~web"
         let e = error(s)
-        XCTAssertEqual(e.offset, col(s, "~"))       // 3
-        XCTAssertTrue(e.message.contains("expected '='"), e.message)
+        #expect(e.offset == col(s, "~"))       // 3
+        #expect(e.message.contains("expected '='"), "\(e.message)")
     }
 
-    func testBarPipeOperatorMissingEquals() {
+    @Test func barPipeOperatorMissingEquals() {
         let s = "tag|web"
         let e = error(s)
-        XCTAssertEqual(e.offset, col(s, "|"))
-        XCTAssertTrue(e.message.contains("after '|'"), e.message)
+        #expect(e.offset == col(s, "|"))
+        #expect(e.message.contains("after '|'"), "\(e.message)")
     }
 
-    func testMissingValueAfterOp() {
+    @Test func missingValueAfterOp() {
         let s = "tag~="
         let e = error(s)
-        XCTAssertEqual(e.offset, s.count)           // EOF (5)
-        XCTAssertTrue(e.message.contains("expected a value"), e.message)
+        #expect(e.offset == s.count)           // EOF (5)
+        #expect(e.message.contains("expected a value"), "\(e.message)")
     }
 
-    func testUnterminatedQuote() {
+    @Test func unterminatedQuote() {
         let s = "app=\"unterminated"
         let e = error(s)
-        XCTAssertEqual(e.offset, col(s, "\""))      // 4
-        XCTAssertTrue(e.message.contains("unterminated"), e.message)
+        #expect(e.offset == col(s, "\""))      // 4
+        #expect(e.message.contains("unterminated"), "\(e.message)")
     }
 
-    func testUnclosedParen() {
+    @Test func unclosedParen() {
         let s = "(tag~=a"
         let e = error(s)
-        XCTAssertEqual(e.offset, s.count)           // EOF (7)
-        XCTAssertTrue(e.message.contains("expected ')'"), e.message)
+        #expect(e.offset == s.count)           // EOF (7)
+        #expect(e.message.contains("expected ')'"), "\(e.message)")
     }
 
-    func testLeadingConnective() {
+    @Test func leadingConnective() {
         let s = "and tag~=a"
         let e = error(s)
-        XCTAssertEqual(e.offset, 0)
-        XCTAssertTrue(e.message.contains("and"), e.message)
+        #expect(e.offset == 0)
+        #expect(e.message.contains("and"), "\(e.message)")
     }
 
-    func testUppercaseKeywordHint() {
+    @Test func uppercaseKeywordHint() {
         let s = "tag~=a OR tag~=b"
         let e = error(s)
-        XCTAssertEqual(e.offset, col(s, "O"))       // 7
-        XCTAssertTrue(e.message.contains("did you mean 'or'"), e.message)
+        #expect(e.offset == col(s, "O"))       // 7
+        #expect(e.message.contains("did you mean 'or'"), "\(e.message)")
     }
 
-    func testDanglingNot() {
+    @Test func danglingNot() {
         let s = "not"
         let e = error(s)
-        XCTAssertEqual(e.offset, s.count)           // EOF (3)
-        XCTAssertTrue(e.message.contains("expected a field name"), e.message)
+        #expect(e.offset == s.count)           // EOF (3)
+        #expect(e.message.contains("expected a field name"), "\(e.message)")
     }
 
-    func testImplicitAndIsRejected() {
+    @Test func implicitAndIsRejected() {
         // No implicit space-AND: two adjacent atoms are a syntax error.
         let s = "a~=1 b~=2"
         let e = error(s)
-        XCTAssertEqual(e.offset, col(s, "b"))       // 5
-        XCTAssertTrue(e.message.contains("unexpected"), e.message)
+        #expect(e.offset == col(s, "b"))       // 5
+        #expect(e.message.contains("unexpected"), "\(e.message)")
     }
 
-    func testCaretRendering() {
+    @Test func caretRendering() {
         let s = "tag~web"
         let e = error(s)
-        XCTAssertEqual(e.caret(in: s), "tag~web\n   ^ expected '=' after '~'")
+        #expect(e.caret(in: s) == "tag~web\n   ^ expected '=' after '~'")
     }
 
-    func testCaretRenderingNormalisesTabs() {
+    @Test func caretRenderingNormalisesTabs() {
         // A tab in the input becomes one space so the caret stays aligned.
         let s = "a\tb~c"
         let e = error(s)
-        XCTAssertEqual(e.offset, col(s, "~"))
-        XCTAssertTrue(e.caret(in: s).hasPrefix("a b~c\n"), e.caret(in: s))
+        #expect(e.offset == col(s, "~"))
+        #expect(e.caret(in: s).hasPrefix("a b~c\n"), "\(e.caret(in: s))")
     }
 }
