@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// Pure tests for `DisplayGeometry`. No NSScreen, no AX, no
@@ -8,7 +8,7 @@ import XCTest
 /// though the developer environment is single-display, so the
 /// rescue / snap behaviour is verified before it has to fire
 /// in production.
-final class DisplayGeometryTests: XCTestCase {
+struct DisplayGeometryTests {
 
     // MARK: - Display layouts used across tests
 
@@ -24,47 +24,47 @@ final class DisplayGeometryTests: XCTestCase {
 
     // MARK: - isVisible
 
-    func testIsVisibleTrueWhenRectFitsInsideOnlyDisplay() {
+    @Test func isVisibleTrueWhenRectFitsInsideOnlyDisplay() {
         let rect = CGRect(x: 100, y: 100, width: 400, height: 300)
-        XCTAssertTrue(DisplayGeometry.isVisible(rect, in: single))
+        #expect(DisplayGeometry.isVisible(rect, in: single))
     }
 
-    func testIsVisibleTrueWhenRectStraddlesBoundary() {
+    @Test func isVisibleTrueWhenRectStraddlesBoundary() {
         // Half on the primary, half on the external — counts as
         // visible (intersects both).
         let rect = CGRect(x: 1800, y: 100, width: 400, height: 300)
-        XCTAssertTrue(DisplayGeometry.isVisible(rect, in: dual))
+        #expect(DisplayGeometry.isVisible(rect, in: dual))
     }
 
-    func testIsVisibleFalseWhenRectIsCompletelyOff() {
+    @Test func isVisibleFalseWhenRectIsCompletelyOff() {
         // Rect is way to the right of any display.
         let rect = CGRect(x: 10_000, y: 100,
                           width: 400, height: 300)
-        XCTAssertFalse(DisplayGeometry.isVisible(rect, in: dual))
+        #expect(!DisplayGeometry.isVisible(rect, in: dual))
     }
 
-    func testIsVisibleFalseWithEmptyDisplays() {
+    @Test func isVisibleFalseWithEmptyDisplays() {
         // Mid-reconfig moment: OS reports no displays. Anything
         // is "not visible" — caller falls back to a safe default.
         let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
-        XCTAssertFalse(DisplayGeometry.isVisible(rect, in: []))
+        #expect(!DisplayGeometry.isVisible(rect, in: []))
     }
 
     // MARK: - nearestDisplay
 
-    func testNearestDisplayPicksPrimaryWhenRectIsThere() {
+    @Test func nearestDisplayPicksPrimaryWhenRectIsThere() {
         let rect = CGRect(x: 100, y: 100, width: 100, height: 100)
         let near = DisplayGeometry.nearestDisplay(to: rect, in: dual)
-        XCTAssertEqual(near, dual[0])
+        #expect(near == dual[0])
     }
 
-    func testNearestDisplayPicksExternalWhenRectIsThere() {
+    @Test func nearestDisplayPicksExternalWhenRectIsThere() {
         let rect = CGRect(x: 3500, y: 1000, width: 100, height: 100)
         let near = DisplayGeometry.nearestDisplay(to: rect, in: dual)
-        XCTAssertEqual(near, dual[1])
+        #expect(near == dual[1])
     }
 
-    func testNearestDisplayPicksClosestForOrphanRect() {
+    @Test func nearestDisplayPicksClosestForOrphanRect() {
         // Rect is far to the right of both displays. Closer in
         // *centre distance* to the external (its centre is at
         // ≈3840, x=10000 → dist 6160 vs primary centre 960 →
@@ -72,35 +72,35 @@ final class DisplayGeometryTests: XCTestCase {
         let rect = CGRect(x: 10_000, y: 1000,
                           width: 100, height: 100)
         let near = DisplayGeometry.nearestDisplay(to: rect, in: dual)
-        XCTAssertEqual(near, dual[1])
+        #expect(near == dual[1])
     }
 
-    func testNearestDisplaySingleDisplayAlwaysReturnsIt() {
+    @Test func nearestDisplaySingleDisplayAlwaysReturnsIt() {
         let rect = CGRect(x: -5000, y: -5000,
                           width: 100, height: 100)
         let near = DisplayGeometry.nearestDisplay(to: rect, in: single)
-        XCTAssertEqual(near, single[0])
+        #expect(near == single[0])
     }
 
-    func testNearestDisplayNilForEmptyDisplays() {
+    @Test func nearestDisplayNilForEmptyDisplays() {
         let rect = CGRect(x: 0, y: 0, width: 100, height: 100)
-        XCTAssertNil(DisplayGeometry.nearestDisplay(to: rect, in: []))
+        #expect(DisplayGeometry.nearestDisplay(to: rect, in: []) == nil)
     }
 
     // MARK: - orphanedPoints
 
-    func testOrphanedPointsEmptyWhenAllSitOnDisplays() {
+    @Test func orphanedPointsEmptyWhenAllSitOnDisplays() {
         let points = [
             CGPoint(x: 500, y: 500),       // on primary
             CGPoint(x: 3000, y: 1000),     // on external
         ]
-        XCTAssertEqual(
+        #expect(
             DisplayGeometry.orphanedPoints(among: points,
-                                           displays: dual),
-            [])
+                                           displays: dual)
+            == [])
     }
 
-    func testOrphanedPointsReturnsOnlyTheStrandedOnes() {
+    @Test func orphanedPointsReturnsOnlyTheStrandedOnes() {
         let points = [
             CGPoint(x: 500, y: 500),       // on primary (keep)
             CGPoint(x: 5800, y: 2155),     // anchor-corner of
@@ -113,22 +113,22 @@ final class DisplayGeometryTests: XCTestCase {
         ]
         let orphans = DisplayGeometry.orphanedPoints(
             among: points, displays: displays)
-        XCTAssertEqual(orphans, [CGPoint(x: 5800, y: 2155)])
+        #expect(orphans == [CGPoint(x: 5800, y: 2155)])
     }
 
-    func testOrphanedPointsTreatsAllAsOrphanWhenNoDisplays() {
+    @Test func orphanedPointsTreatsAllAsOrphanWhenNoDisplays() {
         // Mid-reconfig with zero displays: every parked window
         // is orphan, caller can decide how to handle it (likely
         // wait for the next reconfig).
         let points = [CGPoint(x: 0, y: 0),
                       CGPoint(x: 100, y: 100)]
-        XCTAssertEqual(
+        #expect(
             DisplayGeometry.orphanedPoints(among: points,
-                                           displays: []),
-            points)
+                                           displays: [])
+            == points)
     }
 
-    func testOrphanedPointsHandlesExactCornerAsOutside() {
+    @Test func orphanedPointsHandlesExactCornerAsOutside() {
         // CGRect.contains is half-open on the upper edges:
         // (display.maxX, display.maxY) is OUTSIDE. anchor parking
         // uses (maxX-1, maxY-1) which IS inside — so this asserts
@@ -137,13 +137,13 @@ final class DisplayGeometryTests: XCTestCase {
                              width: 1920, height: 1080)
         let cornerOutside = CGPoint(x: 1920, y: 1080)
         let cornerInside = CGPoint(x: 1919, y: 1079)
-        XCTAssertEqual(
+        #expect(
             DisplayGeometry.orphanedPoints(among: [cornerOutside],
-                                           displays: [display]),
-            [cornerOutside])
-        XCTAssertEqual(
+                                           displays: [display])
+            == [cornerOutside])
+        #expect(
             DisplayGeometry.orphanedPoints(among: [cornerInside],
-                                           displays: [display]),
-            [])
+                                           displays: [display])
+            == [])
     }
 }

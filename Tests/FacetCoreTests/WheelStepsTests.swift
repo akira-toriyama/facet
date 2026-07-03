@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 import CoreGraphics
 @testable import FacetCore
 
@@ -9,80 +9,80 @@ import CoreGraphics
 /// inout `accum` and drain one ±1 step per `threshold`; a notched wheel is a flat
 /// ±1 per detent. Sign: a NEGATIVE `deltaY` (content scrolled DOWN, natural-scroll
 /// sign already baked in) → +1 ("next"); positive → -1 ("prev"). Pure; CI-only.
-final class WheelStepsTests: XCTestCase {
+struct WheelStepsTests {
 
     // MARK: - notched wheel (no accumulation, flat ±1)
 
-    func testNotchedDownIsForward() {
+    @Test func notchedDownIsForward() {
         var accum: CGFloat = 0
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -3, accum: &accum, threshold: 14,
-                       precise: false, gestureBegan: false), 1)
-        XCTAssertEqual(accum, 0, "notched wheel must not touch the accumulator")
+                       precise: false, gestureBegan: false) == 1)
+        #expect(accum == 0, "notched wheel must not touch the accumulator")
     }
 
-    func testNotchedUpIsBackward() {
+    @Test func notchedUpIsBackward() {
         var accum: CGFloat = 0
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: 3, accum: &accum, threshold: 14,
-                       precise: false, gestureBegan: false), -1)
+                       precise: false, gestureBegan: false) == -1)
     }
 
     // MARK: - zero delta
 
-    func testZeroDeltaIsNoStep() {
+    @Test func zeroDeltaIsNoStep() {
         var accum: CGFloat = 5
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: 0, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: false), 0)
-        XCTAssertEqual(accum, 5, "a zero delta leaves the accumulator untouched")
+                       precise: true, gestureBegan: false) == 0)
+        #expect(accum == 5, "a zero delta leaves the accumulator untouched")
     }
 
     // MARK: - precise (trackpad) accumulation
 
-    func testPreciseSubThresholdAccumulatesNoStep() {
+    @Test func preciseSubThresholdAccumulatesNoStep() {
         var accum: CGFloat = 0
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -10, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: false), 0)
-        XCTAssertEqual(accum, -10, "sub-threshold travel is banked, not stepped")
+                       precise: true, gestureBegan: false) == 0)
+        #expect(accum == -10, "sub-threshold travel is banked, not stepped")
     }
 
-    func testPreciseLeftoverCarriesToNextCall() {
+    @Test func preciseLeftoverCarriesToNextCall() {
         var accum: CGFloat = -10            // banked from a previous call
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -10, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: false), 1)
-        XCTAssertEqual(accum, -6, accuracy: 0.0001,
-                       "one threshold drained, remainder carried")
+                       precise: true, gestureBegan: false) == 1)
+        #expect(abs(accum - (-6)) < 0.0001,
+                "one threshold drained, remainder carried")
     }
 
-    func testPreciseNetMultiStepInOneCall() {
+    @Test func preciseNetMultiStepInOneCall() {
         var accum: CGFloat = 0
         // -30 over a 14 threshold drains twice (-30→-16→-2), both forward.
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -30, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: false), 2)
-        XCTAssertEqual(accum, -2, accuracy: 0.0001)
+                       precise: true, gestureBegan: false) == 2)
+        #expect(abs(accum - (-2)) < 0.0001)
     }
 
-    func testPreciseUpIsNegativeNet() {
+    @Test func preciseUpIsNegativeNet() {
         var accum: CGFloat = 0
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: 30, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: false), -2)
-        XCTAssertEqual(accum, 2, accuracy: 0.0001)
+                       precise: true, gestureBegan: false) == -2)
+        #expect(abs(accum - 2) < 0.0001)
     }
 
     /// `.began` resets the accumulator first, so a stale sub-threshold leftover
     /// from an earlier, unrelated gesture cannot bias the new one.
-    func testGestureBeganResetsAccumulator() {
+    @Test func gestureBeganResetsAccumulator() {
         var accum: CGFloat = 13             // stale leftover, just under threshold
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -2, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: true), 0,
+                       precise: true, gestureBegan: true) == 0,
             "the stale +13 is cleared, so -2 alone is sub-threshold")
-        XCTAssertEqual(accum, -2, accuracy: 0.0001)
+        #expect(abs(accum - (-2)) < 0.0001)
     }
 
     // MARK: - the carousel's load-bearing invariant (RailView.scrollRotate)
@@ -93,21 +93,21 @@ final class WheelStepsTests: XCTestCase {
     /// correct because the returned NET magnitude equals the number of ±1 drains
     /// (all sharing one sign). Pin that invariant at the carousel's threshold so
     /// a future "clamp the return to ±1" regression is caught, not swallowed.
-    func testNetMagnitudeEqualsDrainCountAtCarouselThreshold() {
+    @Test func netMagnitudeEqualsDrainCountAtCarouselThreshold() {
         var accum: CGFloat = 0
         // -95 over a 30 threshold drains 3× (-95 → -65 → -35 → -5), all forward.
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -95, accum: &accum, threshold: 30,
-                       precise: true, gestureBegan: false), 3)
-        XCTAssertEqual(accum, -5, accuracy: 0.0001, "sub-threshold residual carries")
+                       precise: true, gestureBegan: false) == 3)
+        #expect(abs(accum - (-5)) < 0.0001, "sub-threshold residual carries")
     }
 
-    func testNetMagnitudeNegativeAtCarouselThreshold() {
+    @Test func netMagnitudeNegativeAtCarouselThreshold() {
         var accum: CGFloat = 0
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: 95, accum: &accum, threshold: 30,
-                       precise: true, gestureBegan: false), -3)
-        XCTAssertEqual(accum, 5, accuracy: 0.0001)
+                       precise: true, gestureBegan: false) == -3)
+        #expect(abs(accum - 5) < 0.0001)
     }
 
     /// The diagnostic case for the no-sign-flip invariant the carousel net-loop
@@ -117,23 +117,23 @@ final class WheelStepsTests: XCTestCase {
     /// starting from an opposite-sign bank. A future "optimize" that keyed off
     /// `deltaY.signum()` instead of the per-iteration `accum` sign would diverge
     /// precisely here.
-    func testOppositeSignLeftoverAbsorbsInOneCall() {
+    @Test func oppositeSignLeftoverAbsorbsInOneCall() {
         var accum: CGFloat = 5
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -30, accum: &accum, threshold: 14,
-                       precise: true, gestureBegan: false), 1)
-        XCTAssertEqual(accum, -11, accuracy: 0.0001,
-                       "opposite-sign bank is absorbed; drains never flip sign")
+                       precise: true, gestureBegan: false) == 1)
+        #expect(abs(accum - (-11)) < 0.0001,
+                "opposite-sign bank is absorbed; drains never flip sign")
     }
 
     // MARK: - defensive (the helper stays total, like boardIndexStep)
 
     /// A zero / negative threshold would make the drain loop never terminate;
     /// the helper guards it and reports no step instead of hanging.
-    func testNonPositiveThresholdIsNoStep() {
+    @Test func nonPositiveThresholdIsNoStep() {
         var accum: CGFloat = 0
-        XCTAssertEqual(
+        #expect(
             wheelSteps(deltaY: -50, accum: &accum, threshold: 0,
-                       precise: true, gestureBegan: false), 0)
+                       precise: true, gestureBegan: false) == 0)
     }
 }

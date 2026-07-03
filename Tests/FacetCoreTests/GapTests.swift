@@ -1,125 +1,125 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// Pure geometry tests for the inner-gap post-pass. 1200×600 with a
 /// gap of 20 keeps every result integral (gap/2 = 10, /2 = 600,
 /// /3 = 400, height /2 = 300) so frames compare exactly.
-final class ApplyInnerGapTests: XCTestCase {
+struct ApplyInnerGapTests {
 
     private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
     private let screen = CGRect(x: 0, y: 0, width: 1200, height: 600)
 
-    func testGapZeroIsNoOp() {
+    @Test func gapZeroIsNoOp() {
         let f = [wid(1): CGRect(x: 0, y: 0, width: 600, height: 600),
                  wid(2): CGRect(x: 600, y: 0, width: 600, height: 600)]
-        XCTAssertEqual(applyInnerGap(f, in: screen, gap: 0), f)
+        #expect(applyInnerGap(f, in: screen, gap: 0) == f)
     }
 
-    func testNegativeGapIsNoOp() {
+    @Test func negativeGapIsNoOp() {
         let f = [wid(1): CGRect(x: 0, y: 0, width: 600, height: 600)]
-        XCTAssertEqual(applyInnerGap(f, in: screen, gap: -10), f)
+        #expect(applyInnerGap(f, in: screen, gap: -10) == f)
     }
 
-    func testSingleWindowUntouched() {
+    @Test func singleWindowUntouched() {
         // Fills the rect → every edge flush with the boundary → no shrink.
         let f = [wid(1): screen]
-        XCTAssertEqual(applyInnerGap(f, in: screen, gap: 20), f)
+        #expect(applyInnerGap(f, in: screen, gap: 20) == f)
     }
 
-    func testTwoSideBySide() {
+    @Test func twoSideBySide() {
         let f = [wid(1): CGRect(x: 0, y: 0, width: 600, height: 600),
                  wid(2): CGRect(x: 600, y: 0, width: 600, height: 600)]
         let g = applyInnerGap(f, in: screen, gap: 20)
         // Only the shared edge shrinks (10 each) → 20 apart; the three
         // outer edges of each window stay flush.
-        XCTAssertEqual(g[wid(1)], CGRect(x: 0, y: 0, width: 590, height: 600))
-        XCTAssertEqual(g[wid(2)], CGRect(x: 610, y: 0, width: 590, height: 600))
+        #expect(g[wid(1)] == CGRect(x: 0, y: 0, width: 590, height: 600))
+        #expect(g[wid(2)] == CGRect(x: 610, y: 0, width: 590, height: 600))
     }
 
-    func testFourQuadrants() {
+    @Test func fourQuadrants() {
         let f = [wid(1): CGRect(x: 0,   y: 0,   width: 600, height: 300),
                  wid(2): CGRect(x: 600, y: 0,   width: 600, height: 300),
                  wid(3): CGRect(x: 0,   y: 300, width: 600, height: 300),
                  wid(4): CGRect(x: 600, y: 300, width: 600, height: 300)]
         let g = applyInnerGap(f, in: screen, gap: 20)
         // Each interior edge gives up 10; boundary edges stay flush.
-        XCTAssertEqual(g[wid(1)], CGRect(x: 0,   y: 0,   width: 590, height: 290))
-        XCTAssertEqual(g[wid(2)], CGRect(x: 610, y: 0,   width: 590, height: 290))
-        XCTAssertEqual(g[wid(3)], CGRect(x: 0,   y: 310, width: 590, height: 290))
-        XCTAssertEqual(g[wid(4)], CGRect(x: 610, y: 310, width: 590, height: 290))
+        #expect(g[wid(1)] == CGRect(x: 0,   y: 0,   width: 590, height: 290))
+        #expect(g[wid(2)] == CGRect(x: 610, y: 0,   width: 590, height: 290))
+        #expect(g[wid(3)] == CGRect(x: 0,   y: 310, width: 590, height: 290))
+        #expect(g[wid(4)] == CGRect(x: 610, y: 310, width: 590, height: 290))
     }
 }
 
 /// `effective*` clamping + `[layout]` parse for the gap config keys,
 /// including per-edge outer-gap fallback to the all-edges default.
-final class GapConfigTests: XCTestCase {
+struct GapConfigTests {
 
-    func testDefaultsZero() {
+    @Test func defaultsZero() {
         let c = FacetConfig()
-        XCTAssertEqual(c.effectiveInnerGap, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapTop, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapBottom, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapLeft, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapRight, 0, accuracy: 0.001)
+        #expect(abs(c.effectiveInnerGap - 0) < 0.001)
+        #expect(abs(c.effectiveOuterGapTop - 0) < 0.001)
+        #expect(abs(c.effectiveOuterGapBottom - 0) < 0.001)
+        #expect(abs(c.effectiveOuterGapLeft - 0) < 0.001)
+        #expect(abs(c.effectiveOuterGapRight - 0) < 0.001)
     }
 
-    func testClampNegativeToZero() {
+    @Test func clampNegativeToZero() {
         var c = FacetConfig()
         c.innerGap = -5
         c.outerGap = -50
-        XCTAssertEqual(c.effectiveInnerGap, 0, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapLeft, 0, accuracy: 0.001)
+        #expect(abs(c.effectiveInnerGap - 0) < 0.001)
+        #expect(abs(c.effectiveOuterGapLeft - 0) < 0.001)
     }
 
-    func testClampLargeToCeiling() {
+    @Test func clampLargeToCeiling() {
         var c = FacetConfig()
         c.innerGap = 9999
         c.outerGap = 9999
-        XCTAssertEqual(c.effectiveInnerGap, 1000, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapTop, 1000, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapRight, 1000, accuracy: 0.001)
+        #expect(abs(c.effectiveInnerGap - 1000) < 0.001)
+        #expect(abs(c.effectiveOuterGapTop - 1000) < 0.001)
+        #expect(abs(c.effectiveOuterGapRight - 1000) < 0.001)
     }
 
-    func testOuterGapDefaultsAllEdges() {
+    @Test func outerGapDefaultsAllEdges() {
         var c = FacetConfig()
         c.outerGap = 10
-        XCTAssertEqual(c.effectiveOuterGapTop, 10, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapBottom, 10, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapLeft, 10, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapRight, 10, accuracy: 0.001)
+        #expect(abs(c.effectiveOuterGapTop - 10) < 0.001)
+        #expect(abs(c.effectiveOuterGapBottom - 10) < 0.001)
+        #expect(abs(c.effectiveOuterGapLeft - 10) < 0.001)
+        #expect(abs(c.effectiveOuterGapRight - 10) < 0.001)
     }
 
-    func testPerEdgeOverridesDefault() {
+    @Test func perEdgeOverridesDefault() {
         var c = FacetConfig()
         c.outerGap = 10
         c.outerGapLeft = 30
-        XCTAssertEqual(c.effectiveOuterGapLeft, 30, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapTop, 10, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapRight, 10, accuracy: 0.001)
+        #expect(abs(c.effectiveOuterGapLeft - 30) < 0.001)
+        #expect(abs(c.effectiveOuterGapTop - 10) < 0.001)
+        #expect(abs(c.effectiveOuterGapRight - 10) < 0.001)
     }
 
-    func testParseFromTOML() {
+    @Test func parseFromTOML() {
         let c = FacetConfig.from(toml: [
             "layout": ["inner-gap": .int(8), "outer-gap": .int(12),
                        "outer-gap-left": .int(24)],
         ])
-        XCTAssertEqual(c.effectiveInnerGap, 8, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapTop, 12, accuracy: 0.001)
-        XCTAssertEqual(c.effectiveOuterGapLeft, 24, accuracy: 0.001)
+        #expect(abs(c.effectiveInnerGap - 8) < 0.001)
+        #expect(abs(c.effectiveOuterGapTop - 12) < 0.001)
+        #expect(abs(c.effectiveOuterGapLeft - 24) < 0.001)
     }
 
     // MARK: - Smart gaps
 
-    func testSmartGapsDefaultsOff() {
-        XCTAssertFalse(FacetConfig().effectiveSmartGaps,
-                       "smart gaps must be opt-in (off by default)")
+    @Test func smartGapsDefaultsOff() {
+        #expect(!FacetConfig().effectiveSmartGaps,
+                "smart gaps must be opt-in (off by default)")
     }
 
-    func testSmartGapsParsedFromTOML() {
+    @Test func smartGapsParsedFromTOML() {
         let on = FacetConfig.from(toml: ["layout": ["smart-gaps": .bool(true)]])
-        XCTAssertTrue(on.effectiveSmartGaps)
+        #expect(on.effectiveSmartGaps)
         let off = FacetConfig.from(toml: ["layout": ["smart-gaps": .bool(false)]])
-        XCTAssertFalse(off.effectiveSmartGaps)
+        #expect(!off.effectiveSmartGaps)
     }
 }

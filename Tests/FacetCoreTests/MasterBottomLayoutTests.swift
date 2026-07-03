@@ -1,11 +1,11 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// `MasterBottomLayout` = `MasterTopLayout` mirrored across Y (master
 /// docks on the bottom). 1600×1000, ratio 0.5 → master bottom row 500
 /// tall, stack columns in the top 500-tall row.
-final class MasterBottomLayoutTests: XCTestCase {
+struct MasterBottomLayoutTests {
 
     private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
     private let screen = CGRect(x: 0, y: 0, width: 1600, height: 1000)
@@ -19,57 +19,57 @@ final class MasterBottomLayoutTests: XCTestCase {
                width: f.width, height: f.height)
     }
 
-    func testSingleWindowFillsRect() {
+    @Test func singleWindowFillsRect() {
         let f = mb.frames(order: [wid(1)], focused: nil,
                           params: LayoutParams(), in: screen)
-        XCTAssertEqual(f, [wid(1): screen])
+        #expect(f == [wid(1): screen])
     }
 
-    func testTwoWindowsMasterOnBottom() {
+    @Test func twoWindowsMasterOnBottom() {
         let f = mb.frames(order: [wid(1), wid(2)], focused: nil,
                           params: LayoutParams(masterRatio: 0.5),
                           in: screen)
-        XCTAssertEqual(f[wid(1)], CGRect(x: 0, y: 500, width: 1600, height: 500))
-        XCTAssertEqual(f[wid(2)], CGRect(x: 0, y: 0, width: 1600, height: 500))
+        #expect(f[wid(1)] == CGRect(x: 0, y: 500, width: 1600, height: 500))
+        #expect(f[wid(2)] == CGRect(x: 0, y: 0, width: 1600, height: 500))
     }
 
-    func testThreeMasterRowStackColumnsOnTop() {
+    @Test func threeMasterRowStackColumnsOnTop() {
         let f = mb.frames(order: [wid(1), wid(2), wid(3)], focused: nil,
                           params: LayoutParams(masterRatio: 0.5),
                           in: screen)
-        XCTAssertEqual(f[wid(1)], CGRect(x: 0, y: 500, width: 1600, height: 500))
-        XCTAssertEqual(f[wid(2)], CGRect(x: 0, y: 0, width: 800, height: 500))
-        XCTAssertEqual(f[wid(3)], CGRect(x: 800, y: 0, width: 800, height: 500))
+        #expect(f[wid(1)] == CGRect(x: 0, y: 500, width: 1600, height: 500))
+        #expect(f[wid(2)] == CGRect(x: 0, y: 0, width: 800, height: 500))
+        #expect(f[wid(3)] == CGRect(x: 800, y: 0, width: 800, height: 500))
     }
 
-    func testRatioControlsMasterHeight() {
+    @Test func ratioControlsMasterHeight() {
         let f = mb.frames(order: [wid(1), wid(2)], focused: nil,
                           params: LayoutParams(masterRatio: 0.6),
                           in: screen)
-        XCTAssertEqual(f[wid(1)]?.height, 600)     // 0.6 * 1000
-        XCTAssertEqual(f[wid(1)]?.minY, 400)       // docked bottom
-        XCTAssertEqual(f[wid(2)]?.height, 400)
-        XCTAssertEqual(f[wid(2)]?.minY, 0)
+        #expect(f[wid(1)]?.height == 600)     // 0.6 * 1000
+        #expect(f[wid(1)]?.minY == 400)       // docked bottom
+        #expect(f[wid(2)]?.height == 400)
+        #expect(f[wid(2)]?.minY == 0)
     }
 
     /// The defining invariant: master-bottom is the exact Y-mirror of
     /// master-top for the same order/params.
-    func testIsYMirrorOfMasterTop() {
+    @Test func isYMirrorOfMasterTop() {
         for n in [2, 3, 4, 5] {
             let order = (1...n).map(wid)
             let p = LayoutParams(masterRatio: 0.55, masterCount: 1)
             let top = mt.frames(order: order, focused: nil, params: p, in: screen)
             let bottom = mb.frames(order: order, focused: nil, params: p, in: screen)
             for id in order {
-                XCTAssertEqual(bottom[id], top[id].map { mirrorY($0, in: screen) },
-                               "master-bottom must be master-top mirrored across Y (n=\(n))")
+                #expect(bottom[id] == top[id].map { mirrorY($0, in: screen) },
+                        "master-bottom must be master-top mirrored across Y (n=\(n))")
             }
         }
     }
 
-    func testRegistryResolvesMasterBottom() {
-        XCTAssertEqual(LayoutRegistry.engine(named: "master-bottom")?.name,
-                       "master-bottom")
-        XCTAssertTrue(LayoutRegistry.names.contains("master-bottom"))
+    @Test func registryResolvesMasterBottom() {
+        #expect(LayoutRegistry.engine(named: "master-bottom")?.name ==
+                "master-bottom")
+        #expect(LayoutRegistry.names.contains("master-bottom"))
     }
 }
