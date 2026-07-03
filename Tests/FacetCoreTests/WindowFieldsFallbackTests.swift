@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// The two projection `WindowFields` adapters that overlay extra context onto
@@ -14,7 +14,7 @@ import XCTest
 /// nil-vs-"" , unknown field → delegate) — including the deliberate asymmetry
 /// where an empty workspace name reads back as `""` from the projection but
 /// `nil` from the apply-plan. Pure; CI-only (CLT can't run `swift test`).
-final class WindowFieldsFallbackTests: XCTestCase {
+struct WindowFieldsFallbackTests {
 
     // MARK: - fixtures
 
@@ -28,13 +28,13 @@ final class WindowFieldsFallbackTests: XCTestCase {
 
     // MARK: - ProjectedWindowFields
 
-    func testProjectedWorkspaceOverlay() {
+    @Test func projectedWorkspaceOverlay() {
         let f = ProjectedWindowFields(window: win(1), workspaceName: "Dev")
-        XCTAssertEqual(f.filterValue("workspace"), "Dev")
-        XCTAssertTrue(f.filterHas("workspace"))
+        #expect(f.filterValue("workspace") == "Dev")
+        #expect(f.filterHas("workspace"))
     }
 
-    func testProjectedEmptyWorkspaceReadsAsEmptyStringAndHasTrue() {
+    @Test func projectedEmptyWorkspaceReadsAsEmptyStringAndHasTrue() {
         // EX-3 迷子: presence is ASSIGNMENT-gated (`workspaceName != nil`), NOT
         // emptiness-gated. An assigned-but-UNNAMED workspace (name `""`) reads
         // its name back verbatim as `""` AND is PRESENT (`filterHas == true`),
@@ -44,104 +44,104 @@ final class WindowFieldsFallbackTests: XCTestCase {
         // §B: ApplyPlanWindowFields now MIRRORS this (nil = orphan, "" =
         // assigned-unnamed), so the apply predictor and the tree agree.
         let f = ProjectedWindowFields(window: win(1), workspaceName: "")
-        XCTAssertEqual(f.filterValue("workspace"), "")
-        XCTAssertTrue(f.filterHas("workspace"))
+        #expect(f.filterValue("workspace") == "")
+        #expect(f.filterHas("workspace"))
     }
 
-    func testProjectedDelegatesNonWorkspaceFields() {
+    @Test func projectedDelegatesNonWorkspaceFields() {
         let f = ProjectedWindowFields(window: win(1, app: "Safari", tags: ["web"]),
                                       workspaceName: "Dev")
-        XCTAssertEqual(f.filterValue("app"), "Safari")          // → Window
-        XCTAssertEqual(f.filterValue("tag"), "web")
-        XCTAssertTrue(f.filterHas("tag"))
-        XCTAssertNil(f.filterValue("bogus"))                    // unknown → nil
-        XCTAssertFalse(f.filterHas("bogus"))
+        #expect(f.filterValue("app") == "Safari")          // → Window
+        #expect(f.filterValue("tag") == "web")
+        #expect(f.filterHas("tag"))
+        #expect(f.filterValue("bogus") == nil)                    // unknown → nil
+        #expect(!f.filterHas("bogus"))
     }
 
     // MARK: - ApplyPlanWindowFields — empty / unknown fallbacks
 
-    func testApplyPlanWorkspacePresenceMirrorsProjection() {
+    @Test func applyPlanWorkspacePresenceMirrorsProjection() {
         // §B: the apply-plan now matches ProjectedWindowFields — nil = orphan
         // (absent), "" = assigned-but-unnamed (present). Previously it coalesced
         // "" → nil, mispredicting a `not workspace` drop for an unnamed-WS window.
         let orphan = ApplyPlanWindowFields(base: win(1), workspaceName: nil, applying: [])
-        XCTAssertNil(orphan.filterValue("workspace"))
-        XCTAssertFalse(orphan.filterHas("workspace"))         // orphan → absent
+        #expect(orphan.filterValue("workspace") == nil)
+        #expect(!orphan.filterHas("workspace"))         // orphan → absent
 
         let unnamed = ApplyPlanWindowFields(base: win(1), workspaceName: "", applying: [])
-        XCTAssertEqual(unnamed.filterValue("workspace"), "")
-        XCTAssertTrue(unnamed.filterHas("workspace"))         // assigned-unnamed → present
+        #expect(unnamed.filterValue("workspace") == "")
+        #expect(unnamed.filterHas("workspace"))         // assigned-unnamed → present
     }
 
-    func testApplyPlanEmptyTagsAreNil() {
+    @Test func applyPlanEmptyTagsAreNil() {
         let f = ApplyPlanWindowFields(base: win(1, tags: []), workspaceName: "Dev",
                                       applying: [])
-        XCTAssertNil(f.filterValue("tag"))
-        XCTAssertFalse(f.filterHas("tag"))
+        #expect(f.filterValue("tag") == nil)
+        #expect(!f.filterHas("tag"))
     }
 
-    func testApplyPlanDelegatesUnknownFieldToBase() {
+    @Test func applyPlanDelegatesUnknownFieldToBase() {
         let f = ApplyPlanWindowFields(base: win(1, app: "Safari"),
                                       workspaceName: "Dev", applying: [])
-        XCTAssertEqual(f.filterValue("app"), "Safari")          // → base
-        XCTAssertTrue(f.filterHas("app"))
-        XCTAssertNil(f.filterValue("bogus"))
-        XCTAssertFalse(f.filterHas("bogus"))
+        #expect(f.filterValue("app") == "Safari")          // → base
+        #expect(f.filterHas("app"))
+        #expect(f.filterValue("bogus") == nil)
+        #expect(!f.filterHas("bogus"))
     }
 
     // MARK: - ApplyPlanWindowFields — overlay coalescing (`?? base`)
 
-    func testApplyPlanFloatingFallsBackToBaseWhenNoOp() {
+    @Test func applyPlanFloatingFallsBackToBaseWhenNoOp() {
         // No setFloating op → overlay is nil → reads the BASE value.
         let onBase = ApplyPlanWindowFields(base: win(1, floating: true),
                                            workspaceName: "Dev", applying: [])
-        XCTAssertEqual(onBase.filterValue("floating"), "true")
-        XCTAssertTrue(onBase.filterHas("floating"))
+        #expect(onBase.filterValue("floating") == "true")
+        #expect(onBase.filterHas("floating"))
     }
 
-    func testApplyPlanFloatingOverlayWinsOverBase() {
+    @Test func applyPlanFloatingOverlayWinsOverBase() {
         // setFloating(false) overrides a base that is floating=true.
         let overridden = ApplyPlanWindowFields(base: win(1, floating: true),
                                                workspaceName: "Dev",
                                                applying: [.setFloating(false)])
-        XCTAssertEqual(overridden.filterValue("floating"), "false")
-        XCTAssertFalse(overridden.filterHas("floating"))
+        #expect(overridden.filterValue("floating") == "false")
+        #expect(!overridden.filterHas("floating"))
     }
 
-    func testApplyPlanStickyAndMasterCoalesce() {
+    @Test func applyPlanStickyAndMasterCoalesce() {
         let base = win(1, sticky: true, master: false)
         let noOps = ApplyPlanWindowFields(base: base, workspaceName: "Dev",
                                           applying: [])
-        XCTAssertTrue(noOps.filterHas("sticky"))                // base true
-        XCTAssertFalse(noOps.filterHas("master"))               // base false
+        #expect(noOps.filterHas("sticky"))                // base true
+        #expect(!noOps.filterHas("master"))               // base false
         let setMa = ApplyPlanWindowFields(base: base, workspaceName: "Dev",
                                           applying: [.setMaster(true),
                                                      .setSticky(false)])
-        XCTAssertEqual(setMa.filterValue("master"), "true")     // overlay
-        XCTAssertEqual(setMa.filterValue("sticky"), "false")    // overlay
+        #expect(setMa.filterValue("master") == "true")     // overlay
+        #expect(setMa.filterValue("sticky") == "false")    // overlay
     }
 
     // MARK: - ApplyPlanWindowFields — ordered tag ops
 
-    func testApplyPlanTagOpsApplyInOrder() {
+    @Test func applyPlanTagOpsApplyInOrder() {
         // MOVE replay: removeTag(inverse) THEN addTag(forward) — a tag pulled
         // by the inverse and re-added by the forward resolves to PRESENT.
         let f = ApplyPlanWindowFields(base: win(1, tags: ["web"]),
                                       workspaceName: "Dev",
                                       applying: [.removeTag("web"), .addTag("web")])
-        XCTAssertEqual(f.filterValue("tag"), "web")
-        XCTAssertTrue(f.filterHas("tag"))
+        #expect(f.filterValue("tag") == "web")
+        #expect(f.filterHas("tag"))
     }
 
-    func testApplyPlanAddTagIsIdempotentAndRemoveClears() {
+    @Test func applyPlanAddTagIsIdempotentAndRemoveClears() {
         let dup = ApplyPlanWindowFields(base: win(1, tags: ["web"]),
                                         workspaceName: "Dev",
                                         applying: [.addTag("web")])
-        XCTAssertEqual(dup.filterValue("tag"), "web")           // no duplicate
+        #expect(dup.filterValue("tag") == "web")           // no duplicate
         let cleared = ApplyPlanWindowFields(base: win(1, tags: ["web"]),
                                             workspaceName: "Dev",
                                             applying: [.removeTag("web")])
-        XCTAssertNil(cleared.filterValue("tag"))                // empty → nil
-        XCTAssertFalse(cleared.filterHas("tag"))
+        #expect(cleared.filterValue("tag") == nil)                // empty → nil
+        #expect(!cleared.filterHas("tag"))
     }
 }

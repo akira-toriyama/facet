@@ -1,13 +1,13 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// `[[rule]]` adopt-rule decode (#282/#286 Phase 3, PR-A — parse-only).
 /// These pin the pure `decodeRuleSections` decoder + the flat-key → `ApplyOp`
 /// reuse; the classify-gate evaluation lands in PR-B. CI-only (no XCTest on
 /// CommandLineTools).
-final class RuleDecodeTests: XCTestCase {
+struct RuleDecodeTests {
 
-    func testDecodesMatchAndFlatApply() {
+    @Test func decodesMatchAndFlatApply() {
         let toml = """
         [[rule]]
         match = "app=Safari"
@@ -15,12 +15,12 @@ final class RuleDecodeTests: XCTestCase {
         floating = true
         """
         let rules = FacetConfig.decodeRuleSections(fromTOML: toml)
-        XCTAssertEqual(rules.count, 1)
-        XCTAssertEqual(rules.first?.match, "app=Safari")
-        XCTAssertEqual(rules.first?.apply, [.addTag("web"), .setFloating(true)])
+        #expect(rules.count == 1)
+        #expect(rules.first?.match == "app=Safari")
+        #expect(rules.first?.apply == [.addTag("web"), .setFloating(true)])
     }
 
-    func testApplyCanonicalOrderIgnoresAuthoredOrder() {
+    @Test func applyCanonicalOrderIgnoresAuthoredOrder() {
         // Frozen order: setWorkspace → addTag(s) → setFloating → setSticky →
         // setMaster, regardless of how the keys are authored.
         let toml = """
@@ -33,40 +33,40 @@ final class RuleDecodeTests: XCTestCase {
         sticky = false
         """
         let rules = FacetConfig.decodeRuleSections(fromTOML: toml)
-        XCTAssertEqual(rules.first?.apply, [
+        #expect(rules.first?.apply == [
             .setWorkspace("Dev"), .addTag("a"), .addTag("b"),
             .setFloating(true), .setSticky(false), .setMaster(true),
         ])
     }
 
-    func testDropsRuleWithNoMatch() {
+    @Test func dropsRuleWithNoMatch() {
         let toml = """
         [[rule]]
         tags = ["web"]
         """
-        XCTAssertTrue(FacetConfig.decodeRuleSections(fromTOML: toml).isEmpty)
+        #expect(FacetConfig.decodeRuleSections(fromTOML: toml).isEmpty)
     }
 
-    func testDropsRuleWithBlankMatch() {
+    @Test func dropsRuleWithBlankMatch() {
         let toml = """
         [[rule]]
         match = "   "
         floating = true
         """
-        XCTAssertTrue(FacetConfig.decodeRuleSections(fromTOML: toml).isEmpty)
+        #expect(FacetConfig.decodeRuleSections(fromTOML: toml).isEmpty)
     }
 
-    func testDropsInertRuleWithNoApplyOp() {
+    @Test func dropsInertRuleWithNoApplyOp() {
         // A `match` with nothing to apply adopts nothing → dropped, like a
         // blank `[[exclude]]`.
         let toml = """
         [[rule]]
         match = "app=Safari"
         """
-        XCTAssertTrue(FacetConfig.decodeRuleSections(fromTOML: toml).isEmpty)
+        #expect(FacetConfig.decodeRuleSections(fromTOML: toml).isEmpty)
     }
 
-    func testMatchGrammarNotValidatedAtDecode() {
+    @Test func matchGrammarNotValidatedAtDecode() {
         // parse-only stays total: a malformed `match` is stored VERBATIM,
         // never rejected at config-load (the consumer compiles it loud +
         // non-fatal at eval time, PR-B).
@@ -76,11 +76,11 @@ final class RuleDecodeTests: XCTestCase {
         floating = true
         """
         let rules = FacetConfig.decodeRuleSections(fromTOML: toml)
-        XCTAssertEqual(rules.first?.match, "app==")
-        XCTAssertEqual(rules.first?.apply, [.setFloating(true)])
+        #expect(rules.first?.match == "app==")
+        #expect(rules.first?.apply == [.setFloating(true)])
     }
 
-    func testMultipleRulesKeepFileOrder() {
+    @Test func multipleRulesKeepFileOrder() {
         let toml = """
         [[rule]]
         match = "app=Safari"
@@ -91,10 +91,10 @@ final class RuleDecodeTests: XCTestCase {
         tags = ["chat"]
         """
         let rules = FacetConfig.decodeRuleSections(fromTOML: toml)
-        XCTAssertEqual(rules.map(\.match), ["app=Safari", "app=Slack"])
+        #expect(rules.map(\.match) == ["app=Safari", "app=Slack"])
     }
 
-    func testUnknownKeysIgnored() {
+    @Test func unknownKeysIgnored() {
         let toml = """
         [[rule]]
         match = "app=Safari"
@@ -102,10 +102,10 @@ final class RuleDecodeTests: XCTestCase {
         bogus = 1
         """
         let rules = FacetConfig.decodeRuleSections(fromTOML: toml)
-        XCTAssertEqual(rules.first?.apply, [.setFloating(true)])
+        #expect(rules.first?.apply == [.setFloating(true)])
     }
 
-    func testEffectiveRulesEmptyWhenUnset() {
-        XCTAssertEqual(FacetConfig().effectiveRules, [])
+    @Test func effectiveRulesEmptyWhenUnset() {
+        #expect(FacetConfig().effectiveRules == [])
     }
 }

@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// `FacetFilter` round-trip: `parse → description → parse`. The
@@ -9,7 +9,7 @@ import XCTest
 /// precedence — plus the two documented NON-round-tripping forms
 /// (`.not(.all)` and a value carrying a `"`). Pure; CI-only (CLT can't run
 /// `swift test`).
-final class FacetFilterRoundTripTests: XCTestCase {
+struct FacetFilterRoundTripTests {
 
     // MARK: - helpers
 
@@ -21,7 +21,7 @@ final class FacetFilterRoundTripTests: XCTestCase {
         switch FacetFilter.parse(input) {
         case .success(let f): return f
         case .failure(let e):
-            XCTFail("parse failed: \(input) — \(e.message)", file: file, line: line)
+            Issue.record("parse failed: \(input) — \(e.message)")
             return .all
         }
     }
@@ -46,105 +46,104 @@ final class FacetFilterRoundTripTests: XCTestCase {
         let f1 = parsed(input, file: file, line: line)
         let canon = f1.description
         let f2 = parsed(canon, file: file, line: line)
-        XCTAssertEqual(f2.description, canon,
-                       "serialize not idempotent for \(input)", file: file, line: line)
+        #expect(f2.description == canon,
+                "serialize not idempotent for \(input)")
         let f3 = parsed(f2.description, file: file, line: line)
-        XCTAssertEqual(f3, f2,
-                       "AST not stable across round-trip for \(input)",
-                       file: file, line: line)
+        #expect(f3 == f2,
+                "AST not stable across round-trip for \(input)")
         return canon
     }
 
     // MARK: - empty / all
 
-    func testEmptyInputSerializesToEmptyAndRoundTrips() {
-        XCTAssertEqual(serialized(""), "")
-        XCTAssertEqual(serialized("   "), "")
-        XCTAssertEqual(parsed(""), .all)
+    @Test func emptyInputSerializesToEmptyAndRoundTrips() {
+        #expect(serialized("") == "")
+        #expect(serialized("   ") == "")
+        #expect(parsed("") == .all)
         assertRoundTrips("")
     }
 
-    func testEmptyValueIsQuotedAndRoundTrips() {
+    @Test func emptyValueIsQuotedAndRoundTrips() {
         // An empty comparison value must be quoted (a bareword would mis-lex).
-        XCTAssertEqual(serialized("title=\"\""), "title=\"\"")
+        #expect(serialized("title=\"\"") == "title=\"\"")
         assertRoundTrips("title=\"\"")
     }
 
     // MARK: - not / and precedence (parenthesisation)
 
-    func testNotBindsTighterThanAndNoParens() {
+    @Test func notBindsTighterThanAndNoParens() {
         // `not tag and floating` == `(not tag) and floating` — not binds
         // tighter, so the printed form needs no parens.
-        XCTAssertEqual(serialized("not tag and floating"),
-                       "not tag and floating")
-        XCTAssertEqual(parsed("not tag and floating"),
-                       .and([.not(.atom(.init(field: "tag", kind: .presence))),
-                             .atom(.init(field: "floating", kind: .presence))]))
+        #expect(serialized("not tag and floating") ==
+                "not tag and floating")
+        #expect(parsed("not tag and floating") ==
+                .and([.not(.atom(.init(field: "tag", kind: .presence))),
+                      .atom(.init(field: "floating", kind: .presence))]))
         assertRoundTrips("not tag and floating")
     }
 
-    func testNotOverAndGetsParens() {
+    @Test func notOverAndGetsParens() {
         // `not (tag and floating)` — the and is looser than not, so it wraps.
-        XCTAssertEqual(serialized("not (tag and floating)"),
-                       "not (tag and floating)")
+        #expect(serialized("not (tag and floating)") ==
+                "not (tag and floating)")
         assertRoundTrips("not (tag and floating)")
     }
 
     // MARK: - or under and/not (precedence-lowering child wraps)
 
-    func testOrUnderAndGetsParens() {
-        XCTAssertEqual(serialized("(tag~=web or floating) and master"),
-                       "(tag~=web or floating) and master")
+    @Test func orUnderAndGetsParens() {
+        #expect(serialized("(tag~=web or floating) and master") ==
+                "(tag~=web or floating) and master")
         assertRoundTrips("(tag~=web or floating) and master")
     }
 
-    func testAndUnderOrNeedsNoParens() {
+    @Test func andUnderOrNeedsNoParens() {
         // and binds tighter than or → no parens around the and branch.
-        XCTAssertEqual(serialized("tag~=web or floating and master"),
-                       "tag~=web or floating and master")
+        #expect(serialized("tag~=web or floating and master") ==
+                "tag~=web or floating and master")
         assertRoundTrips("tag~=web or floating and master")
     }
 
-    func testNotOverOrGetsParens() {
-        XCTAssertEqual(serialized("not (tag~=web or floating)"),
-                       "not (tag~=web or floating)")
+    @Test func notOverOrGetsParens() {
+        #expect(serialized("not (tag~=web or floating)") ==
+                "not (tag~=web or floating)")
         assertRoundTrips("not (tag~=web or floating)")
     }
 
     // MARK: - operators + quoting round-trip
 
-    func testOperatorsRoundTrip() {
+    @Test func operatorsRoundTrip() {
         for input in ["tag~=web", "app^=Saf", "title$=foo", "title*=bar",
                       "app|=com", "app=Safari"] {
-            XCTAssertEqual(assertRoundTrips(input), input,
-                           "operator form changed: \(input)")
+            #expect(assertRoundTrips(input) == input,
+                    "operator form changed: \(input)")
         }
     }
 
-    func testCaseSensitiveFlagRoundTrips() {
-        XCTAssertEqual(serialized("app=Safari s"), "app=Safari s")
+    @Test func caseSensitiveFlagRoundTrips() {
+        #expect(serialized("app=Safari s") == "app=Safari s")
         assertRoundTrips("app=Safari s")
     }
 
-    func testValuesNeedingQuotesRoundTrip() {
+    @Test func valuesNeedingQuotesRoundTrip() {
         // whitespace + paren force quoting; neither carries a `"`, so both
         // survive a full round-trip.
-        XCTAssertEqual(serialized("title=\"hello world\""), "title=\"hello world\"")
-        XCTAssertEqual(serialized("title*=\"a(b\""), "title*=\"a(b\"")
+        #expect(serialized("title=\"hello world\"") == "title=\"hello world\"")
+        #expect(serialized("title*=\"a(b\"") == "title*=\"a(b\"")
         assertRoundTrips("title=\"hello world\"")
         assertRoundTrips("title*=\"a(b\"")
     }
 
     // MARK: - documented NON-round-tripping forms
 
-    func testNotAllRendersBareNotAndCannotBeRecovered() {
+    @Test func notAllRendersBareNotAndCannotBeRecovered() {
         // `.not(.all)` (match-nothing) is only hand-constructible; it renders
         // as a bare `not ` and the grammar has no match-nothing literal to
         // parse it back, so it is NOT recovered (parse may fail or differ).
         let f = FacetFilter.not(.all)
-        XCTAssertEqual(f.description, "not ")
+        #expect(f.description == "not ")
         if case .success(let back) = FacetFilter.parse(f.description) {
-            XCTAssertNotEqual(back, f, "unexpectedly round-tripped .not(.all)")
+            #expect(back != f, "unexpectedly round-tripped .not(.all)")
         }
     }
 }

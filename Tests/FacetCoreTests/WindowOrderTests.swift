@@ -1,9 +1,9 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// Pure tests for the window-order ops behind swap / insert (枠C).
 /// `nil` means "no change" (the caller's change-detection signal).
-final class WindowOrderTests: XCTestCase {
+struct WindowOrderTests {
 
     private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
     private func order() -> [WindowID] {
@@ -12,66 +12,66 @@ final class WindowOrderTests: XCTestCase {
 
     // MARK: - swap
 
-    func testSwapExchangesPositions() {
-        XCTAssertEqual(WindowOrder.swapped(order(), wid(1), wid(4)),
+    @Test func swapExchangesPositions() {
+        #expect(WindowOrder.swapped(order(), wid(1), wid(4)) ==
                        [wid(4), wid(2), wid(3), wid(1)])
     }
 
-    func testSwapSameWindowIsNil() {
-        XCTAssertNil(WindowOrder.swapped(order(), wid(2), wid(2)))
+    @Test func swapSameWindowIsNil() {
+        #expect(WindowOrder.swapped(order(), wid(2), wid(2)) == nil)
     }
 
-    func testSwapAbsentWindowIsNil() {
-        XCTAssertNil(WindowOrder.swapped(order(), wid(2), wid(9)))
+    @Test func swapAbsentWindowIsNil() {
+        #expect(WindowOrder.swapped(order(), wid(2), wid(9)) == nil)
     }
 
     // MARK: - insert
 
-    func testInsertRightPlacesAfterTarget() {
+    @Test func insertRightPlacesAfterTarget() {
         // Move wid(1) to just after wid(3).
-        XCTAssertEqual(
+        #expect(
             WindowOrder.inserted(order(), moving: wid(1),
-                                 beside: wid(3), edge: .right),
+                                 beside: wid(3), edge: .right) ==
             [wid(2), wid(3), wid(1), wid(4)])
     }
 
-    func testInsertLeftPlacesBeforeTarget() {
-        XCTAssertEqual(
+    @Test func insertLeftPlacesBeforeTarget() {
+        #expect(
             WindowOrder.inserted(order(), moving: wid(4),
-                                 beside: wid(2), edge: .left),
+                                 beside: wid(2), edge: .left) ==
             [wid(1), wid(4), wid(2), wid(3)])
     }
 
-    func testInsertTopActsLikeBefore() {
-        XCTAssertEqual(
+    @Test func insertTopActsLikeBefore() {
+        #expect(
             WindowOrder.inserted(order(), moving: wid(4),
-                                 beside: wid(2), edge: .top),
+                                 beside: wid(2), edge: .top) ==
             [wid(1), wid(4), wid(2), wid(3)])
     }
 
-    func testInsertBottomActsLikeAfter() {
-        XCTAssertEqual(
+    @Test func insertBottomActsLikeAfter() {
+        #expect(
             WindowOrder.inserted(order(), moving: wid(1),
-                                 beside: wid(3), edge: .bottom),
+                                 beside: wid(3), edge: .bottom) ==
             [wid(2), wid(3), wid(1), wid(4)])
     }
 
-    func testInsertNoPositionalChangeIsNil() {
+    @Test func insertNoPositionalChangeIsNil() {
         // wid(2) after wid(1) — already its position.
-        XCTAssertNil(
+        #expect(
             WindowOrder.inserted(order(), moving: wid(2),
-                                 beside: wid(1), edge: .right))
+                                 beside: wid(1), edge: .right) == nil)
     }
 
-    func testInsertSameWindowIsNil() {
-        XCTAssertNil(
+    @Test func insertSameWindowIsNil() {
+        #expect(
             WindowOrder.inserted(order(), moving: wid(2),
-                                 beside: wid(2), edge: .left))
+                                 beside: wid(2), edge: .left) == nil)
     }
 
-    func testInsertAbsentWindowIsNil() {
-        XCTAssertNil(
+    @Test func insertAbsentWindowIsNil() {
+        #expect(
             WindowOrder.inserted(order(), moving: wid(9),
-                                 beside: wid(2), edge: .left))
+                                 beside: wid(2), edge: .left) == nil)
     }
 }

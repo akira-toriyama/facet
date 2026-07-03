@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// t-0020: `classifyMatchPredicate` — the PURE verdict the runtime match editor
@@ -7,56 +7,58 @@ import XCTest
 /// non-blocking warning, same as a config lens `match`); everything else — incl.
 /// the empty revert gesture — is `.ok`. Mirrors `FilterProjection.project`'s own
 /// parse + unknown-field handling so the editor never disagrees with the seam.
-final class ClassifyMatchPredicateTests: XCTestCase {
+struct ClassifyMatchPredicateTests {
 
-    func testKnownFieldComparisonIsOK() {
-        XCTAssertEqual(classifyMatchPredicate("app~=Chrome"), .ok)
+    @Test func knownFieldComparisonIsOK() {
+        #expect(classifyMatchPredicate("app~=Chrome") == .ok)
     }
 
-    func testKnownPresenceAtomIsOK() {
-        XCTAssertEqual(classifyMatchPredicate("floating"), .ok)
-        XCTAssertEqual(classifyMatchPredicate("not workspace"), .ok)
+    @Test func knownPresenceAtomIsOK() {
+        #expect(classifyMatchPredicate("floating") == .ok)
+        #expect(classifyMatchPredicate("not workspace") == .ok)
     }
 
-    func testEmptyPredicateIsOK() {
+    @Test func emptyPredicateIsOK() {
         // parse("") == .success(.all) → no fields referenced → the revert gesture.
-        XCTAssertEqual(classifyMatchPredicate(""), .ok)
+        #expect(classifyMatchPredicate("") == .ok)
     }
 
-    func testBareUnknownWordWarnsNotErrors() {
+    @Test func bareUnknownWordWarnsNotErrors() {
         // A bare word is a field-PRESENCE atom; `abc` is an unknown field, so the
         // predicate is valid (commits) but matches nothing — a warning, never an
         // error. This is the exact case the user hit ("abc doesn't error").
-        XCTAssertEqual(classifyMatchPredicate("abc"), .unknownField(["abc"]))
+        #expect(classifyMatchPredicate("abc") == .unknownField(["abc"]))
     }
 
-    func testUnknownFieldInComparisonWarns() {
-        XCTAssertEqual(classifyMatchPredicate("foo=bar"), .unknownField(["foo"]))
+    @Test func unknownFieldInComparisonWarns() {
+        #expect(classifyMatchPredicate("foo=bar") == .unknownField(["foo"]))
     }
 
-    func testMultipleUnknownFieldsAreSortedAndDeduped() {
+    @Test func multipleUnknownFieldsAreSortedAndDeduped() {
         // fieldsReferenced is a Set → the message order must be deterministic.
-        XCTAssertEqual(classifyMatchPredicate("zed or abc or abc"),
+        #expect(classifyMatchPredicate("zed or abc or abc") ==
                        .unknownField(["abc", "zed"]))
     }
 
-    func testKnownAndUnknownMixReportsOnlyUnknown() {
+    @Test func knownAndUnknownMixReportsOnlyUnknown() {
         // `app` known, `bogus` unknown → warn on `bogus` alone.
-        XCTAssertEqual(classifyMatchPredicate("app=Safari or bogus"),
+        #expect(classifyMatchPredicate("app=Safari or bogus") ==
                        .unknownField(["bogus"]))
     }
 
-    func testMalformedSyntaxIsError() {
+    @Test func malformedSyntaxIsError() {
         guard case .malformed = classifyMatchPredicate("tag~~web") else {
-            return XCTFail("expected .malformed for a syntax error")
+            Issue.record("expected .malformed for a syntax error")
+            return
         }
     }
 
-    func testMalformedCarriesAUsableMessage() {
+    @Test func malformedCarriesAUsableMessage() {
         guard case .malformed(let err) = classifyMatchPredicate("tag~web") else {
-            return XCTFail("expected .malformed")
+            Issue.record("expected .malformed")
+            return
         }
-        XCTAssertFalse(err.message.isEmpty)          // inline panel shows .message
-        XCTAssertFalse(err.caret(in: "tag~web").isEmpty)  // CLI shows the caret
+        #expect(!err.message.isEmpty)          // inline panel shows .message
+        #expect(!err.caret(in: "tag~web").isEmpty)  // CLI shows the caret
     }
 }
