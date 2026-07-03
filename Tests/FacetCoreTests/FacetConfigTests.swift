@@ -1,142 +1,142 @@
-import XCTest
+import Testing
 import Foundation
 import CoreGraphics
 @testable import FacetCore
 
-final class FacetConfigTests: XCTestCase {
+struct FacetConfigTests {
 
     // MARK: - effective accessors
 
-    func testEffectiveRailEdgeClampsToBottom() {
+    @Test func effectiveRailEdgeClampsToBottom() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveRailEdge, .bottom, "unset → bottom")
+        #expect(c.effectiveRailEdge == .bottom, "unset → bottom")
         c.railEdge = "LEFT"
-        XCTAssertEqual(c.effectiveRailEdge, .left, "case-insensitive")
+        #expect(c.effectiveRailEdge == .left, "case-insensitive")
         c.railEdge = "top"
-        XCTAssertEqual(c.effectiveRailEdge, .top)
+        #expect(c.effectiveRailEdge == .top)
         c.railEdge = "diagonal"
-        XCTAssertEqual(c.effectiveRailEdge, .bottom, "unknown → bottom")
+        #expect(c.effectiveRailEdge == .bottom, "unknown → bottom")
     }
 
-    func testEffectiveRailCellsClamps() {
+    @Test func effectiveRailCellsClamps() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveRailCells, 7, "default")
+        #expect(c.effectiveRailCells == 7, "default")
         c.railCells = 10
-        XCTAssertEqual(c.effectiveRailCells, 10)
+        #expect(c.effectiveRailCells == 10)
         c.railCells = 0
-        XCTAssertEqual(c.effectiveRailCells, 1, "floor 1")
+        #expect(c.effectiveRailCells == 1, "floor 1")
         c.railCells = 999
-        XCTAssertEqual(c.effectiveRailCells, 20, "ceiling 20")
+        #expect(c.effectiveRailCells == 20, "ceiling 20")
     }
 
-    func testEffectiveThemeFallsBackToTerminal() {
+    @Test func effectiveThemeFallsBackToTerminal() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveTheme, "terminal")
+        #expect(c.effectiveTheme == "terminal")
         c.theme = "Dracula"
-        XCTAssertEqual(c.effectiveTheme, "dracula",
-                       "a known name resolves case-insensitively")
+        #expect(c.effectiveTheme == "dracula",
+                "a known name resolves case-insensitively")
         c.theme = "nonsuch-theme"
-        XCTAssertEqual(c.effectiveTheme, "terminal",
-                       "unknown theme name → default")
+        #expect(c.effectiveTheme == "terminal",
+                "unknown theme name → default")
         c.theme = "nord"
-        XCTAssertEqual(c.effectiveTheme, "terminal",
-                       "a Phase-V-cut theme name (nord) → default")
+        #expect(c.effectiveTheme == "terminal",
+                "a Phase-V-cut theme name (nord) → default")
     }
 
-    func testEffectiveGridColsClampsAndDefaults() {
+    @Test func effectiveGridColsClampsAndDefaults() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveGridCols, 4, "default")
+        #expect(c.effectiveGridCols == 4, "default")
         c.gridCols = 0
-        XCTAssertEqual(c.effectiveGridCols, 1, "clamp low")
+        #expect(c.effectiveGridCols == 1, "clamp low")
         c.gridCols = 99
-        XCTAssertEqual(c.effectiveGridCols, 12, "clamp high")
+        #expect(c.effectiveGridCols == 12, "clamp high")
         c.gridCols = 6
-        XCTAssertEqual(c.effectiveGridCols, 6)
+        #expect(c.effectiveGridCols == 6)
     }
 
-    func testEffectiveThumbnailRefreshInterval() {
+    @Test func effectiveThumbnailRefreshInterval() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 4)
+        #expect(c.effectiveThumbnailRefreshInterval == 4)
         c.thumbnailRefreshSeconds = 0
-        XCTAssertNil(c.effectiveThumbnailRefreshInterval,
-                     "0 disables background capture")
+        #expect(c.effectiveThumbnailRefreshInterval == nil,
+                "0 disables background capture")
         c.thumbnailRefreshSeconds = 200
-        XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 60,
-                       "clamp high")
+        #expect(c.effectiveThumbnailRefreshInterval == 60,
+                "clamp high")
     }
 
-    func testEffectiveWorkspaceListSectionInactiveYieldsDefaults() {
+    @Test func effectiveWorkspaceListSectionInactiveYieldsDefaults() {
         // No section model on a desktop → defaultWorkspaceCount unnamed slots.
         let c = FacetConfig()
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        XCTAssertEqual(list.count, FacetConfig.defaultWorkspaceCount)
-        XCTAssertTrue(list.allSatisfy { $0.config.name.isEmpty })
-        XCTAssertTrue(list.allSatisfy { $0.config.layout == nil })
+        #expect(list.count == FacetConfig.defaultWorkspaceCount)
+        #expect(list.allSatisfy { $0.config.name.isEmpty })
+        #expect(list.allSatisfy { $0.config.layout == nil })
     }
 
     // MARK: - [tree] line-pets
 
-    func testEffectiveTreeLinePetsDefaultsEmpty() {
+    @Test func effectiveTreeLinePetsDefaultsEmpty() {
         let c = FacetConfig()
-        XCTAssertEqual(c.effectiveTreeLinePets, [], "unset → off")
+        #expect(c.effectiveTreeLinePets == [], "unset → off")
     }
 
-    func testEffectiveTreeLinePetsNormalizes() {
+    @Test func effectiveTreeLinePetsNormalizes() {
         var c = FacetConfig()
         c.treeLinePets = ["Chomp", "  ghost ", ""]
-        XCTAssertEqual(c.effectiveTreeLinePets, ["chomp", "ghost"],
-                       "lower-cased, trimmed, empty entries dropped, order kept")
+        #expect(c.effectiveTreeLinePets == ["chomp", "ghost"],
+                "lower-cased, trimmed, empty entries dropped, order kept")
     }
 
-    func testTreeLinePetsParsesArrayOnly() {
+    @Test func treeLinePetsParsesArrayOnly() {
         let arr = FacetConfig.from(toml: parseTOMLSubset("""
             [tree]
             line-pets = ["chomp", "ghost"]
             """))
-        XCTAssertEqual(arr.effectiveTreeLinePets, ["chomp", "ghost"],
-                       "TOML array form")
+        #expect(arr.effectiveTreeLinePets == ["chomp", "ghost"],
+                "TOML array form")
         // The old lenient comma-string form is retired (family grammar:
         // arrays are arrays) — a string value is ignored, pets stay off.
         let csv = FacetConfig.from(toml: parseTOMLSubset("""
             [tree]
             line-pets = "chomp, ghost"
             """))
-        XCTAssertEqual(csv.effectiveTreeLinePets, [],
-                       "comma-string form no longer parses")
+        #expect(csv.effectiveTreeLinePets == [],
+                "comma-string form no longer parses")
     }
 
-    func testEffectiveTreePetScaleDefaultsAndClamps() {
+    @Test func effectiveTreePetScaleDefaultsAndClamps() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveTreePetScale, 0.9, "default")
+        #expect(c.effectiveTreePetScale == 0.9, "default")
         c.treePetScale = 1.5
-        XCTAssertEqual(c.effectiveTreePetScale, 1.5)
+        #expect(c.effectiveTreePetScale == 1.5)
         c.treePetScale = -3
-        XCTAssertEqual(c.effectiveTreePetScale, 0.1, "floor 0.1")
+        #expect(c.effectiveTreePetScale == 0.1, "floor 0.1")
     }
 
-    func testEffectiveTreePetLapSecondsDefaultsAndClamps() {
+    @Test func effectiveTreePetLapSecondsDefaultsAndClamps() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveTreePetLapSeconds, 8, "default")
+        #expect(c.effectiveTreePetLapSeconds == 8, "default")
         c.treePetLapSeconds = 12
-        XCTAssertEqual(c.effectiveTreePetLapSeconds, 12)
+        #expect(c.effectiveTreePetLapSeconds == 12)
         c.treePetLapSeconds = 0
-        XCTAssertEqual(c.effectiveTreePetLapSeconds, 0.5, "floor 0.5")
+        #expect(c.effectiveTreePetLapSeconds == 0.5, "floor 0.5")
     }
 
-    func testTreePetScaleParsesFloatViaTOML() {
+    @Test func treePetScaleParsesFloatViaTOML() {
         let c = FacetConfig.from(toml: parseTOMLSubset("""
             [tree]
             pet-scale = 1.25
             pet-lap-seconds = 6
             """))
-        XCTAssertEqual(c.effectiveTreePetScale, 1.25,
-                       "fractional pet-scale survives the new .double parse")
-        XCTAssertEqual(c.effectiveTreePetLapSeconds, 6)
+        #expect(c.effectiveTreePetScale == 1.25,
+                "fractional pet-scale survives the new .double parse")
+        #expect(c.effectiveTreePetLapSeconds == 6)
     }
 
     // MARK: - [[exclude]] rules
 
-    func testExclusionRulesParsedFromTOML() {
+    @Test func exclusionRulesParsedFromTOML() {
         let rules = FacetConfig.exclusionRules(fromTOML: """
             [[exclude]]
             app = "com.apple.finder"
@@ -150,18 +150,18 @@ final class FacetConfigTests: XCTestCase {
             [[exclude]]
             subrole = "AXDialog"
             """)
-        XCTAssertEqual(rules.count, 3)
-        XCTAssertEqual(rules[0].matcher.app, "com.apple.finder")
-        XCTAssertEqual(rules[0].action, .float)
-        XCTAssertEqual(rules[1].matcher.title, "^$")
-        XCTAssertEqual(rules[1].matcher.maxWidth, 400)
-        XCTAssertEqual(rules[1].action, .ignore)
+        #expect(rules.count == 3)
+        #expect(rules[0].matcher.app == "com.apple.finder")
+        #expect(rules[0].action == .float)
+        #expect(rules[1].matcher.title == "^$")
+        #expect(rules[1].matcher.maxWidth == 400)
+        #expect(rules[1].action == .ignore)
         // No explicit action → defaults to float.
-        XCTAssertEqual(rules[2].matcher.subrole, "AXDialog")
-        XCTAssertEqual(rules[2].action, .float)
+        #expect(rules[2].matcher.subrole == "AXDialog")
+        #expect(rules[2].action == .float)
     }
 
-    func testExclusionRuleWithNoMatchKeyDropped() {
+    @Test func exclusionRuleWithNoMatchKeyDropped() {
         // A `[[exclude]]` with only `action` (no match key) is a
         // mistake and is dropped (it would match nothing anyway).
         let rules = FacetConfig.exclusionRules(fromTOML: """
@@ -171,14 +171,14 @@ final class FacetConfigTests: XCTestCase {
             [[exclude]]
             app = "x"
             """)
-        XCTAssertEqual(rules.count, 1)
-        XCTAssertEqual(rules[0].matcher.app, "x")
+        #expect(rules.count == 1)
+        #expect(rules[0].matcher.app == "x")
     }
 
-    func testExclusionRulesEmptyWhenAbsent() {
+    @Test func exclusionRulesEmptyWhenAbsent() {
         let c = FacetConfig()
-        XCTAssertTrue(c.effectiveExclusionRules.isEmpty)
-        XCTAssertTrue(FacetConfig.exclusionRules(fromTOML: """
+        #expect(c.effectiveExclusionRules.isEmpty)
+        #expect(FacetConfig.exclusionRules(fromTOML: """
             [grid]
             cols = 2
             """).isEmpty)
@@ -186,7 +186,7 @@ final class FacetConfigTests: XCTestCase {
 
     // MARK: - TOML mapping
 
-    func testFromTOMLMapsAllRecognisedKeys() {
+    @Test func fromTOMLMapsAllRecognisedKeys() {
         let parsed = parseTOMLSubset("""
             [theme]
             name = "dracula"
@@ -198,19 +198,19 @@ final class FacetConfigTests: XCTestCase {
             theme = "github-light"
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.effectiveTheme, "dracula")
-        XCTAssertEqual(c.effectiveGridTheme, "github-light",
-                       "per-view override parses")
-        XCTAssertEqual(c.effectiveTreeTheme, "dracula",
-                       "unset per-view key inherits [theme].name")
-        XCTAssertEqual(c.effectiveGridCols, 6)
-        XCTAssertEqual(c.effectiveGridLabelPosition, "down")
-        XCTAssertEqual(c.effectiveThumbnailRefreshInterval, 10)
+        #expect(c.effectiveTheme == "dracula")
+        #expect(c.effectiveGridTheme == "github-light",
+                "per-view override parses")
+        #expect(c.effectiveTreeTheme == "dracula",
+                "unset per-view key inherits [theme].name")
+        #expect(c.effectiveGridCols == 6)
+        #expect(c.effectiveGridLabelPosition == "down")
+        #expect(c.effectiveThumbnailRefreshInterval == 10)
     }
 
     // MARK: - Per-mac-desktop sections
 
-    func testEffectiveWorkspaceListPerOrdinal() {
+    @Test func effectiveWorkspaceListPerOrdinal() {
         // Desktop 1 has a section model (2 workspace sections); desktop 2 has
         // none → its own default slots. The workspace sections carry no label,
         // so their names are EMPTY (unnamed → displayed by 1-based index, §B;
@@ -223,27 +223,27 @@ final class FacetConfigTests: XCTestCase {
 
         // Section-active ordinal → one slot per workspace section.
         let configured = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        XCTAssertEqual(configured.count, 2)
-        XCTAssertEqual(configured.map(\.config.layout), [nil, "bsp"])
-        XCTAssertTrue(configured.allSatisfy { $0.config.name.isEmpty })  // unnamed (§B)
+        #expect(configured.count == 2)
+        #expect(configured.map(\.config.layout) == [nil, "bsp"])
+        #expect(configured.allSatisfy { $0.config.name.isEmpty })  // unnamed (§B)
         // Unconfigured ordinal → defaultWorkspaceCount unnamed slots.
         let unconfigured = c.effectiveWorkspaceList(forMacDesktopOrdinal: 2)
-        XCTAssertEqual(unconfigured.count, FacetConfig.defaultWorkspaceCount)
-        XCTAssertTrue(unconfigured.allSatisfy { $0.config.name.isEmpty })
+        #expect(unconfigured.count == FacetConfig.defaultWorkspaceCount)
+        #expect(unconfigured.allSatisfy { $0.config.name.isEmpty })
         // nil ordinal → default slots (section model never activates).
         let nilList = c.effectiveWorkspaceList(forMacDesktopOrdinal: nil)
-        XCTAssertEqual(nilList.count, FacetConfig.defaultWorkspaceCount)
+        #expect(nilList.count == FacetConfig.defaultWorkspaceCount)
     }
 
-    func testEmptyTOMLYieldsAllDefaults() {
+    @Test func emptyTOMLYieldsAllDefaults() {
         let c = FacetConfig.from(toml: [:])
-        XCTAssertEqual(c.effectiveTheme, "terminal")
-        XCTAssertEqual(c.effectiveGridCols, 4)
+        #expect(c.effectiveTheme == "terminal")
+        #expect(c.effectiveGridCols == 4)
     }
 
     // MARK: - Disk loader
 
-    func testLoadFallsBackToDefaultsForMissingConfig() {
+    @Test func loadFallsBackToDefaultsForMissingConfig() {
         let tmp = NSTemporaryDirectory()
             + "facet-test-\(UUID().uuidString)/missing.toml"
         defer {
@@ -251,18 +251,18 @@ final class FacetConfigTests: XCTestCase {
             try? FileManager.default.removeItem(atPath: dir)
         }
         let c = FacetConfig.load(path: tmp)
-        XCTAssertEqual(c.effectiveTheme, "terminal",
-                       "missing config → default-init'd config")
+        #expect(c.effectiveTheme == "terminal",
+                "missing config → default-init'd config")
     }
 
     // MARK: - unknownValueWarnings (silent-clamp surfacing)
 
-    func testNoWarningsForDefaultConfig() {
-        XCTAssertTrue(FacetConfig().unknownValueWarnings().isEmpty,
-                      "every key unset → nothing was clamped")
+    @Test func noWarningsForDefaultConfig() {
+        #expect(FacetConfig().unknownValueWarnings().isEmpty,
+                "every key unset → nothing was clamped")
     }
 
-    func testNoWarningsForValidValues() {
+    @Test func noWarningsForValidValues() {
         var c = FacetConfig()
         c.theme = "dracula"
         c.defaultLayout = "bsp"
@@ -270,45 +270,45 @@ final class FacetConfigTests: XCTestCase {
         c.treePreviewMode = "mirror"
         c.animationCurve = "spring"
         c.gridLabelPosition = "down"
-        XCTAssertTrue(c.unknownValueWarnings().isEmpty,
-                      "all recognised → no warnings")
+        #expect(c.unknownValueWarnings().isEmpty,
+                "all recognised → no warnings")
     }
 
-    func testValidValuesAreCaseInsensitive() {
+    @Test func validValuesAreCaseInsensitive() {
         var c = FacetConfig()
         c.defaultLayout = "BSP"
         c.theme = "Dracula"
         c.railEdge = "LEFT"
-        XCTAssertTrue(c.unknownValueWarnings().isEmpty,
-                      "a known name in any case is not a clamp")
+        #expect(c.unknownValueWarnings().isEmpty,
+                "a known name in any case is not a clamp")
     }
 
-    func testUnknownLayoutWarns() {
+    @Test func unknownLayoutWarns() {
         var c = FacetConfig()
         // `tall` was renamed to `master-left` (#139); an old config
         // carrying it now silently clamps to `float`.
         c.defaultLayout = "tall"
         let w = c.unknownValueWarnings()
-        XCTAssertEqual(w.count, 1)
-        XCTAssertTrue(w[0].contains("layout"), "names the key")
-        XCTAssertTrue(w[0].contains("tall"), "echoes the written value")
-        XCTAssertTrue(w[0].contains("float"), "names the fallback")
+        #expect(w.count == 1)
+        #expect(w[0].contains("layout"), "names the key")
+        #expect(w[0].contains("tall"), "echoes the written value")
+        #expect(w[0].contains("float"), "names the fallback")
     }
 
-    func testMultipleUnknownsEachWarnOnce() {
+    @Test func multipleUnknownsEachWarnOnce() {
         var c = FacetConfig()
         c.defaultLayout = "nonsuch-layout"
         c.theme = "nonsuch-theme"
         c.railEdge = "diagonal"
-        XCTAssertEqual(c.unknownValueWarnings().count, 3,
-                       "one warning per clamped key")
+        #expect(c.unknownValueWarnings().count == 3,
+                "one warning per clamped key")
     }
 
-    func testEmptyStringIsNotAWarning() {
+    @Test func emptyStringIsNotAWarning() {
         var c = FacetConfig()
         c.defaultLayout = ""
-        XCTAssertTrue(c.unknownValueWarnings().isEmpty,
-                      "empty string is treated like unset, not a typo")
+        #expect(c.unknownValueWarnings().isEmpty,
+                "empty string is treated like unset, not a typo")
     }
 
     // MARK: - effectiveRaiseOnOpen ([window] raise-on-open)
@@ -319,151 +319,151 @@ final class FacetConfigTests: XCTestCase {
         return c.effectiveRaiseOnOpen
     }
 
-    func testRaiseOnOpenDefaultsToRaise() {
-        XCTAssertEqual(raiseMode(nil), .raise)
+    @Test func raiseOnOpenDefaultsToRaise() {
+        #expect(raiseMode(nil) == .raise)
     }
 
-    func testRaiseOnOpenParsesEachCase() {
-        XCTAssertEqual(raiseMode("raise"), .raise)
-        XCTAssertEqual(raiseMode("activate"), .activate)
-        XCTAssertEqual(raiseMode("off"), .off)
+    @Test func raiseOnOpenParsesEachCase() {
+        #expect(raiseMode("raise") == .raise)
+        #expect(raiseMode("activate") == .activate)
+        #expect(raiseMode("off") == .off)
     }
 
-    func testRaiseOnOpenIsCaseInsensitive() {
-        XCTAssertEqual(raiseMode("ACTIVATE"), .activate)
-        XCTAssertEqual(raiseMode("Off"), .off)
+    @Test func raiseOnOpenIsCaseInsensitive() {
+        #expect(raiseMode("ACTIVATE") == .activate)
+        #expect(raiseMode("Off") == .off)
     }
 
-    func testRaiseOnOpenUnknownClampsToRaise() {
-        XCTAssertEqual(raiseMode("bogus"), .raise)
-        XCTAssertEqual(raiseMode(""), .raise)
+    @Test func raiseOnOpenUnknownClampsToRaise() {
+        #expect(raiseMode("bogus") == .raise)
+        #expect(raiseMode("") == .raise)
     }
 
     // MARK: - effectiveRailStrip
 
-    func testEffectiveRailStripClamps() {
+    @Test func effectiveRailStripClamps() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveRailStrip, 30, "default")
+        #expect(c.effectiveRailStrip == 30, "default")
         c.railStrip = 20
-        XCTAssertEqual(c.effectiveRailStrip, 20)
+        #expect(c.effectiveRailStrip == 20)
         c.railStrip = 1
-        XCTAssertEqual(c.effectiveRailStrip, 8, "floor 8")
+        #expect(c.effectiveRailStrip == 8, "floor 8")
         c.railStrip = 999
-        XCTAssertEqual(c.effectiveRailStrip, 50, "ceiling 50")
+        #expect(c.effectiveRailStrip == 50, "ceiling 50")
     }
 
     // MARK: - effectiveTreeGeometry
 
-    func testEffectiveTreeGeometryNeedsAllFour() {
+    @Test func effectiveTreeGeometryNeedsAllFour() {
         var c = FacetConfig()
-        XCTAssertNil(c.effectiveTreeGeometry, "all unset → nil")
+        #expect(c.effectiveTreeGeometry == nil, "all unset → nil")
         c.treePosX = 10; c.treePosY = 20; c.treeWidth = 300; c.treeHeight = 400
-        XCTAssertEqual(c.effectiveTreeGeometry,
-                       CGRect(x: 10, y: 20, width: 300, height: 400))
+        #expect(c.effectiveTreeGeometry ==
+                CGRect(x: 10, y: 20, width: 300, height: 400))
         c.treeHeight = nil
-        XCTAssertNil(c.effectiveTreeGeometry, "one missing → nil")
+        #expect(c.effectiveTreeGeometry == nil, "one missing → nil")
     }
 
-    func testEffectiveTreeGeometryRejectsNonPositiveSize() {
+    @Test func effectiveTreeGeometryRejectsNonPositiveSize() {
         var c = FacetConfig()
         c.treePosX = 0; c.treePosY = 0; c.treeWidth = 0; c.treeHeight = 400
-        XCTAssertNil(c.effectiveTreeGeometry, "width 0 → nil")
+        #expect(c.effectiveTreeGeometry == nil, "width 0 → nil")
         c.treeWidth = 300; c.treeHeight = 0
-        XCTAssertNil(c.effectiveTreeGeometry, "height 0 → nil")
+        #expect(c.effectiveTreeGeometry == nil, "height 0 → nil")
     }
 
-    func testTreeGeometryPartialWarns() {
+    @Test func treeGeometryPartialWarns() {
         var c = FacetConfig()
         c.treePosX = 10   // only 1 of 4
-        XCTAssertTrue(c.unknownValueWarnings().contains {
+        #expect(c.unknownValueWarnings().contains {
             $0.contains("[tree] geometry needs all of")
         }, "partial geometry warns")
         c.treePosY = 20; c.treeWidth = 300; c.treeHeight = 400
-        XCTAssertFalse(c.unknownValueWarnings().contains {
+        #expect(!(c.unknownValueWarnings().contains {
             $0.contains("[tree] geometry needs all of")
-        }, "all four → no warning")
+        }), "all four → no warning")
     }
 
     // MARK: - allow-list accessors (border effect / tree preview mode)
 
-    func testEffectiveBorderEffectAllowList() {
+    @Test func effectiveBorderEffectAllowList() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveBorderEffect, "off", "default")
+        #expect(c.effectiveBorderEffect == "off", "default")
         c.borderEffect = "NEON"
-        XCTAssertEqual(c.effectiveBorderEffect, "neon", "case-insensitive")
+        #expect(c.effectiveBorderEffect == "neon", "case-insensitive")
         c.borderEffect = "sparkle"
-        XCTAssertEqual(c.effectiveBorderEffect, "off", "unknown → off")
+        #expect(c.effectiveBorderEffect == "off", "unknown → off")
     }
 
-    func testEffectiveTreePreviewModeAllowList() {
+    @Test func effectiveTreePreviewModeAllowList() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveTreePreviewMode, "popover", "default")
+        #expect(c.effectiveTreePreviewMode == "popover", "default")
         c.treePreviewMode = "Mirror"
-        XCTAssertEqual(c.effectiveTreePreviewMode, "mirror", "case-insensitive")
+        #expect(c.effectiveTreePreviewMode == "mirror", "case-insensitive")
         c.treePreviewMode = "fullscreen"
-        XCTAssertEqual(c.effectiveTreePreviewMode, "popover", "unknown → popover")
+        #expect(c.effectiveTreePreviewMode == "popover", "unknown → popover")
     }
 
     // MARK: - border / cycle numeric clamps
 
-    func testEffectiveBorderWidthClamps() {
+    @Test func effectiveBorderWidthClamps() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveBorderWidth, 1.5, accuracy: 0.0001, "default")
+        #expect(abs(c.effectiveBorderWidth - 1.5) < 0.0001, "default")
         c.borderWidth = 4
-        XCTAssertEqual(c.effectiveBorderWidth, 4, accuracy: 0.0001)
+        #expect(abs(c.effectiveBorderWidth - 4) < 0.0001)
         c.borderWidth = 0.1
-        XCTAssertEqual(c.effectiveBorderWidth, 0.5, accuracy: 0.0001, "floor")
+        #expect(abs(c.effectiveBorderWidth - 0.5) < 0.0001, "floor")
         c.borderWidth = 99
-        XCTAssertEqual(c.effectiveBorderWidth, 30, accuracy: 0.0001, "ceiling")
+        #expect(abs(c.effectiveBorderWidth - 30) < 0.0001, "ceiling")
     }
 
-    func testBorderAndThemeCycleClampIndependently() {
+    @Test func borderAndThemeCycleClampIndependently() {
         var c = FacetConfig()
-        XCTAssertEqual(c.effectiveBorderCycleSeconds, 6, accuracy: 0.0001,
-                       "border default (6000 ms)")
-        XCTAssertEqual(c.effectiveThemeCycleSeconds, 6, accuracy: 0.0001,
-                       "theme default (6000 ms)")
+        #expect(abs(c.effectiveBorderCycleSeconds - 6) < 0.0001,
+                "border default (6000 ms)")
+        #expect(abs(c.effectiveThemeCycleSeconds - 6) < 0.0001,
+                "theme default (6000 ms)")
         c.borderColorCycleMs = 200_000   // over ceiling (120000 ms)
         c.themeColorCycleMs = 0          // under floor (1000 ms)
-        XCTAssertEqual(c.effectiveBorderCycleSeconds, 120, accuracy: 0.0001,
-                       "border ceiling")
-        XCTAssertEqual(c.effectiveThemeCycleSeconds, 1, accuracy: 0.0001,
-                       "theme floor — independent of the border cycle")
+        #expect(abs(c.effectiveBorderCycleSeconds - 120) < 0.0001,
+                "border ceiling")
+        #expect(abs(c.effectiveThemeCycleSeconds - 1) < 0.0001,
+                "theme floor — independent of the border cycle")
     }
 
-    func testPerViewThemeInheritsAndOverrides() {
+    @Test func perViewThemeInheritsAndOverrides() {
         var c = FacetConfig()
         c.theme = "dracula"
-        XCTAssertEqual(c.effectiveTreeTheme, "dracula", "unset → inherit")
+        #expect(c.effectiveTreeTheme == "dracula", "unset → inherit")
         c.gridTheme = ""
-        XCTAssertEqual(c.effectiveGridTheme, "dracula", "\"\" → inherit")
+        #expect(c.effectiveGridTheme == "dracula", "\"\" → inherit")
         c.railTheme = "github-light"
-        XCTAssertEqual(c.effectiveRailTheme, "github-light", "override wins")
+        #expect(c.effectiveRailTheme == "github-light", "override wins")
         c.treeTheme = "drakula"   // typo
-        XCTAssertEqual(c.effectiveTreeTheme, "dracula",
-                       "unknown → inherit (warned via unknownValueWarnings)")
+        #expect(c.effectiveTreeTheme == "dracula",
+                "unknown → inherit (warned via unknownValueWarnings)")
     }
 
-    func testEffectiveBorderBreathWidthsOptionalClamp() {
+    @Test func effectiveBorderBreathWidthsOptionalClamp() {
         var c = FacetConfig()
-        XCTAssertNil(c.effectiveBorderMinWidth, "unset → nil")
-        XCTAssertNil(c.effectiveBorderMaxWidth, "unset → nil")
+        #expect(c.effectiveBorderMinWidth == nil, "unset → nil")
+        #expect(c.effectiveBorderMaxWidth == nil, "unset → nil")
         c.borderMinWidth = 0    // below floor
         c.borderMaxWidth = 99   // above ceiling
         // Exact (0.5 / 30 are representable); CGFloat(...) keeps the
         // Optional comparison unambiguous — no `accuracy:` on Optionals.
-        XCTAssertEqual(c.effectiveBorderMinWidth, CGFloat(0.5))
-        XCTAssertEqual(c.effectiveBorderMaxWidth, CGFloat(30))
+        #expect(c.effectiveBorderMinWidth == CGFloat(0.5))
+        #expect(c.effectiveBorderMaxWidth == CGFloat(30))
         // Fractional in-range values survive (the fields are CGFloat,
         // like the sibling `width` — a `.5` is no longer dropped by an
         // integer decode). Regression pin for config-01.
         c.borderMinWidth = 1.5
         c.borderMaxWidth = 4.5
-        XCTAssertEqual(c.effectiveBorderMinWidth, CGFloat(1.5))
-        XCTAssertEqual(c.effectiveBorderMaxWidth, CGFloat(4.5))
+        #expect(c.effectiveBorderMinWidth == CGFloat(1.5))
+        #expect(c.effectiveBorderMaxWidth == CGFloat(4.5))
     }
 
-    func testFromTOMLDecodesFractionalBorderBreathWidths() {
+    @Test func fromTOMLDecodesFractionalBorderBreathWidths() {
         // config-01: the DECODE path is the real bug site — when these
         // were `.int`/asInt, a fractional `min-width = 0.5` was silently
         // dropped (asInt returns nil for a TOML double). As `.cgDbl`
@@ -474,8 +474,8 @@ final class FacetConfigTests: XCTestCase {
             max-width = 4.5
             """)
         let c = FacetConfig.from(toml: parsed)
-        XCTAssertEqual(c.borderMinWidth, CGFloat(0.5),
-                       "fractional min-width decodes (was dropped under .int)")
-        XCTAssertEqual(c.borderMaxWidth, CGFloat(4.5))
+        #expect(c.borderMinWidth == CGFloat(0.5),
+                "fractional min-width decodes (was dropped under .int)")
+        #expect(c.borderMaxWidth == CGFloat(4.5))
     }
 }

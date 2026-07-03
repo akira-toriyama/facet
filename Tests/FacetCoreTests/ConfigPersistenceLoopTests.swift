@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 import Foundation
 @testable import FacetCore
 
@@ -8,13 +8,13 @@ import Foundation
 /// bootstrap (B2) and confirm the edit is promoted onto config.toml. Covers the
 /// seam between the pure renderer and the startup promote that the unit tests
 /// exercise separately.
-final class ConfigPersistenceLoopTests: XCTestCase {
+final class ConfigPersistenceLoopTests {
 
-    private var dir: URL!
-    private var configPath: String!
-    private var snapshotPath: String!
+    private let dir: URL
+    private let configPath: String
+    private let snapshotPath: String
 
-    override func setUpWithError() throws {
+    init() throws {
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("facet-loop-\(UUID().uuidString)")
         try FileManager.default.createDirectory(
@@ -23,7 +23,7 @@ final class ConfigPersistenceLoopTests: XCTestCase {
         snapshotPath = dir.appendingPathComponent("config.snapshot.toml").path
     }
 
-    override func tearDownWithError() throws {
+    deinit {
         try? FileManager.default.removeItem(at: dir)
     }
 
@@ -45,16 +45,16 @@ final class ConfigPersistenceLoopTests: XCTestCase {
     """
 
     /// Edit a lens match → export snapshot → restart → the edit is promoted.
-    func testEditExportPromoteRoundTrip() throws {
+    @Test func editExportPromoteRoundTrip() throws {
         try write(configPath, configText, mtime: Date(timeIntervalSince1970: 1_000))
 
         // 1. The dirty hook's work: read config.toml, render with the session
         //    override, resolve the RELATIVE export-path, write the snapshot.
         let cfg0 = FacetConfig.load(path: configPath)
-        let rawExport = try XCTUnwrap(cfg0.effectiveExportPath)
+        let rawExport = try #require(cfg0.effectiveExportPath)
         let resolved = FacetConfig.resolvePath(
             rawExport, relativeTo: (configPath as NSString).deletingLastPathComponent)
-        XCTAssertEqual(resolved, snapshotPath, "relative export-path resolves to config dir")
+        #expect(resolved == snapshotPath, "relative export-path resolves to config dir")
 
         var ov = ConfigSnapshot.Overrides()
         ov.match = [1: ["section:0:Web": "app=Firefox"]]
@@ -68,17 +68,17 @@ final class ConfigPersistenceLoopTests: XCTestCase {
 
         // config.toml was overwritten with the promoted snapshot…
         let onDisk = try String(contentsOfFile: configPath, encoding: .utf8)
-        XCTAssertTrue(onDisk.contains(#"match = "app=Firefox""#),
+        #expect(onDisk.contains(#"match = "app=Firefox""#),
                       "the edited match was promoted onto config.toml")
-        XCTAssertFalse(onDisk.contains("app=Safari"))
+        #expect(!(onDisk.contains("app=Safari")))
 
         // …and the loaded config reflects it (decode the lens section back).
-        let sec = try XCTUnwrap(cfg1.macDesktopSectionConfigs[1]?.first)
-        XCTAssertEqual(sec.match, "app=Firefox", "loaded config carries the edit")
+        let sec = try #require(cfg1.macDesktopSectionConfigs[1]?.first)
+        #expect(sec.match == "app=Firefox", "loaded config carries the edit")
     }
 
     /// A hand-edit to config.toml between sessions beats a stale snapshot.
-    func testHandEditBeatsStaleSnapshot() throws {
+    @Test func handEditBeatsStaleSnapshot() throws {
         // Snapshot is OLDER than config.toml (user hand-edited config since).
         var ov = ConfigSnapshot.Overrides()
         ov.match = [1: ["section:0:Web": "app=Firefox"]]
@@ -87,9 +87,9 @@ final class ConfigPersistenceLoopTests: XCTestCase {
         try write(configPath, configText, mtime: Date(timeIntervalSince1970: 2_000)) // newer
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
-        let sec = try XCTUnwrap(cfg.macDesktopSectionConfigs[1]?.first)
-        XCTAssertEqual(sec.match, "app=Safari", "hand-edit wins; stale snapshot ignored")
-        XCTAssertFalse(try String(contentsOfFile: configPath, encoding: .utf8)
-            .contains("Firefox"))
+        let sec = try #require(cfg.macDesktopSectionConfigs[1]?.first)
+        #expect(sec.match == "app=Safari", "hand-edit wins; stale snapshot ignored")
+        #expect(!(try String(contentsOfFile: configPath, encoding: .utf8)
+            .contains("Firefox")))
     }
 }

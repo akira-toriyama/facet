@@ -1,22 +1,22 @@
-import XCTest
+import Testing
 import Foundation
 @testable import FacetCore
 
 /// B2 (t-hdxb): the startup `bootstrapWithAutoPromote` — promote a NEWER
 /// snapshot onto config.toml (opt-in) with a strict mtime staleness gate,
 /// self-write refusal, and fail-soft I/O.
-final class ConfigAutoPromoteTests: XCTestCase {
+final class ConfigAutoPromoteTests {
 
-    private var dir: URL!
+    private let dir: URL
 
-    override func setUpWithError() throws {
+    init() throws {
         dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("facet-promote-\(UUID().uuidString)")
         try FileManager.default.createDirectory(
             at: dir, withIntermediateDirectories: true)
     }
 
-    override func tearDownWithError() throws {
+    deinit {
         try? FileManager.default.removeItem(at: dir)
     }
 
@@ -54,7 +54,7 @@ final class ConfigAutoPromoteTests: XCTestCase {
 
     // MARK: - promotes when opted in and snapshot is newer
 
-    func testPromotesNewerSnapshot() throws {
+    @Test func promotesNewerSnapshot() throws {
         let snapPath = dir.appendingPathComponent("snap.toml").path
         let configPath = try writeFile("config.toml",
             configText(exportPath: snapPath, autoPromote: true, theme: "terminal"),
@@ -65,14 +65,14 @@ final class ConfigAutoPromoteTests: XCTestCase {
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
 
-        XCTAssertEqual(cfg.effectiveTheme, "dracula", "loaded the promoted snapshot")
-        XCTAssertTrue(read(configPath).contains("dracula"),
+        #expect(cfg.effectiveTheme == "dracula", "loaded the promoted snapshot")
+        #expect(read(configPath).contains("dracula"),
                       "config.toml was overwritten with the snapshot")
     }
 
     // MARK: - staleness guard: older snapshot never wins
 
-    func testStaleSnapshotIsNotPromoted() throws {
+    @Test func staleSnapshotIsNotPromoted() throws {
         let snapPath = dir.appendingPathComponent("snap.toml").path
         let configPath = try writeFile("config.toml",
             configText(exportPath: snapPath, autoPromote: true, theme: "terminal"),
@@ -83,14 +83,14 @@ final class ConfigAutoPromoteTests: XCTestCase {
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
 
-        XCTAssertEqual(cfg.effectiveTheme, "terminal", "hand-edit wins")
-        XCTAssertFalse(read(configPath).contains("dracula"),
+        #expect(cfg.effectiveTheme == "terminal", "hand-edit wins")
+        #expect(!(read(configPath).contains("dracula")),
                        "config.toml untouched when snapshot is stale")
     }
 
     // MARK: - opt-out: auto-promote off → snapshot ignored
 
-    func testAutoPromoteOffIgnoresSnapshot() throws {
+    @Test func autoPromoteOffIgnoresSnapshot() throws {
         let snapPath = dir.appendingPathComponent("snap.toml").path
         let configPath = try writeFile("config.toml",
             configText(exportPath: snapPath, autoPromote: false, theme: "terminal"),
@@ -101,25 +101,25 @@ final class ConfigAutoPromoteTests: XCTestCase {
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
 
-        XCTAssertEqual(cfg.effectiveTheme, "terminal")
-        XCTAssertFalse(read(configPath).contains("dracula"))
+        #expect(cfg.effectiveTheme == "terminal")
+        #expect(!(read(configPath).contains("dracula")))
     }
 
     // MARK: - missing snapshot → no-op
 
-    func testMissingSnapshotIsNoOp() throws {
+    @Test func missingSnapshotIsNoOp() throws {
         let snapPath = dir.appendingPathComponent("snap.toml").path  // never created
         let configPath = try writeFile("config.toml",
             configText(exportPath: snapPath, autoPromote: true, theme: "terminal"),
             mtime: old)
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
-        XCTAssertEqual(cfg.effectiveTheme, "terminal", "no snapshot → load as-is")
+        #expect(cfg.effectiveTheme == "terminal", "no snapshot → load as-is")
     }
 
     // MARK: - self-write refusal: export-path == config.toml
 
-    func testSelfWritePathIsRefused() throws {
+    @Test func selfWritePathIsRefused() throws {
         let configPath = try writeFile("config.toml",
             configText(exportPath: dir.appendingPathComponent("config.toml").path,
                        autoPromote: true, theme: "terminal"),
@@ -127,12 +127,12 @@ final class ConfigAutoPromoteTests: XCTestCase {
         // Even though "snapshot" (== config) is not newer than itself, assert
         // the guard by making the equal-path a no-op rather than a crash.
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
-        XCTAssertEqual(cfg.effectiveTheme, "terminal")
+        #expect(cfg.effectiveTheme == "terminal")
     }
 
     // MARK: - a symlinked config.toml is written THROUGH, not clobbered
 
-    func testPromoteWritesThroughSymlinkedConfig() throws {
+    @Test func promoteWritesThroughSymlinkedConfig() throws {
         // Dotfiles setup: config.toml is a symlink into a "repo" file.
         let repoPath = dir.appendingPathComponent("repo-config.toml").path
         let snapPath = dir.appendingPathComponent("snap.toml").path
@@ -148,19 +148,19 @@ final class ConfigAutoPromoteTests: XCTestCase {
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: linkPath)
 
-        XCTAssertEqual(cfg.effectiveTheme, "dracula", "promoted content loaded")
+        #expect(cfg.effectiveTheme == "dracula", "promoted content loaded")
         // The link is PRESERVED (not replaced by a regular file)…
         let attrs = try FileManager.default.attributesOfItem(atPath: linkPath)
-        XCTAssertEqual(attrs[.type] as? FileAttributeType, .typeSymbolicLink,
+        #expect(attrs[.type] as? FileAttributeType == .typeSymbolicLink,
                        "config.toml stays a symlink (dotfiles link intact)")
         // …and the repo target received the promoted content.
-        XCTAssertTrue(read(repoPath).contains("dracula"),
+        #expect(read(repoPath).contains("dracula"),
                       "the promoted content landed on the real repo file")
     }
 
     // MARK: - equal mtime is NOT strictly newer → no promotion
 
-    func testEqualMtimeIsNotPromoted() throws {
+    @Test func equalMtimeIsNotPromoted() throws {
         let snapPath = dir.appendingPathComponent("snap.toml").path
         let configPath = try writeFile("config.toml",
             configText(exportPath: snapPath, autoPromote: true, theme: "terminal"),
@@ -170,7 +170,7 @@ final class ConfigAutoPromoteTests: XCTestCase {
             mtime: old)  // SAME mtime
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
-        XCTAssertEqual(cfg.effectiveTheme, "terminal",
+        #expect(cfg.effectiveTheme == "terminal",
                        "strictly-newer gate: equal mtime does not promote")
     }
 }
