@@ -156,6 +156,30 @@ public extension FacetConfig {
                      doc: "Width-breathing ceil."),
             ]),
 
+            .init("config", doc: "Config auto-persistence (session edits → "
+                + "config.toml, no UI). See CLAUDE.md `### Configuration`.",
+                  fields: [
+                .str("export-path", \.exportPath,
+                     doc: "Auto-export snapshot target. Set = ON: every session "
+                        + "edit (rename / lens match / layout / tag vocab) writes "
+                        + "the full effective config here, surgically — config.toml "
+                        + "is left untouched. MUST be a different file from "
+                        + "config.toml. `~` and config-dir-relative paths resolve."),
+                .bool("auto-promote", \.autoPromote, default: false,
+                      doc: "Promote a NEWER snapshot onto config.toml at startup "
+                         + "(overwrite + load) — the one sanctioned write to your "
+                         + "config file. A hand-edit between sessions still wins "
+                         + "(mtime guard). Off by default."),
+            ]),
+
+            .init("tags", doc: "Tag vocabulary (names only — colors are runtime).",
+                  fields: [
+                .strArray("defined", \.definedTags,
+                          doc: "Tag names offered in the tag editor before any "
+                             + "window uses them (`[]` = none). Grown by "
+                             + "auto-export as you create tags."),
+            ]),
+
             // ── Schema-only below (facet decodes these from raw text) ──
 
             .init("exclude", kind: .arrayOfTables,
