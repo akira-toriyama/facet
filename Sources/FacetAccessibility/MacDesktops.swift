@@ -33,6 +33,25 @@ nonisolated(unsafe) private let skylight: UnsafeMutableRawPointer? = dlopen(
     "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
     RTLD_NOW)
 
+// Serialize every SkyLight call below (t-bcpw). The window-management
+// query path — `SLSCopyManagedDisplaySpaces` →
+// `SLSWindowManagementClientOperationsEnabled` → `SLSWMBridgeDelegate()` —
+// lazily creates/tears down an `SLSWindowManagementFallbackBridge` and
+// stores a *weak* reference to it, and that path is NOT thread-safe on
+// Apple's side. In production `NativeAdapter.init` reads these on the main
+// actor (single-threaded, no race), but Swift Testing runs suites in
+// parallel on the cooperative pool: many concurrent inits hammered SLS at
+// once and intermittently tripped an objc "Cannot form weak reference to
+// instance … of class SLSWindowManagementFallbackBridge … over-released"
+// SIGABRT (crash logs: all 12 cooperative threads inside
+// `SLSCopyManagedDisplaySpaces`, one mid-`dealloc`, one forming a weak ref
+// to it). facet can't fix Apple's SkyLight, but it can guarantee it never
+// enters that path from two threads at once. The calls are infrequent
+// (adapter init / query commands) and already do a window-server round
+// trip, so the lock's cost is negligible. Regression test:
+// `MacDesktopsConcurrencyTests`.
+private let slsLock = NSLock()
+
 private func slSym(_ name: String) -> UnsafeMutableRawPointer? {
     if let h = skylight, let s = dlsym(h, name) { return s }
     // RTLD_DEFAULT: SkyLight is usually already resident via AppKit.
@@ -89,6 +108,7 @@ public enum MacDesktops {
     public static func activeID() -> UInt64 {
         guard let cid = mainConnectionID, let f = getActiveSpaceFn
         else { return 0 }
+        slsLock.lock(); defer { slsLock.unlock() }
         return f(cid)
     }
 
@@ -113,8 +133,10 @@ public enum MacDesktops {
         guard windowID > 0, let cid = mainConnectionID,
               let f = copySpacesForWindowsFn else { return [] }
         let list = [NSNumber(value: windowID)] as CFArray
-        guard let arr = f(cid, kSpacesAllMask, list)?.takeRetainedValue()
-                as? [NSNumber] else { return [] }
+        slsLock.lock()
+        let raw = f(cid, kSpacesAllMask, list)?.takeRetainedValue()
+        slsLock.unlock()
+        guard let arr = raw as? [NSNumber] else { return [] }
         return arr.map { $0.uint64Value }
     }
 
@@ -129,7 +151,10 @@ public enum MacDesktops {
         guard windowID > 0, let cid = mainConnectionID,
               let f = getWindowLevelFn else { return nil }
         var level: Int32 = 0
-        guard f(cid, UInt32(windowID), &level) == 0 else { return nil }
+        slsLock.lock()
+        let rc = f(cid, UInt32(windowID), &level)
+        slsLock.unlock()
+        guard rc == 0 else { return nil }
         return Int(level)
     }
 
@@ -141,10 +166,12 @@ public enum MacDesktops {
     /// when SkyLight is unavailable. Same enumeration as ``ordinal(for:)``,
     /// returning the whole map instead of one lookup.
     public static func ordinalMap() -> [UInt64: Int] {
-        guard let cid = mainConnectionID, let copy = copyManagedSpacesFn,
-              let displays = copy(cid)?.takeRetainedValue()
-                as? [[String: Any]]
+        guard let cid = mainConnectionID, let copy = copyManagedSpacesFn
         else { return [:] }
+        slsLock.lock()
+        let raw = copy(cid)?.takeRetainedValue()
+        slsLock.unlock()
+        guard let displays = raw as? [[String: Any]] else { return [:] }
         var map: [UInt64: Int] = [:]
         var ordinal = 0
         for display in displays {
@@ -171,10 +198,12 @@ public enum MacDesktops {
     /// managed list.
     public static func ordinal(for activeID: UInt64) -> Int? {
         guard activeID != 0, let cid = mainConnectionID,
-              let copy = copyManagedSpacesFn,
-              let displays = copy(cid)?.takeRetainedValue()
-                as? [[String: Any]]
+              let copy = copyManagedSpacesFn
         else { return nil }
+        slsLock.lock()
+        let raw = copy(cid)?.takeRetainedValue()
+        slsLock.unlock()
+        guard let displays = raw as? [[String: Any]] else { return nil }
         let active = activeID
         var ordinal = 0
         for display in displays {
