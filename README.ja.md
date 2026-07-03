@@ -312,11 +312,13 @@ Recording** も付与。
 
 ## 設定
 
-facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
-なし、 source of truth は 1 ファイル)。 設定可能な項目はリポジトリ
+facet は `~/.config/facet/config.toml` を **読むだけ** (1 つの opt-in
+例外＝startup `[config] auto-promote`（下記）を除き 書き戻しなし、
+source of truth は 1 ファイル)。 設定可能な項目はリポジトリ
 ルートの [config.toml](config.toml) のコメントを参照。 CLI override
 (`facet --theme dracula` 等) はセッション中のみ有効; 永続化したい
-場合はファイルを編集。
+場合はファイルを編集 — または下の `[config]` (設定の自動永続化) を
+opt-in すればセッション編集を facet が保存する。
 
 よく触る key:
 
@@ -433,11 +435,20 @@ facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
   flat な `[[desktop.N.section]]` は 1 desktop につき排他: 同じ `N` に両方書くと
   board が勝つ（flat ブロックは無視・load 時にログ）。 flat 形式は fallback として
   存続。
-- **per-window tag** は config を持たない — **実行時** (session 限り) に
-  `facet window --tag NAME` (および `--untag` / `--toggle-tag` / `--retag`)
-  で付ける自由記述の文字列。 `match` に `tag~=NAME` を含む `type = "lens"`
-  section が NAME を持つ全窓を表示する。 `facet query --tags` でいま使われて
-  いる全 tag を一覧。
+- **per-window tag** は **実行時** (session 限り) に `facet window --tag
+  NAME` (および `--untag` / `--toggle-tag` / `--retag`) で付ける自由記述の
+  文字列。 `match` に `tag~=NAME` を含む `type = "lens"` section が NAME を
+  持つ全窓を表示する。 `facet query --tags` でいま使われている全 tag を一覧。
+  任意で `[tags] defined = ["web", "code", …]` を書くと **語彙** を seed でき、
+  どの窓もまだ使っていない名前を tree の tag editor (`t`) の補完候補に出せる
+  （名前のみ・tag の色は runtime）。
+- `[config]` table — **設定の自動永続化 (opt-in)**。 `export-path` を
+  セットすると facet がセッション編集（rename・lens `match`・layout・tag 語彙）
+  のたびに実効 config の snapshot をその別ファイルへ自動 *export* する
+  （surgical・config.toml は無傷）。 さらに `auto-promote = true` を足すと、
+  次回起動時に config.toml より新しい snapshot をそこへ昇格させる（config.toml
+  への唯一の正規の書き込み。 セッション間の手編集の方が新しければそちらが勝つ）。
+  UI なし・全自動。 `export-path` 未設定なら無効。
 
 ## CLI
 

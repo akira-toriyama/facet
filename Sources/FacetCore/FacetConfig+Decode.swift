@@ -75,9 +75,31 @@ extension FacetConfig {
     public static func decodeDesktopSectionSections(fromTOML text: String)
         -> [Int: [DesktopSection]]
     {
-        var out: [Int: [DesktopSection]] = [:]
+        decodeDesktopSectionOrigins(fromTOML: text, log: true)
+            .mapValues { $0.map(\.section) }
+    }
+
+    /// The origin-tracking core of `decodeDesktopSectionSections` (t-hdxb B4).
+    /// Produces the SAME per-desktop, merged + deduped section lists, but each
+    /// section is wrapped in a `DesktopSectionOrigin` that also carries the RAW
+    /// header spelling it came from and its 0-based position among blocks of
+    /// that spelling. The snapshot writer replays THIS (never a re-implemented
+    /// index) to map a projected section id back to the exact
+    /// `[[desktop.N.section]]` array-of-tables element to edit — so the mapping
+    /// can never drift from the projection's `declOrder`. `log:` mirrors the
+    /// load-path `Log.line` diagnostics (parse notes + dup-label drops); the
+    /// writer passes `false` so re-deriving origins on every snapshot is quiet.
+    public static func decodeDesktopSectionOrigins(fromTOML text: String,
+                                                   log: Bool = true)
+        -> [Int: [DesktopSectionOrigin]]
+    {
         let blocks = parseTOMLArraysOfTables(text) { name in
             name.hasPrefix("desktop.") && name.hasSuffix(".section")
+        }
+        struct Pending {
+            let section: DesktopSection
+            let headerName: String
+            let rawOrdinal: Int
         }
         // Iterate header texts in SORTED order and MERGE into the ordinal
         // bucket (not assign): two distinct spellings can normalize to the
@@ -85,23 +107,25 @@ extension FacetConfig {
         // since `Int` accepts zero-pad / leading `+`). Sorting + appending
         // makes the result independent of per-process Dictionary hash-seed
         // order; file order within one spelling is already preserved by the
-        // parser.
+        // parser. `rawOrdinal` = the row index within THAT spelling's group,
+        // which is exactly swift-toml-edit's array-of-tables ordinal for the
+        // matching header path.
+        var buckets: [Int: [Pending]] = [:]
         for name in blocks.keys.sorted() {
             guard let rows = blocks[name] else { continue }
             // header = "desktop.<N>.section" → pull out N.
             let mid = name.dropFirst("desktop.".count).dropLast(".section".count)
             guard let ordinal = Int(mid), ordinal >= 1 else { continue }
-            var sections: [DesktopSection] = []
             for (i, row) in rows.enumerated() {
                 let (section, note) = DesktopSection.parse(fromTOMLRow: row)
-                if let note {
+                if log, let note {
                     Log.line("config: [[desktop.\(ordinal).section]] "
                         + "#\(i + 1): \(note)")
                 }
-                if let section { sections.append(section) }
-            }
-            if !sections.isEmpty {
-                out[ordinal, default: []].append(contentsOf: sections)
+                if let section {
+                    buckets[ordinal, default: []].append(
+                        Pending(section: section, headerName: name, rawOrdinal: i))
+                }
             }
         }
         // §A: within one mac desktop a NON-EMPTY label must be unique (it is a
@@ -109,23 +133,27 @@ extension FacetConfig {
         // are loud + first-wins — drop the later section so the layout isn't
         // broken; EMPTY labels may repeat freely. Runs AFTER the merge above so
         // two header spellings folding into one ordinal (`desktop.1` vs
-        // `desktop.01`) are de-duped together. Decode-time drop keeps the
-        // projection's positional lens ids (`section:<declOrder>:<label>`)
-        // minted off the surviving list. `keys.sorted()` snapshots the keys, so
-        // mutating `out[ordinal]` mid-loop is safe (and the warn order is stable).
-        for ordinal in out.keys.sorted() {
-            guard let sections = out[ordinal] else { continue }
+        // `desktop.01`) are de-duped together. `declOrder` is assigned over the
+        // SURVIVING list — the same index `FilterProjection` mints ids from.
+        var out: [Int: [DesktopSectionOrigin]] = [:]
+        for ordinal in buckets.keys.sorted() {
+            guard let pend = buckets[ordinal] else { continue }
             var seen: Set<String> = []
-            var kept: [DesktopSection] = []
-            for s in sections {
-                if !s.label.isEmpty, !seen.insert(s.label).inserted {
-                    Log.line("config: [[desktop.\(ordinal).section]]: duplicate "
-                        + "label \"\(s.label)\" — keeping first, dropping this section")
+            var origins: [DesktopSectionOrigin] = []
+            for p in pend {
+                if !p.section.label.isEmpty, !seen.insert(p.section.label).inserted {
+                    if log {
+                        Log.line("config: [[desktop.\(ordinal).section]]: duplicate "
+                            + "label \"\(p.section.label)\" — keeping first, "
+                            + "dropping this section")
+                    }
                     continue
                 }
-                kept.append(s)
+                origins.append(DesktopSectionOrigin(
+                    section: p.section, declOrder: origins.count,
+                    headerName: p.headerName, rawOrdinal: p.rawOrdinal))
             }
-            if kept.count != sections.count { out[ordinal] = kept }
+            out[ordinal] = origins
         }
         return out
     }
@@ -266,7 +294,9 @@ extension FacetConfig {
     /// the file is missing or unreadable. Read-only by design: the
     /// app never writes to the user's config file. Repo root
     /// `config.toml` is the install template; users `curl` it
-    /// into place themselves (see README).
+    /// into place themselves (see README). (The ONE sanctioned write
+    /// to config.toml — startup `auto-promote` — lives in the separate
+    /// `bootstrapWithAutoPromote`, never here.)
     public static func load(path: String = defaultPath) -> FacetConfig {
         let fm = FileManager.default
         guard fm.fileExists(atPath: path) else { return .init() }
@@ -278,6 +308,74 @@ extension FacetConfig {
         FileHandle.standardError.write(Data(
             "facet: could not read \(path)\n".utf8))
         return .init()
+    }
+
+    /// Startup config load WITH auto-promote (t-hdxb). Behaves exactly like
+    /// `load(path:)`, EXCEPT: when the user opted into `[config] auto-promote`
+    /// AND a newer `[config] export-path` snapshot exists, that snapshot is
+    /// PROMOTED — it overwrites config.toml (the one sanctioned write to the
+    /// user's config file, carved out of the "never writes" rule) and is then
+    /// loaded. Guards:
+    ///   • **Staleness**: the snapshot only wins when its mtime is STRICTLY
+    ///     newer than config.toml, so a hand-edit between sessions always
+    ///     wins. After promotion config.toml is newer, so the same snapshot
+    ///     never promotes twice (no sentinel needed).
+    ///   • **Self-write**: a snapshot path equal to config.toml is refused
+    ///     (that would be an in-place write loop, forbidden by design).
+    ///   • **Fail-soft**: any read/write I/O error falls back to the
+    ///     un-promoted config; an unreadable snapshot mtime is fail-CLOSED
+    ///     (no promotion).
+    /// Promotion happens ONLY here (startup) — never in `reloadConfig`, the
+    /// config watcher, or `config --validate/--emit-schema`, which is why this
+    /// is a separate entry point from `load`.
+    public static func bootstrapWithAutoPromote(path: String = defaultPath)
+        -> FacetConfig
+    {
+        let fresh = load(path: path)           // read #1 — learns the [config] keys
+        guard fresh.effectiveAutoPromote,
+              let rawExport = fresh.effectiveExportPath else { return fresh }
+        let baseDir = (path as NSString).deletingLastPathComponent
+        let snapshotPath = resolvePath(rawExport, relativeTo: baseDir)
+        guard !isSameFile(snapshotPath, path) else {
+            Log.line("config: [config] export-path must differ from config.toml "
+                + "— auto-promote skipped")
+            return fresh
+        }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: snapshotPath) else { return fresh }
+        // Follow a symlinked config.toml (dotfiles managers — stow / chezmoi /
+        // yadm — symlink `~/.config/*` into a repo) to the REAL target, for BOTH
+        // the mtime gate and the write. `attributesOfItem` does NOT dereference,
+        // so the gate would otherwise read the LINK's own mtime (its creation
+        // time) instead of the repo file the user actually hand-edits, and the
+        // atomic write (temp-file + rename(2)) would REPLACE the symlink with a
+        // plain file and orphan the repo target. Resolving fixes both.
+        let isLink = ((try? fm.attributesOfItem(atPath: path)[.type])
+            as? FileAttributeType) == .typeSymbolicLink
+        let realConfigPath = isLink ? (path as NSString).resolvingSymlinksInPath : path
+        // mtime gate — snapshot must be strictly newer. Unreadable snapshot
+        // mtime is fail-CLOSED (don't promote); a missing config mtime counts
+        // as ancient so a present snapshot wins.
+        guard let snapMTime = fileModificationDate(snapshotPath) else { return fresh }
+        let configMTime = fileModificationDate(realConfigPath) ?? .distantPast
+        guard snapMTime > configMTime else { return fresh }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: snapshotPath))
+        else { return fresh }                  // fail-soft on unreadable snapshot
+        do {
+            try data.write(to: URL(fileURLWithPath: realConfigPath), options: .atomic)
+        } catch {
+            Log.line("config: auto-promote could not write \(realConfigPath): \(error)")
+            return fresh                       // fail-soft on unwritable config
+        }
+        Log.debug("config: auto-promoted \(snapshotPath) → \(realConfigPath)")
+        return load(path: path)                // read #2 — the promoted config (via the link)
+    }
+
+    /// Modification date of a file, or nil if unavailable (missing / unreadable
+    /// attributes). Used by the auto-promote mtime gate.
+    private static func fileModificationDate(_ path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate])
+            as? Date
     }
 
     /// Build a `FacetConfig` from config.toml SOURCE TEXT — the pure

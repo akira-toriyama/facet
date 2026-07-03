@@ -793,6 +793,7 @@ extension Controller {
             runBackendCommand { bk in
                 bk.renameWorkspace(at: pos1, to: trimmed); return nil
             }
+            markConfigDirty()   // t-hdxb: persist the workspace rename
             return
         }
         guard n >= 1, n <= lastSections.count else {
@@ -817,6 +818,7 @@ extension Controller {
             runBackendCommand { bk in
                 bk.renameWorkspace(at: pos1, to: trimmed); return nil
             }
+            markConfigDirty()   // t-hdxb: persist the workspace rename
         case .lens, .unassigned:
             // §G: lens AND unassigned share the SAME session-only display-label
             // override (`applyLabelOverrides` relabels both; the ids
@@ -852,6 +854,7 @@ extension Controller {
                 Log.debug("renameSection: n=\(n) section id=\(sec.id) → \"\(trimmed)\"")
             }
             apply(lastWorkspaces)       // re-render with the new display label
+            markConfigDirty()   // t-hdxb: persist the lens/unassigned rename (set OR revert)
         }
     }
 
@@ -958,6 +961,7 @@ extension Controller {
             }
         }
         apply(lastWorkspaces)       // re-render: the lens re-filters live
+        markConfigDirty()   // t-hdxb: persist the lens match (set OR revert)
     }
 
     /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`
@@ -1171,6 +1175,7 @@ extension Controller {
         runBackendCommand { bk in
             bk.setLayoutMode(workspaceIndex: idx, mode: name); return nil
         }
+        markConfigDirty()   // t-hdxb: persist the workspace layout mode
     }
 
     /// `facet workspace --retile`: ask the backend to re-apply the active

@@ -93,6 +93,22 @@
       },
       "type" : "object"
     },
+    "config" : {
+      "additionalProperties" : false,
+      "description" : "Config auto-persistence (session edits → config.toml, no UI). See CLAUDE.md `### Configuration`.",
+      "properties" : {
+        "auto-promote" : {
+          "default" : false,
+          "description" : "Promote a NEWER snapshot onto config.toml at startup (overwrite + load) — the one sanctioned write to your config file. A hand-edit between sessions still wins (mtime guard). Off by default.",
+          "type" : "boolean"
+        },
+        "export-path" : {
+          "description" : "Auto-export snapshot target. Set = ON: every session edit (rename / lens match / layout / tag vocab) writes the full effective config here, surgically — config.toml is left untouched. MUST be a different file from config.toml. `~` and config-dir-relative paths resolve.",
+          "type" : "string"
+        }
+      },
+      "type" : "object"
+    },
     "desktop" : {
       "additionalProperties" : true,
       "description" : "`[[desktop.N.section]]` ordered per-mac-desktop display sections (N = Mission Control ordinal) — the sole way to configure a mac desktop. Each has a required `type` of workspace / lens / unassigned. workspace = `{ type, label, layout }` (a spatial cell; an optional `label` names it, else it shows its 1-based index; `match` / `apply` are FORBIDDEN — membership changes via DnD / `facet window --move-to N`). lens = `{ type, label, match, apply }` where match = a facet filter WHERE-clause and apply = `{ tags = [] }` — ADDITIVE TAGS ONLY (`workspace` / `floating` / `sticky` / `master` are forbidden on a lens and dropped); a lens is a pure VIEW, so an authored `layout` is ignored. unassigned = `{ type, label }` — an opt-in lost-and-found that, when present, collects windows shown in no other section (leftover = universe − shown); only the first emits, extras warn. Array order = tree display order. Any section block makes facet opt-in (manages only configured desktops). NESTED FORM: `[[desktop.N.tab]]` `{ type, label }` is a named grouping whose `type` is workspace / lens ONLY; its nested `[[desktop.N.tab.section]]` children carry NO `type` (each INHERITS the tab's), the lone exception being a child marked `unassigned = true` (the per-tab lost-and-found, ≤ 1). Parsed today; consumed by a later wave.",
@@ -386,6 +402,20 @@
         "type" : "object"
       },
       "type" : "array"
+    },
+    "tags" : {
+      "additionalProperties" : false,
+      "description" : "Tag vocabulary (names only — colors are runtime).",
+      "properties" : {
+        "defined" : {
+          "description" : "Tag names offered in the tag editor before any window uses them (`[]` = none). Grown by auto-export as you create tags.",
+          "items" : {
+            "type" : "string"
+          },
+          "type" : "array"
+        }
+      },
+      "type" : "object"
     },
     "theme" : {
       "additionalProperties" : false,

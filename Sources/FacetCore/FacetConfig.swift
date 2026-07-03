@@ -6,6 +6,13 @@
 // accessors below supply built-in defaults (agent-only mode, no
 // panel).
 //
+// ONE carve-out (t-hdxb): with ``[config] auto-promote = true`` +
+// ``[config] export-path`` set, `bootstrapWithAutoPromote` may, at
+// STARTUP ONLY, overwrite config.toml with a strictly-newer snapshot
+// (the sole sanctioned write). `load` itself stays read-only; the
+// snapshot writer is the pure `ConfigSnapshot`. See CLAUDE.md
+// `### Configuration`.
+//
 // All public fields are *raw* (Optional, as parsed from TOML).
 // `effective*` accessors apply defaults + clamping; consumers
 // should always read through those so a typo can never break the
@@ -159,6 +166,27 @@ public struct FacetConfig: Sendable {
     public var borderMinWidth: CGFloat?
     public var borderMaxWidth: CGFloat?
 
+    // [config] — config auto-persistence (t-hdxb). Setting `export-path`
+    // turns auto-export ON: every session edit (workspace / section rename,
+    // lens match, layout, tag vocabulary) writes the full effective config
+    // to that file — surgically, leaving config.toml untouched. `auto-promote`
+    // (opt-in, off by default) promotes a NEWER snapshot onto config.toml at
+    // the next startup — the ONE sanctioned write to the user's config file.
+    /// `[config].export-path` — the auto-export snapshot target (MUST be a
+    /// different file from config.toml). Raw; read `effectiveExportPath`
+    /// (then `resolvePath` to absolutise against the config directory).
+    public var exportPath: String?
+    /// `[config].auto-promote` — promote a newer snapshot onto config.toml
+    /// at startup. Raw; read `effectiveAutoPromote`. Default off.
+    public var autoPromote: Bool?
+
+    // [tags]
+    /// `[tags].defined` — the tag vocabulary (names only, no colors) offered
+    /// in the tag editor before any live window carries a name. Grown by
+    /// auto-export as tags are created. A TOML array (`["web", "code"]`; `[]`
+    /// = none). Raw; read `effectiveDefinedTags`.
+    public var definedTags: [String]?
+
     /// Per-mac-desktop `[[desktop.N.section]]` definitions (the section/lens
     /// model). Outer key is the mac desktop ordinal (Mission Control order,
     /// 1-based); value is that desktop's sections in config-declaration (=
@@ -204,6 +232,64 @@ public struct FacetConfig: Sendable {
     public init() {}
 
     // MARK: - Effective accessors (defaults + clamping)
+
+    /// The configured auto-export snapshot target (`[config] export-path`),
+    /// trimmed; `nil` (auto-export OFF) when unset or blank. Returned RAW /
+    /// unresolved — callers absolutise it against the config file's own
+    /// directory via `resolvePath(_:relativeTo:)` (the sidecar convention),
+    /// because a `FacetConfig` value doesn't carry its own source path.
+    public var effectiveExportPath: String? {
+        guard let raw = exportPath?.trimmingCharacters(in: .whitespaces),
+              !raw.isEmpty else { return nil }
+        return raw
+    }
+
+    /// Whether a newer snapshot is promoted onto config.toml at startup
+    /// (`[config] auto-promote`). Default off — persistence only writes the
+    /// snapshot until the user opts in to the promote-back step.
+    public var effectiveAutoPromote: Bool { autoPromote ?? false }
+
+    /// The tag vocabulary (`[tags] defined`): trimmed, blanks dropped,
+    /// de-duplicated in author order. Names only (no colors). Offered as
+    /// autocomplete in the tag editor even before any window uses them.
+    public var effectiveDefinedTags: [String] {
+        var seen: Set<String> = []
+        return (definedTags ?? [])
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// Expand a `~`-prefixed or relative path against `baseDir`, then
+    /// CANONICALIZE it (collapse `.` / `..` / redundant `//`). An already-
+    /// absolute path (post tilde-expansion) is canonicalized in place. Used to
+    /// resolve `[config] export-path` against the config file's directory, the
+    /// same sidecar logic as the `config.schema.json` neighbour. Canonicalising
+    /// is what lets the self-write guards (`isSameFile`) catch an `export-path`
+    /// like `./config.toml` or `../facet/config.toml` that aliases config.toml —
+    /// otherwise a raw-string compare would miss it and facet would write the
+    /// snapshot onto config.toml at runtime. Symlinks are NOT resolved here (a
+    /// user's chosen export-path may legitimately be a link); `isSameFile`
+    /// resolves those for the guard comparison only.
+    public static func resolvePath(_ raw: String, relativeTo baseDir: String) -> String {
+        let expanded = (raw as NSString).expandingTildeInPath
+        let joined = expanded.hasPrefix("/")
+            ? expanded
+            : (baseDir as NSString).appendingPathComponent(expanded)
+        return URL(fileURLWithPath: joined).standardizedFileURL.path
+    }
+
+    /// True when two paths refer to the SAME file, comparing symlink-resolved,
+    /// standardized forms — so `./config.toml`, `../facet/config.toml`, and a
+    /// symlink alias all correctly match config.toml. Used by the snapshot
+    /// self-write guards: a snapshot (`export-path`) must never target
+    /// config.toml (it would trip the ConfigWatcher → reload loop and breach
+    /// the read-only rule).
+    public static func isSameFile(_ a: String, _ b: String) -> Bool {
+        func canon(_ p: String) -> String {
+            URL(fileURLWithPath: p).resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        return canon(a) == canon(b)
+    }
 
     /// Falls back to `"terminal"` for unset or unrecognised values.
     /// The set of valid names is sill's `canonicalThemeNames` (the single

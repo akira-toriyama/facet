@@ -396,6 +396,21 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   store; both were removed deliberately to keep the file the only
   thing the user has to look at to know what facet will do.
   Memory: [[config-default-behavior]].
+- **The ONE sanctioned write to config.toml is startup `auto-promote`**
+  (t-hdxb, opt-in). With `[config] export-path` set, facet *auto-exports*
+  a live **snapshot** of the effective config to that separate file on
+  every session edit (rename / lens match / layout / tag vocab) — a
+  surgical write via swift-toml-edit that leaves config.toml untouched.
+  With `[config] auto-promote = true`, the NEXT launch promotes a snapshot
+  that is strictly newer than config.toml onto it (overwrite + load), so a
+  hand-edit between sessions still wins (mtime guard). This is the sole
+  carve-out from "never writes config.toml": it happens once, at startup,
+  only on opt-in, and only from a newer snapshot. `reloadConfig` / the
+  watcher / `config --validate` still never write. `FacetConfig.load`
+  stays read-only; the promote lives in the separate
+  `bootstrapWithAutoPromote`. The snapshot writer is `ConfigSnapshot`
+  (pure) driven by `Controller.markConfigDirty`. Memory:
+  [[config-default-behavior]].
 - **Runtime CLI overrides are session-only**.
   `facet --theme cute` swaps the palette in memory but does NOT
   persist. To make it stick, edit `~/.config/facet/config.toml`.

@@ -334,10 +334,13 @@ for each option.
 ## Configuration
 
 facet reads `~/.config/facet/config.toml` (single source of truth)
-and never writes to it. See [config.toml](config.toml) at the repo
-root for every option + inline docs. Runtime CLI overrides
+and never writes to it — save one opt-in exception, startup
+`[config] auto-promote` (below). See [config.toml](config.toml) at the
+repo root for every option + inline docs. Runtime CLI overrides
 (`facet --theme dracula` etc.) apply for the current session only;
-edit the file to make a change stick.
+edit the file to make a change stick — or opt into config
+auto-persistence (`[config]` below) to have facet keep your session
+edits for you.
 
 Frequently-touched keys:
 
@@ -471,11 +474,22 @@ Frequently-touched keys:
   any. Boards and flat `[[desktop.N.section]]` are mutually exclusive per
   desktop: declare both for one `N` and the boards win (the flat block is
   ignored, logged at load). The flat form stays supported as a fallback.
-- **Per-window tags** carry no config — they are free-form strings
-  attached at **runtime** (session-only) with `facet window --tag NAME`
-  (and `--untag` / `--toggle-tag` / `--retag`). A `type = "lens"` section
-  whose `match` contains `tag~=NAME` shows every window carrying NAME;
-  `facet query --tags` lists every tag currently in use.
+- **Per-window tags** are free-form strings attached at **runtime**
+  (session-only) with `facet window --tag NAME` (and `--untag` /
+  `--toggle-tag` / `--retag`). A `type = "lens"` section whose `match`
+  contains `tag~=NAME` shows every window carrying NAME; `facet query
+  --tags` lists every tag currently in use. Optionally, `[tags] defined
+  = ["web", "code", …]` seeds a **vocabulary** — names offered as
+  autocomplete in the tree's tag editor (`t`) before any window uses them
+  (names only; tag colors stay runtime).
+- `[config]` table — **opt-in config auto-persistence**. Set
+  `export-path` and facet auto-*exports* a live snapshot of your effective
+  config (renames, lens `match` edits, layout changes, tag vocabulary) to
+  that separate file on every session edit — surgically, leaving
+  config.toml untouched. Add `auto-promote = true` and the next launch
+  promotes a snapshot that is newer than config.toml onto it (the one
+  sanctioned write; a hand-edit between sessions still wins). No UI — fully
+  automatic. Off unless you set `export-path`.
 
 ## CLI
 

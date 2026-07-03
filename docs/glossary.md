@@ -814,7 +814,11 @@ activeSection := activeLens（type=lens）  XOR  activeWorkspace
 ### `config.toml`
 リポジトリルートの `config.toml` が **source-of-truth テンプレート**。
 ユーザーは `curl` して `~/.config/facet/config.toml` に置く。app は読むだけ
-（書かない / 自動生成しない / 永続化しない）。memory `[[config-default-behavior]]`。
+（書かない / 自動生成しない / 永続化しない）。唯一の例外＝startup `auto-promote`
+（t-hdxb・opt-in）: `[config] auto-promote = true` ＋ `export-path` 設定時のみ、
+次回起動で config.toml より新しい snapshot を promote（overwrite + load）する
+＝唯一の sanctioned write（詳細は CLAUDE.md `### Configuration`）。memory
+`[[config-default-behavior]]`。
 - **Don't call it:** settings, preferences, user config, 設定ファイル（一般指示語）
 
 ### effective accessors
