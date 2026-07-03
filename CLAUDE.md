@@ -29,6 +29,35 @@ views (`--view tree|grid|rail`), native AX/CGS backend
 (`FacetAdapterNative`, sole backend since v2.0.0). SIP-on,
 public API + AX only. Swift 6, macOS 15+.
 
+## Shared libraries (atelier)
+
+facet は swift app family の共有ライブラリに乗る（plan
+[atelier](https://github.com/akira-toriyama/atelier)）。かつて facet の
+theme が family の参照実装だった（北極星＝「facet の theme を真似て」を
+二度と言わない）が、Phase V でその theming は **sill** に抽出され、facet
+自身も**共有 lib 側を消費する**側になった。共有 lib が持つ責務は
+**再実装せずライブラリ側を拡張**する。モジュール → target の正確な配線は
+[Package.swift](Package.swift) を正とする。
+
+- **[sill](https://github.com/akira-toriyama/sill)** — 共有 theming /
+  config / CLI 基盤。facet が消費するもの:
+  - `Palette`（pure・AppKit-free）— `canonical(_:)` = 有効な `--theme=`
+    名の単一ソース。`FacetCore` の no-AppKit 則を破らない。
+  - `PaletteKit`（`@MainActor`・`ResolvedPalette`）— `pal` var の実体
+    （[Sources/FacetView/Palette.swift](Sources/FacetView/Palette.swift)
+    で re-export）。preset（`ThemeSpec`）も sill 側。
+  - `Effects` — view の視覚効果（border 等）。
+  - `ConfigSchema` — 1 つの宣言的 `Spec` が config.toml の decode +
+    `config --emit-schema`（taplo 補完）+ `config --validate` を駆動
+    （sill 1.29.0 bridge・t-0029）→ 3 者が drift しない。
+- **[swift-toml-edit](https://github.com/akira-toriyama/swift-toml-edit)**
+  — family 唯一の TOML 実装（`Toml` module）。元は sill in-tree だったが
+  0.11.0 で独立 repo 化・`import Toml` は不変。facet は config パースに使用。
+
+**自己完結しない — 共有候補は sill に PR を模索**: app 単独で実装する前に
+「2 つ以上の app で冗長になりそうか」を問い、そうなら sill への PR を
+検討する（過剰共通化はしない・zero-debt ≠ 全部共有）。
+
 ## Build / run
 
 ```sh
