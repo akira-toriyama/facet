@@ -1,31 +1,31 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
-final class FuzzyMatchTests: XCTestCase {
+struct FuzzyMatchTests {
 
-    func testEmptyQueryMatchesAnything() {
-        XCTAssertTrue(fuzzyMatch("", ""))
-        XCTAssertTrue(fuzzyMatch("", "anything"))
+    @Test func emptyQueryMatchesAnything() {
+        #expect(fuzzyMatch("", ""))
+        #expect(fuzzyMatch("", "anything"))
     }
 
-    func testSubsequenceMatchesNonContiguously() {
-        XCTAssertTrue(fuzzyMatch("frt", "favorite"))   // f-a-v-o-r-i-t-e
-        XCTAssertTrue(fuzzyMatch("vsc", "VSCode"))
-        XCTAssertTrue(fuzzyMatch("ws", "Workspaces"))
+    @Test func subsequenceMatchesNonContiguously() {
+        #expect(fuzzyMatch("frt", "favorite"))   // f-a-v-o-r-i-t-e
+        #expect(fuzzyMatch("vsc", "VSCode"))
+        #expect(fuzzyMatch("ws", "Workspaces"))
     }
 
-    func testCaseInsensitive() {
-        XCTAssertTrue(fuzzyMatch("CHROME", "chrome window"))
-        XCTAssertTrue(fuzzyMatch("chrome", "Google Chrome — Inbox"))
+    @Test func caseInsensitive() {
+        #expect(fuzzyMatch("CHROME", "chrome window"))
+        #expect(fuzzyMatch("chrome", "Google Chrome — Inbox"))
     }
 
-    func testReturnsFalseWhenCharactersOutOfOrder() {
-        XCTAssertFalse(fuzzyMatch("ec", "code"))       // 'e' comes after 'c' in "code"
-        XCTAssertFalse(fuzzyMatch("xyz", "hello"))
+    @Test func returnsFalseWhenCharactersOutOfOrder() {
+        #expect(!fuzzyMatch("ec", "code"))       // 'e' comes after 'c' in "code"
+        #expect(!fuzzyMatch("xyz", "hello"))
     }
 
-    func testEmptyHaystackOnlyMatchesEmptyQuery() {
-        XCTAssertTrue(fuzzyMatch("", ""))
-        XCTAssertFalse(fuzzyMatch("a", ""))
+    @Test func emptyHaystackOnlyMatchesEmptyQuery() {
+        #expect(fuzzyMatch("", ""))
+        #expect(!fuzzyMatch("a", ""))
     }
 }
