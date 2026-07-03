@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetAccessibility
 import FacetCore
 
@@ -12,7 +12,7 @@ import FacetCore
 /// deterministically, so this pins the *mechanism* the fix relies on: a
 /// stub whose `focusedWindow()` only matches after N calls stands in for
 /// the WM settling focus a few re-asserts late.
-final class FocusAssertBlockingTests: XCTestCase {
+struct FocusAssertBlockingTests {
 
     /// Minimal `WindowBackend` (most requirements have protocol-extension
     /// defaults) whose `focusedWindow()` returns `target` from the
@@ -53,29 +53,29 @@ final class FocusAssertBlockingTests: XCTestCase {
                isFocused: false, isFloating: false, frame: nil)
     }
 
-    func testReturnsTrueOnceBackendConfirms() {
+    @Test func returnsTrueOnceBackendConfirms() {
         let target = win(42)
         let stub = FocusStub(target: target.id, confirmOnCall: 3)
         // Keeps re-asserting until the backend reports the target focused.
         let ok = Focus.assertBlocking(target, backend: stub, attempts: 10)
-        XCTAssertTrue(ok)
-        XCTAssertEqual(stub.focusCalls, 3)
+        #expect(ok)
+        #expect(stub.focusCalls == 3)
     }
 
-    func testReturnsFalseWhenNeverConfirms() {
+    @Test func returnsFalseWhenNeverConfirms() {
         let target = win(7)
         let stub = FocusStub(target: target.id, confirmOnCall: Int.max)
         // Gives up after exactly `attempts` ground-truth checks.
         let ok = Focus.assertBlocking(target, backend: stub, attempts: 3)
-        XCTAssertFalse(ok)
-        XCTAssertEqual(stub.focusCalls, 3)
+        #expect(!ok)
+        #expect(stub.focusCalls == 3)
     }
 
-    func testConfirmsImmediatelyWhenAlreadyOnTarget() {
+    @Test func confirmsImmediatelyWhenAlreadyOnTarget() {
         let target = win(5)
         let stub = FocusStub(target: target.id, confirmOnCall: 1)
         let ok = Focus.assertBlocking(target, backend: stub, attempts: 50)
-        XCTAssertTrue(ok)
-        XCTAssertEqual(stub.focusCalls, 1)   // no wasted re-asserts
+        #expect(ok)
+        #expect(stub.focusCalls == 1)   // no wasted re-asserts
     }
 }
