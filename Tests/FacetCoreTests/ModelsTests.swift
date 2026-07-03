@@ -1,21 +1,21 @@
-import XCTest
+import Testing
 import CoreGraphics
 @testable import FacetCore
 
-final class ModelsTests: XCTestCase {
+struct ModelsTests {
 
-    func testWindowIDIdentityIsServerIDAlone() {
+    @Test func windowIDIdentityIsServerIDAlone() {
         // Two WindowIDs with the same serverID are interchangeable —
         // this is what lets the controller match a window across two
         // `workspaces()` snapshots even when the surrounding state
         // (focus / floating / title) has changed.
         let a = WindowID(serverID: 42)
         let b = WindowID(serverID: 42)
-        XCTAssertEqual(a, b)
-        XCTAssertEqual(a.hashValue, b.hashValue)
+        #expect(a == b)
+        #expect(a.hashValue == b.hashValue)
     }
 
-    func testWorkspaceCarriesItsWindowsInOrder() {
+    @Test func workspaceCarriesItsWindowsInOrder() {
         let ws = Workspace(
             index: 1, name: "code", isActive: true,
             layoutMode: "bsp",
@@ -29,9 +29,9 @@ final class ModelsTests: XCTestCase {
                        isFocused: false, isFloating: false,
                        frame: nil),
             ])
-        XCTAssertEqual(ws.windows.map(\.id.serverID), [1, 2])
-        XCTAssertEqual(ws.windows.first?.frame?.width, 800)
-        XCTAssertNil(ws.windows.last?.frame)
+        #expect(ws.windows.map(\.id.serverID) == [1, 2])
+        #expect(ws.windows.first?.frame?.width == 800)
+        #expect(ws.windows.last?.frame == nil)
     }
 
     // MARK: - Sequence<Window>.predictedFocus
@@ -44,28 +44,28 @@ final class ModelsTests: XCTestCase {
                isFocused: focused, isFloating: false, frame: nil)
     }
 
-    func testPredictedFocusEmptyIsNil() {
-        XCTAssertNil([Window]().predictedFocus())
+    @Test func predictedFocusEmptyIsNil() {
+        #expect([Window]().predictedFocus() == nil)
     }
 
-    func testPredictedFocusPrefersTheFocusedWindow() {
+    @Test func predictedFocusPrefersTheFocusedWindow() {
         // The focused window wins even when it isn't the oldest.
         let wins = [win(1, focused: false),
                     win(5, focused: true),
                     win(2, focused: false)]
-        XCTAssertEqual(wins.predictedFocus()?.id.serverID, 5)
+        #expect(wins.predictedFocus()?.id.serverID == 5)
     }
 
-    func testPredictedFocusFallsBackToOldestServerID() {
+    @Test func predictedFocusFallsBackToOldestServerID() {
         // No focus → the lowest serverID (longest-resident window).
         let wins = [win(7, focused: false),
                     win(3, focused: false),
                     win(9, focused: false)]
-        XCTAssertEqual(wins.predictedFocus()?.id.serverID, 3)
+        #expect(wins.predictedFocus()?.id.serverID == 3)
     }
 
-    func testPredictedFocusFocusedBeatsOlderUnfocused() {
+    @Test func predictedFocusFocusedBeatsOlderUnfocused() {
         let wins = [win(2, focused: false), win(8, focused: true)]
-        XCTAssertEqual(wins.predictedFocus()?.id.serverID, 8)
+        #expect(wins.predictedFocus()?.id.serverID == 8)
     }
 }

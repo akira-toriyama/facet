@@ -1,12 +1,12 @@
-import XCTest
+import Testing
 import Foundation
 @testable import FacetCore
 
-final class StatusTests: XCTestCase {
+struct StatusTests {
 
     // MARK: - Codable round-trip
 
-    func testSnapshotRoundTripsThroughJSON() throws {
+    @Test func snapshotRoundTripsThroughJSON() throws {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
@@ -21,12 +21,12 @@ final class StatusTests: XCTestCase {
         let data = try JSONEncoder().encode(snap)
         let back = try JSONDecoder().decode(StatusSnapshot.self,
                                             from: data)
-        XCTAssertEqual(back, snap)
+        #expect(back == snap)
     }
 
     // MARK: - Atomic file I/O
 
-    func testWriteThenReadRoundTripsOnDisk() throws {
+    @Test func writeThenReadRoundTripsOnDisk() throws {
         let path = tempPath()
         defer { try? FileManager.default.removeItem(atPath: path) }
         let snap = StatusSnapshot(
@@ -40,16 +40,18 @@ final class StatusTests: XCTestCase {
             timestamp: "2026-05-25T11:22:33Z")
         try snap.write(to: path)
         let back = try StatusSnapshot.read(from: path)
-        XCTAssertEqual(back, snap)
+        #expect(back == snap)
     }
 
-    func testReadThrowsForMissingFile() {
+    @Test func readThrowsForMissingFile() {
         let missing = NSTemporaryDirectory()
             + "facet-status-missing-\(UUID().uuidString).json"
-        XCTAssertThrowsError(try StatusSnapshot.read(from: missing))
+        #expect(throws: (any Error).self) {
+            try StatusSnapshot.read(from: missing)
+        }
     }
 
-    func testEntryDecodesMissingStickyCountAsZero() throws {
+    @Test func entryDecodesMissingStickyCountAsZero() throws {
         // A status file written by a pre-sticky server (no stickyCount
         // key) must decode to 0, not throw `keyNotFound` — otherwise
         // `facet query` would fail across an in-place upgrade until the
@@ -59,13 +61,13 @@ final class StatusTests: XCTestCase {
         """.utf8)
         let entry = try JSONDecoder().decode(
             WorkspaceStatusEntry.self, from: json)
-        XCTAssertEqual(entry.stickyCount, 0)
-        XCTAssertEqual(entry.windowCount, 3)
+        #expect(entry.stickyCount == 0)
+        #expect(entry.windowCount == 3)
     }
 
     // MARK: - Rendering
 
-    func testRenderIncludesAllHeaderFields() {
+    @Test func renderIncludesAllHeaderFields() {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
@@ -73,14 +75,14 @@ final class StatusTests: XCTestCase {
             lastError: nil,
             timestamp: "2026-05-25T12:00:00Z")
         let out = snap.render()
-        XCTAssertTrue(out.contains("backend: native"))
-        XCTAssertTrue(out.contains("theme: terminal"))
-        XCTAssertTrue(out.contains("last error: (none)"))
-        XCTAssertTrue(out.contains("timestamp: 2026-05-25T12:00:00Z"))
-        XCTAssertTrue(out.contains("workspaces:\n  (none)"))
+        #expect(out.contains("backend: native"))
+        #expect(out.contains("theme: terminal"))
+        #expect(out.contains("last error: (none)"))
+        #expect(out.contains("timestamp: 2026-05-25T12:00:00Z"))
+        #expect(out.contains("workspaces:\n  (none)"))
     }
 
-    func testRenderMarksActiveAndPluralisesWindowCount() {
+    @Test func renderMarksActiveAndPluralisesWindowCount() {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
@@ -93,17 +95,17 @@ final class StatusTests: XCTestCase {
             lastError: nil,
             timestamp: "ts")
         let out = snap.render()
-        XCTAssertTrue(out.contains("[active]"))
-        XCTAssertTrue(out.contains("\"dev\""))
-        XCTAssertTrue(out.contains("1 window"),
-                      "singular for count == 1")
-        XCTAssertTrue(out.contains("3 windows"),
-                      "plural for count > 1")
-        XCTAssertFalse(out.contains("\"\""),
-                       "empty workspace name should not be quoted")
+        #expect(out.contains("[active]"))
+        #expect(out.contains("\"dev\""))
+        #expect(out.contains("1 window"),
+                "singular for count == 1")
+        #expect(out.contains("3 windows"),
+                "plural for count > 1")
+        #expect(!(out.contains("\"\"")),
+                "empty workspace name should not be quoted")
     }
 
-    func testRenderShowsStickyCountSuffixOnlyWhenNonZero() {
+    @Test func renderShowsStickyCountSuffixOnlyWhenNonZero() {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
@@ -116,13 +118,13 @@ final class StatusTests: XCTestCase {
             lastError: nil,
             timestamp: "ts")
         let out = snap.render()
-        XCTAssertTrue(out.contains("3 windows, 1 sticky"),
-                      "sticky suffix shown when count > 0")
-        XCTAssertFalse(out.contains("0 sticky"),
-                       "no sticky suffix when count is 0")
+        #expect(out.contains("3 windows, 1 sticky"),
+                "sticky suffix shown when count > 0")
+        #expect(!(out.contains("0 sticky")),
+                "no sticky suffix when count is 0")
     }
 
-    func testSnapshotDecodesMissingStashedAsEmpty() throws {
+    @Test func snapshotDecodesMissingStashedAsEmpty() throws {
         // A status file written by a pre-scratchpad server (no `stashed`
         // key) must decode to [] rather than throw, so `facet query`
         // survives an in-place upgrade until the next reconcile.
@@ -130,39 +132,39 @@ final class StatusTests: XCTestCase {
         {"backend":"native","theme":"terminal","workspaces":[],"timestamp":"ts"}
         """.utf8)
         let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
-        XCTAssertEqual(snap.stashed, [])
-        XCTAssertNil(snap.lastError)
+        #expect(snap.stashed == [])
+        #expect(snap.lastError == nil)
     }
 
-    func testRenderShowsStashedLineOnlyWhenNonEmpty() {
+    @Test func renderShowsStashedLineOnlyWhenNonEmpty() {
         let withShelf = StatusSnapshot(
             backend: "native", theme: "terminal",
             workspaces: [], stashed: ["editor", "notes"],
             lastError: nil, timestamp: "ts")
-        XCTAssertTrue(withShelf.render().contains("stashed: editor, notes"),
-                      "stashed line lists shelf names when non-empty")
+        #expect(withShelf.render().contains("stashed: editor, notes"),
+                "stashed line lists shelf names when non-empty")
         let none = StatusSnapshot(
             backend: "native", theme: "terminal",
             workspaces: [], stashed: [],
             lastError: nil, timestamp: "ts")
-        XCTAssertFalse(none.render().contains("stashed:"),
-                       "no stashed line when there are no shelves")
+        #expect(!(none.render().contains("stashed:")),
+                "no stashed line when there are no shelves")
     }
 
-    func testRenderSurfacesLastError() {
+    @Test func renderSurfacesLastError() {
         let snap = StatusSnapshot(
             backend: "native",
             theme: "terminal",
             workspaces: [],
             lastError: "Window 7: AX permission failed",
             timestamp: "ts")
-        XCTAssertTrue(snap.render().contains(
+        #expect(snap.render().contains(
             "last error: Window 7: AX permission failed"))
     }
 
     // MARK: - Tag projection (#228; `facet query --tags`)
 
-    func testSnapshotRoundTripsTags() throws {
+    @Test func snapshotRoundTripsTags() throws {
         let snap = StatusSnapshot(
             backend: "native", theme: "terminal",
             workspaces: [], stashed: [],
@@ -170,11 +172,11 @@ final class StatusTests: XCTestCase {
             lastError: nil, timestamp: "ts")
         let data = try JSONEncoder().encode(snap)
         let back = try JSONDecoder().decode(StatusSnapshot.self, from: data)
-        XCTAssertEqual(back, snap)
-        XCTAssertEqual(back.tags, ["work", "web", "media"])
+        #expect(back == snap)
+        #expect(back.tags == ["work", "web", "media"])
     }
 
-    func testSnapshotDecodesMissingTags() throws {
+    @Test func snapshotDecodesMissingTags() throws {
         // A status file written by a pre-#228 server (no `tags` key) must
         // decode to [] rather than throw, so `facet query` survives an
         // in-place upgrade until the next reconcile.
@@ -182,7 +184,7 @@ final class StatusTests: XCTestCase {
         {"backend":"native","theme":"terminal","workspaces":[],"timestamp":"ts"}
         """.utf8)
         let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
-        XCTAssertEqual(snap.tags, [])
+        #expect(snap.tags == [])
     }
 
     // MARK: - Helpers
