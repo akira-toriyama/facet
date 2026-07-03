@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
@@ -19,7 +19,7 @@ import XCTest
 /// `activateSection` / `setSectionLens` have `dispatchPrecondition(.onQueue(
 /// cliQueue))` — every call is wrapped in `cliQueue.sync { … }` (omitting it
 /// aborts the CI debug build). `currentActiveSection()` is a plain lock read.
-final class ActiveSectionAdapterTests: XCTestCase {
+struct ActiveSectionAdapterTests {
 
     private let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
 
@@ -51,10 +51,10 @@ final class ActiveSectionAdapterTests: XCTestCase {
         a.catalog.reconcile(live: [window(10, appName: "Web"), window(30, appName: "A")])
     }
 
-    func testCurrentActiveSectionDefaultsToWorkspaceOne() {
+    @Test func currentActiveSectionDefaultsToWorkspaceOne() {
         let a = adapter()                                  // bare, no lens
-        XCTAssertEqual(a.currentActiveSection(), .workspace(1))
-        XCTAssertNil(a.currentSectionLens())               // shim agrees
+        #expect(a.currentActiveSection() == .workspace(1))
+        #expect(a.currentSectionLens() == nil)             // shim agrees
     }
 
     // A0: lens identity is the stable id `section:<declOrder>:<label>`. The
@@ -63,24 +63,24 @@ final class ActiveSectionAdapterTests: XCTestCase {
     // so `currentSectionLens()` (the label shim) is unchanged.
     private let webLensID = "section:1:Web"
 
-    func testActivateLensReflectsInMirror() {
+    @Test func activateLensReflectsInMirror() {
         let a = adapterWithWebLensAndWorkspace()
         seeded(a)
         cliQueue.sync { a.activateSection(.lens(webLensID), autoFocus: false) }
-        XCTAssertEqual(a.currentActiveSection(), .lens(webLensID))
-        XCTAssertEqual(a.currentSectionLens(), "Web")      // shim parses label out of id
+        #expect(a.currentActiveSection() == .lens(webLensID))
+        #expect(a.currentSectionLens() == "Web")           // shim parses label out of id
     }
 
-    func testActivateWorkspaceSameIndexClearsActiveLens() {
+    @Test func activateWorkspaceSameIndexClearsActiveLens() {
         // setActive(activeIndex) is a no-op, so activateSection(.workspace(
         // activeIndex)) must clear the lens explicitly — not leave it stale.
         let a = adapterWithWebLensAndWorkspace()
         seeded(a)
         cliQueue.sync { a.activateSection(.lens(webLensID), autoFocus: false) }
-        XCTAssertEqual(a.currentActiveSection(), .lens(webLensID))
+        #expect(a.currentActiveSection() == .lens(webLensID))
 
         cliQueue.sync { a.activateSection(.workspace(1), autoFocus: false) } // 1 == activeIndex
-        XCTAssertEqual(a.currentActiveSection(), .workspace(1))
-        XCTAssertNil(a.currentSectionLens())               // lens cleared, not stale
+        #expect(a.currentActiveSection() == .workspace(1))
+        #expect(a.currentSectionLens() == nil)             // lens cleared, not stale
     }
 }

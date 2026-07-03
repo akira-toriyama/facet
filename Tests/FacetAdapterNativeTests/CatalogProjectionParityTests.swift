@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
@@ -17,13 +17,13 @@ import XCTest
 ///     can't silently drift), plus the out-of-range workspace-name guard.
 ///   • cov-04 — the snapshot GATE: `snapshot` yields one `Workspace` per
 ///     seeded entry.
-final class CatalogProjectionParityTests: XCTestCase {
+struct CatalogProjectionParityTests {
 
     private let rect = CGRect(x: 0, y: 0, width: 1000, height: 800)
 
     // MARK: - cov-01: facetState ⇄ snapshot parity
 
-    func testFacetStateAgreesWithWorkspaceSnapshotPerWindow() {
+    @Test func facetStateAgreesWithWorkspaceSnapshotPerWindow() {
         let a = NativeAdapter(config: FacetConfig())
         a.catalog.seed(configs: [
             (index: 1, config: WorkspaceConfig(name: "Dev")),
@@ -34,22 +34,22 @@ final class CatalogProjectionParityTests: XCTestCase {
 
         let snap = a.catalog.snapshot(live: live, focused: nil, activeRect: rect)
         let wins = snap.flatMap { $0.windows }
-        XCTAssertEqual(wins.count, 2, "both windows present once")
+        #expect(wins.count == 2, "both windows present once")
 
         for w in wins {
             guard let fs = a.facetState(forWindow: w.id, in: a.catalog) else {
-                XCTFail("facetState nil for \(w.id.serverID)"); continue
+                Issue.record("facetState nil for \(w.id.serverID)"); continue
             }
-            XCTAssertEqual(fs.floating, w.isFloating, "floating parity \(w.id.serverID)")
-            XCTAssertEqual(fs.sticky, w.isSticky, "sticky parity \(w.id.serverID)")
-            XCTAssertEqual(fs.master, w.isMaster, "master parity \(w.id.serverID)")
-            XCTAssertEqual(fs.mark, w.mark, "mark parity \(w.id.serverID)")
-            XCTAssertEqual(fs.scratchpad, w.scratchpad, "scratchpad parity \(w.id.serverID)")
-            XCTAssertEqual(fs.workspaceIndex, 1, "both reconciled to active WS1")
+            #expect(fs.floating == w.isFloating, "floating parity \(w.id.serverID)")
+            #expect(fs.sticky == w.isSticky, "sticky parity \(w.id.serverID)")
+            #expect(fs.master == w.isMaster, "master parity \(w.id.serverID)")
+            #expect(fs.mark == w.mark, "mark parity \(w.id.serverID)")
+            #expect(fs.scratchpad == w.scratchpad, "scratchpad parity \(w.id.serverID)")
+            #expect(fs.workspaceIndex == 1, "both reconciled to active WS1")
         }
     }
 
-    func testFacetStateOutOfRangeWorkspaceNameIsEmpty() {
+    @Test func facetStateOutOfRangeWorkspaceNameIsEmpty() {
         // The workspace-name lookup guards against an index outside the
         // live `workspaceNames` set (idx >= 1 && idx <= count else "").
         let a = NativeAdapter(config: FacetConfig())
@@ -57,20 +57,20 @@ final class CatalogProjectionParityTests: XCTestCase {
         a.catalog.windowMap[wid(99)] = WindowSlot(workspace: 99, pid: 1)
 
         let fs = a.facetState(forWindow: wid(99), in: a.catalog)
-        XCTAssertEqual(fs?.workspaceIndex, 99)
-        XCTAssertEqual(fs?.workspace, "", "out-of-range index → empty name guard")
+        #expect(fs?.workspaceIndex == 99)
+        #expect(fs?.workspace == "", "out-of-range index → empty name guard")
     }
 
-    func testFacetStateNilForUnknownWindow() {
+    @Test func facetStateNilForUnknownWindow() {
         let a = NativeAdapter(config: FacetConfig())
         a.catalog.seed(configs: [(index: 1, config: WorkspaceConfig(name: ""))])
-        XCTAssertNil(a.facetState(forWindow: wid(404), in: a.catalog),
+        #expect(a.facetState(forWindow: wid(404), in: a.catalog) == nil,
                      "a window not in windowMap has no facet state")
     }
 
     // MARK: - cov-04: the snapshot gate
 
-    func testGroupingGateWorkspaceModeYieldsOneWorkspacePerEntry() {
+    @Test func groupingGateWorkspaceModeYieldsOneWorkspacePerEntry() {
         var c = WorkspaceCatalog()
         c.seed(configs: (1...3).map {
             (index: $0, config: WorkspaceConfig(name: ""))
@@ -79,10 +79,10 @@ final class CatalogProjectionParityTests: XCTestCase {
         _ = c.reconcile(live: live)
 
         let snap = c.snapshot(live: live, focused: nil, activeRect: rect)
-        XCTAssertEqual(snap.count, 3, "one Workspace per seeded entry")
-        XCTAssertEqual(snap.flatMap { $0.windows }.count, 2,
+        #expect(snap.count == 3, "one Workspace per seeded entry")
+        #expect(snap.flatMap { $0.windows }.count == 2,
                        "each window appears once")
-        XCTAssertEqual(snap.first { $0.isActive }?.windows.count, 2,
+        #expect(snap.first { $0.isActive }?.windows.count == 2,
                        "both reconciled into the active WS")
     }
 }
