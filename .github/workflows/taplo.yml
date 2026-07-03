@@ -11,6 +11,9 @@ on:
     paths: ['**/*.toml']
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   taplo:
     uses: akira-toriyama/.github/.github/workflows/taplo.yml@v1

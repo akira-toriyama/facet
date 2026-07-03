@@ -6,6 +6,9 @@ name: commit-lint
 on:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     uses: akira-toriyama/.github/.github/workflows/commit-lint.yml@v1
