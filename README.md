@@ -334,8 +334,9 @@ for each option.
 ## Configuration
 
 facet reads `~/.config/facet/config.toml` (single source of truth)
-and never writes to it. See [config.toml](config.toml) at the repo
-root for every option + inline docs. Runtime CLI overrides
+and never writes to it — save one opt-in exception, startup
+`[config] auto-promote` (below). See [config.toml](config.toml) at the
+repo root for every option + inline docs. Runtime CLI overrides
 (`facet --theme dracula` etc.) apply for the current session only;
 edit the file to make a change stick — or opt into config
 auto-persistence (`[config]` below) to have facet keep your session

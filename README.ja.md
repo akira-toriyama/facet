@@ -312,8 +312,9 @@ Recording** も付与。
 
 ## 設定
 
-facet は `~/.config/facet/config.toml` を **読むだけ** (書き戻し
-なし、 source of truth は 1 ファイル)。 設定可能な項目はリポジトリ
+facet は `~/.config/facet/config.toml` を **読むだけ** (1 つの opt-in
+例外＝startup `[config] auto-promote`（下記）を除き 書き戻しなし、
+source of truth は 1 ファイル)。 設定可能な項目はリポジトリ
 ルートの [config.toml](config.toml) のコメントを参照。 CLI override
 (`facet --theme dracula` 等) はセッション中のみ有効; 永続化したい
 場合はファイルを編集 — または下の `[config]` (設定の自動永続化) を
