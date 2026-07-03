@@ -329,7 +329,10 @@ The `curl` line drops a fully-commented [config.toml](config.toml)
 into place; defaults are sane and the app starts with the tree
 sidebar straight away. Edit it to switch the default view, change
 theme, columns, label position, etc. — see the file's comments
-for each option.
+for each option. The shipped template **enables config
+auto-persistence by default** (`[config]`, see [Configuration](#configuration)):
+facet keeps your session edits across restarts. Comment out that
+block if you'd rather facet never write to your config.toml.
 
 ## Configuration
 
@@ -489,7 +492,8 @@ Frequently-touched keys:
   config.toml untouched. Add `auto-promote = true` and the next launch
   promotes a snapshot that is newer than config.toml onto it (the one
   sanctioned write; a hand-edit between sessions still wins). No UI — fully
-  automatic. Off unless you set `export-path`.
+  automatic. The code default is off, but the **shipped template turns
+it on** — comment out `[config]` to opt out.
 
 ## CLI
 

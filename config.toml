@@ -61,9 +61,9 @@
 #
 # There is no UI — it's fully automatic. Watch `FACET_DEBUG` logs for
 # "auto-exported" / "auto-promoted". Uncomment to enable:
-# [config]
-# export-path  = "~/.config/facet/config.snapshot.toml"
-# auto-promote = true
+[config]
+export-path = "~/.config/facet/config.snapshot.toml"
+auto-promote = true
 
 
 # -----------------------------------------------------------------
