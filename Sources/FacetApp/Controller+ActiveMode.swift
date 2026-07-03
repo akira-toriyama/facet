@@ -234,6 +234,7 @@ extension Controller {
         // main-side read (no `definedTagNames()` round-trip).
         var all = Set<String>()
         for ws in lastWorkspaces { for w in ws.windows { all.formUnion(w.tags) } }
+        all.formUnion(config.effectiveDefinedTags)   // t-hdxb B5: config vocabulary
         let bk = backend
         tagEditorSelfActivated = !sidebarView.kbNav
         if tagEditorSelfActivated {
@@ -255,11 +256,13 @@ extension Controller {
                     else  { _ = bk.removeTag(name, fromWindow: id) }
                 }
                 self?.scheduleReconcile(after: 0.05)
+                self?.markConfigDirty()   // t-hdxb: persist the tag vocabulary
             },
             onCreate: { [weak self] name in
                 // addTag(_:toWindow:) auto-vivifies, so create == add.
                 cliQueue.async { _ = bk.addTag(name, toWindow: id) }
                 self?.scheduleReconcile(after: 0.05)
+                self?.markConfigDirty()   // t-hdxb: persist the tag vocabulary
             },
             onClose: { [weak self] in self?.finishTagEditor() }
         )
@@ -277,6 +280,7 @@ extension Controller {
         else { return }
         var all = Set<String>()
         for ws in lastWorkspaces { for w in ws.windows { all.formUnion(w.tags) } }
+        all.formUnion(config.effectiveDefinedTags)   // t-hdxb B5: config vocabulary
         let bk = backend
         let f = panelHost.panel.frame
         tagEditorSelfActivated = !sidebarView.kbNav
@@ -292,10 +296,12 @@ extension Controller {
             onRename: { [weak self] old, new in
                 cliQueue.async { _ = bk.renameTag(old, to: new) }
                 self?.scheduleReconcile(after: 0.05)
+                self?.markConfigDirty()   // t-hdxb: persist the tag vocabulary
             },
             onDelete: { [weak self] name in
                 cliQueue.async { _ = bk.removeTag(name) }
                 self?.scheduleReconcile(after: 0.05)
+                self?.markConfigDirty()   // t-hdxb: persist the tag vocabulary
             },
             onClose: { [weak self] in self?.finishTagEditor() }
         )

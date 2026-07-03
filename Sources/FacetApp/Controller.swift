@@ -35,7 +35,11 @@ final class Controller: NSObject {
     /// `facet --reload`. Always read through `effective*`
     /// accessors so clamping survives a typo'd reload.
     var config: FacetConfig
-    private let configPath: String
+    /// The config.toml path this Controller reads (default install location,
+    /// or an injected path in tests). `internal` so the config-persistence
+    /// extension (Controller+ConfigPersistence.swift) can resolve the snapshot
+    /// target against its directory.
+    let configPath: String
     private var configWatcher: ConfigWatcher?
     let panelHost: PanelHost
     let sidebarView: SidebarView
@@ -268,6 +272,13 @@ final class Controller: NSObject {
     /// protection is separate — it lives in `refresh()` via the
     /// `realWindowDrag?.inProgress` gate.)
     private var refreshPending = false
+    /// t-hdxb B3: leading-edge debounce flag for `markConfigDirty` —
+    /// coalesces a burst of session edits (rename → match → layout → tag)
+    /// into one snapshot export within `configExportDebounce`. Main-actor
+    /// confined, mirrors `refreshPending`. The wider window (vs `refreshDebounce`)
+    /// also lets an async backend rename / layout round-trip settle into
+    /// `lastWorkspaces` before the snapshot reads it.
+    var configDirtyPending = false
     /// `--view tree --loading MS` skeleton hold timer (see
     /// `showLoading` in Controller+CLIDispatch.swift). Lives here —
     /// extensions can't hold stored properties.
@@ -374,6 +385,10 @@ final class Controller: NSObject {
     /// Debounce window for event-driven refreshes — coalesces a
     /// burst of events into a single backend query.
     private let refreshDebounce: TimeInterval = 0.05
+    /// t-hdxb B3: debounce window for the config auto-export snapshot.
+    /// Wide enough to coalesce a rename→match→layout burst AND to let an
+    /// async backend round-trip land in `lastWorkspaces` first.
+    let configExportDebounce: TimeInterval = 0.75
 
     // MARK: - Init
 

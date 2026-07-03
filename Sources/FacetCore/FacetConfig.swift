@@ -256,7 +256,7 @@ public struct FacetConfig: Sendable {
     /// absolute path (post tilde-expansion) passes through unchanged. Used to
     /// resolve `[config] export-path` against the config file's directory, the
     /// same sidecar logic as the `config.schema.json` neighbour.
-    static func resolvePath(_ raw: String, relativeTo baseDir: String) -> String {
+    public static func resolvePath(_ raw: String, relativeTo baseDir: String) -> String {
         let expanded = (raw as NSString).expandingTildeInPath
         if expanded.hasPrefix("/") { return expanded }
         return (baseDir as NSString).appendingPathComponent(expanded)
