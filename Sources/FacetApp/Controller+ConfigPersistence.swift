@@ -17,19 +17,32 @@ extension Controller {
 
     /// Mark the session config dirty → schedule a debounced snapshot export.
     /// A cheap no-op when auto-export is off (`[config] export-path` unset), so
-    /// every call site can fire it unconditionally. Leading-edge debounced
-    /// (`configExportDebounce`) so a rename→match→layout burst coalesces into a
-    /// single write, and an async backend round-trip has time to land in
-    /// `lastWorkspaces` before the snapshot reads it.
+    /// every call site can fire it unconditionally. TRAILING-edge debounced:
+    /// while an export is armed, a later edit sets `configDirtyRedo` so the
+    /// armed timer re-arms rather than firing — the export lands
+    /// `configExportDebounce` after the LAST edit, by which point every edit's
+    /// async backend round-trip has reconciled into `lastWorkspaces` (rename /
+    /// layout / tag read that snapshot). This coalesces a burst AND avoids
+    /// snapshotting a trailing edit stale.
     func markConfigDirty() {
         guard config.effectiveExportPath != nil else { return }  // auto-export off
-        if configDirtyPending { return }
+        if configDirtyPending { configDirtyRedo = true; return }
         configDirtyPending = true
+        armConfigExport()
+    }
+
+    private func armConfigExport() {
         DispatchQueue.main.asyncAfter(
             deadline: .now() + configExportDebounce
         ) { [weak self] in
-            self?.configDirtyPending = false
-            self?.exportConfigSnapshot()
+            guard let self else { return }
+            if self.configDirtyRedo {
+                self.configDirtyRedo = false   // a later edit arrived — wait one
+                self.armConfigExport()         // more window for its reconcile
+                return
+            }
+            self.configDirtyPending = false
+            self.exportConfigSnapshot()
         }
     }
 
@@ -43,7 +56,9 @@ extension Controller {
         let snapshotPath = FacetConfig.resolvePath(rawExport, relativeTo: baseDir)
         // Never write the snapshot onto config.toml — that would trip the
         // ConfigWatcher → reloadConfig loop (and violate the read-only rule).
-        guard snapshotPath != configPath else {
+        // Canonical same-file compare so `./config.toml` / `../facet/config.toml`
+        // / a symlink alias can't slip past a raw-string check.
+        guard !FacetConfig.isSameFile(snapshotPath, configPath) else {
             Log.line("config: [config] export-path must differ from config.toml "
                 + "— auto-export skipped")
             return

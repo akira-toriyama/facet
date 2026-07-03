@@ -259,14 +259,36 @@ public struct FacetConfig: Sendable {
             .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
-    /// Expand a `~`-prefixed or relative path against `baseDir`. An already-
-    /// absolute path (post tilde-expansion) passes through unchanged. Used to
+    /// Expand a `~`-prefixed or relative path against `baseDir`, then
+    /// CANONICALIZE it (collapse `.` / `..` / redundant `//`). An already-
+    /// absolute path (post tilde-expansion) is canonicalized in place. Used to
     /// resolve `[config] export-path` against the config file's directory, the
-    /// same sidecar logic as the `config.schema.json` neighbour.
+    /// same sidecar logic as the `config.schema.json` neighbour. Canonicalising
+    /// is what lets the self-write guards (`isSameFile`) catch an `export-path`
+    /// like `./config.toml` or `../facet/config.toml` that aliases config.toml —
+    /// otherwise a raw-string compare would miss it and facet would write the
+    /// snapshot onto config.toml at runtime. Symlinks are NOT resolved here (a
+    /// user's chosen export-path may legitimately be a link); `isSameFile`
+    /// resolves those for the guard comparison only.
     public static func resolvePath(_ raw: String, relativeTo baseDir: String) -> String {
         let expanded = (raw as NSString).expandingTildeInPath
-        if expanded.hasPrefix("/") { return expanded }
-        return (baseDir as NSString).appendingPathComponent(expanded)
+        let joined = expanded.hasPrefix("/")
+            ? expanded
+            : (baseDir as NSString).appendingPathComponent(expanded)
+        return URL(fileURLWithPath: joined).standardizedFileURL.path
+    }
+
+    /// True when two paths refer to the SAME file, comparing symlink-resolved,
+    /// standardized forms — so `./config.toml`, `../facet/config.toml`, and a
+    /// symlink alias all correctly match config.toml. Used by the snapshot
+    /// self-write guards: a snapshot (`export-path`) must never target
+    /// config.toml (it would trip the ConfigWatcher → reload loop and breach
+    /// the read-only rule).
+    public static func isSameFile(_ a: String, _ b: String) -> Bool {
+        func canon(_ p: String) -> String {
+            URL(fileURLWithPath: p).resolvingSymlinksInPath().standardizedFileURL.path
+        }
+        return canon(a) == canon(b)
     }
 
     /// Falls back to `"terminal"` for unset or unrecognised values.

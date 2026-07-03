@@ -279,6 +279,13 @@ final class Controller: NSObject {
     /// also lets an async backend rename / layout round-trip settle into
     /// `lastWorkspaces` before the snapshot reads it.
     var configDirtyPending = false
+    /// t-hdxb B3: set when a `markConfigDirty` arrives while an export is
+    /// already armed. The armed export, instead of firing, RE-ARMS one more
+    /// debounce cycle — so the snapshot is read only AFTER the trailing edit's
+    /// async backend round-trip has reconciled into `lastWorkspaces`. Without
+    /// this, a rename/layout/tag edit landing late in the window would be
+    /// snapshotted stale (and, being the last edit, never re-exported).
+    var configDirtyRedo = false
     /// `--view tree --loading MS` skeleton hold timer (see
     /// `showLoading` in Controller+CLIDispatch.swift). Lives here —
     /// extensions can't hold stored properties.

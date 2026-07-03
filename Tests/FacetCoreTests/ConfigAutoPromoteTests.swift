@@ -130,6 +130,34 @@ final class ConfigAutoPromoteTests: XCTestCase {
         XCTAssertEqual(cfg.effectiveTheme, "terminal")
     }
 
+    // MARK: - a symlinked config.toml is written THROUGH, not clobbered
+
+    func testPromoteWritesThroughSymlinkedConfig() throws {
+        // Dotfiles setup: config.toml is a symlink into a "repo" file.
+        let repoPath = dir.appendingPathComponent("repo-config.toml").path
+        let snapPath = dir.appendingPathComponent("snap.toml").path
+        try writeFile("repo-config.toml",
+            configText(exportPath: snapPath, autoPromote: true, theme: "terminal"),
+            mtime: old)
+        let linkPath = dir.appendingPathComponent("config.toml").path
+        try FileManager.default.createSymbolicLink(
+            atPath: linkPath, withDestinationPath: repoPath)
+        try writeFile("snap.toml",
+            configText(exportPath: snapPath, autoPromote: true, theme: "dracula"),
+            mtime: new)
+
+        let cfg = FacetConfig.bootstrapWithAutoPromote(path: linkPath)
+
+        XCTAssertEqual(cfg.effectiveTheme, "dracula", "promoted content loaded")
+        // The link is PRESERVED (not replaced by a regular file)…
+        let attrs = try FileManager.default.attributesOfItem(atPath: linkPath)
+        XCTAssertEqual(attrs[.type] as? FileAttributeType, .typeSymbolicLink,
+                       "config.toml stays a symlink (dotfiles link intact)")
+        // …and the repo target received the promoted content.
+        XCTAssertTrue(read(repoPath).contains("dracula"),
+                      "the promoted content landed on the real repo file")
+    }
+
     // MARK: - equal mtime is NOT strictly newer → no promotion
 
     func testEqualMtimeIsNotPromoted() throws {

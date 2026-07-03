@@ -284,6 +284,36 @@ final class ConfigSnapshotTests: XCTestCase {
         assertStable(out)
     }
 
+    // MARK: - exotic header spelling: skip rather than mis-edit
+
+    func testAmbiguousHeaderSpellingSkipsRatherThanMisEdits() {
+        // A quoted-key spelling decodes to the SAME path [desktop,1,section] as
+        // the canonical one but is DROPPED by facet's decode (Int("\"1\"") fails).
+        // swift-toml-edit still counts it under the path, so the rawOrdinal would
+        // misalign — the writer must SKIP, never edit the wrong block.
+        let cfg = """
+        [[desktop.1.section]]
+        type = "lens"
+        label = "Web"
+        match = 'a'
+
+        [[desktop."1".section]]
+        type = "lens"
+        label = "Ghost"
+        match = 'z'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.match = [1: ["section:0:Web": "app=Safari"]]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+
+        // Neither block is mis-edited: the canonical Web match is untouched and
+        // the unmanaged quoted block keeps its value.
+        XCTAssertTrue(out.contains("match = 'a'"), "canonical Web block untouched (skipped)")
+        XCTAssertTrue(out.contains("match = 'z'"), "unmanaged quoted block untouched")
+        XCTAssertFalse(out.contains("app=Safari"), "no edit applied under ambiguity")
+        assertStable(out)
+    }
+
     // MARK: - no-op / fail-soft
 
     func testEmptyOverridesReturnsInputUnchanged() {

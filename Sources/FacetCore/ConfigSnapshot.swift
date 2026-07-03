@@ -82,6 +82,20 @@ public enum ConfigSnapshot {
         let origins = FacetConfig.decodeDesktopSectionOrigins(fromTOML: configText,
                                                               log: false)
 
+        // Ordinal-alignment guard (see `rawOrdinal` note in DesktopSectionOrigin):
+        // `rawOrdinal` counts within one LITERAL header spelling (facet's
+        // parseFlat), but swift-toml-edit's `upsertingValue` ordinal counts the
+        // DECODED path. They agree UNLESS a second literal spelling decodes to
+        // the same path (e.g. an exotic `[[desktop . 1 . section]]` /
+        // `[[desktop."1".section]]` that facet's own decode drops). When the DOM
+        // sees MORE `[[path]]` elements than parseFlat grouped under the literal
+        // header, the ordinals would misalign and edit the wrong element — so we
+        // skip those edits (a safe no-op, config.toml untouched) rather than
+        // corrupt a section.
+        let rawGroupCounts = parseTOMLArraysOfTables(configText) { name in
+            name.hasPrefix("desktop.") && name.hasSuffix(".section")
+        }.mapValues { $0.count }
+
         for (ordinal, secOrigins) in origins {
             if boardOrdinals.contains(ordinal) {
                 Log.debug("config: snapshot skipped section edits for desktop "
@@ -92,13 +106,24 @@ public enum ConfigSnapshot {
             for o in secOrigins {
                 // The header spelling this section came from IS the AoT path.
                 let path = o.headerName.split(separator: ".").map(String.init)
+                // Only edit when the DOM's decoded-path element count matches
+                // facet's literal-header count — otherwise the ordinal is
+                // ambiguous (see the guard note above). wsSlot still advances so
+                // any editable siblings keep their positional mapping.
+                let pathSafe = dom.arrayOfTablesCount(at: path)
+                    == (rawGroupCounts[o.headerName] ?? 0)
+                if !pathSafe {
+                    Log.debug("config: snapshot skipped desktop \(ordinal) section "
+                        + "\"\(o.section.label)\" — ambiguous header spelling "
+                        + "\(o.headerName)")
+                }
 
                 // `unassigned` is a MARKER checked before `type` (mirrors
                 // FilterProjection) — id `unassigned:<declOrder>`, label only,
                 // and it advances NO workspace slot.
                 if o.section.unassigned {
                     let id = "unassigned:\(o.declOrder)"
-                    if let l = overrides.label[ordinal]?[id] {
+                    if pathSafe, let l = overrides.label[ordinal]?[id] {
                         dom = dom.upsertingValue(.string(l),
                             inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
                             forKey: "label")
@@ -109,12 +134,12 @@ public enum ConfigSnapshot {
                 switch o.section.type {
                 case .lens:
                     let id = "section:\(o.declOrder):\(o.section.label)"
-                    if let m = overrides.match[ordinal]?[id] {
+                    if pathSafe, let m = overrides.match[ordinal]?[id] {
                         dom = dom.upsertingValue(.string(m),
                             inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
                             forKey: "match")
                     }
-                    if let l = overrides.label[ordinal]?[id] {
+                    if pathSafe, let l = overrides.label[ordinal]?[id] {
                         dom = dom.upsertingValue(.string(l),
                             inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
                             forKey: "label")
@@ -123,13 +148,13 @@ public enum ConfigSnapshot {
                 case .workspace:
                     // The k-th workspace section ↔ the k-th live workspace. An
                     // empty name is left unwritten (absent label = unnamed).
-                    if let name = overrides.workspaceLabel[ordinal]?[wsSlot],
+                    if pathSafe, let name = overrides.workspaceLabel[ordinal]?[wsSlot],
                        !name.isEmpty {
                         dom = dom.upsertingValue(.string(name),
                             inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
                             forKey: "label")
                     }
-                    if let layout = overrides.workspaceLayout[ordinal]?[wsSlot] {
+                    if pathSafe, let layout = overrides.workspaceLayout[ordinal]?[wsSlot] {
                         dom = dom.upsertingValue(.string(layout),
                             inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
                             forKey: "layout")

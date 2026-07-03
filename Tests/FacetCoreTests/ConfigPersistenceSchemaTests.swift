@@ -77,4 +77,29 @@ final class ConfigPersistenceSchemaTests: XCTestCase {
                                     relativeTo: "/Users/x/.config/facet"),
             "/Users/x/.config/facet/config.snapshot.toml")
     }
+
+    // MARK: - resolvePath canonicalizes . / .. / // (self-write-guard defence)
+
+    func testResolvePathCollapsesDotSegments() {
+        let base = "/Users/x/.config/facet"
+        XCTAssertEqual(FacetConfig.resolvePath("./config.toml", relativeTo: base),
+                       "/Users/x/.config/facet/config.toml")
+        XCTAssertEqual(FacetConfig.resolvePath("../facet/config.toml", relativeTo: base),
+                       "/Users/x/.config/facet/config.toml")
+        XCTAssertEqual(FacetConfig.resolvePath("sub/../config.toml", relativeTo: base),
+                       "/Users/x/.config/facet/config.toml")
+    }
+
+    func testIsSameFileMatchesNonCanonicalAliases() {
+        let cfg = "/Users/x/.config/facet/config.toml"
+        XCTAssertTrue(FacetConfig.isSameFile(
+            FacetConfig.resolvePath("./config.toml", relativeTo: "/Users/x/.config/facet"),
+            cfg), "./config.toml aliases config.toml")
+        XCTAssertTrue(FacetConfig.isSameFile(
+            FacetConfig.resolvePath("../facet/config.toml", relativeTo: "/Users/x/.config/facet"),
+            cfg))
+        XCTAssertFalse(FacetConfig.isSameFile(
+            FacetConfig.resolvePath("config.snapshot.toml", relativeTo: "/Users/x/.config/facet"),
+            cfg), "a genuinely different file is not the same")
+    }
 }

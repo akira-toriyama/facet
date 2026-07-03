@@ -336,29 +336,39 @@ extension FacetConfig {
               let rawExport = fresh.effectiveExportPath else { return fresh }
         let baseDir = (path as NSString).deletingLastPathComponent
         let snapshotPath = resolvePath(rawExport, relativeTo: baseDir)
-        guard snapshotPath != path else {
+        guard !isSameFile(snapshotPath, path) else {
             Log.line("config: [config] export-path must differ from config.toml "
                 + "— auto-promote skipped")
             return fresh
         }
         let fm = FileManager.default
         guard fm.fileExists(atPath: snapshotPath) else { return fresh }
+        // Follow a symlinked config.toml (dotfiles managers — stow / chezmoi /
+        // yadm — symlink `~/.config/*` into a repo) to the REAL target, for BOTH
+        // the mtime gate and the write. `attributesOfItem` does NOT dereference,
+        // so the gate would otherwise read the LINK's own mtime (its creation
+        // time) instead of the repo file the user actually hand-edits, and the
+        // atomic write (temp-file + rename(2)) would REPLACE the symlink with a
+        // plain file and orphan the repo target. Resolving fixes both.
+        let isLink = ((try? fm.attributesOfItem(atPath: path)[.type])
+            as? FileAttributeType) == .typeSymbolicLink
+        let realConfigPath = isLink ? (path as NSString).resolvingSymlinksInPath : path
         // mtime gate — snapshot must be strictly newer. Unreadable snapshot
         // mtime is fail-CLOSED (don't promote); a missing config mtime counts
         // as ancient so a present snapshot wins.
         guard let snapMTime = fileModificationDate(snapshotPath) else { return fresh }
-        let configMTime = fileModificationDate(path) ?? .distantPast
+        let configMTime = fileModificationDate(realConfigPath) ?? .distantPast
         guard snapMTime > configMTime else { return fresh }
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: snapshotPath))
         else { return fresh }                  // fail-soft on unreadable snapshot
         do {
-            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            try data.write(to: URL(fileURLWithPath: realConfigPath), options: .atomic)
         } catch {
-            Log.line("config: auto-promote could not write \(path): \(error)")
+            Log.line("config: auto-promote could not write \(realConfigPath): \(error)")
             return fresh                       // fail-soft on unwritable config
         }
-        Log.debug("config: auto-promoted \(snapshotPath) → \(path)")
-        return load(path: path)                // read #2 — the promoted config
+        Log.debug("config: auto-promoted \(snapshotPath) → \(realConfigPath)")
+        return load(path: path)                // read #2 — the promoted config (via the link)
     }
 
     /// Modification date of a file, or nil if unavailable (missing / unreadable
