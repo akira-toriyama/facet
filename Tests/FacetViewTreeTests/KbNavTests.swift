@@ -1,5 +1,5 @@
 import AppKit
-import XCTest
+import Testing
 @testable import FacetViewTree
 import FacetCore
 
@@ -14,7 +14,7 @@ import FacetCore
 /// `group == workspaceIndex == ws.index`, which the first block exercises;
 /// the multi-match block exercises the section case where one window id
 /// appears under two different groups.
-final class KbNavTests: XCTestCase {
+struct KbNavTests {
 
     private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
     /// By-workspace degrade row: group == workspaceIndex == ws.
@@ -34,57 +34,53 @@ final class KbNavTests: XCTestCase {
         [searchRow(), hdr(1), win(ws: 1, id: 10), win(ws: 1, id: 11), hdr(2)]
     }
 
-    func testSelectableIndicesSkipSearch() {
+    @Test func selectableIndicesSkipSearch() {
         // The search row (index 0) is not selectable; headers + windows are.
-        XCTAssertEqual(kbSelectableIndices(rows: sampleRows()), [1, 2, 3, 4])
+        #expect(kbSelectableIndices(rows: sampleRows()) == [1, 2, 3, 4])
     }
 
-    func testKeyAtMapsKindToSelection() {
+    @Test func keyAtMapsKindToSelection() {
         let rows = sampleRows()
-        XCTAssertEqual(kbKeyAt(1, in: rows), .hdr(group: 1))
-        XCTAssertEqual(kbKeyAt(2, in: rows), .win(group: 1, wid(10)))
-        XCTAssertNil(kbKeyAt(0, in: rows))     // search → nil
-        XCTAssertNil(kbKeyAt(99, in: rows))    // out of bounds → nil
+        #expect(kbKeyAt(1, in: rows) == .hdr(group: 1))
+        #expect(kbKeyAt(2, in: rows) == .win(group: 1, wid(10)))
+        #expect(kbKeyAt(0, in: rows) == nil)     // search → nil
+        #expect(kbKeyAt(99, in: rows) == nil)    // out of bounds → nil
     }
 
-    func testIndexOfFindsLogicalSelection() {
+    @Test func indexOfFindsLogicalSelection() {
         let rows = sampleRows()
-        XCTAssertEqual(kbIndexOf(.win(group: 1, wid(11)), in: rows), 3)
-        XCTAssertEqual(kbIndexOf(.hdr(group: 2), in: rows), 4)
-        XCTAssertNil(kbIndexOf(.win(group: 1, wid(404)), in: rows))   // absent
+        #expect(kbIndexOf(.win(group: 1, wid(11)), in: rows) == 3)
+        #expect(kbIndexOf(.hdr(group: 2), in: rows) == 4)
+        #expect(kbIndexOf(.win(group: 1, wid(404)), in: rows) == nil)   // absent
     }
 
-    func testWsOrderListsHeadersInOrder() {
-        XCTAssertEqual(kbWsOrder(rows: sampleRows()), [1, 2])
-        XCTAssertEqual(kbWsOrder(rows: [searchRow()]), [])
+    @Test func wsOrderListsHeadersInOrder() {
+        #expect(kbWsOrder(rows: sampleRows()) == [1, 2])
+        #expect(kbWsOrder(rows: [searchRow()]) == [])
     }
 
-    func testMoveTargetStepsAndClamps() {
+    @Test func moveTargetStepsAndClamps() {
         let sel = [1, 2, 3, 4]
-        XCTAssertEqual(kbMoveTarget(selectable: sel, current: 2, delta: 1), 3)
-        XCTAssertEqual(kbMoveTarget(selectable: sel, current: 2, delta: -1), 1)
-        XCTAssertEqual(kbMoveTarget(selectable: sel, current: 1, delta: -1), 1) // clamp low
-        XCTAssertEqual(kbMoveTarget(selectable: sel, current: 4, delta: 1), 4)  // clamp high
-        XCTAssertEqual(kbMoveTarget(selectable: sel, current: nil, delta: 1), 2) // nil → pos 0 +1
-        XCTAssertNil(kbMoveTarget(selectable: [], current: nil, delta: 1))
+        #expect(kbMoveTarget(selectable: sel, current: 2, delta: 1) == 3)
+        #expect(kbMoveTarget(selectable: sel, current: 2, delta: -1) == 1)
+        #expect(kbMoveTarget(selectable: sel, current: 1, delta: -1) == 1) // clamp low
+        #expect(kbMoveTarget(selectable: sel, current: 4, delta: 1) == 4)  // clamp high
+        #expect(kbMoveTarget(selectable: sel, current: nil, delta: 1) == 2) // nil → pos 0 +1
+        #expect(kbMoveTarget(selectable: [], current: nil, delta: 1) == nil)
     }
 
-    func testJumpTargetPrefersFirstWindowElseHeader() {
+    @Test func jumpTargetPrefersFirstWindowElseHeader() {
         let rows = sampleRows()
         // WS1 forward → WS2 is empty → its header.
-        XCTAssertEqual(kbJumpTarget(rows: rows, fromWS: 1, dir: 1),
-                       .hdr(group: 2))
+        #expect(kbJumpTarget(rows: rows, fromWS: 1, dir: 1) == .hdr(group: 2))
         // WS2 back → WS1's first window.
-        XCTAssertEqual(kbJumpTarget(rows: rows, fromWS: 2, dir: -1),
-                       .win(group: 1, wid(10)))
+        #expect(kbJumpTarget(rows: rows, fromWS: 2, dir: -1) == .win(group: 1, wid(10)))
         // Clamp at the low end (already first WS) → WS1's first window.
-        XCTAssertEqual(kbJumpTarget(rows: rows, fromWS: 1, dir: -1),
-                       .win(group: 1, wid(10)))
+        #expect(kbJumpTarget(rows: rows, fromWS: 1, dir: -1) == .win(group: 1, wid(10)))
         // Missing fromWS → position 0; dir -1 clamps to 0 → WS1's first window.
-        XCTAssertEqual(kbJumpTarget(rows: rows, fromWS: nil, dir: -1),
-                       .win(group: 1, wid(10)))
+        #expect(kbJumpTarget(rows: rows, fromWS: nil, dir: -1) == .win(group: 1, wid(10)))
         // No headers at all → nil.
-        XCTAssertNil(kbJumpTarget(rows: [searchRow()], fromWS: nil, dir: 1))
+        #expect(kbJumpTarget(rows: [searchRow()], fromWS: nil, dir: 1) == nil)
     }
 
     // MARK: - Section model: multi-match (same window id under two groups)
@@ -113,29 +109,28 @@ final class KbNavTests: XCTestCase {
         ]
     }
 
-    func testMultiMatchIndexOfDisambiguatesByGroup() {
+    @Test func multiMatchIndexOfDisambiguatesByGroup() {
         let rows = multiMatchRows()
         // Same window id, two different rows — the group decides which.
-        XCTAssertEqual(kbIndexOf(.win(group: 0, wid(10)), in: rows), 1)
-        XCTAssertEqual(kbIndexOf(.win(group: 1, wid(10)), in: rows), 4)
+        #expect(kbIndexOf(.win(group: 0, wid(10)), in: rows) == 1)
+        #expect(kbIndexOf(.win(group: 1, wid(10)), in: rows) == 4)
         // A group/id pair that doesn't co-occur is absent (window 11 is not
         // in the lens group).
-        XCTAssertNil(kbIndexOf(.win(group: 1, wid(11)), in: rows))
+        #expect(kbIndexOf(.win(group: 1, wid(11)), in: rows) == nil)
     }
 
-    func testMultiMatchKeyAtCarriesGroup() {
+    @Test func multiMatchKeyAtCarriesGroup() {
         let rows = multiMatchRows()
-        XCTAssertEqual(kbKeyAt(1, in: rows), .win(group: 0, wid(10)))
-        XCTAssertEqual(kbKeyAt(4, in: rows), .win(group: 1, wid(10)))
-        XCTAssertEqual(kbKeyAt(3, in: rows), .hdr(group: 1))
+        #expect(kbKeyAt(1, in: rows) == .win(group: 0, wid(10)))
+        #expect(kbKeyAt(4, in: rows) == .win(group: 1, wid(10)))
+        #expect(kbKeyAt(3, in: rows) == .hdr(group: 1))
     }
 
-    func testMultiMatchWsOrderAndJumpUseGroupOrdinals() {
+    @Test func multiMatchWsOrderAndJumpUseGroupOrdinals() {
         let rows = multiMatchRows()
-        XCTAssertEqual(kbWsOrder(rows: rows), [0, 1])
+        #expect(kbWsOrder(rows: rows) == [0, 1])
         // Jump from group 0 forward → group 1's first window (the lens copy
         // of window 10), keyed by group 1 — NOT a teleport back to group 0.
-        XCTAssertEqual(kbJumpTarget(rows: rows, fromWS: 0, dir: 1),
-                       .win(group: 1, wid(10)))
+        #expect(kbJumpTarget(rows: rows, fromWS: 0, dir: 1) == .win(group: 1, wid(10)))
     }
 }

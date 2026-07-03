@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetAccessibility
 
 /// `DisplayChangeObserver` is mostly NSNotificationCenter
@@ -9,31 +9,19 @@ import XCTest
 /// reproducible in tests (notification observers fire on any
 /// `post(name:)` to the same center), so the lifecycle path
 /// is testable end-to-end too.
+///
+/// `@MainActor` keeps `fireCount` touched only on the main actor — by the
+/// test body and by the `@MainActor` `onChange` callback — so there is no
+/// race even though the debounce work item lands asynchronously.
 @MainActor
-final class DisplayChangeObserverTests: XCTestCase {
+struct DisplayChangeObserverTests {
 
-    func testDebounceCoalescesBurstIntoSingleFire() {
+    @Test func debounceCoalescesBurstIntoSingleFire() async {
         // Three `schedule()` calls in the same run-loop tick should
         // collapse into one `onChange` fire after the debounce interval.
-        //
-        // The expectation is fulfilled BY the production callback, so
-        // `wait` returns only once `onChange` actually ran — a real
-        // happens-before, not a race against an unrelated wall-clock
-        // timer. CRITICAL: `fulfill()` is gated on `live`, which we drop
-        // the instant `wait` returns. Calling `fulfill()` after its
-        // waiter has finished is an XCTest API violation that aborts the
-        // whole process (SIGABRT) — and a debounce work item can land
-        // late (a stalled runner pushes the fire past the timeout) or a
-        // buggy `cancel()` can leak a 2nd fire. The guard turns both into
-        // a harmless `fireCount` bump that the final assert catches,
-        // never an abort. `observer.stop()` then cancels anything still
-        // pending. All of `live` / `fireCount` are touched only on the
-        // main actor (the test + the @MainActor callback), so no race.
         var fireCount = 0
-        var live = true
-        let fired = expectation(description: "debounce fires")
         let observer = DisplayChangeObserver(
-            onChange: { fireCount += 1; if live { fired.fulfill() } },
+            onChange: { fireCount += 1 },
             debounceInterval: 0.05)
 
         observer.schedule()
@@ -41,43 +29,45 @@ final class DisplayChangeObserverTests: XCTestCase {
         observer.schedule()
 
         // Synchronously, nothing has fired yet (work items queued).
-        XCTAssertEqual(fireCount, 0)
+        #expect(fireCount == 0)
 
-        wait(for: [fired], timeout: 2.0)
-        live = false        // no fulfill() may run after the wait returns
+        // Wait (bounded) for the coalesced fire. `await` frees the main actor
+        // so the queued debounce work item can run — a real happens-before,
+        // not a race against an unrelated wall-clock timer. A healthy run
+        // settles in ~0.05s; the 2s cap mirrors the original XCTest timeout
+        // for a stalled runner. The 50ms settle tail then lets a spurious 2nd
+        // fire (a leaked or duplicate work item) surface in `fireCount`, which
+        // the final assert catches.
+        var waited = 0.0
+        while fireCount == 0 && waited < 2.0 {
+            try? await Task.sleep(for: .milliseconds(10))
+            waited += 0.010
+        }
+        try? await Task.sleep(for: .milliseconds(50))
         observer.stop()     // cancel any still-pending work item
 
-        XCTAssertEqual(fireCount, 1,
-                       "burst of 3 schedule() calls must "
-                       + "produce exactly 1 fire")
+        #expect(fireCount == 1,
+                "burst of 3 schedule() calls must produce exactly 1 fire")
     }
 
-    func testStopCancelsPendingFire() {
+    @Test func stopCancelsPendingFire() async {
         // schedule() then stop() before the timer fires → no fire at
         // all. Otherwise observer.deinit could miss a queued fire and
         // surprise consumers.
         //
-        // Proving a *non*-event needs a bounded wall-clock window; an
-        // inverted expectation makes it exact (passes iff `onChange`
-        // does NOT fire within the window). `fulfill()` is again gated
-        // on `live` so a fire that somehow lands after the wait can't
-        // abort the process — it just bumps `fireCount`, which the
-        // assert catches.
+        // Proving a *non*-event needs a bounded wall-clock window: wait past
+        // the debounce interval and assert nothing fired.
         var fireCount = 0
-        var live = true
-        let exp = expectation(description: "no fire after stop")
-        exp.isInverted = true
         let observer = DisplayChangeObserver(
-            onChange: { fireCount += 1; if live { exp.fulfill() } },
+            onChange: { fireCount += 1 },
             debounceInterval: 0.1)
 
         observer.schedule()
         observer.stop()
 
-        wait(for: [exp], timeout: 0.5)
-        live = false
+        try? await Task.sleep(for: .milliseconds(500))
 
-        XCTAssertEqual(fireCount, 0,
-                       "stop() must cancel pending fire")
+        #expect(fireCount == 0,
+                "stop() must cancel pending fire")
     }
 }

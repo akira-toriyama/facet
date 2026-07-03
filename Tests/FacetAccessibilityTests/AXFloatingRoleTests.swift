@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 import ApplicationServices
 @testable import FacetAccessibility
 
@@ -6,38 +6,38 @@ import ApplicationServices
 /// decision split out of `isFloatingByRole` so the auto-float rule can
 /// be verified without a live `AXUIElement`. The six floating constants
 /// are the ones the source matches; everything else (incl. nil) tiles.
-final class AXFloatingRoleTests: XCTestCase {
+struct AXFloatingRoleTests {
 
-    func testSheetAndDrawerRolesFloat() {
-        XCTAssertTrue(AXGeom.isFloating(role: kAXSheetRole as String,
-                                        subrole: nil))
-        XCTAssertTrue(AXGeom.isFloating(role: kAXDrawerRole as String,
-                                        subrole: nil))
+    @Test func sheetAndDrawerRolesFloat() {
+        #expect(AXGeom.isFloating(role: kAXSheetRole as String,
+                                  subrole: nil))
+        #expect(AXGeom.isFloating(role: kAXDrawerRole as String,
+                                  subrole: nil))
     }
 
-    func testFloatingSubrolesFloat() {
+    @Test func floatingSubrolesFloat() {
         for sub in [kAXFloatingWindowSubrole as String,
                     kAXSystemDialogSubrole as String,
                     kAXSystemFloatingWindowSubrole as String,
                     kAXDialogSubrole as String] {
-            XCTAssertTrue(AXGeom.isFloating(role: nil, subrole: sub),
-                          "subrole \(sub) should float")
+            #expect(AXGeom.isFloating(role: nil, subrole: sub),
+                    "subrole \(sub) should float")
         }
     }
 
-    func testStandardWindowDoesNotFloat() {
+    @Test func standardWindowDoesNotFloat() {
         // A normal tiled window: role "AXWindow", subrole
         // "AXStandardWindow" — neither is in the floating set.
-        XCTAssertFalse(AXGeom.isFloating(role: "AXWindow",
-                                         subrole: "AXStandardWindow"))
+        #expect(!AXGeom.isFloating(role: "AXWindow",
+                                   subrole: "AXStandardWindow"))
     }
 
-    func testNilRoleAndSubroleDoesNotFloat() {
-        XCTAssertFalse(AXGeom.isFloating(role: nil, subrole: nil))
+    @Test func nilRoleAndSubroleDoesNotFloat() {
+        #expect(!AXGeom.isFloating(role: nil, subrole: nil))
     }
 
-    func testUnknownStringsDoNotFloat() {
-        XCTAssertFalse(AXGeom.isFloating(role: "AXSomethingElse",
-                                         subrole: "AXWeirdSubrole"))
+    @Test func unknownStringsDoNotFloat() {
+        #expect(!AXGeom.isFloating(role: "AXSomethingElse",
+                                   subrole: "AXWeirdSubrole"))
     }
 }
