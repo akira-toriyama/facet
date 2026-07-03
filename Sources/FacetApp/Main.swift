@@ -683,7 +683,11 @@ enum FacetApp {
         // sibling, so no reload churn). Best-effort — never blocks start.
         FacetConfig.installSchema()
 
-        let cfg = FacetConfig.load()
+        // Auto-promote (t-hdxb): if the user opted in and a newer snapshot
+        // exists, it overwrites config.toml here (the one sanctioned write)
+        // before we read. Otherwise identical to `load()`. Startup-only —
+        // reload / watcher / --validate never promote.
+        let cfg = FacetConfig.bootstrapWithAutoPromote()
         // Fail Fast (Rule of Repair): refuse to start on an incoherent
         // config with a loud `exit 2` (usage error) rather than silently
         // running a degraded default. No fatal checks remain today, but

@@ -280,6 +280,64 @@ extension FacetConfig {
         return .init()
     }
 
+    /// Startup config load WITH auto-promote (t-hdxb). Behaves exactly like
+    /// `load(path:)`, EXCEPT: when the user opted into `[config] auto-promote`
+    /// AND a newer `[config] export-path` snapshot exists, that snapshot is
+    /// PROMOTED — it overwrites config.toml (the one sanctioned write to the
+    /// user's config file, carved out of the "never writes" rule) and is then
+    /// loaded. Guards:
+    ///   • **Staleness**: the snapshot only wins when its mtime is STRICTLY
+    ///     newer than config.toml, so a hand-edit between sessions always
+    ///     wins. After promotion config.toml is newer, so the same snapshot
+    ///     never promotes twice (no sentinel needed).
+    ///   • **Self-write**: a snapshot path equal to config.toml is refused
+    ///     (that would be an in-place write loop, forbidden by design).
+    ///   • **Fail-soft**: any read/write I/O error falls back to the
+    ///     un-promoted config; an unreadable snapshot mtime is fail-CLOSED
+    ///     (no promotion).
+    /// Promotion happens ONLY here (startup) — never in `reloadConfig`, the
+    /// config watcher, or `config --validate/--emit-schema`, which is why this
+    /// is a separate entry point from `load`.
+    public static func bootstrapWithAutoPromote(path: String = defaultPath)
+        -> FacetConfig
+    {
+        let fresh = load(path: path)           // read #1 — learns the [config] keys
+        guard fresh.effectiveAutoPromote,
+              let rawExport = fresh.effectiveExportPath else { return fresh }
+        let baseDir = (path as NSString).deletingLastPathComponent
+        let snapshotPath = resolvePath(rawExport, relativeTo: baseDir)
+        guard snapshotPath != path else {
+            Log.line("config: [config] export-path must differ from config.toml "
+                + "— auto-promote skipped")
+            return fresh
+        }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: snapshotPath) else { return fresh }
+        // mtime gate — snapshot must be strictly newer. Unreadable snapshot
+        // mtime is fail-CLOSED (don't promote); a missing config mtime counts
+        // as ancient so a present snapshot wins.
+        guard let snapMTime = fileModificationDate(snapshotPath) else { return fresh }
+        let configMTime = fileModificationDate(path) ?? .distantPast
+        guard snapMTime > configMTime else { return fresh }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: snapshotPath))
+        else { return fresh }                  // fail-soft on unreadable snapshot
+        do {
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        } catch {
+            Log.line("config: auto-promote could not write \(path): \(error)")
+            return fresh                       // fail-soft on unwritable config
+        }
+        Log.debug("config: auto-promoted \(snapshotPath) → \(path)")
+        return load(path: path)                // read #2 — the promoted config
+    }
+
+    /// Modification date of a file, or nil if unavailable (missing / unreadable
+    /// attributes). Used by the auto-promote mtime gate.
+    private static func fileModificationDate(_ path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate])
+            as? Date
+    }
+
     /// Build a `FacetConfig` from config.toml SOURCE TEXT — the pure
     /// text→config half of `load(path:)`, factored out so a caller that
     /// already holds the source (e.g. `facet config --validate`, which reads
