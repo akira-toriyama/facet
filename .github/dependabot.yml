@@ -15,3 +15,16 @@ updates:
     # (CONTRIBUTING.md). Bots are exempt from commit-lint, so this is decoration.
     commit-message:
       prefix: ":arrow_up: build(deps)"
+
+  # Go module updates. A no-op on repos without a go.mod (the Swift/other repos
+  # in the fleet), so it is safe fleet-wide, and it turns on dependency +
+  # security updates for the Go tools (pare, furrow). Batched into one weekly PR.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      gomod:
+        patterns: ["*"]
+    commit-message:
+      prefix: ":arrow_up: build(deps)"
