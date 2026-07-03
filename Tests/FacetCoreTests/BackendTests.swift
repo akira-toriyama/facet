@@ -1,4 +1,4 @@
-import XCTest
+import Testing
 @testable import FacetCore
 
 /// In-memory `WindowBackend` used to exercise the protocol surface in
@@ -64,24 +64,24 @@ private final class StubBackend: WindowBackend, @unchecked Sendable {
     }
 }
 
-final class BackendTests: XCTestCase {
+struct BackendTests {
 
-    func testWindowMenuItemRetainsOpsInOrder() {
+    @Test func windowMenuItemRetainsOpsInOrder() {
         let item = WindowMenuItem("Unfloat & promote",
                                   [.toggleFloat, .promoteToMaster])
-        XCTAssertEqual(item.label, "Unfloat & promote")
-        XCTAssertEqual(item.ops.count, 2)
-        XCTAssertFalse(item.isClose)
+        #expect(item.label == "Unfloat & promote")
+        #expect(item.ops.count == 2)
+        #expect(!(item.isClose))
     }
 
-    func testWindowMenuItemCloseFlagDefaultsOff() {
+    @Test func windowMenuItemCloseFlagDefaultsOff() {
         let normal = WindowMenuItem("Float", [.toggleFloat])
         let close = WindowMenuItem("Close", [], close: true)
-        XCTAssertFalse(normal.isClose)
-        XCTAssertTrue(close.isClose)
+        #expect(!(normal.isClose))
+        #expect(close.isClose)
     }
 
-    func testBackendRecordsControllerSideEffects() {
+    @Test func backendRecordsControllerSideEffects() {
         let b = StubBackend()
         let win = WindowID(serverID: 7)
         b.switchWorkspace(toIndex: 3)
@@ -93,37 +93,36 @@ final class BackendTests: XCTestCase {
         b.perform(.cycleStackPrev)
         b.retileActiveWorkspace()
 
-        XCTAssertEqual(b.switched, [3])
-        XCTAssertEqual(b.moved.count, 1)
-        XCTAssertEqual(b.moved[0].0, win)
-        XCTAssertEqual(b.moved[0].1, 2)
-        XCTAssertEqual(b.layoutChanges.count, 1)
-        XCTAssertEqual(b.layoutChanges[0].0, 2)
-        XCTAssertEqual(b.layoutChanges[0].1, "stack")
-        XCTAssertEqual(b.closed, [win])
+        #expect(b.switched == [3])
+        #expect(b.moved.count == 1)
+        #expect(b.moved[0].0 == win)
+        #expect(b.moved[0].1 == 2)
+        #expect(b.layoutChanges.count == 1)
+        #expect(b.layoutChanges[0].0 == 2)
+        #expect(b.layoutChanges[0].1 == "stack")
+        #expect(b.closed == [win])
         // perform passes the enum through unchanged, in order.
-        XCTAssertEqual(b.performed,
+        #expect(b.performed ==
                        [.toggleFullscreen,
                         .cycleStackNext,
                         .cycleStackPrev])
-        XCTAssertEqual(b.retileCalls, 1)
+        #expect(b.retileCalls == 1)
     }
 
-    func testWindowMenuVariesByMode() {
+    @Test func windowMenuVariesByMode() {
         let b = StubBackend()
-        XCTAssertEqual(b.windowMenu(mode: "bsp", floating: false,
+        #expect(b.windowMenu(mode: "bsp", floating: false,
                                     isMaster: false, windowCount: 2,
                                     isSticky: false)
-                        .first?.label, "Toggle stack")
-        XCTAssertEqual(b.windowMenu(mode: "stack", floating: false,
+                        .first?.label == "Toggle stack")
+        #expect(b.windowMenu(mode: "stack", floating: false,
                                     isMaster: false, windowCount: 2,
                                     isSticky: false)
-                        .first?.label, "Float")
-        XCTAssertEqual(b.windowMenu(mode: "bsp", floating: true,
+                        .first?.label == "Float")
+        #expect(b.windowMenu(mode: "bsp", floating: true,
                                     isMaster: false, windowCount: 2,
                                     isSticky: false)
-                        .map(\.label),
+                        .map(\.label) ==
                        ["Toggle stack", "Unfloat", "Close window"])
     }
 }
-

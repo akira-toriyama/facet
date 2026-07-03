@@ -1,4 +1,5 @@
-import XCTest
+import Testing
+import Foundation
 @testable import FacetCore
 
 /// `OverviewPendingDrop.landed` / `OverviewPendingSwap.landed` — the shared
@@ -8,7 +9,7 @@ import XCTest
 /// [[grid-drag-state-lifecycle]]). They never read `committedAt` (the time
 /// cap lives in the caller), so these tests pin only the membership logic.
 /// Pure; CI-only (CLT can't run `swift test`).
-final class OverviewLandingGateTests: XCTestCase {
+struct OverviewLandingGateTests {
 
     // MARK: - fixtures
 
@@ -26,36 +27,36 @@ final class OverviewLandingGateTests: XCTestCase {
 
     // MARK: - OverviewPendingDrop.landed
 
-    func testDropNotLandedWhileStillInSource() {
+    @Test func dropNotLandedWhileStillInSource() {
         // Window 1 dropped onto WS 2 but the backend still shows it in WS 1.
         let drop = OverviewPendingDrop(id: WindowID(serverID: 1), dstWS: 2,
                                        committedAt: t0)
         let wss = [ws(1, [1]), ws(2, [])]
-        XCTAssertFalse(drop.landed(in: wss))
+        #expect(!(drop.landed(in: wss)))
     }
 
-    func testDropLandedWhenInDestination() {
+    @Test func dropLandedWhenInDestination() {
         let drop = OverviewPendingDrop(id: WindowID(serverID: 1), dstWS: 2,
                                        committedAt: t0)
         let wss = [ws(1, []), ws(2, [1])]
-        XCTAssertTrue(drop.landed(in: wss))
+        #expect(drop.landed(in: wss))
     }
 
-    func testDropIgnoresPresenceInWrongWorkspace() {
+    @Test func dropIgnoresPresenceInWrongWorkspace() {
         // The id reappears in WS 3 (not the destination) — NOT landed: the
         // gate matches the id *in `dstWS`*, not anywhere on the desktop.
         let drop = OverviewPendingDrop(id: WindowID(serverID: 1), dstWS: 2,
                                        committedAt: t0)
         let wss = [ws(1, []), ws(2, []), ws(3, [1])]
-        XCTAssertFalse(drop.landed(in: wss))
+        #expect(!(drop.landed(in: wss)))
     }
 
-    func testDropDestinationMissingIsNotLanded() {
+    @Test func dropDestinationMissingIsNotLanded() {
         // No workspace carries index == dstWS → contains short-circuits false.
         let drop = OverviewPendingDrop(id: WindowID(serverID: 1), dstWS: 9,
                                        committedAt: t0)
-        XCTAssertFalse(drop.landed(in: [ws(1, [1])]))
-        XCTAssertFalse(drop.landed(in: []))
+        #expect(!(drop.landed(in: [ws(1, [1])])))
+        #expect(!(drop.landed(in: [])))
     }
 
     // MARK: - OverviewPendingSwap.landed
@@ -66,47 +67,47 @@ final class OverviewLandingGateTests: XCTestCase {
                             dstIDs: [WindowID(serverID: 2)], committedAt: t0)
     }
 
-    func testSwapNotLandedBeforeBackendMoves() {
+    @Test func swapNotLandedBeforeBackendMoves() {
         // Both windows still sit in their original workspaces.
         let wss = [ws(1, [1]), ws(2, [2])]
-        XCTAssertFalse(swap12().landed(in: wss))
+        #expect(!(swap12().landed(in: wss)))
     }
 
-    func testSwapNotLandedWhenOnlyOneHalfMoved() {
+    @Test func swapNotLandedWhenOnlyOneHalfMoved() {
         // src half landed (1 → WS 2) but dst half hasn't (2 not yet in WS 1).
         let half = [ws(1, []), ws(2, [1, 2])]
-        XCTAssertFalse(swap12().landed(in: half))
+        #expect(!(swap12().landed(in: half)))
     }
 
-    func testSwapLandedWhenBothHalvesReflected() {
+    @Test func swapLandedWhenBothHalvesReflected() {
         let done = [ws(1, [2]), ws(2, [1])]
-        XCTAssertTrue(swap12().landed(in: done))
+        #expect(swap12().landed(in: done))
     }
 
-    func testSwapMissingEitherWorkspaceIsNotLanded() {
+    @Test func swapMissingEitherWorkspaceIsNotLanded() {
         // The guard returns false if srcWS or dstWS is absent.
-        XCTAssertFalse(swap12().landed(in: [ws(2, [1])]))      // no WS 1
-        XCTAssertFalse(swap12().landed(in: [ws(1, [2])]))      // no WS 2
-        XCTAssertFalse(swap12().landed(in: []))
+        #expect(!(swap12().landed(in: [ws(2, [1])])))      // no WS 1
+        #expect(!(swap12().landed(in: [ws(1, [2])])))      // no WS 2
+        #expect(!(swap12().landed(in: [])))
     }
 
-    func testSwapWithEmptyIDsLandsVacuously() {
+    @Test func swapWithEmptyIDsLandsVacuously() {
         // `allSatisfy` on an empty list is true, so a no-id swap "lands" the
         // instant both workspaces resolve — an intentional edge of the gate.
         let empty = OverviewPendingSwap(srcWS: 1, dstWS: 2, srcIDs: [],
                                         dstIDs: [], committedAt: t0)
-        XCTAssertTrue(empty.landed(in: [ws(1, []), ws(2, [])]))
-        XCTAssertFalse(empty.landed(in: [ws(1, [])]))          // WS 2 missing
+        #expect(empty.landed(in: [ws(1, []), ws(2, [])]))
+        #expect(!(empty.landed(in: [ws(1, [])])))          // WS 2 missing
     }
 
-    func testSwapAllOfMultipleSourceIDsMustLand() {
+    @Test func swapAllOfMultipleSourceIDsMustLand() {
         let multi = OverviewPendingSwap(
             srcWS: 1, dstWS: 2,
             srcIDs: [WindowID(serverID: 1), WindowID(serverID: 3)],
             dstIDs: [], committedAt: t0)
         // Only one of the two src ids reached WS 2 → not landed.
-        XCTAssertFalse(multi.landed(in: [ws(1, [3]), ws(2, [1])]))
+        #expect(!(multi.landed(in: [ws(1, [3]), ws(2, [1])])))
         // Both reached WS 2 → landed.
-        XCTAssertTrue(multi.landed(in: [ws(1, []), ws(2, [1, 3])]))
+        #expect(multi.landed(in: [ws(1, []), ws(2, [1, 3])]))
     }
 }
