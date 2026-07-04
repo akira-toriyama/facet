@@ -26,6 +26,19 @@ struct ConfigPersistenceSchemaTests {
         #expect(blank.effectiveExportPath == nil, "blank → auto-export off")
     }
 
+    /// Surrounding whitespace is stripped while the inner path stays verbatim.
+    /// Regression guard: `exportPathDecodesAndTrims` uses a value with NO
+    /// surrounding whitespace, so its trim is a no-op there — a version that
+    /// returned the raw field would leak the padding (breaking downstream
+    /// `resolvePath`) yet still pass that test.
+    @Test func exportPathTrimsSurroundingWhitespace() {
+        let c = FacetConfig.from(toml: parseTOMLSubset("""
+            [config]
+            export-path = "  ~/foo/snap.toml  "
+            """))
+        #expect(c.effectiveExportPath == "~/foo/snap.toml")
+    }
+
     @Test func autoPromoteDefaultsOff() {
         #expect(!(FacetConfig().effectiveAutoPromote), "default off")
         let on = FacetConfig.from(toml: parseTOMLSubset("""

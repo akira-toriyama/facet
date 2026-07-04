@@ -51,4 +51,28 @@ struct BoardLensProjectionTests {
         #expect(other?.windows.map(\.id.serverID) == [2],
                 "the unassigned receptacle catches the unmatched window")
     }
+
+    /// The receptacle catches EVERY unmatched window — multiple leftover
+    /// workspace windows AND an orphan — in universe order: unmatched workspace
+    /// windows first (snapshot order), the orphan appended last. Pins the core
+    /// board promise that a lens board loses no live window: reordering the
+    /// universe concat or dropping subsequent unmatched windows would silently
+    /// hide live windows undetected (the one-window sibling test can't catch a
+    /// concat/order regression).
+    @Test func lensBoardReceptacleCatchesMultipleUnmatchedInUniverseOrder() {
+        let wss = [ws(0, [win(1, app: "Chrome"),
+                          win(2, app: "Terminal"),
+                          win(3, app: "Slack")])]
+        let r = FilterProjection.project(
+            workspaces: wss,
+            sections: [lens("Web", "app=Chrome"),
+                       DesktopSection(type: .lens, label: "Lost", unassigned: true)],
+            orphans: [win(9, app: "Finder")])
+        #expect(r.sections.count == 2, "lens + receptacle — no workspace tail")
+        let web = r.sections.first { $0.id == "section:0:Web" }
+        #expect(web?.windows.map(\.id.serverID) == [1])
+        let lost = r.sections.first { $0.sectionType == .unassigned }
+        #expect(lost?.windows.map(\.id.serverID) == [2, 3, 9],
+                "unmatched workspace windows (snapshot order) then orphan last")
+    }
 }

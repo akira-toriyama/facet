@@ -114,4 +114,25 @@ struct EffectiveWorkspaceListBoardTests {
                 "boards win; the flat workspace section is masked")
         #expect(list.allSatisfy { $0.config.name.isEmpty })
     }
+
+    /// W2.6: the board branch of `workspaceSubstrateSections` applies
+    /// `$0.type == .workspace && !$0.unassigned`, so an `unassigned` receptacle
+    /// inside a workspace board is NOT a spatial substrate — it never seeds a
+    /// workspace nor shifts the 1-based indices. Only the flat branch's
+    /// `!unassigned` clause was covered; dropping the board-branch clause would
+    /// seed a phantom workspace ("Recv") and push every real workspace's index
+    /// up by one.
+    @Test func boardBranchExcludesUnassignedReceptacleFromSubstrate() {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [
+            DesktopTab(type: .workspace, sections: [
+                ws("Main"),
+                DesktopSection(type: .workspace, label: "Recv", unassigned: true),
+            ]),
+        ]]
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
+        #expect(list.map(\.config.name) == ["Main"])
+        #expect(list.map(\.index) == [1])
+        #expect(c.isSectionModelActive(ordinal: 1))
+    }
 }
