@@ -181,6 +181,40 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
+    /// An `unassigned` marker sitting BETWEEN two real workspaces must consume
+    /// no workspace slot: the writer `continue`s before the `switch`, so `wsSlot`
+    /// stays put. Pins that slot 0 names the first workspace and slot 1 names the
+    /// THIRD section (the real second workspace) — not the unassigned middle,
+    /// which keeps its config label untouched. (Hoisting `wsSlot += 1` above the
+    /// `continue` would leave the second workspace unnamed; the existing
+    /// positional test uses a LENS, not `unassigned`, between the two.)
+    @Test func unassignedBetweenWorkspacesConsumesNoSlot() {
+        let cfg = """
+        [[desktop.1.section]]
+        type = "workspace"
+
+        [[desktop.1.section]]
+        unassigned = true
+        type = "workspace"
+        label = "Lost"
+
+        [[desktop.1.section]]
+        type = "workspace"
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.workspaceLabel = [1: [0: "First", 1: "Second"]]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+
+        let secs = origins(out, ordinal: 1).map(\.section)
+        // secs[0] = first ws (slot 0), secs[1] = unassigned middle (no slot),
+        // secs[2] = second ws (slot 1).
+        #expect(secs[0].label == "First")
+        #expect(secs[2].label == "Second",
+                "the unassigned middle consumed no workspace slot")
+        #expect(secs[1].label == "Lost", "the unassigned marker is untouched")
+        assertStable(out)
+    }
+
     @Test func workspaceEmptyNameIsNotWritten() {
         let cfg = """
         [[desktop.1.section]]
@@ -330,6 +364,19 @@ struct ConfigSnapshotTests {
         let out = ConfigSnapshot.render(configText: cfg,
                                         overrides: ConfigSnapshot.Overrides())
         #expect(out == cfg)
+    }
+
+    /// `isEmpty` uses `allSatisfy { $0.value.isEmpty }`, so an ordinal key that
+    /// maps to an EMPTY inner dict is still "empty" — nothing to bake. Regressing
+    /// to a bare outer `.isEmpty` would flip these and cause spurious disk writes.
+    /// (The existing no-op test only exercises the all-defaults case.)
+    @Test func isEmptyIgnoresEmptyInnerDicts() {
+        #expect(ConfigSnapshot.Overrides(match: [1: [:]]).isEmpty,
+                "outer key present but inner dict empty → still empty")
+        #expect(!ConfigSnapshot.Overrides(match: [1: ["section:0:Web": "a"]]).isEmpty,
+                "a non-empty inner dict makes it non-empty")
+        #expect(ConfigSnapshot.Overrides(workspaceLabel: [1: [:]]).isEmpty,
+                "same for workspaceLabel's empty inner dict")
     }
 
     @Test func unparseableConfigReturnedUnchanged() {

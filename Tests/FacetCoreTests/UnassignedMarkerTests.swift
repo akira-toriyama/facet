@@ -56,6 +56,24 @@ struct UnassignedMarkerTests {
         #expect(note?.contains("unknown") == true)
     }
 
+    @Test func unassignedMarkerWinsOverInvalidType() {
+        // The receptacle MARKER is checked BEFORE `type`, so a bogus type on a
+        // marker row is projection-irrelevant: `recType` falls through to the
+        // `.workspace` default and the row still decodes as a receptacle (no
+        // drop note). Contrast `unknownTypeIsDropped` — the SAME bogus type
+        // WITHOUT the marker drops LOUD. Regression pin: a refactor that
+        // validated `type` before the marker would silently DROP a typo-typed
+        // receptacle, losing the lost-and-found section.
+        let (s, note) = DesktopSection.parse(fromTOMLRow: [
+            "unassigned": .bool(true), "type": .string("bogus"),
+        ])
+        #expect(s != nil)
+        #expect(s?.type == .workspace)   // bogus type → moot `.workspace` default
+        #expect(s?.unassigned == true)
+        #expect(s?.label == "")
+        #expect(note == nil)             // marker accepts; no drop / caveat
+    }
+
     // MARK: - non-receptacle sections keep the marker false
 
     @Test func workspaceSectionMarkerFalse() {
