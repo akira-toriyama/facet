@@ -7,35 +7,19 @@ import Testing
 /// put, predictable, unlike the rail's circular wrap). Pure; CI-only.
 struct BoardIndexStepTests {
 
-    @Test func stepForwardAdvancesOne() {
-        #expect(boardIndexStep(current: 0, by: 1, count: 3) == 1)
-        #expect(boardIndexStep(current: 1, by: 1, count: 3) == 2)
-    }
-
-    @Test func stepBackwardRetreatsOne() {
-        #expect(boardIndexStep(current: 2, by: -1, count: 3) == 1)
-        #expect(boardIndexStep(current: 1, by: -1, count: 3) == 0)
-    }
-
-    @Test func clampsAtUpperEnd() {
-        #expect(boardIndexStep(current: 2, by: 1, count: 3) == 2)
-    }
-
-    @Test func clampsAtLowerEnd() {
-        #expect(boardIndexStep(current: 0, by: -1, count: 3) == 0)
-    }
-
-    @Test func multiStepClamps() {
-        #expect(boardIndexStep(current: 0, by: 5, count: 3) == 2)
-        #expect(boardIndexStep(current: 2, by: -9, count: 3) == 0)
-    }
-
-    @Test func singleBoardStaysAtZero() {
-        #expect(boardIndexStep(current: 0, by: 1, count: 1) == 0)
-    }
-
-    /// Defensive: a zero / negative count never produces a negative index.
-    @Test func emptyCountStaysAtZero() {
-        #expect(boardIndexStep(current: 0, by: 1, count: 0) == 0)
+    @Test("step by ±1, clamped at both ends", arguments: [
+        (current: 0, by: 1, count: 3, expected: 1),   // forward advances one
+        (current: 1, by: 1, count: 3, expected: 2),   // forward advances one
+        (current: 2, by: -1, count: 3, expected: 1),  // backward retreats one
+        (current: 1, by: -1, count: 3, expected: 0),  // backward retreats one
+        (current: 2, by: 1, count: 3, expected: 2),   // clamps at upper end
+        (current: 0, by: -1, count: 3, expected: 0),  // clamps at lower end
+        (current: 0, by: 5, count: 3, expected: 2),   // multi-step clamps
+        (current: 2, by: -9, count: 3, expected: 0),  // multi-step clamps
+        (current: 0, by: 1, count: 1, expected: 0),   // single board stays at zero
+        (current: 0, by: 1, count: 0, expected: 0),   // defensive: zero / negative count never negative
+    ])
+    func step(current: Int, by: Int, count: Int, expected: Int) {
+        #expect(boardIndexStep(current: current, by: by, count: count) == expected)
     }
 }

@@ -6,73 +6,67 @@ import Testing
 /// whitespace now rejected; `.normalized` collapses spaces to `-`).
 struct TagNameTests {
 
-    @Test func stripsLeadingHashAndTrims() {
-        #expect(TagName.sanitized("web") == "web")
-        #expect(TagName.sanitized("  web ") == "web")
-        #expect(TagName.sanitized("#web") == "web")
-        #expect(TagName.sanitized("  # code ") == "code")
+    /// `TagName.sanitized` — strip a leading `#`, trim, then validate. Rejects
+    /// empty, a reserved `_` prefix, delimiter chars (`: , =`), a leading `-`
+    /// (#227: would be mistaken for a flag under the space-separated grammar's
+    /// strict consumption), and internal whitespace (#227: the shell already
+    /// split CLI tokens, so a space inside one is a genuine error — the GUI
+    /// path uses `normalized`). Inner `-` / `_` / `.` and non-ASCII stay legal.
+    /// Each row runs (and reports failures) independently.
+    @Test("sanitized: strip #, trim, then validate", arguments: [
+        // strips leading hash and trims
+        (input: "web", expected: "web"),
+        (input: "  web ", expected: "web"),
+        (input: "#web", expected: "web"),
+        (input: "  # code ", expected: "code"),
+        // rejects empty
+        (input: "", expected: nil),
+        (input: "   ", expected: nil),
+        (input: "#", expected: nil),        // only a hash → empty
+        (input: "#  ", expected: nil),
+        // rejects reserved underscore prefix
+        (input: "_default", expected: nil),
+        (input: "_x", expected: nil),
+        (input: "#_x", expected: nil),      // hash strip then leading _
+        // rejects delimiter chars
+        (input: "a:b", expected: nil),
+        (input: "a,b", expected: nil),
+        (input: "a=b", expected: nil),
+        // #227: rejects leading dash (would be mistaken for a flag)
+        (input: "-foo", expected: nil),
+        (input: "  -foo ", expected: nil),
+        (input: "#-foo", expected: nil),    // hash strip then leading -
+        // #227: rejects internal whitespace (shell already split CLI tokens)
+        (input: "a b", expected: nil),
+        (input: "a\tb", expected: nil),
+        (input: "my tag", expected: nil),
+        // keeps inner non-delimiter characters
+        (input: "my-tag.2", expected: "my-tag.2"),
+        (input: "a_b", expected: "a_b"),    // inner _ is fine
+        (input: "日本語", expected: "日本語"),
+    ])
+    func sanitized(input: String, expected: String?) {
+        #expect(TagName.sanitized(input) == expected)
     }
 
-    @Test func rejectsEmpty() {
-        #expect(TagName.sanitized("") == nil)
-        #expect(TagName.sanitized("   ") == nil)
-        #expect(TagName.sanitized("#") == nil)      // only a hash → empty
-        #expect(TagName.sanitized("#  ") == nil)
-    }
-
-    @Test func rejectsReservedUnderscorePrefix() {
-        #expect(TagName.sanitized("_default") == nil)
-        #expect(TagName.sanitized("_x") == nil)
-        #expect(TagName.sanitized("#_x") == nil)    // hash strip then leading _
-    }
-
-    @Test func rejectsDelimiterChars() {
-        #expect(TagName.sanitized("a:b") == nil)
-        #expect(TagName.sanitized("a,b") == nil)
-        #expect(TagName.sanitized("a=b") == nil)
-    }
-
-    /// #227: a leading `-` would be mistaken for a flag under the
-    /// space-separated grammar's strict consumption, so it's rejected.
-    /// An inner `-` stays legal (see `testKeepsInnerNonDelimiterCharacters`).
-    @Test func rejectsLeadingDash() {
-        #expect(TagName.sanitized("-foo") == nil)
-        #expect(TagName.sanitized("  -foo ") == nil)
-        #expect(TagName.sanitized("#-foo") == nil)  // hash strip then leading -
-    }
-
-    /// #227: internal whitespace is rejected by the strict validator
-    /// (the shell already split CLI tokens, so a space inside one is a
-    /// genuine error). The GUI path uses `normalized` instead.
-    @Test func rejectsInternalWhitespace() {
-        #expect(TagName.sanitized("a b") == nil)
-        #expect(TagName.sanitized("a\tb") == nil)
-        #expect(TagName.sanitized("my tag") == nil)
-    }
-
-    @Test func keepsInnerNonDelimiterCharacters() {
-        #expect(TagName.sanitized("my-tag.2") == "my-tag.2")
-        #expect(TagName.sanitized("a_b") == "a_b")   // inner _ is fine
-        #expect(TagName.sanitized("日本語") == "日本語")
-    }
-
-    /// #227: `normalized` is the lenient variant for free-typed input
-    /// (GUI box, config `[[tag]] name`) — it collapses internal whitespace
-    /// runs to `-` before validating, so "my tag" → "my-tag".
-    @Test func normalizedCollapsesSpacesToDash() {
-        #expect(TagName.normalized("my tag") == "my-tag")
-        #expect(TagName.normalized("  multi   word  name ") ==
-                       "multi-word-name")
-        #expect(TagName.normalized("#my tag") == "my-tag")
-        #expect(TagName.normalized("web") == "web")  // no-op on clean
-    }
-
-    /// `normalized` still rejects what no amount of space-collapsing can
-    /// fix: a delimiter, a leading `_` / `-`, or an empty result.
-    @Test func normalizedStillRejectsHardViolations() {
-        #expect(TagName.normalized("a:b") == nil)
-        #expect(TagName.normalized("_x") == nil)
-        #expect(TagName.normalized("-foo") == nil)
-        #expect(TagName.normalized("   ") == nil)
+    /// #227: `normalized` is the lenient variant for free-typed input (GUI
+    /// box, config `[[tag]] name`) — it collapses internal whitespace runs to
+    /// `-` before validating, so "my tag" → "my-tag". It still rejects what no
+    /// amount of space-collapsing can fix: a delimiter, a leading `_` / `-`, or
+    /// an empty result. Each row reports independently.
+    @Test("normalized: collapse whitespace to dash, then validate", arguments: [
+        // collapses spaces to dash
+        (input: "my tag", expected: "my-tag"),
+        (input: "  multi   word  name ", expected: "multi-word-name"),
+        (input: "#my tag", expected: "my-tag"),
+        (input: "web", expected: "web"),    // no-op on clean
+        // still rejects hard violations
+        (input: "a:b", expected: nil),
+        (input: "_x", expected: nil),
+        (input: "-foo", expected: nil),
+        (input: "   ", expected: nil),
+    ])
+    func normalized(input: String, expected: String?) {
+        #expect(TagName.normalized(input) == expected)
     }
 }

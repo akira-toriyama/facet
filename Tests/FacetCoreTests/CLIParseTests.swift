@@ -9,142 +9,100 @@ struct CLIParseTests {
 
     // MARK: - parseGeomInt
 
-    @Test func parseGeomInt_PlainInteger() {
-        #expect(parseGeomInt("123") == .success(123))
-    }
-
-    @Test func parseGeomInt_NegativeAllowedByDefault() {
-        // --pos-x / --pos-y can legitimately be negative on
-        // multi-monitor setups.
-        #expect(parseGeomInt("-50") == .success(-50))
-    }
-
-    @Test func parseGeomInt_TrimsWhitespace() {
-        #expect(parseGeomInt("  42  ") == .success(42))
-    }
-
-    @Test func parseGeomInt_RejectsNonInteger() {
-        #expect(parseGeomInt("abc") ==
-                       .failure(.notAnInteger(value: "abc")))
-    }
-
-    @Test func parseGeomInt_RejectsEmpty() {
-        #expect(parseGeomInt("") ==
-                       .failure(.notAnInteger(value: "")))
-    }
-
-    @Test func parseGeomInt_RequirePositive_RejectsZero() {
-        #expect(parseGeomInt("0", requirePositive: true) ==
-                       .failure(.notPositive(value: 0)))
-    }
-
-    @Test func parseGeomInt_RequirePositive_RejectsNegative() {
-        #expect(parseGeomInt("-5", requirePositive: true) ==
-                       .failure(.notPositive(value: -5)))
-    }
-
-    @Test func parseGeomInt_RequirePositive_AcceptsPositive() {
-        #expect(parseGeomInt("100", requirePositive: true) ==
-                       .success(100))
+    /// Parse an integer flag value: plain / trimmed / signed, plus the
+    /// `requirePositive` guard that rejects `0` and negatives (width / height).
+    @Test("parseGeomInt: parse, trim, sign, and requirePositive guard",
+          arguments: [
+        (input: "123", requirePositive: false, expected: .success(123)),
+        // --pos-x / --pos-y can legitimately be negative on multi-monitor setups.
+        (input: "-50", requirePositive: false, expected: .success(-50)),
+        (input: "  42  ", requirePositive: false, expected: .success(42)),
+        (input: "abc", requirePositive: false,
+            expected: .failure(.notAnInteger(value: "abc"))),
+        (input: "", requirePositive: false,
+            expected: .failure(.notAnInteger(value: ""))),
+        (input: "0", requirePositive: true,
+            expected: .failure(.notPositive(value: 0))),
+        (input: "-5", requirePositive: true,
+            expected: .failure(.notPositive(value: -5))),
+        (input: "100", requirePositive: true, expected: .success(100)),
+    ] as [(input: String, requirePositive: Bool,
+           expected: Result<Int, CLIParseError>)])
+    func parseGeomIntCases(input: String, requirePositive: Bool,
+                           expected: Result<Int, CLIParseError>) {
+        #expect(parseGeomInt(input, requirePositive: requirePositive) == expected)
     }
 
     // MARK: - canonicalize
 
-    @Test func canonicalize_ExactMatch() {
-        #expect(canonicalize("tree", allowed: ["tree", "grid"]) ==
-                       .success("tree"))
-    }
-
-    @Test func canonicalize_LowercasesInput() {
-        #expect(canonicalize("TREE", allowed: ["tree", "grid"]) ==
-                       .success("tree"))
-    }
-
-    @Test func canonicalize_TrimsWhitespace() {
-        #expect(canonicalize("  grid ", allowed: ["tree", "grid"]) ==
-                       .success("grid"))
-    }
-
-    @Test func canonicalize_RejectsUnknown_ReportsExpected() {
-        #expect(
-            canonicalize("xyz", allowed: ["tree", "grid"]) ==
-            .failure(.unknownValue(value: "xyz",
-                                   expected: ["tree", "grid"])))
+    /// Canonicalise against a fixed allow-list: exact / lowercased / trimmed
+    /// matches succeed; an unknown value rejects with the expected list.
+    @Test("canonicalize: exact/lowercase/trim match; unknown rejects",
+          arguments: [
+        (input: "tree", expected: .success("tree")),
+        (input: "TREE", expected: .success("tree")),
+        (input: "  grid ", expected: .success("grid")),
+        (input: "xyz",
+            expected: .failure(.unknownValue(value: "xyz",
+                                             expected: ["tree", "grid"]))),
+    ] as [(input: String, expected: Result<String, CLIParseError>)])
+    func canonicalizeCases(input: String,
+                           expected: Result<String, CLIParseError>) {
+        #expect(canonicalize(input, allowed: ["tree", "grid"]) == expected)
     }
 
     // MARK: - validateGeom
 
-    @Test func validateGeom_AllNil_None() {
-        #expect(validateGeom(posX: nil, posY: nil,
-                                    width: nil, height: nil) == .none)
-    }
-
-    @Test func validateGeom_AllSet_Complete() {
-        #expect(
-            validateGeom(posX: 100, posY: 200, width: 400, height: 600) ==
-            .complete(x: 100, y: 200, w: 400, h: 600))
-    }
-
-    @Test func validateGeom_OneMissing_Partial() {
-        #expect(
-            validateGeom(posX: 100, posY: 200, width: 400, height: nil) ==
-            .partial(count: 3))
-    }
-
-    @Test func validateGeom_OnlyOne_Partial() {
-        #expect(
-            validateGeom(posX: 100, posY: nil, width: nil, height: nil) ==
-            .partial(count: 1))
+    /// All-or-nothing geometry tuple: none when all nil, complete when all
+    /// four set, partial (with the provided count) otherwise.
+    @Test("validateGeom: none / complete / partial by provided-count",
+          arguments: [
+        (posX: nil, posY: nil, width: nil, height: nil,
+            expected: GeomValidation.none),
+        (posX: 100, posY: 200, width: 400, height: 600,
+            expected: .complete(x: 100, y: 200, w: 400, h: 600)),
+        (posX: 100, posY: 200, width: 400, height: nil,
+            expected: .partial(count: 3)),
+        (posX: 100, posY: nil, width: nil, height: nil,
+            expected: .partial(count: 1)),
+    ] as [(posX: Int?, posY: Int?, width: Int?, height: Int?,
+           expected: GeomValidation)])
+    func validateGeomCases(posX: Int?, posY: Int?, width: Int?, height: Int?,
+                           expected: GeomValidation) {
+        #expect(validateGeom(posX: posX, posY: posY,
+                             width: width, height: height) == expected)
     }
 
     // MARK: - §E validateSectionLabel (loose display-label policy)
 
-    @Test func validateSectionLabel_PlainLabel() {
-        #expect(validateSectionLabel("Web") == .success("Web"))
-    }
-
-    @Test func validateSectionLabel_AllowsSpacesAndPunctuation() {
+    /// §E loose display-label policy: spaces / punctuation / ':' kept
+    /// verbatim; empty is the explicit revert gesture; all-whitespace or ANY
+    /// leading-dash value (flag-guard parity with `parseLensSectionLabel` /
+    /// `CLIName`) rejects; the success value is preserved VERBATIM (untrimmed).
+    @Test("validateSectionLabel: loose accept, empty-revert, reject blank/dash",
+          arguments: [
+        (input: "Web", expected: .success("Web")),
         // Display labels are config strings — spaces / punctuation kept verbatim.
-        #expect(validateSectionLabel("My Lens!") == .success("My Lens!"))
-    }
-
-    @Test func validateSectionLabel_AllowsColonVerbatim() {
-        #expect(validateSectionLabel("with: colon") ==
-                       .success("with: colon"))
-    }
-
-    @Test func validateSectionLabel_EmptyAllowedAsRevertGesture() {
-        // Truly empty = the explicit "revert to number / config label" gesture
-        // the server resolver acts on; allowed (not a typo).
-        #expect(validateSectionLabel("") == .success(""))
-    }
-
-    @Test func validateSectionLabel_RejectsAllWhitespace() {
-        #expect(validateSectionLabel("   ") ==
-                       .failure(.unknownValue(value: "   ", expected: [])))
-    }
-
-    @Test func validateSectionLabel_RejectsLoneDash() {
-        #expect(validateSectionLabel("-") ==
-                       .failure(.unknownValue(value: "-", expected: [])))
-    }
-
-    @Test func validateSectionLabel_RejectsLeadingDashValue() {
-        // ANY leading-dash value is rejected (flag-guard parity with
-        // `parseLensSectionLabel` / `CLIName`): `--rename`'s LABEL is consumed
-        // unconditionally, so a mistyped flag (`--focus`) lands here as the
-        // value — reject it loudly instead of renaming to the flag string.
-        #expect(validateSectionLabel("-x") ==
-                       .failure(.unknownValue(value: "-x", expected: [])))
-        #expect(validateSectionLabel("--focus") ==
-                       .failure(.unknownValue(value: "--focus", expected: [])))
-    }
-
-    @Test func validateSectionLabel_PreservesLeadingTrailingSpacesVerbatim() {
-        // The success value is kept VERBATIM (untrimmed) — the trim is only for
-        // the reject guard. Normalization (the actual trim of a stored label)
-        // happens at the server's store site, not here.
-        #expect(validateSectionLabel(" Web ") == .success(" Web "))
+        (input: "My Lens!", expected: .success("My Lens!")),
+        (input: "with: colon", expected: .success("with: colon")),
+        // Truly empty = the explicit "revert to number / config label" gesture.
+        (input: "", expected: .success("")),
+        (input: "   ",
+            expected: .failure(.unknownValue(value: "   ", expected: []))),
+        (input: "-",
+            expected: .failure(.unknownValue(value: "-", expected: []))),
+        // ANY leading-dash value is rejected (a mistyped flag `--focus` lands
+        // here as the consumed LABEL value — reject it loudly).
+        (input: "-x",
+            expected: .failure(.unknownValue(value: "-x", expected: []))),
+        (input: "--focus",
+            expected: .failure(.unknownValue(value: "--focus", expected: []))),
+        // Success value kept VERBATIM (untrimmed); the trim is only the guard.
+        (input: " Web ", expected: .success(" Web ")),
+    ] as [(input: String, expected: Result<String, CLIParseError>)])
+    func validateSectionLabelCases(input: String,
+                                   expected: Result<String, CLIParseError>) {
+        #expect(validateSectionLabel(input) == expected)
     }
 
     // MARK: - §E section-rename wire encode / decode round-trip
@@ -154,51 +112,44 @@ struct CLIParseTests {
                        "section-rename:2:Web")
     }
 
-    @Test func decodeSectionRename_RoundTrip() {
-        let wire = encodeSectionRename(index: 3, label: "My Lens")
+    /// encode → decode round-trip: the label half may contain ':' — split
+    /// ONCE so it stays intact.
+    @Test("decodeSectionRename: encode→decode round-trips (label keeps ':')",
+          arguments: [
+        (index: 3, label: "My Lens"),
+        (index: 1, label: "with: colon"),
+    ])
+    func decodeSectionRenameRoundTrip(index: Int, label: String) {
+        let wire = encodeSectionRename(index: index, label: label)
         let got = decodeSectionRename(wire)
-        #expect(got?.index == 3)
-        #expect(got?.label == "My Lens")
+        #expect(got?.index == index)
+        #expect(got?.label == label)
     }
 
-    @Test func decodeSectionRename_LabelWithColonSurvivesVerbatim() {
-        // The label half may contain ':' — split ONCE so it stays intact.
-        let wire = encodeSectionRename(index: 1, label: "with: colon")
+    /// Decode literal bodies: empty label decodes; a prefix-less body is
+    /// treated as the whole payload (the dispatch passes it through).
+    @Test("decodeSectionRename: literal bodies (empty label / prefix-less)",
+          arguments: [
+        (wire: "section-rename:5:", index: 5, label: ""),
+        (wire: "4:Mail", index: 4, label: "Mail"),
+    ])
+    func decodeSectionRenameLiteral(wire: String, index: Int, label: String) {
         let got = decodeSectionRename(wire)
-        #expect(got?.index == 1)
-        #expect(got?.label == "with: colon")
+        #expect(got?.index == index)
+        #expect(got?.label == label)
     }
 
-    @Test func decodeSectionRename_EmptyLabelDecodes() {
-        let got = decodeSectionRename("section-rename:5:")
-        #expect(got?.index == 5)
-        #expect(got?.label == "")
-    }
-
-    @Test func decodeSectionRename_AcceptsBodyWithoutPrefix() {
-        // The decoder strips the prefix if present, else treats the whole
-        // string as the body (the dispatch passes the full payload).
-        let got = decodeSectionRename("4:Mail")
-        #expect(got?.index == 4)
-        #expect(got?.label == "Mail")
-    }
-
-    @Test func decodeSectionRename_RejectsNonIntegerIndex() {
-        #expect(decodeSectionRename("section-rename:x:Web") == nil)
-    }
-
-    @Test func decodeSectionRename_RejectsZeroIndex() {
-        #expect(decodeSectionRename("section-rename:0:Web") == nil)
-    }
-
-    @Test func decodeSectionRename_RejectsNegativeIndex() {
-        // "-1" parses as Int but is < 1; the leading-dash split keeps "-1"
-        // whole (one ':' only), so it's the index half → rejected.
-        #expect(decodeSectionRename("section-rename:-1:Web") == nil)
-    }
-
-    @Test func decodeSectionRename_RejectsMissingColon() {
-        #expect(decodeSectionRename("section-rename:2") == nil)
+    /// Rejects (returns nil): non-integer / zero / negative index (the
+    /// leading-dash split keeps "-1" whole → index half → rejected), and a
+    /// missing second colon.
+    @Test("decodeSectionRename: rejects (returns nil)", arguments: [
+        "section-rename:x:Web",
+        "section-rename:0:Web",
+        "section-rename:-1:Web",
+        "section-rename:2",
+    ])
+    func decodeSectionRenameRejects(wire: String) {
+        #expect(decodeSectionRename(wire) == nil)
     }
 
     // MARK: - t-0020 section-match wire encode / decode round-trip
@@ -208,49 +159,43 @@ struct CLIParseTests {
                        "section-match:2:tag~=web")
     }
 
-    @Test func decodeSectionMatch_RoundTrip() {
-        let wire = encodeSectionMatch(index: 3, predicate: "app=Safari")
+    /// encode → decode round-trip: a predicate half may contain ':' (e.g. a
+    /// quoted value) — split ONCE so it stays intact.
+    @Test("decodeSectionMatch: encode→decode round-trips (predicate keeps ':')",
+          arguments: [
+        (index: 3, predicate: "app=Safari"),
+        (index: 1, predicate: "title~=\"a: b\""),
+    ])
+    func decodeSectionMatchRoundTrip(index: Int, predicate: String) {
+        let wire = encodeSectionMatch(index: index, predicate: predicate)
         let got = decodeSectionMatch(wire)
-        #expect(got?.index == 3)
-        #expect(got?.predicate == "app=Safari")
+        #expect(got?.index == index)
+        #expect(got?.predicate == predicate)
     }
 
-    @Test func decodeSectionMatch_PredicateWithColonSurvivesVerbatim() {
-        // A predicate half may contain ':' (e.g. a quoted value) — split ONCE
-        // so it stays intact.
-        let wire = encodeSectionMatch(index: 1, predicate: "title~=\"a: b\"")
+    /// Decode literal bodies: empty predicate is a valid REVERT gesture (the
+    /// caller deletes the override) and must round-trip; a prefix-less body is
+    /// treated as the whole payload.
+    @Test("decodeSectionMatch: literal bodies (empty predicate / prefix-less)",
+          arguments: [
+        (wire: "section-match:5:", index: 5, predicate: ""),
+        (wire: "4:tag~=mail", index: 4, predicate: "tag~=mail"),
+    ])
+    func decodeSectionMatchLiteral(wire: String, index: Int, predicate: String) {
         let got = decodeSectionMatch(wire)
-        #expect(got?.index == 1)
-        #expect(got?.predicate == "title~=\"a: b\"")
+        #expect(got?.index == index)
+        #expect(got?.predicate == predicate)
     }
 
-    @Test func decodeSectionMatch_EmptyPredicateDecodes() {
-        // Empty predicate is a valid REVERT gesture (the caller deletes the
-        // override); the decoder must round-trip it, not reject it.
-        let got = decodeSectionMatch("section-match:5:")
-        #expect(got?.index == 5)
-        #expect(got?.predicate == "")
-    }
-
-    @Test func decodeSectionMatch_AcceptsBodyWithoutPrefix() {
-        let got = decodeSectionMatch("4:tag~=mail")
-        #expect(got?.index == 4)
-        #expect(got?.predicate == "tag~=mail")
-    }
-
-    @Test func decodeSectionMatch_RejectsNonIntegerIndex() {
-        #expect(decodeSectionMatch("section-match:x:tag~=web") == nil)
-    }
-
-    @Test func decodeSectionMatch_RejectsZeroIndex() {
-        #expect(decodeSectionMatch("section-match:0:tag~=web") == nil)
-    }
-
-    @Test func decodeSectionMatch_RejectsNegativeIndex() {
-        #expect(decodeSectionMatch("section-match:-1:tag~=web") == nil)
-    }
-
-    @Test func decodeSectionMatch_RejectsMissingColon() {
-        #expect(decodeSectionMatch("section-match:2") == nil)
+    /// Rejects (returns nil): non-integer / zero / negative index, and a
+    /// missing second colon.
+    @Test("decodeSectionMatch: rejects (returns nil)", arguments: [
+        "section-match:x:tag~=web",
+        "section-match:0:tag~=web",
+        "section-match:-1:tag~=web",
+        "section-match:2",
+    ])
+    func decodeSectionMatchRejects(wire: String) {
+        #expect(decodeSectionMatch(wire) == nil)
     }
 }

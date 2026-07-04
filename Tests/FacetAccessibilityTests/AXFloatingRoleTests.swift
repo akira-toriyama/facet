@@ -8,36 +8,22 @@ import ApplicationServices
 /// are the ones the source matches; everything else (incl. nil) tiles.
 struct AXFloatingRoleTests {
 
-    @Test func sheetAndDrawerRolesFloat() {
-        #expect(AXGeom.isFloating(role: kAXSheetRole as String,
-                                  subrole: nil))
-        #expect(AXGeom.isFloating(role: kAXDrawerRole as String,
-                                  subrole: nil))
-    }
-
-    @Test func floatingSubrolesFloat() {
-        for sub in [kAXFloatingWindowSubrole as String,
-                    kAXSystemDialogSubrole as String,
-                    kAXSystemFloatingWindowSubrole as String,
-                    kAXDialogSubrole as String] {
-            #expect(AXGeom.isFloating(role: nil, subrole: sub),
-                    "subrole \(sub) should float")
-        }
-    }
-
-    @Test func standardWindowDoesNotFloat() {
+    @Test("floats iff role/subrole matches a floating constant", arguments: [
+        // The floating constants the source matches: two roles…
+        (role: kAXSheetRole as String, subrole: nil, expected: true),
+        (role: kAXDrawerRole as String, subrole: nil, expected: true),
+        // …and four subroles.
+        (role: nil, subrole: kAXFloatingWindowSubrole as String, expected: true),
+        (role: nil, subrole: kAXSystemDialogSubrole as String, expected: true),
+        (role: nil, subrole: kAXSystemFloatingWindowSubrole as String, expected: true),
+        (role: nil, subrole: kAXDialogSubrole as String, expected: true),
         // A normal tiled window: role "AXWindow", subrole
         // "AXStandardWindow" — neither is in the floating set.
-        #expect(!AXGeom.isFloating(role: "AXWindow",
-                                   subrole: "AXStandardWindow"))
-    }
-
-    @Test func nilRoleAndSubroleDoesNotFloat() {
-        #expect(!AXGeom.isFloating(role: nil, subrole: nil))
-    }
-
-    @Test func unknownStringsDoNotFloat() {
-        #expect(!AXGeom.isFloating(role: "AXSomethingElse",
-                                   subrole: "AXWeirdSubrole"))
+        (role: "AXWindow", subrole: "AXStandardWindow", expected: false),
+        (role: nil, subrole: nil, expected: false),
+        (role: "AXSomethingElse", subrole: "AXWeirdSubrole", expected: false),
+    ] as [(role: String?, subrole: String?, expected: Bool)])
+    func isFloating(role: String?, subrole: String?, expected: Bool) {
+        #expect(AXGeom.isFloating(role: role, subrole: subrole) == expected)
     }
 }
