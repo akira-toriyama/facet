@@ -11,6 +11,11 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege, made explicit — closes zizmor's excessive-permissions
+# finding ahead of the fleet-wide zizmor gate (akira-toriyama/.github t-qbp1).
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-15
