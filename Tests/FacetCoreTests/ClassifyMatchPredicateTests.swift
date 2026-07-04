@@ -9,41 +9,28 @@ import Testing
 /// parse + unknown-field handling so the editor never disagrees with the seam.
 struct ClassifyMatchPredicateTests {
 
-    @Test func knownFieldComparisonIsOK() {
-        #expect(classifyMatchPredicate("app~=Chrome") == .ok)
-    }
-
-    @Test func knownPresenceAtomIsOK() {
-        #expect(classifyMatchPredicate("floating") == .ok)
-        #expect(classifyMatchPredicate("not workspace") == .ok)
-    }
-
-    @Test func emptyPredicateIsOK() {
+    /// Known fields / valid syntax → `.ok`; a parseable predicate that
+    /// references unknown field name(s) → a soft `.unknownField([sorted])`
+    /// warning (valid-but-matches-nothing). Malformed SYNTAX is `.malformed`
+    /// and stays in the two `guard case` tests below (not a clean equality).
+    @Test("ok / unknownField verdicts", arguments: [
+        (predicate: "app~=Chrome", expected: MatchPredicateStatus.ok),  // known field comparison
+        (predicate: "floating", expected: .ok),          // known presence atom
+        (predicate: "not workspace", expected: .ok),      // known presence atom (negated)
         // parse("") == .success(.all) → no fields referenced → the revert gesture.
-        #expect(classifyMatchPredicate("") == .ok)
-    }
-
-    @Test func bareUnknownWordWarnsNotErrors() {
+        (predicate: "", expected: .ok),
         // A bare word is a field-PRESENCE atom; `abc` is an unknown field, so the
         // predicate is valid (commits) but matches nothing — a warning, never an
         // error. This is the exact case the user hit ("abc doesn't error").
-        #expect(classifyMatchPredicate("abc") == .unknownField(["abc"]))
-    }
-
-    @Test func unknownFieldInComparisonWarns() {
-        #expect(classifyMatchPredicate("foo=bar") == .unknownField(["foo"]))
-    }
-
-    @Test func multipleUnknownFieldsAreSortedAndDeduped() {
+        (predicate: "abc", expected: .unknownField(["abc"])),
+        (predicate: "foo=bar", expected: .unknownField(["foo"])),  // unknown field in comparison
         // fieldsReferenced is a Set → the message order must be deterministic.
-        #expect(classifyMatchPredicate("zed or abc or abc") ==
-                       .unknownField(["abc", "zed"]))
-    }
-
-    @Test func knownAndUnknownMixReportsOnlyUnknown() {
+        (predicate: "zed or abc or abc", expected: .unknownField(["abc", "zed"])),
         // `app` known, `bogus` unknown → warn on `bogus` alone.
-        #expect(classifyMatchPredicate("app=Safari or bogus") ==
-                       .unknownField(["bogus"]))
+        (predicate: "app=Safari or bogus", expected: .unknownField(["bogus"])),
+    ])
+    func okOrUnknownFieldVerdict(predicate: String, expected: MatchPredicateStatus) {
+        #expect(classifyMatchPredicate(predicate) == expected)
     }
 
     @Test func malformedSyntaxIsError() {
