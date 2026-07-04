@@ -16,6 +16,11 @@ on:
         required: false
         default: ""
 
+# Least privilege, made explicit — closes zizmor's excessive-permissions
+# finding ahead of the fleet-wide zizmor gate (akira-toriyama/.github t-qbp1).
+permissions:
+  contents: read
+
 jobs:
   bump:
     uses: akira-toriyama/.github/.github/workflows/update-tap.yml@v1
