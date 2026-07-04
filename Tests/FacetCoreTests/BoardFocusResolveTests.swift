@@ -14,85 +14,31 @@ import Testing
 /// CI-only (CLT can't run `swift test`).
 struct BoardFocusResolveTests {
 
-    // MARK: - index addressing
-
-    @Test func indexResolvesToZeroBasedBoard() {
-        #expect(resolveBoardFocus("index:2", boardLabels: ["A", "B", "C"]) ==
-                       .resolved(boardIndex: 1))
-    }
-
-    @Test func indexOneResolvesToFirstBoard() {
-        #expect(resolveBoardFocus("index:1", boardLabels: ["A", "B"]) ==
-                       .resolved(boardIndex: 0))
-    }
-
-    /// An explicit out-of-range index is REJECTED loudly (not clamped) — the
-    /// CLI carries user intent; a typo should surface, not silently land on the
-    /// last board the way the display selector self-heals a stale state.
-    @Test func indexAboveCountIsOutOfRange() {
-        #expect(resolveBoardFocus("index:4", boardLabels: ["A", "B", "C"]) ==
-                       .outOfRange(requested: 4, count: 3))
-    }
-
-    /// A non-positive index (defensive — the client only emits `index:N` for
-    /// N > 0) is out of range, mirroring `dispatchSectionFocus`'s `n >= 1` guard.
-    @Test func indexZeroIsOutOfRange() {
-        #expect(resolveBoardFocus("index:0", boardLabels: ["A", "B"]) ==
-                       .outOfRange(requested: 0, count: 2))
-    }
-
-    // MARK: - label addressing
-
-    @Test func labelResolvesToItsBoard() {
-        #expect(resolveBoardFocus("label:Views",
-                                         boardLabels: ["Spaces", "Views"]) ==
-                       .resolved(boardIndex: 1))
-    }
-
-    @Test func unknownLabelIsRejected() {
-        #expect(resolveBoardFocus("label:Nope",
-                                         boardLabels: ["Spaces", "Views"]) ==
-                       .unknownLabel("Nope"))
-    }
-
-    /// Empty-labeled boards are index-addressed only — a label lookup never
-    /// matches them (mirrors the config rule: name resolution targets only
-    /// labeled boards; unnamed ones are index-addressed).
-    @Test func labelSkipsEmptyLabeledBoards() {
-        #expect(resolveBoardFocus("label:Views",
-                                         boardLabels: ["", "Views"]) ==
-                       .resolved(boardIndex: 1))
-        #expect(resolveBoardFocus("label:",
-                                         boardLabels: ["", "Views"]) ==
-                       .unknownLabel(""))
-    }
-
-    // MARK: - flat-config degrade (no boards = one implicit board)
-
-    @Test func flatConfigFocusOneIsIdempotent() {
-        #expect(resolveBoardFocus("index:1", boardLabels: []) ==
-                       .resolved(boardIndex: 0))
-    }
-
-    @Test func flatConfigFocusTwoIsOutOfRange() {
-        #expect(resolveBoardFocus("index:2", boardLabels: []) ==
-                       .outOfRange(requested: 2, count: 1))
-    }
-
-    @Test func flatConfigLabelIsUnknown() {
-        #expect(resolveBoardFocus("label:Spaces", boardLabels: []) ==
-                       .unknownLabel("Spaces"))
-    }
-
-    // MARK: - malformed
-
-    @Test func missingPrefixIsMalformed() {
-        #expect(resolveBoardFocus("Spaces", boardLabels: ["A"]) ==
-                       .malformed)
-    }
-
-    @Test func nonIntegerIndexIsMalformed() {
-        #expect(resolveBoardFocus("index:two", boardLabels: ["A", "B"]) ==
-                       .malformed)
+    /// index addressing (out-of-range REJECTED loudly, not clamped — the CLI
+    /// carries user intent; a non-positive index is defensively out-of-range),
+    /// label addressing (empty-labeled boards are index-addressed only, so a
+    /// label lookup never matches them), the flat-config degrade (empty
+    /// `boardLabels` = one implicit board, index 1 only), and malformed payloads.
+    @Test("resolveBoardFocus: index / label / flat-degrade / malformed", arguments: [
+        // index addressing
+        (payload: "index:2", boardLabels: ["A", "B", "C"], expected: .resolved(boardIndex: 1)),
+        (payload: "index:1", boardLabels: ["A", "B"], expected: .resolved(boardIndex: 0)),
+        (payload: "index:4", boardLabels: ["A", "B", "C"], expected: .outOfRange(requested: 4, count: 3)),  // reject, don't clamp
+        (payload: "index:0", boardLabels: ["A", "B"], expected: .outOfRange(requested: 0, count: 2)),  // non-positive is out of range
+        // label addressing
+        (payload: "label:Views", boardLabels: ["Spaces", "Views"], expected: .resolved(boardIndex: 1)),
+        (payload: "label:Nope", boardLabels: ["Spaces", "Views"], expected: .unknownLabel("Nope")),
+        (payload: "label:Views", boardLabels: ["", "Views"], expected: .resolved(boardIndex: 1)),  // empty-labeled board is skipped
+        (payload: "label:", boardLabels: ["", "Views"], expected: .unknownLabel("")),  // a label lookup never matches an empty label
+        // flat-config degrade (no boards = one implicit board)
+        (payload: "index:1", boardLabels: [], expected: .resolved(boardIndex: 0)),  // flat --focus 1 is idempotent
+        (payload: "index:2", boardLabels: [], expected: .outOfRange(requested: 2, count: 1)),
+        (payload: "label:Spaces", boardLabels: [], expected: .unknownLabel("Spaces")),
+        // malformed
+        (payload: "Spaces", boardLabels: ["A"], expected: .malformed),  // missing prefix
+        (payload: "index:two", boardLabels: ["A", "B"], expected: .malformed),  // non-integer index
+    ] as [(payload: String, boardLabels: [String], expected: BoardFocusResolution)])
+    func resolve(payload: String, boardLabels: [String], expected: BoardFocusResolution) {
+        #expect(resolveBoardFocus(payload, boardLabels: boardLabels) == expected)
     }
 }
