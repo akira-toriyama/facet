@@ -1,0 +1,17 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/workflows/zizmor.yml
+# Pairs with fleet/zizmor-config.yml → .github/zizmor.yml (the unpinned-uses policy
+# the gate reads). The zizmor version + action SHA are pinned once in the reusable
+# below, so this caller carries none — nothing here for a per-repo Dependabot to bump.
+name: zizmor
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    uses: akira-toriyama/.github/.github/workflows/zizmor.yml@v1
