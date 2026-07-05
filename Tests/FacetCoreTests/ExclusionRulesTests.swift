@@ -66,6 +66,23 @@ struct ExclusionRulesTests {
         #expect(r2.action(for: probe(bundle: "com.google.Chrome")) == .ignore)
     }
 
+    @Test func manageActionReturnedAndWinsFirstMatch() {
+        // `.manage` is the inverse escape hatch — force-tile a window the
+        // allowlist would otherwise float/ignore. Existing policy tests only
+        // ever produce .float/.ignore, so pin that action(for:) returns
+        // .manage AND that its first-match-wins precedence beats a later
+        // .ignore. A refactor special-casing/filtering .manage out of
+        // action(for:) would break the feature silently.
+        let r = ExclusionRules([ExclusionRule(app: "Chrome", action: .manage)])
+        #expect(r.action(for: probe(bundle: "com.google.Chrome")) == .manage)
+        // First-match-wins: a leading .manage beats a later .ignore.
+        let r2 = ExclusionRules([
+            ExclusionRule(app: "Chrome", action: .manage),
+            ExclusionRule(app: "Chrome", action: .ignore),
+        ])
+        #expect(r2.action(for: probe(bundle: "com.google.Chrome")) == .manage)
+    }
+
     @Test func roleAndSubroleExactMatch() {
         let r = ExclusionRules([
             ExclusionRule(subrole: "AXDialog", action: .float),

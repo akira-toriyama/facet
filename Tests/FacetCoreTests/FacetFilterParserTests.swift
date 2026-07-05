@@ -278,6 +278,21 @@ struct FacetFilterParserTests {
         #expect(e.message.contains("expected a field name"), "\(e.message)")
     }
 
+    @Test func leadingOperatorWhereFieldExpected() {
+        // A stray leading operator (a common typo) where parseAtom expects a
+        // field name: the guard's `.map` branch fires and `unexpected()` hits
+        // its non-`.word` fallback ("unexpected token"). Pins both the caret
+        // offset (0, under the operator) and the composed message for the
+        // present-but-not-a-word branch — the one parseAtom path with no other
+        // coverage.
+        let s = "=tag"
+        let e = error(s)
+        #expect(e.offset == 0)
+        #expect(e.message.contains("expected a field name"), "\(e.message)")
+        #expect(e.message == "expected a field name, found unexpected token",
+                "\(e.message)")
+    }
+
     @Test func implicitAndIsRejected() {
         // No implicit space-AND: two adjacent atoms are a syntax error.
         let s = "a~=1 b~=2"
