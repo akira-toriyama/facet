@@ -404,6 +404,46 @@ struct SectionDecodeTests {
         #expect(first[1]?.map(\.label) == ["ZeroPad", "Plain"])
     }
 
+    /// t-hdxb B4: when two DISTINCT-label spellings fold into one ordinal, each
+    /// surviving origin keeps its OWN raw header spelling + its per-spelling
+    /// `rawOrdinal` — the merge must NOT re-index to a global ordinal or
+    /// normalize the header. Here `desktop.1` (Plain) and `desktop.01` (Zero)
+    /// both land in bucket 1; sorted header order ("desktop.01.section" <
+    /// "desktop.1.section") makes the zero-padded spelling `declOrder` 0. The
+    /// LOAD-BEARING pin: BOTH `rawOrdinal` are 0 (each is row 0 of its own
+    /// spelling) yet the two `headerName` values DIFFER. If the merge assigned a
+    /// global rawOrdinal or a normalized headerName, the snapshot writer would
+    /// replay the wrong element and a rename/match on the folded section would
+    /// edit the WRONG `[[desktop.N.section]]` block. (The label-only merge test
+    /// above can't catch this; snapshot tests use a single spelling.)
+    @Test func bothSurvivingSpellingsKeepOwnHeaderAndRawOrdinal() {
+        let text = """
+        [[desktop.1.section]]
+        type = "lens"
+        label = "Plain"
+        match = 'a'
+        [[desktop.01.section]]
+        type = "lens"
+        label = "Zero"
+        match = 'b'
+        """
+        let origins = FacetConfig.decodeDesktopSectionOrigins(
+            fromTOML: text, log: false)
+        #expect(origins[1]?.count == 2)
+        // Sorted header order: "desktop.01.section" < "desktop.1.section".
+        #expect(origins[1]?[0].section.label == "Zero")
+        #expect(origins[1]?[0].declOrder == 0)
+        #expect(origins[1]?[0].headerName == "desktop.01.section")
+        #expect(origins[1]?[0].rawOrdinal == 0)
+        #expect(origins[1]?[1].section.label == "Plain")
+        #expect(origins[1]?[1].declOrder == 1)
+        #expect(origins[1]?[1].headerName == "desktop.1.section")
+        #expect(origins[1]?[1].rawOrdinal == 0)
+        // LOAD-BEARING: both rawOrdinal == 0, yet the headers DIFFER.
+        #expect(origins[1]?[0].rawOrdinal == origins[1]?[1].rawOrdinal)
+        #expect(origins[1]?[0].headerName != origins[1]?[1].headerName)
+    }
+
     @Test func noSectionsAtAll() {
         #expect(FacetConfig.decodeDesktopSectionSections(
             fromTOML: "[desktop.1]\n1 = { name = \"Dev\" }\n").isEmpty)

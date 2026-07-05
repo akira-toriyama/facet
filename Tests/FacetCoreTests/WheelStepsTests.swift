@@ -48,6 +48,19 @@ struct WheelStepsTests {
         #expect(accum == -10, "sub-threshold travel is banked, not stepped")
     }
 
+    /// A delta EXACTLY equal to the threshold drains one step and leaves the
+    /// accumulator at 0. Pins the `while abs(accum) >= threshold` boundary:
+    /// flipping `>=` to `>` would make an exact-threshold gesture return 0 (no
+    /// board switch). The other precise rows only exercise sub-threshold /
+    /// non-exact residuals, so this is the one that would catch that off-by-one.
+    @Test func exactThresholdYieldsOneStepAndDrainsToZero() {
+        var accum: CGFloat = 0
+        #expect(
+            wheelSteps(deltaY: -14, accum: &accum, threshold: 14,
+                       precise: true, gestureBegan: false) == 1)
+        #expect(accum == 0, "an exact-threshold delta drains fully, no remainder")
+    }
+
     @Test func preciseLeftoverCarriesToNextCall() {
         var accum: CGFloat = -10            // banked from a previous call
         #expect(

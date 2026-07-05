@@ -134,6 +134,17 @@ struct FacetFilterRoundTripTests {
         assertRoundTrips("title*=\"a(b\"")
     }
 
+    @Test func operatorLeadCharInValueForcesQuoting() {
+        // A value carrying an operator-lead char (`= ~ ^ $ * |`) with NO
+        // whitespace/paren/quote is quoted via `quote()`'s 4th
+        // (`operatorLeads.contains`) OR arm: `a=b` must render `title="a=b"`,
+        // not the bareword `title=a=b` (the `=` would re-lex mid-value into a
+        // broken predicate). Pins that arm's contribution to the parse↔
+        // description inverse.
+        #expect(serialized("title=\"a=b\"") == "title=\"a=b\"")
+        assertRoundTrips("title=\"a=b\"")
+    }
+
     // MARK: - documented NON-round-tripping forms
 
     @Test func notAllRendersBareNotAndCannotBeRecovered() {

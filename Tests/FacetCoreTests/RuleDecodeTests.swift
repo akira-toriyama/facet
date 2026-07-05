@@ -39,6 +39,19 @@ struct RuleDecodeTests {
         ])
     }
 
+    @Test func emptyWorkspaceOpDroppedSiblingSurvives() {
+        // `ApplyOp.list` guards `!ws.isEmpty`: an empty `workspace = ""`
+        // emits NO `.setWorkspace`, while a sibling op still survives. Pins
+        // the guard directly — a regression that emitted `.setWorkspace("")`
+        // in a `[[rule]]` apply would mis-route an adopted window to an
+        // empty-named workspace. (The lens tags-only sanitizer drops ALL
+        // non-tag ops, so it can't distinguish this guard.)
+        let ops = ApplyOp.list(from: .table([
+            "workspace": .string(""), "floating": .bool(true),
+        ]))
+        #expect(ops == [.setFloating(true)])
+    }
+
     @Test func dropsRuleWithNoMatch() {
         let toml = """
         [[rule]]

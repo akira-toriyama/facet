@@ -50,6 +50,27 @@ struct WindowMatcherTests {
         #expect(WindowMatcher(app: "^$").matches(probe(bundleId: nil)))
     }
 
+    /// The app/title regex is case-SENSITIVE: `range(of:options:.regularExpression)`
+    /// is called with NO `.caseInsensitive` option, so a lowercase pattern
+    /// misses a capitalized subject. Case-insensitivity is opt-in only via an
+    /// inline `(?i)` flag. This deliberately diverges from `FacetFilter`, whose
+    /// compare is case-insensitive by default — pins that a "harmonizing"
+    /// regression adding `.caseInsensitive` would silently change which windows
+    /// `[[exclude]]` rules catch. (`appRegexIsSearchNotAnchored` only uses
+    /// same-case inputs, so it can't detect a case-fold regression.)
+    @Test func regexIsCaseSensitiveUnlessInlineFlag() {
+        // lowercase pattern does NOT match a capital-S bundle id / title
+        #expect(!WindowMatcher(app: "safari")
+            .matches(probe(bundleId: "com.apple.Safari")))
+        #expect(!WindowMatcher(title: "inbox").matches(probe(title: "Inbox")))
+        // inline (?i) flag opts into case-insensitivity
+        #expect(WindowMatcher(app: "(?i)safari")
+            .matches(probe(bundleId: "com.apple.Safari")))
+        // directly through the static helper
+        #expect(!WindowMatcher.regexMatches("safari", "com.apple.Safari"))
+        #expect(WindowMatcher.regexMatches("(?i)safari", "com.apple.Safari"))
+    }
+
     // MARK: - title (regex; empty title matched by ^$)
 
     @Test func titleRegexSubstring() {

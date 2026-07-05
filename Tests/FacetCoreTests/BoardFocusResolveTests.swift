@@ -41,4 +41,19 @@ struct BoardFocusResolveTests {
     func resolve(payload: String, boardLabels: [String], expected: BoardFocusResolution) {
         #expect(resolveBoardFocus(payload, boardLabels: boardLabels) == expected)
     }
+
+    /// Label lookup is VERBATIM (`!$0.isEmpty && $0 == label`), DELIBERATELY
+    /// unlike `canonicalize`, which lowercases + trims. A wrong-case `views`
+    /// must NOT match `Views`, and a trailing space in `Views ` must NOT be
+    /// trimmed away — both fail loudly with the label kept exactly as typed.
+    /// Pins the CLI typo-fails-loudly contract: a plausible "be forgiving"
+    /// `.lowercased()` / `.trimmingCharacters` change would pass every row in
+    /// `resolve` above yet silently switch a board on a typo.
+    @Test("resolveBoardFocus: label lookup is case- and whitespace-verbatim", arguments: [
+        (payload: "label:views", boardLabels: ["Spaces", "Views"], expected: .unknownLabel("views")),  // case mismatch, no lowercasing
+        (payload: "label:Views ", boardLabels: ["Views"], expected: .unknownLabel("Views ")),  // trailing space kept, not trimmed
+    ] as [(payload: String, boardLabels: [String], expected: BoardFocusResolution)])
+    func labelLookupIsCaseAndWhitespaceVerbatim(payload: String, boardLabels: [String], expected: BoardFocusResolution) {
+        #expect(resolveBoardFocus(payload, boardLabels: boardLabels) == expected)
+    }
 }

@@ -58,6 +58,23 @@ struct MasterCenterLayoutTests {
         #expect(f[wid(5)] == CGRect(x: 0, y: 500, width: 400, height: 500))
     }
 
+    /// Odd stack count fills the two side columns asymmetrically:
+    /// rightCount = (stack+1)/2 gives the right column one MORE window
+    /// than the left, so the right rows are shorter than the single
+    /// full-height left row. Regression pins the unequal per-side row
+    /// heights (both sides non-empty, different counts).
+    @Test func oddStackAsymmetricSideColumns() {
+        // 1 master + 3 stack → rightCount=2 (wid2,wid3), left=1 (wid4).
+        let f = cm.frames(order: [wid(1), wid(2), wid(3), wid(4)],
+                          focused: nil,
+                          params: LayoutParams(masterRatio: 0.5),
+                          in: screen)
+        #expect(f[wid(1)] == CGRect(x: 400, y: 0, width: 800, height: 1000))
+        #expect(f[wid(4)] == CGRect(x: 0, y: 0, width: 400, height: 1000))
+        #expect(f[wid(2)] == CGRect(x: 1200, y: 0, width: 400, height: 500))
+        #expect(f[wid(3)] == CGRect(x: 1200, y: 500, width: 400, height: 500))
+    }
+
     @Test func masterRatioWidensCenter() {
         // ratio 0.6 → sides 320, center 960.
         let f = cm.frames(order: [wid(1), wid(2), wid(3)], focused: nil,

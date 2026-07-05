@@ -66,6 +66,17 @@ struct SectionOrderTests {
         }
     }
 
+    /// First-occurrence-wins for a DUPLICATED override id: the rank map keeps
+    /// the id's FIRST position (`where rank[key] == nil`), so `["ws:1","ws:0",
+    /// "ws:1"]` ranks ws:1→0, ws:0→1 and ws:1 precedes ws:0. Pins the ORDER
+    /// (not just the multiset) that `outputIsAlwaysAPermutation`'s duplicate
+    /// case leaves unchecked — a last-wins regression would flip these two.
+    @Test func duplicateOverrideIdKeepsFirstOccurrencePosition() {
+        let s = base.map(sec)
+        #expect(ids(SectionOrder.apply(["ws:1", "ws:0", "ws:1"], to: s)) ==
+                       ["ws:1", "ws:0", "section:1:Web", "section:3:Code"])
+    }
+
     // MARK: - applyWorkspaces (degrade path, keyed by ws:<index>)
 
     @Test func applyWorkspacesKeyedByWireIndex() {
@@ -114,6 +125,16 @@ struct SectionOrderTests {
     @Test func boundaryPastEndClampsToTail() {
         #expect(SectionOrder.reorder(cur, move: "A", toBoundary: 99) ==
                        ["B", "C", "D", "A"])
+    }
+
+    /// A NEGATIVE (below-range) boundary clamps to the front via `max(0, …)`,
+    /// never traps on an insert-at-negative-index. C (idx 2) → boundary -5:
+    /// from < -5 is false (no self-shift), insert clamps -5→0, C lands first.
+    /// The upper clamp is pinned by `boundaryPastEndClampsToTail`; this pins
+    /// the symmetric lower clamp the contract promises.
+    @Test func negativeBoundaryClampsToFront() {
+        #expect(SectionOrder.reorder(cur, move: "C", toBoundary: -5) ==
+                       ["C", "A", "B", "D"])
     }
 
     // MARK: - keyboard header-reorder boundary contract

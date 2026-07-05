@@ -1,0 +1,18 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it. Synced to:
+# .github/zizmor.yml — the policy the reusable zizmor gate reads (fleet/zizmor.yml →
+# .github/workflows/zizmor.yml passes `config: .github/zizmor.yml`).
+#
+# The reusable runs at min-confidence:medium, which drops the low-confidence
+# artipacked (persist-credentials) nags. The unpinned-uses policy encodes the fleet's
+# action-pinning decision: first-party actions/* and self-owned akira-toriyama/* ride
+# version TAGS (ref-pin); everything third-party MUST be a full commit SHA (hash-pin).
+# Rationale: akira-toriyama/.github/blob/main/docs/action-pinning-policy.md
+
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        actions/*: ref-pin
+        akira-toriyama/*: ref-pin
+        "*": hash-pin

@@ -54,6 +54,17 @@ struct BoardTabLayoutTests {
                        [BoardTabFrame(boardIndex: 0, x: 0, width: 120)])
     }
 
+    /// A single tab that OVERFLOWS shrinks to `available`, not its intrinsic
+    /// width — the n==1 overflow branch the `singleTabFitsAtIntrinsic` case
+    /// doesn't reach. The doc comment "a single tab fills its intrinsic width"
+    /// invites a refactor that special-cases n==1; this pins that width 400
+    /// still becomes 300 so such a change can't slip through undetected.
+    @Test func singleTabOverflowShrinksToAvailable() {
+        // intrinsic 400 > available 300 → overflow: cellW = max(0,(300-0)/1) = 300.
+        #expect(boardTabLayout(widths: [400], available: 300, gap: 6) ==
+                       [BoardTabFrame(boardIndex: 0, x: 0, width: 300)])
+    }
+
     /// N4 (board review follow-up): an EXTREME overflow where the gaps alone
     /// exceed `available` clamps each width to 0 (never negative) — pins the
     /// `max(0, …)` so a future refactor can't emit negative widths unnoticed.
