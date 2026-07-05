@@ -15,7 +15,7 @@ jobs:
   sync:
     # Pin a CONCRETE furrow release tag: the workflow installs the furrow
     # release binary of the same version (skew-free); bump the pin per release.
-    uses: akira-toriyama/furrow/.github/workflows/sync-task-status.yml@v0.6.0
+    uses: akira-toriyama/furrow/.github/workflows/sync-task-status.yml@v0.6.1
     # Pass ONLY the tracker-write PAT — least privilege over `secrets: inherit`,
     # which would expose every caller-repo secret to the reusable workflow.
     secrets:

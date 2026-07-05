@@ -22,7 +22,7 @@ jobs:
     # Bounded so a hung `swift build` can't burn 6 h of free macOS minutes.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Shared Swift build (setup-xcode + SPM cache + build + test).
       - uses: akira-toriyama/.github/actions/swift-build@main
