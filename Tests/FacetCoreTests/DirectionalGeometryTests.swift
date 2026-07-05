@@ -52,6 +52,20 @@ struct DirectionalGeometryTests {
         #expect(nearestWindow(to: tl, among: rest, direction: .right) == wid(3))
     }
 
+    @Test func perpPenaltyOutweighsNearerAlongAxis() {
+        // The perp*2 penalty can beat raw along-axis proximity: a
+        // nearer-but-diagonal candidate loses to a farther-but-aligned
+        // one. From TL (centre 50,50) going right —
+        //   id2 = (100,0,100,100)  centre (150,50): along=100, perp=0  → score 100
+        //   id3 = ( 60,30,100,100) centre (110,80): along= 60, perp=30 → score 60+2*30=120
+        // id3 is closer horizontally (dx 60 < 100) yet id2 wins (100 < 120).
+        // Pins the perp weight at 2 — a regression to perp*1 would flip this.
+        let aligned  = CGRect(x: 100, y:  0, width: 100, height: 100)
+        let diagonal = CGRect(x:  60, y: 30, width: 100, height: 100)
+        let rest = others([(2, aligned), (3, diagonal)])
+        #expect(nearestWindow(to: tl, among: rest, direction: .right) == wid(2))
+    }
+
     @Test func empty() {
         #expect(nearestWindow(to: tl, among: [], direction: .right) == nil)
     }

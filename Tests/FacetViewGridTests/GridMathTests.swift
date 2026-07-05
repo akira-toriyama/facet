@@ -27,6 +27,22 @@ struct GridMathTests {
         #expect(gridWrapIndex(index: 2, dx: 1, dy: 0, cols: cols, count: n) == 0)
     }
 
+    /// Horizontal wrap WITHIN a ragged last row that holds MORE than one
+    /// real cell: 8 WS, 3 cols → Row2 = [6 7 _] (lastRowCells = 2).
+    /// The `% rowCells` arithmetic must wrap over exactly those 2 cells, not
+    /// the full `cols` (which would step onto the phantom index 8). Regression
+    /// pins the multi-cell-last-row branch that gridWrapRaggedWorkedExample
+    /// (lastRowCells = 1) leaves as a trivial no-op.
+    @Test func gridWrapRaggedMultiCellLastRow() {
+        // RIGHT from WS7 (r2c1): last real cell → wraps within the 2-cell row
+        // back to WS6 (not onto the phantom r2c2).
+        #expect(gridWrapIndex(index: 7, dx: 1, dy: 0, cols: 3, count: 8) == 6)
+        // LEFT from WS6 (r2c0): wraps within the 2-cell row to WS7.
+        #expect(gridWrapIndex(index: 6, dx: -1, dy: 0, cols: 3, count: 8) == 7)
+        // Sanity within the same row: RIGHT from WS6 → WS7.
+        #expect(gridWrapIndex(index: 6, dx: 1, dy: 0, cols: 3, count: 8) == 7)
+    }
+
     @Test func gridWrapFullGrid() {
         // 6 WS, 3 cols → two full rows; plain modular wrap.
         #expect(gridWrapIndex(index: 2, dx: 1, dy: 0, cols: 3, count: 6) == 0)  // RIGHT wraps
