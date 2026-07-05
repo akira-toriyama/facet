@@ -66,6 +66,19 @@ struct ApplyResolverTests {
         #expect(s?.label == "a:b:c")   // split on the FIRST colon only
     }
 
+    @Test func sectionNilForUnassignedReceptacleEvenWhenLensTyped() {
+        // W2.6: a lost-and-found receptacle carries config `type == .lens` yet
+        // renders as `unassigned:N`, so a stale `section:N:label` id landing on
+        // its declOrder must MISS via the `!s.unassigned` guard — even though it
+        // passes both the `.lens` type check AND the label match. Removing that
+        // guard would wrongly resolve the receptacle as a real lens dest and let
+        // plan() apply tags into it instead of reporting stale-destination inert.
+        let secs = [DesktopSection(type: .workspace),
+                    DesktopSection(type: .lens, label: "Misc", match: "tag~=misc",
+                                   apply: [.addTag("misc")], unassigned: true)]
+        #expect(ApplyResolver.section(forSectionID: "section:1:Misc", in: secs) == nil)
+    }
+
     // MARK: - parseSectionID (A0: the shared id wire-format split)
 
     @Test func parseSectionIDSplitsDeclOrderAndLabel() {

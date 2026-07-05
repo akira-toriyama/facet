@@ -61,6 +61,17 @@ struct FacetFilterEvalTests {
         #expect(!m("tag~=we", w))   // whole-token, not substring
     }
 
+    // An EMPTY `~=` value is ALWAYS a no-match: the whitespace split uses
+    // omittingEmptySubsequences (default), so it never yields an empty token
+    // for `.contains { $0 == "" }` to find — regardless of the field's
+    // contents. This corner is separate from the ^=/$=/*= empty→nothing rule
+    // the doc pins; a regression keeping empty subsequences (or special-casing
+    // empty) would make `tag~=""` match every / no window silently.
+    @Test func tokenContainsEmptyValueMatchesNothing() {
+        #expect(!m("tag~=\"\"", win(tags: ["web", "docs"])))
+        #expect(!m("tag~=\"\"", win(tags: [])))
+    }
+
     @Test func tagExactMeansOnlyThatTag() {
         #expect(m("tag=web", win(tags: ["web"])))
         #expect(!m("tag=web", win(tags: ["web", "docs"])))
@@ -87,6 +98,36 @@ struct FacetFilterEvalTests {
         // top-level fields still resolve for an unmanaged window
         #expect(m("app=Safari", e))
         #expect(m("desktop=1", e))
+    }
+
+    // For a MANAGED-but-unnamed window (facet != nil, workspace == ""),
+    // WindowQueryEntry.filterHas("workspace") = !("".isEmpty) = false, so the
+    // empty name collapses to ABSENT: `not workspace` MATCHES it and a
+    // `workspace` presence filter DROPS it. This is the OPPOSITE of the
+    // ProjectedWindowFields conformer's empty-name-present distinction — an
+    // intentional but unpinned coalescing on the `facet query --windows
+    // --filter` surface. A refactor keying presence on `facet != nil` (to
+    // mirror the projection conformers) would silently flip which windows
+    // `not workspace` lists.
+    @Test func queryEntryUnnamedWorkspaceReadsAbsent() {
+        #expect(!m("workspace", entry(facet: managed(workspace: ""))))
+        #expect(m("not workspace", entry(facet: managed(workspace: ""))))
+        // contrast: a named workspace is present.
+        #expect(m("workspace", entry(facet: managed(workspace: "Dev"))))
+    }
+
+    // mark / scratchpad through a WindowQueryEntry: for a managed entry they
+    // read out of the nested facet block; for an unmanaged entry (facet==nil)
+    // both resolve to absent/nil. Completes the FROZEN unmanaged-window
+    // contract (mark/scratchpad were omitted from the source header's freeze,
+    // which only enumerates tag/floating/sticky/master). A change to the
+    // optional-chaining default (e.g. defaulting to a value like floating does)
+    // would go uncaught on the query surface.
+    @Test func queryEntryMarkAndScratchpad() {
+        #expect(m("mark=a", entry(facet: managed(mark: "a"))))
+        #expect(m("scratchpad", entry(facet: managed(scratchpad: "term"))))
+        #expect(!m("mark", entry(facet: nil)))
+        #expect(!m("scratchpad", entry(facet: nil)))
     }
 
     // MARK: bare boolean flags (managed)
@@ -156,6 +197,19 @@ struct FacetFilterEvalTests {
         #expect(m("workspace|=dog", entry(facet: managed(workspace: "dog"))))
         #expect(m("workspace|=dog", entry(facet: managed(workspace: "dog-2"))))
         #expect(!m("workspace|=dog", entry(facet: managed(workspace: "doghouse"))))
+    }
+
+    // The `|=` (hierarchical) operator with an EMPTY value evaluates
+    // `a == "" || a.hasPrefix("-")`, so it matches ONLY a field whose value is
+    // itself empty and never reaches the `-`-prefix arm — distinct from the
+    // ^=/$=/*= empty→nothing rule. If `|=` were folded into that shared
+    // empty→false guard (or the `+ "-"` concat altered), this branch would
+    // flip silently; it is the only operator whose empty-value semantics is
+    // otherwise unpinned.
+    @Test func hierarchicalEmptyValueMatchesOnlyEmptyField() {
+        #expect(!m("workspace|=\"\"", entry(facet: managed(workspace: "dog"))))
+        // contrast: a window whose workspace name is empty DOES match.
+        #expect(m("workspace|=\"\"", entry(facet: managed(workspace: ""))))
     }
 
     @Test func emptyValueMatchesNothing() {

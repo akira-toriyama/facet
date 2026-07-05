@@ -123,6 +123,41 @@ struct LensMembershipTests {
             "a tagged orphan still has no workspace")
     }
 
+    /// `not workspace=Dev` ("everything not in Dev") is a realistic lens whose
+    /// interaction with the nil overlay is surprising: an ORPHAN
+    /// (`inWorkspaceNamed: nil`) MATCHES, because the nil field makes the inner
+    /// `workspace=Dev` compare short-circuit false and `not` flips it to true —
+    /// while a window ACTUALLY in Dev is correctly excluded and one in another
+    /// named workspace is included. Pins the nil-field/negation seam so a
+    /// regression in the overlay's nil-handling or the compare nil-guard can't
+    /// silently change which windows this common lens shows.
+    @Test func negatedWorkspaceValueIncludesOrphan() {
+        let f = filter("not workspace=Dev")
+        #expect(LensMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),
+                "orphan: nil workspace field → inner compare false → not → true")
+        #expect(!LensMembership.matches(win(2), inWorkspaceNamed: "Dev", filter: f),
+                "a window in Dev is excluded by `not workspace=Dev`")
+        #expect(LensMembership.matches(win(3), inWorkspaceNamed: "Web", filter: f),
+                "a window in another named workspace matches `not workspace=Dev`")
+    }
+
+    /// The workspace-name overlay resolves case-INSENSITIVELY by default: a lens
+    /// written `match='workspace=dev'` (lowercase) matches a window in a
+    /// workspace named "Dev" because `op.equals` lowercases both sides. The
+    /// case-sensitive flag (`s`) opts back into an exact-case compare, so the
+    /// same lowercase literal then MISSES "Dev". Config authors routinely write
+    /// a lens match in a different case than the live workspace name — pins that
+    /// user-facing contract at the overlay.
+    @Test func workspaceOverlayIsCaseInsensitiveByDefault() {
+        let insensitive = filter("workspace=dev")
+        #expect(LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: insensitive),
+                "lowercase literal matches mixed-case workspace name")
+
+        let sensitive = filter("workspace=dev s")
+        #expect(!LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: sensitive),
+                "case-sensitive flag makes the lowercase literal miss \"Dev\"")
+    }
+
     /// `desktop=` stays a no-match even through the overlay (sections are
     /// already per-mac-desktop scoped, so the overlay deliberately doesn't
     /// resolve it).

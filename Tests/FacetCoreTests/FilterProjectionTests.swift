@@ -146,6 +146,26 @@ struct FilterProjectionTests {
         #expect(r.sections[2].sectionType == .lens)
     }
 
+    /// A LENS section BETWEEN two workspace sections: the extras cursor
+    /// (`insertExtrasAt`) tracks the LAST-filled workspace section, so a surplus
+    /// live workspace lands AFTER the SECOND workspace section — past the
+    /// intervening lens, not after the first. A regression that set the cursor
+    /// only once (at the first workspace section) would yield
+    /// ["ws:0", "ws:2", "section:1:L", "ws:1"] and pass every single-ws-section
+    /// extras test. Pins the moving-cursor semantics for a mixed section list.
+    @Test func extraWorkspacesInsertAfterSecondWorkspaceSection() {
+        let wss = [
+            ws(0, name: "A", windows: [win(1, tags: ["x"])]),
+            ws(1, name: "B", windows: []),
+            ws(2, name: "C", windows: []),
+        ]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [wsSec(), lens("L", "tag~=x"), wsSec()])
+        #expect(r.sections.map(\.id) == ["ws:0", "section:1:L", "ws:1", "ws:2"])
+        #expect(r.sections[1].windows.map(\.id.serverID) == [1])
+        #expect(r.diagnostics.isEmpty)
+    }
+
     /// Surplus workspace sections (more than live workspaces) emit no section
     /// and add a diagnostic.
     @Test func surplusWorkspaceSectionDiagnosed() {
@@ -321,6 +341,25 @@ struct FilterProjectionTests {
         #expect(recepts[0].label == "A")
         #expect(r.diagnostics.count == 1)
         #expect(r.diagnostics[0].contains("unassigned section #3 ignored"))
+    }
+
+    /// An unassigned receptacle as the ONLY section (no workspace section, no
+    /// lens) collects EVERY window — workspace windows AND orphans — because
+    /// `shown` is built only from emitted workspace/lens sections, and here
+    /// there are none, so universe − shown = the whole universe. Falsifies the
+    /// header's "in practice the leftover is the orphans no lens caught": a
+    /// future optimization assuming workspace windows are always shown would
+    /// silently drop all windows from an unassigned-only board.
+    @Test func unassignedOnlySectionCollectsEveryWindow() {
+        let wss = [ws(0, name: "Dev", windows: [win(1), win(2)])]
+        let r = FilterProjection.project(
+            workspaces: wss, sections: [unassigned("All")],
+            orphans: [win(9)])
+        #expect(r.sections.count == 1)
+        #expect(r.sections[0].id == "unassigned:0")
+        #expect(r.sections[0].sectionType == .unassigned)
+        #expect(r.sections[0].windows.map(\.id.serverID) == [1, 2, 9])
+        #expect(r.diagnostics.isEmpty)
     }
 
     /// The receptacle preserves universe order (workspace windows then orphans,
