@@ -64,6 +64,23 @@ struct SpiralLayoutTests {
         }
     }
 
+    /// The 4th rotation direction (`default` / i%4==3) docks into the
+    /// BOTTOM half of the remainder and shrinks the leftover to the top
+    /// half. It is only reached at index 3 when there are ≥5 windows (for
+    /// n≤4 the 4th window is `last` and just fills the remainder, never
+    /// running the bottom-split branch). Regression pins the exact
+    /// bottom-split y-arithmetic — a wrong sign / wrong half would still
+    /// land inside the rect and pass the bounds-only loop, but mis-place
+    /// the window.
+    @Test func fiveSpiralsBottomSplitDefaultBranch() {
+        let f = frames(5)
+        #expect(f[wid(1)] == CGRect(x: 0, y: 0, width: 800, height: 1000))
+        #expect(f[wid(2)] == CGRect(x: 800, y: 0, width: 800, height: 500))
+        #expect(f[wid(3)] == CGRect(x: 1200, y: 500, width: 400, height: 500))
+        #expect(f[wid(4)] == CGRect(x: 800, y: 750, width: 400, height: 250))
+        #expect(f[wid(5)] == CGRect(x: 800, y: 500, width: 400, height: 250))
+    }
+
     @Test func registryResolvesSpiral() {
         #expect(LayoutRegistry.engine(named: "spiral")?.name == "spiral")
         #expect(LayoutRegistry.names.contains("spiral"))

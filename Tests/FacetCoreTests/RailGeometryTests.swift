@@ -62,6 +62,18 @@ struct RailGeometryTests {
         #expect(s.minY == 0)
     }
 
+    /// When the strip clamps to the full cross-axis extent the hero's
+    /// remaining height goes negative and `clampedHero`'s `max(0, h)`
+    /// collapses it to a valid zero-height rect — never a negative-
+    /// dimension CGRect handed to AppKit. Regression pins the collapse
+    /// guard the sibling clamp test discards with `_`.
+    @Test func heroCollapsesToZeroWhenStripFillsBounds() {
+        let (_, h) = railBands(in: bounds, edge: .bottom, thickness: 5000,
+                               outerPad: pad, heroGap: gap)
+        // t=min(5000,1000)=1000 ⇒ raw hero height (1000-1000-16)-40=-56 → 0.
+        #expect(h == CGRect(x: 40, y: 40, width: 1520, height: 0))
+    }
+
     // MARK: - Carousel offsets (2-b)
 
     /// The worked example: 5 WS, ws5 (pos 4) selected → ws3 −2 … ws2 +2,
@@ -104,6 +116,24 @@ struct RailGeometryTests {
 
     @Test func carouselEmpty() {
         #expect(railCarouselOffsets(count: 0, selectedPos: 0) == [])
+    }
+
+    /// A large out-of-range `selectedPos` (>= count) is normalized into
+    /// range via `((selectedPos % count) + count) % count`, centring exactly
+    /// like the equivalent in-range position. Regression pins that the
+    /// normalization is actually applied: dropping it (`p0 = selectedPos`)
+    /// drives the offset map's dividend negative for a large position and
+    /// mis-places every cell. A LARGE value is required — a small overflow
+    /// like 7 leaves the dividend non-negative, and a bare single `% count`
+    /// is indistinguishable here (the offset map's own `+ count` folds a
+    /// negative remainder), so only removing normalization entirely at a
+    /// large position is observable.
+    @Test func carouselNormalizesLargeOutOfRangeSelectedPos() {
+        // 12 → (12%5+5)%5 = 2 → same centring as selectedPos 2.
+        // (regressed p0=12 would give [-2,-6,-5,-4,-3].)
+        #expect(railCarouselOffsets(count: 5, selectedPos: 12) == [-2, -1, 0, 1, 2])
+        // 13 → 3 → same as selectedPos 3. (regressed p0=13 → [-3,-2,-6,-5,-4].)
+        #expect(railCarouselOffsets(count: 5, selectedPos: 13) == [2, -2, -1, 0, 1])
     }
 
     // MARK: - Responsive sizing (orientation- & display-size-aware)

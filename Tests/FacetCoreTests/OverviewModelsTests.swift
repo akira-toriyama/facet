@@ -29,4 +29,22 @@ struct OverviewModelsTests {
     @Test func workspaceKindIsNotLens() {
         #expect(!(cell(.workspace, id: "ws:0").isLens))
     }
+
+    private func win(_ id: Int) -> Window {
+        Window(id: WindowID(serverID: id), pid: id, appName: "App", title: "",
+               isFocused: false, isFloating: false, frame: nil, tags: [])
+    }
+
+    /// `ProjectedSection.==` compares the ORDERED window-id list, not the
+    /// window set — the source names this "the projection's actual contract:
+    /// which windows land in which section". Two sections that hold the same
+    /// windows in a different order must be unequal. Regression pin: swapping
+    /// the ordered compare for a Set-based one would flip this to equal.
+    @Test func windowOrderMakesSectionsUnequal() {
+        let a = ProjectedSection(id: "a", label: "L", windows: [win(1), win(2)],
+                                 sourceWorkspaceIndex: 0)
+        let b = ProjectedSection(id: "a", label: "L", windows: [win(2), win(1)],
+                                 sourceWorkspaceIndex: 0)
+        #expect(a != b)
+    }
 }
