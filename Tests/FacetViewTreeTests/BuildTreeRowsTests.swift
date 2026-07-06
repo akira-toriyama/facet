@@ -1,5 +1,6 @@
 import XCTest
 import FacetCore
+import FacetView
 @testable import FacetViewTree
 
 final class BuildTreeRowsTests: XCTestCase {
@@ -137,5 +138,18 @@ extension BuildTreeRowsTests {
             sections: [sec("unassigned:0", "spare", .unassigned, [win(9, "X", "")], src: nil)],
             query: "", layoutMode: { _ in "bsp" })
         guard case .header(.unassigned, nil) = rows[0].kind else { return XCTFail() }
+    }
+}
+
+// MARK: - Task 6: TreeViewModel memoization (success-criterion 5)
+
+@MainActor
+extension BuildTreeRowsTests {
+    func testPaletteMutationDoesNotRebuildItems() {
+        let vm = TreeViewModel(palette: resolve(.terminal))      // any preset
+        vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)])
+        let afterApply = vm.rowsRebuildCount             // == 1
+        vm.palette = resolve(.dracula)                    // 30 Hz animator only touches palette
+        XCTAssertEqual(vm.rowsRebuildCount, afterApply)  // listItems NOT rebuilt
     }
 }
