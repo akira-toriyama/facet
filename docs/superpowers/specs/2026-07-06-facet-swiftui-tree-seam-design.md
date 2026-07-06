@@ -149,13 +149,19 @@ width, no truncation). The themed-knob loss is accepted for the pilot
 (re-add later if missed).
 
 `PanelHost` still lays out its AppKit chrome vertically:
-`[HandleBar | search band | hosting view]`. **Panel sizing**: the hosting
-view reports its SwiftUI fitting height; panel height =
-`min(fittingHeight, screenMaxHeight)` (the existing screen-relative
-clamp). When content exceeds the clamp, `ThemedListView` scrolls
-internally — this replaces the old `SidebarView.update(...) -> CGFloat`
-height-return contract. `FlippedClipView`'s top-anchor requirement
-dissolves (SwiftUI `ScrollView` is top-anchored by default).
+`[HandleBar | search band | hosting view]`. **Panel sizing**:
+`NSHostingView.fittingSize` does **not** work here — `ThemedListView`'s root
+is a greedy SwiftUI `ScrollView` (verified `ThemedListView.swift:253`) that
+fills its scroll axis and never self-reports a content-fitting height, so
+`fittingSize` would collapse the Spotlight-style shrink-to-content panel.
+Instead compute the intended content height by **summing sill's public
+`ListMetrics.forDensity` per built row** (header1 = 28 / header2 = 40 /
+singleRow = 30 / twoLineRow = 46); panel height =
+`min(sum, screenMaxHeight)` (the existing screen-relative clamp). When the
+sum exceeds the clamp, `ThemedListView` scrolls internally — this replaces
+the old `SidebarView.update(...) -> CGFloat` height-return contract.
+`FlippedClipView`'s top-anchor requirement dissolves (SwiftUI `ScrollView`
+is top-anchored by default).
 
 **Loading skeleton**: stays a **host-side AppKit overlay** that `PanelHost`
 shows over the hosting view, driven by `Controller.showLoading`, and
@@ -318,11 +324,23 @@ move never leaves facet frontmost (tie to the drag lifecycle).
 
 The **existing global `NSEvent` keyDown monitor + `handleKbKey` dispatch
 table stays host-side, unchanged**, and remains the sole owner of tree
-keyboard input. SwiftUI `.onKeyPress`/`.focusable` is **not** used for tree
-nav (it has weaker swallow control and cannot express the #66 /
-`isKeyWindow` gating). The only change: `handleKbKey`'s targets move from
-imperative `SidebarView` methods to the `@Observable` view-model bindings +
-`TreeController` commits (the `KbNav.swift` pure fns are reused verbatim).
+keyboard input. facet adds **no** SwiftUI `.onKeyPress`/`.focusable` of its
+own for tree nav (they have weaker swallow control and cannot express the
+#66 / `isKeyWindow` gating). **Caveat (verified):** sill's `ThemedListView`
+installs its **own** `.focusable` + five `.onKeyPress` (↑/↓/return/escape/
+space) + a list-level focus ring internally, with no `ThemedListStyle`
+off-switch (`ThemedListView.swift:282-299`). These do **not** fire because
+the host monitor pre-empts the responder chain — `handleKbKey` returns
+`nil` for all five keys in nav mode (`Controller.swift:1521-1524`), so the
+event is swallowed before SwiftUI sees it. **Swallowing every overlapping
+key is therefore a load-bearing invariant**, not an incidental detail. This
+is NOT a hidden sill dependency (no third sill PR) — but a Task-10 GUI check
+must confirm both: all five keys are swallowed, AND sill's list-level focus
+ring does not double-render with facet's own cursor outline (suppress
+host-side or file a sill knob as a fast-follow only if it doubles). The only
+routing change: `handleKbKey`'s targets move from imperative `SidebarView`
+methods to the `@Observable` view-model bindings + `TreeController` commits
+(the `KbNav.swift` pure fns are reused verbatim).
 
 Every key preserved with no loss:
 - `↑↓` / `Ctrl-N/P` / `j/k` → `kbMove`; `←→` / `h/l` / `Tab` → `kbJumpWS`.
@@ -419,11 +437,21 @@ sill-B ─▶ facet-1 ─▶ facet-2 ─▶ sill-A ─▶ facet-3
 
 - **sill-B** glyph vendor (unblocks facet-1 icons).
 - **facet-1** tree render + kb-nav + icons + palette injection + skeleton
-  overlay (SF→Phosphor name-map; DnD/search still old). The seam's core
-  proof.
+  overlay (SF→Phosphor name-map). The seam's core proof. ⚠️ **Not a
+  standalone merge**: Task 8 removes `SidebarView` from the view hierarchy as
+  the hosting view takes over, so its `mouseDown`-driven DnD and its
+  `update()`-driven search filter go **dead** — a facet-1-only merge would
+  ship a DnD-/search-dead tree to `main` on the daily-driver WM.
 - **facet-2** DnD (`onDrop` → commits; chunk-drag section reorder).
 - **sill-A** T1 binding (unblocks search; closes sill #17).
 - **facet-3** search (`ThemedTextFieldView`).
+
+**Merge unit = A (トミー 2026-07-06).** The five slices above are the
+**development / local-commit order**, NOT five separate merges to `main`.
+facet-1 + facet-2 + facet-3 land as **one squash-merge** so `main` never
+sees a tree with dead DnD or search on the daily-driver WM. (sill-B and
+sill-A remain their own separate sill-repo PRs.) The PR body states the
+bundled scope + names that facet-1 alone would have regressed DnD/search.
 
 Each PR: co-dev ritual — `../sill` path-dep during dev → `swift build`
 green → swap back to url + new SemVer floor → re-pin `Package.resolved` →

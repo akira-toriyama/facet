@@ -4,8 +4,11 @@
 
 **Goal:** Render the facet view `tree` (sections + window rows + badges,
 keyboard-nav, #66 focus) with sill's SwiftUI `ThemedListView` hosted inside
-the existing AppKit `KeyablePanel`/`PanelHost` — DnD and search stay on the
-old path (later phases).
+the existing AppKit `KeyablePanel`/`PanelHost`. DnD and search are restored in
+later phases (facet-2 / facet-3). **⚠️ facet-1 DETACHES DnD + live-search**
+(Task 8 removes `SidebarView` from the view hierarchy, killing its
+`mouseDown`-driven DnD + `update()`-driven filter), so it does **not** ship
+alone — facet-1+2+3 land as one squash-merge (spec §8, merge=A).
 
 **Architecture:** Content-only migration. A pure `buildTreeRows` maps
 `[ProjectedSection]` → `[TreeRowSpec]` (Sendable, unit-tested). An
@@ -29,7 +32,7 @@ keyDown monitor + #66 activation dance stay host-side unchanged.
 - **sill dep**: this phase needs sill product `ThemeKitUI`. During dev use a `../sill` path-dep; before the PR, swap to a URL + SemVer floor and re-pin `Package.resolved` (no path-dep on main).
 - **Custom/upstream glyphs (`spiral`, `bsp`, `master-*`) are vendored by sill-B**, which lands before this phase. Task 9 assumes those slugs resolve from sill's bundle.
 - **Commits**: gitmoji + Conventional Commits (`<:gitmoji:> <type>(<scope>): <subject>`). Local hook at `scripts/hooks/commit-msg`. Commit locally freely; do NOT push without トミー's OK.
-- **Branch**: `feat/swiftui-tree-render` (off `main`).
+- **Branch**: `feat/swiftui-tree-render` (off `main`). facet-2 (DnD) and facet-3 (search) continue on **this same branch** so the three land as **one squash-merge** (spec §8, merge=A) — `main` never sees a DnD-/search-dead tree.
 
 ---
 
@@ -508,10 +511,11 @@ git commit -m ":sparkles: feat(icons): SF→Phosphor slug map + SwiftUI glyph he
 - Create: `Sources/FacetViewTree/TreeViewModel.swift`
 
 **Interfaces:**
-- Consumes: `TreeRowSpec` (Task 3), `ResolvedPalette` (PaletteKit).
+- Consumes: `TreeRowSpec`/`TreeBadge` (Tasks 3-4), `ResolvedPalette` (PaletteKit), `ListItem`/`Badge`/`BadgeRole` (ThemeKitUI), `AppIcons`/`IconResolver` (FacetView).
 - Produces:
-  - `@Observable @MainActor final class TreeViewModel` with: `var rows: [TreeRowSpec]`, `var selection: Set<TreeItemID>`, `var highlight: TreeItemID?`, `var collapsed: Set<TreeItemID>`, `var query: String`, `var isLoading: Bool`, `var palette: ResolvedPalette`.
-  - `func apply(sections: [ProjectedSection])` — rebuilds `rows` via `buildTreeRows(sections:query:)` (called from `Controller.apply`).
+  - `@Observable @MainActor final class TreeViewModel` with: `var rows: [TreeRowSpec]`, memoized `private(set) var listItems: [ListItem<TreeItemID>]`, test-hook `private(set) var rowsRebuildCount`, `var selection: Set<TreeItemID>`, `var highlight: TreeItemID?`, `var collapsed: Set<TreeItemID>`, `var query: String`, `var isLoading: Bool`, `var palette: ResolvedPalette`.
+  - `func apply(sections: [ProjectedSection])` — rebuilds `rows` + memoized `listItems` via `buildTreeRows` + `TreeListItem.make` (called from `Controller.apply`).
+  - `enum TreeListItem` — the pure-ish `TreeRowSpec → ListItem` mapper (palette-independent), invoked ONLY from `apply()` so the expensive NSImage builds stay off the 30 Hz palette-tick path (spec §4.6/§7.7).
 
 - [ ] **Step 1: Implement.** Create `Sources/FacetViewTree/TreeViewModel.swift`:
 
@@ -519,15 +523,26 @@ git commit -m ":sparkles: feat(icons): SF→Phosphor slug map + SwiftUI glyph he
 import Observation
 import PaletteKit
 import FacetCore
+import ThemeKitUI          // ListItem / Badge / BadgeRole
+import FacetView           // AppIcons, IconResolver
 
 /// The single @Observable box the SwiftUI tree binds to. Injected via
 /// `.environment`; `Controller` is the sole writer. Palette lives here so a
-/// re-theme updates ONE value (never rebuilds `rows`) — the 30 Hz animator
-/// tick must set only `palette` (spec §4.6/§7.7).
+/// re-theme updates ONE value — it must NOT rebuild `rows` OR `listItems`.
+/// The 30 Hz animator tick sets only `palette` (spec §4.6/§7.7).
 @Observable
 @MainActor
 final class TreeViewModel {
     var rows: [TreeRowSpec] = []
+    /// **Memoized** render-ready items — rebuilt ONLY in `apply()` (section-data
+    /// change), NEVER read-derived in a SwiftUI body. The expensive per-row
+    /// NSImage builds (`AppIcons.icon` / `IconResolver.phosphorImage`) live here,
+    /// off the palette-tick path, so a theme animation never re-flattens the list
+    /// (spec §4.6/§7.7). The view reads this array; `palette` is passed separately.
+    private(set) var listItems: [ListItem<TreeItemID>] = []
+    /// Test hook for success-criterion 5: increments each time `listItems` is
+    /// rebuilt. A palette-only mutation must leave this UNCHANGED.
+    private(set) var rowsRebuildCount = 0
     var selection: Set<TreeItemID> = []
     var highlight: TreeItemID?
     var collapsed: Set<TreeItemID> = []
@@ -537,26 +552,90 @@ final class TreeViewModel {
 
     init(palette: ResolvedPalette) { self.palette = palette }
 
-    /// Rebuild rows from a fresh projection. Selection/highlight/collapsed are
-    /// id-keyed and survive across rebuilds (dropped only if their id vanishes).
+    /// Rebuild rows + memoized items from a fresh projection. Selection/highlight/
+    /// collapsed are id-keyed and survive across rebuilds (dropped only if their id
+    /// vanishes). Palette is NOT touched here.
     func apply(sections: [ProjectedSection]) {
         rows = buildTreeRows(sections: sections, query: query)
+        listItems = rows.map(TreeListItem.make(_:))   // memoize here, NOT in the view body
+        rowsRebuildCount += 1
         let ids = Set(rows.map(\.id))
         selection.formIntersection(ids)
         collapsed.formIntersection(ids)
         if let h = highlight, !ids.contains(h) { highlight = nil }
     }
 }
+
+/// `TreeRowSpec` → sill `ListItem` mapping. Lives here (not in the SwiftUI body)
+/// so it is invoked from `apply()` and memoized — see `TreeViewModel.listItems`.
+/// Palette-independent: NSImage builds key only on pid/slug, never on colour.
+@MainActor
+enum TreeListItem {
+    static func make(_ r: TreeRowSpec) -> ListItem<TreeItemID> {
+        switch r.kind {
+        case let .header(type, subtitle):
+            return ListItem(id: r.id, image: headerGlyph(type),
+                            primary: r.primary, kind: .sectionHeader(subtitle: subtitle))
+        case let .window(pid):
+            return ListItem(id: r.id, image: AppIcons.icon(forPID: pid),
+                            primary: r.primary, secondary: r.secondary,
+                            badges: r.badges.map(badge(_:)))
+        }
+    }
+
+    private static func headerGlyph(_ type: ProjectedSectionType) -> NSImage? {
+        let slug: String?
+        switch type {
+        case .lens: slug = "funnel"
+        case .unassigned: slug = "archive"
+        case .workspace: slug = nil
+        }
+        return slug.flatMap { IconResolver.phosphorImage($0, pt: 13) }
+    }
+
+    private static func badge(_ b: TreeBadge) -> Badge {
+        let slug: String?
+        let role: BadgeRole
+        switch b.kind {
+        case .master: slug = "crown"; role = .primary
+        case .float: slug = "app-window"; role = .secondary
+        case .sticky: slug = "push-pin"; role = .secondary
+        case .hidden: slug = "eye-slash"; role = .error
+        case .mark: slug = nil; role = .primary
+        case .scratchpad: slug = "tray"; role = .secondary
+        case .tag: slug = "tag"; role = .neutral
+        case .overflow: slug = nil; role = .neutral
+        }
+        return Badge(b.text, symbol: slug.flatMap { IconResolver.phosphorImage($0, pt: 11) }, role: role)
+    }
+}
 ```
 
-- [ ] **Step 2: Build.** Run: `swift build`
+- [ ] **Step 2: Success-criterion 5 test (memoization).** Append to `BuildTreeRowsTests.swift` — assert a palette-only mutation does NOT rebuild the item array (guards spec §4.6/§7.7 / criterion 5):
+
+```swift
+@MainActor
+extension BuildTreeRowsTests {
+    func testPaletteMutationDoesNotRebuildItems() {
+        let vm = TreeViewModel(palette: .terminal)      // any preset
+        vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)])
+        let afterApply = vm.rowsRebuildCount             // == 1
+        vm.palette = .dracula                            // 30 Hz animator only touches palette
+        XCTAssertEqual(vm.rowsRebuildCount, afterApply)  // listItems NOT rebuilt
+    }
+}
+```
+  Run: `DEVELOPER_DIR=/Applications/Xcode-26.6.0.app/Contents/Developer swift test --filter BuildTreeRowsTests`
+  Expected: PASS (count stays 1 — palette setter never calls `apply`).
+
+- [ ] **Step 3: Build.** Run: `swift build`
   Expected: clean.
 
-- [ ] **Step 3: Commit.**
+- [ ] **Step 4: Commit.**
 
 ```bash
-git add Sources/FacetViewTree/TreeViewModel.swift
-git commit -m ":sparkles: feat(tree): @Observable TreeViewModel + palette box (facet-1)"
+git add Sources/FacetViewTree/TreeViewModel.swift Tests/FacetViewTreeTests/BuildTreeRowsTests.swift
+git commit -m ":sparkles: feat(tree): @Observable TreeViewModel + memoized listItems + palette box (facet-1)"
 ```
 
 ---
@@ -567,16 +646,15 @@ git commit -m ":sparkles: feat(tree): @Observable TreeViewModel + palette box (f
 - Modify: `Sources/FacetViewTree/TreeContentView.swift` (replace the Task 1 placeholder body)
 
 **Interfaces:**
-- Consumes: `TreeViewModel` (Task 6), `TreeRowSpec`/`TreeBadge` (Tasks 3-4), `IconResolver.phosphorImage`/`AppIcons.icon(forPID:)`, sill `ListItem`/`ThemedListView`/`Badge`/`BadgeRole`/`ListTint`.
-- Produces: a `TreeContentView` bound to a `TreeViewModel` that renders the real rows, wiring `selection`/`highlight`/`collapsed` bindings + `onActivate`/`onToggleSection`/`onHover` callbacks (the callbacks are stubbed to closures the host injects — real behaviour in Tasks 8/10/12).
+- Consumes: `TreeViewModel` (Task 6, incl. its memoized `listItems`), sill `ThemedListView`/`ThemedListStyle`. (The `TreeRowSpec→ListItem` map + `IconResolver`/`AppIcons` calls moved to `TreeListItem` in Task 6 for memoization — the view no longer flattens.)
+- Produces: a `TreeContentView` bound to a `TreeViewModel` that renders the memoized `model.listItems`, wiring `selection`/`highlight`/`collapsed` bindings + `onActivate`/`onToggleSection`/`onHover` callbacks (the callbacks are stubbed to closures the host injects — real behaviour in Tasks 8/10/12).
 
-- [ ] **Step 1: Implement the mapping + view.** Replace `TreeContentView.swift`:
+- [ ] **Step 1: Implement the view.** Replace `TreeContentView.swift` (the `TreeRowSpec→ListItem` mapping now lives in Task 6's `TreeListItem`):
 
 ```swift
 import SwiftUI
 import ThemeKitUI
 import PaletteKit
-import FacetView   // AppIcons, IconResolver
 import FacetCore
 
 @MainActor
@@ -587,8 +665,13 @@ struct TreeContentView: View {
     var onHover: (TreeItemID?) -> Void = { _ in }
 
     var body: some View {
+        // `model.listItems` is MEMOIZED (rebuilt only in `apply()`), so a palette
+        // tick re-runs this body cheaply — it does NOT re-flatten rows or rebuild
+        // per-row NSImages (spec §4.6/§7.7). `palette` is passed separately for
+        // re-colour; the `TreeRowSpec→ListItem` map now lives in `TreeListItem`
+        // (Task 6), invoked only from `apply()`.
         ThemedListView<TreeItemID>(
-            items: model.rows.map(listItem(_:)),
+            items: model.listItems,
             selection: $model.selection,
             collapsed: $model.collapsed,
             highlight: $model.highlight,
@@ -603,50 +686,6 @@ struct TreeContentView: View {
             onActivate: onActivate,
             onToggleSection: onToggleSection,
             onHover: onHover)
-    }
-
-    private func listItem(_ r: TreeRowSpec) -> ListItem<TreeItemID> {
-        switch r.kind {
-        case let .header(type, subtitle):
-            return ListItem(
-                id: r.id,
-                image: headerGlyph(type),
-                primary: r.primary,
-                kind: .sectionHeader(subtitle: subtitle))
-        case let .window(pid):
-            return ListItem(
-                id: r.id,
-                image: AppIcons.icon(forPID: pid),
-                primary: r.primary,
-                secondary: r.secondary,
-                badges: r.badges.map(badge(_:)))
-        }
-    }
-
-    private func headerGlyph(_ type: ProjectedSectionType) -> NSImage? {
-        let slug: String?
-        switch type {
-        case .lens: slug = "funnel"
-        case .unassigned: slug = "archive"
-        case .workspace: slug = nil
-        }
-        return slug.flatMap { IconResolver.phosphorImage($0, pt: 13) }
-    }
-
-    private func badge(_ b: TreeBadge) -> Badge {
-        let slug: String?
-        let role: BadgeRole
-        switch b.kind {
-        case .master: slug = "crown"; role = .primary
-        case .float: slug = "app-window"; role = .secondary
-        case .sticky: slug = "push-pin"; role = .secondary
-        case .hidden: slug = "eye-slash"; role = .error
-        case .mark: slug = nil; role = .primary
-        case .scratchpad: slug = "tray"; role = .secondary
-        case .tag: slug = "tag"; role = .neutral
-        case .overflow: slug = nil; role = .neutral
-        }
-        return Badge(b.text, symbol: slug.flatMap { IconResolver.phosphorImage($0, pt: 11) }, role: role)
     }
 }
 ```
@@ -673,11 +712,11 @@ git commit -m ":sparkles: feat(tree): TreeRowSpec→ListItem mapping + ThemedLis
 - Consumes: `TreeViewModel` (Task 6), `TreeContentView` (Task 7).
 - Produces: the panel renders the SwiftUI tree; `Controller.apply` calls `treeVM.apply(sections:)` + `treeVM.palette = pal` instead of `sidebarView.update(...)`.
 
-> This is the render-swap checkpoint — verified by build + host GUI (render parity), not a unit test. `SidebarView` remains in the tree for DnD/search until facet-2/3; the SwiftUI view takes over rendering + selection display.
+> This is the render-swap checkpoint — verified by build + host GUI (render parity), not a unit test. **⚠️ This DETACHES DnD + live-search**: Step 1 removes `SidebarView` as the hosting view's documentView, so its `mouseDown`-driven DnD and `update()`-driven fuzzy filter go dead until facet-2 (DnD) and facet-3 (search) restore them on the SwiftUI path. Therefore **facet-1 must NOT merge to `main` alone** — facet-1+2+3 land as one squash-merge (spec §8, merge=A). The SwiftUI view takes over rendering + selection display; the old `SidebarView`/`SearchBar`/`IconResolver` code stays in the module (NOT deleted) so facet-2/3 re-wire against it and a mid-way abandon reverts cleanly (View-layer-only blast radius).
 
 - [ ] **Step 1: Add a `TreeViewModel` + hosting view to `PanelHost`.** In `PanelHost`, construct `let treeVM = TreeViewModel(palette: pal)` and an `NSHostingView(rootView: TreeContentView(model: treeVM, onActivate: ..., onToggleSection: ..., onHover: ...))`. Replace the `NSScrollView`(FlippedClipView + `SidebarView` documentView + `ThemedScroller`) construction with the hosting view laid out in the content region below the search band. Wire `onActivate`/`onToggleSection`/`onHover` to the existing Controller/handleClick paths (real #66 behaviour lands in Task 12; here route `onActivate` → `controller?.exitActive(restore:false)` then the existing focus path).
 
-- [ ] **Step 2: Sizing.** Replace the `layout(contentHeight:searching:)` height math: compute the hosting view's `fittingSize.height`, set panel height = `min(fittingHeight, screenMaxHeight)` (reuse the existing screen-relative clamp). When clamped, `ThemedListView` scrolls internally. Remove `FlippedClipView`/`ThemedScroller` usages.
+- [ ] **Step 2: Sizing — do NOT use `NSHostingView.fittingSize`.** sill's `ThemedListView` root is a greedy SwiftUI `ScrollView` (`ThemedListView.swift:253`) that fills its scroll axis and never self-reports a content-fitting height, so `fittingSize.height` would collapse the Spotlight-style shrink-to-content panel. Instead, in `PanelHost.layout`, compute the intended content height by **summing sill's public `ListMetrics.forDensity` over `treeVM.listItems`** — map each `ListItem.kind` to its metric (bare `sectionHeader` → 28 / header with subtitle → 40 / single-line window row → 30 / 2-line window row with `secondary` → 46) and sum. Panel height = `min(sum + chrome, screenMaxHeight)` (reuse the existing screen-relative clamp); when the sum exceeds the clamp, `ThemedListView` scrolls internally. Remove `FlippedClipView`/`ThemedScroller` usages. **(This one line is the panel's core geometry — promoted from a throwaway; verify the exact `ListMetrics` field names/values against sill source before summing.)** (spec §4.1.)
 
 - [ ] **Step 3: Feed the view-model from `Controller.apply`.** Replace `Controller.swift:1367-1377`:
 
@@ -789,7 +828,7 @@ git commit -m ":sparkles: feat(tree): layout-mode header subtitle + glyphs (face
 - [ ] **Step 3: Build.** Run: `swift build`
   Expected: clean.
 
-- [ ] **Step 4: GUI check (host consent).** Verify success-criterion 3: `↑↓/hjkl/Enter/Space/Esc/Tab/Ctrl-N-P/s/t` all navigate/act; cursor (outline) is distinct from selection (fill).
+- [ ] **Step 4: GUI check (host consent) — incl. the sill-swallow invariant.** Verify success-criterion 3: `↑↓/hjkl/Enter/Space/Esc/Tab/Ctrl-N-P/s/t` all navigate/act; cursor (outline) is distinct from selection (fill). **Also confirm the load-bearing swallow invariant (spec §4.8):** sill's `ThemedListView` installs its own `.focusable` + 5 `.onKeyPress` (↑/↓/return/escape/space) + a list-level focus ring (`ThemedListView.swift:282-299`), pre-empted by the host monitor returning `nil` for those keys in nav mode (`Controller.swift:1521-1524`). Check that (a) none of the 5 keys double-acts (e.g. Return doesn't both commit AND fire sill's `onKeyPress`), and (b) sill's list-level focus ring does NOT render alongside facet's cursor outline (no doubled ring). If it doubles, suppress host-side or file a sill `ThemedListStyle` off-knob as a fast-follow.
 
 - [ ] **Step 5: Commit.**
 
