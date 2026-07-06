@@ -75,18 +75,76 @@ struct ConfigValidateTests {
         }, "exclude is arrayOfTables (strict); got \(errors.map(\.rule))")
     }
 
-    /// `[[desktop.N.section]]` folds to a `.dynamicTable` → a PERMISSIVE object
-    /// (arbitrary keys accepted): facet decodes those blocks from raw text, so
-    /// validate deliberately does NOT own their keys and must not false-flag a
-    /// key it doesn't know. Pins the permissive boundary — a future switch to
-    /// a strict section kind would flip this and break the raw-text decode.
-    @Test func desktopSectionDynamicTableIsPermissive() throws {
+    // MARK: - Desktop typed open-map (t-kz0m) — `[[desktop.N.section]]` is now
+    // STRICTLY validated via the `dynamicValue` value shape. The raw-text decode
+    // is untouched (it never consulted the schema); only `--validate` / taplo
+    // gained field-level strictness. Flips the old permissive boundary.
+
+    /// A typo'd section key IS now reported (the value shape owns the section
+    /// vocabulary: type/label/match/layout/unassigned/apply).
+    @Test func desktopSectionUnknownKeyIsReported() throws {
         let errors = try FacetConfig.validate("""
         [[desktop.1.section]]
         type = "workspace"
         not-a-real-key = 1
         """)
-        #expect(errors == [],
-                "desktop section is dynamicTable (permissive); got: \(errors.map(\.message).joined(separator: "; "))")
+        #expect(errors.contains {
+            if case .unknownKey(let k) = $0.rule { return k == "not-a-real-key" }
+            return false
+        }, "desktop section is now strict; got \(errors.map(\.rule))")
+    }
+
+    /// A section's `type` is an enum {workspace, lens}; a bogus value is caught.
+    @Test func desktopSectionBadTypeEnumIsReported() throws {
+        let errors = try FacetConfig.validate("""
+        [[desktop.1.section]]
+        type = "banana"
+        """)
+        #expect(errors.contains {
+            if case .notInEnum(let k, _, _) = $0.rule { return k == "type" }
+            return false
+        }, "bad `type` enum should be reported; got \(errors.map(\.rule))")
+    }
+
+    /// The ordinal key must match `^0*[1-9][0-9]*$` (mirrors the runtime
+    /// `Int(mid) >= 1` guard): a non-numeric desktop key is rejected.
+    @Test func desktopNonOrdinalKeyIsReported() throws {
+        let errors = try FacetConfig.validate("""
+        [[desktop.foo.section]]
+        type = "workspace"
+        """)
+        #expect(errors.contains {
+            if case .unknownKey(let k) = $0.rule { return k == "foo" }
+            return false
+        }, "non-ordinal desktop key should be reported; got \(errors.map(\.rule))")
+    }
+
+    /// `[desktop.0]` is out of the ordinal domain (runtime drops `0`) — the
+    /// pattern rejects it so the editor can't silently accept a dead key.
+    @Test func desktopZeroOrdinalIsReported() throws {
+        let errors = try FacetConfig.validate("""
+        [[desktop.0.section]]
+        type = "workspace"
+        """)
+        #expect(errors.contains {
+            if case .unknownKey(let k) = $0.rule { return k == "0" }
+            return false
+        }, "`[desktop.0]` should be reported; got \(errors.map(\.rule))")
+    }
+
+    /// A nested `[[desktop.N.tab.section]]` child is also strictly validated
+    /// (the value shape is shared with flat sections).
+    @Test func desktopTabSectionUnknownKeyIsReported() throws {
+        let errors = try FacetConfig.validate("""
+        [[desktop.1.tab]]
+        type = "workspace"
+        label = "Code"
+        [[desktop.1.tab.section]]
+        bogus = 1
+        """)
+        #expect(errors.contains {
+            if case .unknownKey(let k) = $0.rule { return k == "bogus" }
+            return false
+        }, "tab.section is strict too; got \(errors.map(\.rule))")
     }
 }

@@ -113,8 +113,167 @@
       "type" : "object"
     },
     "desktop" : {
-      "additionalProperties" : true,
-      "description" : "`[[desktop.N.section]]` ordered per-mac-desktop display sections (N = Mission Control ordinal) — the sole way to configure a mac desktop. Each has a required `type` of workspace / lens / unassigned. workspace = `{ type, label, layout }` (a spatial cell; an optional `label` names it, else it shows its 1-based index; `match` / `apply` are FORBIDDEN — membership changes via DnD / `facet window --move-to N`). lens = `{ type, label, match, apply }` where match = a facet filter WHERE-clause and apply = `{ tags = [] }` — ADDITIVE TAGS ONLY (`workspace` / `floating` / `sticky` / `master` are forbidden on a lens and dropped); a lens is a pure VIEW, so an authored `layout` is ignored. unassigned = `{ type, label }` — an opt-in lost-and-found that, when present, collects windows shown in no other section (leftover = universe − shown); only the first emits, extras warn. Array order = tree display order. Any section block makes facet opt-in (manages only configured desktops). NESTED FORM: `[[desktop.N.tab]]` `{ type, label }` is a named grouping whose `type` is workspace / lens ONLY; its nested `[[desktop.N.tab.section]]` children carry NO `type` (each INHERITS the tab's), the lone exception being a child marked `unassigned = true` (the per-tab lost-and-found, ≤ 1). Parsed today; consumed by a later wave.",
+      "additionalProperties" : false,
+      "description" : "`[[desktop.N.section]]` ordered per-mac-desktop display sections (N = Mission Control ordinal) — the sole way to configure a mac desktop. A section's `type` is workspace / lens (OPTIONAL); the third shape, the lost-and-found, is the `unassigned = true` bool MARKER (NOT a `type` value — `type` is omitted there). workspace = `{ type, label, layout }` (a spatial cell; an optional `label` names it, else it shows its 1-based index; `match` / `apply` are FORBIDDEN — membership changes via DnD / `facet window --move-to N`). lens = `{ type, label, match, apply }` where match = a facet filter WHERE-clause and apply = `{ tags = [] }` — ADDITIVE TAGS ONLY (`workspace` / `floating` / `sticky` / `master` are forbidden on a lens and dropped); a lens is a pure VIEW, so an authored `layout` is ignored. unassigned = `{ unassigned = true, label }` — an opt-in lost-and-found that, when present, collects windows shown in no other section (leftover = universe − shown); only the first emits, extras warn. Array order = tree display order. Any section block makes facet opt-in (manages only configured desktops). NESTED FORM: `[[desktop.N.tab]]` `{ type, label }` is a named board grouping whose `type` is workspace / lens ONLY; its nested `[[desktop.N.tab.section]]` children carry NO `type` (each INHERITS the tab's), the lone exception being a child marked `unassigned = true` (the per-tab lost-and-found, ≤ 1).",
+      "patternProperties" : {
+        "^0*[1-9][0-9]*$" : {
+          "additionalProperties" : false,
+          "description" : "One mac desktop (N = Mission Control ordinal): its display sections and/or boards.",
+          "properties" : {
+            "section" : {
+              "items" : {
+                "additionalProperties" : false,
+                "description" : "One display section: workspace / lens / (unassigned) lost-and-found.",
+                "properties" : {
+                  "apply" : {
+                    "additionalProperties" : false,
+                    "description" : "Facets applied to a lens's matched windows (a lens uses `tags` only).",
+                    "properties" : {
+                      "floating" : {
+                        "description" : "Force a matched window floating (or tiled = false).",
+                        "type" : "boolean"
+                      },
+                      "master" : {
+                        "description" : "Make a matched window the layout master.",
+                        "type" : "boolean"
+                      },
+                      "sticky" : {
+                        "description" : "Pin a matched window across mac-desktop / workspace switches.",
+                        "type" : "boolean"
+                      },
+                      "tags" : {
+                        "description" : "Tags to add to a matched window.",
+                        "items" : {
+                          "type" : "string"
+                        },
+                        "type" : "array"
+                      },
+                      "workspace" : {
+                        "description" : "Move a matched window to this named workspace.",
+                        "type" : "string"
+                      }
+                    },
+                    "type" : "object"
+                  },
+                  "label" : {
+                    "description" : "Display name; unset shows the section's 1-based index.",
+                    "type" : "string"
+                  },
+                  "layout" : {
+                    "description" : "workspace only — layout-engine name (ignored on a lens).",
+                    "type" : "string"
+                  },
+                  "match" : {
+                    "description" : "lens only — a facet-filter WHERE-clause selecting its windows.",
+                    "type" : "string"
+                  },
+                  "type" : {
+                    "description" : "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle or a tab child (inherits the tab's).",
+                    "enum" : [
+                      "workspace",
+                      "lens"
+                    ],
+                    "type" : "string"
+                  },
+                  "unassigned" : {
+                    "description" : "Mark this the opt-in lost-and-found: collects windows shown in no other section.",
+                    "type" : "boolean"
+                  }
+                },
+                "type" : "object"
+              },
+              "type" : "array"
+            },
+            "tab" : {
+              "items" : {
+                "additionalProperties" : false,
+                "description" : "A browser-tab-style board grouping sections inside one mac desktop.",
+                "properties" : {
+                  "label" : {
+                    "description" : "Board display name.",
+                    "type" : "string"
+                  },
+                  "section" : {
+                    "items" : {
+                      "additionalProperties" : false,
+                      "description" : "One display section: workspace / lens / (unassigned) lost-and-found.",
+                      "properties" : {
+                        "apply" : {
+                          "additionalProperties" : false,
+                          "description" : "Facets applied to a lens's matched windows (a lens uses `tags` only).",
+                          "properties" : {
+                            "floating" : {
+                              "description" : "Force a matched window floating (or tiled = false).",
+                              "type" : "boolean"
+                            },
+                            "master" : {
+                              "description" : "Make a matched window the layout master.",
+                              "type" : "boolean"
+                            },
+                            "sticky" : {
+                              "description" : "Pin a matched window across mac-desktop / workspace switches.",
+                              "type" : "boolean"
+                            },
+                            "tags" : {
+                              "description" : "Tags to add to a matched window.",
+                              "items" : {
+                                "type" : "string"
+                              },
+                              "type" : "array"
+                            },
+                            "workspace" : {
+                              "description" : "Move a matched window to this named workspace.",
+                              "type" : "string"
+                            }
+                          },
+                          "type" : "object"
+                        },
+                        "label" : {
+                          "description" : "Display name; unset shows the section's 1-based index.",
+                          "type" : "string"
+                        },
+                        "layout" : {
+                          "description" : "workspace only — layout-engine name (ignored on a lens).",
+                          "type" : "string"
+                        },
+                        "match" : {
+                          "description" : "lens only — a facet-filter WHERE-clause selecting its windows.",
+                          "type" : "string"
+                        },
+                        "type" : {
+                          "description" : "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle or a tab child (inherits the tab's).",
+                          "enum" : [
+                            "workspace",
+                            "lens"
+                          ],
+                          "type" : "string"
+                        },
+                        "unassigned" : {
+                          "description" : "Mark this the opt-in lost-and-found: collects windows shown in no other section.",
+                          "type" : "boolean"
+                        }
+                      },
+                      "type" : "object"
+                    },
+                    "type" : "array"
+                  },
+                  "type" : {
+                    "description" : "Board kind — workspace / lens; its sections inherit it.",
+                    "enum" : [
+                      "workspace",
+                      "lens"
+                    ],
+                    "type" : "string"
+                  }
+                },
+                "type" : "object"
+              },
+              "type" : "array"
+            }
+          },
+          "type" : "object"
+        }
+      },
       "type" : "object"
     },
     "exclude" : {
