@@ -35,6 +35,67 @@ import Toml
 // keeps taplo from flagging the common inherit sentinel.
 private let perViewThemeDomain = canonicalThemeNames + [""]
 
+// The typed value shape for `[desktop.<N>]` ordinal keys — the open-map the
+// bare `.dynamicTable` couldn't express (t-kz0m). Hand-built at the DESCRIPTOR
+// layer (ObjectShape / NestedTable / NestedObject / SchemaField) rather than a
+// new authoring builder, per t-0avb B1. Canonical spec: t-0avb「値 shape の確定形」.
+// `permissive` defaults false → `additionalProperties: false`, so taplo AND the
+// runtime validator reject typo'd keys / non-ordinal `[desktop.foo]`. Per-type
+// conditionals (workspace forbids `match`, lens requires it) are deferred to
+// `DesktopSection.parse`, the enforcement authority (t-0avb B5).
+private enum DesktopSchema {
+    // A section's inline `apply` sub-table. Section-specific — NOT shared with
+    // `[[rule]]`'s flat apply vocab (that dedup is t-g0h9 / t-0046; t-0avb B4).
+    static var applyShape: ObjectShape {
+        ObjectShape(fields: [
+            SchemaField("workspace", .string, doc: "Move a matched window to this named workspace."),
+            SchemaField("tags", .stringArray, doc: "Tags to add to a matched window."),
+            SchemaField("floating", .boolean, doc: "Force a matched window floating (or tiled = false)."),
+            SchemaField("sticky", .boolean, doc: "Pin a matched window across mac-desktop / workspace switches."),
+            SchemaField("master", .boolean, doc: "Make a matched window the layout master."),
+        ], doc: "Facets applied to a lens's matched windows (a lens uses `tags` only).")
+    }
+
+    // One `[[desktop.N.section]]` (and `[[desktop.N.tab.section]]`) row. `type`
+    // is OPTIONAL: an `unassigned = true` receptacle and a tab.section child
+    // (which inherits its tab's type) carry none.
+    static var sectionItemShape: ObjectShape {
+        ObjectShape(fields: [
+            SchemaField("type", .string,
+                        doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle or a tab child (inherits the tab's).",
+                        enumDomain: ["workspace", "lens"]),
+            SchemaField("label", .string, doc: "Display name; unset shows the section's 1-based index."),
+            SchemaField("match", .string, doc: "lens only — a facet-filter WHERE-clause selecting its windows."),
+            SchemaField("layout", .string, doc: "workspace only — layout-engine name (ignored on a lens)."),
+            SchemaField("unassigned", .boolean, doc: "Mark this the opt-in lost-and-found: collects windows shown in no other section."),
+        ], objects: [
+            NestedObject(key: "apply", shape: applyShape),
+        ], doc: "One display section: workspace / lens / (unassigned) lost-and-found.")
+    }
+
+    // One `[[desktop.N.tab]]` board — a named grouping whose sections inherit
+    // its `type`, with nested `[[desktop.N.tab.section]]` children.
+    static var tabShape: ObjectShape {
+        ObjectShape(fields: [
+            SchemaField("type", .string,
+                        doc: "Board kind — workspace / lens; its sections inherit it.",
+                        enumDomain: ["workspace", "lens"]),
+            SchemaField("label", .string, doc: "Board display name."),
+        ], nested: [
+            NestedTable(key: "section", item: sectionItemShape),
+        ], doc: "A browser-tab-style board grouping sections inside one mac desktop.")
+    }
+
+    // The value each `[desktop.<N>]` ordinal key maps to — the container of
+    // `section` (flat) and/or `tab` (board) arrays; no scalar keys of its own.
+    static var valueShape: ObjectShape {
+        ObjectShape(fields: [], nested: [
+            NestedTable(key: "section", item: sectionItemShape),
+            NestedTable(key: "tab", item: tabShape),
+        ], doc: "One mac desktop (N = Mission Control ordinal): its display sections and/or boards.")
+    }
+}
+
 public extension FacetConfig {
 
     /// The single declarative spec. Drives `from(toml:)`,
@@ -224,30 +285,37 @@ public extension FacetConfig {
             .init("desktop", kind: .dynamicTable,
                   doc: "`[[desktop.N.section]]` ordered per-mac-desktop display "
                      + "sections (N = Mission Control ordinal) — the sole way "
-                     + "to configure a mac desktop. Each has a required `type` of "
-                     + "workspace / lens / unassigned. workspace = "
-                     + "`{ type, label, layout }` (a spatial cell; an optional "
-                     + "`label` names it, else it shows its 1-based index; "
-                     + "`match` / `apply` are FORBIDDEN — membership changes via "
-                     + "DnD / `facet window --move-to N`). lens = "
+                     + "to configure a mac desktop. A section's `type` is "
+                     + "workspace / lens (OPTIONAL); the third shape, the "
+                     + "lost-and-found, is the `unassigned = true` bool MARKER "
+                     + "(NOT a `type` value — `type` is omitted there). "
+                     + "workspace = `{ type, label, layout }` (a spatial cell; "
+                     + "an optional `label` names it, else it shows its 1-based "
+                     + "index; `match` / `apply` are FORBIDDEN — membership "
+                     + "changes via DnD / `facet window --move-to N`). lens = "
                      + "`{ type, label, match, apply }` where match = a facet "
                      + "filter WHERE-clause and apply = `{ tags = [] }` — ADDITIVE "
                      + "TAGS ONLY (`workspace` / `floating` / `sticky` / `master` "
                      + "are forbidden on a lens and dropped); a lens is a pure "
                      + "VIEW, so an authored `layout` is ignored. unassigned = "
-                     + "`{ type, label }` — an opt-in lost-and-found that, when "
-                     + "present, collects windows shown in no other section "
-                     + "(leftover = universe − shown); only the first emits, "
-                     + "extras warn. Array order = tree display order. Any "
+                     + "`{ unassigned = true, label }` — an opt-in lost-and-found "
+                     + "that, when present, collects windows shown in no other "
+                     + "section (leftover = universe − shown); only the first "
+                     + "emits, extras warn. Array order = tree display order. Any "
                      + "section block makes facet opt-in (manages only "
                      + "configured desktops). NESTED FORM: "
-                     + "`[[desktop.N.tab]]` `{ type, label }` is a named "
+                     + "`[[desktop.N.tab]]` `{ type, label }` is a named board "
                      + "grouping whose `type` is workspace / lens ONLY; its "
                      + "nested `[[desktop.N.tab.section]]` children carry NO "
                      + "`type` (each INHERITS the tab's), the lone exception "
                      + "being a child marked `unassigned = true` (the per-tab "
-                     + "lost-and-found, ≤ 1). Parsed today; consumed by a later "
-                     + "wave."),
+                     + "lost-and-found, ≤ 1).",
+                  // Typed open-map: each ordinal key maps to a `{ section[],
+                  // tab[] }` value (t-kz0m). keyPattern mirrors the runtime
+                  // `Int(mid) >= 1` guard (FacetConfig+Decode.swift) — accepts
+                  // `1`/`01`/`10`, rejects `0`/`00`/`foo` (t-0avb B2).
+                  dynamicValue: DynamicValue(keyPattern: "^0*[1-9][0-9]*$",
+                                             shape: DesktopSchema.valueShape)),
         ]
         )
     }
