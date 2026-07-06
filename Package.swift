@@ -116,6 +116,7 @@ let package = Package(
             .product(name: "Palette", package: "sill"),
             .product(name: "PaletteKit", package: "sill"),
             .product(name: "Effects", package: "sill"),
+            .product(name: "ThemeKit", package: "sill"),
         ]),
         .target(name: "FacetViewTree", dependencies: [
             "FacetView", "FacetCore",
