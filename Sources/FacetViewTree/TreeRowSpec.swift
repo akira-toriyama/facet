@@ -31,6 +31,27 @@ private func matches(_ query: String, _ w: Window) -> Bool {
     query.isEmpty || fuzzyMatch(query, w.appName + " " + w.title)
 }
 
+/// Max tag chips shown before collapsing the remainder into a `+N` badge.
+private let tagVisibleCap = 3
+
+/// Status badges first (fixed order), then up to `tagVisibleCap` tag chips, then
+/// a `+N` overflow badge when tags exceed the cap.
+private func windowBadges(_ w: Window) -> [TreeBadge] {
+    var out: [TreeBadge] = []
+    if w.isMaster { out.append(TreeBadge(.master)) }
+    if w.isFloating { out.append(TreeBadge(.float)) }
+    if w.isSticky { out.append(TreeBadge(.sticky)) }
+    if !w.isOnscreen { out.append(TreeBadge(.hidden)) }
+    if let m = w.mark { out.append(TreeBadge(.mark, m)) }
+    if let s = w.scratchpad { out.append(TreeBadge(.scratchpad, s)) }
+    let shown = w.tags.prefix(tagVisibleCap)
+    out.append(contentsOf: shown.map { TreeBadge(.tag, $0) })
+    if w.tags.count > tagVisibleCap {
+        out.append(TreeBadge(.overflow, "+\(w.tags.count - tagVisibleCap)"))
+    }
+    return out
+}
+
 private func headerPrimary(_ s: ProjectedSection) -> String {
     let kind: String
     switch s.sectionType {
@@ -62,7 +83,7 @@ public func buildTreeRows(sections: [ProjectedSection], query: String) -> [TreeR
                 kind: .window(pid: w.pid),
                 primary: w.appName,
                 secondary: w.title.isEmpty ? nil : w.title,
-                badges: []))
+                badges: windowBadges(w)))
         }
         group += 1
     }

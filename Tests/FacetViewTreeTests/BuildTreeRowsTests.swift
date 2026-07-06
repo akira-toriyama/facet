@@ -72,3 +72,44 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(rows[1].primary, "unassigned · spare")
     }
 }
+
+// MARK: - Task 4: badges + tag overflow
+
+extension BuildTreeRowsTests {
+    // Same init-order note as `win` — omit the defaulted `bundleId` (it sits
+    // between isMaster and mark), pass the rest in declaration order.
+    fileprivate func rich(_ id: Int, master: Bool = false, floating: Bool = false,
+                          sticky: Bool = false, onscreen: Bool = true, mark: String? = nil,
+                          scratch: String? = nil, tags: [String] = []) -> Window {
+        Window(id: WindowID(serverID: id), pid: id, appName: "A", title: "",
+               isFocused: false, isFloating: floating, frame: nil,
+               isOnscreen: onscreen, isMaster: master, mark: mark, isSticky: sticky,
+               scratchpad: scratch, tags: tags)
+    }
+    fileprivate func badges(_ w: Window) -> [TreeBadge] {
+        buildTreeRows(sections: [sec("ws:0", "1", .workspace, [w], src: 0)], query: "")[1].badges
+    }
+
+    func testStatusBadges() {
+        XCTAssertEqual(badges(rich(1, master: true)), [TreeBadge(.master)])
+        XCTAssertEqual(badges(rich(1, floating: true)), [TreeBadge(.float)])
+        XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky)])
+        XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden)])
+        XCTAssertEqual(badges(rich(1, mark: "a")), [TreeBadge(.mark, "a")])
+        XCTAssertEqual(badges(rich(1, scratch: "shelf")), [TreeBadge(.scratchpad, "shelf")])
+    }
+
+    func testTagBadgesCapWithOverflow() {
+        let b = badges(rich(1, tags: ["red", "green", "blue", "amber"]))
+        // status badges (none) + 3 tag chips + a "+1" overflow badge
+        XCTAssertEqual(b, [
+            TreeBadge(.tag, "red"), TreeBadge(.tag, "green"), TreeBadge(.tag, "blue"),
+            TreeBadge(.overflow, "+1"),
+        ])
+    }
+
+    func testStatusBeforeTags() {
+        let b = badges(rich(1, master: true, tags: ["x"]))
+        XCTAssertEqual(b, [TreeBadge(.master), TreeBadge(.tag, "x")])
+    }
+}
