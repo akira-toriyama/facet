@@ -113,3 +113,29 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(b, [TreeBadge(.master), TreeBadge(.tag, "x")])
     }
 }
+
+// MARK: - Task 9: layout-mode subtitle (workspace headers only)
+
+extension BuildTreeRowsTests {
+    func testWorkspaceHeaderCarriesLayoutSubtitle() {
+        let rows = buildTreeRows(
+            sections: [sec("ws:0", "1", .workspace, [], src: 0)],
+            query: "",
+            layoutMode: { _ in "bsp" })
+        guard case .header(.workspace, "bsp") = rows[0].kind else { return XCTFail() }
+    }
+
+    func testLensHeaderIgnoresLayoutSubtitle() {
+        let rows = buildTreeRows(
+            sections: [sec("section:0:dev", "dev", .lens, [win(1, "A", "")], src: nil)],
+            query: "", layoutMode: { _ in "bsp" })
+        guard case .header(.lens, nil) = rows[0].kind else { return XCTFail() }
+    }
+
+    func testUnassignedHeaderIgnoresLayoutSubtitle() {
+        let rows = buildTreeRows(
+            sections: [sec("unassigned:0", "spare", .unassigned, [win(9, "X", "")], src: nil)],
+            query: "", layoutMode: { _ in "bsp" })
+        guard case .header(.unassigned, nil) = rows[0].kind else { return XCTFail() }
+    }
+}

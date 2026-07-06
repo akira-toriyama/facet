@@ -67,15 +67,24 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
 /// multiple sections gets distinct ids. A section whose windows all fail the
 /// filter is dropped whole (its header does not render); an empty query keeps
 /// every section (even one with no windows).
-public func buildTreeRows(sections: [ProjectedSection], query: String) -> [TreeRowSpec] {
+///
+/// `layoutMode` supplies the layout-engine abbrev shown as a header subtitle,
+/// and is consulted for `.workspace` sections only (lens / unassigned headers
+/// have no layout, so their subtitle stays `nil` even if the closure returns a
+/// value). The default keeps every existing 2-arg call site subtitle-free.
+public func buildTreeRows(
+    sections: [ProjectedSection], query: String,
+    layoutMode: (ProjectedSection) -> String? = { _ in nil }
+) -> [TreeRowSpec] {
     var rows: [TreeRowSpec] = []
     var group = 0
     for s in sections {
         let wins = s.windows.filter { matches(query, $0) }
         if !query.isEmpty && wins.isEmpty { continue }   // zero-match drop
+        let subtitle = s.sectionType == .workspace ? layoutMode(s) : nil
         rows.append(TreeRowSpec(
             id: .header(s.id),
-            kind: .header(sectionType: s.sectionType, subtitle: nil),
+            kind: .header(sectionType: s.sectionType, subtitle: subtitle),
             primary: headerPrimary(s), secondary: nil, badges: []))
         for w in wins {
             rows.append(TreeRowSpec(
