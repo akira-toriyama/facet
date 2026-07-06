@@ -77,7 +77,7 @@ let package = Package(
         // the same 2.x, never a split graph. For local, atomic sill↔facet
         // editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "3.1.0")),
+                 .upToNextMinor(from: "3.2.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
@@ -116,8 +116,12 @@ let package = Package(
             .product(name: "Palette", package: "sill"),
             .product(name: "PaletteKit", package: "sill"),
             .product(name: "Effects", package: "sill"),
+            .product(name: "ThemeKit", package: "sill"),
         ]),
-        .target(name: "FacetViewTree", dependencies: ["FacetView", "FacetCore"]),
+        .target(name: "FacetViewTree", dependencies: [
+            "FacetView", "FacetCore",
+            .product(name: "ThemeKitUI", package: "sill"),
+        ]),
         .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
         // Capture adapter: the sole ScreenCaptureKit consumer, behind

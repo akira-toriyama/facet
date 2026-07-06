@@ -17,6 +17,7 @@
 
 import AppKit
 import FacetCore
+import ThemeKit
 
 @MainActor
 public enum IconResolver {
@@ -99,5 +100,48 @@ public enum IconResolver {
             y: (size.height - measured.height) / 2))
         img.unlockFocus()
         return img
+    }
+}
+
+extension IconResolver {
+    /// facet `SF:<name>` → sill Phosphor slug. Tree-scope glyphs only
+    /// (row badges, section-header, layout-mode badge); context-menu specs
+    /// keep resolving via `resolve(_:)` (F2). Unknown → nil (logged by caller).
+    public static func phosphorSlug(forSF sf: String) -> String? {
+        switch sf {
+        case "magnifyingglass": return "magnifying-glass"
+        case "pencil": return "pencil"
+        case "tag": return "tag"
+        case "line.3.horizontal.decrease.circle": return "funnel"
+        case "crown": return "crown"
+        case "macwindow": return "app-window"
+        case "eye.slash": return "eye-slash"
+        case "chevron.down": return "caret-down"
+        case "chevron.up": return "caret-up"
+        case "plus": return "plus"
+        case "minus": return "minus"
+        case "xmark": return "x"
+        case "square.stack": return "stack"
+        case "square.grid.2x2": return "squares-four"
+        case "archivebox": return "archive"            // GAP-A (sill-B)
+        case "pin": return "push-pin"                  // GAP-A
+        case "pin.slash": return "push-pin-slash"      // GAP-A
+        case "tray": return "tray"                     // GAP-A
+        case "arrow.left.and.right": return "arrows-left-right"  // GAP-A
+        case "square.split.bottomrightquarter": return "spiral"  // upstream
+        case "square.split.2x2": return "bsp"                     // custom (sill-B)
+        case "rectangle.lefthalf.filled": return "master-left"   // custom
+        case "rectangle.righthalf.filled": return "master-right" // custom
+        case "rectangle.tophalf.filled": return "master-top"     // custom
+        case "rectangle.bottomhalf.filled": return "master-bottom" // custom
+        case "rectangle.center.inset.filled": return "master-center" // custom
+        default: return nil
+        }
+    }
+
+    /// A template (currentColor) Phosphor NSImage from sill, for SwiftUI
+    /// `Image(nsImage:).renderingMode(.template).foregroundStyle(...)`.
+    public static func phosphorImage(_ slug: String, pt: CGFloat) -> NSImage? {
+        ThemeKit.phosphorImage(slug, pt: pt)
     }
 }
