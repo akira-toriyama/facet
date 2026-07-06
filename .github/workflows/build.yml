@@ -18,7 +18,10 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-15
+    # macos-26: facet's floor is macOS 26 (t-tbar), and `swift test` runs
+    # minos-26 binaries a macos-15 host can't load. The 26 runner defaults
+    # to Xcode 26.x, which the shared swift-build composite consumes.
+    runs-on: macos-26
     # Bounded so a hung `swift build` can't burn 6 h of free macOS minutes.
     timeout-minutes: 20
     steps:

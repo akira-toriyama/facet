@@ -27,7 +27,7 @@ Adding or renaming a term lands in the same PR as the code change.
 `facet` — Swift workspace + window manager for macOS. Multiple
 views (`--view tree|grid|rail`), native AX/CGS backend
 (`FacetAdapterNative`, sole backend since v2.0.0). SIP-on,
-public API + AX only. Swift 6, macOS 15+.
+public API + AX only. Swift 6, macOS 26+.
 
 ## Shared libraries (atelier)
 

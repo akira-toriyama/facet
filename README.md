@@ -1,6 +1,6 @@
 # facet
 
-![platform](https://img.shields.io/badge/platform-macOS%2015%2B-lightgrey)
+![platform](https://img.shields.io/badge/platform-macOS%2026%2B-lightgrey)
 ![swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![status](https://img.shields.io/badge/status-alpha-orange)
@@ -63,7 +63,7 @@ slots themselves don't move, so hotkey numbering is preserved). No
 modifier keys.
 
 All views share the same backend and the same theme
-(13 built-in themes — terminal, chomp, rainbow, dracula, github-dark,
+(35 built-in themes — terminal, chomp, rainbow, dracula, github-dark,
 catppuccin-mocha, … plus `random` — live toggleable).
 
 ## Layouts
@@ -347,10 +347,10 @@ edits for you.
 
 Frequently-touched keys:
 
-- `[theme] name` — 13 themes: `terminal` (default) / `chomp` /
+- `[theme] name` — 35 themes, including: `terminal` (default) / `chomp` /
   `rainbow` / `cobalt2` / `shades-of-purple` / `tokyo-hack` /
   `github-dark` / `dracula` / `catppuccin-mocha` / `gruvbox` /
-  `github-light` / `catppuccin-latte` / `system`, plus `random`
+  `github-light` / `system`, plus `random`
   (picks one at each launch / `--reload`, excluding `system`)
 - `[tree]` table — `preview-mode` (`popover` / `mirror`), plus the
   panel geometry seed `pos-x` / `pos-y` / `width` / `height` (screen
@@ -624,7 +624,7 @@ facet query --tags                # every tag currently in use, as a sorted
 facet config --validate           # lint the config file
 
 # Server controls
-facet --theme NAME                # 13 themes + random (terminal, chomp, …, catppuccin-latte; see config.toml)
+facet --theme NAME                # 35 themes + random (terminal, chomp, …; see config.toml)
 facet --reload                    # re-read config.toml + apply
                                   # (theme / preview-mode)
 facet --quit                      # terminate the running server

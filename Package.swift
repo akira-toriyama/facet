@@ -46,7 +46,14 @@ import PackageDescription
 
 let package = Package(
     name: "facet",
-    platforms: [.macOS(.v15)],
+    // macOS 26 floor (t-tbar family policy): raised from .v15 the moment
+    // facet first bumps its sill pin into the 26-floor line (sill v2.0.0+
+    // requires macOS 26 for the #17b/Phase-B SwiftUI migration). Spelled as
+    // the STRING "26.0" — the only form both toolchains parse (`.v26` is
+    // absent from CLT's PackageDescription 6.1, and tools-version 6.2 would
+    // break CLT manifest parsing), so tools-version stays 6.0. Dropping
+    // macOS <26 is a deliberate breaking change (t-kz0m).
+    platforms: [.macOS("26.0")],
     products: [
         .executable(name: "facet", targets: ["FacetApp"]),
         .library(name: "FacetCore", targets: ["FacetCore"]),
@@ -54,18 +61,23 @@ let package = Package(
     dependencies: [
         // Shared theming foundation (plan atelier). Pinned to a SemVer
         // tag for release/CI reproducibility; `.upToNextMinor` keeps it on
-        // a single minor. Floor 1.29.0 = the sill release (PR #80, t-0029)
-        // that added the `ConfigSchema.Spec.validate` bridge, so the ONE
-        // `configSpec` now drives decode + `config --emit-schema` + `config
-        // --validate` (see FacetConfig+Validate.swift) — "editor green"
-        // and "loader accepts it" can't diverge. 1.29.0 > 1.27.0, so
-        // sill's OWN swift-toml-edit floor stays 2.0.0 (the breaking
-        // `Toml.Row`/source-span bump, chord#148) — facet's DIRECT
-        // swift-toml-edit 2.x pin below and sill's transitive one resolve
-        // to the same 2.x, never a split graph. For local, atomic
-        // sill↔facet editing, temporarily swap this for `.package(path: "../sill")`.
+        // a single minor. Floor 3.1.0 = the sill release (PR #109, t-5d5a)
+        // that added `ObjectShape.dynamicValue` — a TYPED open-map value
+        // schema for dynamic-ordinal tables — so the ONE `configSpec` gives
+        // `[desktop.<N>]` field-level completion + strict validation instead
+        // of a bare permissive object (t-kz0m; see FacetConfig+Spec.swift
+        // `desktop`). This 1.29.0→3.x jump crosses sill 2.0.0/3.0.0, which
+        // raised sill's macOS floor to 26 (t-tbar) — hence facet's own
+        // `.macOS("26.0")` bump above. The breaking majors touched only
+        // ThemeKit/ThemeKitUI/prism (the AppKit ThemedList retirement), none
+        // of the modules facet links (Palette / PaletteKit / Effects /
+        // ConfigSchema). sill's OWN swift-toml-edit floor stays 2.0.0 (the
+        // breaking `Toml.Row`/source-span bump, chord#148) — facet's DIRECT
+        // swift-toml-edit 2.x pin below and sill's transitive one resolve to
+        // the same 2.x, never a split graph. For local, atomic sill↔facet
+        // editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "1.29.0")),
+                 .upToNextMinor(from: "3.1.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The

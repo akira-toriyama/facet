@@ -105,7 +105,6 @@ auto-promote = true
 #
 # Light:
 #   "github-light"     — GitHub light; blue + violet on white. System font.
-#   "catppuccin-latte" — soft pastel light (Latte); purple + teal.
 #
 # Adaptive:
 #   "system"           — native vibrancy + dynamic colors, follows macOS
