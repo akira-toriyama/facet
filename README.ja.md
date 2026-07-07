@@ -49,6 +49,13 @@ section をまとめた**タブ状のグループ**（workspace の集合 / lens
 （[設定](#設定)）で記述し、 CLI では `facet board --focus N|"label"` で切替える。
 board が 1 つだけ（または board 未設定）なら帯は出ない。
 
+**lens board** は `isolate = true` で **focus モード**に出来る： その board で lens を
+activate すると、*lens 外*の窓を画面隅にスライドさせ、 画面を active lens の世界だけに
+declutter する（dwm 風フォーカス）。 park された窓は board の Lost & Found セクション
+（`unassigned = true`）に dim ＋ `parked` バッジで並ぶ； クリックすると lens を解除して
+戻る。 board の切替自体は依然として何も動かさない — `isolate` board で lens を activate
+した時だけ park する。 既定 `isolate = false` では lens は純粋な表示フィルタのまま。
+
 DnD は各 view 共通のモデル — **掴んだ対象が動作を決める**: window を
 掴めば移動、 ワークスペース header を掴めば 2 ワークスペースの中身を
 swap (ワークスペースの枠自体は動かないので hotkey 番号は不変)。 修飾

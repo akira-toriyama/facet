@@ -211,4 +211,19 @@ struct IsolateParkWiringTests {
         }
         #expect(a.catalog.isolateParked.isEmpty)
     }
+
+    /// Board-invariant (t-c6fm phase 5): SELECTING an isolate board is display-
+    /// only — with no lens active the gate stays off, so nothing parks and every
+    /// window keeps its workspace assignment. Park needs BOTH an isolate board
+    /// AND an active lens; a board switch alone never moves a window.
+    @Test func boardSwitchAloneParksNothing() {
+        let a = isolateAdapter(isolate: true)
+        cliQueue.sync {
+            a.setSelectedBoard(1, forMacDesktopOrdinal: 1)   // isolate board, NO lens
+            a.applyIsolatePark(live: live(), focused: nil, rect: rect)
+        }
+        #expect(a.catalog.isolateParked.isEmpty)
+        #expect(a.catalog.windowMap[wid(10)]?.workspace == 1)
+        #expect(a.catalog.windowMap[wid(30)]?.workspace == 1)
+    }
 }

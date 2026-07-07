@@ -190,6 +190,14 @@ flat な [[section]] config（`[[desktop.N.section]]`）の上位互換で、同
 既定 workspace 群へ縮退（byte 一致）。
 - 設定: `[[desktop.N.tab]]`（`type` 必須＝`workspace` / `lens`・`label` 任意）＋配下
   `[[desktop.N.tab.section]]`（`type` を書かず親から継承・`unassigned = true` マーカー可）
+- **isolate モード**（lens board 限定・`isolate = true`／t-c6fm）: その board で [[lens]] を
+  activate すると **lens 外の active-workspace 窓を corner に anchor-park** して画面を active
+  lens の世界だけに declutter する（dwm 風 focus）。既定 `false` = overview（従来の pure
+  VIEW）。**board 切替そのものは依然「窓を動かさない」**——実際に動くのは lens *activation*
+  だけ（`match` から毎 reconcile 導出）。park 窓は tree では [[unassigned]] Lost&Found に dim
+  ＋ `parked` バッジで出る（画面と一致・option ②）；その行を click すると lens を解除して復帰。
+  sticky は park 免除。コード: `Window.isParked` / `WorkspaceCatalog.isolateParked` /
+  `IsolatePark.parkSet`（純）/ `NativeAdapter.applyIsolatePark` / `DesktopTab.isolate`
 - CLI: `facet board --focus N|"label"`（1始まり index か label で切替・out-of-range /
   未知 label は loud reject・**無名 board は index 専用**＝band の既定キャプション
   `Workspaces` / `Lenses` は `--focus` ラベルにならない）。`facet section --focus` の
