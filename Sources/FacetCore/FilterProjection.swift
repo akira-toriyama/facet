@@ -134,9 +134,16 @@ public enum FilterProjection {
         // (possibly-empty / non-unique) label, and `--focus` / `--move-to` stay
         // correct. Array order (not a re-sort) keeps the degrade byte-
         // identical to today.
+        // Isolate-parked windows (t-c6fm phase 4) are anchor-parked off-screen
+        // because they fall outside the active lens on an `isolate` board — they
+        // must NOT show in place. Excluding them from every emitted section here
+        // makes Pass 2 (`universe − shown`) sweep them into the `unassigned`
+        // Lost&Found receptacle instead (the universe still reads `ws.windows`
+        // directly, so they stay in it). Matches the decluttered screen.
         func wsSection(_ ws: Workspace) -> ProjectedSection {
             ProjectedSection(id: "ws:\(ws.index)", label: ws.name,
-                        windows: ws.windows, sourceWorkspaceIndex: ws.index,
+                        windows: ws.windows.filter { !$0.isParked },
+                        sourceWorkspaceIndex: ws.index,
                         sectionType: .workspace)
         }
 
@@ -203,7 +210,10 @@ public enum FilterProjection {
                     var matched: [Window] = []
                     for ws in workspaces {
                         for w in ws.windows
-                        where LensMembership.matches(
+                        // Skip isolate-parked windows (t-c6fm) — a parked window
+                        // is out of the ACTIVE lens but could still match another
+                        // lens on the board; it belongs in Lost&Found, not here.
+                        where !w.isParked && LensMembership.matches(
                             w, inWorkspaceNamed: ws.name, filter: filter) {
                             matched.append(w)
                         }

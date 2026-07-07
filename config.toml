@@ -802,6 +802,11 @@ action = "ignore"
 #     [[desktop.4.tab.section]]
 #     label = "Chat"
 #     match = 'app~=Slack or app~=Discord'
+#     [[desktop.4.tab.section]]
+#     unassigned = true          # RECOMMENDED on an isolate board: the parked
+#     label = "Parked"           # (out-of-lens) windows show here, dimmed + a
+#                                # `parked` badge. Without it, parked windows are
+#                                # hidden from the tree entirely.
 #
 # ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: a Lost & Found
 # receptacle (`unassigned = true`) + 2 unnamed (index-shown) workspaces + 3

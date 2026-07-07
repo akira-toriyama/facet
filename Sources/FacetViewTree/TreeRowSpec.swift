@@ -18,7 +18,7 @@ public struct TreeRowSpec: Sendable, Equatable {
 /// A pure badge spec — the SwiftUI seam maps `kind` to a Phosphor slug + role.
 public struct TreeBadge: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
-        case master, float, sticky, hidden, mark, scratchpad, tag, overflow
+        case master, float, sticky, hidden, parked, mark, scratchpad, tag, overflow
     }
     public let kind: Kind
     public let text: String
@@ -42,6 +42,7 @@ private func windowBadges(_ w: Window) -> [TreeBadge] {
     if w.isFloating { out.append(TreeBadge(.float)) }
     if w.isSticky { out.append(TreeBadge(.sticky)) }
     if !w.isOnscreen { out.append(TreeBadge(.hidden)) }
+    if w.isParked { out.append(TreeBadge(.parked)) }   // t-c6fm phase 4
     if let m = w.mark { out.append(TreeBadge(.mark, m)) }
     if let s = w.scratchpad { out.append(TreeBadge(.scratchpad, s)) }
     let shown = w.tags.prefix(tagVisibleCap)

@@ -97,6 +97,15 @@ public struct Window: Sendable {
     /// tiling). Session-only, per-mac-desktop; orthogonal to `mark`.
     /// Views surface it as a slanted "sticky" badge.
     public let isSticky: Bool
+    /// Whether this window is currently ISOLATE-PARKED (t-c6fm) — anchor-parked
+    /// off-screen because it falls OUTSIDE the active lens on an `isolate`
+    /// (focus-mode) board. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
+    /// window keeps `isOnscreen == true` (it sits on an on-screen sliver), so
+    /// this is the SEPARATE signal the tree reads to DIM it + show a `parked`
+    /// badge, and the projection reads to route it into the Lost&Found receptacle
+    /// instead of its normal section. Stamped by the catalog snapshot from
+    /// `isolateParked`; `false` in every non-isolate context.
+    public let isParked: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
     /// `nil` when it isn't a scratchpad window. A scratchpad is a
     /// named hidden shelf (`facet scratchpad --stash NAME`): the
@@ -128,6 +137,7 @@ public struct Window: Sendable {
                 bundleId: String? = nil,
                 mark: String? = nil,
                 isSticky: Bool = false,
+                isParked: Bool = false,
                 scratchpad: String? = nil,
                 tags: [String] = []) {
         self.id = id
@@ -142,6 +152,7 @@ public struct Window: Sendable {
         self.isMaster = isMaster
         self.mark = mark
         self.isSticky = isSticky
+        self.isParked = isParked
         self.scratchpad = scratchpad
         self.tags = tags
     }
@@ -156,8 +167,8 @@ public struct Window: Sendable {
         Window(id: id, pid: pid, appName: appName, title: title,
                isFocused: isFocused, isFloating: isFloating, frame: frame,
                isOnscreen: isOnscreen, isMaster: isMaster, bundleId: bundleId,
-               mark: mark, isSticky: isSticky, scratchpad: scratchpad,
-               tags: tags)
+               mark: mark, isSticky: isSticky, isParked: isParked,
+               scratchpad: scratchpad, tags: tags)
     }
 }
 

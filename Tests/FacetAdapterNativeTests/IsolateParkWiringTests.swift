@@ -112,6 +112,19 @@ struct IsolateParkWiringTests {
         #expect(!c.isolateParked.contains(wid(30)))
     }
 
+    /// The snapshot stamps `Window.isParked` from `isolateParked` (t-c6fm phase
+    /// 4) so the tree can dim + badge a parked window and route it to Lost&Found.
+    @Test func snapshotStampsIsParked() {
+        var c = seededCatalog(2)
+        _ = c.reconcile(live: [window(10), window(30)])
+        _ = c.reconcileIsolatePark(desired: [wid(30)], focused: nil, in: rect)
+        let snap = c.snapshot(live: [window(10), window(30)],
+                              focused: nil, activeRect: rect)
+        let active = snap.first { $0.isActive }
+        #expect(active?.windows.first { $0.id == wid(30) }?.isParked == true)
+        #expect(active?.windows.first { $0.id == wid(10) }?.isParked == false)
+    }
+
     // MARK: - adapter: applyIsolatePark gate + derivation
 
     private func ws(_ label: String) -> DesktopSection {
