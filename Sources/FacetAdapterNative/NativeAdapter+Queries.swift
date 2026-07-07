@@ -199,6 +199,43 @@ extension NativeAdapter {
                     + "windows=\(result.addedIDs.count)")
             }
         }
+        // t-sw9p — match-based lens auto-tag: a window carries the `apply` tags
+        // of EVERY lens section it MATCHES, applied to ALL managed windows (not
+        // just `addedIDs`) every reconcile. This is what finally tags a window
+        // open BEFORE facet launched — the EX-3.3 inherit above only reaches
+        // `addedIDs` while a lens is active, so pre-existing windows stayed
+        // untagged. Additive + idempotent (`addTagToWindow` inserts into a Set;
+        // we skip tags already present so a settled window stays quiet), and
+        // membership rides the SAME `LensMembership` predicate the display uses,
+        // so tags and the tree can never disagree. A lens stays a pure VIEW
+        // (t-0021) — this writes only the window's own tag attribute, moving
+        // nothing. Gated on the active mac desktop being section-managed (a
+        // by-workspace desktop carries no lens sections). Evaluated against each
+        // window's PRE-add snapshot (no chaining within one pass, like `[[rule]]`);
+        // a `match='tag~=X'` lens settles over successive reconciles.
+        if config.isSectionModelActive(ordinal: activeMacDesktopOrdinal) {
+            let board = activeMacDesktopOrdinal.flatMap { selectedBoardByOrdinal[$0] } ?? 0
+            let lensSecs = config.activeBoardSections(
+                forMacDesktopOrdinal: activeMacDesktopOrdinal, board: board)
+            if lensSecs.contains(where: { $0.type == .lens && !$0.unassigned }) {
+                var adds: [(WindowID, String)] = []
+                for (id, slot) in catalog.windowMap {
+                    guard let w = liveByID[id] else { continue }
+                    let wsName = slot.workspace.map { catalog.workspaceName($0) }
+                    let tagged = w.withTags(slot.tags.sorted())
+                    for t in LensAutoTag.tags(for: tagged, inWorkspaceNamed: wsName,
+                                              lensSections: lensSecs)
+                    where !slot.tags.contains(t) {
+                        adds.append((id, t))
+                    }
+                }
+                for (id, t) in adds { catalog.addTagToWindow(id, name: t) }
+                if !adds.isEmpty {
+                    Log.debug("native: lens auto-tag applied=\(adds.count) "
+                        + "(match-based, all windows)")
+                }
+            }
+        }
         // Mechanism ② (auto-heal orphan slivers): a window left parked in a
         // display's bottom-right corner by a PREVIOUS (crashed) facet run is
         // adopted on relaunch / desktop switch but isn't in THIS session's

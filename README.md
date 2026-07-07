@@ -437,7 +437,9 @@ Frequently-touched keys:
   **forbidden** on a workspace, so its membership changes only by drag or
   `facet window --move-to N`),
   `"lens"` (a saved visibility filter / view — `label` + `match` + optional
-  `apply`, where **`apply` adds tags only** — `{ tags = [...] }`, additive;
+  `apply`, where **`apply` adds tags only** — `{ tags = [...] }`, additive,
+  auto-applied to **every window the lens matches** (incl. windows open before
+  facet launched);
   `workspace` / `floating` / `sticky` / `master` are forbidden on a lens and
   dropped; activate it with `facet lens NAME` to DISPLAY the matches
   aggregated across **every** workspace on the current mac desktop (a lens is

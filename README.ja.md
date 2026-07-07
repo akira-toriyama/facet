@@ -404,7 +404,7 @@ opt-in すればセッション編集を facet が保存する。
   workspace 数。 **workspace では `match` / `apply` は禁止** — 所属は drag
   または `facet window --move-to N` でのみ変える)、 `"lens"` (保存フィルタ /
   view — `label` + `match` + 任意の `apply`。 **`apply` は tag 付与のみ** =
-  `{ tags = [...] }`（additive）。 `workspace` / `floating` / `sticky` /
+  `{ tags = [...] }`（additive・lens に **match する全窓**へ自動付与＝facet 起動前の窓も含む）。 `workspace` / `floating` / `sticky` /
   `master` は lens では禁止で drop される。 `facet lens NAME` で有効化すると、
   現在の mac desktop の**すべての workspace 横断で**一致した窓を集約表示する
   （lens は pure VIEW＝実窓を一切動かさず、 `layout` も無視）。 どれかの

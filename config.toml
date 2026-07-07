@@ -698,16 +698,20 @@ action = "ignore"
 #                  meaningful only on `type = "workspace"` sections, where it
 #                  seeds the tiling engine. Per the clamp-don't-reject rule an
 #                  authored `layout` here is harmless dead data.
-#         apply  — (optional) tags ADDED to a window dropped into the lens, so
-#                  the drop "sticks" (and a drag back out un-tags it). ADDITIVE
-#                  TAGS ONLY — inline table, only `tags` honored:
+#         apply  — (optional) tags AUTOMATICALLY added to EVERY window this lens
+#                  MATCHES — regardless of when/where it opened, INCLUDING windows
+#                  already open before facet launched. ADDITIVE (a window keeps the
+#                  tag even if it later stops matching; nothing is auto-removed). A
+#                  drag INTO the lens also applies them (the drop "sticks"), and a
+#                  drag back OUT un-tags — for a `tag~=X` lens the window then no
+#                  longer matches and stays out; for a pure-condition lens
+#                  (`app=Safari`) it keeps matching, so the tag re-applies (the
+#                  window belongs there). TAGS ONLY — inline table, only `tags`:
 #                    tags = ["web"]   add these tags (additive)
 #                  `workspace` / `floating` / `sticky` / `master` are FORBIDDEN
 #                  on a lens (dropped with a warning): workspace membership is
-#                  the workspace axis, window attributes are direct CLI. Pair
-#                  `match = 'tag~=X'` with `apply = { tags = ["X"] }` so a drop
-#                  into the lens tags the window and it then satisfies the match
-#                  (it stays). Omit `apply` → the lens is drop-inert (snaps back).
+#                  the workspace axis, window attributes are direct CLI. Omit
+#                  `apply` → a pure display filter that tags nothing.
 #
 #   unassigned = true  — (§G / W2.6) the lost-and-found receptacle MARKER, and
 #       the RECOMMENDED safety net. Set `unassigned = true` on a section to make

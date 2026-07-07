@@ -625,7 +625,8 @@ config で宣言する **順序付きの表示単位**（pivot・`[[desktop.N.se
   [[match]] + 任意 [[apply]]）。1 window = match に当たった**全** lens に出る
   （multi-match）。lens は「絞る」だけ（束ね直さない）。**`apply` は tag 付与のみ**
   （t-qtpx・`{ tags = [...] }` additive。`workspace`/`floating`/`sticky`/`master`
-  は禁止で drop）。
+  は禁止で drop）。**`apply` は match する全窓へ自動付与**（t-sw9p・起動前の窓も含む・
+  additive で自動除去なし）。
 - **`unassigned = true`（マーカー）**: §G の**迷子受け皿**。`type` ではなく **bool マーカー**
   （#366・W2.6＝`type` は workspace/lens のまま任意・受け皿では投影に無関係。旧
   `type = "unassigned"` 綴りは **退役**＝unknown type で drop）。`label` のみ・`match`/`apply`
