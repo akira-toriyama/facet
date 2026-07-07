@@ -18,6 +18,7 @@
 // should always read through those so a typo can never break the
 // UI.
 
+import ConfigSchema // sill's pure schema validator — `ValidationError`
 import CoreGraphics
 import Foundation
 import Palette   // sill's pure (AppKit-free) theme layer — `canonical(_:)`
@@ -45,6 +46,10 @@ public struct FacetConfig: Sendable {
     // surface-owning blocks ([tree]/[grid]/[rail], `""` = inherit this
     // one) per the family rule "theme lives with the painted surface".
     public var theme: String?               // [theme].name; see effectiveTheme
+    /// A1: strict schema violations found on the LOAD path, recorded (not
+    /// rejected) by `load(source:)`; emitted at startup/hot-reload by
+    /// `Controller.logConfigWarnings()`. `[]` when clean or unparseable.
+    public internal(set) var schemaWarnings: [ValidationError] = []
     /// Theme color-cycle period (`[theme].color-cycle-ms`, integer ms) —
     /// animatable themes (rainbow / chomp) rotate their accents over
     /// this period. Set → animate; unset → static. Independent of the
