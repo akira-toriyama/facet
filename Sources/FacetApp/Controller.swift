@@ -833,6 +833,7 @@ final class Controller: NSObject {
     /// hot-reload), never from the per-tick `effective*` accessors.
     private func logConfigWarnings() {
         for warning in config.unknownValueWarnings() { Log.line(warning) }
+        for v in config.schemaWarnings { Log.line("config: \(v.message)") }   // A1
     }
 
     /// Log `diagnostics` once per change, each line carrying `prefix`.

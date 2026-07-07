@@ -404,6 +404,13 @@ extension FacetConfig {
         }
         let adoptRules = decodeRuleSections(fromTOML: text)
         if !adoptRules.isEmpty { c.rules = adoptRules }
+        // A1: run the STRICT schema validate on the LOAD path and RECORD any
+        // violations as warnings — load still clamps/drops (never rejects).
+        // The daemon surfaces these via Controller.logConfigWarnings at
+        // startup + hot-reload. `try?`: syntactically-bad TOML can't be
+        // strict-parsed and the lenient decode above already produced a
+        // usable clamped config.
+        c.schemaWarnings = (try? Self.validate(text)) ?? []
         return c
     }
 }

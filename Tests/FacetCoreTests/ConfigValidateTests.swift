@@ -147,4 +147,27 @@ struct ConfigValidateTests {
             return false
         }, "tab.section is strict too; got \(errors.map(\.rule))")
     }
+
+    // MARK: - A1: schema warnings recorded on the LOAD path (data-on-config)
+
+    /// A schema violation surfaces on the LENIENT load path as a recorded
+    /// warning while load STILL clamps — it must never reject (A1).
+    @Test func loadPathRecordsSchemaViolationAndStillClamps() throws {
+        let cfg = FacetConfig.load(source: """
+        [grid]
+        cols = "four"
+        """)
+        // (1) load recorded the violation as a warning
+        #expect(cfg.schemaWarnings.contains {
+            if case .typeMismatch(let k, _) = $0.rule { return k == "cols" }
+            return false
+        }, "load(source:) should record the schema violation; got \(cfg.schemaWarnings.map(\.rule))")
+        // (2) but load stayed lenient — cols fell back to its clamp default (4)
+        #expect(cfg.effectiveGridCols == 4)
+    }
+
+    /// A clean config records zero load-path warnings (no false positives).
+    @Test func loadPathCleanConfigHasNoSchemaWarnings() {
+        #expect(FacetConfig.load(source: "").schemaWarnings.isEmpty)
+    }
 }
