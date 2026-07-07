@@ -312,6 +312,7 @@ extension WorkspaceCatalog {
         everywhereWindows.remove(id)              // drop sticky on it
         scratchpads = scratchpads.filter { $0.value != id }  // drop shelf
         stashedWindows.remove(id)
+        isolateParked.remove(id)                  // drop isolate-park ledger (t-c6fm)
     }
 
     /// Clear all hide-state bookkeeping for `id` without

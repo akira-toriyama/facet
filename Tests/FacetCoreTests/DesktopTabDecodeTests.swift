@@ -533,6 +533,41 @@ struct DesktopTabDecodeTests {
         #expect(c.effectiveMacDesktopTabConfigs[1]?[0].label == "W")
     }
 
+    // MARK: - activeBoardTab (selected board's DesktopTab, for isolate gating)
+
+    private func twoBoardConfig() -> FacetConfig {
+        var c = FacetConfig()
+        c.macDesktopTabConfigs = [1: [
+            DesktopTab(type: .workspace, label: "Spaces"),
+            DesktopTab(type: .lens, label: "Focus", isolate: true),
+        ]]
+        return c
+    }
+
+    /// The selected board's `DesktopTab` — the isolate-gating handle (t-c6fm).
+    @Test func activeBoardTabReturnsSelectedBoard() {
+        let c = twoBoardConfig()
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 0)?.label == "Spaces")
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 1)?.isolate == true)
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 1)?.type == .lens)
+    }
+
+    /// Out-of-range board index clamps to the nearest in-range board (mirrors
+    /// `activeBoardSections`) — a stale selection never crashes / returns nil.
+    @Test func activeBoardTabClampsOutOfRange() {
+        let c = twoBoardConfig()
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 99)?.label == "Focus")
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: -5)?.label == "Spaces")
+    }
+
+    /// nil ordinal, or an ordinal with no boards (flat / unconfigured), → nil.
+    @Test func activeBoardTabNilWhenNoBoards() {
+        let c = twoBoardConfig()
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: nil, board: 0) == nil)
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 2, board: 0) == nil)
+        #expect(FacetConfig().activeBoardTab(forMacDesktopOrdinal: 1, board: 0) == nil)
+    }
+
     private func loadConfig(_ toml: String) -> FacetConfig {
         let path = NSTemporaryDirectory()
             + "facet-test-\(UUID().uuidString)/config.toml"

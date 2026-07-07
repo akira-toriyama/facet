@@ -212,12 +212,19 @@ extension NativeAdapter {
         if result.added > 0 || macDesktopSwapped {
             healOrphanSlivers(live: live, visibleRect: rect)
         }
-        // Section-lens (t-0021): a lens is a pure VIEW — nothing to re-park on
-        // reconcile. A window that opens / whose match flips while a lens is
-        // active simply re-projects (display) on the next snapshot. Keep the
-        // main-readable mirror in lock-step (covers a mac-desktop swap that
-        // restored a desktop whose lens persists).
+        // Section-lens (t-0021): a lens on a PLAIN board is a pure VIEW —
+        // nothing to re-park on reconcile; a window that opens / whose match
+        // flips while such a lens is active simply re-projects (display) on the
+        // next snapshot. Keep the main-readable mirror in lock-step (covers a
+        // mac-desktop swap that restored a desktop whose lens persists).
         syncSectionLensMirror()
+        // t-c6fm: on an `isolate` (focus-mode) board, a lens DOES re-park —
+        // anchor-park the active WS's out-of-lens windows so the screen
+        // declutters to the active lens. Derived from `match` every reconcile.
+        // BEFORE the re-tile (detached parks would otherwise be tiled back on),
+        // AFTER healOrphanSlivers (which excludes `anchorParked`). A no-op on
+        // plain boards / when nothing is isolate-parked.
+        applyIsolatePark(live: live, focused: focused, rect: rect)
         // Event-driven re-tile of the active WS (with open/close reflow
         // animation when applicable). See `retileAfterReconcile`.
         retileAfterReconcile(addedIDs: result.addedIDs,
@@ -476,6 +483,45 @@ extension NativeAdapter {
     /// resolves. The single read all the lens-config queries below share.
     func activeLensSection() -> DesktopSection? {
         catalog.activeSectionLens.flatMap(lensSection(forID:))
+    }
+
+    /// t-c6fm: isolate focus-mode re-park. On an `isolate` lens board with a lens
+    /// active, anchor-park the active workspace's OUT-of-lens windows so the
+    /// screen declutters to just the active lens's world (dwm-style); unpark
+    /// re-joiners, and unpark EVERYTHING when the gate is off (lens cleared /
+    /// board switched away / not an isolate board). The park set is DERIVED from
+    /// the lens `match` every reconcile so it can't drift from the tree display
+    /// (both ride `LensMembership.matches`). Reuses the anchor-park machinery
+    /// (`applyHide` → `parkAnchor` / `restoreAnchor`); the ledger + layout
+    /// detach/attach live in `catalog.reconcileIsolatePark`. cliQueue-only; a
+    /// no-op unless an isolate board's lens is active or something is still
+    /// isolate-parked (fast-path guard). `live` is the reconcile's CGWindowList
+    /// (tags overlaid here); `focused` feeds the re-attach bsp orientation.
+    func applyIsolatePark(live: [Window], focused: WindowID?, rect: CGRect) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))
+        // Gate: the SELECTED board is an `isolate` board AND a lens is active AND
+        // its match compiles. Off → empty desired → the catalog unparks all.
+        var desired: [WindowID] = []
+        if let ord = activeMacDesktopOrdinal,
+           config.activeBoardTab(forMacDesktopOrdinal: ord,
+                                 board: selectedBoardByOrdinal[ord] ?? 0)?.isolate == true,
+           catalog.activeSectionLens != nil,
+           let section = activeLensSection(),
+           case .success(let lens) = FacetFilter.parse(section.match) {
+            let activeWindows = live
+                .filter { catalog.windowMap[$0.id]?.workspace == catalog.activeIndex }
+                .map { $0.withTags((catalog.windowMap[$0.id]?.tags ?? []).sorted()) }
+            desired = IsolatePark.parkSet(
+                windows: activeWindows,
+                inWorkspaceNamed: catalog.workspaceName(catalog.activeIndex),
+                lens: lens,
+                sticky: catalog.everywhereWindows)
+        }
+        // Fast path: idle when nothing is parked and nothing wants parking.
+        guard !desired.isEmpty || !catalog.isolateParked.isEmpty else { return }
+        let plan = catalog.reconcileIsolatePark(desired: desired,
+                                                focused: focused, in: rect)
+        applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
     }
 
     /// EX-3.3: the FORWARD `apply` ops in the ACTIVE section-lens (canon ④⑨ — a
