@@ -337,7 +337,7 @@ struct WorkspaceCatalog {
     var pendingHideCandidates: Set<WindowID> = []
 
     /// Windows the ACTIVE section-lens has anchor-parked because they fall
-    /// OUTSIDE it while an `isolate` (focus-mode) board is selected (t-c6fm).
+    /// OUTSIDE it while a `type=lens` (focus) board is selected (t-c6fm).
     /// Like `hiddenMembers`, a member here is detached from the layout so the
     /// in-lens survivors reflow to fill (`nonFloatingMembers` excludes it); like
     /// `stashedWindows`, it is a provenance discriminator over the shared

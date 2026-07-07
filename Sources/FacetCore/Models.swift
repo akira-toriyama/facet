@@ -98,13 +98,14 @@ public struct Window: Sendable {
     /// Views surface it as a slanted "sticky" badge.
     public let isSticky: Bool
     /// Whether this window is currently ISOLATE-PARKED (t-c6fm) — anchor-parked
-    /// off-screen because it falls OUTSIDE the active lens on an `isolate`
-    /// (focus-mode) board. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
-    /// window keeps `isOnscreen == true` (it sits on an on-screen sliver), so
-    /// this is the SEPARATE signal the tree reads to DIM it + show a `parked`
-    /// badge, and the projection reads to route it into the Lost&Found receptacle
-    /// instead of its normal section. Stamped by the catalog snapshot from
-    /// `isolateParked`; `false` in every non-isolate context.
+    /// off-screen because it falls OUTSIDE the active lens on a `type=lens`
+    /// (focus) board. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
+    /// window keeps `isOnscreen == true` (it sits on an on-screen sliver). Park is
+    /// a SCREEN-only operation, so this flag drives NO display (a parked window
+    /// shows normally in every section its `match` satisfies — the tree is a
+    /// filter-inventory, not a screen mirror); it is read ONLY so a click on a
+    /// parked tree row exits focus mode (clears the lens + focuses it). Stamped by
+    /// the catalog snapshot from `isolateParked`; `false` in every non-park context.
     public let isParked: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
     /// `nil` when it isn't a scratchpad window. A scratchpad is a

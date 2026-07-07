@@ -1,8 +1,9 @@
-// `IsolatePark` — derive the anchor-park set for an isolate-active lens (t-c6fm).
+// `IsolatePark` — derive the anchor-park set for a lens board's active lens (t-c6fm).
 //
-// When a `type="lens"` board runs in `isolate` mode and one of its lenses is
-// active, the active workspace's windows that fall OUTSIDE the lens slide to the
-// corner (anchor-park), so the screen shows only the active lens's world — the
+// When a `type="lens"` board's lens is active (lens boards are focus boards — the
+// park is inherent, no opt-in), the active workspace's windows that fall OUTSIDE
+// the lens slide to the corner (anchor-park), so the screen shows only the active
+// lens's world — the
 // dwm-style focus トミー's original design (PR #313) delivered before t-0021
 // removed it. This revives ONLY the park (never the union-tile that actually
 // broke — the float-freeze), and it is DERIVED from `match` every reconcile

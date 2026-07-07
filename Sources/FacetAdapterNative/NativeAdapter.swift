@@ -657,8 +657,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
               config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
         else { return }
 
-        // Clear — drop the lens authority. Nothing was parked, so there is
-        // nothing to restore or re-tile.
+        // Clear — drop the lens authority. On a lens board this may leave
+        // out-of-lens windows parked; the `.refreshNeeded` below drives a
+        // reconcile whose now-off gate (no active lens) unparks them via
+        // `applyIsolatePark`.
         guard let id else {
             guard catalog.activeSectionLens != nil else { return }
             catalog.activeSectionLens = nil

@@ -218,7 +218,7 @@ extension NativeAdapter {
         // next snapshot. Keep the main-readable mirror in lock-step (covers a
         // mac-desktop swap that restored a desktop whose lens persists).
         syncSectionLensMirror()
-        // t-c6fm: on an `isolate` (focus-mode) board, a lens DOES re-park —
+        // t-c6fm: on a `type=lens` (focus) board, activating a lens re-parks —
         // anchor-park the active WS's out-of-lens windows so the screen
         // declutters to the active lens. Derived from `match` every reconcile.
         // BEFORE the re-tile (detached parks would otherwise be tiled back on),
