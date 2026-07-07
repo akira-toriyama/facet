@@ -56,14 +56,15 @@ window moved. Boards are configured with `[[desktop.N.tab]]`
 `facet board --focus N|"label"`. With a single board (or no board config)
 the band stays hidden.
 
-A **lens board** can opt into **focus mode** with `isolate = true`:
-activating one of its lenses then also slides the *out-of-lens* windows to a
-corner so the screen declutters to just the active lens's world (a dwm-style
-focus). The parked windows show dimmed with a `parked` badge in the board's
-Lost & Found section (`unassigned = true`); click one to drop the lens and
-return. Switching a board still moves nothing — only activating a lens on an
-`isolate` board parks. Default `isolate = false` keeps a lens a pure display
-filter.
+A **lens board** is a **focus board**: activating one of its lenses also slides
+the *out-of-lens* windows to a corner so the real screen declutters to just the
+active lens's world (a dwm-style focus) — this is inherent to lens boards, with
+no opt-in key. The tree stays a full inventory, though: a parked window still
+shows under any lens its `match` satisfies (park is a screen operation, not a
+display filter — just like a non-active workspace's windows, which are also
+parked but shown normally). Clicking a parked row drops the lens and returns.
+Switching a board still moves nothing — only activating a lens parks; clearing
+the lens un-parks. A `workspace` board never parks.
 
 Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a

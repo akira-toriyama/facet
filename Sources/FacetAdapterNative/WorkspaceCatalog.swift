@@ -736,8 +736,8 @@ struct WorkspaceCatalog {
     /// and restores re-joiners by re-attaching + dropping the ledger entry; a
     /// ledgered window that has LEFT the active workspace is dropped WITHOUT a
     /// restore (the WS-switch park owns it now). Returns the AX work for the
-    /// adapter to drive through `applyHide`. `desired` is empty when the isolate
-    /// gate is off (no isolate board / no active lens / board switched away) —
+    /// adapter to drive through `applyHide`. `desired` is empty when the park
+    /// gate is off (no lens board / no active lens / board switched away) —
     /// that path unparks everything. `focused` / `rect` feed `attachToLayout`'s
     /// bsp orientation choice.
     ///

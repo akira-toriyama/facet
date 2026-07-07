@@ -747,17 +747,18 @@ action = "ignore"
 #
 #   type   — REQUIRED: "workspace" or "lens". An absent / unknown type
 #       (including "unassigned") DROPS the whole board with a loud log. The
-#       board's child sections all INHERIT this type.
+#       board's child sections all INHERIT this type. A `lens` board is a FOCUS
+#       board: activating one of its lenses ALSO anchor-parks the out-of-lens
+#       windows to a screen corner (sticky windows are exempt), decluttering the
+#       REAL screen to just the active lens's world (dwm-style); clearing the lens
+#       or switching board un-parks them. This is inherent to lens boards — no
+#       opt-in key. (The tree still lists every window under the lens its `match`
+#       satisfies — park is a screen operation, not a display filter, so a parked
+#       window shows normally, just like a non-active workspace's windows.) A
+#       `workspace` board never parks.
 #   label  — (optional) the board's caption in the switcher. Omit → the type
 #       default ("Workspaces" / "Lenses"). A board is switched at runtime with
 #       `facet board --focus N|"label"` (1-based index, or the label).
-#   isolate — (optional; LENS boards only) focus mode. Default false = an
-#       OVERVIEW board: activating one of its lenses only re-groups the tree,
-#       moving nothing. With isolate = true the board is a FOCUS board —
-#       activating a lens ALSO anchor-parks the out-of-lens windows to a screen
-#       corner (sticky windows are exempt), decluttering the screen to just the
-#       active lens's world (dwm-style); clearing the lens or switching board
-#       un-parks them. Ignored on a workspace board.
 #
 # A board's sections are nested `[[desktop.N.tab.section]]` blocks. They carry
 # NO `type` (each inherits the parent board's) and otherwise obey the SAME
@@ -793,9 +794,8 @@ action = "ignore"
 #     unassigned = true
 #     label = "Lost & Found"
 #   [[desktop.4.tab]]
-#   type = "lens"
-#   label = "Web"
-#   isolate = true   # focus mode: activating Docs / Chat parks the rest
+#   type = "lens"                # a lens board = FOCUS: activating Docs / Chat
+#   label = "Web"                # parks the rest of the screen (no opt-in key)
 #     [[desktop.4.tab.section]]
 #     label = "Docs"
 #     match = 'app=Safari or app~=Chrome'
@@ -803,10 +803,9 @@ action = "ignore"
 #     label = "Chat"
 #     match = 'app~=Slack or app~=Discord'
 #     [[desktop.4.tab.section]]
-#     unassigned = true          # RECOMMENDED on an isolate board: the parked
-#     label = "Parked"           # (out-of-lens) windows show here, dimmed + a
-#                                # `parked` badge. Without it, parked windows are
-#                                # hidden from the tree entirely.
+#     unassigned = true          # RECOMMENDED: the lost-and-found. A parked
+#     label = "Parked"           # window still shows under any lens it matches;
+#                                # this collects windows matching NO lens.
 #
 # ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: a Lost & Found
 # receptacle (`unassigned = true`) + 2 unnamed (index-shown) workspaces + 3

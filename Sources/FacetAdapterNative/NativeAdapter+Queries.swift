@@ -485,27 +485,32 @@ extension NativeAdapter {
         catalog.activeSectionLens.flatMap(lensSection(forID:))
     }
 
-    /// t-c6fm: isolate focus-mode re-park. On an `isolate` lens board with a lens
+    /// t-c6fm: lens-board focus-mode re-park. On a `type=lens` board with a lens
     /// active, anchor-park the active workspace's OUT-of-lens windows so the
     /// screen declutters to just the active lens's world (dwm-style); unpark
     /// re-joiners, and unpark EVERYTHING when the gate is off (lens cleared /
-    /// board switched away / not an isolate board). The park set is DERIVED from
+    /// board switched away / not a lens board). The park set is DERIVED from
     /// the lens `match` every reconcile so it can't drift from the tree display
     /// (both ride `LensMembership.matches`). Reuses the anchor-park machinery
     /// (`applyHide` → `parkAnchor` / `restoreAnchor`); the ledger + layout
     /// detach/attach live in `catalog.reconcileIsolatePark`. cliQueue-only; a
-    /// no-op unless an isolate board's lens is active or something is still
+    /// no-op unless a lens board's lens is active or something is still
     /// isolate-parked (fast-path guard). `live` is the reconcile's CGWindowList
     /// (tags overlaid here); `focused` feeds the re-attach bsp orientation.
     func applyIsolatePark(live: [Window], focused: WindowID?, rect: CGRect) {
         dispatchPrecondition(condition: .onQueue(cliQueue))
-        // Gate: the SELECTED board is an `isolate` board AND a lens is active AND
+        // Gate: the SELECTED board is a `lens` board AND a lens is active AND
         // its match compiles. Off → empty desired → the catalog unparks all.
+        // (t-c6fm: park is INHERENT to lens boards — activating a lens on a
+        // `type = "lens"` board always declutters. No per-board opt-in toggle.)
+        let ord = activeMacDesktopOrdinal
+        let board = ord.map { selectedBoardByOrdinal[$0] ?? 0 } ?? 0
+        let lensBoard = ord.flatMap {
+            config.activeBoardTab(forMacDesktopOrdinal: $0, board: board)?.type
+        } == .lens
+        let lensID = catalog.activeSectionLens
         var desired: [WindowID] = []
-        if let ord = activeMacDesktopOrdinal,
-           config.activeBoardTab(forMacDesktopOrdinal: ord,
-                                 board: selectedBoardByOrdinal[ord] ?? 0)?.isolate == true,
-           catalog.activeSectionLens != nil,
+        if lensBoard, lensID != nil,
            let section = activeLensSection(),
            case .success(let lens) = FacetFilter.parse(section.match) {
             let activeWindows = live

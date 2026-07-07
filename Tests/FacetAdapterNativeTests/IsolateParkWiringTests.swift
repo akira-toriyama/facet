@@ -136,13 +136,14 @@ struct IsolateParkWiringTests {
     private let webLensID = "section:0:Web"
 
     /// Adapter on ordinal 1 with a workspace board (index 0) and a `type=lens`
-    /// board (index 1). `isolate` is caller-set so the same fixture serves the
-    /// on/off cases. Live windows: 10 = Web (in-lens), 30 = Other (out-of-lens).
-    private func isolateAdapter(isolate: Bool) -> NativeAdapter {
+    /// board (index 1). t-c6fm: a `type=lens` board ALWAYS parks (no per-board
+    /// opt-in) — activating a lens declutters. Live windows: 10 = Web (in-lens),
+    /// 30 = Other (out-of-lens).
+    private func lensBoardAdapter() -> NativeAdapter {
         var cfg = FacetConfig()
         cfg.macDesktopTabConfigs = [1: [
             DesktopTab(type: .workspace, label: "Spaces", sections: [ws("Main")]),
-            DesktopTab(type: .lens, label: "Focus", isolate: isolate,
+            DesktopTab(type: .lens, label: "Focus",
                        sections: [lens("Web", "app=Web")]),
         ]]
         cfg.defaultLayout = "master-left"
@@ -158,9 +159,10 @@ struct IsolateParkWiringTests {
         [window(10, appName: "Web"), window(30, appName: "Other")]
     }
 
-    /// Activating a lens on an `isolate` lens board parks the out-of-lens window.
-    @Test func isolateBoardActiveLensParksOutOfLens() {
-        let a = isolateAdapter(isolate: true)
+    /// Activating a lens on a `type=lens` board parks the out-of-lens window
+    /// (park is inherent to lens boards — no opt-in).
+    @Test func lensBoardActiveLensParksOutOfLens() {
+        let a = lensBoardAdapter()
         cliQueue.sync {
             a.setSelectedBoard(1, forMacDesktopOrdinal: 1)
             a.setSectionLens(webLensID, autoFocus: false)
@@ -170,21 +172,9 @@ struct IsolateParkWiringTests {
         #expect(!a.catalog.isolateParked.contains(wid(10))) // Web stays
     }
 
-    /// The SAME board with `isolate = false` is a pure-VIEW board — activating a
-    /// lens parks nothing.
-    @Test func nonIsolateBoardParksNothing() {
-        let a = isolateAdapter(isolate: false)
-        cliQueue.sync {
-            a.setSelectedBoard(1, forMacDesktopOrdinal: 1)
-            a.setSectionLens(webLensID, autoFocus: false)
-            a.applyIsolatePark(live: live(), focused: nil, rect: rect)
-        }
-        #expect(a.catalog.isolateParked.isEmpty)
-    }
-
-    /// Clearing the active lens unparks everything the isolate board parked.
+    /// Clearing the active lens unparks everything the lens board parked.
     @Test func clearingLensUnparks() {
-        let a = isolateAdapter(isolate: true)
+        let a = lensBoardAdapter()
         cliQueue.sync {
             a.setSelectedBoard(1, forMacDesktopOrdinal: 1)
             a.setSectionLens(webLensID, autoFocus: false)
@@ -196,11 +186,11 @@ struct IsolateParkWiringTests {
         #expect(a.catalog.isolateParked.isEmpty)
     }
 
-    /// Switching to the workspace board (display-only) drops the isolate gate →
+    /// Switching to the workspace board (display-only) drops the park gate →
     /// the parked windows come back (the board switch itself moves no OS window;
-    /// leaving the focus board reverses its declutter).
-    @Test func switchingAwayFromIsolateBoardUnparks() {
-        let a = isolateAdapter(isolate: true)
+    /// leaving the lens board reverses its declutter).
+    @Test func switchingAwayFromLensBoardUnparks() {
+        let a = lensBoardAdapter()
         cliQueue.sync {
             a.setSelectedBoard(1, forMacDesktopOrdinal: 1)
             a.setSectionLens(webLensID, autoFocus: false)
@@ -212,14 +202,14 @@ struct IsolateParkWiringTests {
         #expect(a.catalog.isolateParked.isEmpty)
     }
 
-    /// Board-invariant (t-c6fm phase 5): SELECTING an isolate board is display-
-    /// only — with no lens active the gate stays off, so nothing parks and every
-    /// window keeps its workspace assignment. Park needs BOTH an isolate board
-    /// AND an active lens; a board switch alone never moves a window.
+    /// Board-invariant (t-c6fm): SELECTING a lens board is display-only — with no
+    /// lens active the gate stays off, so nothing parks and every window keeps its
+    /// workspace assignment. Park needs BOTH a lens board AND an active lens; a
+    /// board switch alone never moves a window.
     @Test func boardSwitchAloneParksNothing() {
-        let a = isolateAdapter(isolate: true)
+        let a = lensBoardAdapter()
         cliQueue.sync {
-            a.setSelectedBoard(1, forMacDesktopOrdinal: 1)   // isolate board, NO lens
+            a.setSelectedBoard(1, forMacDesktopOrdinal: 1)   // lens board, NO lens
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
         }
         #expect(a.catalog.isolateParked.isEmpty)

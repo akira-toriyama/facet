@@ -79,7 +79,6 @@ enum TreeListItem {
         case .float: slug = "app-window"; role = .secondary
         case .sticky: slug = "push-pin"; role = .secondary
         case .hidden: slug = "eye-slash"; role = .error
-        case .parked: slug = "arrow-line-right"; role = .secondary   // t-c6fm phase 4
         case .mark: slug = nil; role = .primary
         case .scratchpad: slug = "tray"; role = .secondary
         case .tag: slug = "tag"; role = .neutral

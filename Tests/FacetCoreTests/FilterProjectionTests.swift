@@ -30,8 +30,8 @@ struct FilterProjectionTests {
     private func unassigned(_ label: String) -> DesktopSection {
         DesktopSection(type: .workspace, label: label, unassigned: true)
     }
-    /// An isolate-parked window (t-c6fm phase 4) — the tree must route it to the
-    /// Lost&Found, never its normal section.
+    /// An isolate-parked window (t-c6fm) — `isParked` is set, but projection now
+    /// treats it like any window: it shows in every section its match satisfies.
     private func parked(_ id: Int, app: String = "App") -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: app, title: "",
                isFocused: false, isFloating: false, frame: nil, isParked: true)
@@ -380,25 +380,27 @@ struct FilterProjectionTests {
         #expect(recept?.windows.map(\.id.serverID) == [8, 9])
     }
 
-    // MARK: - isolate-parked routing (t-c6fm phase 4, option ②)
+    // MARK: - isolate-parked windows show in place (t-c6fm)
 
-    /// An isolate-parked window is EXCLUDED from its workspace section and falls
-    /// into the Lost&Found receptacle instead — the tree matches the decluttered
-    /// screen (only the active lens's windows stay visible in place).
-    @Test func parkedWindowExcludedFromWorkspaceSectionToLostAndFound() {
+    /// An isolate-parked window STAYS in its workspace section — the tree is a
+    /// filter-inventory, not a screen mirror. Park declutters the real screen, but
+    /// the tree shows a window under every section its match satisfies, parked or
+    /// not (same as a non-active workspace's windows, which are also parked).
+    @Test func parkedWindowStaysInWorkspaceSection() {
         let wss = [ws(0, name: "Main", windows: [win(10), parked(30)])]
         let r = FilterProjection.project(
             workspaces: wss, sections: [wsSec(), unassigned("Lost")])
         #expect(r.sections.first { $0.sectionType == .workspace }?
-            .windows.map(\.id.serverID) == [10])            // parked excluded
+            .windows.map(\.id.serverID) == [10, 30])        // parked shown in place
         #expect(r.sections.first { $0.sectionType == .unassigned }?
-            .windows.map(\.id.serverID) == [30])            // → Lost&Found
+            .windows.isEmpty == true)                       // nothing homeless
     }
 
-    /// A parked window is not shown under ANY lens — even one it would match.
-    /// (Web is the active isolate lens; the parked Slack window would match the
-    /// Chat lens but is parked, so it goes to Lost&Found, not Chat.)
-    @Test func parkedWindowNotShownUnderAnotherLensToLostAndFound() {
+    /// A parked window shows under EVERY lens its match satisfies — even while a
+    /// DIFFERENT lens is the active (screen-decluttering) one. Web is active; the
+    /// parked Slack window still appears under the Chat lens it matches (not routed
+    /// away to Lost&Found).
+    @Test func parkedWindowShownUnderMatchingLens() {
         let wss = [ws(0, name: "Main",
                       windows: [win(10, app: "Web"), parked(30, app: "Slack")])]
         let r = FilterProjection.project(workspaces: wss, sections: [
@@ -406,9 +408,10 @@ struct FilterProjectionTests {
         ])
         #expect(r.sections.first { $0.label == "Web" }?
             .windows.map(\.id.serverID) == [10])
-        #expect(r.sections.first { $0.label == "Chat" }?.windows.isEmpty == true)
+        #expect(r.sections.first { $0.label == "Chat" }?
+            .windows.map(\.id.serverID) == [30])            // parked, still shown
         #expect(r.sections.first { $0.sectionType == .unassigned }?
-            .windows.map(\.id.serverID) == [30])
+            .windows.isEmpty == true)                       // not routed to Lost&Found
     }
 
     // MARK: - loud-but-non-fatal

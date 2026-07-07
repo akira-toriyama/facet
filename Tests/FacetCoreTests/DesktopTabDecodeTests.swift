@@ -121,43 +121,6 @@ struct DesktopTabDecodeTests {
         #expect(t[1]?[0].sections.isEmpty ?? false)
     }
 
-    // MARK: - `isolate` board-level mode flag (t-c6fm phase 2)
-
-    /// A lens board without `isolate` is overview-mode by default — the flag
-    /// clamps to `false` so existing pure-VIEW boards are unchanged.
-    @Test func isolateDefaultsFalse() {
-        let t = FacetConfig.decodeDesktopTabs(fromTOML: """
-        [[desktop.1.tab]]
-        type = "lens"
-        label = "Views"
-        """)
-        #expect(t[1]?[0].isolate == false)
-    }
-
-    /// `isolate = true` on a lens board arms focus-mode — activating one of its
-    /// lenses will anchor-park the out-of-lens windows (wiring lands in phase 3).
-    @Test func isolateDecodesTrue() {
-        let t = FacetConfig.decodeDesktopTabs(fromTOML: """
-        [[desktop.1.tab]]
-        type = "lens"
-        label = "Focus"
-        isolate = true
-        """)
-        #expect(t[1]?[0].isolate == true)
-    }
-
-    /// A non-bool `isolate` clamps to the `false` default (never rejects) —
-    /// facet's "a typo can't break the layout" rule.
-    @Test func isolateNonBoolClampsToFalse() {
-        let t = FacetConfig.decodeDesktopTabs(fromTOML: """
-        [[desktop.1.tab]]
-        type = "lens"
-        label = "Oops"
-        isolate = "yes"
-        """)
-        #expect(t[1]?[0].isolate == false)
-    }
-
     // MARK: - `unassigned = true` per-tab marker
 
     /// A child with `unassigned = true` inherits the parent tab's type AND
@@ -533,22 +496,23 @@ struct DesktopTabDecodeTests {
         #expect(c.effectiveMacDesktopTabConfigs[1]?[0].label == "W")
     }
 
-    // MARK: - activeBoardTab (selected board's DesktopTab, for isolate gating)
+    // MARK: - activeBoardTab (selected board's DesktopTab, for park gating)
 
     private func twoBoardConfig() -> FacetConfig {
         var c = FacetConfig()
         c.macDesktopTabConfigs = [1: [
             DesktopTab(type: .workspace, label: "Spaces"),
-            DesktopTab(type: .lens, label: "Focus", isolate: true),
+            DesktopTab(type: .lens, label: "Focus"),
         ]]
         return c
     }
 
-    /// The selected board's `DesktopTab` — the isolate-gating handle (t-c6fm).
+    /// The selected board's `DesktopTab` — the park-gating handle (t-c6fm: park
+    /// fires when the selected board is `type == .lens`).
     @Test func activeBoardTabReturnsSelectedBoard() {
         let c = twoBoardConfig()
         #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 0)?.label == "Spaces")
-        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 1)?.isolate == true)
+        #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 0)?.type == .workspace)
         #expect(c.activeBoardTab(forMacDesktopOrdinal: 1, board: 1)?.type == .lens)
     }
 

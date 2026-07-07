@@ -341,12 +341,13 @@ extension SidebarView {
                         // size change).
                         .font: uiFont(windowFontSize,
                                       sel ? .semibold : .regular),
-                        // Dim a hidden (Cmd+H/Cmd+M'd) OR isolate-parked (t-c6fm)
-                        // row, but keep a selected row at full strength so the
-                        // highlight stays legible.
+                        // Dim a hidden (Cmd+H/Cmd+M'd) row, but keep a selected
+                        // row at full strength so the highlight stays legible.
+                        // (Isolate-parked rows show at full strength — t-c6fm:
+                        // the tree is an inventory, not a screen mirror.)
                         .foregroundColor: (sel ? pal.primary : pal.foreground)
                             .withAlphaComponent(
-                                (c.isHidden || c.isParked) && !sel ? 0.45 : 1.0),
+                                c.isHidden && !sel ? 0.45 : 1.0),
                         .paragraphStyle: para,
                     ])
                 if hasTitle {
@@ -360,14 +361,14 @@ extension SidebarView {
                         withAttributes: [
                             .font: uiFont(windowTitleFontSize, .regular),
                             .foregroundColor: pal.muted.withAlphaComponent(
-                                (c.isHidden || c.isParked) && !sel ? 0.45 : 1.0),
+                                c.isHidden && !sel ? 0.45 : 1.0),
                             .paragraphStyle: para,
                         ])
                 }
                 // Third line: the mark pill (left), then the "sticky"
                 // badge or the `scratchpad:NAME` shelf pill, then the
-                // master / float / hidden / parked label.
-                if hasLabel || hasMark || c.isSticky || c.isHidden || c.isParked
+                // master / float / hidden label.
+                if hasLabel || hasMark || c.isSticky || c.isHidden
                     || hasScratch || hasTags {
                     // Wider gap below the title before the mark / status.
                     let labelY = hasTitle ? row.minY + 51 : row.minY + 32
@@ -493,15 +494,6 @@ extension SidebarView {
                         // restores it. (Never master/float/sticky, so it's the
                         // only badge on its row.)
                         lx = drawStatusPill("hidden", icon: "SF:eye.slash",
-                                            color: pal.muted,
-                                            at: lx, labelY: labelY)
-                    }
-                    if c.isParked {
-                        // Isolate-parked (t-c6fm): out of the active focus lens,
-                        // slid to the corner — dimmed, same flavour as hidden.
-                        // Confirms the row is parked, not gone.
-                        lx = drawStatusPill("parked",
-                                            icon: "SF:arrow.right.to.line",
                                             color: pal.muted,
                                             at: lx, labelY: labelY)
                     }

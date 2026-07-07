@@ -134,15 +134,14 @@ public enum FilterProjection {
         // (possibly-empty / non-unique) label, and `--focus` / `--move-to` stay
         // correct. Array order (not a re-sort) keeps the degrade byte-
         // identical to today.
-        // Isolate-parked windows (t-c6fm phase 4) are anchor-parked off-screen
-        // because they fall outside the active lens on an `isolate` board — they
-        // must NOT show in place. Excluding them from every emitted section here
-        // makes Pass 2 (`universe − shown`) sweep them into the `unassigned`
-        // Lost&Found receptacle instead (the universe still reads `ws.windows`
-        // directly, so they stay in it). Matches the decluttered screen.
+        // Isolate-parked windows (t-c6fm) stay in place in their section — the
+        // real screen declutters (only the active lens's windows are on-screen),
+        // but the tree is a filter-inventory, not a screen mirror: a window shows
+        // in every section its match satisfies, parked or not (consistent with a
+        // non-active workspace's windows, which are also parked but shown normally).
         func wsSection(_ ws: Workspace) -> ProjectedSection {
             ProjectedSection(id: "ws:\(ws.index)", label: ws.name,
-                        windows: ws.windows.filter { !$0.isParked },
+                        windows: ws.windows,
                         sourceWorkspaceIndex: ws.index,
                         sectionType: .workspace)
         }
@@ -210,10 +209,12 @@ public enum FilterProjection {
                     var matched: [Window] = []
                     for ws in workspaces {
                         for w in ws.windows
-                        // Skip isolate-parked windows (t-c6fm) — a parked window
-                        // is out of the ACTIVE lens but could still match another
-                        // lens on the board; it belongs in Lost&Found, not here.
-                        where !w.isParked && LensMembership.matches(
+                        // A lens shows EVERY window its match satisfies (t-c6fm):
+                        // an isolate-parked window that matches this lens still
+                        // shows here (parked = a real-screen operation, orthogonal
+                        // to the display filter — same as a non-active workspace's
+                        // parked windows, which show normally).
+                        where LensMembership.matches(
                             w, inWorkspaceNamed: ws.name, filter: filter) {
                             matched.append(w)
                         }

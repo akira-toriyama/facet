@@ -358,22 +358,13 @@ public struct DesktopTab: Sendable, Equatable {
     public let type: SectionType
     /// Display header — an optional name (`""` when unset), like a section's.
     public let label: String
-    /// Focus-mode toggle (t-c6fm) — only meaningful on a `lens` board. `true`
-    /// arms `isolate`: activating one of this board's lenses anchor-parks the
-    /// out-of-lens windows so the screen shows only the active lens's world
-    /// (dwm-style declutter). `false` (the default) is a pure-VIEW / overview
-    /// board — a lens switch re-groups the tree but moves nothing. Inert on a
-    /// `workspace` board (no lens to activate).
-    public let isolate: Bool
     /// The tab's sections, in config-declaration (= display) order.
     public let sections: [DesktopSection]
 
     public init(type: SectionType, label: String = "",
-                isolate: Bool = false,
                 sections: [DesktopSection] = []) {
         self.type = type
         self.label = label
-        self.isolate = isolate
         self.sections = sections
     }
 

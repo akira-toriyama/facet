@@ -766,13 +766,13 @@ public struct FacetConfig: Sendable {
         return effectiveMacDesktopSectionConfigs[ordinal] ?? []
     }
 
-    /// The selected board's `DesktopTab` for `ordinal` — the handle the isolate
-    /// re-park (t-c6fm) reads to learn whether the active board is a focus
-    /// (`isolate = true`) board. Board index is CLAMPED into range (like
+    /// The selected board's `DesktopTab` for `ordinal` — the handle the focus-mode
+    /// re-park (t-c6fm) reads to learn whether the active board is a `type == .lens`
+    /// board (lens boards always park). Board index is CLAMPED into range (like
     /// `activeBoardSections`), so a stale selection lands on the nearest board.
     /// `nil` when the ordinal is absent / has no `[[desktop.N.tab]]` boards (a
     /// flat / unconfigured desktop has no board to gate on). Pure / read-only —
-    /// the isolate flag it exposes acts, a board switch itself moves nothing.
+    /// the board type it exposes gates the park, a board switch itself moves nothing.
     public func activeBoardTab(forMacDesktopOrdinal ordinal: Int?, board: Int)
         -> DesktopTab?
     {

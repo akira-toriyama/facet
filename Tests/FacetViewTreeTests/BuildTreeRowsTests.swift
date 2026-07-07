@@ -97,7 +97,9 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(badges(rich(1, floating: true)), [TreeBadge(.float)])
         XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky)])
         XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden)])
-        XCTAssertEqual(badges(rich(1, parked: true)), [TreeBadge(.parked)])   // t-c6fm phase 4
+        // t-c6fm: an isolate-parked window shows as a NORMAL row — no badge (the
+        // tree is an inventory, not a screen mirror; park is screen-only).
+        XCTAssertEqual(badges(rich(1, parked: true)), [])
         XCTAssertEqual(badges(rich(1, mark: "a")), [TreeBadge(.mark, "a")])
         XCTAssertEqual(badges(rich(1, scratch: "shelf")), [TreeBadge(.scratchpad, "shelf")])
     }
