@@ -197,6 +197,14 @@ extension FacetConfig {
                     if case .string(let s)? = raw.tab["label"] { return s }
                     return ""
                 }()
+                // Board-level focus-mode toggle (t-c6fm). Clamp-to-default: a
+                // missing / non-bool value is `false` (never rejects) — a typo
+                // can't break the layout. Only a `lens` board acts on it; on a
+                // `workspace` board it is stored but inert.
+                let isolate: Bool = {
+                    if case .bool(true)? = raw.tab["isolate"] { return true }
+                    return false
+                }()
                 // Each child INHERITS the parent type (children carry no `type`)
                 // — the inherited type is injected into the row so
                 // `DesktopSection.parse` re-applies the per-type field rules
@@ -233,7 +241,7 @@ extension FacetConfig {
                         + "label \"\(s.label)\" — keeping first, dropping this section")
                 }
                 tabs.append(DesktopTab(type: parentType, label: label,
-                                       sections: sections))
+                                       isolate: isolate, sections: sections))
             }
             // §A: within ONE mac desktop a non-empty tab label must be unique
             // (the `facet board --focus "label"` handle) — first-wins, loud.

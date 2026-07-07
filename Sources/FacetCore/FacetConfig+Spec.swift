@@ -81,6 +81,8 @@ private enum DesktopSchema {
                         doc: "Board kind — workspace / lens; its sections inherit it.",
                         enumDomain: ["workspace", "lens"]),
             SchemaField("label", .string, doc: "Board display name."),
+            SchemaField("isolate", .boolean,
+                        doc: "lens board only — activating a lens anchor-parks the out-of-lens windows (focus mode); default false = overview."),
         ], nested: [
             NestedTable(key: "section", item: sectionItemShape),
         ], doc: "A browser-tab-style board grouping sections inside one mac desktop.")

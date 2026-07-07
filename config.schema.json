@@ -189,6 +189,10 @@
                 "additionalProperties" : false,
                 "description" : "A browser-tab-style board grouping sections inside one mac desktop.",
                 "properties" : {
+                  "isolate" : {
+                    "description" : "lens board only — activating a lens anchor-parks the out-of-lens windows (focus mode); default false = overview.",
+                    "type" : "boolean"
+                  },
                   "label" : {
                     "description" : "Board display name.",
                     "type" : "string"

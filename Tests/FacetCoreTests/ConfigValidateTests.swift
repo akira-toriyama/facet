@@ -148,6 +148,34 @@ struct ConfigValidateTests {
         }, "tab.section is strict too; got \(errors.map(\.rule))")
     }
 
+    /// A board-level `isolate` bool (t-c6fm) is a KNOWN tab key — a lens board
+    /// declaring it validates clean.
+    @Test func desktopTabIsolateBoolValidatesClean() throws {
+        let errors = try FacetConfig.validate("""
+        [[desktop.1.tab]]
+        type = "lens"
+        label = "Focus"
+        isolate = true
+        """)
+        #expect(errors == [],
+                "isolate=true on a lens board should validate clean; got \(errors.map(\.message))")
+    }
+
+    /// The load/validate asymmetry for `isolate`: the lenient `decode` CLAMPS a
+    /// non-bool `isolate` to `false`, but the STRICT validator SURFACES it as a
+    /// type mismatch (the whole point of `config --validate`).
+    @Test func desktopTabIsolateWrongTypeIsReported() throws {
+        let errors = try FacetConfig.validate("""
+        [[desktop.1.tab]]
+        type = "lens"
+        isolate = "yes"
+        """)
+        #expect(errors.contains {
+            if case .typeMismatch(let k, _) = $0.rule { return k == "isolate" }
+            return false
+        }, "a string isolate should be a type mismatch; got \(errors.map(\.rule))")
+    }
+
     // MARK: - A1: schema warnings recorded on the LOAD path (data-on-config)
 
     /// A schema violation surfaces on the LENIENT load path as a recorded
