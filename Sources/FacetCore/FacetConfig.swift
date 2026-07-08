@@ -215,6 +215,15 @@ public struct FacetConfig: Sendable {
     /// `[[desktop.N.section]]` decode — the two read different header shapes.
     public var macDesktopTabConfigs: [Int: [DesktopTab]] = [:]
 
+    /// Per-mac-desktop `[desktop.N]` typed-table definitions (board abolition,
+    /// t-0sbm). Outer key is the mac desktop ordinal (1-based); value is that
+    /// desktop's single `DesktopMeta` (`type` + `label`, plus lens-only `match` /
+    /// `layout` / `show-non-matching`). Parsed from the FLAT `parseTOMLSubset`
+    /// map by `load` (via `decodeDesktopTables`). Read through `desktopType` /
+    /// `desktopLens`. This is the successor to `macDesktopTabConfigs` — a mac
+    /// desktop is now typed directly rather than grouped into boards.
+    public var macDesktopMetaConfigs: [Int: DesktopMeta] = [:]
+
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
     /// `nil` when the config specifies none. Parsed from the raw TOML
@@ -651,9 +660,35 @@ public struct FacetConfig: Sendable {
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
         let tabs = effectiveMacDesktopTabConfigs
-        if sections.isEmpty && tabs.isEmpty { return true }
+        let metas = macDesktopMetaConfigs
+        if sections.isEmpty && tabs.isEmpty && metas.isEmpty { return true }
         guard let ordinal else { return true }
         return sections[ordinal] != nil || tabs[ordinal] != nil
+            || metas[ordinal] != nil
+    }
+
+    /// The declared `type` of the mac desktop at `ordinal` (board abolition,
+    /// t-0sbm). Resolution order:
+    ///   • an explicit `[desktop.N] type = …` table wins;
+    ///   • else `.workspace` if the desktop has `[[desktop.N.section]]` blocks
+    ///     (back-compat — a flat-sections config with no `[desktop.N]` table
+    ///     reads as a workspace desktop);
+    ///   • else `nil` (no typed desktop / unconfigured — e.g. a board-only
+    ///     desktop while boards still exist, or a bare default desktop).
+    public func desktopType(ordinal: Int?) -> SectionType? {
+        guard let ordinal else { return nil }
+        if let meta = macDesktopMetaConfigs[ordinal] { return meta.type }
+        if macDesktopSectionConfigs[ordinal] != nil { return .workspace }
+        return nil
+    }
+
+    /// The lens definition for a `type = "lens"` mac desktop at `ordinal`, else
+    /// `nil` (not a lens desktop). The single always-on lens (`match` + `layout`
+    /// + `show-non-matching`) that drives the desktop-lens park + tile.
+    public func desktopLens(ordinal: Int?) -> DesktopMeta? {
+        guard let ordinal, let meta = macDesktopMetaConfigs[ordinal],
+              meta.type == .lens else { return nil }
+        return meta
     }
 
     /// Whether the section/lens model drives the mac desktop at `ordinal` —

@@ -1,0 +1,150 @@
+import Testing
+import Foundation
+@testable import FacetCore
+
+/// `[desktop.N]` typed-desktop table decode (board abolition, t-0sbm) — the
+/// SINGLE-table successor to `[[desktop.N.tab]]` boards. A mac desktop is typed
+/// directly (`type = "workspace" | "lens"`); a lens desktop carries an always-on
+/// `match` + `layout` (+ `show-non-matching`) right on the table. PURE FacetCore,
+/// ADDITIVE at Phase 1: nothing reads `macDesktopMetaConfigs` at runtime yet, so
+/// this layer is proven only by these unit tests + the `desktopType`/`desktopLens`
+/// accessors.
+///
+/// Wire rules (FROZEN here):
+///   • `type` is REQUIRED (workspace / lens) — absent / unknown DROPS the desktop.
+///   • a lens desktop REQUIRES a non-empty `match`; `layout` + `show-non-matching`
+///     are honoured; `apply` is forbidden (ignored w/ caveat).
+///   • a workspace desktop keeps `match` / `layout` on its `[[desktop.N.section]]`
+///     rows — authored ones on the table are ignored w/ caveat.
+struct DesktopMetaDecodeTests {
+
+    // MARK: - decode
+
+    @Test func decodesLensDesktop() {
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.2]
+        type = "lens"
+        label = "Web"
+        match = 'app=Safari or app~=Chrome'
+        layout = "bsp"
+        show-non-matching = true
+        """)
+        #expect(m[2] == DesktopMeta(type: .lens, label: "Web",
+            match: "app=Safari or app~=Chrome", layout: "bsp",
+            showNonMatching: true))
+    }
+
+    @Test func decodesWorkspaceDesktopTypeAndLabelOnly() {
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.1]
+        type = "workspace"
+        label = "Main"
+        """)
+        #expect(m[1] == DesktopMeta(type: .workspace, label: "Main"))
+    }
+
+    @Test func lensWithoutMatchDrops() {
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.1]
+        type = "lens"
+        label = "Web"
+        """)
+        #expect(m[1] == nil)
+    }
+
+    @Test func unknownTypeDrops() {
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.1]
+        type = "banana"
+        """)
+        #expect(m[1] == nil)
+    }
+
+    @Test func missingTypeDrops() {
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.1]
+        label = "x"
+        """)
+        #expect(m[1] == nil)
+    }
+
+    @Test func showNonMatchingDefaultsFalseAndLayoutOptional() {
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.1]
+        type = "lens"
+        match = 'app=Safari'
+        """)
+        #expect(m[1]?.showNonMatching == false)
+        #expect(m[1]?.layout == nil)
+    }
+
+    @Test func workspaceAuthoredMatchIsIgnored() {
+        // A `match` on a workspace desktop belongs on its sections — dropped
+        // (loud caveat), the desktop still decodes as a bare workspace.
+        let m = FacetConfig.decodeDesktopTables(fromTOML: """
+        [desktop.1]
+        type = "workspace"
+        match = 'app=Safari'
+        """)
+        #expect(m[1] == DesktopMeta(type: .workspace))
+    }
+
+    // MARK: - accessors
+
+    @Test func desktopTypeExplicitWins() {
+        var c = FacetConfig()
+        c.macDesktopMetaConfigs = [1: DesktopMeta(type: .lens, match: "app=x")]
+        #expect(c.desktopType(ordinal: 1) == .lens)
+    }
+
+    @Test func desktopTypeFallsBackToWorkspaceForSections() {
+        var c = FacetConfig()
+        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace)]]
+        #expect(c.desktopType(ordinal: 1) == .workspace)
+    }
+
+    @Test func desktopTypeNilWhenUnconfigured() {
+        let c = FacetConfig()
+        #expect(c.desktopType(ordinal: 1) == nil)
+        #expect(c.desktopType(ordinal: nil) == nil)
+    }
+
+    @Test func desktopLensOnlyForLens() {
+        var c = FacetConfig()
+        c.macDesktopMetaConfigs = [
+            1: DesktopMeta(type: .lens, match: "app=x", layout: "grid"),
+            2: DesktopMeta(type: .workspace),
+        ]
+        #expect(c.desktopLens(ordinal: 1)?.match == "app=x")
+        #expect(c.desktopLens(ordinal: 2) == nil)
+        #expect(c.desktopLens(ordinal: 3) == nil)
+    }
+
+    @Test func lensDesktopIsManagedButOptInElsewhere() {
+        var c = FacetConfig()
+        c.macDesktopMetaConfigs = [1: DesktopMeta(type: .lens, match: "app=x")]
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        // Opt-in: declaring ANY typed desktop leaves the others hands-off.
+        #expect(!c.isMacDesktopManaged(ordinal: 2))
+    }
+
+    // MARK: - full load path
+
+    @Test func loadPopulatesTypedDesktops() {
+        let c = FacetConfig.load(source: """
+        [desktop.1]
+        type = "workspace"
+        label = "Main"
+
+        [desktop.2]
+        type = "lens"
+        label = "Web"
+        match = 'app~=Chrome'
+        layout = "grid"
+        """)
+        #expect(c.desktopType(ordinal: 1) == .workspace)
+        #expect(c.desktopType(ordinal: 2) == .lens)
+        #expect(c.desktopLens(ordinal: 2)?.layout == "grid")
+        #expect(c.desktopLens(ordinal: 2)?.label == "Web")
+    }
+}

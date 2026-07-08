@@ -86,13 +86,23 @@ private enum DesktopSchema {
         ], doc: "A browser-tab-style board grouping sections inside one mac desktop.")
     }
 
-    // The value each `[desktop.<N>]` ordinal key maps to — the container of
-    // `section` (flat) and/or `tab` (board) arrays; no scalar keys of its own.
+    // The value each `[desktop.<N>]` ordinal key maps to. A SINGLE typed table
+    // (board abolition, t-0sbm): `type`/`label` (+ lens-only `match`/`layout`/
+    // `show-non-matching`) directly on the desktop. A `workspace` desktop still
+    // carries its `[[desktop.N.section]]` array; the `tab` board array is retired.
     static var valueShape: ObjectShape {
-        ObjectShape(fields: [], nested: [
+        ObjectShape(fields: [
+            SchemaField("type", .string,
+                        doc: "workspace = spatial sections (tree/grid/rail); lens = an always-on filtered view (tree only).",
+                        enumDomain: ["workspace", "lens"]),
+            SchemaField("label", .string, doc: "Display name for this mac desktop."),
+            SchemaField("match", .string, doc: "lens desktop only — a facet-filter WHERE-clause selecting the tiled windows."),
+            SchemaField("layout", .string, doc: "lens desktop only — layout-engine name for the matched windows."),
+            SchemaField("show-non-matching", .boolean, doc: "lens desktop only — also show the non-matching windows as a second tree section."),
+        ], nested: [
             NestedTable(key: "section", item: sectionItemShape),
             NestedTable(key: "tab", item: tabShape),
-        ], doc: "One mac desktop (N = Mission Control ordinal): its display sections and/or boards.")
+        ], doc: "One mac desktop (N = Mission Control ordinal): its `type`/`label`, plus its display sections and/or boards.")
     }
 }
 

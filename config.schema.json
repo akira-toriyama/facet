@@ -118,8 +118,20 @@
       "patternProperties" : {
         "^0*[1-9][0-9]*$" : {
           "additionalProperties" : false,
-          "description" : "One mac desktop (N = Mission Control ordinal): its display sections and/or boards.",
+          "description" : "One mac desktop (N = Mission Control ordinal): its `type`/`label`, plus its display sections and/or boards.",
           "properties" : {
+            "label" : {
+              "description" : "Display name for this mac desktop.",
+              "type" : "string"
+            },
+            "layout" : {
+              "description" : "lens desktop only — layout-engine name for the matched windows.",
+              "type" : "string"
+            },
+            "match" : {
+              "description" : "lens desktop only — a facet-filter WHERE-clause selecting the tiled windows.",
+              "type" : "string"
+            },
             "section" : {
               "items" : {
                 "additionalProperties" : false,
@@ -183,6 +195,10 @@
                 "type" : "object"
               },
               "type" : "array"
+            },
+            "show-non-matching" : {
+              "description" : "lens desktop only — also show the non-matching windows as a second tree section.",
+              "type" : "boolean"
             },
             "tab" : {
               "items" : {
@@ -269,6 +285,14 @@
                 "type" : "object"
               },
               "type" : "array"
+            },
+            "type" : {
+              "description" : "workspace = spatial sections (tree/grid/rail); lens = an always-on filtered view (tree only).",
+              "enum" : [
+                "workspace",
+                "lens"
+              ],
+              "type" : "string"
             }
           },
           "type" : "object"

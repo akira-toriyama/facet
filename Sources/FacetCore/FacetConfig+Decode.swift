@@ -282,6 +282,34 @@ extension FacetConfig {
         }
     }
 
+    /// Build the per-mac-desktop `[desktop.N]` typed-table map from the raw TOML
+    /// text (board abolition, t-0sbm). Each `[desktop.<N>]` is a SINGLE table
+    /// (`N` = Mission Control ordinal ≥ 1) carrying `type` (workspace / lens) +
+    /// `label`, plus lens-only `match` / `layout` / `show-non-matching`. Read from
+    /// the FLAT `parseTOMLSubset` map keyed by the literal header text
+    /// `desktop.<N>` (a single table, so it lands in `.tables`, NOT the
+    /// array-of-tables `.arrays` the section/tab decoders read). A table with an
+    /// absent / unknown `type`, or a lens missing `match`, is DROPPED LOUD.
+    /// Successor to `decodeDesktopTabs`.
+    public static func decodeDesktopTables(fromTOML text: String)
+        -> [Int: DesktopMeta]
+    {
+        var out: [Int: DesktopMeta] = [:]
+        for (header, row) in parseTOMLSubset(text) {
+            // Match EXACTLY `desktop.<N>` — one dotted level, ordinal ≥ 1. Skip
+            // the top-level scope (`""`), other `[section]` blocks, and any
+            // deeper `desktop.N.foo` header (arrays live elsewhere anyway).
+            guard header.hasPrefix("desktop.") else { continue }
+            let mid = header.dropFirst("desktop.".count)
+            guard !mid.contains("."), let ordinal = Int(mid), ordinal >= 1
+            else { continue }
+            let (meta, note) = DesktopMeta.parse(fromTOMLRow: row)
+            if let note { Log.line("config: [desktop.\(ordinal)]: \(note)") }
+            if let meta { out[ordinal] = meta }
+        }
+        return out
+    }
+
     // MARK: - Disk
 
     public static var defaultPath: String {
@@ -392,6 +420,18 @@ extension FacetConfig {
         if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
         let tabs = decodeDesktopTabs(fromTOML: text)
         if !tabs.isEmpty { c.macDesktopTabConfigs = tabs }
+        let metas = decodeDesktopTables(fromTOML: text)
+        if !metas.isEmpty { c.macDesktopMetaConfigs = metas }
+        // A `type = "lens"` desktop has no sections — warn if it ALSO declares
+        // `[[desktop.N.section]]` (they're ignored; the desktop-lens uses its
+        // single `match`). `desktopType` resolves the explicit meta first, so the
+        // stray sections never render — this is purely a loud heads-up.
+        for ordinal in metas.keys.sorted()
+        where metas[ordinal]?.type == .lens && sections[ordinal] != nil {
+            Log.line("config: desktop \(ordinal) is type=lens but also declares "
+                + "[[desktop.\(ordinal).section]] — a lens desktop has no sections;"
+                + " ignoring them")
+        }
         // N1: a desktop declaring BOTH `[[desktop.N.section]]` and
         // `[[desktop.N.tab]]` is ambiguous — boards win and the flat
         // sections are shadowed (see `effectiveMacDesktopSectionConfigs`).
