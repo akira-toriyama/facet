@@ -691,6 +691,27 @@ public struct FacetConfig: Sendable {
         return meta
     }
 
+    /// The synthesized `[DesktopSection]` a `type = "lens"` mac desktop feeds to
+    /// `FilterProjection.project` (board abolition, t-0sbm). A lens desktop has no
+    /// authored sections — its single always-on lens becomes ONE `.lens` section
+    /// (its matched windows, id `section:0:<label>` — the handle the runtime
+    /// change-match uses). When `show-non-matching` is set, a second `unassigned`
+    /// receptacle is appended so the tree ALSO shows the non-matching ("holding")
+    /// windows as the projection's leftover (universe − matched); otherwise the
+    /// tree is the lens section alone. Empty (`[]`) when `ordinal` is not a lens
+    /// desktop, so the caller falls back to the workspace path. Pure.
+    public func lensDesktopSections(ordinal: Int?) -> [DesktopSection] {
+        guard let lens = desktopLens(ordinal: ordinal) else { return [] }
+        var out: [DesktopSection] = [
+            DesktopSection(type: .lens, label: lens.label, match: lens.match,
+                           layout: lens.layout),
+        ]
+        if lens.showNonMatching {
+            out.append(DesktopSection(type: .workspace, unassigned: true))
+        }
+        return out
+    }
+
     /// Whether the section/lens model drives the mac desktop at `ordinal` —
     /// i.e. it has at least one `type = "workspace"` section in EITHER the flat
     /// `[[desktop.N.section]]` list OR any `[[desktop.N.tab]]` board (the board
