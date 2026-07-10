@@ -1185,7 +1185,13 @@ final class Controller: NSObject {
         // run AFTER the active-section re-read above — `activeLensID` reads the
         // freshly-resolved `currentActiveSection.lensID`. Section model off
         // ⇒ empty sections ⇒ the overview degrades to `wss` (byte-identical).
-        if config.isSectionModelActive(ordinal: macDesktopOrdinal),
+        // A lens DESKTOP (`[desktop.N] type=lens`, board abolition t-0sbm) is
+        // tree-only and synthesizes its own 1|2 sections (matched + optional
+        // non-matching holding). It is NOT `isSectionModelActive` (it has no
+        // workspace sections), so gate on it explicitly alongside.
+        let isLensDesktop = macDesktopOrdinal.map {
+            config.desktopType(ordinal: $0) == .lens } ?? false
+        if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop,
            let ordinal = macDesktopOrdinal {
             // W2.2 (board model): read the section list through the board
             // SELECTOR keyed by the session-selected board for this mac desktop.
@@ -1193,13 +1199,17 @@ final class Controller: NSObject {
             // section read uses (W2.5), so the id `declOrder` minted HERE matches
             // what the lens/DnD resolvers parse back. With no `[[desktop.N.tab]]`
             // boards this DEGRADES to the flat list (board 0) — byte-identical.
+            // A LENS DESKTOP instead synthesizes its sections (t-0sbm).
             // t-0020: overlay the session-only runtime `match` override BEFORE
             // projection (the seam difference from the label override below,
             // which runs AFTER). A changed `match` changes which windows a lens
             // catches, so it must mutate `project()`'s INPUT. Lens-only +
             // id-preserving (the override key is the lens id, built from the
             // label, so the projected id is unchanged). No override ⇒ identity.
-            let secs = applyMatchOverrides(selectedBoardSections(forOrdinal: ordinal),
+            let rawSecs = isLensDesktop
+                ? config.lensDesktopSections(ordinal: ordinal)
+                : selectedBoardSections(forOrdinal: ordinal)
+            let secs = applyMatchOverrides(rawSecs,
                                            to: sectionMatchOverride[ordinal] ?? [:])
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
             // from `wss`) so the projection appends them into the `not

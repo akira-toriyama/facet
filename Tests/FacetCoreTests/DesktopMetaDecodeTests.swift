@@ -147,4 +147,29 @@ struct DesktopMetaDecodeTests {
         #expect(c.desktopLens(ordinal: 2)?.layout == "grid")
         #expect(c.desktopLens(ordinal: 2)?.label == "Web")
     }
+
+    // MARK: - flat N=1 seed (Phase 2c)
+
+    /// A lens desktop is FLAT — `effectiveWorkspaceList` seeds EXACTLY ONE
+    /// workspace, named by the lens label + seeded with its layout. This pins the
+    /// catalog to N=1 so the active-WS park scope is the whole desktop.
+    @Test func lensDesktopSeedsExactlyOneWorkspace() {
+        var c = FacetConfig()
+        c.macDesktopMetaConfigs = [1: DesktopMeta(
+            type: .lens, label: "Web", match: "app~=Chrome", layout: "bsp")]
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
+        #expect(list.count == 1)
+        #expect(list[0].index == 1)
+        #expect(list[0].config.name == "Web")
+        #expect(list[0].config.layout == "bsp")
+    }
+
+    /// A workspace desktop with no sections is unaffected by the lens seed — it
+    /// still degrades to the default slot count.
+    @Test func workspaceDesktopUnaffectedByLensSeed() {
+        var c = FacetConfig()
+        c.macDesktopMetaConfigs = [1: DesktopMeta(type: .workspace, label: "Main")]
+        #expect(c.effectiveWorkspaceList(forMacDesktopOrdinal: 1).count
+                == FacetConfig.defaultWorkspaceCount)
+    }
 }

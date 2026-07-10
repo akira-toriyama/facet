@@ -218,12 +218,13 @@ extension NativeAdapter {
         // next snapshot. Keep the main-readable mirror in lock-step (covers a
         // mac-desktop swap that restored a desktop whose lens persists).
         syncSectionLensMirror()
-        // t-c6fm: on a `type=lens` (focus) board, activating a lens re-parks —
-        // anchor-park the active WS's out-of-lens windows so the screen
-        // declutters to the active lens. Derived from `match` every reconcile.
-        // BEFORE the re-tile (detached parks would otherwise be tiled back on),
-        // AFTER healOrphanSlivers (which excludes `anchorParked`). A no-op on
-        // plain boards / when nothing is isolate-parked.
+        // A lens DESKTOP (`[desktop.N] type=lens`, always-on — t-0sbm) or a lens
+        // BOARD (t-c6fm) re-parks the active WS's out-of-lens windows so the
+        // screen declutters to the matched set (and, for a lens desktop, tiles it
+        // with the lens's `layout`). Derived from `match` every reconcile. BEFORE
+        // the re-tile (detached parks would otherwise be tiled back on), AFTER
+        // healOrphanSlivers (which excludes `anchorParked`). A no-op on plain
+        // desktops / when nothing is isolate-parked.
         applyIsolatePark(live: live, focused: focused, rect: rect)
         // Event-driven re-tile of the active WS (with open/close reflow
         // animation when applicable). See `retileAfterReconcile`.
@@ -499,20 +500,46 @@ extension NativeAdapter {
     /// (tags overlaid here); `focused` feeds the re-attach bsp orientation.
     func applyIsolatePark(live: [Window], focused: WindowID?, rect: CGRect) {
         dispatchPrecondition(condition: .onQueue(cliQueue))
-        // Gate: the SELECTED board is a `lens` board AND a lens is active AND
-        // its match compiles. Off → empty desired → the catalog unparks all.
-        // (t-c6fm: park is INHERENT to lens boards — activating a lens on a
-        // `type = "lens"` board always declutters. No per-board opt-in toggle.)
+        // Resolve the ACTIVE lens filter for this mac desktop, from either:
+        //   • a typed lens DESKTOP (`[desktop.N] type=lens`, ALWAYS-ON — board
+        //     abolition t-0sbm): its single `match` parks the out-of-lens
+        //     windows and its `layout` tiles the matched set (below); OR
+        //   • while boards still exist, the active lens BOARD (t-c6fm): a lens
+        //     activated on a `type="lens"` board declutters the active WS.
+        // The desktop-lens takes PRECEDENCE (the two are mutually exclusive by
+        // config shape — a `[desktop.N]` scalar table never coexists with
+        // `[[desktop.N.tab]]` arrays). Off → empty desired → the catalog
+        // unparks all.
         let ord = activeMacDesktopOrdinal
-        let board = ord.map { selectedBoardByOrdinal[$0] ?? 0 } ?? 0
-        let lensBoard = ord.flatMap {
-            config.activeBoardTab(forMacDesktopOrdinal: $0, board: board)?.type
-        } == .lens
-        let lensID = catalog.activeSectionLens
+        var lensMatch: String? = nil
+        if let lens = config.desktopLens(ordinal: ord) {
+            lensMatch = lens.match
+            // Lens-layout seam: a lens desktop tiles its matched set with the
+            // lens's declared `layout`, asserted on the (N=1) active workspace
+            // BEFORE the retile. Only when it actually CHANGES — `setMode`
+            // REBUILDS the tree/stack from scratch, so re-asserting every
+            // reconcile would reset a user's bsp split ratios. `nil` layout
+            // leaves the seeded / default mode in place.
+            if let layout = lens.layout,
+               catalog.mode(of: catalog.activeIndex) != layout.lowercased() {
+                catalog.setMode(workspace: catalog.activeIndex, to: layout, in: rect)
+            }
+        } else {
+            let board = ord.map { selectedBoardByOrdinal[$0] ?? 0 } ?? 0
+            let lensBoard = ord.flatMap {
+                config.activeBoardTab(forMacDesktopOrdinal: $0, board: board)?.type
+            } == .lens
+            if lensBoard, catalog.activeSectionLens != nil,
+               let section = activeLensSection() {
+                lensMatch = section.match
+            }
+        }
+
         var desired: [WindowID] = []
-        if lensBoard, lensID != nil,
-           let section = activeLensSection(),
-           case .success(let lens) = FacetFilter.parse(section.match) {
+        if let matchStr = lensMatch,
+           case .success(let lens) = FacetFilter.parse(matchStr) {
+            // ACTIVE-WS scope — at N=1 (a lens desktop) this is the whole
+            // desktop; on a multi-workspace board it is the active workspace.
             let activeWindows = live
                 .filter { catalog.windowMap[$0.id]?.workspace == catalog.activeIndex }
                 .map { $0.withTags((catalog.windowMap[$0.id]?.tags ?? []).sorted()) }

@@ -404,6 +404,15 @@ extension Controller {
         // (The rail otherwise coexists with the tree — different
         // screen regions, complementary surfaces.)
         if name == "grid" && isRailVisible { hideRail() }
+        // 2-world separation (t-0sbm): a lens desktop is TREE-ONLY — a dynamic
+        // lens has no fixed thumbnail, so grid/rail can't render it. A lens
+        // desktop is valid config (not a typo), but the request is
+        // unsatisfiable, so surface it loud rather than silently no-op.
+        if (name == "grid" || name == "rail"),
+           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
+            setError("\(name) view is not available on a lens desktop (tree only)")
+            return
+        }
         switch name {
         case "tree":
             // Apply explicit geom BEFORE showing so the panel
@@ -1149,6 +1158,13 @@ extension Controller {
     }
 
     private func dispatchToggle(_ name: String) {
+        // 2-world separation (t-0sbm): grid/rail are unavailable on a lens
+        // desktop (tree-only) — same loud reject as the show path.
+        if (name == "grid" || name == "rail"),
+           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
+            setError("\(name) view is not available on a lens desktop (tree only)")
+            return
+        }
         switch name {
         // Toggling ON opens the tree active (same entry as `--view
         // tree`); OFF hides it. Mirrors the show path so a toggle

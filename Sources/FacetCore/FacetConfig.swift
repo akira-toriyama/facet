@@ -621,6 +621,16 @@ public struct FacetConfig: Sendable {
         // 1-based index, not an emoji. Runtime `facet workspace --rename`
         // still overrides. `isSectionModelActive` guarantees a non-nil ordinal
         // with ≥1 workspace section, so this list is non-empty.
+        // A lens DESKTOP (`[desktop.N] type=lens`, board abolition t-0sbm) is
+        // FLAT — exactly ONE workspace whose layout is the lens's. This pins the
+        // catalog to N=1 so the active-WS park/tile scope (the `workspace ==
+        // activeIndex` filter in applyIsolatePark) IS the whole desktop. Seeded
+        // from the `[desktop.N]` table, never from sections (a lens desktop has
+        // none). Checked BEFORE the section/default branches.
+        if let lens = desktopLens(ordinal: ordinal) {
+            return [(index: 1,
+                     config: WorkspaceConfig(name: lens.label, layout: lens.layout))]
+        }
         if isSectionModelActive(ordinal: ordinal), let ordinal {
             let wsSections = workspaceSubstrateSections(forOrdinal: ordinal)
             // §B: a non-empty `label` names the workspace; an empty one stays
