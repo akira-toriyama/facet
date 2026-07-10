@@ -139,35 +139,16 @@ struct GridMathTests {
         #expect(mapped == .zero)
     }
 
-    // MARK: - board band carve (t-wrd2 — gridUsableHeight / gridOriginY)
+    // MARK: - vertical placement (gridUsableHeight / gridOriginY)
 
-    /// With no board band (< 2 boards ⇒ height 0) the carve MUST reduce to the
-    /// pre-band vertical placement — the byte-identical guarantee for flat /
-    /// single-board configs.
-    @Test func boardBandZeroIsByteIdentical() {
+    /// The cell block centres in the usable area — the origin is exactly
+    /// `(boundsHeight - totalH) / 2` (flipped view, top-down).
+    @Test func gridOriginCentresCellBlock() {
         let h: CGFloat = 1000, pad = gridOuterPad, totalH: CGFloat = 600
-        #expect(abs(gridUsableHeight(boundsHeight: h, outerPad: pad,
-                                     boardBandHeight: 0) - (h - 2 * pad)) < 0.0001)
-        // pre-band origin was exactly `(bounds.height - totalH) / 2`.
-        #expect(abs(gridOriginY(boundsHeight: h, outerPad: pad,
-                                boardBandHeight: 0, totalH: totalH) - (h - totalH) / 2) < 0.0001)
-    }
-
-    /// A reserved band shrinks the usable height by exactly its height and
-    /// pushes the centred cell block down by half that (re-centred in the
-    /// smaller area below the band), never intruding into the band region.
-    @Test func boardBandReservesHeightAndShiftsDown() {
-        let h: CGFloat = 1000, pad = gridOuterPad, totalH: CGFloat = 600
-        let band: CGFloat = 30
-        #expect(abs(gridUsableHeight(boundsHeight: h, outerPad: pad,
-                                     boardBandHeight: band) - ((h - 2 * pad) - band)) < 0.0001)
-        let y0 = gridOriginY(boundsHeight: h, outerPad: pad,
-                             boardBandHeight: 0, totalH: totalH)
-        let yB = gridOriginY(boundsHeight: h, outerPad: pad,
-                             boardBandHeight: band, totalH: totalH)
-        #expect(abs(yB - (y0 + band / 2)) < 0.0001)
-        // Flipped view: top = small y; the block's top stays below the band.
-        #expect(yB >= pad + band - 0.0001)
+        #expect(abs(gridUsableHeight(boundsHeight: h, outerPad: pad)
+                    - (h - 2 * pad)) < 0.0001)
+        #expect(abs(gridOriginY(boundsHeight: h, outerPad: pad, totalH: totalH)
+                    - (h - totalH) / 2) < 0.0001)
     }
 
     // §D: the WS caption (`gridLabel`) was retired in favour of the shared

@@ -102,7 +102,7 @@ final class Controller: NSObject {
     /// `sectionLabelOverride`**: a label override relabels the PROJECTED output
     /// (display-only), but a match override changes which windows a lens catches,
     /// so it must mutate the projection INPUT — it is applied via
-    /// `applyMatchOverrides` to `selectedBoardSections(...)` BEFORE `project()` in
+    /// `applyMatchOverrides` to `desktopSections(...)` BEFORE `project()` in
     /// `apply()`, not after. Same lifetime as `sectionLabelOverride`: per-mac-
     /// desktop, NEVER written to disk (config.toml stays read-only), reset on
     /// relaunch (NOT on `facet reload`). Only PURE lens sections are overridable
@@ -111,68 +111,13 @@ final class Controller: NSObject {
     /// like `sectionLabelOverride`'s (a non-nil `currentMacDesktopOrdinal()`), so
     /// it never lands in a `-1` bucket the seam can't read.
     var sectionMatchOverride: [Int: [String: String]] = [:]
-    /// W2.2 (board model, t-wrd2): the session-only SELECTED BOARD index per
-    /// mac desktop — the view-state twin of `sectionLabelOverride` (a
-    /// PROJECTION-SEAM dict, NOT the degrade-path `macDesktopSectionOrder`).
-    /// Keyed by the NON-NIL mac-desktop ordinal, read ONLY inside the
-    /// `let ordinal = macDesktopOrdinal` guard at the single `apply()`
-    /// projection seam via `config.activeBoardSections(forMacDesktopOrdinal:
-    /// board:)`; the value is the 0-based index of the `[[desktop.N.tab]]`
-    /// board currently SHOWN by tree/grid/rail. Absent ⇒ board 0 (the first
-    /// board, and the flat-degrade path when no boards are configured), so all
-    /// three views agree. Because the read is ordinal-gated it NEVER consults a
-    /// `-1` bucket — a future writer (W2.3 `facet board`) must therefore guard
-    /// on a non-nil `currentMacDesktopOrdinal()` like `sectionLabelOverride`'s
-    /// writer (Controller+CLIDispatch), NOT write under `?? -1` (which would
-    /// orphan the entry in a bucket the seam can't read). NEVER written to disk
-    /// (config.toml stays read-only) and NEVER touches the backend (a board
-    /// switch re-groups the SAME windows — display only). A relaunch resets to
-    /// board 0; a mac-desktop swap reads the destination ordinal's own
-    /// selection for free. The resolver clamps the index, so a stale selection
-    /// after a hot-reload that dropped boards self-heals to the nearest
-    /// in-range board.
-    var selectedBoard: [Int: Int] = [:]
-
-    /// Per-board remembered active section (t-wrd2 / L1), keyed
-    /// `[ordinal: [board: ActiveSection]]`. A board switch saves the section the
-    /// user was on under the board they LEAVE and restores the destination
-    /// board's — the single `currentActiveSection` would otherwise go stale on a
-    /// switch (`apply()`'s re-read fires on a desktop swap / WS switch, never a
-    /// board switch), leaving the active-lens highlight on the wrong board.
-    /// Session-only, per-mac-desktop, reset on relaunch — same contract as
-    /// `selectedBoard` / `macDesktopSectionOrder`. Written ONLY through
-    /// `commitBoardSelection`.
-    var boardActiveSection: [Int: [Int: ActiveSection]] = [:]
-
-    /// The active board's sections for `ordinal` (t-wrd2 / W2.5) — the board
-    /// SELECTOR keyed by this mac desktop's session-selected board. EVERY
-    /// Controller-side section read goes through this ONE seam so the
-    /// section-id `declOrder` agrees with what the `apply()` projection minted
-    /// (`FilterProjection` enumerates the SAME list) — the W2.5 Risk#1
-    /// guard against a second, stale section SSOT. With no `[[desktop.N.tab]]`
-    /// boards (or no selection) it degrades to the flat `[[desktop.N.section]]`
-    /// list at board 0 — byte-identical to the pre-board reads. `nil` ordinal →
-    /// empty (the config selector keys off the ordinal). The adapter's own id
-    /// resolution is now board-aware too (W2.5-adapter — the Controller pushes
-    /// the board via `setSelectedBoard`), so both sides resolve a board-minted
-    /// id against the same selected-board section list.
-    func selectedBoardSections(forOrdinal ordinal: Int?) -> [DesktopSection] {
-        config.activeBoardSections(
-            forMacDesktopOrdinal: ordinal,
-            board: ordinal.flatMap { selectedBoard[$0] } ?? 0)
-    }
-    /// The active mac desktop's board-switcher inputs, shared by the tree band
-    /// feed (`apply`) and the grid / rail overlay bands. Returns the display
-    /// labels in config order + the clamped selected index. < 2 boards (flat /
-    /// single-board config, or `nil` ordinal) ⇒ `([], 0)` ⇒ the caller reserves
-    /// no band height (byte-identical chrome). The clamp matches the projection's
-    /// board clamp in `selectedBoardSections`.
-    func boardBandInputs() -> (labels: [String], selectedIndex: Int) {
-        let ord = currentMacDesktopOrdinal()
-        let boards = ord.flatMap { config.effectiveMacDesktopTabConfigs[$0] } ?? []
-        guard boards.count >= 2, let ord else { return ([], 0) }
-        return (boards.map(\.displayLabel),
-                max(0, min(boards.count - 1, selectedBoard[ord] ?? 0)))
+    /// The mac desktop's declared sections for `ordinal`. EVERY Controller-side
+    /// section read goes through this ONE seam so the section-id `declOrder`
+    /// agrees with what the `apply()` projection minted (`FilterProjection`
+    /// enumerates the SAME list) — the guard against a second, stale section
+    /// SSOT. `nil` ordinal → empty (the config selector keys off the ordinal).
+    func desktopSections(forOrdinal ordinal: Int?) -> [DesktopSection] {
+        config.activeBoardSections(forMacDesktopOrdinal: ordinal, board: 0)
     }
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
@@ -424,9 +369,6 @@ final class Controller: NSObject {
         }
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
-        }
-        panelHost.boardBand.onSelectBoard = { [weak self] idx in
-            self?.selectBoardFromUI(idx)
         }
         searchDelegate.onChange = { [weak self] q in
             MainActor.assumeIsolated {
@@ -710,12 +652,11 @@ final class Controller: NSObject {
         // is to the always-present workspace; benign + narrow), surfaced via
         // `Log.line` (which also makes today's silent label-removal drop visible).
         if case .lens(let id) = currentActiveSection {
-            // W2.5: validate against the ACTIVE board's sections (the same list
-            // the projection minted the id from), not the flat list — else a
-            // lens on a board config never re-resolves and is dropped on reload.
+            // Validate against the SAME section list the projection minted the
+            // id from, so a reload re-resolves (or loudly drops) consistently.
             let stillValid = ApplyResolver.section(
                 forSectionID: id,
-                in: selectedBoardSections(forOrdinal: currentMacDesktopOrdinal())
+                in: desktopSections(forOrdinal: currentMacDesktopOrdinal())
             ) != nil
             if !stillValid {
                 let ws = activeWSIndex(in: lastWorkspaces)
@@ -735,23 +676,6 @@ final class Controller: NSObject {
                     bk.setSectionLens(nil, autoFocus: false); return nil
                 }
             }
-        }
-        // B1 (t-1rck): the block above re-validates only the ACTIVE board's
-        // live `currentActiveSection`. Sweep the OTHER boards' remembered
-        // selections too — a `.lens(id)` stored in `boardActiveSection` for a
-        // non-active board is never re-read by `apply()`, so without this a
-        // config edit that drops / reorders that board's lens leaves a dead id
-        // that `commitBoardSelection` would later restore as a stale highlight
-        // on the next switch BACK. Pure prune (no backend op — a non-active
-        // board's lens isn't live in the adapter; only the active board's, which
-        // the block above already cleared).
-        let boardPrune = config.prunedBoardActiveSections(
-            boardActiveSection,
-            fallback: .workspace(activeWSIndex(in: lastWorkspaces)))
-        boardActiveSection = boardPrune.pruned
-        for d in boardPrune.dropped {
-            Log.line("remembered lens on board \(d.board) (desktop \(d.ordinal)) "
-                + "no longer resolves after config reload (id=\(d.id)) → workspace")
         }
         backend.updateConfig(fresh)   // hot-reload the backend's copy
         logConfigWarnings()
@@ -796,17 +720,17 @@ final class Controller: NSObject {
     func lensSectionLabels(ordinal: Int?) -> [String] {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return [] }
-        return selectedBoardSections(forOrdinal: ord)
+        return desktopSections(forOrdinal: ord)
             .filter { $0.type == .lens && !$0.unassigned }.map(\.label)   // W2.6: not a receptacle
     }
 
     /// A0: resolve a lens section's display `label` to its **stable id**
     /// (`"section:<declOrder>:<label>"`) on the mac desktop at `ordinal`, or nil
     /// when no `type="lens"` section there has that label. `declOrder` is the
-    /// index into the ACTIVE board's section array (W2.5) — the SAME index
+    /// index into the desktop's section array — the SAME index
     /// `FilterProjection` mints the id from (`FilterProjection.swift`) and
     /// `ApplyResolver.section(forSectionID:)` parses back, so the round-trip is
-    /// exact (both now read the selected board via `selectedBoardSections`).
+    /// exact (both read the same `desktopSections` list).
     /// Config-based (not `lastSections`) so it resolves even before the first
     /// render (headless CLI). The label↔id map is 1:1 while labels are unique +
     /// non-empty (the A0 invariant). Shared by `setActiveLens`,
@@ -814,7 +738,7 @@ final class Controller: NSObject {
     func lensID(forLabel label: String, ordinal: Int?) -> String? {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return nil }
-        guard let declOrder = selectedBoardSections(forOrdinal: ord)
+        guard let declOrder = desktopSections(forOrdinal: ord)
             .firstIndex(where: { $0.type == .lens && !$0.unassigned && $0.label == label })
         else { return nil }
         return "section:\(declOrder):\(label)"
@@ -1193,12 +1117,10 @@ final class Controller: NSObject {
             config.desktopType(ordinal: $0) == .lens } ?? false
         if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop,
            let ordinal = macDesktopOrdinal {
-            // W2.2 (board model): read the section list through the board
-            // SELECTOR keyed by the session-selected board for this mac desktop.
-            // The SAME `selectedBoardSections` seam every other Controller-side
-            // section read uses (W2.5), so the id `declOrder` minted HERE matches
-            // what the lens/DnD resolvers parse back. With no `[[desktop.N.tab]]`
-            // boards this DEGRADES to the flat list (board 0) — byte-identical.
+            // Read the section list through the SAME `desktopSections` seam
+            // every other Controller-side section read uses, so the id
+            // `declOrder` minted HERE matches what the lens/DnD resolvers
+            // parse back.
             // A LENS DESKTOP instead synthesizes its sections (t-0sbm).
             // t-0020: overlay the session-only runtime `match` override BEFORE
             // projection (the seam difference from the label override below,
@@ -1208,7 +1130,7 @@ final class Controller: NSObject {
             // label, so the projected id is unchanged). No override ⇒ identity.
             let rawSecs = isLensDesktop
                 ? config.lensDesktopSections(ordinal: ordinal)
-                : selectedBoardSections(forOrdinal: ordinal)
+                : desktopSections(forOrdinal: ordinal)
             let secs = applyMatchOverrides(rawSecs,
                                            to: sectionMatchOverride[ordinal] ?? [:])
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
@@ -1243,18 +1165,11 @@ final class Controller: NSObject {
         // windows) — no park-flag narrowing, no view-side recompute. `wss`
         // stays the full set.
         if let g = gridView {
-            let prevBoard = g.activeBoardIndex
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
             g.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
-            let board = boardBandInputs()      // keep the open grid's board band in sync
-            g.boardLabels = board.labels
-            g.activeBoardIndex = board.selectedIndex
             g.layoutCells()       // refresh open grid on backend events
-            // A board switch swaps the whole section set — re-seed the keyboard
-            // ring onto a valid cell (other backend events keep the selection).
-            if board.selectedIndex != prevBoard { g.kbSeedToActiveCell() }
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
         // grid), so keep it live with every reconcile — the active-WS
@@ -1269,10 +1184,6 @@ final class Controller: NSObject {
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
             rv.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
-            let prevBoard = rv.activeBoardIndex
-            let railBoard = boardBandInputs()   // keep the open rail's board band in sync
-            rv.boardLabels = railBoard.labels
-            rv.activeBoardIndex = railBoard.selectedIndex
             // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
             // is open re-centres the strip on the new active SECTION — but
             // only when the user isn't mid-browse (cursor still on the OLD
@@ -1283,9 +1194,6 @@ final class Controller: NSObject {
             if rv.selectedSectionID == oldActiveID, let n = newActiveID {
                 rv.selectedSectionID = n
             }
-            // A board switch swaps the whole section set — reset the carousel
-            // slide / crossfade so the old board's animation can't bleed in.
-            if railBoard.selectedIndex != prevBoard { rv.resetCarouselAnimation() }
             rv.layoutCells()      // refresh open rail on backend events
         }
         if firstRealApply {
@@ -1386,14 +1294,6 @@ final class Controller: NSObject {
             contentH = sidebarView.update(displayWss, titles: titles,
                                           macDesktop: macDesktopOrdinal)
         }
-        // Board tab bar (W2.4): feed the tree's board switcher. Shown only with
-        // ≥2 `[[desktop.N.tab]]` boards on this mac desktop — a flat / single-
-        // board config feeds an empty label list, so PanelHost hides the band
-        // and reserves no height (byte-identical chrome). The active index is
-        // clamped, matching the projection's board clamp.
-        let board = boardBandInputs()
-        panelHost.boardBand.boardLabels = board.labels
-        panelHost.boardBand.activeBoardIndex = board.selectedIndex
         panelHost.layout(contentHeight: contentH,
                          searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }

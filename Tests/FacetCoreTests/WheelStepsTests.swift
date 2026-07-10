@@ -3,8 +3,8 @@ import CoreGraphics
 @testable import FacetCore
 
 /// `wheelSteps` (t-9amp / R1) — the pure scroll-wheel → integer-step math lifted
-/// out of the three view-side switchers (the tree `BoardBand`, the rail
-/// `RailBoardBand`, and the `RailView` section carousel), which previously held
+/// out of the view-side switchers (today the `RailView` section carousel;
+/// originally also the retired board bands), which previously held
 /// three byte-identical copies. Precise (trackpad) deltas accumulate into an
 /// inout `accum` and drain one ±1 step per `threshold`; a notched wheel is a flat
 /// ±1 per detent. Sign: a NEGATIVE `deltaY` (content scrolled DOWN, natural-scroll
@@ -139,7 +139,7 @@ struct WheelStepsTests {
                 "opposite-sign bank is absorbed; drains never flip sign")
     }
 
-    // MARK: - defensive (the helper stays total, like boardIndexStep)
+    // MARK: - defensive (the helper stays total)
 
     /// A zero / negative threshold would make the drain loop never terminate;
     /// the helper guards it and reports no step instead of hanging.

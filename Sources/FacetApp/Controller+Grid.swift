@@ -66,14 +66,6 @@ extension Controller {
         gv.config = GridConfig(
             cols: config.effectiveGridCols,
             labelPosition: config.effectiveGridLabelPosition)
-        // Board switcher band (t-wrd2) — same source as the tree band. ≥2
-        // boards on this mac desktop shows it (pinned at the overlay top); a
-        // flat / single-board config feeds nothing ⇒ no band. The click / wheel
-        // routes through the SAME `selectBoardFromUI` seam as the tree + CLI.
-        let board = boardBandInputs()
-        gv.boardLabels = board.labels
-        gv.activeBoardIndex = board.selectedIndex
-        gv.onSelectBoard = { [weak self] idx in self?.selectBoardFromUI(idx) }
         gv.onPick = { [weak self, bk = backend] pick in
             // EX-2: route every pick through the validated `activateSection`
             // throughline (updates the currentActiveSection mirror on main,

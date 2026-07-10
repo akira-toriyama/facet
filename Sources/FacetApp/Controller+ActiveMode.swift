@@ -421,7 +421,7 @@ extension Controller {
             if let overridden = sectionMatchOverride[ordinal]?[secID] {
                 return overridden
             }
-            for (i, s) in selectedBoardSections(forOrdinal: ordinal).enumerated()
+            for (i, s) in desktopSections(forOrdinal: ordinal).enumerated()
             where s.type == .lens && !s.unassigned
                 && "section:\(i):\(s.label)" == secID {
                 return s.match

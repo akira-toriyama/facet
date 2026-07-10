@@ -79,21 +79,15 @@ public func gridWrapIndex(index: Int, dx: Int, dy: Int,
     return i
 }
 
-/// Usable cell-area height after reserving the board switcher band at the top
-/// (t-wrd2). `boardBandHeight` is 0 with < 2 boards, so this reduces to the
-/// pre-band `boundsHeight - 2*outerPad` — the byte-identical guarantee for
-/// flat / single-board configs. Pure / testable.
-public func gridUsableHeight(boundsHeight: CGFloat, outerPad: CGFloat,
-                             boardBandHeight: CGFloat) -> CGFloat {
-    boundsHeight - 2 * outerPad - boardBandHeight
+/// Usable cell-area height inside the outer pad. Pure / testable.
+public func gridUsableHeight(boundsHeight: CGFloat, outerPad: CGFloat) -> CGFloat {
+    boundsHeight - 2 * outerPad
 }
 
-/// Y-origin (flipped view, top-down) that centres a `totalH`-tall cell block in
-/// the area BELOW the board band. With `boardBandHeight == 0` this reduces to
-/// the pre-band `(boundsHeight - totalH) / 2`. Pure / testable.
+/// Y-origin (flipped view, top-down) that centres a `totalH`-tall cell block
+/// in the usable area — exactly `(boundsHeight - totalH) / 2`. Pure / testable.
 public func gridOriginY(boundsHeight: CGFloat, outerPad: CGFloat,
-                        boardBandHeight: CGFloat, totalH: CGFloat) -> CGFloat {
-    outerPad + boardBandHeight
-        + (gridUsableHeight(boundsHeight: boundsHeight, outerPad: outerPad,
-                            boardBandHeight: boardBandHeight) - totalH) / 2
+                        totalH: CGFloat) -> CGFloat {
+    outerPad + (gridUsableHeight(boundsHeight: boundsHeight,
+                                 outerPad: outerPad) - totalH) / 2
 }

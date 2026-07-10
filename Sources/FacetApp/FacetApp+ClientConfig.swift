@@ -7,7 +7,7 @@
 //   --emit-schema  print the Draft-07 JSON Schema to stdout (repo/dev regen
 //                  of config.schema.json; not shown in --help).
 //
-// A new subject (mirrors window / workspace / section / board / query). It
+// A new subject (mirrors window / workspace / section / query). It
 // FOLDS IN the former bare `facet --emit-schema`: no bare alias survives
 // (facet's no-alias rule — a bare flag beside a subject is the exact
 // "is it bare or scoped?" ambiguity the subject-verb CLI exists to kill).

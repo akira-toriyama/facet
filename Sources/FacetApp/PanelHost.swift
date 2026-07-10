@@ -41,12 +41,6 @@ final class PanelHost: NSObject {
     /// scroll view (never scrolls). Controller wires its `onResetGeometry`;
     /// PanelHost feeds its ordinal + sizes it in `applySubviewLayout`.
     let handleBar = HandleBar()
-    /// Board band (t-wrd2 / W2.4) — a pinned band below the HandleBar that
-    /// switches `[[desktop.N.tab]]` boards. Shown only when the Controller
-    /// feeds it ≥2 board labels (a flat / single-board config leaves it empty
-    /// ⇒ hidden ⇒ no height reserved ⇒ byte-identical chrome). Controller wires
-    /// `onSelectBoard`.
-    let boardBand = BoardBand()
 
     /// Outer panel border. Drawn as a layer (never a view) so it can't
     /// intercept clicks; sits above the chrome via `zPosition`, tracks
@@ -95,7 +89,6 @@ final class PanelHost: NSObject {
         self.paletteBox = paletteBox
         view.paletteBox = paletteBox
         handleBar.paletteBox = paletteBox
-        boardBand.paletteBox = paletteBox
         borderFX.paletteBox = paletteBox
 
         // Built-in default: top-left of the main screen, auto height.
@@ -175,7 +168,6 @@ final class PanelHost: NSObject {
         effect.addSubview(scroll)
         effect.addSubview(searchBar)
         effect.addSubview(handleBar)
-        effect.addSubview(boardBand)
 
         // Outer accent border, on top of the chrome. A layer (not a
         // view) can't intercept clicks; `zPosition` keeps it above the
@@ -414,16 +406,7 @@ final class PanelHost: NSObject {
                                  width: f.width, height: hb)
         handleBar.ordinal = view.shownMacDesktopOrdinal
         handleBar.needsDisplay = true
-        // Board band (W2.4): a pinned band just below the HandleBar, shown
-        // only when the Controller fed ≥2 board labels. Hidden ⇒ 0 height ⇒ the
-        // scroll body is unchanged from the pre-board layout (byte-identical).
-        let showBoardBand = boardBand.boardLabels.count >= 2
-        let bb = showBoardBand ? BoardBand.height : 0
-        boardBand.isHidden = !showBoardBand
-        boardBand.frame = NSRect(x: 0, y: f.height - sh - hb - bb,
-                                   width: f.width, height: bb)
-        boardBand.needsDisplay = true
-        let bodyH = max(f.height - sh - hb - bb, 0)
+        let bodyH = max(f.height - sh - hb, 0)
         scroll.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
         // documentView width = the natural content width (≥ clip width) so
         // overflowing titles scroll horizontally (B); height as before.
@@ -454,7 +437,6 @@ final class PanelHost: NSObject {
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
         handleBar.needsDisplay = true
-        boardBand.needsDisplay = true
         scroll.verticalScroller?.needsDisplay = true
         scroll.horizontalScroller?.needsDisplay = true
     }
