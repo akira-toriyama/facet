@@ -155,8 +155,8 @@ macOS の **native Space**（OS が提供する仮想デスクトップ。Missio
 しか触らない（別 mac desktop への window 移動は SIP-off が要るので非対応）。
 - コード: `MacDesktops`（in `FacetAccessibility`・SkyLight 経由の read-only
   クエリ）, `NativeAdapter.activeMacDesktopID`
-- 設定: `[[desktop.N.section]]` / `[[desktop.N.tab]]`（[[board]]）ブロック
-  （Mission Control 順の ordinal で指定）
+- 設定: `[[desktop.N.section]]` / `[desktop.N]`（typed desktop・[[lens desktop]]）
+  ブロック（Mission Control 順の ordinal で指定）
 - UI: tree の上部ハンドル帯に "Desktop N"（macOS の呼称に合わせた表示ラベル）
 - **Don't call it:** Space, native Space, workspace, virtual desktop（facet
   workspace と紛れる）, デスクトップ別
@@ -177,45 +177,30 @@ by-name seed は廃止）。**未命名（label 空）は無名のまま 1始ま
   `sectionDisplayLabel(index:label:)`（§D・`index` or `index (label)`）
 - **Don't call it:** group, tab, page, desktop, mac desktop, Space, グループ, タブ
 
-### board
-1 つの [[mac desktop]] の中で [[section]] 群をまとめる **タブ状の表示単位**＝
-階層 **mac desktop > board > section > window**。各 board は `type`（`workspace`
-or `lens`）を 1 つ持ち、配下の section は **その type を継承**する（混在不可）。
-同じ窓集合を **workspace board（排他分割の土台）と lens board（横断 projection）**
-という別グルーピングで見比べるためのもの＝board 切替は **表示の再グループ化だけ**で
-実 OS 窓は一切動かさない（[[lens]] と同じ pure VIEW・「別世界」）。board は複数可で、
-1始まりの index か任意の `label` で指す（無名は型既定名 `Workspaces` / `Lenses` を表示）。
-flat な [[section]] config（`[[desktop.N.section]]`）の上位互換で、同一 desktop に
-両方を書くと **board が勝ち**・flat は shadow（loud warn）。board 無し → flat /
-既定 workspace 群へ縮退（byte 一致）。
-- 設定: `[[desktop.N.tab]]`（`type` 必須＝`workspace` / `lens`・`label` 任意）＋配下
-  `[[desktop.N.tab.section]]`（`type` を書かず親から継承・`unassigned = true` マーカー可）
-- **focus モード**（`type = "lens"` board = 常に有効／t-c6fm）: その board で [[lens]] を
-  activate すると **lens 外の active-workspace 窓を corner に anchor-park** して**実画面**を active
-  lens の世界だけに declutter する（dwm 風 focus）。opt-in キーは無い——lens board 本来の挙動。
-  **board 切替そのものは「窓を動かさない」**——実際に動くのは lens *activation* だけ（`match`
-  から毎 reconcile 導出）。park は**実画面だけ**の操作で、tree は inventory のまま——park 窓は
-  自分の `match` を満たす section に**普通に**並ぶ（非 active workspace の park 窓と同じ・dim/badge
-  無し）。どの lens にもマッチしない park 窓だけ [[unassigned]] Lost&Found に落ちる；その行を
-  click すると lens を解除して復帰。sticky は park 免除。コード: `Window.isParked` /
-  `WorkspaceCatalog.isolateParked` / `IsolatePark.parkSet`（純）/ `NativeAdapter.applyIsolatePark`
-- CLI: `facet board --focus N|"label"`（1始まり index か label で切替・out-of-range /
-  未知 label は loud reject・**無名 board は index 専用**＝band の既定キャプション
-  `Workspaces` / `Lenses` は `--focus` ラベルにならない）。`facet section --focus` の
-  双子＝**表示のみ**（窓は動かない）
-- UI: active な [[mac desktop]] が **2 board 以上の時だけ** tree / grid / rail の上端に
-  board 帯（`BoardBand`）を出す（1 board / flat は非表示＝高さ 0）。**click + ホイール**で
-  即切替（下見なし・表示のみ）。caption は `label` か型既定名（index は CLI 専用で UI に出さない）
-- コード: `DesktopTab`（`type` / `label` / `sections`・`displayLabel`）/ `SectionType`
-  ＝{`workspace`, `lens`} / `FacetConfig.activeBoardSections(forMacDesktopOrdinal:board:)` /
-  `Controller.selectedBoard`（session-only・per-mac-desktop）/ `resolveBoardFocus`・
-  `boardTabLayout`・`boardIndexStep`（`FacetCore`・純幾何）/ `BoardBand`（`FacetView`）
-- **Don't call it:** tab（概念名は board）, page, partition, workspace（board は section 群の
-  入れ物／workspace は 1 section）, view（[[facet view]] は別軸）, 別世界（説明語・正規名でない）,
-  タブ, ページ
-  - ※ コード識別子 / 設定キーの `tab`（`DesktopTab` / `[[desktop.N.tab]]` / "tab bar"）は
-    その表記を維持する（このファイル冒頭・「エントリ追加時のルール」の方針＝コード識別子は
-    綴りを保つ）。概念を指す散文では **board** を使う。
+### lens desktop
+`[desktop.N] type = "lens"` で型付けした [[mac desktop]]＝**常時有効（always-on）の
+filtered desktop**。階層は **mac desktop > section > window**（旧 **board** 層は
+t-0sbm で廃止——「workspace と lens を両方使いたい」は board でなく **mac desktop を
+型で分けて**解く。1 ordinal = 1 desktop = 1 type）。`[desktop.N]` は SINGLE table で、
+`type` は `workspace`（従来どおり `[[desktop.N.section]]` が中身を記述・section だけ
+書けば暗黙にこの型）か `lens`。
+- **挙動**: その mac desktop に居る間ずっと、`match` に合う窓を `layout` でタイルし、
+  合わない窓を corner に anchor-park（sticky は免除・`match` から毎 reconcile 導出）。
+  focus toggle は無い——**desktop に入ることが focus**。flat＝sub-workspace 無し
+  （`effectiveWorkspaceList` は N=1 の 1 slot だけを seed）。park は**実画面だけ**の
+  操作で、tree は inventory のまま（[[lens]] の pure-VIEW 原則と同じ）。
+- **tree 専用**（2世界分離）: lens は動的（membership が変わる）で固定画面が無い→
+  サムネイル不能。`--view grid` / `--view rail` はその desktop 上では **loud reject**。
+  `show-non-matching = true` で tree が matched + "holding"（非マッチ）の 2 section
+  表示（既定 false = matched の 1 section）。
+- 設定: `[desktop.N]`（SINGLE table・`[[…]]` 配列ではない）: `type` 必須／`lens` は
+  `match` 必須・`layout`・`show-non-matching`・`label` 任意
+- コード: `DesktopMeta` / `FacetConfig.desktopType`・`desktopLens`・
+  `lensDesktopSections`（1|2 section 合成・純）/ `NativeAdapter.applyIsolatePark`
+  （always-on park + lens-layout seam）/ `WorkspaceCatalog.isolateParked` /
+  `IsolatePark.parkSet`（純）
+- **Don't call it:** board（旧概念・t-0sbm で廃止）, tab, focus mode, lens board,
+  filtered space, フォーカスモード
 
 ### 迷子 (orphan)
 **どの [[facet workspace]] にも属さない窓**（`WindowSlot.workspace == nil`）。直交
@@ -620,10 +605,10 @@ exit / stderr など副作用を担う。コアへ渡る DNC 制御文字列（`
 - **Don't call it:** equals syntax, `--flag=value`, GNU-style options
 
 ### section
-config で宣言する **順序付きの表示単位**（pivot・`[[desktop.N.section]]`、または
-[[board]] の `[[desktop.N.tab.section]]`）。per-mac-desktop の順序付き配列で、
-**配列順 = [[tree view]] の表示順**。各 section の `type` は **`workspace` / `lens` の 2 種**
-（[[board]] の子 section は `type` を書かず親 board から継承）。第 3 の受け皿は
+config で宣言する **順序付きの表示単位**（pivot・`[[desktop.N.section]]`）。
+per-mac-desktop の順序付き配列で、
+**配列順 = [[tree view]] の表示順**。各 section の `type` は **`workspace` / `lens` の 2 種**。
+第 3 の受け皿は
 `type` ではなく **`unassigned = true` マーカー**（#366・W2.6）:
 - **type=workspace**: 常設の空間土台（タイル単位・grid/rail のセル）。**任意の
   `label` で命名・無名は 1始まり index 表示**（絞り込みは不可）＝暗黙
@@ -645,21 +630,20 @@ config で宣言する **順序付きの表示単位**（pivot・`[[desktop.N.se
 
 `type` は workspace / lens section では**必須**＝省略 or 未知値の section は **loud-log で
 drop**（silent な既定推測はしない＝authored match の黙殺を防ぐ・トミー 2026-06-17）／
-`unassigned = true` 受け皿では任意（既定 workspace・投影に無関係）／[[board]] の子では
-書かず親 type を継承。section 未定義の
+`unassigned = true` 受け皿では任意（既定 workspace・投影に無関係）。section 未定義の
 [[mac desktop]] は内蔵の既定 workspace 群へ degrade。**LIVE**（tree が消費・PR3
 `FilterProjection` 再設計 + PR5 tree 出荷済）＝`FilterProjection.project` が live
 window 上に section を投影し、1 表示単位として `ProjectedSection` を産む。**config の
 宣言 `DesktopSection` ↔ 投影結果 `ProjectedSection` を区別する**（後者は旧称 `FilterGroup`
 ＝Phase D で禁止語 group をリネーム）。
-- コード: `DesktopSection`（config 宣言・`unassigned: Bool` マーカー）/ `DesktopTab`
-  （[[board]]＝section 群＋継承 type）/ `ProjectedSection`（投影結果＝1 表示単位・
+- コード: `DesktopSection`（config 宣言・`unassigned: Bool` マーカー）/
+  `ProjectedSection`（投影結果＝1 表示単位・
   `id`〔`"ws:<index>"` / `"section:<declOrder>:<label>"` / `"unassigned:<declOrder>"`〕/
   `label` / `windows` / `sourceWorkspaceIndex` / `sectionType`・`OverviewModels`）/
   `FilterProjection.project`（投影・純）/ `SectionType`＝{`workspace`, `lens`} /
   `ProjectedSectionType`＝{`workspace`, `lens`, `unassigned`}（投影時の型）/
   `FacetConfig.macDesktopSectionConfigs` / `decodeDesktopSectionSections` /
-  `decodeDesktopTabs` / `effectiveMacDesktopSectionConfigs`（`FacetCore`）
+  `effectiveMacDesktopSectionConfigs`（`FacetCore`）
 - **Don't call it:** group（旧称＝旧型名 `FilterGroup`）, workspace（section は多重所属・filter 由来／
   workspace は 1 窓 1 個・タイル枠）, tab, page, グループ, セクション以外
 
@@ -671,7 +655,7 @@ window 上に section を投影し、1 表示単位として `ProjectedSection` 
 projection（余剰は warn）。tree/grid/rail に lens セルのように並び、`facet section --focus N|LABEL`
 で**先頭窓を focus**（workspace 切替なし）、`facet section --rename` で session-only rename
 （lens と同じ `sectionLabelOverride`）、ここから workspace へ DnD で窓を RESCUE（移動）。
-- 設定: `[[desktop.N.section]]`（または [[board]] の `[[desktop.N.tab.section]]`）に
+- 設定: `[[desktop.N.section]]` に
   **`unassigned = true`**（`label` 任意・`type` は書いても無視＝旧 `type = "unassigned"` は #366 で退役）
 - CLI: `facet section --focus N|LABEL`（先頭窓 focus）/ `facet section --rename N "label"`
 - コード: `DesktopSection.unassigned: Bool`（マーカー）/ `ProjectedSectionType.unassigned`（投影型）/

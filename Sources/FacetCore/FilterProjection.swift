@@ -241,17 +241,14 @@ public enum FilterProjection {
         // the tail of the workspace-section run, before any later lens
         // sections. Only when there IS a workspace-section run.
         //
-        // N6 (t-wrd2): a lens-only `sections` list produces only lens sections
-        // and NO workspace tail. Pre-board this was unreachable (the consumer
-        // routed lens-only configs only when `isSectionModelActive` was false →
-        // by-workspace degrade), but under the BOARD model a SELECTED lens board
-        // routes a lens-only list here WITH `isSectionModelActive == true` (a
-        // workspace board exists elsewhere on the desktop). The intended
-        // semantics: a lens board is a FILTERED view — a workspace window that
-        // matches no lens on the selected board is shown only if the board
-        // declares an `unassigned` receptacle (W2.6); otherwise it is hidden
-        // until the user switches back to a workspace board (the window stays
-        // live, never lost). `BoardLensProjectionTests` pins this.
+        // N6: a lens-only `sections` list produces only lens sections and NO
+        // workspace tail — the input a LENS DESKTOP feeds (t-0sbm:
+        // `lensDesktopSections` synthesizes one lens section, plus an
+        // `unassigned` receptacle only when `show-non-matching` is set). The
+        // intended semantics: a lens desktop is a FILTERED view — a window
+        // matching no lens is shown only if an `unassigned` receptacle is
+        // declared (W2.6); otherwise it is hidden (the window stays live,
+        // never lost). `LensOnlyProjectionTests` pins this.
         if sawWorkspaceSection && wsCursor < workspaces.count {
             let extras = workspaces[wsCursor...].map(wsSection)
             out.insert(contentsOf: extras, at: insertExtrasAt)

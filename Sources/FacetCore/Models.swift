@@ -98,8 +98,8 @@ public struct Window: Sendable {
     /// Views surface it as a slanted "sticky" badge.
     public let isSticky: Bool
     /// Whether this window is currently ISOLATE-PARKED (t-c6fm) — anchor-parked
-    /// off-screen because it falls OUTSIDE the active lens on a `type=lens`
-    /// (focus) board. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
+    /// off-screen because it falls OUTSIDE the lens on a `[desktop.N] type=lens`
+    /// mac desktop. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
     /// window keeps `isOnscreen == true` (it sits on an on-screen sliver). Park is
     /// a SCREEN-only operation, so this flag drives NO display (a parked window
     /// shows normally in every section its `match` satisfies — the tree is a

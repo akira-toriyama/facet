@@ -298,15 +298,12 @@ public extension FacetConfig {
                      + "section (leftover = universe − shown); only the first "
                      + "emits, extras warn. Array order = tree display order. Any "
                      + "section block makes facet opt-in (manages only "
-                     + "configured desktops). NESTED FORM: "
-                     + "`[[desktop.N.tab]]` `{ type, label }` is a named board "
-                     + "grouping whose `type` is workspace / lens ONLY; its "
-                     + "nested `[[desktop.N.tab.section]]` children carry NO "
-                     + "`type` (each INHERITS the tab's), the lone exception "
-                     + "being a child marked `unassigned = true` (the per-tab "
-                     + "lost-and-found, ≤ 1).",
-                  // Typed open-map: each ordinal key maps to a `{ section[],
-                  // tab[] }` value (t-kz0m). keyPattern mirrors the runtime
+                     + "configured desktops). TYPED DESKTOP: the `[desktop.N]` "
+                     + "table itself carries `type` (workspace / lens) — a lens "
+                     + "desktop writes `match` / `layout` / `show-non-matching` "
+                     + "directly on it and declares NO sections.",
+                  // Typed open-map: each ordinal key maps to a
+                  // `{ …scalars, section[] }` value (t-kz0m). keyPattern mirrors the runtime
                   // `Int(mid) >= 1` guard (FacetConfig+Decode.swift) — accepts
                   // `1`/`01`/`10`, rejects `0`/`00`/`foo` (t-0avb B2).
                   dynamicValue: DynamicValue(keyPattern: "^0*[1-9][0-9]*$",

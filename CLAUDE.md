@@ -10,16 +10,16 @@ All UI / config / code terminology follows
 `facet workspace`, `facet view`, `lens`, `AX target`, `pal`,
 `loading skeleton`, …), **not** the `Don't call it:` synonyms.
 The 5 core concepts are kept strictly apart — hierarchy
-**mac desktop > board > section > window**: **mac desktop** (= macOS
-native Space; code `MacDesktops` / `[[desktop.N.section]]`), **facet workspace**
+**mac desktop (typed) > section > window**: **mac desktop** (= macOS
+native Space, TYPED `workspace` | `lens` via `[desktop.N]`; code
+`MacDesktops` / `DesktopMeta` / `[[desktop.N.section]]`), **facet workspace**
 (facet's window grouping; `WorkspaceCatalog`), **facet view** (UI:
 `tree`/`grid`/`rail`), **lens** (tag display set; M11-3, shipped in
-#176 — `facet lens`, `WorkspaceCatalog.activeSectionLens`), **board** (a
-browser-tab-style grouping of sections inside one mac desktop; `DesktopTab` /
-`[[desktop.N.tab]]` / `Controller.selectedBoard` / `facet board --focus N|LABEL`;
-DISPLAY-only — switching a board re-groups the SAME windows, it never moves
-one; shipped t-wrd2 / #368). Apple's own SLS /
-`NSWorkspace` API names stay verbatim.
+#176 — `facet lens`, `WorkspaceCatalog.activeSectionLens`), **lens desktop**
+(a `[desktop.N] type=lens` mac desktop: ALWAYS-ON match+layout tile with
+non-matching windows anchor-parked, tree-only; t-0sbm — this replaced the
+retired browser-tab **board** layer, t-wrd2/#368 → removed t-0sbm).
+Apple's own SLS / `NSWorkspace` API names stay verbatim.
 Adding or renaming a term lands in the same PR as the code change.
 
 ## What this is
@@ -210,22 +210,23 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   `activeMacDesktopID == 0` → one shared catalog (pre-feature
   behaviour). `[[desktop.N.section]]` config keys by ordinal; catalog
   state is session-only (never persisted), rebuilt from live windows on
-  restart. **Sections may be grouped into boards** — `[[desktop.N.tab]]`
-  is a browser-tab-style grouping (`type` = `workspace` / `lens`; child
-  `[[desktop.N.tab.section]]` blocks inherit that type), and switching a
-  board is DISPLAY-only (re-groups the SAME windows, never moves one).
-  **Boards win over flat**: when the same ordinal `N` declares BOTH
-  `[[desktop.N.tab]]` and flat `[[desktop.N.section]]`, the boards win and
-  the flat blocks are shadowed with a loud warn
-  (the `effectiveMacDesktopSectionConfigs` filter drops them;
-  warn in `FacetConfig+Decode.swift`). No `[[desktop.N.tab]]` → degrade to
-  the flat list, byte-identical (`FacetConfig.activeBoardSections`). See the
-  glossary `### board` + [docs/architecture.md](docs/architecture.md) "The
-  board selection layer". **Opt-in rule**: any `[[desktop.N.section]]` OR
-  `[[desktop.N.tab]]` block makes facet
+  restart. **A mac desktop may be TYPED** — `[desktop.N]` is a SINGLE
+  table with `type = "workspace" | "lens"` (t-0sbm; one ordinal = one
+  desktop = one type; a sections-only config implies `workspace`). A
+  **lens desktop** carries `match` (required) + `layout` /
+  `show-non-matching` / `label` directly on the table: while that mac
+  desktop is active, facet ALWAYS tiles the matched windows with the
+  lens `layout` and anchor-parks the rest (`applyIsolatePark`; flat —
+  `effectiveWorkspaceList` seeds exactly ONE workspace). Lens desktops
+  are TREE-ONLY: `--view grid` / `--view rail` there loud-reject. See
+  the glossary `### lens desktop` +
+  [docs/architecture.md](docs/architecture.md) "The typed-desktop
+  layer". (The former board layer — `[[desktop.N.tab]]`, `facet board`,
+  the switcher bands — was retired by t-0sbm.) **Opt-in rule**: any
+  `[[desktop.N.section]]` OR `[desktop.N]` block makes facet
   manage ONLY configured mac desktops — others are hands-off (no
   adopt/park, empty `workspaces()` → Controller's empty-list guard
-  hides the panel). No `[[desktop.N.section]]` / `[[desktop.N.tab]]` at all
+  hides the panel). No `[[desktop.N.section]]` / `[desktop.N]` at all
   → every mac desktop managed with the global default (`FacetConfig.isMacDesktopManaged`
   gates on EITHER form).
   **A workspace section may be named from config via an optional `label`**
@@ -292,19 +293,12 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   → ``SectionRenamePanel``; unassigned gets a Rename-only
   ``ViewContextMenu.showUnassignedMenu`` — no layout). Wire
   ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
-- **``facet board --focus N|LABEL`` is the DISPLAY-only twin of
-  ``facet section --focus``** — it selects which `[[desktop.N.tab]]` board
-  (a workspace-set or lens-set grouping of sections) the tree / grid / rail
-  show on the current mac desktop, addressed by 1-based index or label. A
-  board switch RE-GROUPS the same windows (it never moves a real OS window),
-  exactly like a lens. The selection is session-only
-  (``Controller.selectedBoard``, keyed per mac-desktop ordinal, reset on
-  relaunch — mirrors ``macDesktopSectionOrder``); out-of-range index /
-  unknown label is a loud reject (pure ``resolveBoardFocus`` in
-  ``CLIParse.swift`` → ``dispatchBoardFocus``). GUI twin: the board band
-  (``BoardBand``, in ``FacetView``) sits across the top of every view **only
-  when the active mac desktop has ≥2 boards** (1 board / flat config → no
-  band, height 0 — ``boardBandInputs``); click or wheel switches.
+- **A lens desktop is TREE-ONLY (the two-world gate)** — `--view grid` /
+  `--view rail` (and their toggles) on a `[desktop.N] type=lens` mac
+  desktop are a loud ``setError`` no-op: a lens desktop's membership is
+  dynamic, so there is no fixed picture to thumbnail. The tree renders
+  its 1–2 synthesized sections (``lensDesktopSections``). (``facet
+  board`` was removed with the board layer, t-0sbm.)
 - **The tree opens in keyboard-nav (active) mode directly** —
   there is **no ``--active`` modifier** (it was folded into
   ``--view tree`` itself; the flag, the ``view:tree+active`` DNC

@@ -1,18 +1,17 @@
 import Testing
 @testable import FacetCore
 
-/// N6 (board review follow-up): these test `FilterProjection.project` DIRECTLY
-/// with a lens-only `sections` list — the exact input a SELECTED lens board
-/// feeds it under the board model (t-wrd2), a combination the old workspace-tail
-/// invariant comment assumed impossible (the Controller routes it at
-/// `Controller.swift` apply() when the board is lens-only but the model is
-/// active). A lens board is a FILTERED view: a workspace window matching no lens
-/// on the board is HIDDEN (not tail-appended), unless the board declares an
-/// `unassigned` receptacle (W2.6). The window stays live (it is not lost —
-/// switching back to the workspace board shows it). These tests PIN that
+/// N6: these test `FilterProjection.project` DIRECTLY with a lens-only
+/// `sections` list — the exact input a LENS DESKTOP feeds it (t-0sbm:
+/// `lensDesktopSections` synthesizes one lens section, plus an `unassigned`
+/// receptacle only when `show-non-matching` is set), a combination the old
+/// workspace-tail invariant comment assumed impossible. A lens desktop is a
+/// FILTERED view: a window matching no lens is HIDDEN (not tail-appended),
+/// unless an `unassigned` receptacle is declared (W2.6). The window stays live
+/// (it is not lost — it is parked, still on the desktop). These tests PIN that
 /// intended projection behavior so a future change can't silently flip it.
 /// Pure; CI-only (CLT can't run `swift test`).
-struct BoardLensProjectionTests {
+struct LensOnlyProjectionTests {
 
     private func win(_ id: Int, app: String) -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: app, title: "",
@@ -26,8 +25,8 @@ struct BoardLensProjectionTests {
         DesktopSection(type: .lens, label: label, match: match)
     }
 
-    /// A lens-only board hides a window matching no lens (no workspace tail).
-    @Test func lensOnlyBoardHidesUnmatchedWindow() {
+    /// A lens-only list hides a window matching no lens (no workspace tail).
+    @Test func lensOnlyListHidesUnmatchedWindow() {
         let wss = [ws(0, [win(1, app: "Chrome"), win(2, app: "Terminal")])]
         let r = FilterProjection.project(
             workspaces: wss, sections: [lens("Web", "app=Chrome")])
@@ -36,12 +35,12 @@ struct BoardLensProjectionTests {
         #expect(r.sections[0].windows.map(\.id.serverID) == [1])
         let shownIDs = r.sections.flatMap { $0.windows.map(\.id.serverID) }
         #expect(!shownIDs.contains(2),
-                "a window matching no lens is hidden on a lens board")
+                "a window matching no lens is hidden on a lens desktop")
     }
 
-    /// An `unassigned` receptacle on the lens board catches the unmatched window
+    /// An `unassigned` receptacle on the lens desktop catches the unmatched window
     /// (the W2.6 opt-in lost-and-found).
-    @Test func unassignedReceptacleCatchesUnmatchedOnLensBoard() {
+    @Test func unassignedReceptacleCatchesUnmatchedOnLensDesktop() {
         let wss = [ws(0, [win(1, app: "Chrome"), win(2, app: "Terminal")])]
         let r = FilterProjection.project(
             workspaces: wss,
@@ -55,11 +54,11 @@ struct BoardLensProjectionTests {
     /// The receptacle catches EVERY unmatched window — multiple leftover
     /// workspace windows AND an orphan — in universe order: unmatched workspace
     /// windows first (snapshot order), the orphan appended last. Pins the core
-    /// board promise that a lens board loses no live window: reordering the
+    /// promise that a lens desktop loses no live window: reordering the
     /// universe concat or dropping subsequent unmatched windows would silently
     /// hide live windows undetected (the one-window sibling test can't catch a
     /// concat/order regression).
-    @Test func lensBoardReceptacleCatchesMultipleUnmatchedInUniverseOrder() {
+    @Test func lensDesktopReceptacleCatchesMultipleUnmatchedInUniverseOrder() {
         let wss = [ws(0, [win(1, app: "Chrome"),
                           win(2, app: "Terminal"),
                           win(3, app: "Slack")])]

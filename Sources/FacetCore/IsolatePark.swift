@@ -1,8 +1,9 @@
-// `IsolatePark` — derive the anchor-park set for a lens board's active lens (t-c6fm).
+// `IsolatePark` — derive the anchor-park set for a lens desktop's always-on
+// lens (t-c6fm machinery, t-0sbm gate).
 //
-// When a `type="lens"` board's lens is active (lens boards are focus boards — the
-// park is inherent, no opt-in), the active workspace's windows that fall OUTSIDE
-// the lens slide to the corner (anchor-park), so the screen shows only the active
+// On a `[desktop.N] type="lens"` mac desktop (the park is inherent, no opt-in),
+// the windows that fall OUTSIDE
+// the lens slide to the corner (anchor-park), so the screen shows only the
 // lens's world — the
 // dwm-style focus トミー's original design (PR #313) delivered before t-0021
 // removed it. This revives ONLY the park (never the union-tile that actually
