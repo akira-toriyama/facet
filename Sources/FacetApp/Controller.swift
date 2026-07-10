@@ -117,7 +117,7 @@ final class Controller: NSObject {
     /// enumerates the SAME list) — the guard against a second, stale section
     /// SSOT. `nil` ordinal → empty (the config selector keys off the ordinal).
     func desktopSections(forOrdinal ordinal: Int?) -> [DesktopSection] {
-        config.activeBoardSections(forMacDesktopOrdinal: ordinal, board: 0)
+        config.desktopSections(forMacDesktopOrdinal: ordinal)
     }
     /// Active-WS index at the previous ``apply`` — lets the
     /// event-driven preview refresh spot a workspace switch (the
@@ -713,10 +713,9 @@ final class Controller: NSObject {
 
     /// The `type="lens"` section labels on the mac desktop at `ordinal` — the
     /// active-lens domain (empty when the section model isn't active there, or
-    /// it defines no lens sections). Reads the ACTIVE board's sections (W2.5),
-    /// so on a board config the domain is the SELECTED board's lenses. Shared by
-    /// `setActiveLens` (validate) and `reloadConfig` (re-validate after an
-    /// edit). (PR6.)
+    /// it defines no lens sections). Reads the SAME `desktopSections` list the
+    /// projection consumes. Shared by `setActiveLens` (validate) and
+    /// `reloadConfig` (re-validate after an edit). (PR6.)
     func lensSectionLabels(ordinal: Int?) -> [String] {
         guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
         else { return [] }

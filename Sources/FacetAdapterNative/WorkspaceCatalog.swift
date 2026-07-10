@@ -336,14 +336,14 @@ struct WorkspaceCatalog {
     /// forgotten.
     var pendingHideCandidates: Set<WindowID> = []
 
-    /// Windows the ACTIVE section-lens has anchor-parked because they fall
-    /// OUTSIDE it while a `type=lens` (focus) board is selected (t-c6fm).
+    /// Windows the lens desktop's always-on lens has anchor-parked because
+    /// they fall OUTSIDE its `match` (t-c6fm machinery, t-0sbm gate).
     /// Like `hiddenMembers`, a member here is detached from the layout so the
     /// in-lens survivors reflow to fill (`nonFloatingMembers` excludes it); like
     /// `stashedWindows`, it is a provenance discriminator over the shared
     /// `anchorParked` — so an isolate re-park is told apart from a WS-switch /
-    /// scratchpad park, and only ITS windows are un-parked when a window re-joins
-    /// the lens, the lens clears, or the board switches away. Re-derived from the
+    /// scratchpad park, and only ITS windows are un-parked when a window
+    /// re-joins the lens or the gate turns off. Re-derived from the
     /// lens `match` every reconcile (`reconcileIsolatePark`); session-only,
     /// per-mac-desktop (this catalog is swapped per mac desktop); pruned in
     /// `forgetWindow`.
@@ -737,8 +737,8 @@ struct WorkspaceCatalog {
     /// ledgered window that has LEFT the active workspace is dropped WITHOUT a
     /// restore (the WS-switch park owns it now). Returns the AX work for the
     /// adapter to drive through `applyHide`. `desired` is empty when the park
-    /// gate is off (no lens board / no active lens / board switched away) —
-    /// that path unparks everything. `focused` / `rect` feed `attachToLayout`'s
+    /// gate is off (not a lens desktop) — that path unparks everything.
+    /// `focused` / `rect` feed `attachToLayout`'s
     /// bsp orientation choice.
     ///
     /// Routing through the guarded `anchorParked` (via the adapter's

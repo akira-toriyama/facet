@@ -82,29 +82,6 @@ struct UnassignedMarkerTests {
         #expect(s?.unassigned != true)
     }
 
-    // MARK: - tab child: inherits parent type AND carries the marker
-
-    @Test func tabUnassignedChildInheritsTypeWithMarker() {
-        let t = FacetConfig.decodeDesktopTabs(fromTOML: """
-        [[desktop.1.tab]]
-        type = "lens"
-        label = "Views"
-        [[desktop.1.tab.section]]
-        label = "Web"
-        match = 'tag~=web'
-        [[desktop.1.tab.section]]
-        label = "Misc"
-        unassigned = true
-        """)
-        let secs = t[1]?[0].sections ?? []
-        #expect(secs.count == 2)
-        #expect(secs.first?.type == .lens)
-        #expect(secs.first?.unassigned != true)
-        // the marker child inherits the parent (lens) type AND is a receptacle
-        #expect(secs.last?.type == .lens)
-        #expect(secs.last?.unassigned == true)
-    }
-
     // MARK: - FilterProjection: marker emits the receptacle
 
     @Test func projectionMarkerEmitsUnassignedReceptacle() {

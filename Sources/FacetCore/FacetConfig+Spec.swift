@@ -56,13 +56,12 @@ private enum DesktopSchema {
         ], doc: "Facets applied to a lens's matched windows (a lens uses `tags` only).")
     }
 
-    // One `[[desktop.N.section]]` (and `[[desktop.N.tab.section]]`) row. `type`
-    // is OPTIONAL: an `unassigned = true` receptacle and a tab.section child
-    // (which inherits its tab's type) carry none.
+    // One `[[desktop.N.section]]` row. `type` is OPTIONAL: an
+    // `unassigned = true` receptacle carries none.
     static var sectionItemShape: ObjectShape {
         ObjectShape(fields: [
             SchemaField("type", .string,
-                        doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle or a tab child (inherits the tab's).",
+                        doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle.",
                         enumDomain: ["workspace", "lens"]),
             SchemaField("label", .string, doc: "Display name; unset shows the section's 1-based index."),
             SchemaField("match", .string, doc: "lens only — a facet-filter WHERE-clause selecting its windows."),
@@ -73,23 +72,10 @@ private enum DesktopSchema {
         ], doc: "One display section: workspace / lens / (unassigned) lost-and-found.")
     }
 
-    // One `[[desktop.N.tab]]` board — a named grouping whose sections inherit
-    // its `type`, with nested `[[desktop.N.tab.section]]` children.
-    static var tabShape: ObjectShape {
-        ObjectShape(fields: [
-            SchemaField("type", .string,
-                        doc: "Board kind — workspace / lens; its sections inherit it.",
-                        enumDomain: ["workspace", "lens"]),
-            SchemaField("label", .string, doc: "Board display name."),
-        ], nested: [
-            NestedTable(key: "section", item: sectionItemShape),
-        ], doc: "A browser-tab-style board grouping sections inside one mac desktop.")
-    }
-
     // The value each `[desktop.<N>]` ordinal key maps to. A SINGLE typed table
-    // (board abolition, t-0sbm): `type`/`label` (+ lens-only `match`/`layout`/
-    // `show-non-matching`) directly on the desktop. A `workspace` desktop still
-    // carries its `[[desktop.N.section]]` array; the `tab` board array is retired.
+    // (t-0sbm): `type`/`label` (+ lens-only `match`/`layout`/
+    // `show-non-matching`) directly on the desktop. A `workspace` desktop
+    // carries its `[[desktop.N.section]]` array.
     static var valueShape: ObjectShape {
         ObjectShape(fields: [
             SchemaField("type", .string,
@@ -101,8 +87,7 @@ private enum DesktopSchema {
             SchemaField("show-non-matching", .boolean, doc: "lens desktop only — also show the non-matching windows as a second tree section."),
         ], nested: [
             NestedTable(key: "section", item: sectionItemShape),
-            NestedTable(key: "tab", item: tabShape),
-        ], doc: "One mac desktop (N = Mission Control ordinal): its `type`/`label`, plus its display sections and/or boards.")
+        ], doc: "One mac desktop (N = Mission Control ordinal): its `type`/`label`, plus its display sections.")
     }
 }
 

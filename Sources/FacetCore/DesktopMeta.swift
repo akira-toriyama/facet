@@ -9,7 +9,8 @@
 // `[desktop.N]` is a SINGLE table (not a `[[…]]` array — one ordinal is one
 // desktop), decoded from the flat `parseTOMLSubset` map by `decodeDesktopTables`
 // into `FacetConfig.macDesktopMetaConfigs` and read via `desktopType` /
-// `desktopLens`. ADDITIVE at Phase 1 — no runtime consumer until later phases.
+// `desktopLens` (the lens desktop's runtime is `applyIsolatePark` +
+// `lensDesktopSections`).
 
 import Foundation
 

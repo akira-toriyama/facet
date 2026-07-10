@@ -212,19 +212,19 @@ extension NativeAdapter {
         if result.added > 0 || macDesktopSwapped {
             healOrphanSlivers(live: live, visibleRect: rect)
         }
-        // Section-lens (t-0021): a lens on a PLAIN board is a pure VIEW —
-        // nothing to re-park on reconcile; a window that opens / whose match
+        // Section-lens (t-0021): a lens on a workspace desktop is a pure VIEW
+        // — nothing to re-park on reconcile; a window that opens / whose match
         // flips while such a lens is active simply re-projects (display) on the
         // next snapshot. Keep the main-readable mirror in lock-step (covers a
         // mac-desktop swap that restored a desktop whose lens persists).
         syncSectionLensMirror()
-        // A lens DESKTOP (`[desktop.N] type=lens`, always-on — t-0sbm) or a lens
-        // BOARD (t-c6fm) re-parks the active WS's out-of-lens windows so the
-        // screen declutters to the matched set (and, for a lens desktop, tiles it
-        // with the lens's `layout`). Derived from `match` every reconcile. BEFORE
-        // the re-tile (detached parks would otherwise be tiled back on), AFTER
-        // healOrphanSlivers (which excludes `anchorParked`). A no-op on plain
-        // desktops / when nothing is isolate-parked.
+        // A lens DESKTOP (`[desktop.N] type=lens`, always-on — t-0sbm) re-parks
+        // the desktop's out-of-lens windows so the screen declutters to the
+        // matched set, tiled with the lens's `layout`. Derived from `match`
+        // every reconcile. BEFORE the re-tile (detached parks would otherwise
+        // be tiled back on), AFTER healOrphanSlivers (which excludes
+        // `anchorParked`). A no-op on plain desktops / when nothing is
+        // isolate-parked.
         applyIsolatePark(live: live, focused: focused, rect: rect)
         // Event-driven re-tile of the active WS (with open/close reflow
         // animation when applicable). See `retileAfterReconcile`.
@@ -465,17 +465,12 @@ extension NativeAdapter {
     /// (`"section:<declOrder>:<label>"`) to its `DesktopSection` on the active
     /// mac desktop, or `nil` when the id no longer resolves (out of range, not
     /// a lens, label-suffix mismatch — a stale hot-reload). `declOrder` indexes
-    /// the SELECTED board's section list (t-wrd2 / W2.5-adapter) — the SAME
-    /// array `FilterProjection` enumerated to mint the id — so the lookup round-
-    /// trips exactly on a board config too. `config.activeBoardSections` reads
-    /// the live config (a hot-reload is picked up immediately) and DEGRADES to
-    /// the flat `[[desktop.N.section]]` list when no `[[desktop.N.tab]]` boards
-    /// exist; the board mirror defaults to 0, so a flat config resolves byte-
-    /// identically to the pre-board accessor.
+    /// the desktop's declared section list — the SAME array `FilterProjection`
+    /// enumerated to mint the id — read from the LIVE config so a hot-reload is
+    /// picked up immediately.
     func lensSection(forID id: String) -> DesktopSection? {
-        guard let ord = activeMacDesktopOrdinal else { return nil }
-        let board = selectedBoardByOrdinal[ord] ?? 0
-        let sections = config.activeBoardSections(forMacDesktopOrdinal: ord, board: board)
+        let sections = config.desktopSections(
+            forMacDesktopOrdinal: activeMacDesktopOrdinal)
         return ApplyResolver.section(forSectionID: id, in: sections)
     }
 
@@ -486,29 +481,24 @@ extension NativeAdapter {
         catalog.activeSectionLens.flatMap(lensSection(forID:))
     }
 
-    /// t-c6fm: lens-board focus-mode re-park. On a `type=lens` board with a lens
-    /// active, anchor-park the active workspace's OUT-of-lens windows so the
-    /// screen declutters to just the active lens's world (dwm-style); unpark
-    /// re-joiners, and unpark EVERYTHING when the gate is off (lens cleared /
-    /// board switched away / not a lens board). The park set is DERIVED from
-    /// the lens `match` every reconcile so it can't drift from the tree display
-    /// (both ride `LensMembership.matches`). Reuses the anchor-park machinery
+    /// Desktop-lens always-on park (t-0sbm, on the t-c6fm machinery). On a
+    /// `[desktop.N] type=lens` mac desktop, anchor-park the OUT-of-lens windows
+    /// so the screen declutters to just the lens's matched set (dwm-style),
+    /// tile the survivors with the lens's declared `layout`, unpark
+    /// re-joiners, and unpark EVERYTHING when the gate is off (not a lens
+    /// desktop). The park set is DERIVED from the lens `match` every reconcile
+    /// so it can't drift from the tree display (both ride
+    /// `LensMembership.matches`). Reuses the anchor-park machinery
     /// (`applyHide` → `parkAnchor` / `restoreAnchor`); the ledger + layout
     /// detach/attach live in `catalog.reconcileIsolatePark`. cliQueue-only; a
-    /// no-op unless a lens board's lens is active or something is still
+    /// no-op unless the desktop-lens gate is on or something is still
     /// isolate-parked (fast-path guard). `live` is the reconcile's CGWindowList
     /// (tags overlaid here); `focused` feeds the re-attach bsp orientation.
     func applyIsolatePark(live: [Window], focused: WindowID?, rect: CGRect) {
         dispatchPrecondition(condition: .onQueue(cliQueue))
-        // Resolve the ACTIVE lens filter for this mac desktop, from either:
-        //   • a typed lens DESKTOP (`[desktop.N] type=lens`, ALWAYS-ON — board
-        //     abolition t-0sbm): its single `match` parks the out-of-lens
-        //     windows and its `layout` tiles the matched set (below); OR
-        //   • while boards still exist, the active lens BOARD (t-c6fm): a lens
-        //     activated on a `type="lens"` board declutters the active WS.
-        // The desktop-lens takes PRECEDENCE (the two are mutually exclusive by
-        // config shape — a `[desktop.N]` scalar table never coexists with
-        // `[[desktop.N.tab]]` arrays). Off → empty desired → the catalog
+        // The gate: a typed lens DESKTOP (`[desktop.N] type=lens`) is ALWAYS-ON
+        // — its single `match` parks the out-of-lens windows and its `layout`
+        // tiles the matched set (below). Off → empty desired → the catalog
         // unparks all.
         let ord = activeMacDesktopOrdinal
         var lensMatch: String? = nil
@@ -524,22 +514,13 @@ extension NativeAdapter {
                catalog.mode(of: catalog.activeIndex) != layout.lowercased() {
                 catalog.setMode(workspace: catalog.activeIndex, to: layout, in: rect)
             }
-        } else {
-            let board = ord.map { selectedBoardByOrdinal[$0] ?? 0 } ?? 0
-            let lensBoard = ord.flatMap {
-                config.activeBoardTab(forMacDesktopOrdinal: $0, board: board)?.type
-            } == .lens
-            if lensBoard, catalog.activeSectionLens != nil,
-               let section = activeLensSection() {
-                lensMatch = section.match
-            }
         }
 
         var desired: [WindowID] = []
         if let matchStr = lensMatch,
            case .success(let lens) = FacetFilter.parse(matchStr) {
             // ACTIVE-WS scope — at N=1 (a lens desktop) this is the whole
-            // desktop; on a multi-workspace board it is the active workspace.
+            // desktop.
             let activeWindows = live
                 .filter { catalog.windowMap[$0.id]?.workspace == catalog.activeIndex }
                 .map { $0.withTags((catalog.windowMap[$0.id]?.tags ?? []).sorted()) }

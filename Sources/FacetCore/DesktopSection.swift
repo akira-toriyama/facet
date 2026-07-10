@@ -161,13 +161,12 @@ public struct DesktopSection: Sendable, Equatable {
     /// IGNORED (harmless dead data, per the clamp-don't-reject config rule).
     public let layout: String?
     /// W2.6 (t-wrd2): the lost-and-found MARKER. `true` makes this section the
-    /// per-board receptacle that collects the LEFTOVER (universe − shown) — the
-    /// windows that land in NO other emitted section — regardless of its `type`
-    /// (which is then projection-irrelevant: `match` / `apply` are ignored). At
-    /// most one per board is honoured; extras warn. Replaces the retired
-    /// `type = "unassigned"` (§G) — `type` stays {workspace, lens}, the
-    /// receptacle is a flag, so a tab child can be a receptacle while still
-    /// inheriting the parent type (no `type` exception).
+    /// per-desktop receptacle that collects the LEFTOVER (universe − shown) —
+    /// the windows that land in NO other emitted section — regardless of its
+    /// `type` (which is then projection-irrelevant: `match` / `apply` are
+    /// ignored). At most one per desktop is honoured; extras warn. Replaces the
+    /// retired `type = "unassigned"` (§G) — `type` stays {workspace, lens}, the
+    /// receptacle is a flag.
     public let unassigned: Bool
 
     public init(type: SectionType, label: String = "", match: String = "",
@@ -336,55 +335,5 @@ public struct DesktopSectionOrigin: Sendable, Equatable {
         self.declOrder = declOrder
         self.headerName = headerName
         self.rawOrdinal = rawOrdinal
-    }
-}
-
-/// One `[[desktop.N.tab]]` — a NAMED grouping of sections within a mac desktop
-/// (the board model, t-wrd2). A tab is a `type` (`workspace` OR `lens` — never
-/// `unassigned`, which is a per-section marker, not a grouping) + an optional
-/// `label` + an ordered list of child `[[desktop.N.tab.section]]` sections.
-///
-/// The children carry NO `type` of their own — every section in a tab INHERITS
-/// the tab's `type` (mixing is impossible by construction). A child marked
-/// `unassigned = true` is the per-tab lost-and-found receptacle: it STILL
-/// inherits the parent type (W2.6 — `unassigned` is a marker, not a type, so
-/// there is no type exception), with its `unassigned` flag set.
-///
-/// PURE DATA + ADDITIVE (t-f19q / Wave 1): this models the nested config so a
-/// later wave can wire boards into the projection / UI. Nothing consumes
-/// `FacetConfig.macDesktopTabConfigs` yet — the reader is `decodeDesktopTabs`.
-public struct DesktopTab: Sendable, Equatable {
-    /// The tab's kind — `workspace` or `lens`. Every child section inherits it.
-    public let type: SectionType
-    /// Display header — an optional name (`""` when unset), like a section's.
-    public let label: String
-    /// The tab's sections, in config-declaration (= display) order.
-    public let sections: [DesktopSection]
-
-    public init(type: SectionType, label: String = "",
-                sections: [DesktopSection] = []) {
-        self.type = type
-        self.label = label
-        self.sections = sections
-    }
-
-    /// The caption the tree tab bar (t-wrd2 / W2.4) shows for this board. A
-    /// named board reads its `label`; an UNNAMED one falls back to a type-
-    /// default (`Workspaces` / `Lenses`) so the tab is never blank and the
-    /// type reads at a glance. The 1-based index is CLI-addressing only
-    /// (`facet board --focus N`) and is never shown here. Display-only / pure —
-    /// identity stays on the board's position, never this caption.
-    public var displayLabel: String {
-        // Trim so a whitespace-only label is treated as unnamed — `displayLabel`
-        // promises a never-blank caption (N2). `.whitespacesAndNewlines` so a
-        // `"\n"`-only label is caught too. The non-empty label is shown verbatim
-        // (no trim) to match the codebase's no-trim label convention.
-        if !label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return label
-        }
-        switch type {
-        case .workspace:  return "Workspaces"
-        case .lens:       return "Lenses"
-        }
     }
 }

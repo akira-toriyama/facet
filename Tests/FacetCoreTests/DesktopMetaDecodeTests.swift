@@ -2,8 +2,8 @@ import Testing
 import Foundation
 @testable import FacetCore
 
-/// `[desktop.N]` typed-desktop table decode (board abolition, t-0sbm) — the
-/// SINGLE-table successor to `[[desktop.N.tab]]` boards. A mac desktop is typed
+/// `[desktop.N]` typed-desktop table decode (t-0sbm) — the SINGLE-table
+/// successor to the retired `[[desktop.N.tab]]` boards. A mac desktop is typed
 /// directly (`type = "workspace" | "lens"`); a lens desktop carries an always-on
 /// `match` + `layout` (+ `show-non-matching`) right on the table. PURE FacetCore,
 /// ADDITIVE at Phase 1: nothing reads `macDesktopMetaConfigs` at runtime yet, so

@@ -204,24 +204,13 @@ public struct FacetConfig: Sendable {
     /// `effectiveWorkspaceList` (workspace count + layout). Shipped #296–#301.
     public var macDesktopSectionConfigs: [Int: [DesktopSection]] = [:]
 
-    /// Per-mac-desktop `[[desktop.N.tab]]` definitions (the board model,
-    /// t-wrd2). Outer key is the mac desktop ordinal (1-based); value is that
-    /// desktop's tabs in config-declaration order, each a `type` + optional
-    /// `label` + ordered child sections (which inherit the tab's type). Parsed
-    /// from the raw TOML text (NESTED array-of-tables, via `Toml.Annotated`) by
-    /// `load`, like `macDesktopSectionConfigs`. ADDITIVE / no consumer yet
-    /// (t-f19q / Wave 1 — the nesting-aware reader prerequisite); read through
-    /// `effectiveMacDesktopTabConfigs`. Disjoint from the flat
-    /// `[[desktop.N.section]]` decode — the two read different header shapes.
-    public var macDesktopTabConfigs: [Int: [DesktopTab]] = [:]
-
     /// Per-mac-desktop `[desktop.N]` typed-table definitions (board abolition,
     /// t-0sbm). Outer key is the mac desktop ordinal (1-based); value is that
     /// desktop's single `DesktopMeta` (`type` + `label`, plus lens-only `match` /
     /// `layout` / `show-non-matching`). Parsed from the FLAT `parseTOMLSubset`
     /// map by `load` (via `decodeDesktopTables`). Read through `desktopType` /
-    /// `desktopLens`. This is the successor to `macDesktopTabConfigs` — a mac
-    /// desktop is now typed directly rather than grouped into boards.
+    /// `desktopLens`. This is the successor to the retired `[[desktop.N.tab]]`
+    /// boards — a mac desktop is typed directly rather than grouped.
     public var macDesktopMetaConfigs: [Int: DesktopMeta] = [:]
 
     /// `[[exclude]]` rules — windows matching one are floated or
@@ -603,7 +592,7 @@ public struct FacetConfig: Sendable {
 
     /// Workspace list for a given mac-desktop ordinal (1-based, Mission
     /// Control order). When the section model is active there (≥1
-    /// `type = "workspace"` section, flat OR in a board), the COUNT and
+    /// `type = "workspace"` section), the COUNT and
     /// per-workspace layout seed come from those sections (via
     /// `workspaceSubstrateSections`); a section's name is its `label` if set,
     /// else it stays UNNAMED and is shown by its 1-based index (§B — the
@@ -659,22 +648,15 @@ public struct FacetConfig: Sendable {
     /// - `nil` ordinal (SkyLight unavailable / single-desktop mode) is
     ///   always managed.
     ///
-    /// The section signal is read through `effectiveMacDesktopSectionConfigs`
-    /// AND `effectiveMacDesktopTabConfigs` (the board model, t-wrd2 / M1): a
-    /// tab-only config opts facet in exactly like a section config. Keying on
-    /// the flat dict alone made an empty flat dict (every tab-only config)
-    /// return `true` for EVERY ordinal — facet would adopt + default-slot-seed
-    /// every unconfigured desktop. The gate is the UNION of the two ordinal
-    /// sets (not substrate presence — a lens-only config is deliberately
-    /// MANAGED-but-model-inactive, see `isSectionModelActive`).
+    /// The gate is the UNION of the `[[desktop.N.section]]` and `[desktop.N]`
+    /// ordinal sets (not substrate presence — a lens-only config is
+    /// deliberately MANAGED-but-model-inactive, see `isSectionModelActive`).
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
-        let tabs = effectiveMacDesktopTabConfigs
         let metas = macDesktopMetaConfigs
-        if sections.isEmpty && tabs.isEmpty && metas.isEmpty { return true }
+        if sections.isEmpty && metas.isEmpty { return true }
         guard let ordinal else { return true }
-        return sections[ordinal] != nil || tabs[ordinal] != nil
-            || metas[ordinal] != nil
+        return sections[ordinal] != nil || metas[ordinal] != nil
     }
 
     /// The declared `type` of the mac desktop at `ordinal` (board abolition,
@@ -683,8 +665,8 @@ public struct FacetConfig: Sendable {
     ///   • else `.workspace` if the desktop has `[[desktop.N.section]]` blocks
     ///     (back-compat — a flat-sections config with no `[desktop.N]` table
     ///     reads as a workspace desktop);
-    ///   • else `nil` (no typed desktop / unconfigured — e.g. a board-only
-    ///     desktop while boards still exist, or a bare default desktop).
+    ///   • else `nil` (no typed desktop / unconfigured — a bare default
+    ///     desktop).
     public func desktopType(ordinal: Int?) -> SectionType? {
         guard let ordinal else { return nil }
         if let meta = macDesktopMetaConfigs[ordinal] { return meta.type }
@@ -723,18 +705,13 @@ public struct FacetConfig: Sendable {
     }
 
     /// Whether the section/lens model drives the mac desktop at `ordinal` —
-    /// i.e. it has at least one `type = "workspace"` section in EITHER the flat
-    /// `[[desktop.N.section]]` list OR any `[[desktop.N.tab]]` board (the board
-    /// model, t-wrd2 / W2.5). This is the gate the read path, auto-naming, and
-    /// the overview/tree consult to decide between the section model and the
-    /// default unnamed slots.
+    /// i.e. it has at least one `type = "workspace"` section in the
+    /// `[[desktop.N.section]]` list. This is the gate the read path,
+    /// auto-naming, and the overview/tree consult to decide between the
+    /// section model and the default unnamed slots.
     ///
-    /// Board-INDEPENDENT — a config property, not the current selection: the
-    /// gate is true whenever a workspace substrate is DECLARED, even if the
-    /// session-selected board is a lens board (a display-only switch never
-    /// removes the substrate). Shares `workspaceSubstrateSections` with
-    /// `effectiveWorkspaceList`, so "gate active" and "seed N workspaces" can
-    /// never disagree (the W2.5 SSOT).
+    /// Shares `workspaceSubstrateSections` with `effectiveWorkspaceList`, so
+    /// "gate active" and "seed N workspaces" can never disagree (the SSOT).
     ///
     /// `nil` ordinal (SkyLight unavailable / single-desktop) is `false`: the
     /// section model is a per-ordinal opt-in, and an unresolvable ordinal
@@ -745,14 +722,10 @@ public struct FacetConfig: Sendable {
     }
 
     /// The `type = "workspace"` sections that form the spatial substrate for
-    /// `ordinal` — the count + per-workspace layout seed source. Board-
-    /// INDEPENDENT (a display-only board switch never reshapes the tiling):
-    /// boards present → every board's workspace sections in declaration order;
-    /// else the flat `[[desktop.N.section]]` workspace sections. The boards-win
-    /// precedence mirrors `activeBoardSections` so the substrate and the
-    /// projection agree. With no boards this is byte-identical to the
-    /// pre-board flat filter. The shared SSOT for `isSectionModelActive`
-    /// (non-empty?) and `effectiveWorkspaceList` (the actual list).
+    /// `ordinal` — the count + per-workspace layout seed source: the
+    /// `[[desktop.N.section]]` workspace sections in declaration order. The
+    /// shared SSOT for `isSectionModelActive` (non-empty?) and
+    /// `effectiveWorkspaceList` (the actual list).
     private func workspaceSubstrateSections(forOrdinal ordinal: Int)
         -> [DesktopSection]
     {
@@ -760,12 +733,7 @@ public struct FacetConfig: Sendable {
         // workspace/lens type (the marker, not a `.unassigned` type), but it is
         // NOT a spatial substrate, so it must not seed a workspace or flip the
         // section-model gate.
-        if let tabs = effectiveMacDesktopTabConfigs[ordinal], !tabs.isEmpty {
-            return tabs.flatMap {
-                $0.sections.filter { $0.type == .workspace && !$0.unassigned }
-            }
-        }
-        return (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
+        (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
             .filter { $0.type == .workspace && !$0.unassigned }
     }
 
@@ -781,116 +749,19 @@ public struct FacetConfig: Sendable {
 
     /// Effective `[[desktop.N.section]]` definitions (the section/lens
     /// model). Always read through this, never the raw dict.
-    ///
-    /// N1 (boards-win is TOTAL): an ordinal that ALSO has `[[desktop.N.tab]]`
-    /// boards has its flat sections SHADOWED here — boards already win in
-    /// `activeBoardSections` / `workspaceSubstrateSections`, so a tab-config
-    /// ordinal's flat sections are inert and must not surface as a parallel
-    /// SSOT. The adapter's id resolver (`lensSection(forID:)`) is now board-
-    /// aware (W2.5-adapter — it reads `activeBoardSections`, not this accessor),
-    /// so the shadow no longer guards a flat mis-resolve; it stays as the
-    /// boards-win invariant (a tab-config ordinal is driven entirely by its
-    /// boards). No tabs anywhere ⇒ the raw dict verbatim (byte-identical to the
-    /// pre-N1 accessor).
     public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
-        guard !macDesktopTabConfigs.isEmpty else { return macDesktopSectionConfigs }
-        return macDesktopSectionConfigs.filter { macDesktopTabConfigs[$0.key] == nil }
+        macDesktopSectionConfigs
     }
 
-    /// Effective `[[desktop.N.tab]]` definitions (the board model). Always read
-    /// through this, never the raw dict.
-    public var effectiveMacDesktopTabConfigs: [Int: [DesktopTab]] {
-        macDesktopTabConfigs
-    }
-
-    /// The section list that drives the overview projection for `ordinal`,
-    /// given the session-selected BOARD index (the board model, t-wrd2 / W2.2).
-    ///
-    /// - With `[[desktop.N.tab]]` boards present, returns the selected board's
-    ///   child sections. `board` is CLAMPED into range, so a stale selection
-    ///   (e.g. a hot-reload dropped boards) lands on the nearest in-range board
-    ///   rather than crashing or blanking the tree.
-    /// - With NO boards (every config today, until the W2.5 migration), DEGRADES
-    ///   to the flat `[[desktop.N.section]]` list — byte-identical to the
-    ///   pre-board path. The board layer is a transparent SELECTOR over the same
-    ///   section model `FilterProjection` already consumes, so projecting a
-    ///   board's sections equals projecting an equivalent flat config (the W2.2
-    ///   byte-一致 invariant).
-    /// - `nil` ordinal (SkyLight unavailable / single-desktop) → empty, like the
-    ///   flat reads keyed off the ordinal.
-    ///
-    /// Pure / read-only: never persists, never touches the backend (a board
-    /// switch re-groups the SAME windows — display only).
-    public func activeBoardSections(forMacDesktopOrdinal ordinal: Int?, board: Int)
+    /// The section list that drives the overview projection for `ordinal` —
+    /// the `[[desktop.N.section]]` declarations. `nil` ordinal (SkyLight
+    /// unavailable / single-desktop) → empty, like the other reads keyed off
+    /// the ordinal. Pure / read-only.
+    public func desktopSections(forMacDesktopOrdinal ordinal: Int?)
         -> [DesktopSection]
     {
         guard let ordinal else { return [] }
-        if let tabs = effectiveMacDesktopTabConfigs[ordinal], !tabs.isEmpty {
-            let b = max(0, min(board, tabs.count - 1))
-            return tabs[b].sections
-        }
         return effectiveMacDesktopSectionConfigs[ordinal] ?? []
-    }
-
-    /// The selected board's `DesktopTab` for `ordinal` — the handle the focus-mode
-    /// re-park (t-c6fm) reads to learn whether the active board is a `type == .lens`
-    /// board (lens boards always park). Board index is CLAMPED into range (like
-    /// `activeBoardSections`), so a stale selection lands on the nearest board.
-    /// `nil` when the ordinal is absent / has no `[[desktop.N.tab]]` boards (a
-    /// flat / unconfigured desktop has no board to gate on). Pure / read-only —
-    /// the board type it exposes gates the park, a board switch itself moves nothing.
-    public func activeBoardTab(forMacDesktopOrdinal ordinal: Int?, board: Int)
-        -> DesktopTab?
-    {
-        guard let ordinal,
-              let tabs = effectiveMacDesktopTabConfigs[ordinal], !tabs.isEmpty
-        else { return nil }
-        return tabs[max(0, min(board, tabs.count - 1))]
-    }
-
-    /// One pruned per-board remembered lens (B1, t-1rck) — the payload the
-    /// Controller logs when a board's stored `.lens(id)` no longer resolves
-    /// after a config reload.
-    public struct DroppedBoardLens: Equatable, Sendable {
-        public let ordinal: Int
-        public let board: Int
-        public let id: String
-        public init(ordinal: Int, board: Int, id: String) {
-            self.ordinal = ordinal
-            self.board = board
-            self.id = id
-        }
-    }
-
-    /// Prune a per-board remembered-active-section map after a hot-reload: any
-    /// `.lens(id)` whose stable id no longer resolves to a lens section on its
-    /// OWN board (`activeBoardSections(forMacDesktopOrdinal:board:)`) is replaced
-    /// with `fallback`. Pure — the Controller drives its `boardActiveSection`
-    /// sweep through this so a stale lens can't relight as a wrong / missing
-    /// highlight when the user switches BACK to a non-active board whose lens the
-    /// edited config dropped or reordered (B1, t-1rck). The ACTIVE board's live
-    /// `currentActiveSection` is pruned separately by `reloadConfig` (it also
-    /// clears the backend's live lens; a non-active board's lens is not live, so
-    /// this sweep needs no backend op). Returns the pruned map + the dropped
-    /// entries, in a deterministic (ordinal, board)-sorted order so the log and
-    /// the unit tests are stable.
-    public func prunedBoardActiveSections(
-        _ map: [Int: [Int: ActiveSection]],
-        fallback: ActiveSection
-    ) -> (pruned: [Int: [Int: ActiveSection]], dropped: [DroppedBoardLens]) {
-        var pruned = map
-        var dropped: [DroppedBoardLens] = []
-        for ordinal in map.keys.sorted() {
-            for (board, section) in map[ordinal]!.sorted(by: { $0.key < $1.key }) {
-                guard case .lens(let id) = section else { continue }
-                let sections = activeBoardSections(forMacDesktopOrdinal: ordinal, board: board)
-                if ApplyResolver.section(forSectionID: id, in: sections) == nil {
-                    pruned[ordinal]?[board] = fallback
-                    dropped.append(DroppedBoardLens(ordinal: ordinal, board: board, id: id))
-                }
-            }
-        }
-        return (pruned, dropped)
     }
 
     /// Fatal config errors that should refuse startup (Fail Fast /
