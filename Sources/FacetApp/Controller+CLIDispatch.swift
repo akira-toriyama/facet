@@ -1057,8 +1057,12 @@ extension Controller {
 
     private func dispatchToggle(_ name: String) {
         // 2-world separation (t-0sbm): grid/rail are unavailable on a lens
-        // desktop (tree-only) — same loud reject as the show path.
+        // desktop (tree-only) — same loud reject as the show path, but ONLY
+        // for the toggle-ON direction: an overlay that travelled here (they
+        // are `.canJoinAllSpaces` panels) must stay closable by its own
+        // toggle hotkey.
         if (name == "grid" || name == "rail"),
+           !(name == "grid" ? isGridVisible : isRailVisible),
            config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
             setError("\(name) view is not available on a lens desktop (tree only)")
             return

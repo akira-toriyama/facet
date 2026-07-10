@@ -67,4 +67,21 @@ struct ManagementGateTests {
         #expect(c.isMacDesktopManaged(ordinal: 1))
         #expect(!c.isSectionModelActive(ordinal: 1))
     }
+
+    // MARK: - typed desktops ([desktop.N], t-0sbm): the opt-in gate is the
+    // UNION of section ordinals and typed-desktop ordinals
+
+    /// Flat sections on desktop 1, a `[desktop.3]` typed table on desktop 3 →
+    /// both managed; the gap (2) and tail (4) stay hands-off. (Successor to
+    /// the retired section∪tab union test — tabs no longer exist.)
+    @Test func managedKeysOnUnionOfSectionAndMetaOrdinals() {
+        var c = FacetConfig()
+        c.macDesktopSectionConfigs = [1: [wsSection()]]
+        c.macDesktopMetaConfigs = [3: DesktopMeta(type: .lens, match: "app=x")]
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(!c.isMacDesktopManaged(ordinal: 2))
+        #expect(c.isMacDesktopManaged(ordinal: 3))
+        #expect(!c.isMacDesktopManaged(ordinal: 4))
+        #expect(c.isMacDesktopManaged(ordinal: nil))
+    }
 }

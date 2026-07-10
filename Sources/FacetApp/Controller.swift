@@ -1114,6 +1114,21 @@ final class Controller: NSObject {
         // workspace sections), so gate on it explicitly alongside.
         let isLensDesktop = macDesktopOrdinal.map {
             config.desktopType(ordinal: $0) == .lens } ?? false
+        // Two-world gate, arrival half: grid/rail overlays are
+        // `.canJoinAllSpaces` panels, so one opened on a workspace desktop
+        // FOLLOWS a mac-desktop switch onto a lens desktop — tear it down
+        // here (the dispatch gate only blocks new summons). The tree is the
+        // only surface a lens desktop keeps.
+        if isLensDesktop {
+            if isGridVisible {
+                Log.debug("lens desktop: tearing down the travelling grid")
+                hideGrid()
+            }
+            if isRailVisible {
+                Log.debug("lens desktop: tearing down the travelling rail")
+                hideRail()
+            }
+        }
         if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop,
            let ordinal = macDesktopOrdinal {
             // Read the section list through the SAME `desktopSections` seam
@@ -1275,15 +1290,18 @@ final class Controller: NSObject {
         sidebarView.forceRedraw()
         // `macDesktopOrdinal` + the PR6 active-lens swap-reset were computed
         // / applied above. Section/lens model (PR5): when this mac desktop is
-        // section-managed (≥1 `type="workspace"` section), the tree renders the
-        // config's ordered sections — a window shows up in EVERY section it
-        // matches. Otherwise the by-workspace / tag path.
+        // section-managed (≥1 `type="workspace"` section) OR a lens desktop
+        // (whose 1|2 sections were synthesized into `lastSections` above —
+        // t-0sbm; without this the ONLY view a lens desktop permits would
+        // never show its sections), the tree renders the ordered sections —
+        // a window shows up in EVERY section it matches. Otherwise the
+        // by-workspace / tag path.
         // EX-2: the projection is now HOISTED above the grid/rail feed (see
         // `lastSections`/`lastActiveLensID`), so the tree consumes the SAME
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
         let contentH: CGFloat
-        if config.isSectionModelActive(ordinal: macDesktopOrdinal) {
+        if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop {
             contentH = sidebarView.update(sections: lastSections,
                                           workspaces: wss,
                                           activeLensID: lastActiveLensID,

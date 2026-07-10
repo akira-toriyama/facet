@@ -51,9 +51,10 @@ A mac desktop may be **typed** with a single `[desktop.N]` table
 window*). A **lens desktop** is an **always-on focus space**: while you are
 on it, facet tiles the windows matching its `match` with its `layout` and
 slides the rest to a corner (a dwm-style declutter, sticky windows exempt) —
-no toggle, entering the desktop *is* the focus. The tree stays a full
-inventory (`show-non-matching = true` adds a second "holding" section for the
-parked rest), and it is **tree-only**: `--view grid` / `--view rail` are
+no toggle, entering the desktop *is* the focus. The tree shows the matched
+section; `show-non-matching = true` adds a second "holding" section listing
+the parked rest (making the tree a full inventory). It is **tree-only**:
+`--view grid` / `--view rail` are
 rejected there, since a lens desktop's membership is dynamic — there is no
 fixed picture to thumbnail. A `workspace` desktop (the implied type of a
 sections-only config) behaves exactly as before.

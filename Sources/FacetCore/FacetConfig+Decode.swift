@@ -316,6 +316,17 @@ extension FacetConfig {
         if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
         let metas = decodeDesktopTables(fromTOML: text)
         if !metas.isEmpty { c.macDesktopMetaConfigs = metas }
+        // Migration guard: `[[desktop.N.tab]]` boards were RETIRED (t-0sbm)
+        // and no longer decode. Without this warn a leftover tab-only config
+        // would silently flip facet from opt-in (that ordinal only) to the
+        // manage-every-desktop default. Loud, once per ordinal, every load.
+        for header in parseTOMLArraysOfTables(text, where: {
+            $0.hasPrefix("desktop.") && $0.hasSuffix(".tab")
+        }).keys.sorted() {
+            Log.line("config: [[\(header)]] — boards were retired (t-0sbm) "
+                + "and this block is IGNORED; type the desktop with "
+                + "[desktop.N] and/or [[desktop.N.section]] instead")
+        }
         // A `type = "lens"` desktop has no sections — warn if it ALSO declares
         // `[[desktop.N.section]]` (they're ignored; the desktop-lens uses its
         // single `match`). `desktopType` resolves the explicit meta first, so the

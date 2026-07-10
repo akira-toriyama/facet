@@ -46,8 +46,9 @@ mac desktop は `[desktop.N]` テーブル 1 つで**型付け**できる（`typ
 **lens desktop** は**常時有効の focus 空間**： その desktop に居る間ずっと、
 `match` に合う窓を `layout` でタイルし、 合わない窓を画面隅へスライドさせる
 （dwm 風 declutter・sticky は免除）。 トグルは無い——**desktop に入ることが
-focus**。 tree は inventory のまま（`show-non-matching = true` で park された
-残りを "holding" section として 2 段目に表示）。 そして **tree 専用**：
+focus**。 tree は matched section を表示し、 `show-non-matching = true` で
+park された残りを "holding" section として並べる（＝全窓 inventory になる）。
+そして **tree 専用**：
 lens desktop の membership は動的でサムネイルにできる固定画面が無いため、
 そこでの `--view grid` / `--view rail` は loud に拒否される。 `workspace`
 desktop（section だけ書いた config の暗黙型）は従来どおり。

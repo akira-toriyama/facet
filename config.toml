@@ -741,9 +741,9 @@ action = "ignore"
 # mac desktop > section > window.
 #
 #   type = "workspace" — the classic desktop: its [[desktop.N.section]] blocks
-#       above describe it (the [desktop.N] table adds an explicit type +
-#       label). This is also the implied type when only section blocks exist,
-#       so a sections-only config needs no [desktop.N] table at all.
+#       above describe it (the [desktop.N] table just makes the type
+#       explicit). This is also the implied type when only section blocks
+#       exist, so a sections-only config needs no [desktop.N] table at all.
 #   type = "lens" — an ALWAYS-ON filtered desktop (no sections, no
 #       sub-workspaces). Whenever that mac desktop is active, facet tiles the
 #       windows matching `match` with `layout` and anchor-parks the rest to a

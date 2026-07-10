@@ -244,8 +244,15 @@ extension NativeAdapter {
         // makes the AX reality catch up. See memory
         // `facet-ws-switch-focus-management`.
         let displayFocus = redirectedFocus(live: live, axFocus: focused)
+        // A lens DESKTOP is section-driven too (its 1|2 sections are
+        // synthesized, so `isSectionModelActive` — which reads authored
+        // workspace sections — is false there): without the second gate a
+        // `match='tag~=X'` lens desktop would project against `tags: []`
+        // while the park side overlays tags — tree and screen disagreeing
+        // on the SAME predicate.
         let sectionModelLive =
             config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
+            || config.desktopType(ordinal: activeMacDesktopOrdinal) == .lens
         workspaceList = catalog.snapshot(
             live: live,
             focused: displayFocus,
