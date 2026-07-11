@@ -6,13 +6,24 @@
 - **Status**: design agreed (5 decisions locked), claims verified against
   current sill/facet code, ready for `writing-plans`
 
+> **⚠️ Retirement note (2026-07-11)** — this spec predates the **board
+> layer removal** (`t-0sbm` / PR #403, merged 2026-07-11). The former
+> browser-tab **board** layer — `BoardBand` / `RailBoardBand`, the "board
+> band" host chrome, the "board feed" push path — was **deleted** with that
+> layer; a mac desktop is now typed directly (`[desktop.N]
+> type = "workspace" | "lens"`) and a **lens desktop is tree-only** (no
+> band). The F2 scope below therefore **excludes board-band** (nothing to
+> migrate), and the "stays intact" invariants have been corrected to drop
+> `BoardBand` / board feed. The 2026-07-06 architecture diagram in §2.2 is a
+> dated snapshot — read its "board band" cell as historical.
+
 ## 1. Goal
 
 Prove the **SwiftUI-on-sill seam** on facet's hardest view — the **facet
 view `tree`** (`FacetViewTree`) — covering its three load-bearing
 behaviours: **rendering, DnD, keyboard-nav**, plus the type-to-filter
 **search** bar. If the seam holds here, it unlocks F2 (menus / badges /
-rename / board-band / thumbnail-grid) and the other atelier apps
+rename / thumbnail-grid) and the other atelier apps
 (#19–#22).
 
 The migration is **View-layer only**. `FacetAdapterNative` (AX/CGS),
@@ -108,10 +119,11 @@ bridge). Everything else is deferred, resource-only, or facet-side.
   passthrough key hook, gated on `panel.isKeyWindow` (`installKbMonitor` →
   `handleKbKey`). **Stays host-side and keeps owning all tree keyboard
   input** (see §4.8) — SwiftUI `.onKeyPress` is *not* used for tree nav.
-- Panel-move (mode 1 → `win.performDrag`), board band (`BoardBand`),
+- Panel-move (mode 1 → `win.performDrag`),
   handle bar (`HandleBar`), the **loading-skeleton overlay** (§4.1),
   section-header right-click context menu, sibling keyable editors
   (`TagEditPanel` / `SectionRenamePanel`).
+  (Was: `board band (BoardBand)` — retired with the board layer, `t-0sbm`.)
 
 **Stays untouched (pure / backend / protocol)**:
 - `WindowBackend`, `TreeController` (@MainActor protocol, all
@@ -183,9 +195,10 @@ alternative).
 tree/grid/rail (verified: `Controller.swift:1076/1224/1229`, single
 `SectionOrder.apply`). Only the tree push (`sidebarView.update(...)` at
 `Controller.swift:1369-1373`) changes: it feeds the view-model instead.
-The projection, board feed, and grid/rail `layoutCells()` push **stay
+The projection and grid/rail `layoutCells()` push **stay
 intact** (partial migration — two rendering models coexist behind one
-`apply()`).
+`apply()`). (Was: "projection, board feed, and grid/rail …" — the board
+feed was removed with the board layer, `t-0sbm`.)
 
 Additive FacetCore / view-model work (low-risk):
 - The SwiftUI row **ID is the composite `(group, WindowID)`** (a small
@@ -395,7 +408,8 @@ surface in `FacetViewTree` — View-layer only, respects the 3-layer rule.
 - **`performSwap` header-swap** — degrade-only; revisit via a sill swap
   mode if dogfood misses it.
 - **Adapter-layer SF-spec remap** (context menus) — F2 / menu migration.
-- grid / rail / board-band / menus / badges / rename / thumbnail-grid — F2.
+- grid / rail / menus / badges / rename / thumbnail-grid — F2.
+  (board-band dropped — retired with the board layer, `t-0sbm`.)
 
 ## 7. Risks
 
@@ -418,8 +432,9 @@ surface in `FacetViewTree` — View-layer only, respects the 3-layer rule.
    focus-assert race) moves into the **view-model `@State`**. Both must be
    reproduced explicitly, not dropped.
 5. **Partial migration**: `apply()` feeds SwiftUI tree AND still-AppKit
-   grid/rail/board-band — keep the projection + board feed intact, change
-   only the tree push.
+   grid/rail — keep the projection intact, change only the tree push.
+   (Was: "…grid/rail/board-band — keep the projection + board feed intact" —
+   board-band and the board feed were removed with the board layer, `t-0sbm`.)
 6. **Panel-move / tilting drag-ghost** — `win.performDrag` and the
    overflow drag-card have no SwiftUI equivalent; panel-move stays AppKit,
    drag chrome becomes sill's built-in ghost (title + count capsule).
