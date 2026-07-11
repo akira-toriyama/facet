@@ -336,6 +336,19 @@ struct WorkspaceCatalog {
     /// forgotten.
     var pendingHideCandidates: Set<WindowID> = []
 
+    /// Windows the lens desktop's always-on lens has anchor-parked because
+    /// they fall OUTSIDE its `match` (t-c6fm machinery, t-0sbm gate).
+    /// Like `hiddenMembers`, a member here is detached from the layout so the
+    /// in-lens survivors reflow to fill (`nonFloatingMembers` excludes it); like
+    /// `stashedWindows`, it is a provenance discriminator over the shared
+    /// `anchorParked` — so an isolate re-park is told apart from a WS-switch /
+    /// scratchpad park, and only ITS windows are un-parked when a window
+    /// re-joins the lens or the gate turns off. Re-derived from the
+    /// lens `match` every reconcile (`reconcileIsolatePark`); session-only,
+    /// per-mac-desktop (this catalog is swapped per mac desktop); pruned in
+    /// `forgetWindow`.
+    var isolateParked: Set<WindowID> = []
+
     // MARK: - Section-lens state (tag-unification Phase 1)
 
     /// The active section-lens's `label` (a `type="lens"`
@@ -716,6 +729,68 @@ struct WorkspaceCatalog {
         return pos
     }
 
+    /// Reconcile the isolate-park ledger (t-c6fm) against a freshly-derived
+    /// `desired` park set — the active workspace's out-of-active-lens, non-sticky
+    /// window ids (`IsolatePark.parkSet`). PURE bookkeeping (no AX): it detaches
+    /// newly-parked windows from the layout + ledgers them in `isolateParked`,
+    /// and restores re-joiners by re-attaching + dropping the ledger entry; a
+    /// ledgered window that has LEFT the active workspace is dropped WITHOUT a
+    /// restore (the WS-switch park owns it now). Returns the AX work for the
+    /// adapter to drive through `applyHide`. `desired` is empty when the park
+    /// gate is off (not a lens desktop) — that path unparks everything.
+    /// `focused` / `rect` feed `attachToLayout`'s
+    /// bsp orientation choice.
+    ///
+    /// Routing through the guarded `anchorParked` (via the adapter's
+    /// `parkAnchor` / `restoreAnchor`) keeps continuous per-reconcile re-derivation
+    /// safe: an already-parked window is skipped here (the `!anchorParked` gate),
+    /// and the crash-orphan / hide-reclaim guards already exclude `anchorParked`.
+    mutating func reconcileIsolatePark(desired: [WindowID],
+                                              focused: WindowID?,
+                                              in rect: CGRect)
+        -> (toPark: [WindowRef], toRestore: [WindowRef])
+    {
+        let desiredSet = Set(desired)
+        let activeWSIDs = Set(
+            windowMap.compactMap { $0.value.workspace == activeIndex ? $0.key : nil })
+
+        // PARK: desired ids not yet isolate-parked, park-eligible (not sticky /
+        // stashed), and not already parked by another mechanism (stack non-top /
+        // WS-switch) — detach so the in-lens survivors reflow.
+        var toPark: [WindowRef] = []
+        for id in desired
+        where !isolateParked.contains(id)
+            && isParkEligible(id)
+            && !anchorParked.contains(id) {
+            guard let pid = windowMap[id]?.pid else { continue }
+            isolateParked.insert(id)
+            detachFromLayouts(id)
+            toPark.append(WindowRef(id: id, pid: pid))
+        }
+
+        // UNPARK: ledgered ids no longer desired. ALWAYS undo the isolate detach
+        // — re-admit the window to ITS workspace's layout, active or not.
+        // Leaving it detached would strand it out of tiling when that WS next
+        // activates: the WS-switch park restores POSITION only (`restoreAnchor`),
+        // relying on the window still being a layout member. Snapshot the
+        // releasing set first — we mutate `isolateParked` in the loop.
+        var toRestore: [WindowRef] = []
+        for id in isolateParked.filter({ !desiredSet.contains($0) }) {
+            isolateParked.remove(id)
+            guard let slot = windowMap[id] else { continue }  // closed → forgetWindow owns it
+            if let ws = slot.workspace {
+                attachToLayout(id, workspace: ws, focused: focused, in: rect)
+            }
+            // Restore POSITION only for a window still on the ACTIVE WS (a lens
+            // re-join, or the gate went off in place). One now on another WS
+            // keeps its anchor-park — the WS-switch machinery owns its position.
+            if activeWSIDs.contains(id) {
+                toRestore.append(WindowRef(id: id, pid: slot.pid))
+            }
+        }
+        return (toPark, toRestore)
+    }
+
     // MARK: - Snapshot
 
     /// Build the `WindowBackend.workspaces()` return value from
@@ -854,6 +929,7 @@ struct WorkspaceCatalog {
                isMaster: isMaster,
                mark: mark(forWindow: w.id),
                isSticky: isSticky(w.id),
+               isParked: isolateParked.contains(w.id),   // t-c6fm phase 4
                scratchpad: scratchpad(forWindow: w.id),
                tags: populateTags
                    ? (windowMap[w.id]?.tags.sorted() ?? [])

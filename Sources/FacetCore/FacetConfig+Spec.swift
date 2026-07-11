@@ -56,13 +56,12 @@ private enum DesktopSchema {
         ], doc: "Facets applied to a lens's matched windows (a lens uses `tags` only).")
     }
 
-    // One `[[desktop.N.section]]` (and `[[desktop.N.tab.section]]`) row. `type`
-    // is OPTIONAL: an `unassigned = true` receptacle and a tab.section child
-    // (which inherits its tab's type) carry none.
+    // One `[[desktop.N.section]]` row. `type` is OPTIONAL: an
+    // `unassigned = true` receptacle carries none.
     static var sectionItemShape: ObjectShape {
         ObjectShape(fields: [
             SchemaField("type", .string,
-                        doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle or a tab child (inherits the tab's).",
+                        doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle.",
                         enumDomain: SectionType.allCases.map(\.rawValue)),
             SchemaField("label", .string, doc: "Display name; unset shows the section's 1-based index."),
             SchemaField("match", .string, doc: "lens only — a facet-filter WHERE-clause selecting its windows."),
@@ -73,26 +72,22 @@ private enum DesktopSchema {
         ], doc: "One display section: workspace / lens / (unassigned) lost-and-found.")
     }
 
-    // One `[[desktop.N.tab]]` board — a named grouping whose sections inherit
-    // its `type`, with nested `[[desktop.N.tab.section]]` children.
-    static var tabShape: ObjectShape {
+    // The value each `[desktop.<N>]` ordinal key maps to. A SINGLE typed table
+    // (t-0sbm): `type`/`label` (+ lens-only `match`/`layout`/
+    // `show-non-matching`) directly on the desktop. A `workspace` desktop
+    // carries its `[[desktop.N.section]]` array.
+    static var valueShape: ObjectShape {
         ObjectShape(fields: [
             SchemaField("type", .string,
-                        doc: "Board kind — workspace / lens; its sections inherit it.",
+                        doc: "workspace = spatial sections (tree/grid/rail); lens = an always-on filtered view (tree only).",
                         enumDomain: SectionType.allCases.map(\.rawValue)),
-            SchemaField("label", .string, doc: "Board display name."),
+            SchemaField("label", .string, doc: "Display name for this mac desktop."),
+            SchemaField("match", .string, doc: "lens desktop only — a facet-filter WHERE-clause selecting the tiled windows."),
+            SchemaField("layout", .string, doc: "lens desktop only — layout-engine name for the matched windows."),
+            SchemaField("show-non-matching", .boolean, doc: "lens desktop only — also show the non-matching windows as a second tree section."),
         ], nested: [
             NestedTable(key: "section", item: sectionItemShape),
-        ], doc: "A browser-tab-style board grouping sections inside one mac desktop.")
-    }
-
-    // The value each `[desktop.<N>]` ordinal key maps to — the container of
-    // `section` (flat) and/or `tab` (board) arrays; no scalar keys of its own.
-    static var valueShape: ObjectShape {
-        ObjectShape(fields: [], nested: [
-            NestedTable(key: "section", item: sectionItemShape),
-            NestedTable(key: "tab", item: tabShape),
-        ], doc: "One mac desktop (N = Mission Control ordinal): its display sections and/or boards.")
+        ], doc: "One mac desktop (N = Mission Control ordinal): its `type`/`label`, plus its display sections.")
     }
 }
 
@@ -303,15 +298,12 @@ public extension FacetConfig {
                      + "section (leftover = universe − shown); only the first "
                      + "emits, extras warn. Array order = tree display order. Any "
                      + "section block makes facet opt-in (manages only "
-                     + "configured desktops). NESTED FORM: "
-                     + "`[[desktop.N.tab]]` `{ type, label }` is a named board "
-                     + "grouping whose `type` is workspace / lens ONLY; its "
-                     + "nested `[[desktop.N.tab.section]]` children carry NO "
-                     + "`type` (each INHERITS the tab's), the lone exception "
-                     + "being a child marked `unassigned = true` (the per-tab "
-                     + "lost-and-found, ≤ 1).",
-                  // Typed open-map: each ordinal key maps to a `{ section[],
-                  // tab[] }` value (t-kz0m). keyPattern mirrors the runtime
+                     + "configured desktops). TYPED DESKTOP: the `[desktop.N]` "
+                     + "table itself carries `type` (workspace / lens) — a lens "
+                     + "desktop writes `match` / `layout` / `show-non-matching` "
+                     + "directly on it and declares NO sections.",
+                  // Typed open-map: each ordinal key maps to a
+                  // `{ …scalars, section[] }` value (t-kz0m). keyPattern mirrors the runtime
                   // `Int(mid) >= 1` guard (FacetConfig+Decode.swift) — accepts
                   // `1`/`01`/`10`, rejects `0`/`00`/`foo` (t-0avb B2).
                   dynamicValue: DynamicValue(keyPattern: "^0*[1-9][0-9]*$",

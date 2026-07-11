@@ -59,6 +59,7 @@ extension Controller {
                         String(s.dropFirst("toggle:".count)))
 
                 case let s where s.hasPrefix("workspace:"):
+                    if self.lensDesktopBlocks("workspace --focus") { break }
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
@@ -80,14 +81,6 @@ extension Controller {
                 case let s where s.hasPrefix("section-focus:"):
                     self.dispatchSectionFocus(
                         String(s.dropFirst("section-focus:".count)))
-
-                // Board addressing: `facet board --focus N|LABEL` → select which
-                // `[[desktop.N.tab]]` board the overview shows. The label can hold
-                // any character (incl. `:`), so the whole remainder is the payload
-                // and `resolveBoardFocus` re-splits the `index:`/`label:` prefix.
-                case let s where s.hasPrefix("board-focus:"):
-                    self.dispatchBoardFocus(
-                        String(s.dropFirst("board-focus:".count)))
 
                 // §E: `facet section --rename N LABEL` → runtime (session-only)
                 // display-label rename. Wire = `section-rename:<index>:<label>`.
@@ -118,9 +111,11 @@ extension Controller {
                     self.setSectionMatch(indexN1Based: n, to: predicate)
 
                 case "workspace-add":
+                    if self.lensDesktopBlocks("workspace --add") { break }
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
                 case let s where s.hasPrefix("workspace-remove:"):
+                    if self.lensDesktopBlocks("workspace --remove") { break }
                     let raw = String(s.dropFirst("workspace-remove:".count))
                     self.runBackendCommand { bk in
                         bk.removeWorkspace(at: raw.isEmpty ? nil : Int(raw))
@@ -128,12 +123,14 @@ extension Controller {
                     }
 
                 case let s where s.hasPrefix("workspace-rename:"):
+                    if self.lensDesktopBlocks("workspace --rename") { break }
                     let name = String(s.dropFirst("workspace-rename:".count))
                     self.runBackendCommand { bk in
                         bk.renameWorkspace(at: nil, to: name); return nil
                     }
 
                 case let s where s.hasPrefix("workspace-move:"):
+                    if self.lensDesktopBlocks("workspace --move") { break }
                     let to = Int(s.dropFirst("workspace-move:".count)) ?? 0
                     self.runBackendCommand { bk in
                         bk.moveActiveWorkspace(to: to); return nil
@@ -255,6 +252,7 @@ extension Controller {
                     }
 
                 case let s where s.hasPrefix("set-layout:"):
+                    if self.lensDesktopBlocks("workspace --layout") { break }
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)
 
@@ -404,6 +402,15 @@ extension Controller {
         // (The rail otherwise coexists with the tree — different
         // screen regions, complementary surfaces.)
         if name == "grid" && isRailVisible { hideRail() }
+        // 2-world separation (t-0sbm): a lens desktop is TREE-ONLY — a dynamic
+        // lens has no fixed thumbnail, so grid/rail can't render it. A lens
+        // desktop is valid config (not a typo), but the request is
+        // unsatisfiable, so surface it loud rather than silently no-op.
+        if (name == "grid" || name == "rail"),
+           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
+            setError("\(name) view is not available on a lens desktop (tree only)")
+            return
+        }
         switch name {
         case "tree":
             // Apply explicit geom BEFORE showing so the panel
@@ -464,6 +471,28 @@ extension Controller {
                 }
             }
         }
+    }
+
+    /// t-0sbm: a lens desktop is a FLAT, always-on, single-workspace desktop
+    /// (`effectiveWorkspaceList` seeds exactly one). Workspace-SET and
+    /// active-workspace mutations (add / remove / move / rename / focus) can't
+    /// be honored there, and `--add` actively breaks the N=1 invariant the
+    /// anchor-park scope relies on (`workspace == activeIndex` stops being
+    /// desktop-wide the moment a 2nd workspace exists → non-matching windows
+    /// escape the park). Reject loudly, mirroring the tree-only view gate in
+    /// `dispatchView`. `--layout` (a workspace mode-NAME change) is gated too:
+    /// the lens `layout` seam re-asserts the declared layout whenever the mode
+    /// name differs (`applyIsolatePark` → `setMode` only on a name change), so a
+    /// runtime `--layout` would silently revert next reconcile — reject it
+    /// honestly. `--retile` / `--balance` / `--rotate` / `--mirror` are NOT gated:
+    /// they refine the tiled set WITHIN the same mode (the seam never re-fires),
+    /// so they take effect and persist exactly as on a workspace desktop
+    /// (t-0sbm review corrected the earlier "all refinement reverts" premise).
+    private func lensDesktopBlocks(_ verb: String) -> Bool {
+        guard config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens
+        else { return false }
+        setError("\(verb) is not available on a lens desktop")
+        return true
     }
 
     /// Route a `workspace:` control payload — either an absolute
@@ -580,100 +609,6 @@ extension Controller {
             return
         }
         activateSection(section, autoFocus: true)
-    }
-
-    /// `facet board --focus N|LABEL`: select which `[[desktop.N.tab]]` board the
-    /// overview (tree / grid / rail) shows on the CURRENT mac desktop (t-wrd2 /
-    /// W2.3). A pure DISPLAY re-grouping of the SAME windows — it writes the
-    /// session-only `selectedBoard[ordinal]` and re-renders; it NEVER touches the
-    /// backend or persists. Runs on main (DNC). Resolution is delegated to the
-    /// pure `resolveBoardFocus`; an out-of-range index / unknown label is loud-
-    /// but-non-fatal (`setError`, no change), matching `section --focus`.
-    ///
-    /// Like `renameSection`'s lens/unassigned branch, the `selectedBoard` WRITE
-    /// is gated on a non-nil ordinal: the projection seam READS the dict under
-    /// the `let ordinal = macDesktopOrdinal` guard (never a `-1` bucket), so a
-    /// `?? -1` write would orphan the entry where `apply()` can't see it. A
-    /// transient nil ordinal (SkyLight blip) is a retryable loud reject.
-    private func dispatchBoardFocus(_ arg: String) {
-        guard let ordinal = currentMacDesktopOrdinal() else {
-            setError("board --focus: mac desktop unknown (try again)")
-            scheduleReconcile(after: 0.05)
-            return
-        }
-        let labels = config.effectiveMacDesktopTabConfigs[ordinal]?.map(\.label) ?? []
-        switch resolveBoardFocus(arg, boardLabels: labels) {
-        case .resolved(let boardIndex):
-            commitBoardSelection(ordinal: ordinal, to: boardIndex)
-        case .outOfRange(let requested, let count):
-            let hint = count == 1 ? "only 1 board" : "1..\(count)"
-            setError("board --focus \(requested): out of range (\(hint))")
-            scheduleReconcile(after: 0.05)
-        case .unknownLabel(let label):
-            setError("board --focus \(label): no such board")
-            scheduleReconcile(after: 0.05)
-        case .malformed:
-            Log.debug("board-focus: malformed \"\(arg)\"")
-            setError("board --focus: malformed")
-            scheduleReconcile(after: 0.05)
-        }
-    }
-
-    /// Board band board switch (t-wrd2 / W2.4) — the GUI twin of
-    /// `facet board --focus`. A click / wheel on the `BoardBand` hands a 0-based
-    /// board index (already resolved view-side from the laid-out tabs), so this
-    /// skips `resolveBoardFocus`'s label/`index:` parsing and just commits:
-    /// write the session-only `selectedBoard[ordinal]` + re-render (a pure
-    /// DISPLAY re-grouping of the SAME windows — never a real window move). The
-    /// non-nil-ordinal gate mirrors `dispatchBoardFocus` (the projection seam
-    /// reads `selectedBoard` only under the `let ordinal` guard). The view
-    /// already drops a no-op pick, but the equality guard keeps it idempotent.
-    func selectBoardFromUI(_ index: Int) {
-        guard let ordinal = currentMacDesktopOrdinal() else { return }
-        commitBoardSelection(ordinal: ordinal, to: index)
-    }
-
-    /// Commit a board switch for `ordinal` — the shared core of the CLI
-    /// (`dispatchBoardFocus`) and GUI (`selectBoardFromUI`) board verbs. A no-op
-    /// when the board is unchanged (so a flat `--focus 1` / board 0 on an unset
-    /// selection stays idempotent, matching the `apply()` seam's `?? 0`).
-    ///
-    /// L1 per-board active-section memory: the section the user was on is saved
-    /// under the board they LEAVE, and the destination board's remembered
-    /// section is restored (default: the spatial workspace). Without this the
-    /// single `currentActiveSection` would go stale after a switch — `apply()`'s
-    /// active-section re-read fires only on a desktop swap / WS switch, not a
-    /// board switch — leaving the active-lens highlight on the wrong board's
-    /// section. The swap-detector is synced (as `activateLensID` does) so the
-    /// synchronous `apply()` below doesn't mistake the switch for a desktop swap
-    /// and clobber the restored section.
-    ///
-    /// The backend is told the destination board (`setSelectedBoard`) so its
-    /// id resolver (`lensSection(forID:)`) indexes the right board, then the
-    /// destination board's REMEMBERED lens is re-activated — or cleared, when
-    /// the restored section is a workspace (W2.5-adapter completes the L1
-    /// backend half). The push lands BEFORE `setSectionLens` in the same
-    /// `runBackendCommand` closure (serial on `cliQueue`), so the lens id
-    /// resolves against the new board. A lens stays a pure VIEW for highlight
-    /// (its window list comes from `FilterProjection`), but its real-hide is
-    /// now board-correct.
-    func commitBoardSelection(ordinal: Int, to newBoard: Int) {
-        let oldBoard = selectedBoard[ordinal] ?? 0
-        guard oldBoard != newBoard else { return }
-        boardActiveSection[ordinal, default: [:]][oldBoard] = currentActiveSection
-        selectedBoard[ordinal] = newBoard
-        currentActiveSection = boardActiveSection[ordinal]?[newBoard]
-            ?? .workspace(activeWSIndex(in: lastWorkspaces))
-        hasRenderedMacDesktop = true
-        lastRenderedMacDesktopOrdinal = ordinal
-        let restoredLensID = currentActiveSection.lensID
-        runBackendCommand { bk in
-            bk.setSelectedBoard(newBoard, forMacDesktopOrdinal: ordinal)
-            bk.setSectionLens(restoredLensID, autoFocus: false)
-            return nil
-        }
-        Log.debug("commitBoardSelection: ordinal=\(ordinal) → board \(newBoard)")
-        apply(lastWorkspaces)   // re-render: re-group into the selected board
     }
 
     /// §G unified focus helper: focus the FIRST window of the section with
@@ -960,6 +895,19 @@ extension Controller {
                 Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → \"\(predicate)\"")
             }
         }
+        // t-0sbm: on a lens DESKTOP the match also drives the PHYSICAL park/tile
+        // (the lens's whole point — "change the match to change what you see"),
+        // so push it across the backend seam. The projection override above
+        // only re-filters the tree display; without this the two diverge (tree
+        // shows the new match, windows stay parked by the old one). A
+        // workspace-desktop section-lens is a pure VIEW → no push.
+        if config.desktopType(ordinal: key) == .lens {
+            // `predicate` promotes to `String?`; `setLensDesktopMatch` already
+            // treats empty as the revert (drops the key), so no pre-normalize.
+            runBackendCommand { bk in
+                bk.setLensDesktopMatch(predicate, ordinal: key); return nil
+            }
+        }
         apply(lastWorkspaces)       // re-render: the lens re-filters live
         markConfigDirty()   // t-hdxb: persist the lens match (set OR revert)
     }
@@ -1149,6 +1097,17 @@ extension Controller {
     }
 
     private func dispatchToggle(_ name: String) {
+        // 2-world separation (t-0sbm): grid/rail are unavailable on a lens
+        // desktop (tree-only) — same loud reject as the show path, but ONLY
+        // for the toggle-ON direction: an overlay that travelled here (they
+        // are `.canJoinAllSpaces` panels) must stay closable by its own
+        // toggle hotkey.
+        if (name == "grid" || name == "rail"),
+           !(name == "grid" ? isGridVisible : isRailVisible),
+           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
+            setError("\(name) view is not available on a lens desktop (tree only)")
+            return
+        }
         switch name {
         // Toggling ON opens the tree active (same entry as `--view
         // tree`); OFF hides it. Mirrors the show path so a toggle

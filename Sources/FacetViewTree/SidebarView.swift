@@ -58,8 +58,8 @@ public final class SidebarView: NSView {
         init(row: NSRect, kind: Int, hot: Bool, firstHeader: Bool, pid: Int,
              app: String, title: String, text: String, mode: String,
              isMaster: Bool, isFloating: Bool, isSticky: Bool, mark: String?,
-             isHidden: Bool, scratchpad: String?, tags: [String],
-             sectionType: ProjectedSectionType = .workspace) {
+             isHidden: Bool, scratchpad: String?,
+             tags: [String], sectionType: ProjectedSectionType = .workspace) {
             self.row = row; self.kind = kind; self.hot = hot
             self.firstHeader = firstHeader; self.pid = pid; self.app = app
             self.title = title; self.text = text; self.mode = mode
@@ -497,8 +497,8 @@ public final class SidebarView: NSView {
                           app: win.appName, title: wt, text: "", mode: "",
                           isMaster: win.isMaster, isFloating: win.isFloating,
                           isSticky: win.isSticky, mark: win.mark,
-                          isHidden: !win.isOnscreen, scratchpad: win.scratchpad,
-                          tags: win.tags))
+                          isHidden: !win.isOnscreen,
+                          scratchpad: win.scratchpad, tags: win.tags))
         return y + rh
     }
 

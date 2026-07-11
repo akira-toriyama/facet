@@ -46,15 +46,22 @@ overview, each summoned on demand (`facet --view tree|grid|rail`):
   that, workspaces rotate through (peeking at both ends). Summoned with
   `facet --view rail`.
 
-When a mac desktop holds two or more **boards** — tabbed groupings of
-sections within one desktop (a workspace set or a lens set; the hierarchy is
-*mac desktop ▸ board ▸ section ▸ window*) — every view shows a **board
-switcher band** at its top. Click a tab or scroll the mouse wheel to flip
-boards; it is display-only — the same windows, re-grouped, with no real
-window moved. Boards are configured with `[[desktop.N.tab]]`
-([Configuration](#configuration)) and switched from the CLI with
-`facet board --focus N|"label"`. With a single board (or no board config)
-the band stays hidden.
+A mac desktop may be **typed** with a single `[desktop.N]` table
+(`type = "workspace"` or `"lens"`; the hierarchy is *mac desktop ▸ section ▸
+window*). A **lens desktop** is an **always-on focus space**: while you are
+on it, facet tiles the windows matching its `match` with its `layout` and
+slides the rest to a corner (a dwm-style declutter, sticky windows exempt) —
+no toggle, entering the desktop *is* the focus. The tree shows the matched
+section; `show-non-matching = true` adds a second "holding" section listing
+the parked rest (making the tree a full inventory). It is **tree-only**:
+`--view grid` / `--view rail` are
+rejected there, since a lens desktop's membership is dynamic — there is no
+fixed picture to thumbnail. Workspace-structure commands (`facet workspace
+--add` / `--remove` / `--move` / `--rename` / `--focus`, plus `--layout`) are
+rejected there too — a lens desktop is a single always-on workspace, so there
+is nothing to add, switch to, or re-declare a layout for (tile-refinement
+`--retile` / `--balance` / `--rotate` / `--mirror` still work). A `workspace`
+desktop (the implied type of a sections-only config) behaves exactly as before.
 
 Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a
@@ -465,18 +472,15 @@ Frequently-touched keys:
   grid, **and** rail, with exactly one section highlighted; on the rail the
   active section is the centre hero (an active lens shows its aggregated
   matches there).
-- `[[desktop.N.tab]]` blocks — **boards**: group the sections above into tabs
-  within one mac desktop (hierarchy *mac desktop ▸ board ▸ section ▸ window*).
-  Each board has a required `type` (`"workspace"` or `"lens"`) and an optional
-  `label`; its nested `[[desktop.N.tab.section]]` children omit `type` (they
-  inherit the board's) and otherwise follow the same per-type rules, and one
-  child may set `unassigned = true` to be that board's lost-and-found. Switch
-  boards with `facet board --focus N|"label"`; when a desktop has two or more
-  boards every view shows a switcher band (click / mouse-wheel) at its top. A
-  board switch is display-only — it re-groups the same windows without moving
-  any. Boards and flat `[[desktop.N.section]]` are mutually exclusive per
-  desktop: declare both for one `N` and the boards win (the flat block is
-  ignored, logged at load). The flat form stays supported as a fallback.
+- `[desktop.N]` table — the **typed desktop**: `type = "workspace"` or
+  `"lens"` (one ordinal = one desktop = one type; a sections-only config
+  implies `workspace`). A **lens desktop** writes its single always-on lens
+  directly on the table: `match` (required, a facet-filter WHERE-clause),
+  optional `layout` (the engine that tiles the matched windows; `"float"`
+  leaves them floating), optional `show-non-matching` (default `false`;
+  `true` adds a "holding" tree section listing the parked rest), optional
+  `label`. It has no `[[desktop.N.section]]` blocks and no sub-workspaces,
+  and renders in the tree only.
 - **Per-window tags** are free-form strings attached at **runtime**
   (session-only) with `facet window --tag NAME` (and `--untag` /
   `--toggle-tag` / `--retag`). A `type = "lens"` section whose `match`
@@ -575,14 +579,6 @@ facet section --rename N "label"   # rename the Nth section's display label
 # lens header → Section ▸ Edit match (or press `m`).
 facet section --match N "tag~=web" # set the Nth lens's match, re-filters at once
 facet section --match N ""          # revert the Nth lens's match to config
-
-# Board (section model) — switch which [[desktop.N.tab]] board the views show.
-# A board groups sections into a tab (a workspace set or a lens set) within one
-# mac desktop; a switch re-groups the SAME windows (display only — never moves a
-# window). The display twin of `section --focus`. When the desktop has >=2
-# boards every view shows a switcher band (click / mouse-wheel) at its top.
-facet board --focus N              # show board N (1-based) on this mac desktop
-facet board --focus "label"        # show the board labelled "label"
 
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
 facet scratchpad --stash NAME     # park the focused window onto a named

@@ -528,6 +528,20 @@ extension SidebarView {
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
+            // t-c6fm: clicking an isolate-PARKED window (it shows normally in
+            // whatever lens section its `match` satisfies — parked ≠ dimmed) EXITS
+            // focus mode: clear the active lens so every parked window un-parks,
+            // then focus the clicked one. A durable single-window unpark would
+            // bounce back next reconcile (the park set is re-derived from the lens
+            // `match`), so clearing the lens is the only stable "restore". Parked
+            // windows are active-WS, so no switch. (OPEN: an alternative is to
+            // activate the CLICKED row's lens instead of clearing — pending
+            // dogfood.)
+            if win0?.isParked == true, let lensID = lastActiveLensID {
+                controller?.toggleActiveLens(lensID)   // active id → clears
+                controller?.focusWindow(window, postSwitch: false)
+                return
+            }
             let bk = backend
             let ctrl = controller
             cliQueue.async {

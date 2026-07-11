@@ -134,9 +134,15 @@ public enum FilterProjection {
         // (possibly-empty / non-unique) label, and `--focus` / `--move-to` stay
         // correct. Array order (not a re-sort) keeps the degrade byte-
         // identical to today.
+        // Isolate-parked windows (t-c6fm) stay in place in their section — the
+        // real screen declutters (only the active lens's windows are on-screen),
+        // but the tree is a filter-inventory, not a screen mirror: a window shows
+        // in every section its match satisfies, parked or not (consistent with a
+        // non-active workspace's windows, which are also parked but shown normally).
         func wsSection(_ ws: Workspace) -> ProjectedSection {
             ProjectedSection(id: "ws:\(ws.index)", label: ws.name,
-                        windows: ws.windows, sourceWorkspaceIndex: ws.index,
+                        windows: ws.windows,
+                        sourceWorkspaceIndex: ws.index,
                         sectionType: .workspace)
         }
 
@@ -203,6 +209,11 @@ public enum FilterProjection {
                     var matched: [Window] = []
                     for ws in workspaces {
                         for w in ws.windows
+                        // A lens shows EVERY window its match satisfies (t-c6fm):
+                        // an isolate-parked window that matches this lens still
+                        // shows here (parked = a real-screen operation, orthogonal
+                        // to the display filter — same as a non-active workspace's
+                        // parked windows, which show normally).
                         where LensMembership.matches(
                             w, inWorkspaceNamed: ws.name, filter: filter) {
                             matched.append(w)
@@ -230,17 +241,14 @@ public enum FilterProjection {
         // the tail of the workspace-section run, before any later lens
         // sections. Only when there IS a workspace-section run.
         //
-        // N6 (t-wrd2): a lens-only `sections` list produces only lens sections
-        // and NO workspace tail. Pre-board this was unreachable (the consumer
-        // routed lens-only configs only when `isSectionModelActive` was false →
-        // by-workspace degrade), but under the BOARD model a SELECTED lens board
-        // routes a lens-only list here WITH `isSectionModelActive == true` (a
-        // workspace board exists elsewhere on the desktop). The intended
-        // semantics: a lens board is a FILTERED view — a workspace window that
-        // matches no lens on the selected board is shown only if the board
-        // declares an `unassigned` receptacle (W2.6); otherwise it is hidden
-        // until the user switches back to a workspace board (the window stays
-        // live, never lost). `BoardLensProjectionTests` pins this.
+        // N6: a lens-only `sections` list produces only lens sections and NO
+        // workspace tail — the input a LENS DESKTOP feeds (t-0sbm:
+        // `lensDesktopSections` synthesizes one lens section, plus an
+        // `unassigned` receptacle only when `show-non-matching` is set). The
+        // intended semantics: a lens desktop is a FILTERED view — a window
+        // matching no lens is shown only if an `unassigned` receptacle is
+        // declared (W2.6); otherwise it is hidden (the window stays live,
+        // never lost). `LensOnlyProjectionTests` pins this.
         if sawWorkspaceSection && wsCursor < workspaces.count {
             let extras = workspaces[wsCursor...].map(wsSection)
             out.insert(contentsOf: extras, at: insertExtrasAt)

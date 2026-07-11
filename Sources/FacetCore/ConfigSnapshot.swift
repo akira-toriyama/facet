@@ -10,9 +10,7 @@
 // The mapping from a projected section id back to a raw `[[desktop.N.section]]`
 // element is done through `decodeDesktopSectionOrigins` — the SAME decode the
 // projection reads — so it can never drift from `FilterProjection`'s
-// `declOrder`. v1 scope: only FLAT desktops are edited; a desktop that declares
-// `[[desktop.N.tab]]` (boards) has its nested sections skipped (logged) — the
-// `[tags]` write is global and still applies.
+// `declOrder`.
 
 import Foundation
 import Toml
@@ -76,9 +74,6 @@ public enum ConfigSnapshot {
             return configText
         }
 
-        // Board desktops ([[desktop.N.tab]]) → skip section edits (v1 scope:
-        // nested tab sections aren't mapped). The [tags] write below is global.
-        let boardOrdinals = Set(FacetConfig.decodeDesktopTabs(fromTOML: configText).keys)
         let origins = FacetConfig.decodeDesktopSectionOrigins(fromTOML: configText,
                                                               log: false)
 
@@ -97,11 +92,6 @@ public enum ConfigSnapshot {
         }.mapValues { $0.count }
 
         for (ordinal, secOrigins) in origins {
-            if boardOrdinals.contains(ordinal) {
-                Log.debug("config: snapshot skipped section edits for desktop "
-                    + "\(ordinal) (board config — nested sections out of scope)")
-                continue
-            }
             var wsSlot = 0
             for o in secOrigins {
                 // The header spelling this section came from IS the AoT path.

@@ -270,32 +270,6 @@ struct ConfigSnapshotTests {
         #expect(out == cfg, "no in-use tags → [tags] byte-identical")
     }
 
-    // MARK: - board desktop: section edits skipped, tags still write
-
-    @Test func boardDesktopSkipsSectionEditsButWritesTags() {
-        let cfg = """
-        [[desktop.1.tab]]
-        type = "workspace"
-        label = "Main"
-
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Web"
-        match = 'a'
-        """
-        var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Safari"]]  // must be SKIPPED (board)
-        ov.definedTags = ["web"]
-        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
-
-        #expect(out.contains("match = 'a'"),
-                "board desktop → the flat section match is untouched")
-        #expect(!(out.contains("app=Safari")))
-        #expect(FacetConfig.load(source: out).effectiveDefinedTags == ["web"],
-                "the global [tags] write still applies")
-        assertStable(out)
-    }
-
     // MARK: - multi-desktop + everything-else byte identity
 
     @Test func multipleDesktopsEachApplied() {

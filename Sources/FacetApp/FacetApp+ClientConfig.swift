@@ -7,7 +7,7 @@
 //   --emit-schema  print the Draft-07 JSON Schema to stdout (repo/dev regen
 //                  of config.schema.json; not shown in --help).
 //
-// A new subject (mirrors window / workspace / section / board / query). It
+// A new subject (mirrors window / workspace / section / query). It
 // FOLDS IN the former bare `facet --emit-schema`: no bare alias survives
 // (facet's no-alias rule — a bare flag beside a subject is the exact
 // "is it bare or scoped?" ambiguity the subject-verb CLI exists to kill).
@@ -99,14 +99,13 @@ extension FacetApp {
         // validated (no second disk read / no TOCTOU) to surface the bespoke
         // loader warnings validate can't (clamp did-you-mean hints,
         // geometry-partial) + a one-line summary. Counts read through the
-        // `effective*` accessors (CLAUDE.md: never the raw Optional fields) so
-        // boards-win shadowing is reflected.
+        // `effective*` accessors (CLAUDE.md: never the raw Optional fields).
         let cfg = FacetConfig.load(source: source)
         for w in cfg.unknownValueWarnings() {
             FileHandle.standardError.write(Data("facet: \(w)\n".utf8))
         }
         let desktops = Set(cfg.effectiveMacDesktopSectionConfigs.keys)
-            .union(cfg.effectiveMacDesktopTabConfigs.keys).count
+            .union(cfg.macDesktopMetaConfigs.keys).count
         FileHandle.standardError.write(Data((
             "facet: config valid — theme=\(cfg.effectiveTheme), "
             + "layout=\(cfg.effectiveDefaultLayout), "

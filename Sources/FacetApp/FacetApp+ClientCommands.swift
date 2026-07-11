@@ -177,48 +177,6 @@ extension FacetApp {
         die("facet section: dispatch fell through (bug)")
     }
 
-    /// Sub-command parser for ``facet board <flag>`` — select which BOARD
-    /// (`[[desktop.N.tab]]`: a workspace-set or lens-set view) the tree / grid /
-    /// rail show on the current mac desktop (t-wrd2 / W2.3). The display twin of
-    /// `section --focus`: boards are addressed by 1-based display order or label.
-    /// Verbs:
-    ///   --focus N|LABEL    show the Nth board (numeric = index, else label)
-    /// One action per invocation, loud reject on zero / multiple / unknown.
-    static func runBoardCommand(_ args: [String]) -> Never {
-        var focusArg: String?           // payload: "index:N" or "label:LABEL"
-        var cursor = ArgCursor(args)
-        while let a = cursor.next() {
-            switch a {
-            case "--focus":
-                focusArg = parseBoardFocus(cursor.value(for: "board --focus"))
-            default:
-                die("unknown `board` flag \"\(a)\" — see `facet --help`")
-            }
-        }
-        let count = [focusArg != nil].filter { $0 }.count
-        requireExactlyOneAction(count, subject: "board")
-        requireServerAlive()
-        if let f = focusArg { postControl("board-focus:" + f) }
-        die("facet board: dispatch fell through (bug)")
-    }
-
-    /// Parse the value of ``facet board --focus VALUE``. A positive integer is a
-    /// 1-based board (display-order) index (`index:N`); anything else is a board
-    /// label (`label:LABEL`, kept VERBATIM — board labels are config strings that
-    /// allow spaces / punctuation). Numeric values are always indices — label a
-    /// board non-numerically to reference it by name (yabai-style, mirrors
-    /// `section --focus`). Loud reject (exit 2) on an empty / leading-dash value
-    /// (a mistyped flag in the value slot must not become a silent label match).
-    static func parseBoardFocus(_ value: String) -> String {
-        if let n = Int(value), n > 0 { return "index:\(n)" }
-        let trimmed = value.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else {
-            die("board --focus: expected a board index (1-based) or label, "
-                + "got \"\(value)\"")
-        }
-        return "label:" + value
-    }
-
     /// FacetApp wrapper over the pure `validateSectionLabel` (FacetCore): loud-
     /// exit(2) on the all-whitespace / leading-dash reject, else return the
     /// label VERBATIM (loose — spaces / `:` / punctuation are fine for a display

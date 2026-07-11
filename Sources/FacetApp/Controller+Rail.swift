@@ -56,13 +56,6 @@ extension Controller {
         rv.edge = edge                              // M9-3: docked edge
         rv.cellsTarget = config.effectiveRailCells  // upper bound on visible cells
         rv.stripPercent = config.effectiveRailStrip // strip band size (% short edge)
-        // Board switcher band (t-wrd2): same source as the tree + grid bands.
-        // ≥2 boards shows it; a flat config feeds none ⇒ no band. Click / wheel
-        // routes through the SAME `selectBoardFromUI` seam as the tree + CLI.
-        let board = boardBandInputs()
-        rv.boardLabels = board.labels
-        rv.activeBoardIndex = board.selectedIndex
-        rv.onSelectBoard = { [weak self] idx in self?.selectBoardFromUI(idx) }
         // EX-2b: the browse cursor (selectedSectionID) is seeded by the
         // first layoutCells (its stranded-cursor repair snaps nil → the
         // active section) — no explicit seed here.

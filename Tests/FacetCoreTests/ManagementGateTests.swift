@@ -68,74 +68,20 @@ struct ManagementGateTests {
         #expect(!c.isSectionModelActive(ordinal: 1))
     }
 
-    // MARK: - board model (t-wrd2 / W2.5): a tab config activates the gate
+    // MARK: - typed desktops ([desktop.N], t-0sbm): the opt-in gate is the
+    // UNION of section ordinals and typed-desktop ordinals
 
-    private func wsBoard() -> DesktopTab {
-        DesktopTab(type: .workspace, label: "Spaces", sections: [wsSection()])
-    }
-    private func lensBoard() -> DesktopTab {
-        DesktopTab(type: .lens, label: "Views", sections: [lensSection()])
-    }
-
-    /// A tab-only config (no flat `[[desktop.N.section]]`) with a workspace
-    /// board ACTIVATES the section model. This is the keystone of the visible
-    /// board switch (W2.5): until the gate is board-aware, a tab-only config is
-    /// `gate=false`, so the projection degrades to default slots and a
-    /// `facet board --focus` is invisible.
-    @Test func workspaceBoardActivatesModel() {
-        var c = FacetConfig()
-        c.macDesktopTabConfigs = [1: [wsBoard(), lensBoard()]]
-        #expect(c.isSectionModelActive(ordinal: 1),
-                "a workspace board activates the model on a tab-only config")
-        #expect(!c.isSectionModelActive(ordinal: 2),
-                "the board model is a per-ordinal opt-in")
-        #expect(!c.isSectionModelActive(ordinal: nil))
-    }
-
-    /// The gate is board-INDEPENDENT — a config property, not the current
-    /// selection. A workspace board ANYWHERE in the tab list activates the
-    /// model, even when it isn't board 0 (the selected board may be a lens
-    /// board, yet the substrate still exists).
-    @Test func workspaceBoardActivatesRegardlessOfOrder() {
-        var c = FacetConfig()
-        c.macDesktopTabConfigs = [1: [lensBoard(), wsBoard()]]
-        #expect(c.isSectionModelActive(ordinal: 1))
-    }
-
-    /// A tab config with ONLY lens boards (no workspace substrate) does NOT
-    /// activate the model — mirrors the flat lens-only rule.
-    @Test func lensOnlyBoardsDoNotActivateModel() {
-        var c = FacetConfig()
-        c.macDesktopTabConfigs = [1: [lensBoard()]]
-        #expect(!c.isSectionModelActive(ordinal: 1))
-    }
-
-    // MARK: - M1: the opt-in MANAGEMENT gate must see tab configs too
-
-    /// A tab-only config (no flat `[[desktop.N.section]]`) opts facet in just
-    /// like a section config: the configured ordinal is managed, the rest are
-    /// hands-off. Before M1, `isMacDesktopManaged` read only the flat dict, so
-    /// an empty flat dict made it return `true` for EVERY ordinal — facet would
-    /// adopt + default-slot-seed every unconfigured desktop.
-    @Test func tabOnlyConfigIsOptIn() {
-        var c = FacetConfig()
-        c.macDesktopTabConfigs = [1: [wsBoard(), lensBoard()]]
-        #expect(c.isMacDesktopManaged(ordinal: 1),
-                "a desktop with boards is managed")
-        #expect(!c.isMacDesktopManaged(ordinal: 2),
-                "tab presence makes facet opt-in (desktop 2 untouched)")
-        #expect(c.isMacDesktopManaged(ordinal: nil))
-    }
-
-    /// Opt-in keys on the UNION of section + tab ordinals: flat on desktop 1,
-    /// tabs on desktop 3 → both managed, the gap (2) and tail (4) hands-off.
-    @Test func managedKeysOnUnionOfSectionAndTabOrdinals() {
+    /// Flat sections on desktop 1, a `[desktop.3]` typed table on desktop 3 →
+    /// both managed; the gap (2) and tail (4) stay hands-off. (Successor to
+    /// the retired section∪tab union test — tabs no longer exist.)
+    @Test func managedKeysOnUnionOfSectionAndMetaOrdinals() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [wsSection()]]
-        c.macDesktopTabConfigs = [3: [wsBoard()]]
+        c.macDesktopMetaConfigs = [3: DesktopMeta(type: .lens, match: "app=x")]
         #expect(c.isMacDesktopManaged(ordinal: 1))
         #expect(!c.isMacDesktopManaged(ordinal: 2))
         #expect(c.isMacDesktopManaged(ordinal: 3))
         #expect(!c.isMacDesktopManaged(ordinal: 4))
+        #expect(c.isMacDesktopManaged(ordinal: nil))
     }
 }

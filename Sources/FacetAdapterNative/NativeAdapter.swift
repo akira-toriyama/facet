@@ -51,6 +51,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// applies the AX side-effects the catalog hands back.
     var catalog = WorkspaceCatalog()
 
+    /// t-0sbm: runtime lens-desktop `match` overrides, keyed by mac desktop
+    /// ordinal (session-only; the park/tile mirror of the Controller's
+    /// `sectionMatchOverride`). `applyIsolatePark` prefers this over the config
+    /// match so `facet section --match` / the tree Edit-match physically
+    /// re-tile + re-park live. cliQueue-only (set + read both on cliQueue).
+    var lensDesktopMatchOverride: [Int: String] = [:]
+
     /// Per-mac-desktop catalogs that aren't currently active.
     /// facet keeps an independent set of virtual workspaces per
     /// mac desktop (memory: facet-per-native-space-ws). On a
@@ -187,19 +194,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// cadence — long enough for the create→settle transient, short
     /// enough that a stale hint can't fast-add much later.
     let trustedNewTTL: TimeInterval = 2.0
-
-    /// Mirror of the Controller's session-only `selectedBoard[ordinal]`
-    /// (t-wrd2 / W2.5-adapter), keyed by mac-desktop ordinal. The board-aware
-    /// `lensSection(forID:)` reads it so a board-minted lens id
-    /// `section:<declOrder>:<label>` resolves against the SELECTED board's
-    /// section list (what `FilterProjection` enumerated to mint it), not the
-    /// flat list. Pushed by the Controller via `setSelectedBoard` whenever the
-    /// board changes. An absent ordinal ⇒ board 0 — the flat-degrade default,
-    /// so a flat config (which never pushes) resolves byte-identically.
-    /// Touched only on `cliQueue` (the `setSelectedBoard` write and the
-    /// `lensSection` reads — via `setSectionLens` / reconcile — are all serial
-    /// there), so no lock is needed (mirrors `trustedNew`).
-    var selectedBoardByOrdinal: [Int: Int] = [:]
 
     /// Cap on `classifyNewWindows`'s per-refresh AX probes. The
     /// role check costs ~3 AX round-trips per window (window
@@ -657,8 +651,9 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
               config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
         else { return }
 
-        // Clear — drop the lens authority. Nothing was parked, so there is
-        // nothing to restore or re-tile.
+        // Clear — drop the lens authority. The `.refreshNeeded` below drives
+        // a reconcile; on a plain (non-lens) desktop `applyIsolatePark`'s gate
+        // is off there, so anything still isolate-parked unparks.
         guard let id else {
             guard catalog.activeSectionLens != nil else { return }
             catalog.activeSectionLens = nil
@@ -686,18 +681,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         syncSectionLensMirror()
         Log.debug("native: setSectionLens \"\(id)\" (view-only)")
         eventContinuation.yield(.refreshNeeded)
-    }
-
-    /// `WindowBackend`: mirror the Controller's session-selected board so
-    /// `lensSection(forID:)` resolves board-minted lens ids against the right
-    /// section list (t-wrd2 / W2.5-adapter). A synchronous write on `cliQueue`
-    /// (NOT re-dispatched) so a caller that pushes the board then activates the
-    /// board's lens in the SAME `runBackendCommand` closure sees the update
-    /// before `setSectionLens` resolves the id. Display-only — never moves a
-    /// window.
-    public func setSelectedBoard(_ board: Int, forMacDesktopOrdinal ordinal: Int) {
-        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
-        selectedBoardByOrdinal[ordinal] = board
     }
 
     /// 2-b defocus: when the destination WS is empty, push the

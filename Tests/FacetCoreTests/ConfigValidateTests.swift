@@ -132,22 +132,6 @@ struct ConfigValidateTests {
         }, "`[desktop.0]` should be reported; got \(errors.map(\.rule))")
     }
 
-    /// A nested `[[desktop.N.tab.section]]` child is also strictly validated
-    /// (the value shape is shared with flat sections).
-    @Test func desktopTabSectionUnknownKeyIsReported() throws {
-        let errors = try FacetConfig.validate("""
-        [[desktop.1.tab]]
-        type = "workspace"
-        label = "Code"
-        [[desktop.1.tab.section]]
-        bogus = 1
-        """)
-        #expect(errors.contains {
-            if case .unknownKey(let k) = $0.rule { return k == "bogus" }
-            return false
-        }, "tab.section is strict too; got \(errors.map(\.rule))")
-    }
-
     // MARK: - A1: schema warnings recorded on the LOAD path (data-on-config)
 
     /// A schema violation surfaces on the LENIENT load path as a recorded

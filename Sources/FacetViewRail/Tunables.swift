@@ -85,24 +85,6 @@ let railHeaderTwoLineMinH: CGFloat = 26
 // = more sensitive (fewer points to advance one workspace). Tune to taste.
 let railScrollStep: CGFloat = 30
 
-// -- Board switcher band (t-wrd2): a thin HORIZONTAL tab row, glued to the
-//    strip's outer side for top/bottom, at the screen TOP for left/right
-//    (a horizontal band can't glue to a vertical side strip). --
-/// Band thickness (height) as a fraction of the short screen edge, clamped —
-/// lands near the tree band's 30 pt so the chrome reads consistently.
-let railBoardBandFrac: CGFloat = 0.030
-let railBoardBandMinThick: CGFloat = 26
-let railBoardBandMaxThick: CGFloat = 40
-/// Tab caption font + horizontal padding inside each tab (→ intrinsic width).
-let railBoardFontSize: CGFloat = 12
-let railBoardPadX: CGFloat = 10
-/// Gap between adjacent tabs + the band's left/right content inset.
-let railBoardGap: CGFloat = 4
-let railBoardInnerPad: CGFloat = 12
-/// Active-tab pill corner radius.
-let railBoardRadius: CGFloat = 6
-// Scroll-wheel points per board step: shared with the tree band via FacetView's
-// `boardBandWheelStep` (both bands mirror) — no separate rail copy (t-9amp / R1).
 
 /// Centred label size on an empty-WS swap ghost.
 let railGhostLabelSize: CGFloat = 22

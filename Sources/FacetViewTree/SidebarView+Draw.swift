@@ -343,6 +343,8 @@ extension SidebarView {
                                       sel ? .semibold : .regular),
                         // Dim a hidden (Cmd+H/Cmd+M'd) row, but keep a selected
                         // row at full strength so the highlight stays legible.
+                        // (Isolate-parked rows show at full strength — t-c6fm:
+                        // the tree is an inventory, not a screen mirror.)
                         .foregroundColor: (sel ? pal.primary : pal.foreground)
                             .withAlphaComponent(
                                 c.isHidden && !sel ? 0.45 : 1.0),

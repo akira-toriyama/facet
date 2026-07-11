@@ -158,110 +158,6 @@ extension FacetConfig {
         return out
     }
 
-    /// Build the per-mac-desktop `[[desktop.N.tab]]` map from the raw TOML text
-    /// (the board model, t-wrd2 — the nesting-aware sibling of
-    /// `decodeDesktopSectionSections`). Each tab block is `[[desktop.<N>.tab]]`
-    /// (`N` = Mission Control ordinal ≥ 1) with a required `type` of
-    /// `workspace` / `lens` (an absent / unknown / `unassigned` tab type DROPS
-    /// the whole tab, LOUD) + an optional `label`. Its nested
-    /// `[[desktop.N.tab.section]]` children carry NO `type` — each INHERITS the
-    /// tab's type, then runs through `DesktopSection.parse` so the per-type
-    /// field rules (t-qtpx) re-apply at the inheritance seam. A child marked
-    /// `unassigned = true` is the per-tab lost-and-found receptacle — it decodes
-    /// to a `.unassigned` section regardless of the parent type; at most one per
-    /// tab (a 2nd is dropped, LOUD). Tab + section order is file order. ADDITIVE
-    /// / no consumer yet — read through `effectiveMacDesktopTabConfigs`. Disjoint
-    /// from `decodeDesktopSectionSections` (the two read different headers).
-    public static func decodeDesktopTabs(fromTOML text: String)
-        -> [Int: [DesktopTab]]
-    {
-        var out: [Int: [DesktopTab]] = [:]
-        let grouped = parseTOMLNestedTabs(text)
-        for ordinal in grouped.keys.sorted() {
-            guard let rawTabs = grouped[ordinal] else { continue }
-            var tabs: [DesktopTab] = []
-            for (ti, raw) in rawTabs.enumerated() {
-                // A tab's `type` is REQUIRED and may only be workspace / lens —
-                // an absent / unknown / `unassigned` one DROPS the whole tab
-                // (LOUD), never a silent clamp (it would mis-route every child).
-                guard case .string(let rawType)? = raw.tab["type"],
-                      let parentType = SectionType(rawValue: rawType.lowercased()),
-                      parentType == .workspace || parentType == .lens
-                else {
-                    Log.line("config: [[desktop.\(ordinal).tab]] #\(ti + 1): "
-                        + "missing / invalid `type` (expected workspace / lens) "
-                        + "— dropping tab")
-                    continue
-                }
-                let label: String = {
-                    if case .string(let s)? = raw.tab["label"] { return s }
-                    return ""
-                }()
-                // Each child INHERITS the parent type (children carry no `type`)
-                // — the inherited type is injected into the row so
-                // `DesktopSection.parse` re-applies the per-type field rules
-                // (t-qtpx) at the seam. A child marked `unassigned = true` is the
-                // per-tab lost-and-found receptacle (W2.6): it STILL inherits the
-                // parent type (the preserved `unassigned` key drives `parse`'s
-                // marker branch), and at most one per tab is honoured (a 2nd is
-                // dropped LOUD).
-                var sections: [DesktopSection] = []
-                var sawUnassigned = false
-                for (si, childRow) in raw.sections.enumerated() {
-                    var injected = childRow
-                    injected["type"] = .string(parentType.rawValue)
-                    if case .bool(true)? = childRow["unassigned"] {
-                        if sawUnassigned {
-                            Log.line("config: [[desktop.\(ordinal).tab.section]] "
-                                + "#\(si + 1): a tab may have at most one "
-                                + "`unassigned = true` section — dropping this one")
-                            continue
-                        }
-                        sawUnassigned = true
-                    }
-                    let (section, note) = DesktopSection.parse(fromTOMLRow: injected)
-                    if let note {
-                        Log.line("config: [[desktop.\(ordinal).tab.section]] "
-                            + "#\(si + 1): \(note)")
-                    }
-                    if let section { sections.append(section) }
-                }
-                // §A: within ONE tab a non-empty section label must be unique
-                // (its addressing handle) — first-wins, loud. Empty labels repeat.
-                sections = dedupByLabel(sections, label: \.label) { s in
-                    Log.line("config: [[desktop.\(ordinal).tab.section]]: duplicate "
-                        + "label \"\(s.label)\" — keeping first, dropping this section")
-                }
-                tabs.append(DesktopTab(type: parentType, label: label,
-                                       sections: sections))
-            }
-            // §A: within ONE mac desktop a non-empty tab label must be unique
-            // (the `facet board --focus "label"` handle) — first-wins, loud.
-            tabs = dedupByLabel(tabs, label: \.label) { t in
-                Log.line("config: [[desktop.\(ordinal).tab]]: duplicate label "
-                    + "\"\(t.label)\" — keeping first, dropping this tab")
-            }
-            if !tabs.isEmpty { out[ordinal] = tabs }
-        }
-        return out
-    }
-
-    /// Drop later entries whose NON-EMPTY label repeats (first-wins, loud);
-    /// empty labels may repeat. The §A uniqueness rule, reused for both tabs
-    /// (unique per mac desktop) and a tab's sections (unique per tab).
-    private static func dedupByLabel<T>(
-        _ items: [T], label: (T) -> String, onDrop: (T) -> Void
-    ) -> [T] {
-        var seen: Set<String> = []
-        var kept: [T] = []
-        for item in items {
-            let l = label(item)
-            if !l.isEmpty, !seen.insert(l).inserted { onDrop(item); continue }
-            kept.append(item)
-        }
-        return kept
-    }
-
     /// Build `[Rule]` from the raw TOML text's `[[rule]]` array-of-tables
     /// (the Phase 3 adopt-rules — #282/#286). Each table: `match` (a facet
     /// filter WHERE-clause string) + the FLAT apply keys (`workspace` /
@@ -280,6 +176,34 @@ extension FacetConfig {
             let apply = ApplyOp.list(from: .table(t))
             return apply.isEmpty ? nil : Rule(match: match, apply: apply)
         }
+    }
+
+    /// Build the per-mac-desktop `[desktop.N]` typed-table map from the raw TOML
+    /// text (board abolition, t-0sbm). Each `[desktop.<N>]` is a SINGLE table
+    /// (`N` = Mission Control ordinal ≥ 1) carrying `type` (workspace / lens) +
+    /// `label`, plus lens-only `match` / `layout` / `show-non-matching`. Read from
+    /// the FLAT `parseTOMLSubset` map keyed by the literal header text
+    /// `desktop.<N>` (a single table, so it lands in `.tables`, NOT the
+    /// array-of-tables `.arrays` the section/tab decoders read). A table with an
+    /// absent / unknown `type`, or a lens missing `match`, is DROPPED LOUD.
+    /// Successor to the retired `[[desktop.N.tab]]` board decode.
+    public static func decodeDesktopTables(fromTOML text: String)
+        -> [Int: DesktopMeta]
+    {
+        var out: [Int: DesktopMeta] = [:]
+        for (header, row) in parseTOMLSubset(text) {
+            // Match EXACTLY `desktop.<N>` — one dotted level, ordinal ≥ 1. Skip
+            // the top-level scope (`""`), other `[section]` blocks, and any
+            // deeper `desktop.N.foo` header (arrays live elsewhere anyway).
+            guard header.hasPrefix("desktop.") else { continue }
+            let mid = header.dropFirst("desktop.".count)
+            guard !mid.contains("."), let ordinal = Int(mid), ordinal >= 1
+            else { continue }
+            let (meta, note) = DesktopMeta.parse(fromTOMLRow: row)
+            if let note { Log.line("config: [desktop.\(ordinal)]: \(note)") }
+            if let meta { out[ordinal] = meta }
+        }
+        return out
     }
 
     // MARK: - Disk
@@ -390,17 +314,28 @@ extension FacetConfig {
         if !rules.isEmpty { c.exclusionRules = rules }
         let sections = decodeDesktopSectionSections(fromTOML: text)
         if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
-        let tabs = decodeDesktopTabs(fromTOML: text)
-        if !tabs.isEmpty { c.macDesktopTabConfigs = tabs }
-        // N1: a desktop declaring BOTH `[[desktop.N.section]]` and
-        // `[[desktop.N.tab]]` is ambiguous — boards win and the flat
-        // sections are shadowed (see `effectiveMacDesktopSectionConfigs`).
-        // Warn loudly once so the dropped flat block isn't a silent
-        // surprise (it would otherwise look configured but never render).
-        for ordinal in tabs.keys.sorted() where sections[ordinal] != nil {
-            Log.line("config: desktop \(ordinal) declares both "
-                + "[[desktop.\(ordinal).section]] and [[desktop.\(ordinal).tab]]"
-                + " — boards win; the flat section block is ignored")
+        let metas = decodeDesktopTables(fromTOML: text)
+        if !metas.isEmpty { c.macDesktopMetaConfigs = metas }
+        // Migration guard: `[[desktop.N.tab]]` boards were RETIRED (t-0sbm)
+        // and no longer decode. Without this warn a leftover tab-only config
+        // would silently flip facet from opt-in (that ordinal only) to the
+        // manage-every-desktop default. Loud, once per ordinal, every load.
+        for header in parseTOMLArraysOfTables(text, where: {
+            $0.hasPrefix("desktop.") && $0.hasSuffix(".tab")
+        }).keys.sorted() {
+            Log.line("config: [[\(header)]] — boards were retired (t-0sbm) "
+                + "and this block is IGNORED; type the desktop with "
+                + "[desktop.N] and/or [[desktop.N.section]] instead")
+        }
+        // A `type = "lens"` desktop has no sections — warn if it ALSO declares
+        // `[[desktop.N.section]]` (they're ignored; the desktop-lens uses its
+        // single `match`). `desktopType` resolves the explicit meta first, so the
+        // stray sections never render — this is purely a loud heads-up.
+        for ordinal in metas.keys.sorted()
+        where metas[ordinal]?.type == .lens && sections[ordinal] != nil {
+            Log.line("config: desktop \(ordinal) is type=lens but also declares "
+                + "[[desktop.\(ordinal).section]] — a lens desktop has no sections;"
+                + " ignoring them")
         }
         let adoptRules = decodeRuleSections(fromTOML: text)
         if !adoptRules.isEmpty { c.rules = adoptRules }
