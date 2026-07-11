@@ -72,12 +72,10 @@ extension Controller {
                 // is 1-based → +1. autoFocus → the WS's last-touched window.
                 self.activateSection(.workspace(ws + 1), autoFocus: true)
             case .lens(let sectionID):
-                // §A: the pick carries the stable section id (`ProjectedSection.id`)
-                // straight from the live-rendered cell — route to the id-core,
-                // no ambiguous label→id lookup.
-                self.activateLensID(sectionID,
-                                    ordinal: self.currentMacDesktopOrdinal(),
-                                    autoFocus: true)
+                // Since the section-lens ACTIVATE concept was retired (t-ec9s), a
+                // lens cell focuses its FIRST window like the unassigned
+                // receptacle — membership is match-driven, not activatable.
+                self.focusFirstWindow(inSectionID: sectionID)
             case .unassigned(let sectionID):
                 // §G: an unassigned cell focuses its FIRST orphan window — no
                 // lens toggle, no workspace switch (the unified focus helper,

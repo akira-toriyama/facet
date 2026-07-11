@@ -349,38 +349,6 @@ struct WorkspaceCatalog {
     /// `forgetWindow`.
     var isolateParked: Set<WindowID> = []
 
-    // MARK: - Section-lens state (tag-unification Phase 1)
-
-    /// The active section-lens's `label` (a `type="lens"`
-    /// `[[desktop.N.section]]`), or nil for no active lens. The AUTHORITY for
-    /// the lens — held here (not in the view) so the continuous re-park, which
-    /// runs on `cliQueue` in `refreshCatalog`, can read it; the view's
-    /// `currentActiveSection` is a highlight read-back of this (via the
-    /// `activeSection` derivation + the adapter mirror). The match
-    /// EVALUATION lives adapter-side (the catalog has no live
-    /// `appName`/`title`), so the catalog stores only the opaque **section id**
-    /// (`"section:<declOrder>:<label>"`, A0); the adapter resolves the id → its
-    /// section → `match` against its config. A lens is a pure VIEW (t-0021):
-    /// activating one changes only what the tree/grid/rail DISPLAY (the matched
-    /// windows, via `FilterProjection`) — it never moves a real window.
-    /// Session-only, and per-mac-desktop for free (this whole catalog is swapped
-    /// per mac desktop).
-    var activeSectionLens: String?
-
-    /// The single active-section concept (EX-1): a lens when one is active,
-    /// else the active workspace. DERIVED — `activeSectionLens` / `activeIndex`
-    /// stay the load-bearing stored fields (the XOR is enforced by `setActive`
-    /// nulling the lens, EX-0.4). The derivation is the final shape: EX-3/EX-4
-    /// shipped without collapsing the two into one stored field — enforcing the
-    /// XOR at the single write (`setActive`) is cheaper than maintaining a
-    /// redundant combined field.
-    /// Read by the adapter mirror (`syncSectionLensMirror`) to drive the
-    /// Controller's single active-section highlight. `activeIndex` is already
-    /// 1-based, matching `ActiveSection.workspace`, so no conversion here.
-    var activeSection: ActiveSection {
-        activeSectionLens.map(ActiveSection.lens) ?? .workspace(activeIndex)
-    }
-
     init() {}
 
     // MARK: - Dynamic workspace set (seed + mutate)
@@ -564,9 +532,6 @@ struct WorkspaceCatalog {
     mutating func setActive(_ n1Based: Int, in rect: CGRect = .zero) -> SwitchPlan? {
         guard isValid(n1Based), n1Based != activeIndex else { return nil }
         let old = activeIndex
-        // Drop the lens authority on a workspace switch (EX-0.4). A lens is a
-        // pure VIEW — nothing was parked, so there is nothing to lift.
-        activeSectionLens = nil
         activeIndex = n1Based
         previousActiveIndex = old
         // Sticky windows stay on-screen across the switch (they're

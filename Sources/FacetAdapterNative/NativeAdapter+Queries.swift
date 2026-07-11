@@ -161,44 +161,6 @@ extension NativeAdapter {
                 }
             }
         }
-        // EX-3.3 (canon ④⑨ "新規窓 = 開いた世界の apply を継ぐ・必ず見える"): a
-        // window launched while a section-lens is active inherits that lens's
-        // FORWARD `apply` ops so it JOINS the lens — once it carries the lens's
-        // tags it re-projects into the lens DISPLAY (a lens is a pure VIEW,
-        // t-0021: nothing is parked). The full forward set is applied (tags +
-        // floating/sticky/master), so a window auto-joining lands in the same
-        // facet state as one dragged into the section; `setWorkspace` is the one
-        // op stripped — the window keeps `workspace = activeIndex` (D-A: never an
-        // orphan-on-birth — orphans arise only from an explicit DnD move). Only
-        // the freshly-adopted ids are touched (not existing windows), and the
-        // catalog setters are idempotent. An apply-less / wholly-stripped
-        // pure-condition lens that a new window doesn't match leaves it in its
-        // home WS (declared gap).
-        if !result.addedIDs.isEmpty {
-            let inheritOps = activeSectionLensApplyForward()
-            if !inheritOps.isEmpty {
-                for id in result.addedIDs {
-                    for op in inheritOps {
-                        switch op {
-                        case .addTag(let t):
-                            _ = catalog.addTagToWindow(id, name: t)
-                        case .setFloating(let b):
-                            _ = catalog.setFloating(id, b, focused: focused, in: rect)
-                        case .setSticky(let b):
-                            _ = catalog.setSticky(id, b, focused: focused, in: rect)
-                        case .setMaster(let b):
-                            _ = catalog.setMaster(id, b, workspace: catalog.activeIndex)
-                        // removeTag is never config-authored; setWorkspace is
-                        // stripped upstream (keep `workspace = activeIndex`).
-                        case .removeTag, .setWorkspace:
-                            break
-                        }
-                    }
-                }
-                Log.debug("native: new-window lens-inherit ops=\(inheritOps.count) "
-                    + "windows=\(result.addedIDs.count)")
-            }
-        }
         // Mechanism ② (auto-heal orphan slivers): a window left parked in a
         // display's bottom-right corner by a PREVIOUS (crashed) facet run is
         // adopted on relaunch / desktop switch but isn't in THIS session's
@@ -212,12 +174,6 @@ extension NativeAdapter {
         if result.added > 0 || macDesktopSwapped {
             healOrphanSlivers(live: live, visibleRect: rect)
         }
-        // Section-lens (t-0021): a lens on a workspace desktop is a pure VIEW
-        // — nothing to re-park on reconcile; a window that opens / whose match
-        // flips while such a lens is active simply re-projects (display) on the
-        // next snapshot. Keep the main-readable mirror in lock-step (covers a
-        // mac-desktop swap that restored a desktop whose lens persists).
-        syncSectionLensMirror()
         // A lens DESKTOP (`[desktop.N] type=lens`, always-on — t-0sbm) re-parks
         // the desktop's out-of-lens windows so the screen declutters to the
         // matched set, tiled with the lens's `layout`. Derived from `match`
@@ -475,19 +431,6 @@ extension NativeAdapter {
     /// the desktop's declared section list — the SAME array `FilterProjection`
     /// enumerated to mint the id — read from the LIVE config so a hot-reload is
     /// picked up immediately.
-    func lensSection(forID id: String) -> DesktopSection? {
-        let sections = config.desktopSections(
-            forMacDesktopOrdinal: activeMacDesktopOrdinal)
-        return ApplyResolver.section(forSectionID: id, in: sections)
-    }
-
-    /// The DesktopSection of the ACTIVE section-lens (`catalog.activeSectionLens`
-    /// holds its id, A0), or `nil` when no lens is active / its id no longer
-    /// resolves. The single read all the lens-config queries below share.
-    func activeLensSection() -> DesktopSection? {
-        catalog.activeSectionLens.flatMap(lensSection(forID:))
-    }
-
     /// Desktop-lens always-on park (t-0sbm, on the t-c6fm machinery). On a
     /// `[desktop.N] type=lens` mac desktop, anchor-park the OUT-of-lens windows
     /// so the screen declutters to just the lens's matched set (dwm-style),
@@ -562,24 +505,6 @@ extension NativeAdapter {
             Log.debug("native: setLensDesktopMatch ord=\(ordinal) → revert config")
         }
         eventContinuation.yield(.refreshNeeded)
-    }
-
-    /// EX-3.3: the FORWARD `apply` ops in the ACTIVE section-lens (canon ④⑨ — a
-    /// window launched while this lens is active inherits these so it joins the
-    /// lens in the SAME facet state as one dragged in). Everything the section's
-    /// `apply` carries EXCEPT `setWorkspace`, which is stripped so the new window
-    /// keeps `workspace = activeIndex` (D-A: never an orphan-on-birth). This
-    /// mirrors the DnD forward set (`ApplyResolver` strips `setWorkspace`;
-    /// `removeTag` is never config-authored). `[]` when no lens is active or the
-    /// section has an empty / wholly-stripped `apply` (a pure-condition lens —
-    /// the new window can't be made to match, declared gap). Resolved against the
-    /// LIVE config so a hot-reload is honoured (mirrors `activeLensSection()`).
-    func activeSectionLensApplyForward() -> [ApplyOp] {
-        guard let section = activeLensSection() else { return [] }
-        return section.apply.filter {
-            if case .setWorkspace = $0 { return false }
-            return true
-        }
     }
 
     /// The active `[[rule]]` adopt-rules with their `match` compiled to a
@@ -822,10 +747,8 @@ extension NativeAdapter {
     {
         let rules = config.effectiveExclusionRules
         let normalLevel = Int(CGWindowLevelForKey(.normalWindow))
-        // New windows start with no tags (the `tags` map stays empty). A
-        // window opened while a `type="lens"` section is active inherits that
-        // lens's forward `apply` later in `refreshCatalog`
-        // (`activeSectionLensApplyForward`), so no per-window seed is needed here.
+        // New windows start with no tags (the `tags` map stays empty); a
+        // `[[rule]]` match→tag adopt-rule may add some later in `refreshCatalog`.
         // The probe below is built for the `[[exclude]]` action lookup, the
         // sole consumer of the resolved AX role/subrole now that `[[assign]]`
         // is retired (#191).

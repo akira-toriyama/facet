@@ -543,13 +543,11 @@ extension SidebarView {
             let ctrl = controller
             cliQueue.async {
                 if needSwitch {
-                    // EX-1: same activateSection seam as the header click (clears
-                    // any active lens via the throughline). `autoFocus: false`
-                    // because focusWindow below focuses the explicit target —
-                    // `needSwitch` guarantees a different WS so the same-index
-                    // edge is unreachable here (behaviour-identical to the old
-                    // switchWorkspace). `i` 0-based → `i + 1` (1-based enum).
-                    bk.activateSection(.workspace(i + 1), autoFocus: false)
+                    // Switch to the clicked row's workspace. `autoFocus: false`
+                    // because focusWindow below focuses the explicit target.
+                    // `i` is 0-based (Workspace.index); switchWorkspace takes
+                    // 0-based.
+                    bk.switchWorkspace(toIndex: i, autoFocus: false)
                 }
                 if hidden {
                     bk.revealWindow(id)

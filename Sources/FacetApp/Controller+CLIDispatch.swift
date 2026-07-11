@@ -527,11 +527,12 @@ extension Controller {
     /// `Controller.reorderSection`'s two-mode handling so `--focus N` matches
     /// the numbers the user sees.
     private func addressableSections() -> [SectionAddr] {
-        // A lens DESKTOP's `.lens` section is match-synthesized (no activation
-        // concept — membership is `match`), so `--focus` focuses its first
-        // window like the unassigned receptacle (D5). A config section-lens on a
-        // workspace desktop (removed by Phase 4) still activates by id.
-        let onLensDesktop = config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens
+        // Since the section-lens ACTIVATE concept was retired (t-ec9s), only a
+        // workspace section has something to switch to. A `.lens` section (a
+        // lens desktop's match-synthesized section) and a `.unassigned`
+        // receptacle both FOCUS THEIR FIRST window (membership is match-driven /
+        // by-subtraction, not activatable) — `dispatchSectionFocus` routes a
+        // `nil` section with a non-nil id to `focusFirstWindow`.
         if !lastSections.isEmpty {
             return lastSections.map { ps in
                 switch ps.sectionType {
@@ -541,19 +542,7 @@ extension Controller {
                     return SectionAddr(label: ps.label,
                         section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) },
                         sectionID: ps.id)
-                case .lens where onLensDesktop:
-                    // Lens desktop: focus-first-window (no `.lens` activation).
-                    return SectionAddr(label: ps.label, section: nil,
-                                       sectionID: ps.id)
-                case .lens:
-                    // A0: identity = the stable id; `--focus index:N` activates
-                    // by id. `label:NAME` addressing stays label-based (display).
-                    return SectionAddr(label: ps.label, section: .lens(ps.id),
-                                       sectionID: ps.id)
-                case .unassigned:
-                    // §G: no workspace/lens behind it → `section: nil`, but the
-                    // stable id lets `dispatchSectionFocus` focus its FIRST
-                    // WINDOW instead of erroring (the unified focus helper).
+                case .lens, .unassigned:
                     return SectionAddr(label: ps.label, section: nil,
                                        sectionID: ps.id)
                 }
@@ -914,102 +903,12 @@ extension Controller {
         markConfigDirty()   // t-hdxb: persist the lens match (set OR revert)
     }
 
-    /// Section/lens model (PR6): set the ACTIVE lens to the `type="lens"`
-    /// section labelled `label`, or clear it with `nil`. Session-only +
-    /// per-mac-desktop (reset on a swap, never persisted). Validated against
-    /// the LIVE section config — an unknown label is loud-but-non-fatal
-    /// (`setError`, no change), matching facet's typo philosophy. On a real
-    /// change it re-renders so the lens's tree header lights up (`pal.primary`)
-    /// — grid/rail narrowing by the active lens lands in PR7.
-    ///
-    /// Tag-unification Phase 1: the active section-lens is now a REAL hide,
-    /// driven by the backend (the catalog is the authority). This validates
-    /// the label against the LIVE section config (nice error messages),
-    /// A0-resolves it to the stable section id, then hands the id to
-    /// `activateLensID` (the id-core: optimistically lights the tree header +
-    /// routes through `backend.activateSection` on `cliQueue`, where the catalog
-    /// gathers the matching windows + parks the rest). `currentActiveSection` is
-    /// the view's highlight mirror — set optimistically to `.lens(id)` and read
-    /// back from the catalog on a mac-desktop swap / WS switch (`apply()`). A
-    /// `nil` CLEAR returns the active section to the spatial workspace
-    /// (`.workspace(N)`) and routes through `setSectionLens(nil)` (a clear is a
-    /// deactivation, not a switch). `autoFocus`: the CLI / hotkey path passes
-    /// `true`; the in-panel tree lens-header toggle passes `false`.
-    func setActiveLens(_ label: String?, autoFocus: Bool = false) {
-        guard let label else {
-            if case .lens = currentActiveSection {
-                currentActiveSection = .workspace(activeWSIndex(in: lastWorkspaces))
-                runBackendCommand { bk in
-                    bk.setSectionLens(nil, autoFocus: autoFocus); return nil
-                }
-                apply(lastWorkspaces)        // re-render: drop the highlight
-            }
-            return
-        }
-        // Read the ordinal FRESH (not the cached lastRenderedMacDesktopOrdinal):
-        // validation must check the mac desktop on screen NOW, and syncing the
-        // swap-detector to this same value below stops the apply() call from
-        // mistaking this command for a swap and wiping the just-set lens.
-        let ordinal = currentMacDesktopOrdinal()
-        guard config.isSectionModelActive(ordinal: ordinal) else {
-            setError("lens \(label): no section model on this mac desktop")
-            scheduleReconcile(after: 0.05)      // surface lastError via status
-            return
-        }
-        let lenses = lensSectionLabels(ordinal: ordinal)
-        guard lenses.contains(label) else {
-            let have = lenses.isEmpty ? "none" : lenses.joined(separator: ", ")
-            setError("lens \(label): no such lens section (have: \(have))")
-            scheduleReconcile(after: 0.05)      // surface lastError via status
-            return
-        }
-        // A0: the human label is identity-decoupled now — resolve it to the
-        // stable section id (1:1 while labels are unique), then activate by id.
-        // A nil id is defensive (validated above, so it shouldn't happen).
-        guard let id = lensID(forLabel: label, ordinal: ordinal) else {
-            setError("lens \(label): no such lens section")
-            scheduleReconcile(after: 0.05)
-            return
-        }
-        activateLensID(id, ordinal: ordinal, autoFocus: autoFocus)
-    }
-
-    /// A0 id-core: activate the lens with the resolved stable `id` — no label
-    /// lookup. The label-validating entry is `setActiveLens` (`facet lens NAME`
-    /// / view picks); the CLI `--focus index:N` path reaches here via
-    /// `activateSection(.lens(id))`. Idempotent — `.workspace(N) != .lens(id)`
-    /// structurally, so a re-activation after a WS switch (which cleared the
-    /// lens) is never swallowed (the EX-0.5 double-SSOT bug, fixed at the root
-    /// by EX-1).
-    func activateLensID(_ id: String, ordinal: Int?, autoFocus: Bool) {
-        guard currentActiveSection != .lens(id) else { return }
-        currentActiveSection = .lens(id)
-        // Sync the swap-detector to the ordinal so the synchronous apply() below
-        // (same desktop, no main-actor suspension) sees no ordinal change and
-        // keeps the lens.
-        hasRenderedMacDesktop = true
-        lastRenderedMacDesktopOrdinal = ordinal
-        runBackendCommand { bk in
-            bk.activateSection(.lens(id), autoFocus: autoFocus); return nil
-        }
-        apply(lastWorkspaces)                // re-render: light up its header
-    }
-
-    /// EX-1 Controller-side activation throughline: route to the validated
-    /// per-kind entry — lens → `setActiveLens` (label lookup, idempotent guard,
-    /// section-model gate); workspace → `dispatchWorkspace` (P6 range check).
-    /// Both ultimately reach `backend.activateSection`. The user-facing single
-    /// `facet section` verb is EX-4; here it is the internal seam the CLI
-    /// dispatch and (in EX-2) grid/rail clicks funnel through.
+    /// Controller-side activation throughline: a section activation is now
+    /// always a workspace switch (the section-lens ACTIVATE concept was retired,
+    /// t-ec9s). Kept as the one seam the CLI dispatch + grid/rail clicks funnel
+    /// through so the workspace-switch path has a single home.
     func activateSection(_ section: ActiveSection, autoFocus: Bool = true) {
         switch section {
-        // A0: `.lens` now carries the resolved stable id (e.g. from
-        // `addressableSections` / `--focus index:N`), so route straight to the
-        // id-core — no label round-trip. The label-validating entry is
-        // `setActiveLens` (the CLI `facet lens NAME`); §A: grid/rail/tree view
-        // picks now carry the stable id and call `activateLensID` directly.
-        case .lens(let id):     activateLensID(id, ordinal: currentMacDesktopOrdinal(),
-                                               autoFocus: autoFocus)
         case .workspace(let n): dispatchWorkspace(n, autoFocus: autoFocus)
         }
     }
@@ -1032,19 +931,6 @@ extension Controller {
     /// `--focus N` path wants `true`; a caller that focuses its own target
     /// afterward (the tree window-row click) passes `false`.
     private func dispatchWorkspace(_ n: Int, autoFocus: Bool = true) {
-        // Reflect the activation in the view mirror UP-FRONT so it never goes
-        // stale when the backend clears a lens WITHOUT a `wsSwitched` read-back —
-        // the same-index-clear path (`--focus` / click the ALREADY-active
-        // workspace while a lens is active): the backend clears the lens, but
-        // `apply()` sees no switch, so without this the mirror keeps a dead
-        // `.lens(…)` and the next `lens NAME` is swallowed by the idempotent
-        // guard (found in EX-1 host-verify — the EX-0.5 bug class via a new
-        // path). In-range guard against the main-actor snapshot so a stale /
-        // out-of-range `n` doesn't set a bogus `.workspace(N)`; the authoritative
-        // range check + error stay inside the closure.
-        if n >= 1, n <= lastWorkspaces.count {
-            currentActiveSection = .workspace(n)
-        }
         // P6: the range check reads `workspaces()` (which runs the catalog
         // reconcile) and the switch mutates it — both must happen in ONE
         // cliQueue block so a poll reconcile can't interleave between them.
@@ -1057,11 +943,9 @@ extension Controller {
             // CLI `workspace --focus N`: no explicit window pick, so the
             // backend auto-focuses the last-touched window of the destination
             // (or activates Finder if empty) when `autoFocus`. See memory
-            // [[facet-ws-switch-focus-management]]. EX-1: route through the
-            // activateSection throughline (clears any active lens). NOT
-            // optimistic — the highlight updates via the apply() read-back on
-            // the reconcile (wsSwitched). `n` is 1-based (range-checked above).
-            bk.activateSection(.workspace(n), autoFocus: autoFocus)
+            // [[facet-ws-switch-focus-management]]. `n` is 1-based (range-checked
+            // above); the backend takes 0-based.
+            bk.switchWorkspace(toIndex: n - 1, autoFocus: autoFocus)
             return nil
         }
     }

@@ -65,11 +65,6 @@ final class Controller: NSObject {
     /// all three views agree. Empty/nil ⇒ section model off here ⇒ the
     /// overview degrades to `lastWorkspaces`. Snapshot-on-show seeds from these.
     var lastSections: [ProjectedSection] = []
-    /// §A: the active lens's stable section id (`ProjectedSection.id`), fed to
-    /// all three views as the single-highlight key. Keyed on the id, not the
-    /// display label, so a non-unique / empty lens label can't light the wrong
-    /// cell. Display labels still come from each cell's own `label`.
-    var lastActiveLensID: String?
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -90,9 +85,9 @@ final class Controller: NSObject {
     /// Same lifetime as `macDesktopSectionOrder`: per-mac-desktop, non-
     /// persisted, a relaunch resets to config order. Keyed on the FULL stable
     /// id (not declOrder alone) so a config edit that changes declOrder/label
-    /// naturally orphans a stale override (the self-heal `activeSectionLens`
-    /// uses); a reorder leaves the id unchanged so the override follows its
-    /// section. Workspace labels live in the catalog (`workspaceNames`), so a
+    /// naturally orphans a stale override; a reorder leaves the id unchanged so
+    /// the override follows its section. Workspace labels live in the catalog
+    /// (`workspaceNames`), so a
     /// workspace rename routes to `renameWorkspace` and never lands here.
     var sectionLabelOverride: [Int: [String: String]] = [:]
     /// t-0020: the session-only runtime `match` override per mac desktop — the
@@ -175,22 +170,6 @@ final class Controller: NSObject {
     /// only on the static config — so log them once per change, not once per
     /// frame.
     private var loggedSectionDiagnostics: [String] = []
-    /// Section/lens model (EX-1): the session-only ACTIVE SECTION — a
-    /// `type="lens"` section the user activated (`.lens(id)`, A0: keyed by the
-    /// stable section id) or the active workspace (`.workspace(index)`), exactly
-    /// one at a time. This is the VIEW's highlight MIRROR (emphasises the active
-    /// section's tree header in `pal.primary`); the real state — the
-    /// cross-workspace anchor-park + the active workspace — lives in the catalog,
-    /// which is the authority. Set optimistically (lens) via `setActiveLens` →
-    /// `activateLensID`; `apply()` re-reads it from `backend.currentActiveSection()`
-    /// (the authority) whenever the active section context shifts (a mac-desktop
-    /// swap reads BACK the destination's persisted section; a facet-workspace
-    /// switch reads back the now-cleared lens → `.workspace(N)`, EX-0.4). Carrying
-    /// the workspace index (not just a lens `String?`) is what resolves the EX-0.5
-    /// double-source-of-truth: the idempotent guard `currentActiveSection != .lens(id)`
-    /// can never stale-swallow a re-activation because `.workspace(N) != .lens(id)`
-    /// structurally.
-    var currentActiveSection: ActiveSection = .workspace(1)
 
     /// The **1-based** index of the active workspace from the latest snapshot,
     /// or 1. ⚠️ `Workspace.index` is **0-based** (snapshot seam:
@@ -202,12 +181,8 @@ final class Controller: NSObject {
         (wss.first(where: { $0.isActive })?.index ?? 0) + 1
     }
     /// Whether `apply()` has rendered at least once, and the mac-desktop
-    /// ordinal it last rendered — together they detect a mac-desktop swap so
-    /// `currentActiveSection` resets. The first render only records the ordinal
-    /// (no clear), so a lens activated between renders survives.
-    /// Internal (not private) so `setActiveLens` can sync them before its
-    /// synchronous `apply()` (keeping a just-set active lens from being read as
-    /// a mac-desktop swap and wiped).
+    /// ordinal it last rendered — together they detect a mac-desktop swap. The
+    /// first render only records the ordinal (no reset).
     var hasRenderedMacDesktop = false
     var lastRenderedMacDesktopOrdinal: Int?
     /// Leading-edge debounce flag for `requestRefresh`: coalesces a
@@ -641,42 +616,6 @@ final class Controller: NSObject {
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
         config = fresh
-        // PR6 / A0: drop a now-stale active lens — if the edited config no
-        // longer resolves the active lens's stable id (`section:<declOrder>:<label>`)
-        // to a lens section on the current mac desktop, clear it (else a re-added
-        // same-label section would silently auto-light, and a removed one would
-        // keep a dead highlight). Session-only contract.
-        // A0 note: identity is the declOrder-embedded id, so a config **reorder**
-        // (or rename) that moves the lens to a new declOrder no longer resolves
-        // and DROPS — where the old label scan persisted it. Accepted (the drop
-        // is to the always-present workspace; benign + narrow), surfaced via
-        // `Log.line` (which also makes today's silent label-removal drop visible).
-        if case .lens(let id) = currentActiveSection {
-            // Validate against the SAME section list the projection minted the
-            // id from, so a reload re-resolves (or loudly drops) consistently.
-            let stillValid = ApplyResolver.section(
-                forSectionID: id,
-                in: desktopSections(forOrdinal: currentMacDesktopOrdinal())
-            ) != nil
-            if !stillValid {
-                let ws = activeWSIndex(in: lastWorkspaces)
-                Log.line("active lens no longer resolves after config reload "
-                    + "(id=\(id)) → workspace \(ws)")
-                currentActiveSection = .workspace(ws)
-                // COMPLETE the drop: clear the backend lens too, so the catalog
-                // un-parks the windows the dropped lens was holding. The mirror
-                // alone would leave the catalog's `activeSectionLens` set (its
-                // windows parked) while the Controller shows a workspace —
-                // desynced until the next lens op. Enqueued on `cliQueue` BEFORE
-                // `updateConfig` below (FIFO), so the clear runs against the
-                // still-valid old adapter config (its guards pass; the clear
-                // path only restores parked members, it never re-resolves the
-                // id). Mirrors `setActiveLens(nil)`'s clear.
-                runBackendCommand { bk in
-                    bk.setSectionLens(nil, autoFocus: false); return nil
-                }
-            }
-        }
         backend.updateConfig(fresh)   // hot-reload the backend's copy
         logConfigWarnings()
         applyBorderFromConfig()
@@ -702,51 +641,18 @@ final class Controller: NSObject {
     }
 
     /// The active mac-desktop ordinal via read-only SkyLight (nil = SkyLight
-    /// unavailable / single-desktop). `apply()` (section keying), `setActiveLens`
-    /// (active-lens validation), and `reloadConfig` (re-validation) all read
-    /// through this so they agree on "which mac desktop" within one main-actor
-    /// turn. (PR6.)
+    /// unavailable / single-desktop). `apply()` (section keying) and
+    /// `reloadConfig` read through this so they agree on "which mac desktop"
+    /// within one main-actor turn. (PR6.)
     func currentMacDesktopOrdinal() -> Int? {
         let id = MacDesktops.activeID()
         return id == 0 ? nil : MacDesktops.ordinal(for: id)
     }
 
-    /// The `type="lens"` section labels on the mac desktop at `ordinal` — the
-    /// active-lens domain (empty when the section model isn't active there, or
-    /// it defines no lens sections). Reads the SAME `desktopSections` list the
-    /// projection consumes. Shared by `setActiveLens` (validate) and
-    /// `reloadConfig` (re-validate after an edit). (PR6.)
-    func lensSectionLabels(ordinal: Int?) -> [String] {
-        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
-        else { return [] }
-        return desktopSections(forOrdinal: ord)
-            .filter { $0.type == .lens && !$0.unassigned }.map(\.label)   // W2.6: not a receptacle
-    }
-
-    /// A0: resolve a lens section's display `label` to its **stable id**
-    /// (`"section:<declOrder>:<label>"`) on the mac desktop at `ordinal`, or nil
-    /// when no `type="lens"` section there has that label. `declOrder` is the
-    /// index into the desktop's section array — the SAME index
-    /// `FilterProjection` mints the id from (`FilterProjection.swift`) and
-    /// `ApplyResolver.section(forSectionID:)` parses back, so the round-trip is
-    /// exact (both read the same `desktopSections` list).
-    /// Config-based (not `lastSections`) so it resolves even before the first
-    /// render (headless CLI). The label↔id map is 1:1 while labels are unique +
-    /// non-empty (the A0 invariant). Shared by `setActiveLens`,
-    /// `toggleActiveLens`.
-    func lensID(forLabel label: String, ordinal: Int?) -> String? {
-        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
-        else { return nil }
-        guard let declOrder = desktopSections(forOrdinal: ord)
-            .firstIndex(where: { $0.type == .lens && !$0.unassigned && $0.label == label })
-        else { return nil }
-        return "section:\(declOrder):\(label)"
-    }
-
     // The grid/rail don't recompute a lens `match` view-side. A lens is a pure
-    // VIEW (t-0021): `FilterProjection` builds each section's window list (a
-    // lens section lists its matched windows) and the views render that — one
-    // display authority, no view-side recompute to drift from it.
+    // VIEW: `FilterProjection` builds each section's window list (a lens section
+    // lists its matched windows) and the views render that — one display
+    // authority, no view-side recompute to drift from it.
 
     /// Surface any named-enum config value that silently clamped to a
     /// default (e.g. a layout name carried across a breaking rename:
@@ -1056,42 +962,14 @@ final class Controller: NSObject {
         // copies handed to the views are reordered. Empty override ⇒ identity.
         let displaySectionOrder = macDesktopSectionOrder[macDesktopOrdinal ?? -1]
         let displayWss = SectionOrder.applyWorkspaces(displaySectionOrder, to: wss)
-        // Tag-unification + EX-0.4 (exclusive model) + EX-1 (ActiveSection):
-        // the active section is held per-mac-desktop in the catalog (the
-        // authority); `currentActiveSection` is only the view's highlight MIRROR.
-        // Re-read it from the catalog whenever the active SECTION context may
-        // have shifted underneath the mirror:
-        //   • a facet-workspace switch — EX-0.4 clears the active lens at the
-        //     catalog, so the mirror must drop the highlight; without this the
-        //     stale mirror also makes `setActiveLens`'s idempotent guard swallow
-        //     a re-activation of the SAME lens after a switch.
-        //   • a genuine mac-desktop swap — the catalog (and its persisted lens)
-        //     swaps in; READ BACK the destination's lens rather than blanket-nil
-        //     (the grid/rail display rides the swapped-in catalog's active lens,
-        //     which `FilterProjection` re-projects automatically).
-        // The catalog's mirror — read ordinal-independently via
-        // `backend.currentActiveSection()` — is the authority, so on a WS switch
-        // we re-read it EVEN IF SkyLight momentarily can't name the desktop
-        // (ordinal == nil); the ordinal only gates the mac-desktop-swap detector
-        // and the not-section-model fallback. A PURE transient blip (no switch,
-        // no real swap) fires neither trigger, so it can't false-nil a live lens;
-        // and the baseline advances only on a real ordinal so a blip can't
-        // register as a new baseline (→ a false swap on recovery). HOISTED above
-        // the tree render so a cleared highlight lands in the same frame. The
-        // FIRST render only records the ordinal (no read-back), so an
-        // optimistically-set lens survives until the first real change.
+        // A mac-desktop swap resets the swap baseline + is logged below. Since
+        // the section-lens ACTIVATE concept was retired (t-ec9s), there is no
+        // active-section mirror to re-read here — the active workspace comes
+        // straight from the snapshot (`wss.first(where: isActive)`), so the tree
+        // / grid / rail highlight the active WS directly.
         let macDesktopSwapped = hasRenderedMacDesktop
             && macDesktopOrdinal != nil
             && macDesktopOrdinal != lastRenderedMacDesktopOrdinal
-        let wsSwitched = prevActive != nil && prevActiveWSIndex != prevActive
-        if macDesktopSwapped || wsSwitched {
-            if let ord = macDesktopOrdinal, !config.isSectionModelActive(ordinal: ord) {
-                // section model off here → fall back to the spatial workspace
-                currentActiveSection = .workspace(activeWSIndex(in: wss))
-            } else {
-                currentActiveSection = backend.currentActiveSection()   // the authority
-            }
-        }
         // Instrument a real mac-desktop ordinal change (read against the OLD
         // baseline so the log shows the transition).
         if macDesktopSwapped {
@@ -1104,10 +982,9 @@ final class Controller: NSObject {
         // register as the new baseline (and fire a false swap on recovery).
         if macDesktopOrdinal != nil { lastRenderedMacDesktopOrdinal = macDesktopOrdinal }
         // EX-2: project ONCE here (hoisted above the grid/rail feed AND the
-        // tree render) so all three views share one ordered section list. Must
-        // run AFTER the active-section re-read above — `activeLensID` reads the
-        // freshly-resolved `currentActiveSection.lensID`. Section model off
-        // ⇒ empty sections ⇒ the overview degrades to `wss` (byte-identical).
+        // tree render) so all three views share one ordered section list.
+        // Section model off ⇒ empty sections ⇒ the overview degrades to `wss`
+        // (byte-identical).
         // A lens DESKTOP (`[desktop.N] type=lens`, board abolition t-0sbm) is
         // tree-only and synthesizes its own 1|2 sections (matched + optional
         // non-matching holding). It is NOT `isSectionModelActive` (it has no
@@ -1184,16 +1061,16 @@ final class Controller: NSObject {
         } else {
             lastSections = []
         }
-        lastActiveLensID = currentActiveSection.lensID
-        // A lens is a pure VIEW (t-0021): the open grid/rail show whatever
-        // `FilterProjection` projects (a lens section lists its matched
-        // windows) — no park-flag narrowing, no view-side recompute. `wss`
-        // stays the full set.
+        // The open grid/rail show whatever `FilterProjection` projects; `wss`
+        // stays the full set. Since the section-lens ACTIVATE highlight is gone
+        // (t-ec9s), `activeLensID` is fed nil — the active WORKSPACE cell still
+        // lights via `activeIndex`. (The grid/rail `activeLensID` field is
+        // retired in a later sweep.)
         if let g = gridView {
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
-            g.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+            g.activeLensID = nil
             g.layoutCells()       // refresh open grid on backend events
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
@@ -1208,7 +1085,7 @@ final class Controller: NSObject {
             rv.workspaces = displayWss         // reorder: degrade-path cell order
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
-            rv.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+            rv.activeLensID = nil
             // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
             // is open re-centres the strip on the new active SECTION — but
             // only when the user isn't mid-browse (cursor still on the OLD

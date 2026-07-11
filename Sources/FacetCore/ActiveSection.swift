@@ -1,10 +1,8 @@
-/// The single active-section concept (EX-1): exactly one section is active
-/// at a time — a `type="lens"` section (cross-workspace union) when one is
-/// set, else the active workspace (the always-present spatial slot). The
-/// catalog enforces the XOR invariant structurally (every workspace switch
-/// nulls the active lens, EX-0.4); this enum names it so all three layers
-/// share one vocabulary instead of "`activeIndex: Int` + `activeSectionLens:
-/// String?`". See docs/glossary.md `### active section`.
+/// The active-section concept: the active workspace (the always-present
+/// spatial slot). Since the section-lens ACTIVATE concept was retired (t-ec9s),
+/// a workspace is the only thing that is ever "active" — the enum stays a
+/// single-case value so the `activateSection` throughline keeps one vocabulary.
+/// See docs/glossary.md `### active section`.
 public enum ActiveSection: Equatable, Sendable {
     /// The active workspace, by **1-based** index — matches
     /// `WorkspaceCatalog.activeIndex` and the user-facing `facet workspace
@@ -12,30 +10,6 @@ public enum ActiveSection: Equatable, Sendable {
     /// 0-based convention at the seam; the `[Workspace]` snapshot's
     /// `index` is also 0-based, so a `+1` is needed when deriving from it.
     case workspace(Int)
-    /// The active `type="lens"` section, keyed by its **stable section id**
-    /// (`"section:<declOrder>:<label>"` — `ProjectedSection.id`). A0 moved the
-    /// lens identity off the raw `label` (which becomes optional / non-unique in
-    /// the section-label campaign) onto the declOrder-embedded id; the label is
-    /// now display-only (derive it with `lensLabel`). The id↔label map is 1:1
-    /// while labels are unique + non-empty, so this stays behaviour-preserving.
-    case lens(String)
-
-    /// The active lens's stable section id, else `nil`. The raw `.lens` payload
-    /// — the identity used for routing / highlight matching.
-    public var lensID: String? {
-        if case .lens(let id) = self { return id }
-        return nil
-    }
-
-    /// The active lens's display **label**, parsed out of its stable id, else
-    /// `nil`. Lets display-only readers (`currentSectionLens()`) keep showing a
-    /// label while identity / highlight matching is keyed on the id (§A moved
-    /// the view highlight onto `activeLensID`). `nil` if no lens is active OR
-    /// the id is malformed (cannot happen for an id minted by `FilterProjection`).
-    public var lensLabel: String? {
-        guard case .lens(let id) = self else { return nil }
-        return ApplyResolver.parseSectionID(id)?.label
-    }
 }
 
 /// EX-2b: the stable `ProjectedSection.id` of the **lit** section — the
