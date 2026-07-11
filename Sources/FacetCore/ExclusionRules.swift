@@ -18,7 +18,7 @@ import CoreGraphics
 import Foundation
 
 /// What to do with a window a rule matches.
-public enum ExclusionAction: String, Sendable, Equatable {
+public enum ExclusionAction: String, Sendable, Equatable, CaseIterable {
     /// Float it: still tracked + shown in the tree, just not tiled
     /// (same lane as the built-in role auto-float). Good for a
     /// persistent auxiliary palette.
