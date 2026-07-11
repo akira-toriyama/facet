@@ -21,4 +21,26 @@ struct ConfigSchemaDriftTests {
             committed == FacetConfig.jsonSchema,
             "config.schema.json is stale — run `facet config --emit-schema > config.schema.json` and commit.")
     }
+
+    /// Enum-domain vocabularies are now DERIVED from `.allCases` (t-5qxd
+    /// config-DRY: `exclude.action` ← `ExclusionAction`, `desktop.*.type` ←
+    /// `SectionType`), so a hand-mirrored literal can no longer silently drift
+    /// from the enum. These asserts freeze the WIRE spellings + case order so
+    /// adding / renaming / reordering a case fails loudly here — and, for
+    /// `action`, keeps the positional `enumDocs` aligned to the cases.
+    @Test func enumVocabulariesAreFrozen() throws {
+        // Config.toml surface spellings + order; changing these is a
+        // user-visible config break and must be a conscious edit.
+        #expect(ExclusionAction.allCases.map(\.rawValue) == ["float", "ignore", "manage"])
+        #expect(SectionType.allCases.map(\.rawValue) == ["workspace", "lens"])
+
+        // `[[exclude]].action` derives its domain from ExclusionAction, and its
+        // enumDocs are index-aligned to the cases — guard both from the spec so
+        // a new case can't leave a doc-less (misaligned) enum value.
+        let action = FacetConfig.configSpec
+            .sections.first { $0.header == "exclude" }?
+            .fields.first { $0.key == "action" }
+        #expect(action?.domain == ExclusionAction.allCases.map(\.rawValue))
+        #expect(action?.enumDocs?.count == ExclusionAction.allCases.count)
+    }
 }

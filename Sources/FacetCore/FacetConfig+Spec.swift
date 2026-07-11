@@ -62,7 +62,7 @@ private enum DesktopSchema {
         ObjectShape(fields: [
             SchemaField("type", .string,
                         doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle.",
-                        enumDomain: ["workspace", "lens"]),
+                        enumDomain: SectionType.allCases.map(\.rawValue)),
             SchemaField("label", .string, doc: "Display name; unset shows the section's 1-based index."),
             SchemaField("match", .string, doc: "lens only — a facet-filter WHERE-clause selecting its windows."),
             SchemaField("layout", .string, doc: "workspace only — layout-engine name (ignored on a lens)."),
@@ -80,7 +80,7 @@ private enum DesktopSchema {
         ObjectShape(fields: [
             SchemaField("type", .string,
                         doc: "workspace = spatial sections (tree/grid/rail); lens = an always-on filtered view (tree only).",
-                        enumDomain: ["workspace", "lens"]),
+                        enumDomain: SectionType.allCases.map(\.rawValue)),
             SchemaField("label", .string, doc: "Display name for this mac desktop."),
             SchemaField("match", .string, doc: "lens desktop only — a facet-filter WHERE-clause selecting the tiled windows."),
             SchemaField("layout", .string, doc: "lens desktop only — layout-engine name for the matched windows."),
@@ -247,8 +247,8 @@ public extension FacetConfig {
                 .descOnly("subrole", doc: "AX subrole (exact)."),
                 .descOnly("max-width", .integer),
                 .descOnly("max-height", .integer),
-                .descOnly("action", enum: ["float", "ignore", "manage"],
-                          enumDocs: [
+                .descOnly("action", enum: ExclusionAction.allCases.map(\.rawValue),
+                          enumDocs: [  // index-aligned to ExclusionAction.allCases (float/ignore/manage)
                             "Float it: still tracked + shown in the tree, just not tiled (default).",
                             "Drop it entirely: never enters a workspace, never shown.",
                             "Force-tile it even though the allowlist would otherwise float/ignore it.",
