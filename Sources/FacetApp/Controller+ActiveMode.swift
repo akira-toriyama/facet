@@ -398,23 +398,22 @@ extension Controller {
         let capturedOrdinal = currentMacDesktopOrdinal()
 
         // Prefill = the CURRENT effective predicate: the session override if set,
-        // else the config `match` for this lens (matched by the id `project()`
-        // mints). A transient nil ordinal prefills empty.
+        // else the config `match` for this lens. A transient nil ordinal
+        // prefills empty.
         let prefill: String = {
             guard let ordinal = capturedOrdinal else { return "" }
+            // A lens DESKTOP carries its `match` on the `[desktop.N]` table
+            // (t-ec9s); the effective predicate is the single ordinal-keyed
+            // session override (D6) over the config `match` off `desktopLens`.
+            if config.desktopType(ordinal: ordinal) == .lens,
+               let lens = config.desktopLens(ordinal: ordinal) {
+                return lensDesktopMatchOverride[ordinal] ?? lens.match
+            }
+            // A config section-lens (workspace desktop, removed by Phase 6) keeps
+            // the id-keyed override over its `DesktopSection.match`.
             if let overridden = sectionMatchOverride[ordinal]?[secID] {
                 return overridden
             }
-            // A lens DESKTOP carries its `match` on the `[desktop.N]` table
-            // (t-ec9s), not a `[[desktop.N.section]]`. Its synthesized matched
-            // section id is `section:0:<label>`, so read the config match off
-            // `desktopLens` directly.
-            if config.desktopType(ordinal: ordinal) == .lens,
-               let lens = config.desktopLens(ordinal: ordinal) {
-                return lens.match
-            }
-            // A config section-lens (workspace desktop, removed by Phase 6)
-            // still reads its `match` off the `DesktopSection`.
             for (i, s) in desktopSections(forOrdinal: ordinal).enumerated()
             where s.type == .lens && !s.unassigned
                 && "section:\(i):\(s.label)" == secID {

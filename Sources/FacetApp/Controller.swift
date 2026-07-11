@@ -106,6 +106,20 @@ final class Controller: NSObject {
     /// like `sectionLabelOverride`'s (a non-nil `currentMacDesktopOrdinal()`), so
     /// it never lands in a `-1` bucket the seam can't read.
     var sectionMatchOverride: [Int: [String: String]] = [:]
+    /// t-ec9s (D6): the session-only runtime `match` override for a LENS DESKTOP,
+    /// keyed by mac-desktop ORDINAL alone (a lens desktop holds exactly one lens,
+    /// so there is no section id to key on). This is the SINGLE effective-match
+    /// source for the lens desktop: `setSectionMatch` writes it here AND pushes
+    /// the SAME value to the adapter (`bk.setLensDesktopMatch`, also ordinal-
+    /// keyed), so the tree projection (`override ?? config.desktopLens.match`)
+    /// and the physical park (`applyIsolatePark`) can never diverge — the earlier
+    /// desync (id-keyed display override vs ordinal-keyed adapter override) came
+    /// from editing the desktop `label`, which changed the id but not the ordinal.
+    /// SESSION-ONLY: not persisted to the snapshot (a lens desktop is a single
+    /// `[desktop.N]` table, and the snapshot writer only edits `[[desktop.N.
+    /// section]]` array elements — the `[desktop.N] match=` write path is a
+    /// follow-up, t-ec9s). Reset on relaunch, NOT on `facet reload`.
+    var lensDesktopMatchOverride: [Int: String] = [:]
     /// The mac desktop's declared sections for `ordinal`. EVERY Controller-side
     /// section read goes through this ONE seam so the section-id `declOrder`
     /// agrees with what the `apply()` projection minted (`FilterProjection`
@@ -1028,12 +1042,11 @@ final class Controller: NSObject {
             let projected: FilterProjection.Result
             if isLensDesktop, let lens = config.desktopLens(ordinal: ordinal) {
                 // A LENS DESKTOP rides its dedicated `DesktopSection`-free route
-                // (t-ec9s). Resolve the effective match: the session-only runtime
-                // `--match` override (keyed by the lens id `section:0:<label>`)
-                // wins over the config `match`, mirroring the pre-t-ec9s
-                // `applyMatchOverrides` seam that mutated `project()`'s input.
-                let lensID = "section:0:\(lens.label)"
-                let effMatch = sectionMatchOverride[ordinal]?[lensID] ?? lens.match
+                // (t-ec9s). D6: the effective match is the single ORDINAL-keyed
+                // session override (`lensDesktopMatchOverride`) over the config
+                // `match` — the SAME value the adapter parks by, so display and
+                // park can't diverge when the desktop label is edited.
+                let effMatch = lensDesktopMatchOverride[ordinal] ?? lens.match
                 projected = FilterProjection.projectLensDesktop(
                     workspaces: wss, orphans: backend.orphanWindows(),
                     match: effMatch, label: lens.label,

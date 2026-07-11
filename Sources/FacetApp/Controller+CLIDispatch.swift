@@ -856,11 +856,21 @@ extension Controller {
             scheduleReconcile(after: 0.05)
             return
         }
+        // D6 (t-ec9s): a lens DESKTOP's match is a SINGLE ordinal-keyed override
+        // (`lensDesktopMatchOverride`), written here AND pushed to the adapter
+        // (same ordinal key) so display + park never diverge. A workspace-desktop
+        // config section-lens (removed by Phase 6) keeps the id-keyed
+        // `sectionMatchOverride` (a pure VIEW, no physical push).
+        let isLensDesktop = config.desktopType(ordinal: key) == .lens
         if predicate.isEmpty {
             // Empty → revert to the CONFIG match by DELETING the override key.
-            sectionMatchOverride[key]?.removeValue(forKey: sec.id)
-            if sectionMatchOverride[key]?.isEmpty == true {
-                sectionMatchOverride.removeValue(forKey: key)
+            if isLensDesktop {
+                lensDesktopMatchOverride.removeValue(forKey: key)
+            } else {
+                sectionMatchOverride[key]?.removeValue(forKey: sec.id)
+                if sectionMatchOverride[key]?.isEmpty == true {
+                    sectionMatchOverride.removeValue(forKey: key)
+                }
             }
             Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → revert config")
         } else {
@@ -882,17 +892,18 @@ extension Controller {
                 scheduleReconcile(after: 0.05)
                 return
             case .ok:
-                sectionMatchOverride[key, default: [:]][sec.id] = predicate
+                if isLensDesktop {
+                    lensDesktopMatchOverride[key] = predicate
+                } else {
+                    sectionMatchOverride[key, default: [:]][sec.id] = predicate
+                }
                 Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → \"\(predicate)\"")
             }
         }
-        // t-0sbm: on a lens DESKTOP the match also drives the PHYSICAL park/tile
-        // (the lens's whole point — "change the match to change what you see"),
-        // so push it across the backend seam. The projection override above
-        // only re-filters the tree display; without this the two diverge (tree
-        // shows the new match, windows stay parked by the old one). A
-        // workspace-desktop section-lens is a pure VIEW → no push.
-        if config.desktopType(ordinal: key) == .lens {
+        // On a lens DESKTOP the match also drives the PHYSICAL park/tile (the
+        // lens's whole point — "change the match to change what you see"), so push
+        // it across the backend seam with the SAME ordinal key.
+        if isLensDesktop {
             // `predicate` promotes to `String?`; `setLensDesktopMatch` already
             // treats empty as the revert (drops the key), so no pre-normalize.
             runBackendCommand { bk in
@@ -900,7 +911,7 @@ extension Controller {
             }
         }
         apply(lastWorkspaces)       // re-render: the lens re-filters live
-        markConfigDirty()   // t-hdxb: persist the lens match (set OR revert)
+        markConfigDirty()   // t-hdxb: persist the (workspace-desktop) lens match
     }
 
     /// Controller-side activation throughline: a section activation is now
