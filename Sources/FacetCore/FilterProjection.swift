@@ -242,13 +242,12 @@ public enum FilterProjection {
         // sections. Only when there IS a workspace-section run.
         //
         // N6: a lens-only `sections` list produces only lens sections and NO
-        // workspace tail — the input a LENS DESKTOP feeds (t-0sbm:
-        // `lensDesktopSections` synthesizes one lens section, plus an
-        // `unassigned` receptacle only when `show-non-matching` is set). The
-        // intended semantics: a lens desktop is a FILTERED view — a window
-        // matching no lens is shown only if an `unassigned` receptacle is
-        // declared (W2.6); otherwise it is hidden (the window stays live,
-        // never lost). `LensOnlyProjectionTests` pins this.
+        // workspace tail — the config section-lens path (t-ec9s removes it; the
+        // lens DESKTOP now rides `projectLensDesktop` instead). The intended
+        // semantics: a filtered view — a window matching no lens is shown only
+        // if an `unassigned` receptacle is declared (W2.6); otherwise it is
+        // hidden (the window stays live, never lost). `LensOnlyProjectionTests`
+        // pins this.
         if sawWorkspaceSection && wsCursor < workspaces.count {
             let extras = workspaces[wsCursor...].map(wsSection)
             out.insert(contentsOf: extras, at: insertExtrasAt)
@@ -280,6 +279,75 @@ public enum FilterProjection {
                                         windows: leftover, sourceWorkspaceIndex: nil,
                                         sectionType: .unassigned)
             }
+        }
+        return Result(sections: out, diagnostics: diags)
+    }
+
+    /// Project a lens DESKTOP (t-0sbm → t-ec9s) DIRECTLY — without synthesizing a
+    /// config `DesktopSection`. This is the lens desktop's dedicated route: it
+    /// does NOT ride the config section-lens `.lens` path in `project()` (which
+    /// is removed with section-lens, t-ec9s). Produces ONE matched lens section
+    /// (id `section:0:<label>` — the stable change-match handle) and, when
+    /// `showNonMatching`, a holding `unassigned` receptacle (id `unassigned:1`,
+    /// the declaration position the old synthesized list used) filled with the
+    /// leftover (universe − matched), byte-identical to what `project()`'s
+    /// leftover pass produced for that synthesized input. Pure. `match` is the
+    /// ALREADY-EFFECTIVE predicate (config `match` or the runtime `--match`
+    /// override, resolved by the caller).
+    public static func projectLensDesktop(
+        workspaces: [Workspace],
+        orphans: [Window] = [],
+        match: String,
+        label: String,
+        showNonMatching: Bool
+    ) -> Result {
+        var diags: [String] = []
+        var matched: [Window] = []
+        switch FacetFilter.parse(match) {
+        case .failure(let error):
+            diags.append("config: lens \"\(label)\" match: "
+                + error.caret(in: match))
+        case .success(let filter):
+            let unknown = filter.fieldsReferenced()
+                .subtracting(FacetFilter.knownFields).sorted()
+            if !unknown.isEmpty {
+                diags.append("config: lens \"\(label)\" match references "
+                    + "unknown field(s): " + unknown.joined(separator: ", "))
+            }
+            // A lens shows EVERY window its match satisfies (t-c6fm): a parked
+            // window still shows (park is a real-screen op, orthogonal to the
+            // display filter). Orphans (in no workspace) match with
+            // `inWorkspaceNamed: nil`.
+            for ws in workspaces {
+                for w in ws.windows
+                where LensMembership.matches(
+                    w, inWorkspaceNamed: ws.name, filter: filter) {
+                    matched.append(w)
+                }
+            }
+            for w in orphans
+            where LensMembership.matches(
+                w, inWorkspaceNamed: nil, filter: filter) {
+                matched.append(w)
+            }
+        }
+        var out: [ProjectedSection] = [
+            ProjectedSection(id: "section:0:\(label)", label: label,
+                             windows: matched, sourceWorkspaceIndex: nil,
+                             sectionType: .lens),
+        ]
+        if showNonMatching {
+            var shownIDs = Set<WindowID>()
+            for w in matched { shownIDs.insert(w.id) }
+            var seen = Set<WindowID>()
+            var leftover: [Window] = []
+            for w in workspaces.flatMap(\.windows) + orphans {
+                guard seen.insert(w.id).inserted else { continue }   // dedup universe
+                if !shownIDs.contains(w.id) { leftover.append(w) }
+            }
+            out.append(ProjectedSection(
+                id: "unassigned:1", label: "", windows: leftover,
+                sourceWorkspaceIndex: nil, sectionType: .unassigned))
         }
         return Result(sections: out, diagnostics: diags)
     }

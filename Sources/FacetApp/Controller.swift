@@ -1142,20 +1142,31 @@ final class Controller: NSObject {
             // catches, so it must mutate `project()`'s INPUT. Lens-only +
             // id-preserving (the override key is the lens id, built from the
             // label, so the projected id is unchanged). No override ⇒ identity.
-            let rawSecs = isLensDesktop
-                ? config.lensDesktopSections(ordinal: ordinal)
-                : desktopSections(forOrdinal: ordinal)
-            let secs = applyMatchOverrides(rawSecs,
-                                           to: sectionMatchOverride[ordinal] ?? [:])
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
             // from `wss`) so the projection appends them into the `not
             // workspace` receptacle + any content lens they match. Main-actor-
             // safe mirror read (lock-guarded, refreshed on cliQueue). Closes the
             // GAP where an orphan rendered in no tree/grid/rail section even
             // though the activation path gathered it on-screen.
-            let projected = FilterProjection.project(
-                workspaces: wss, sections: secs,
-                orphans: backend.orphanWindows())
+            let projected: FilterProjection.Result
+            if isLensDesktop, let lens = config.desktopLens(ordinal: ordinal) {
+                // A LENS DESKTOP rides its dedicated `DesktopSection`-free route
+                // (t-ec9s). Resolve the effective match: the session-only runtime
+                // `--match` override (keyed by the lens id `section:0:<label>`)
+                // wins over the config `match`, mirroring the pre-t-ec9s
+                // `applyMatchOverrides` seam that mutated `project()`'s input.
+                let lensID = "section:0:\(lens.label)"
+                let effMatch = sectionMatchOverride[ordinal]?[lensID] ?? lens.match
+                projected = FilterProjection.projectLensDesktop(
+                    workspaces: wss, orphans: backend.orphanWindows(),
+                    match: effMatch, label: lens.label,
+                    showNonMatching: lens.showNonMatching)
+            } else {
+                let secs = desktopSections(forOrdinal: ordinal)
+                projected = FilterProjection.project(
+                    workspaces: wss, sections: secs,
+                    orphans: backend.orphanWindows())
+            }
             logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
                                    against: &loggedSectionDiagnostics)
             // §E: overlay the session-only lens DISPLAY-LABEL override BEFORE
