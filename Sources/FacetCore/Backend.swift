@@ -160,15 +160,15 @@ public protocol WindowBackend: Sendable {
     /// move (memory: facet-cli-dynamic-runtime-model).
     func switchWorkspace(named name: String, autoFocus: Bool)
 
-    /// t-0sbm: push the RUNTIME lens-desktop `match` override to the adapter so
+    /// Push the RUNTIME lens-desktop `match` override to the adapter so
     /// `applyIsolatePark` tiles the matched set + parks the rest by the LIVE
     /// match, not just `config.desktopLens.match`. A lens desktop holds exactly
     /// one lens, so the override keys on the mac desktop ordinal alone (no
     /// section-id resolution). `nil` / empty reverts to the config match. The
-    /// tree projection already overlays the same override
-    /// (`sectionMatchOverride`); this keeps the physical park/tile in lock-step,
-    /// which is the lens desktop's whole point ("change the match to change what
-    /// you see"). No-op on a workspace desktop's section-lens (a pure VIEW).
+    /// tree projection overlays the SAME ordinal-keyed override
+    /// (`Controller.lensDesktopMatchOverride`, D6); this keeps the physical
+    /// park/tile in lock-step, which is the lens desktop's whole point ("change
+    /// the match to change what you see").
     func setLensDesktopMatch(_ predicate: String?, ordinal: Int)
 
     /// Append a new, empty (unnamed) workspace at the end. Runtime
@@ -380,25 +380,6 @@ public protocol WindowBackend: Sendable {
 
     // MARK: - Section-model apply/un-apply (PR8)
 
-    /// ABSOLUTE, focus-free by-`WindowID` mutators driven by the tree's
-    /// section-path apply/un-apply DnD (the `ApplyOp` set). Unlike the
-    /// `perform(.toggle*)` gestures these target an arbitrary managed window,
-    /// are idempotent (set an absolute value, never flip), and skip lens
-    /// park/restore (the section model is the by-workspace axis). No-op
-    /// outside the section model (the native impl gates on
-    /// `isSectionModelActive`); the protocol defaults are no-ops so other
-    /// backends need not implement them.
-    func setFloating(_ id: WindowID, _ floating: Bool)
-    func setSticky(_ id: WindowID, _ sticky: Bool)
-    func setMaster(_ id: WindowID, _ master: Bool)
-
-    /// Set / clear a tag bit on a SPECIFIC window WITHOUT lens park/restore
-    /// (section-model apply / un-apply). `addTagSection` auto-vivifies +
-    /// keeps the `_default` floor; `removeTagSection` is strict. Both return
-    /// `false` on unknown window / vocab-full (add) / unknown name (remove).
-    func addTagSection(_ name: String, toWindow id: WindowID) -> Bool
-    func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool
-
     /// Stash the focused window onto scratchpad shelf `name`, parking
     /// it off-screen (`facet scratchpad --stash NAME`). A named hidden
     /// shelf, 1:1 like marks; clears any sticky (XOR), force-floats and
@@ -553,11 +534,6 @@ public extension WindowBackend {
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func renameTag(_ old: String, to new: String) -> Bool { false }
     func removeTag(_ name: String) -> Bool { false }
-    func setFloating(_ id: WindowID, _ floating: Bool) { }
-    func setSticky(_ id: WindowID, _ sticky: Bool) { }
-    func setMaster(_ id: WindowID, _ master: Bool) { }
-    func addTagSection(_ name: String, toWindow id: WindowID) -> Bool { false }
-    func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func stashScratchpad(_ name: String) -> Bool { false }
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }

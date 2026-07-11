@@ -20,10 +20,8 @@ public enum ConfigSnapshot {
     /// The session overrides to bake into the snapshot, keyed exactly the way
     /// the Controller holds them (see `Controller` + `FilterProjection`).
     public struct Overrides: Sendable, Equatable {
-        /// `[macDesktopOrdinal: [ProjectedSection.id: match]]` — lens match edits.
-        public var match: [Int: [String: String]]
-        /// `[macDesktopOrdinal: [ProjectedSection.id: label]]` — lens /
-        /// unassigned display renames (a workspace rename lives in
+        /// `[macDesktopOrdinal: [ProjectedSection.id: label]]` — unassigned
+        /// receptacle display renames (a workspace rename lives in
         /// `workspaceLabel`, not here — its id keys the catalog, not config).
         public var label: [Int: [String: String]]
         /// `[macDesktopOrdinal: [wsSlot: name]]` — workspace names. `wsSlot` is
@@ -40,12 +38,10 @@ public enum ConfigSnapshot {
         /// config's own `[tags] defined` so a hand-authored vocabulary survives.
         public var definedTags: [String]
 
-        public init(match: [Int: [String: String]] = [:],
-                    label: [Int: [String: String]] = [:],
+        public init(label: [Int: [String: String]] = [:],
                     workspaceLabel: [Int: [Int: String]] = [:],
                     workspaceLayout: [Int: [Int: String]] = [:],
                     definedTags: [String] = []) {
-            self.match = match
             self.label = label
             self.workspaceLabel = workspaceLabel
             self.workspaceLayout = workspaceLayout
@@ -54,8 +50,7 @@ public enum ConfigSnapshot {
 
         /// True when there is nothing to bake — the caller can skip the write.
         public var isEmpty: Bool {
-            match.allSatisfy { $0.value.isEmpty }
-                && label.allSatisfy { $0.value.isEmpty }
+            label.allSatisfy { $0.value.isEmpty }
                 && workspaceLabel.allSatisfy { $0.value.isEmpty }
                 && workspaceLayout.allSatisfy { $0.value.isEmpty }
                 && definedTags.isEmpty
@@ -121,36 +116,21 @@ public enum ConfigSnapshot {
                     continue
                 }
 
-                switch o.section.type {
-                case .lens:
-                    let id = "section:\(o.declOrder):\(o.section.label)"
-                    if pathSafe, let m = overrides.match[ordinal]?[id] {
-                        dom = dom.upsertingValue(.string(m),
-                            inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
-                            forKey: "match")
-                    }
-                    if pathSafe, let l = overrides.label[ordinal]?[id] {
-                        dom = dom.upsertingValue(.string(l),
-                            inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
-                            forKey: "label")
-                    }
-
-                case .workspace:
-                    // The k-th workspace section ↔ the k-th live workspace. An
-                    // empty name is left unwritten (absent label = unnamed).
-                    if pathSafe, let name = overrides.workspaceLabel[ordinal]?[wsSlot],
-                       !name.isEmpty {
-                        dom = dom.upsertingValue(.string(name),
-                            inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
-                            forKey: "label")
-                    }
-                    if pathSafe, let layout = overrides.workspaceLayout[ordinal]?[wsSlot] {
-                        dom = dom.upsertingValue(.string(layout),
-                            inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
-                            forKey: "layout")
-                    }
-                    wsSlot += 1
+                // Every section is a workspace SPATIAL cell (t-ec9s). The k-th
+                // workspace section ↔ the k-th live workspace. An empty name is
+                // left unwritten (absent label = unnamed).
+                if pathSafe, let name = overrides.workspaceLabel[ordinal]?[wsSlot],
+                   !name.isEmpty {
+                    dom = dom.upsertingValue(.string(name),
+                        inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
+                        forKey: "label")
                 }
+                if pathSafe, let layout = overrides.workspaceLayout[ordinal]?[wsSlot] {
+                    dom = dom.upsertingValue(.string(layout),
+                        inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
+                        forKey: "layout")
+                }
+                wsSlot += 1
             }
         }
 

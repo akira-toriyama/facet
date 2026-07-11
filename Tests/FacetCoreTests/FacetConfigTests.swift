@@ -217,8 +217,8 @@ struct FacetConfigTests {
         // the `[desktop.N]` by-name seed was retired).
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [
-            DesktopSection(type: .workspace),
-            DesktopSection(type: .workspace, layout: "bsp"),
+            DesktopSection(),
+            DesktopSection(layout: "bsp"),
         ]]
 
         // Section-active ordinal → one slot per workspace section.

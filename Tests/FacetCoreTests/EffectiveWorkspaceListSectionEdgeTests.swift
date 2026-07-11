@@ -3,38 +3,21 @@ import Testing
 
 /// `FacetConfig.effectiveWorkspaceList` — the SECTION-INACTIVE edges
 /// complementing `EffectiveWorkspaceListNamingTests` (section-active naming). The
-/// section model engages ONLY when a desktop carries ≥1 `type = "workspace"`
-/// section (`isSectionModelActive`); a config that has sections but NONE of
-/// the workspace kind — lens-only, unassigned-only, or an empty array — must
+/// section model engages ONLY when a desktop carries ≥1 spatial (non-`unassigned`)
+/// section (`isSectionModelActive`); a config that has sections but NONE that seed
+/// a workspace cell — an `unassigned`-only receptacle or an empty array — must
 /// DEGRADE to the default unnamed slots. These are the load-bearing
 /// "sections present, model still off" branches.
+/// (The retired section-lens edge — lens-only sections degrading — is gone: every
+/// `[[desktop.N.section]]` is now a workspace cell, t-ec9s.)
 /// Pure; CI-only (CLT can't run `swift test`).
 struct EffectiveWorkspaceListSectionEdgeTests {
 
-    private func lens(_ label: String, _ match: String) -> DesktopSection {
-        DesktopSection(type: .lens, label: label, match: match)
-    }
-
-    // MARK: - sections present, but no workspace section → legacy default
-
-    @Test func lensOnlySectionsDoNotActivateModel() {
-        var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [
-            lens("Web", "tag~=web"),
-            lens("Mail", "app=Mail"),
-        ]]
-        // No workspace section → model off → default unnamed slots (NOT an
-        // empty list).
-        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        #expect(list.count == FacetConfig.defaultWorkspaceCount)
-        #expect(list.allSatisfy { $0.config.name.isEmpty })
-        #expect(list.allSatisfy { $0.config.layout == nil })
-    }
+    // MARK: - sections present, but no workspace cell → legacy default
 
     @Test func unassignedOnlySectionsDoNotActivateModel() {
         var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace,
-                                                         label: "Other",
+        c.macDesktopSectionConfigs = [1: [DesktopSection(label: "Other",
                                                          unassigned: true)]]
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         #expect(list.count == FacetConfig.defaultWorkspaceCount)
@@ -53,7 +36,7 @@ struct EffectiveWorkspaceListSectionEdgeTests {
 
     @Test func nilOrdinalIgnoresSectionsAndUsesDefault() {
         var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace)]]
+        c.macDesktopSectionConfigs = [1: [DesktopSection()]]
         // The section model is a per-ordinal opt-in; an unresolvable ordinal
         // falls back to default slots.
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: nil)

@@ -44,32 +44,17 @@ private let perViewThemeDomain = canonicalThemeNames + [""]
 // conditionals (workspace forbids `match`, lens requires it) are deferred to
 // `DesktopSection.parse`, the enforcement authority (t-0avb B5).
 private enum DesktopSchema {
-    // A section's inline `apply` sub-table. Section-specific — NOT shared with
-    // `[[rule]]`'s flat apply vocab (that dedup is t-g0h9 / t-0046; t-0avb B4).
-    static var applyShape: ObjectShape {
-        ObjectShape(fields: [
-            SchemaField("workspace", .string, doc: "Move a matched window to this named workspace."),
-            SchemaField("tags", .stringArray, doc: "Tags to add to a matched window."),
-            SchemaField("floating", .boolean, doc: "Force a matched window floating (or tiled = false)."),
-            SchemaField("sticky", .boolean, doc: "Pin a matched window across mac-desktop / workspace switches."),
-            SchemaField("master", .boolean, doc: "Make a matched window the layout master."),
-        ], doc: "Facets applied to a lens's matched windows (a lens uses `tags` only).")
-    }
-
-    // One `[[desktop.N.section]]` row. `type` is OPTIONAL: an
-    // `unassigned = true` receptacle carries none.
+    // One `[[desktop.N.section]]` row — a workspace SPATIAL cell (t-ec9s: the
+    // section-lens type was retired; `lens` is now only a `[desktop.N]` type).
+    // `additionalProperties: false` (the permissive default is off), so a stray
+    // `type` / `match` / `apply` from the retired section-lens era fails
+    // `config --validate` loudly.
     static var sectionItemShape: ObjectShape {
         ObjectShape(fields: [
-            SchemaField("type", .string,
-                        doc: "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle.",
-                        enumDomain: SectionType.allCases.map(\.rawValue)),
             SchemaField("label", .string, doc: "Display name; unset shows the section's 1-based index."),
-            SchemaField("match", .string, doc: "lens only — a facet-filter WHERE-clause selecting its windows."),
-            SchemaField("layout", .string, doc: "workspace only — layout-engine name (ignored on a lens)."),
+            SchemaField("layout", .string, doc: "Layout-engine name for this workspace cell."),
             SchemaField("unassigned", .boolean, doc: "Mark this the opt-in lost-and-found: collects windows shown in no other section."),
-        ], objects: [
-            NestedObject(key: "apply", shape: applyShape),
-        ], doc: "One display section: workspace / lens / (unassigned) lost-and-found.")
+        ], doc: "One workspace spatial cell (or the `unassigned = true` lost-and-found receptacle).")
     }
 
     // The value each `[desktop.<N>]` ordinal key maps to. A SINGLE typed table

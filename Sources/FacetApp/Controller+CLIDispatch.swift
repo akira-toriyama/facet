@@ -856,31 +856,20 @@ extension Controller {
             scheduleReconcile(after: 0.05)
             return
         }
-        // D6 (t-ec9s): a lens DESKTOP's match is a SINGLE ordinal-keyed override
-        // (`lensDesktopMatchOverride`), written here AND pushed to the adapter
-        // (same ordinal key) so display + park never diverge. A workspace-desktop
-        // config section-lens (removed by Phase 6) keeps the id-keyed
-        // `sectionMatchOverride` (a pure VIEW, no physical push).
-        let isLensDesktop = config.desktopType(ordinal: key) == .lens
+        // A lens section only ever comes from a lens DESKTOP now (t-ec9s); its
+        // match is a SINGLE ordinal-keyed session override (D6), written here AND
+        // pushed to the adapter with the SAME ordinal key so the tree display and
+        // the physical park/tile never diverge. Session-only (never persisted —
+        // see `lensDesktopMatchOverride`; `[desktop.N] match=` snapshot = t-sgqk).
         if predicate.isEmpty {
-            // Empty → revert to the CONFIG match by DELETING the override key.
-            if isLensDesktop {
-                lensDesktopMatchOverride.removeValue(forKey: key)
-            } else {
-                sectionMatchOverride[key]?.removeValue(forKey: sec.id)
-                if sectionMatchOverride[key]?.isEmpty == true {
-                    sectionMatchOverride.removeValue(forKey: key)
-                }
-            }
-            Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → revert config")
+            lensDesktopMatchOverride.removeValue(forKey: key)   // revert to config match
+            Log.debug("setSectionMatch: n=\(n) → revert config")
         } else {
             // Classify, but store VERBATIM — `FilterProjection` compiles the same
-            // string at projection time. Runtime `--match` is STRICT (unlike a
-            // config lens `match`, which stays soft): a malformed predicate OR an
-            // unknown FIELD is a loud reject that keeps the working lens (a typo'd
-            // field always matches nothing — no legitimate use). Config keeps the
-            // clamp-don't-crash rule; the projection diagnostics still cover a
-            // config typo. Same verdict the client + the GUI editor apply.
+            // string at projection time. Runtime `--match` is STRICT: a malformed
+            // predicate OR an unknown FIELD is a loud reject that keeps the working
+            // match (a typo'd field always matches nothing — no legitimate use).
+            // Same verdict the client + the GUI editor apply.
             switch classifyMatchPredicate(predicate) {
             case .malformed(let error):
                 setError("section --match \(n): " + error.caret(in: predicate))
@@ -892,26 +881,18 @@ extension Controller {
                 scheduleReconcile(after: 0.05)
                 return
             case .ok:
-                if isLensDesktop {
-                    lensDesktopMatchOverride[key] = predicate
-                } else {
-                    sectionMatchOverride[key, default: [:]][sec.id] = predicate
-                }
-                Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → \"\(predicate)\"")
+                lensDesktopMatchOverride[key] = predicate
+                Log.debug("setSectionMatch: n=\(n) → \"\(predicate)\"")
             }
         }
-        // On a lens DESKTOP the match also drives the PHYSICAL park/tile (the
-        // lens's whole point — "change the match to change what you see"), so push
-        // it across the backend seam with the SAME ordinal key.
-        if isLensDesktop {
-            // `predicate` promotes to `String?`; `setLensDesktopMatch` already
-            // treats empty as the revert (drops the key), so no pre-normalize.
-            runBackendCommand { bk in
-                bk.setLensDesktopMatch(predicate, ordinal: key); return nil
-            }
+        // The match also drives the PHYSICAL park/tile (the lens desktop's whole
+        // point — "change the match to change what you see"), so push it across
+        // the backend seam. `predicate` promotes to `String?`; `setLensDesktopMatch`
+        // treats empty as the revert (drops the key), so no pre-normalize.
+        runBackendCommand { bk in
+            bk.setLensDesktopMatch(predicate, ordinal: key); return nil
         }
         apply(lastWorkspaces)       // re-render: the lens re-filters live
-        markConfigDirty()   // t-hdxb: persist the (workspace-desktop) lens match
     }
 
     /// Controller-side activation throughline: a section activation is now

@@ -1,16 +1,16 @@
 import Testing
 @testable import FacetCore
 
-/// N6: these test `FilterProjection.project` DIRECTLY with a lens-only
-/// `sections` list — the exact input a LENS DESKTOP feeds it (t-0sbm:
-/// `lensDesktopSections` synthesizes one lens section, plus an `unassigned`
-/// receptacle only when `show-non-matching` is set), a combination the old
-/// workspace-tail invariant comment assumed impossible. A lens desktop is a
-/// FILTERED view: a window matching no lens is HIDDEN (not tail-appended),
-/// unless an `unassigned` receptacle is declared (W2.6). The window stays live
-/// (it is not lost — it is parked, still on the desktop). These tests PIN that
-/// intended projection behavior so a future change can't silently flip it.
-/// Pure; CI-only (CLT can't run `swift test`).
+/// These pin the LENS DESKTOP projection route (t-0sbm → t-ec9s):
+/// `FilterProjection.projectLensDesktop` — the dedicated path a `[desktop.N]
+/// type=lens` mac desktop feeds. Section-lens is retired (t-ec9s: `project()`
+/// no longer does lens membership; every `[[desktop.N.section]]` is a workspace
+/// cell), so lens matching lives ONLY here now. A lens desktop is a FILTERED
+/// view: a window matching the lens is shown, one matching nothing is HIDDEN
+/// (not tail-appended) unless `show-non-matching` declares the holding
+/// `unassigned` receptacle (W2.6). The window stays live (parked, still on the
+/// desktop — not lost). These PIN that intended projection so a future change
+/// can't silently flip it. Pure; CI-only (CLT can't run `swift test`).
 struct LensOnlyProjectionTests {
 
     private func win(_ id: Int, app: String) -> Window {
@@ -21,15 +21,13 @@ struct LensOnlyProjectionTests {
         Workspace(index: index, name: "WS", isActive: index == 0,
                   layoutMode: "float", windows: windows)
     }
-    private func lens(_ label: String, _ match: String) -> DesktopSection {
-        DesktopSection(type: .lens, label: label, match: match)
-    }
 
-    /// A lens-only list hides a window matching no lens (no workspace tail).
-    @Test func lensOnlyListHidesUnmatchedWindow() {
+    /// A lens desktop hides a window matching no lens (no workspace tail).
+    @Test func lensDesktopHidesUnmatchedWindow() {
         let wss = [ws(0, [win(1, app: "Chrome"), win(2, app: "Terminal")])]
-        let r = FilterProjection.project(
-            workspaces: wss, sections: [lens("Web", "app=Chrome")])
+        let r = FilterProjection.projectLensDesktop(
+            workspaces: wss, match: "app=Chrome", label: "Web",
+            showNonMatching: false)
         #expect(r.sections.count == 1, "exactly the lens — no workspace tail")
         #expect(r.sections[0].sectionType == .lens)
         #expect(r.sections[0].windows.map(\.id.serverID) == [1])
@@ -38,14 +36,13 @@ struct LensOnlyProjectionTests {
                 "a window matching no lens is hidden on a lens desktop")
     }
 
-    /// An `unassigned` receptacle on the lens desktop catches the unmatched window
-    /// (the W2.6 opt-in lost-and-found).
+    /// The `show-non-matching` receptacle on the lens desktop catches the
+    /// unmatched window (the W2.6 opt-in lost-and-found).
     @Test func unassignedReceptacleCatchesUnmatchedOnLensDesktop() {
         let wss = [ws(0, [win(1, app: "Chrome"), win(2, app: "Terminal")])]
-        let r = FilterProjection.project(
-            workspaces: wss,
-            sections: [lens("Web", "app=Chrome"),
-                       DesktopSection(type: .lens, label: "Other", unassigned: true)])
+        let r = FilterProjection.projectLensDesktop(
+            workspaces: wss, match: "app=Chrome", label: "Web",
+            showNonMatching: true)
         let other = r.sections.first { $0.sectionType == .unassigned }
         #expect(other?.windows.map(\.id.serverID) == [2],
                 "the unassigned receptacle catches the unmatched window")
@@ -62,11 +59,9 @@ struct LensOnlyProjectionTests {
         let wss = [ws(0, [win(1, app: "Chrome"),
                           win(2, app: "Terminal"),
                           win(3, app: "Slack")])]
-        let r = FilterProjection.project(
-            workspaces: wss,
-            sections: [lens("Web", "app=Chrome"),
-                       DesktopSection(type: .lens, label: "Lost", unassigned: true)],
-            orphans: [win(9, app: "Finder")])
+        let r = FilterProjection.projectLensDesktop(
+            workspaces: wss, orphans: [win(9, app: "Finder")],
+            match: "app=Chrome", label: "Web", showNonMatching: true)
         #expect(r.sections.count == 2, "lens + receptacle — no workspace tail")
         let web = r.sections.first { $0.id == "section:0:Web" }
         #expect(web?.windows.map(\.id.serverID) == [1])

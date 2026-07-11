@@ -402,22 +402,12 @@ extension Controller {
         // prefills empty.
         let prefill: String = {
             guard let ordinal = capturedOrdinal else { return "" }
-            // A lens DESKTOP carries its `match` on the `[desktop.N]` table
-            // (t-ec9s); the effective predicate is the single ordinal-keyed
-            // session override (D6) over the config `match` off `desktopLens`.
-            if config.desktopType(ordinal: ordinal) == .lens,
-               let lens = config.desktopLens(ordinal: ordinal) {
+            // A lens section only ever comes from a lens DESKTOP now (t-ec9s),
+            // which carries its `match` on the `[desktop.N]` table. The effective
+            // predicate is the single ordinal-keyed session override (D6) over
+            // the config `match` off `desktopLens`.
+            if let lens = config.desktopLens(ordinal: ordinal) {
                 return lensDesktopMatchOverride[ordinal] ?? lens.match
-            }
-            // A config section-lens (workspace desktop, removed by Phase 6) keeps
-            // the id-keyed override over its `DesktopSection.match`.
-            if let overridden = sectionMatchOverride[ordinal]?[secID] {
-                return overridden
-            }
-            for (i, s) in desktopSections(forOrdinal: ordinal).enumerated()
-            where s.type == .lens && !s.unassigned
-                && "section:\(i):\(s.label)" == secID {
-                return s.match
             }
             return ""
         }()

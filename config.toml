@@ -565,8 +565,8 @@ action = "ignore"
 #   facet window --tag NAME / --untag NAME / --toggle-tag NAME
 #   facet window --retag OLD NEW
 # Tags are session-only (never persisted) and per-mac-desktop. They
-# feed lens filters: a `type = "lens"` section whose `match` contains
-# `tag~=NAME` (see [[desktop.N.section]] below) shows every window
+# feed a lens DESKTOP's filter: a `[desktop.N] type = "lens"` whose
+# `match` contains `tag~=NAME` (see [desktop.N] below) tiles every window
 # carrying NAME. `facet query --tags` lists every tag currently in use.
 
 
@@ -615,231 +615,116 @@ action = "ignore"
 # Zero config: with NO [[desktop.N.section]] blocks anywhere, every mac
 # desktop is managed with the default 5 workspaces. It just works.
 #
-# To shape a mac desktop, describe an ORDERED list of sections with
-# `[[desktop.N.section]]` (N = Mission Control order, 1-based, user
-# desktops only — fullscreen desktops don't count). This is the ONLY
-# way to configure a desktop —
-# a workspace's name is its optional `label` (else it's unnamed, shown by
-# its 1-based index); `facet workspace --rename` overrides at runtime. When a
-# desktop has at least one `type = "workspace"` section, the section model
-# becomes AUTHORITATIVE for that desktop: the tree, the grid (`--view grid`),
-# AND the rail (`--view rail`) all render the sections in declaration order —
-# lens sections appear as their own cells (a rail carousel cell), and clicking
-# one activates that lens (same as `facet lens NAME`); the active section is the
-# single lit highlight in every view (on the rail it is also the centre hero —
-# an active lens renders its matched windows there). Activating a lens
-# section (`facet lens NAME`) is a PURE VIEW change: it ONLY changes what
-# tree/grid/rail DISPLAY — they list the lens's matched windows, aggregated
-# across ALL workspaces on the current mac desktop. A lens NEVER moves a real
-# OS window (no park, no tiling, no real hide) — the real desktop is unchanged;
-# you CLICK a matched window to jump to it (workspace switch + focus).
-# Switching to any workspace clears the active lens automatically; `--clear`
-# drops the view. Tree drag-and-drop is SAME-TYPE ONLY: a window dragged
-# between workspaces changes its membership, and one dragged between lenses
-# re-tags it (applies / un-applies the lenses' `apply` tags) — but a window is
-# never dragged ACROSS the workspace/lens boundary (do that via right-click /
-# `facet window --tag` / `--move-to`). The section model is facet's canonical
-# configuration.
+# To shape a mac desktop, describe an ORDERED list of workspace SPATIAL
+# cells with `[[desktop.N.section]]` (N = Mission Control order, 1-based,
+# user desktops only — fullscreen desktops don't count). The array ORDER
+# is the tree's display order; the COUNT of sections is that desktop's
+# live workspace count. Each section is a workspace cell:
 #
-# OPT-IN: as soon as ANY [[desktop.N.section]] exists, facet manages ONLY
-# the desktops that have a section block. A desktop without one is left
-# completely untouched — no facet workspaces, windows stay as-is, and the
-# facet panel is hidden there. On single-desktop / SkyLight-unavailable
-# setups (no resolvable Mission Control ordinal) facet falls back to the
-# default 5 unnamed workspaces.
+#   label   — (optional) the workspace's display name; omit → unnamed,
+#             shown by its 1-based index. A non-empty label must be unique
+#             on the desktop (dup → loud warn + first-wins). `facet
+#             workspace --rename` overrides at runtime.
+#   layout  — (optional) the workspace's startup tiling engine (bsp /
+#             stack / master-left / …); runtime-changeable.
+#   unassigned = true — (§G) the lost-and-found receptacle MARKER (below).
+#
+# The tree, the grid (`--view grid`), and the rail (`--view rail`) all
+# render the sections in declaration order. A window's membership changes
+# by DRAG (between workspaces) or `facet window --move-to N`.
+#
+# OPT-IN: as soon as ANY [[desktop.N.section]] (or [desktop.N]) block
+# exists, facet manages ONLY the desktops that have one. A desktop without
+# one is left completely untouched — no facet workspaces, windows stay
+# as-is, the panel is hidden there. On single-desktop / SkyLight-
+# unavailable setups facet falls back to the default 5 unnamed workspaces.
 #
 # Caveat: the mapping is by Mission Control position. Reordering your
 # desktops re-points these sections (counts / layouts only — your windows
 # stay correctly scoped to their real desktop).
 #
-# Each `[[desktop.N.section]]` is one section on the Nth mac desktop
-# (Mission Control order). The array ORDER is the tree's display order.
-# A section is one of three shapes — two carry a required `type`
-# (`workspace` / `lens`); the third, the lost-and-found, is the
-# `unassigned = true` MARKER (a bool, not a `type`):
-#
-#   type = "workspace"  — a permanent spatial cell (the tiling unit, the
-#       grid/rail cell). Named by an optional `label` (else unnamed, shown by
-#       its 1-based index); a non-empty `label` must be unique on the desktop
-#       (dup → loud warn + first-wins). You don't filter it — `match` and
-#       `apply` are FORBIDDEN on a workspace (it is the exclusive spatial
-#       substrate, carrying no filter or side-effect; an authored one is
-#       ignored with a warning). Membership changes by DRAG (between
-#       workspaces) or `facet window --move-to N`, never config apply.
-#       Optional `layout` seeds its tiling engine. The COUNT of workspace
-#       sections is that desktop's live workspace count; each section's
-#       `layout` is that workspace's startup layout. Having at least one
-#       workspace section is what turns the section model ON for the desktop —
-#       a desktop with ONLY lens / unassigned sections falls back to the
-#       default 5 workspaces (and its lenses stay inert).
-#         [[desktop.1.section]]
-#         type = "workspace"
-#         label = "Dev"     # optional; omit → unnamed (shown by its index)
-#         layout = "bsp"
-#
-#   type = "lens"  — a saved visibility filter / VIEW (an SQL VIEW),
-#       orthogonal to workspaces; a window shows in EVERY lens whose `match`
-#       it satisfies (multi-match). Activating one with `facet lens NAME` is a
-#       PURE VIEW change: it ONLY changes what tree/grid/rail DISPLAY, listing
-#       the matched windows aggregated across ALL workspaces on the current
-#       mac desktop. A lens NEVER moves a real OS window (no park, no tiling,
-#       no real hide) — the real desktop is unchanged; you CLICK a matched
-#       window to jump to it (workspace switch + focus). Switching to any
-#       workspace clears the lens automatically; `facet lens --clear` drops
-#       the view. Keys:
-#         label  — the lens's header in the view (optional; non-empty
-#                  labels must be unique on the desktop).
-#         match  — a facet filter WHERE-clause (required; the same mini-
-#                  language as `facet query --windows --filter`), e.g.
-#                    'tag~=web or app=Safari'
-#                    '(tag~=work or tag~=urgent) and not floating'
-#         layout — IGNORED on a lens. A lens tiles nothing (it's a display-
-#                  only view — there is no lens layout); `layout` is
-#                  meaningful only on `type = "workspace"` sections, where it
-#                  seeds the tiling engine. Per the clamp-don't-reject rule an
-#                  authored `layout` here is harmless dead data.
-#         apply  — (optional) tags ADDED to a window dropped into the lens, so
-#                  the drop "sticks" (and a drag back out un-tags it). ADDITIVE
-#                  TAGS ONLY — inline table, only `tags` honored:
-#                    tags = ["web"]   add these tags (additive)
-#                  `workspace` / `floating` / `sticky` / `master` are FORBIDDEN
-#                  on a lens (dropped with a warning): workspace membership is
-#                  the workspace axis, window attributes are direct CLI. Pair
-#                  `match = 'tag~=X'` with `apply = { tags = ["X"] }` so a drop
-#                  into the lens tags the window and it then satisfies the match
-#                  (it stays). Omit `apply` → the lens is drop-inert (snaps back).
-#
-#   unassigned = true  — (§G / W2.6) the lost-and-found receptacle MARKER, and
-#       the RECOMMENDED safety net. Set `unassigned = true` on a section to make
-#       it collect every window shown in NO other section (the "leftover",
-#       computed by subtraction). It is a MARKER, not a `type`: `type` stays
-#       workspace / lens and is OPTIONAL on a receptacle row (it defaults to
-#       workspace, which is projection-irrelevant for a receptacle). `match` /
-#       `apply` are FORBIDDEN (the leftover is not a filter); just an optional
-#       `label`. Only the FIRST receptacle renders (extras warn). It shows in
-#       tree/grid/rail like a lens cell, focuses its first window on click /
-#       `--focus`, can be runtime-renamed, and a window dragged out of it onto a
-#       workspace is RESCUED (moved there). KEEP ONE per desktop — DON'T DELETE
-#       IT: without it a stray window that lands in no section is invisible. In
-#       practice it's usually empty (every window lives in a workspace), so it
-#       just sits quietly until needed. (The old `type = "unassigned"` spelling
-#       is RETIRED — it now drops as an unknown type.)
+#   unassigned = true — the lost-and-found receptacle, and the RECOMMENDED
+#       safety net. Set it on a section to collect every window shown in NO
+#       other section (the "leftover", by subtraction). Just an optional
+#       `label`. Only the FIRST receptacle renders (extras warn). It shows
+#       in every view; click / `facet section --focus` focuses its first
+#       window; a window dragged out onto a workspace is RESCUED (moved
+#       there). KEEP ONE per desktop — without it a stray window that lands
+#       in no section is invisible. Usually empty (every window lives in a
+#       workspace), so it just sits quietly until needed.
 #         [[desktop.1.section]]
 #         unassigned = true
 #         label = "Lost & Found"   # optional
 #
-# `type` is REQUIRED on a workspace / lens section (an absent or unknown `type`
-# is skipped with a loud log, never a silent guess); it is OPTIONAL only on an
-# `unassigned = true` receptacle.
-#
 # -----------------------------------------------------------------
-# Typed desktops  [desktop.N]  (lens desktops)
+# Typed desktops  [desktop.N]
 # -----------------------------------------------------------------
 # A mac desktop may be TYPED with a single [desktop.N] table (N = the same
 # Mission Control ordinal): type = "workspace" or "lens". One ordinal = one
 # desktop = one type; use two mac desktops to have both kinds. Hierarchy:
 # mac desktop > section > window.
 #
-#   type = "workspace" — the classic desktop: its [[desktop.N.section]] blocks
-#       above describe it (the [desktop.N] table just makes the type
-#       explicit). This is also the implied type when only section blocks
-#       exist, so a sections-only config needs no [desktop.N] table at all.
-#   type = "lens" — an ALWAYS-ON filtered desktop (no sections, no
-#       sub-workspaces). Whenever that mac desktop is active, facet tiles the
-#       windows matching `match` with `layout` and anchor-parks the rest to a
-#       screen corner (sticky windows are exempt). There is no focus toggle —
-#       entering the desktop IS the focus; leaving it un-parks nothing (the
-#       parked windows belong to that desktop). TREE-ONLY: `--view grid` /
-#       `--view rail` are rejected there (a lens desktop is dynamic — it has
-#       no fixed picture to thumbnail).
+#   type = "workspace" — the classic desktop: its [[desktop.N.section]]
+#       blocks above describe it (the [desktop.N] table just makes the type
+#       explicit). This is the implied type when only section blocks exist,
+#       so a sections-only config needs no [desktop.N] table at all.
+#   type = "lens" — an ALWAYS-ON filtered desktop (no sections, no sub-
+#       workspaces). Whenever that mac desktop is active, facet tiles the
+#       windows matching `match` with `layout` and anchor-parks the rest to
+#       a screen corner (sticky windows are exempt). Entering the desktop IS
+#       the focus; leaving it un-parks nothing (the parked windows belong to
+#       that desktop). Change what it shows live with `facet section --match
+#       1 "expr"` (session-only) or the tree header's "Edit match".
+#       TREE-ONLY: `--view grid` / `--view rail` are rejected there (a lens
+#       desktop is dynamic — no fixed picture to thumbnail).
 #       Keys (written directly on the [desktop.N] table):
-#         match   — REQUIRED: a facet-filter WHERE-clause selecting the tiled
-#                   windows (same grammar as a lens section's `match`).
-#                   Missing → the desktop is dropped, loud.
-#         layout  — (optional) layout-engine name for the matched windows.
-#                   "float" keeps them floating; non-matching still park.
-#         show-non-matching — (optional, default false) true → the tree adds a
-#                   second "holding" section listing the parked non-matching
-#                   windows; false → the matched section alone.
-#         label   — (optional) display name for the desktop's one section.
+#         match   — REQUIRED: a facet-filter WHERE-clause (same grammar as
+#                   `facet query --windows --filter`) selecting the tiled
+#                   windows, e.g. 'app~=Chrome or app~=Safari' or 'tag~=web'.
+#                   An empty match ('') matches nothing → every window parks,
+#                   so give it a CONCRETE predicate. Missing → the desktop is
+#                   dropped, loud.
+#         layout  — (optional) layout-engine name for the matched windows;
+#                   "float" keeps them floating. Non-matching still park.
+#         show-non-matching — (optional, default false) true → the tree adds
+#                   a second "holding" section listing the parked non-
+#                   matching windows; false → the matched section alone.
+#         label   — (optional) display name for the desktop.
 #
-# Example — Desktop 4 as an always-on Web lens desktop. Commented out so it
-# doesn't manage a 4th desktop; uncomment to try.
-#   [desktop.4]
-#   type = "lens"
-#   label = "Web"
-#   match = 'app=Safari or app~=Chrome'
-#   layout = "bsp"
-#   show-non-matching = true
-#
-# ACTIVE SAMPLE — a 3-desktop dev workflow. Desktop 1: a Lost & Found
-# receptacle (`unassigned = true`) + 2 unnamed (index-shown) workspaces + 3
-# lenses (Web / Code / Chat). Desktop 2: a NAMED "Main" workspace + an unnamed
-# one + a "Stray" lost-and-found (`unassigned = true`). Desktop 3: 2 unnamed
-# workspaces. Because these section blocks exist, facet is OPT-IN: it manages
-# desktops 1–3 and leaves every OTHER mac desktop untouched (panel hidden
-# there). Edit to taste, add `[[desktop.4.section]]` blocks for more desktops,
-# or comment this whole sample out to fall back to the zero-config default
-# (every mac desktop gets 5 unnamed workspaces). Activate a lens at runtime
-# with `facet lens "Web"` (it shows only the Web windows in the views — it
-# parks nothing); clear it with `facet lens --clear`.
+# ACTIVE SAMPLE — two mac desktops. Desktop 1 is a classic WORKSPACE desktop:
+# a NAMED "Main" workspace + an unnamed one (shown by index) + a Lost & Found
+# receptacle. Desktop 2 is an always-on LENS desktop that tiles your browser
+# windows and parks everything else. Because these blocks exist, facet is
+# OPT-IN: it manages desktops 1–2 and leaves every OTHER mac desktop
+# untouched. Edit to taste, or comment this whole sample out to fall back to
+# the zero-config default (every mac desktop gets 5 unnamed workspaces).
 
-# Recommended!! — the Lost & Found receptacle. It collects any window that ends
-# up in no section so nothing is ever invisible. Usually empty (every window
-# lives in a workspace); keep one per desktop as a safety net — DON'T DELETE.
+# Desktop 1 — a WORKSPACE desktop: a section array + a Lost & Found net.
+# A named "Main" workspace (header `1 (Main)`) next to an unnamed one
+# (header `2`).
+[[desktop.1.section]]
+label = "Main"
+layout = "bsp"
+
+[[desktop.1.section]]
+layout = "stack"
+
+# Recommended!! — the Lost & Found receptacle. It collects any window that
+# ends up in no section so nothing is ever invisible. Usually empty (every
+# window lives in a workspace); keep one per desktop as a safety net —
+# DON'T DELETE. Click / `facet section --focus` focuses its first window;
+# drag a window out onto a workspace to RESCUE it.
 [[desktop.1.section]]
 unassigned = true
 label = "Lost & Found"
 
-[[desktop.1.section]]
-type = "workspace"
-layout = "bsp"
-
-[[desktop.1.section]]
-type = "workspace"
-layout = "stack"
-
-[[desktop.1.section]]
+# Desktop 2 — an always-on LENS desktop: tiles the browser windows (a
+# CONCRETE match, never '') with bsp, parks everything else, and shows the
+# parked ones as a second "holding" tree section. Retarget live with
+# `facet section --match 1 "app~=Slack"` or the tree header's "Edit match".
+[desktop.2]
 type = "lens"
 label = "Web"
-match = 'app=Safari or app~=Chrome or app~=Firefox'
-apply = { tags = ["web"] }
-
-[[desktop.1.section]]
-type = "lens"
-label = "Code"
-match = 'app=Xcode or app~=Code or app~=Cursor'
-apply = { tags = ["code"] }
-
-[[desktop.1.section]]
-type = "lens"
-label = "Chat"
-match = 'app~=Slack or app=Mail or app~=Discord'
-apply = { tags = ["chat"] }
-
-# Desktop 2 shows a NAMED workspace ("Main", header `1 (Main)`) next to an
-# unnamed one (header `2`), plus a lost-and-found.
-[[desktop.2.section]]
-type = "workspace"
-label = "Main"
+match = 'app~=Chrome or app~=Safari or app~=Firefox'
 layout = "bsp"
-
-[[desktop.2.section]]
-type = "workspace"
-
-# An `unassigned = true` lost-and-found: collects every window on this desktop
-# shown in NO section above (the leftover by subtraction; usually empty). It
-# renders like a lens cell; click / `facet section --focus` focuses its first
-# window; drag a window out onto a workspace to RESCUE it. Only the first
-# receptacle renders (extras warn).
-[[desktop.2.section]]
-unassigned = true
-label = "Stray"
-
-[[desktop.3.section]]
-type = "workspace"
-layout = "master-left"
-
-[[desktop.3.section]]
-type = "workspace"
-layout = "stack"
+show-non-matching = true

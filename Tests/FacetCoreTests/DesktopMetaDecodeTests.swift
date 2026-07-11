@@ -99,7 +99,7 @@ struct DesktopMetaDecodeTests {
 
     @Test func desktopTypeFallsBackToWorkspaceForSections() {
         var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [DesktopSection(type: .workspace)]]
+        c.macDesktopSectionConfigs = [1: [DesktopSection()]]
         #expect(c.desktopType(ordinal: 1) == .workspace)
     }
 

@@ -90,22 +90,6 @@ final class Controller: NSObject {
     /// (`workspaceNames`), so a
     /// workspace rename routes to `renameWorkspace` and never lands here.
     var sectionLabelOverride: [Int: [String: String]] = [:]
-    /// t-0020: the session-only runtime `match` override per mac desktop — the
-    /// live-tuning twin of `sectionLabelOverride`. `[ordinal: [sectionID:
-    /// predicate]]`, keyed by the same stable lens id
-    /// (`"section:<declOrder>:<label>"`). **The seam DIFFERS from
-    /// `sectionLabelOverride`**: a label override relabels the PROJECTED output
-    /// (display-only), but a match override changes which windows a lens catches,
-    /// so it must mutate the projection INPUT — it is applied via
-    /// `applyMatchOverrides` to `desktopSections(...)` BEFORE `project()` in
-    /// `apply()`, not after. Same lifetime as `sectionLabelOverride`: per-mac-
-    /// desktop, NEVER written to disk (config.toml stays read-only), reset on
-    /// relaunch (NOT on `facet reload`). Only PURE lens sections are overridable
-    /// (workspace = exclusive substrate, unassigned = leftover-by-subtraction —
-    /// both forbidden, the writer loud-rejects them). The writer is ordinal-gated
-    /// like `sectionLabelOverride`'s (a non-nil `currentMacDesktopOrdinal()`), so
-    /// it never lands in a `-1` bucket the seam can't read.
-    var sectionMatchOverride: [Int: [String: String]] = [:]
     /// t-ec9s (D6): the session-only runtime `match` override for a LENS DESKTOP,
     /// keyed by mac-desktop ORDINAL alone (a lens desktop holds exactly one lens,
     /// so there is no section id to key on). This is the SINGLE effective-match
