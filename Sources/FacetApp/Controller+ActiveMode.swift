@@ -199,22 +199,6 @@ extension Controller {
             onSearch: { [weak self] in self?.enterSearchFromMenu() })
     }
 
-    /// Section/lens model: TreeController hook — the user clicked a
-    /// `type="lens"` section header in the tree. Toggle it as the active section
-    /// (clicking the already-active lens clears it back to the active workspace).
-    /// Tree click → `autoFocus: false` (the tree keeps key).
-    func toggleActiveLens(_ sectionID: String) {
-        // §A: the tree passes the stable section id straight from the rendered
-        // section — no label→id lookup, so the toggle is unambiguous even with
-        // non-unique / empty labels.
-        if currentActiveSection == .lens(sectionID) {
-            setActiveLens(nil)                                // toggle off → active workspace
-        } else {
-            activateLensID(sectionID, ordinal: currentMacDesktopOrdinal(),
-                           autoFocus: false)                 // tree keeps key focus
-        }
-    }
-
     /// TreeController (R10): open the per-window tag checklist for `windowID`
     /// (the ops-menu "Tag…" item). Everything the panel needs is derived from
     /// the live snapshot on main — `allTags` is the union of every window's
@@ -421,6 +405,16 @@ extension Controller {
             if let overridden = sectionMatchOverride[ordinal]?[secID] {
                 return overridden
             }
+            // A lens DESKTOP carries its `match` on the `[desktop.N]` table
+            // (t-ec9s), not a `[[desktop.N.section]]`. Its synthesized matched
+            // section id is `section:0:<label>`, so read the config match off
+            // `desktopLens` directly.
+            if config.desktopType(ordinal: ordinal) == .lens,
+               let lens = config.desktopLens(ordinal: ordinal) {
+                return lens.match
+            }
+            // A config section-lens (workspace desktop, removed by Phase 6)
+            // still reads its `match` off the `DesktopSection`.
             for (i, s) in desktopSections(forOrdinal: ordinal).enumerated()
             where s.type == .lens && !s.unassigned
                 && "section:\(i):\(s.label)" == secID {

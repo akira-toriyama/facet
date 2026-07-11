@@ -95,13 +95,13 @@ public final class SidebarView: NSView {
     /// internal relayouts in `rebuild()` (the projection is recomputed only
     /// on a Controller refresh, not on every search keystroke / resize).
     var lastSections: [ProjectedSection] = []
-    /// The active lens's stable section id (`ProjectedSection.id`) pushed via
-    /// `update(sections:activeLensID:)` (§A): the `type=lens` section whose
-    /// header is emphasised (`pal.primary`), or nil for none. Keyed on the id,
-    /// not the display label, so a non-unique / empty label can't light the
-    /// wrong header. Reused by `rebuild()` so an internal relayout (search /
-    /// optimistic / resize) keeps the highlight. Session-only.
-    var lastActiveLensID: String?
+    /// Whether the mac desktop currently rendered is a lens desktop
+    /// (`[desktop.N] type=lens`), pushed via `update(sections:lensDesktop:)`
+    /// (t-ec9s). A lens desktop's membership is match-driven, so the tree gates
+    /// section-move DnD (a window can't be hand-moved between the matched /
+    /// holding sections). Reused by `rebuild()` so an internal relayout (search
+    /// / optimistic / resize) keeps the gate. Session-only.
+    var lensDesktop = false
 
     var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public internal(set) var signature = ""
@@ -274,7 +274,7 @@ public final class SidebarView: NSView {
     func rebuild() {
         if sectionModeActive {
             _ = update(sections: lastSections, workspaces: lastWorkspaces,
-                       activeLensID: lastActiveLensID)
+                       lensDesktop: lensDesktop)
         } else {
             _ = update(lastWorkspaces)
         }
@@ -513,12 +513,12 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(sections: [ProjectedSection],
                        workspaces: [Workspace],
-                       activeLensID: String? = nil,
+                       lensDesktop: Bool = false,
                        titles: [WindowID: String]? = nil,
                        macDesktop: Int?? = nil) -> CGFloat {
         sectionModeActive = true
         lastSections = sections
-        lastActiveLensID = activeLensID
+        self.lensDesktop = lensDesktop
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         if let macDesktop { macDesktopOrdinal = macDesktop }
@@ -549,24 +549,14 @@ public final class SidebarView: NSView {
             return wsByIndex[src]?.layoutMode ?? ""
         }
         // Header "active" (drives the `pal.primary` accent + the signature's
-        // `*` marker): a workspace section follows its source workspace; a
-        // lens section lights up when it IS the active lens (§A, matched by
-        // stable section id — the CLI / click key). Folding it through `active`
-        // everywhere means the signature rebuilds whenever the active lens
-        // changes, with no separate sig field.
+        // `*` marker): a workspace section follows its source workspace. Since
+        // the section-lens activate concept was retired (t-ec9s), a `.lens`
+        // section (only ever a lens desktop's match-synthesized section now) and
+        // a `.unassigned` receptacle have no "active" state — they render dim.
         func headerActive(_ sec: ProjectedSection) -> Bool {
-            // EX-1 single-highlight: exactly one active section is lit. When a
-            // lens is active, workspace-section headers go dark (the catalog is
-            // already exclusive — `activeLens XOR activeWorkspace`; the view now
-            // reflects it) so only the active lens header reads `pal.primary`.
-            // §A: keyed on the stable id, not the label. §G: an unassigned
-            // section is NEVER active (a passive orphan receptacle, no
-            // highlight concept) — it always renders dim.
             switch sec.sectionType {
-            case .lens:       return activeLensID != nil && sec.id == activeLensID
-            case .unassigned: return false
-            case .workspace:  return activeLensID == nil
-                                  && wsActive(sec.sourceWorkspaceIndex)
+            case .lens, .unassigned: return false
+            case .workspace:         return wsActive(sec.sourceWorkspaceIndex)
             }
         }
 

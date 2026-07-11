@@ -72,13 +72,6 @@ public protocol TreeController: AnyObject, Sendable {
                       on window: Window,
                       workspaceIndex: Int)
 
-    /// Section/lens model (PR6 / §A): the user clicked a `type=lens` section
-    /// header in the tree. TOGGLE it as the active lens — activate the section
-    /// `sectionID` (`ProjectedSection.id`), or clear if it is already active.
-    /// Keyed on the stable id, not the display label, so a non-unique / empty
-    /// label can't toggle the wrong lens. No-op outside the section model.
-    func toggleActiveLens(_ sectionID: String)
-
     /// §G: the user clicked an `type=unassigned` section header (or its grid /
     /// rail cell, or `section --focus`d it). FOCUS ITS FIRST orphan window — no
     /// lens toggle, no workspace switch (unassigned has neither behind it). The

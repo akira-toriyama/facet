@@ -63,19 +63,6 @@ extension Controller {
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
-                // Section/lens model: activate / clear the ACTIVE lens (a
-                // `type="lens"` section, keyed by its label). The label can
-                // hold any character (incl. `:`), so the whole remainder is
-                // the label — no further parsing.
-                case let s where s.hasPrefix("lens-section:"):
-                    // CLI / hotkey path → autoFocus so focus lands in the
-                    // new visible set (the in-panel tree toggle passes false).
-                    self.setActiveLens(
-                        String(s.dropFirst("lens-section:".count)),
-                        autoFocus: true)
-                case "lens-clear":
-                    self.setActiveLens(nil, autoFocus: true)
-
                 // Unified section addressing: `facet section --focus N|LABEL`
                 // → resolve the tree-order index / label to its ActiveSection.
                 case let s where s.hasPrefix("section-focus:"):
@@ -88,6 +75,12 @@ extension Controller {
                 // `decodeSectionRename` splits ONCE and keeps the label verbatim
                 // (same wire form as `window-retag`, but the label half is loose).
                 case let s where s.hasPrefix("section-rename:"):
+                    // A lens desktop's sections are match-synthesized (matched
+                    // + holding) — their labels come from `[desktop.N]`, not a
+                    // renameable section, so `--rename` is a loud no-op (D5).
+                    // The GUI header Rename still relabels the desktop's display
+                    // via its own path (`renameSection(sectionID:)`).
+                    if self.lensDesktopBlocks("section --rename") { break }
                     guard let (n, label) = decodeSectionRename(s) else {
                         Log.debug("section-rename: malformed \"\(s)\"")
                         self.setError("section --rename: malformed")
@@ -534,6 +527,11 @@ extension Controller {
     /// `Controller.reorderSection`'s two-mode handling so `--focus N` matches
     /// the numbers the user sees.
     private func addressableSections() -> [SectionAddr] {
+        // A lens DESKTOP's `.lens` section is match-synthesized (no activation
+        // concept — membership is `match`), so `--focus` focuses its first
+        // window like the unassigned receptacle (D5). A config section-lens on a
+        // workspace desktop (removed by Phase 4) still activates by id.
+        let onLensDesktop = config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens
         if !lastSections.isEmpty {
             return lastSections.map { ps in
                 switch ps.sectionType {
@@ -543,6 +541,10 @@ extension Controller {
                     return SectionAddr(label: ps.label,
                         section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) },
                         sectionID: ps.id)
+                case .lens where onLensDesktop:
+                    // Lens desktop: focus-first-window (no `.lens` activation).
+                    return SectionAddr(label: ps.label, section: nil,
+                                       sectionID: ps.id)
                 case .lens:
                     // A0: identity = the stable id; `--focus index:N` activates
                     // by id. `label:NAME` addressing stays label-based (display).

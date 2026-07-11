@@ -64,7 +64,11 @@ extension SidebarView {
                         // `wsBands` key), and dropping it on a WORKSPACE band runs
                         // that workspace's move → the orphan is rescued. Dropping
                         // ON unassigned is inert (no apply) → snap-back.
-                        if let tgt, tgt != dragGroup,
+                        // A lens DESKTOP's section membership is match-driven
+                        // (t-ec9s) — a window can't be hand-moved between the
+                        // matched / holding sections, so the drop is inert (snap-
+                        // back; the row was never hidden). Retarget via `--match`.
+                        if !lensDesktop, let tgt, tgt != dragGroup,
                            dragGroup < lastSections.count, tgt < lastSections.count {
                             controller?.applyMove(
                                 windowID: dragWindowID,
@@ -98,8 +102,12 @@ extension SidebarView {
                     // insertion boundary is the top/bottom half of the band
                     // under the cursor. The Controller mutates the per-mac-
                     // desktop order override + re-renders all three views; a
-                    // no-op drop commits nothing (`reorderSection` guards).
-                    if let hit = wsBands.first(where: { $0.value.contains(cp.y) }),
+                    // no-op drop commits nothing (`reorderSection` guards). A
+                    // lens DESKTOP's 1–2 synthesized sections have a fixed order
+                    // (matched then holding) — reordering is meaningless, so gate
+                    // it (t-ec9s).
+                    if !lensDesktop,
+                       let hit = wsBands.first(where: { $0.value.contains(cp.y) }),
                        dragGroup < lastSections.count {
                         let mid = (hit.value.lowerBound + hit.value.upperBound) / 2
                         let boundary = cp.y < mid ? hit.key : hit.key + 1
@@ -458,20 +466,18 @@ extension SidebarView {
             break
         case .header(let g, let i):
             // A lens / unassigned header carries `workspaceIndex == nil` (no
-            // workspace to switch to) — discriminate by section type:
-            //   • lens (PR6 / §A): TOGGLE the active lens — pass the section's
-            //     stable id (not the display label) so the right lens toggles
-            //     even with non-unique / empty labels; the re-render lights its
-            //     header (`pal.primary`) + (PR7) narrows grid/rail.
-            //   • unassigned (§G): FOCUS ITS FIRST orphan window (the unified
-            //     focus helper) — no toggle, no switch.
+            // workspace to switch to). Since the section-lens activate concept
+            // was retired (t-ec9s), a `.lens` section (a lens desktop's
+            // match-synthesized section) and a `.unassigned` receptacle both
+            // FOCUS THEIR FIRST window via the unified §G helper — no toggle, no
+            // switch (membership is match-driven / by-subtraction, not manual).
             guard let i else {
                 kbSel = .hdr(group: g)
                 if sectionModeActive, g < lastSections.count {
                     let sec = lastSections[g]
                     switch sec.sectionType {
-                    case .lens:       controller?.toggleActiveLens(sec.id)
-                    case .unassigned: controller?.focusFirstWindow(inSectionID: sec.id)
+                    case .lens, .unassigned:
+                        controller?.focusFirstWindow(inSectionID: sec.id)
                     case .workspace:  break   // workspace always has i != nil
                     }
                 }
@@ -528,20 +534,11 @@ extension SidebarView {
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
-            // t-c6fm: clicking an isolate-PARKED window (it shows normally in
-            // whatever lens section its `match` satisfies — parked ≠ dimmed) EXITS
-            // focus mode: clear the active lens so every parked window un-parks,
-            // then focus the clicked one. A durable single-window unpark would
-            // bounce back next reconcile (the park set is re-derived from the lens
-            // `match`), so clearing the lens is the only stable "restore". Parked
-            // windows are active-WS, so no switch. (OPEN: an alternative is to
-            // activate the CLICKED row's lens instead of clearing — pending
-            // dogfood.)
-            if win0?.isParked == true, let lensID = lastActiveLensID {
-                controller?.toggleActiveLens(lensID)   // active id → clears
-                controller?.focusWindow(window, postSwitch: false)
-                return
-            }
+            // A lens DESKTOP always tiles its matched set + anchor-parks the
+            // rest by `match` (t-ec9s; the section-lens "clear to un-park"
+            // gesture is gone). Clicking any window — parked or tiled — just
+            // focuses it; the always-on park re-derives from `match` next
+            // reconcile, so there is no per-window unpark to perform.
             let bk = backend
             let ctrl = controller
             cliQueue.async {

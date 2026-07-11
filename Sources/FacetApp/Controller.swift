@@ -1315,7 +1315,7 @@ final class Controller: NSObject {
         if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop {
             contentH = sidebarView.update(sections: lastSections,
                                           workspaces: wss,
-                                          activeLensID: lastActiveLensID,
+                                          lensDesktop: isLensDesktop,
                                           titles: titles,
                                           macDesktop: macDesktopOrdinal)
         } else {
