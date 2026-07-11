@@ -56,8 +56,12 @@ section; `show-non-matching = true` adds a second "holding" section listing
 the parked rest (making the tree a full inventory). It is **tree-only**:
 `--view grid` / `--view rail` are
 rejected there, since a lens desktop's membership is dynamic — there is no
-fixed picture to thumbnail. A `workspace` desktop (the implied type of a
-sections-only config) behaves exactly as before.
+fixed picture to thumbnail. Workspace-structure commands (`facet workspace
+--add` / `--remove` / `--move` / `--rename` / `--focus`, plus `--layout`) are
+rejected there too — a lens desktop is a single always-on workspace, so there
+is nothing to add, switch to, or re-declare a layout for (tile-refinement
+`--retile` / `--balance` / `--rotate` / `--mirror` still work). A `workspace`
+desktop (the implied type of a sections-only config) behaves exactly as before.
 
 Drag-and-drop follows one model across the views: the **grabbed
 target decides the action** — drag a window to move it, drag a

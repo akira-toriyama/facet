@@ -178,6 +178,17 @@ public protocol WindowBackend: Sendable {
     /// not the raw label — the adapter parses the declOrder to find the section.
     func setSectionLens(_ id: String?, autoFocus: Bool)
 
+    /// t-0sbm: push the RUNTIME lens-desktop `match` override to the adapter so
+    /// `applyIsolatePark` tiles the matched set + parks the rest by the LIVE
+    /// match, not just `config.desktopLens.match`. A lens desktop holds exactly
+    /// one lens, so the override keys on the mac desktop ordinal alone (no
+    /// section-id resolution). `nil` / empty reverts to the config match. The
+    /// tree projection already overlays the same override
+    /// (`sectionMatchOverride`); this keeps the physical park/tile in lock-step,
+    /// which is the lens desktop's whole point ("change the match to change what
+    /// you see"). No-op on a workspace desktop's section-lens (a pure VIEW).
+    func setLensDesktopMatch(_ predicate: String?, ordinal: Int)
+
     /// Activate a section (EX-1 throughline) — a workspace (clears any active
     /// lens, exclusive model) or a `type="lens"` section (cross-workspace
     /// union). Lens-activate and workspace-activate funnel through this one
@@ -555,6 +566,7 @@ public extension WindowBackend {
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
     func setSectionLens(_ id: String?, autoFocus: Bool) {}
+    func setLensDesktopMatch(_ predicate: String?, ordinal: Int) {}
     func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
     func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}

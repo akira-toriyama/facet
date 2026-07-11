@@ -510,7 +510,10 @@ extension NativeAdapter {
         let ord = activeMacDesktopOrdinal
         var lensMatch: String? = nil
         if let lens = config.desktopLens(ordinal: ord) {
-            lensMatch = lens.match
+            // t-0sbm: a runtime `--match` override (CLI or tree Edit-match) wins
+            // over the config match so the physical park/tile tracks what the
+            // user just typed — matching the tree projection override.
+            lensMatch = ord.flatMap { lensDesktopMatchOverride[$0] } ?? lens.match
             // Lens-layout seam: a lens desktop tiles its matched set with the
             // lens's declared `layout`, asserted on the (N=1) active workspace
             // BEFORE the retile. Only when it actually CHANGES — `setMode`
@@ -542,6 +545,23 @@ extension NativeAdapter {
         let plan = catalog.reconcileIsolatePark(desired: desired,
                                                 focused: focused, in: rect)
         applyHide(toPark: plan.toPark, toRestore: plan.toRestore)
+    }
+
+    /// t-0sbm change-match: store (or clear) the runtime `match` override for a
+    /// lens desktop, then kick a reconcile so `applyIsolatePark` re-tiles the
+    /// new matched set + re-parks the rest immediately (mirrors `setLayoutMode`
+    /// — mutate on cliQueue, then `.refreshNeeded`). `nil` / empty reverts to
+    /// the config match by dropping the key.
+    public func setLensDesktopMatch(_ predicate: String?, ordinal: Int) {
+        dispatchPrecondition(condition: .onQueue(cliQueue))
+        if let predicate, !predicate.isEmpty {
+            lensDesktopMatchOverride[ordinal] = predicate
+            Log.debug("native: setLensDesktopMatch ord=\(ordinal) → \"\(predicate)\"")
+        } else {
+            lensDesktopMatchOverride.removeValue(forKey: ordinal)
+            Log.debug("native: setLensDesktopMatch ord=\(ordinal) → revert config")
+        }
+        eventContinuation.yield(.refreshNeeded)
     }
 
     /// EX-3.3: the FORWARD `apply` ops in the ACTIVE section-lens (canon ④⑨ — a

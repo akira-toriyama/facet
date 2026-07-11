@@ -59,6 +59,7 @@ extension Controller {
                         String(s.dropFirst("toggle:".count)))
 
                 case let s where s.hasPrefix("workspace:"):
+                    if self.lensDesktopBlocks("workspace --focus") { break }
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
@@ -110,9 +111,11 @@ extension Controller {
                     self.setSectionMatch(indexN1Based: n, to: predicate)
 
                 case "workspace-add":
+                    if self.lensDesktopBlocks("workspace --add") { break }
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
                 case let s where s.hasPrefix("workspace-remove:"):
+                    if self.lensDesktopBlocks("workspace --remove") { break }
                     let raw = String(s.dropFirst("workspace-remove:".count))
                     self.runBackendCommand { bk in
                         bk.removeWorkspace(at: raw.isEmpty ? nil : Int(raw))
@@ -120,12 +123,14 @@ extension Controller {
                     }
 
                 case let s where s.hasPrefix("workspace-rename:"):
+                    if self.lensDesktopBlocks("workspace --rename") { break }
                     let name = String(s.dropFirst("workspace-rename:".count))
                     self.runBackendCommand { bk in
                         bk.renameWorkspace(at: nil, to: name); return nil
                     }
 
                 case let s where s.hasPrefix("workspace-move:"):
+                    if self.lensDesktopBlocks("workspace --move") { break }
                     let to = Int(s.dropFirst("workspace-move:".count)) ?? 0
                     self.runBackendCommand { bk in
                         bk.moveActiveWorkspace(to: to); return nil
@@ -247,6 +252,7 @@ extension Controller {
                     }
 
                 case let s where s.hasPrefix("set-layout:"):
+                    if self.lensDesktopBlocks("workspace --layout") { break }
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)
 
@@ -465,6 +471,28 @@ extension Controller {
                 }
             }
         }
+    }
+
+    /// t-0sbm: a lens desktop is a FLAT, always-on, single-workspace desktop
+    /// (`effectiveWorkspaceList` seeds exactly one). Workspace-SET and
+    /// active-workspace mutations (add / remove / move / rename / focus) can't
+    /// be honored there, and `--add` actively breaks the N=1 invariant the
+    /// anchor-park scope relies on (`workspace == activeIndex` stops being
+    /// desktop-wide the moment a 2nd workspace exists → non-matching windows
+    /// escape the park). Reject loudly, mirroring the tree-only view gate in
+    /// `dispatchView`. `--layout` (a workspace mode-NAME change) is gated too:
+    /// the lens `layout` seam re-asserts the declared layout whenever the mode
+    /// name differs (`applyIsolatePark` → `setMode` only on a name change), so a
+    /// runtime `--layout` would silently revert next reconcile — reject it
+    /// honestly. `--retile` / `--balance` / `--rotate` / `--mirror` are NOT gated:
+    /// they refine the tiled set WITHIN the same mode (the seam never re-fires),
+    /// so they take effect and persist exactly as on a workspace desktop
+    /// (t-0sbm review corrected the earlier "all refinement reverts" premise).
+    private func lensDesktopBlocks(_ verb: String) -> Bool {
+        guard config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens
+        else { return false }
+        setError("\(verb) is not available on a lens desktop")
+        return true
     }
 
     /// Route a `workspace:` control payload — either an absolute
@@ -865,6 +893,19 @@ extension Controller {
             case .ok:
                 sectionMatchOverride[key, default: [:]][sec.id] = predicate
                 Log.debug("setSectionMatch: n=\(n) section id=\(sec.id) → \"\(predicate)\"")
+            }
+        }
+        // t-0sbm: on a lens DESKTOP the match also drives the PHYSICAL park/tile
+        // (the lens's whole point — "change the match to change what you see"),
+        // so push it across the backend seam. The projection override above
+        // only re-filters the tree display; without this the two diverge (tree
+        // shows the new match, windows stay parked by the old one). A
+        // workspace-desktop section-lens is a pure VIEW → no push.
+        if config.desktopType(ordinal: key) == .lens {
+            // `predicate` promotes to `String?`; `setLensDesktopMatch` already
+            // treats empty as the revert (drops the key), so no pre-normalize.
+            runBackendCommand { bk in
+                bk.setLensDesktopMatch(predicate, ordinal: key); return nil
             }
         }
         apply(lastWorkspaces)       // re-render: the lens re-filters live

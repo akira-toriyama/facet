@@ -605,7 +605,14 @@ switcher bands — was retired by t-0sbm as one concept too many.)
   survive).
 - **Two-world gate** — a lens desktop is TREE-ONLY (dynamic membership ⇒ no
   fixed picture to thumbnail): `--view grid` / `--view rail` there are a loud
-  `setError` no-op (`Controller+CLIDispatch.swift`).
+  `setError` no-op (`Controller+CLIDispatch.swift`). The same gate
+  (`lensDesktopBlocks`) also rejects the workspace-set / active-workspace verbs
+  (`workspace --add` / `--remove` / `--move` / `--rename` / `--focus`) and
+  `--layout` — a lens desktop is a flat single always-on workspace (the N=1
+  park scope), and a runtime `--layout` would be reverted every reconcile by
+  the lens layout seam. Tile-refinement (`--retile` / `--balance` / `--rotate`
+  / `--mirror`) is NOT gated: it mutates the tiled set within the same mode and
+  persists exactly as on a workspace desktop.
 
 ### One tiling machinery, one active section
 

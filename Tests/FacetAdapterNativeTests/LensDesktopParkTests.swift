@@ -81,6 +81,54 @@ struct LensDesktopParkTests {
         #expect(a.catalog.isolateParked == [wid(10)])        // Web now out-of-lens
     }
 
+    /// t-0sbm change-match: a RUNTIME `--match` override (the CLI / tree
+    /// Edit-match seam) drives the park set OVER the config match, so the
+    /// physical park/tile tracks what the user just typed — matching the tree
+    /// projection override. Config says Web is in-lens; override flips it to
+    /// Other, so Web (10) now parks.
+    @Test func runtimeMatchOverrideDrivesParkSet() {
+        let a = lensDesktopAdapter(match: "app=Web")
+        cliQueue.sync {
+            a.setLensDesktopMatch("app=Other", ordinal: 1)
+            a.applyIsolatePark(live: live(), focused: nil, rect: rect)
+        }
+        #expect(a.catalog.isolateParked == [wid(10)])   // Web now out-of-lens
+        #expect(!a.catalog.isolateParked.contains(wid(30)))
+    }
+
+    /// Reverting (nil / empty) drops the override AND unparks the window the
+    /// override had parked. Establishes the override-parked state FIRST (Web/10
+    /// parked under `app=Other`), then reverts + reconciles so the config→revert
+    /// UNPARK transition is actually exercised — not just the config baseline.
+    @Test func emptyOverrideRevertsToConfigMatch() {
+        let a = lensDesktopAdapter(match: "app=Web")
+        cliQueue.sync {
+            a.setLensDesktopMatch("app=Other", ordinal: 1)   // override → Other
+            a.applyIsolatePark(live: live(), focused: nil, rect: rect)
+        }
+        #expect(a.catalog.isolateParked == [wid(10)])   // override active: Web (in config) now parked
+        cliQueue.sync {
+            a.setLensDesktopMatch(nil, ordinal: 1)           // revert to config
+            a.applyIsolatePark(live: live(), focused: nil, rect: rect)
+        }
+        #expect(a.catalog.isolateParked == [wid(30)])   // config (Web in-lens) → Other parks, Web UNparked
+    }
+
+    /// The override is keyed by ordinal — an override for a DIFFERENT desktop
+    /// never leaks into the active ordinal's park derivation. The active-ordinal
+    /// override IS read (Web parks under `app=Other`) while an ordinal-2 DECOY
+    /// (`app=Web`, which would flip the result if it leaked) is ignored — so the
+    /// assertion distinguishes "per-ordinal isolation works" from "read path dead".
+    @Test func overrideIsPerOrdinal() {
+        let a = lensDesktopAdapter(match: "app=Web")
+        cliQueue.sync {
+            a.setLensDesktopMatch("app=Other", ordinal: 1)   // active ordinal — must win
+            a.setLensDesktopMatch("app=Web", ordinal: 2)     // decoy on wrong ordinal — must be ignored
+            a.applyIsolatePark(live: live(), focused: nil, rect: rect)
+        }
+        #expect(a.catalog.isolateParked == [wid(10)])   // ord-1 override (Other) → Web parks; ord-2 decoy ignored
+    }
+
     /// A `type=workspace` desktop is NOT a lens — it parks nothing.
     @Test func workspaceDesktopParksNothing() {
         var cfg = FacetConfig()

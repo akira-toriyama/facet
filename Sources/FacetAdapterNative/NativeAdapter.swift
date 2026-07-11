@@ -51,6 +51,13 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// applies the AX side-effects the catalog hands back.
     var catalog = WorkspaceCatalog()
 
+    /// t-0sbm: runtime lens-desktop `match` overrides, keyed by mac desktop
+    /// ordinal (session-only; the park/tile mirror of the Controller's
+    /// `sectionMatchOverride`). `applyIsolatePark` prefers this over the config
+    /// match so `facet section --match` / the tree Edit-match physically
+    /// re-tile + re-park live. cliQueue-only (set + read both on cliQueue).
+    var lensDesktopMatchOverride: [Int: String] = [:]
+
     /// Per-mac-desktop catalogs that aren't currently active.
     /// facet keeps an independent set of virtual workspaces per
     /// mac desktop (memory: facet-per-native-space-ws). On a
