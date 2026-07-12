@@ -7,18 +7,20 @@ Guidance for working in this repository.
 All UI / config / code terminology follows
 [`docs/glossary.md`](docs/glossary.md) — use the canonical names
 (`FacetCore`, `FacetAdapterNative`, `WindowBackend`, `mac desktop`,
-`facet workspace`, `facet view`, `lens`, `AX target`, `pal`,
+`facet workspace`, `facet view`, `lens desktop`, `AX target`, `pal`,
 `loading skeleton`, …), **not** the `Don't call it:` synonyms.
-The 5 core concepts are kept strictly apart — hierarchy
+The core concepts are kept strictly apart — hierarchy
 **mac desktop (typed) > section > window**: **mac desktop** (= macOS
 native Space, TYPED `workspace` | `lens` via `[desktop.N]`; code
-`MacDesktops` / `DesktopMeta` / `[[desktop.N.section]]`), **facet workspace**
-(facet's window grouping; `WorkspaceCatalog`), **facet view** (UI:
-`tree`/`grid`/`rail`), **lens** (tag display set; M11-3, shipped in
-#176 — `facet lens`, `WorkspaceCatalog.activeSectionLens`), **lens desktop**
-(a `[desktop.N] type=lens` mac desktop: ALWAYS-ON match+layout tile with
-non-matching windows anchor-parked, tree-only; t-0sbm — this replaced the
-retired browser-tab **board** layer, t-wrd2/#368 → removed t-0sbm).
+`MacDesktops` / `DesktopMeta` / `[[desktop.N.section]]`, each a workspace
+SPATIAL cell now — t-ec9s), **facet workspace** (facet's window grouping;
+`WorkspaceCatalog`), **facet view** (UI: `tree`/`grid`/`rail`), **lens
+desktop** (a `[desktop.N] type=lens` mac desktop: ALWAYS-ON match+layout tile
+with non-matching windows anchor-parked, tree-only; t-0sbm — this replaced the
+retired browser-tab **board** layer, t-wrd2/#368 → removed t-0sbm). The former
+**section-lens** `lens` — a cross-workspace VIEW filter activated by `facet
+lens NAME` — was retired t-ec9s; `lens` now means ONLY the lens desktop (the
+auto-tag-on-match need its `apply` served moved to `[[rule]]`).
 Apple's own SLS / `NSWorkspace` API names stay verbatim.
 Adding or renaming a term lands in the same PR as the code change.
 
@@ -231,12 +233,13 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   gates on EITHER form).
   **A workspace section may be named from config via an optional `label`**
   (§A / t-0018 reversed the old "never named from config" rule; the old
-  `[desktop.N]` by-name seed stays retired). `type = "workspace"` with a
-  non-empty `label` names the workspace; an empty / absent `label` leaves
-  it UNNAMED — displayed by its 1-based index (§B retired the emoji
-  auto-name pool `WorkspaceNaming`; all section headers compose via
-  `sectionDisplayLabel(index:label:)` → `index` or `index (label)`, §D).
-  The `label` is OPTIONAL on every section type now (`lens` / `unassigned`
+  `[desktop.N]` by-name seed stays retired). Every `[[desktop.N.section]]`
+  is a workspace SPATIAL cell now (t-ec9s dropped the section `type` /
+  `match` / `apply`); a non-empty `label` names the workspace, an empty /
+  absent `label` leaves it UNNAMED — displayed by its 1-based index (§B
+  retired the emoji auto-name pool `WorkspaceNaming`; all section headers
+  compose via `sectionDisplayLabel(index:label:)` → `index` or
+  `index (label)`, §D). The `label` is OPTIONAL (the `unassigned` receptacle
   too); within one mac desktop a non-empty `label` must be unique (loud
   warn + first-wins; empty labels may repeat — name resolution targets only
   labeled workspaces, unnamed ones are index-addressed). Runtime
@@ -276,29 +279,31 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``Main.canonicalViews`` + matching cases in
   ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
   don't reintroduce per-view bespoke flags.
-- **``facet section`` addresses ANY section (workspace, lens, OR unassigned)
-  by its 1-based tree-order index or its label** — the unified addressing layer
-  over the older per-kind verbs. ``--focus N|LABEL`` activates it (switch
-  workspace / activate lens / — §G — focus an unassigned section's FIRST window
-  via the unified ``focusFirstWindow(inSectionID:)``; resolves via
-  ``addressableSections()`` reading ``lastSections``). ``--rename N "label"``
-  sets the display label at runtime (§E): workspace → catalog
-  ``renameWorkspace``; lens AND unassigned (§G) → session-only
-  ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection
-  seam by the pure ``applyLabelOverrides``); empty → revert (workspace = bare
-  index, lens/unassigned = config label). Identity stays on the stable section
-  id — the override never mutates ``ProjectedSection.id``. Session-only: reset
-  on relaunch, NOT on ``facet reload`` (mirrors ``macDesktopSectionOrder``). GUI
-  twin = the tree header right-click ``Section ▸ Rename`` (``beginSectionRename``
-  → ``SectionRenamePanel``; unassigned gets a Rename-only
-  ``ViewContextMenu.showUnassignedMenu`` — no layout). Wire
-  ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
+- **``facet section`` addresses ANY section (workspace, unassigned, OR a lens
+  desktop's synthesized section) by its 1-based tree-order index or its label** —
+  the unified addressing layer. ``--focus N|LABEL`` (switch workspace / — §G —
+  focus an unassigned OR lens-desktop section's FIRST window via the unified
+  ``focusFirstWindow(inSectionID:)``, since the section-lens ACTIVATE concept was
+  retired t-ec9s; resolves via ``addressableSections()`` reading ``lastSections``).
+  ``--rename N "label"`` sets the display label at runtime (§E): workspace →
+  catalog ``renameWorkspace``; unassigned (§G) → session-only
+  ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection seam by
+  the pure ``applyLabelOverrides``); empty → revert. On a lens desktop ``--rename``
+  is a loud reject (its sections are match-synthesized). ``--match N "expr"``
+  retargets a lens desktop's match (session-only ordinal-keyed
+  ``lensDesktopMatchOverride``, D6; pushed to the adapter's ``setLensDesktopMatch``
+  so display + park stay in lock-step). Identity stays on the stable section id.
+  Session-only: reset on relaunch, NOT on ``facet reload``. GUI twin = the tree
+  header right-click ``Section ▸ Rename`` (``beginSectionRename`` →
+  ``SectionRenamePanel``) + ``Edit match`` (``beginSectionMatchEdit``, lens desktop).
+  Wire ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
 - **A lens desktop is TREE-ONLY (the two-world gate)** — `--view grid` /
   `--view rail` (and their toggles) on a `[desktop.N] type=lens` mac
   desktop are a loud ``setError`` no-op: a lens desktop's membership is
   dynamic, so there is no fixed picture to thumbnail. The tree renders
-  its 1–2 synthesized sections (``lensDesktopSections``). (``facet
-  board`` was removed with the board layer, t-0sbm.)
+  its 1–2 synthesized sections (``FilterProjection.projectLensDesktop`` —
+  matched + optional non-matching holding; t-ec9s decoupled it from the config
+  ``DesktopSection``). (``facet board`` was removed with the board layer, t-0sbm.)
 - **The tree opens in keyboard-nav (active) mode directly** —
   there is **no ``--active`` modifier** (it was folded into
   ``--view tree`` itself; the flag, the ``view:tree+active`` DNC

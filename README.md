@@ -437,41 +437,28 @@ Frequently-touched keys:
   rule is skipped; the rest still run).
 - `[[desktop.N.section]]` blocks — the per-mac-desktop section model
   (`N` = the mac desktop's Mission Control position). An ordered list of
-  sections describes that desktop; each has a required `type`:
-  `"workspace"` (a spatial cell named by an optional `label`, else unnamed
-  and shown by its 1-based index, with an optional `layout` seed; the count
-  of these is that desktop's workspace count — `match` and `apply` are
-  **forbidden** on a workspace, so its membership changes only by drag or
-  `facet window --move-to N`),
-  `"lens"` (a saved visibility filter / view — `label` + `match` + optional
-  `apply`, where **`apply` adds tags only** — `{ tags = [...] }`, additive;
-  `workspace` / `floating` / `sticky` / `master` are forbidden on a lens and
-  dropped; activate it with `facet lens NAME` to DISPLAY the matches
-  aggregated across **every** workspace on the current mac desktop (a lens is
-  a pure VIEW — it never moves a real window, and an authored `layout` is
-  ignored); switching to any workspace clears the lens, `facet lens --clear`
-  drops the view). **Drag-and-drop is same-type only**: dragging a window
-  between workspaces moves it; between lenses re-tags it; the workspace ↔ lens
-  boundary is never crossed by a drag (do cross-axis edits via right-click /
-  `facet window --tag` / `--move-to`), and a section marked
-  `unassigned = true` (a marker, not a `type`; `label` only, no `match` /
-  `apply`) is the **recommended** opt-in lost-and-found — it collects **every**
-  leftover window (any window shown in no other section), renders like a lens
-  cell, focuses its first window on `facet section --focus`, and rescues a
-  window dragged out onto a workspace; only the first `unassigned = true`
-  section renders, and it's usually empty (every window lives in a workspace) —
-  keep one as a safety net. (The old `type = "unassigned"` spelling is retired.)
-  **A workspace is named by its optional `label`** (else
-  unnamed, shown by its 1-based index); `facet workspace --rename` overrides
-  at runtime. Two modes: **no**
-  `[[desktop.N.section]]` anywhere → every mac desktop gets the default
-  workspaces automatically; **any** present → **opt-in**: facet manages
-  only the mac desktops that have a section block; a mac desktop without
-  one is left untouched (windows as-is, panel hidden there). All three views
-  render the same section list — lens sections appear as cells in the tree,
-  grid, **and** rail, with exactly one section highlighted; on the rail the
-  active section is the centre hero (an active lens shows its aggregated
-  matches there).
+  **workspace spatial cells** describes that desktop; each is
+  `{ label, layout, unassigned }`. `label` names the workspace (optional,
+  else unnamed and shown by its 1-based index); `layout` is an optional
+  layout seed; the count of these is that desktop's workspace count. A
+  window's membership changes only by drag or `facet window --move-to N`.
+  A section marked `unassigned = true` (`label` only) is the
+  **recommended** opt-in lost-and-found — it collects **every** leftover
+  window (any window shown in no other section), focuses its first window
+  on `facet section --focus`, and rescues a window dragged out onto it;
+  only the first `unassigned = true` section renders, and it's usually
+  empty (every window lives in a workspace) — keep one as a safety net.
+  (There is no section `type` any more — a saved cross-workspace filter is
+  now a whole **lens desktop**, `[desktop.N] type = "lens"` below; a stray
+  `type` / `match` / `apply` on a section is ignored on load and flagged by
+  `config --validate`.) `facet workspace --rename` overrides a label at
+  runtime. Two modes: **no** `[[desktop.N.section]]` anywhere → every mac
+  desktop gets the default workspaces automatically; **any** present →
+  **opt-in**: facet manages only the mac desktops that have a section
+  block; a mac desktop without one is left untouched (windows as-is, panel
+  hidden there). All three views render the same section list, with exactly
+  one workspace highlighted; on the rail the active workspace is the centre
+  hero.
 - `[desktop.N]` table — the **typed desktop**: `type = "workspace"` or
   `"lens"` (one ordinal = one desktop = one type; a sections-only config
   implies `workspace`). A **lens desktop** writes its single always-on lens
@@ -483,8 +470,8 @@ Frequently-touched keys:
   and renders in the tree only.
 - **Per-window tags** are free-form strings attached at **runtime**
   (session-only) with `facet window --tag NAME` (and `--untag` /
-  `--toggle-tag` / `--retag`). A `type = "lens"` section whose `match`
-  contains `tag~=NAME` shows every window carrying NAME; `facet query
+  `--toggle-tag` / `--retag`). A lens desktop or `[[rule]]` whose `match`
+  contains `tag~=NAME` targets every window carrying NAME; `facet query
   --tags` lists every tag currently in use. Optionally, `[tags] defined
   = ["web", "code", …]` seeds a **vocabulary** — names offered as
   autocomplete in the tree's tag editor (`t`) before any window uses them
@@ -554,31 +541,25 @@ facet window --unmark NAME        # remove a mark
                                   # a name moves it off the old window.
                                   # session-only, per mac desktop.
 
-# Lens (section model) — activate a type="lens" [[desktop.N.section]] by its
-# label; the matches are shown aggregated across EVERY workspace
-# (display only — a lens never moves a window).
-# Switching to any workspace clears the lens. Persists across mac-desktop swaps.
-facet lens "Web"                  # activate the lens labelled Web
-facet lens --clear                # clear the active lens view
-
-# Section — address ANY section (workspace, lens, or unassigned) by its
+# Section — address ANY section (workspace or unassigned) by its
 # 1-based tree index or its label. `--focus` activates it (switch to the
-# workspace / activate the lens / focus an unassigned section's first window).
+# workspace, or focus an unassigned / lens-desktop section's first window).
 # `--rename` sets its display label at runtime (session-only — reset on
 # relaunch, NOT on `facet reload`; an empty label reverts a workspace to its
-# bare index, a lens or unassigned section to its config label). You can also
-# rename from the tree: right-click a section header → Section ▸ Rename.
+# bare index, an unassigned section to its config label; a lens desktop
+# rejects `--rename`). You can also rename from the tree: right-click a
+# section header → Section ▸ Rename.
 facet section --focus N            # focus the Nth section in tree order
 facet section --focus LABEL        # focus the section labelled LABEL
 facet section --rename N "label"   # rename the Nth section's display label
 
-# `--match` live-edits a LENS section's filter (the `facet filter` predicate),
-# session-only (same lifetime as --rename: reset on relaunch, kept on `reload`).
-# Lens-only — a workspace / unassigned section is rejected. An empty PREDICATE
-# reverts to the config match. You can also edit from the tree: right-click a
-# lens header → Section ▸ Edit match (or press `m`).
-facet section --match N "tag~=web" # set the Nth lens's match, re-filters at once
-facet section --match N ""          # revert the Nth lens's match to config
+# `--match` retargets a LENS DESKTOP's filter (the `facet filter` predicate)
+# live, session-only (same lifetime as --rename: reset on relaunch, kept on
+# `reload`). Lens-desktop-only — a workspace / unassigned section is rejected.
+# An empty PREDICATE reverts to the config match. You can also edit from the
+# tree: right-click the lens-desktop header → Section ▸ Edit match (or press `m`).
+facet section --match N "tag~=web" # retarget the lens desktop, re-tiles at once
+facet section --match N ""          # revert the lens desktop's match to config
 
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
 facet scratchpad --stash NAME     # park the focused window onto a named
@@ -663,9 +644,10 @@ It moves any corner-stranded window back on-screen. Notes:
 ### Window tags
 
 A window can carry any number of **free-form string tags** — created
-on first use, session-only, attached live from the CLI. They feed lens
-filters: a `type = "lens"` section whose `match` contains `tag~=NAME`
-(see [Configuration](#configuration)) shows every window carrying NAME.
+on first use, session-only, attached live from the CLI. They feed
+`match` predicates: a lens desktop or `[[rule]]` whose `match` contains
+`tag~=NAME` (see [Configuration](#configuration)) targets every window
+carrying NAME.
 
 ```sh
 facet window --tag NAME           # add a tag to the focused window
