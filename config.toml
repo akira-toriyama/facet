@@ -60,7 +60,8 @@
 #      snapshot but config.toml is never overwritten.
 #
 # There is no UI — it's fully automatic. Watch `FACET_DEBUG` logs for
-# "auto-exported" / "auto-promoted". Uncomment to enable:
+# "auto-exported" / "auto-promoted". This template ships with it ON
+# (#381) — comment the block out to keep config.toml strictly read-only:
 [config]
 export-path = "~/.config/facet/config.snapshot.toml"
 auto-promote = true
