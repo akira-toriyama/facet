@@ -285,6 +285,11 @@ extension SidebarView {
     public func kbActivate() {
         guard let s = kbSel, let i = kbIndex(of: s) else { return }
         let row = rows[i]
+        // t-63h2: a lens desktop's holding row is inert — bail BEFORE
+        // exitActive so Enter on it doesn't silently drop keyboard nav
+        // for a no-op (see isLensHoldingRow).
+        if case .window(let g, _, _, _, _) = row.kind,
+           isLensHoldingRow(group: g) { return }
         // Leave keyboard mode FIRST so we act exactly like a mouse
         // click (facet no longer the active app). Otherwise,
         // switching to an empty workspace then dropping .regular
