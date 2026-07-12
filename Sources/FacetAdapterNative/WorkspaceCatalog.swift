@@ -901,6 +901,31 @@ struct WorkspaceCatalog {
                    : [])
     }
 
+    /// The ACTIVE workspace's live windows, each carrying the FULL catalog
+    /// management state — the same fields `makeWindow` surfaces to the tree
+    /// (`floating` / `mark` / `sticky` / `scratchpad` / `master` / `focused` /
+    /// tags) — so a lens desktop's park predicate (`IsolatePark.parkSet` in
+    /// `applyIsolatePark`) evaluates the IDENTICAL `Window` the tree projected.
+    /// t-63h2: the park side used to overlay ONLY tags on the raw CGWindowList
+    /// window, leaving `floating`/`mark`/`master`/`scratchpad`/`focused` at
+    /// their live defaults, so a lens `match` referencing one of those fields
+    /// parked a DIFFERENT set than the tree showed (tree/park lock-step broke).
+    /// Built through the SAME `makeWindow` construction site as `snapshot` /
+    /// `orphanWindows`, so the park predicate can't drift from the display;
+    /// `master` is computed for the active workspace exactly as `snapshot`
+    /// does (only for a layout that `hasMaster`). `frame` is irrelevant to the
+    /// predicate, so the live frame passes through.
+    func activeWorkspacePredicateWindows(live: [Window],
+                                         focused: WindowID?) -> [Window] {
+        let hasMasterSlot =
+            LayoutRegistry.engine(named: mode(of: activeIndex))?.hasMaster ?? false
+        let master = hasMasterSlot ? orderedMembers(of: activeIndex).first : nil
+        return live
+            .filter { windowMap[$0.id]?.workspace == activeIndex }
+            .map { makeWindow($0, focused: focused, frame: $0.frame,
+                              isMaster: $0.id == master, populateTags: true) }
+    }
+
     /// EX-3 迷子: the managed windows assigned to NO workspace
     /// (`WindowSlot.workspace == nil`), projected as `Window`s for the views'
     /// LENS sections. `snapshot` buckets these under its `-1` sentinel and

@@ -266,6 +266,50 @@ struct WorkspaceCatalogTests {
         #expect(!c.isValid(-1))
     }
 
+    // MARK: - activeWorkspacePredicateWindows (t-63h2 lens-desktop park lock-step)
+
+    /// The park predicate must see the SAME management state the tree does.
+    /// Before t-63h2 the park side overlaid ONLY tags, so `floating` / `mark`
+    /// read false/nil and a lens `match` on those fields parked the wrong set.
+    @Test func predicateWindowsCarryFullManagementState() {
+        var c = seededCatalog()
+        _ = c.reconcile(live: [window(10), window(20)])
+        _ = c.setFloating(wid(10), true)
+        c.setMark("hero", to: wid(20))
+
+        let ws = c.activeWorkspacePredicateWindows(
+            live: [window(10), window(20)], focused: wid(20))
+        let w10 = ws.first { $0.id == wid(10) }
+        let w20 = ws.first { $0.id == wid(20) }
+        // Raw live windows report isFloating from the fixture (false) and no
+        // mark; the overlay replaces them with the catalog's authoritative
+        // state — the whole point of the fix.
+        #expect(w10?.isFloating == true, "catalog float overlaid, not the raw live false")
+        #expect(w20?.mark == "hero", "catalog mark overlaid, not the raw live nil")
+        #expect(w20?.isFocused == true, "focused id overlaid")
+        #expect(w10?.mark == nil)
+    }
+
+    /// The lock-step guarantee end-to-end: a lens `match='floating'` parks
+    /// exactly the NON-floating windows (the tree's non-members), not — as the
+    /// old tags-only overlay did — every window on the desktop.
+    @Test func floatingLensParksExactlyTheNonFloating() {
+        var c = seededCatalog()
+        _ = c.reconcile(live: [window(10), window(20), window(30)])
+        _ = c.setFloating(wid(20), true)     // 20 is the lens member
+
+        let ws = c.activeWorkspacePredicateWindows(
+            live: [window(10), window(20), window(30)], focused: nil)
+        guard case .success(let lens) = FacetFilter.parse("floating") else {
+            Issue.record("filter parse failed"); return
+        }
+        let parked = IsolatePark.parkSet(
+            windows: ws, inWorkspaceNamed: c.workspaceName(c.activeIndex),
+            lens: lens, sticky: c.everywhereWindows)
+        #expect(Set(parked) == [wid(10), wid(30)],
+                "only the non-floating windows park; the floating member stays")
+    }
+
     // MARK: - setActive
 
     @Test func setActiveReturnsNilForCurrentWorkspace() {

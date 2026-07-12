@@ -473,10 +473,13 @@ extension NativeAdapter {
         if let matchStr = lensMatch,
            case .success(let lens) = FacetFilter.parse(matchStr) {
             // ACTIVE-WS scope — at N=1 (a lens desktop) this is the whole
-            // desktop.
-            let activeWindows = live
-                .filter { catalog.windowMap[$0.id]?.workspace == catalog.activeIndex }
-                .map { $0.withTags((catalog.windowMap[$0.id]?.tags ?? []).sorted()) }
+            // desktop. The windows carry the FULL catalog management state
+            // (t-63h2: floating / mark / master / scratchpad / focused, not
+            // just tags), so the park predicate evaluates the SAME `Window`
+            // the tree projected — a lens `match='floating'` (or `mark=…`)
+            // now parks exactly the tree's non-members.
+            let activeWindows = catalog.activeWorkspacePredicateWindows(
+                live: live, focused: focused)
             desired = IsolatePark.parkSet(
                 windows: activeWindows,
                 inWorkspaceNamed: catalog.workspaceName(catalog.activeIndex),
