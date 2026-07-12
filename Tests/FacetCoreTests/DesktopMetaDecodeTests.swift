@@ -128,6 +128,52 @@ struct DesktopMetaDecodeTests {
         #expect(!c.isMacDesktopManaged(ordinal: 2))
     }
 
+    // MARK: - desktopTypeFlips (t-63h2: hot-reload can't re-seed the catalog)
+
+    @Test func typeFlipsDetectsWorkspaceToLensAndBack() {
+        var ws = FacetConfig()
+        ws.macDesktopSectionConfigs = [1: [DesktopSection()]]   // desktop 1 = workspace
+        var lens = FacetConfig()
+        lens.macDesktopMetaConfigs = [1: DesktopMeta(type: .lens, match: "app=x")]
+        // Either direction reports ordinal 1 (symmetric across the two configs).
+        #expect(ws.desktopTypeFlips(against: lens) == [1])
+        #expect(lens.desktopTypeFlips(against: ws) == [1])
+    }
+
+    @Test func typeFlipsDetectsGainingOrLosingATypedDesktop() {
+        let bare = FacetConfig()                                // desktop 1 = none
+        var lens = FacetConfig()
+        lens.macDesktopMetaConfigs = [1: DesktopMeta(type: .lens, match: "app=x")]
+        #expect(bare.desktopTypeFlips(against: lens) == [1],
+                "none → lens is a flip (the desktop gains a type)")
+    }
+
+    @Test func typeFlipsEmptyWhenTypesUnchanged() {
+        // A match / label edit on the SAME lens type is not a type flip.
+        var a = FacetConfig()
+        a.macDesktopMetaConfigs = [1: DesktopMeta(type: .lens, match: "app=x")]
+        var b = FacetConfig()
+        b.macDesktopMetaConfigs = [1: DesktopMeta(type: .lens, label: "W",
+                                                  match: "app=y")]
+        #expect(a.desktopTypeFlips(against: b) == [])
+    }
+
+    @Test func typeFlipsReportsOnlyChangedOrdinalsSorted() {
+        var a = FacetConfig()
+        a.macDesktopMetaConfigs = [
+            1: DesktopMeta(type: .workspace),
+            2: DesktopMeta(type: .lens, match: "app=x"),
+            3: DesktopMeta(type: .lens, match: "app=z"),
+        ]
+        var b = FacetConfig()
+        b.macDesktopMetaConfigs = [
+            1: DesktopMeta(type: .workspace),                   // unchanged
+            2: DesktopMeta(type: .workspace),                   // lens → workspace
+            3: DesktopMeta(type: .lens, match: "app=z2"),       // match edit only
+        ]
+        #expect(a.desktopTypeFlips(against: b) == [2])
+    }
+
     // MARK: - full load path
 
     @Test func loadPopulatesTypedDesktops() {

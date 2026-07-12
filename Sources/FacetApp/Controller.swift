@@ -624,6 +624,22 @@ final class Controller: NSObject {
             config.desktopLens(ordinal: ord)?.match
                 != fresh.desktopLens(ordinal: ord)?.match
         }
+        // A hand-edit that changes a mac desktop's TYPE (workspace ⇄ lens) is
+        // OUT OF SCOPE for hot-reload: the per-mac-desktop WorkspaceCatalog is
+        // seeded once and never re-seeded (session-authoritative, like the
+        // documented "[[desktop.N.section]] workspace count needs a restart"
+        // rule). Half-applying just the type gate while the catalog stays stale
+        // would strand windows (workspace→lens leaves inactive-workspace windows
+        // parked in the corner, unreachable while lens blocks WS switching) or
+        // show the wrong set (lens→workspace keeps the lens's single workspace).
+        // Rather than silently half-apply, say so LOUD so the user restarts to
+        // pick it up (Fail-Fast; the live layout is left untouched). t-63h2.
+        for ord in config.desktopTypeFlips(against: fresh) {
+            Log.line("config: [desktop.\(ord)] type changed "
+                + "\(config.desktopType(ordinal: ord)?.rawValue ?? "none") → "
+                + "\(fresh.desktopType(ordinal: ord)?.rawValue ?? "none") — "
+                + "restart facet to apply (hot-reload keeps the current layout)")
+        }
         config = fresh
         backend.updateConfig(fresh)   // hot-reload the backend's copy
         for ord in staleLensOrdinals {
