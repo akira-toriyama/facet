@@ -132,6 +132,11 @@ extension SidebarView {
                     }
                     needsDisplay = true
                 } else if let row, row.rect.contains(cp) {
+                    // t-63h2: a lens desktop's holding row is inert — bail
+                    // BEFORE exitActive so an active-mode click doesn't drop
+                    // keyboard nav for a no-op (see isLensHoldingRow).
+                    if case .window(let g, _, _, _, _) = row.kind,
+                       isLensHoldingRow(group: g) { break loop }
                     // #66 safety belt: drop key/active BEFORE acting on
                     // the row, mirroring the Enter path (kbActivate).
                     // Since the tree now opens active, a plain click
@@ -160,6 +165,11 @@ extension SidebarView {
                         case .none, .search?:
                             mode = 1                   // empty / search → move
                         case .window(let g, let ws, _, let wid, _)?:
+                            // t-63h2: a holding row never becomes a drag
+                            // source (display-only; see isLensHoldingRow).
+                            // Not promoting keeps mode 0 — the eventual
+                            // mouseUp lands on the inert-click guard above.
+                            if isLensHoldingRow(group: g) { break }
                             mode = 2
                             dragWS = ws
                             dragGroup = g
@@ -512,6 +522,9 @@ extension SidebarView {
             // ActiveSection.workspace is 1-based → `i + 1`.
             controller?.activateSection(.workspace(i + 1), autoFocus: true)
         case .window(let g, let i, let pid, let id, let title):
+            // t-63h2 defensive twin of the mouseUp / kbActivate guards: a
+            // holding row is inert whichever path reaches here.
+            if isLensHoldingRow(group: g) { return }
             // Off main so the click never hitches; skip the switch
             // round-trip when the window is already on the active
             // workspace.
@@ -558,6 +571,23 @@ extension SidebarView {
                 }
             }
         }
+    }
+
+    /// t-63h2 (2026-07-12 決定): a lens desktop's HOLDING row — a parked
+    /// non-matching window listed under the `show-non-matching` section — is
+    /// DISPLAY-ONLY. Its window sits at the anchor sliver, so focusing it is
+    /// an invisible no-op, and a drop into the lens can't be made to "stick"
+    /// (the match is app-shaped in general — no derivable tag). Click / Enter
+    /// are inert and the row never becomes a drag source; hover preview and
+    /// the right-click tag menu stay (adding the matching tag by hand IS the
+    /// explicit escape hatch), and the CLI `facet section --focus` keeps
+    /// addressing the section. Only lens desktops project an `.unassigned`
+    /// section with `lensDesktop == true` — the by-workspace rescue
+    /// receptacle (drag-out = rescue) has `lensDesktop == false` and is
+    /// untouched.
+    func isLensHoldingRow(group g: Int) -> Bool {
+        lensDesktop && g < lastSections.count
+            && lastSections[g].sectionType == .unassigned
     }
 
 }
