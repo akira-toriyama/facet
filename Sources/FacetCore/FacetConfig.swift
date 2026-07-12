@@ -674,6 +674,23 @@ public struct FacetConfig: Sendable {
         return nil
     }
 
+    /// The mac-desktop ordinals whose declared `type` DIFFERS between `self`
+    /// and `other` (workspace ⇄ lens, or gaining / losing a typed desktop) —
+    /// the change a hot-reload can NOT apply, because the per-mac-desktop
+    /// WorkspaceCatalog is seeded once and never re-seeded (session-
+    /// authoritative, like the "workspace count needs a restart" rule).
+    /// `Controller.reloadConfig` uses this to warn LOUD rather than silently
+    /// half-apply a type flip (which would strand windows). Sorted for a
+    /// deterministic warning order. t-63h2.
+    public func desktopTypeFlips(against other: FacetConfig) -> [Int] {
+        Set(macDesktopMetaConfigs.keys)
+            .union(macDesktopSectionConfigs.keys)
+            .union(other.macDesktopMetaConfigs.keys)
+            .union(other.macDesktopSectionConfigs.keys)
+            .filter { desktopType(ordinal: $0) != other.desktopType(ordinal: $0) }
+            .sorted()
+    }
+
     /// The lens definition for a `type = "lens"` mac desktop at `ordinal`, else
     /// `nil` (not a lens desktop). The single always-on lens (`match` + `layout`
     /// + `show-non-matching`) that drives the desktop-lens park + tile.
