@@ -613,8 +613,30 @@ final class Controller: NSObject {
         let oldThemes = [config.effectiveTreeTheme,
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
+        // A config edit to a lens desktop's `match` (or dropping its lens-ness)
+        // drops that ordinal's live `--match` override — config becomes source
+        // of truth again, exactly like the theme-key precedent below. An
+        // unrelated save keeps the override (a label-only edit must not reset
+        // a live retarget). Without this, the snapshot export (t-sgqk) would
+        // re-bake the forgotten override into a NEWER snapshot and auto-promote
+        // would silently revert the user's hand edit at the next launch.
+        let staleLensOrdinals = lensDesktopMatchOverride.keys.filter { ord in
+            config.desktopLens(ordinal: ord)?.match
+                != fresh.desktopLens(ordinal: ord)?.match
+        }
         config = fresh
         backend.updateConfig(fresh)   // hot-reload the backend's copy
+        for ord in staleLensOrdinals {
+            lensDesktopMatchOverride.removeValue(forKey: ord)
+            // Revert the adapter's park-side copy through the same seam the
+            // set went through, so tree display + physical park/tile stay in
+            // lock-step on the (fresh) config match.
+            runBackendCommand { bk in
+                bk.setLensDesktopMatch("", ordinal: ord); return nil
+            }
+            Log.debug("reloadConfig: [desktop.\(ord)] match edited — "
+                + "dropped the session --match override")
+        }
         logConfigWarnings()
         applyBorderFromConfig()
         seedTreeGeometry()

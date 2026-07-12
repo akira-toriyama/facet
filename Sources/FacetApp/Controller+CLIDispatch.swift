@@ -825,7 +825,13 @@ extension Controller {
         setSectionMatch(indexN1Based: pos0 + 1, to: predicate)
     }
 
-    func setSectionMatch(indexN1Based n: Int, to predicate: String) {
+    func setSectionMatch(indexN1Based n: Int, to rawPredicate: String) {
+        // Trim at entry (mirrors `renameSection`): a whitespace-only predicate
+        // parses to match-ALL (`.all` is `.ok`), so stored verbatim — and now
+        // persisted via the snapshot (t-sgqk) — it would turn a shell-quoting
+        // slip into a durable match-everything. Trimmed-empty takes the revert
+        // path instead.
+        let predicate = rawPredicate.trimmingCharacters(in: .whitespaces)
         // Match is LENS-ONLY: the degrade path (section model off) is all
         // workspaces, so there is no lens to retarget — loud reject.
         guard !lastSections.isEmpty else {
@@ -885,6 +891,11 @@ extension Controller {
                 Log.debug("setSectionMatch: n=\(n) → \"\(predicate)\"")
             }
         }
+        // A match edit (set OR revert) is a session config edit with a home in
+        // config.toml (`[desktop.N] match=`, t-sgqk) — schedule the snapshot
+        // export. The revert needs it too: the re-render from config.toml
+        // naturally drops the previously-baked override.
+        markConfigDirty()
         // The match also drives the PHYSICAL park/tile (the lens desktop's whole
         // point — "change the match to change what you see"), so push it across
         // the backend seam. `predicate` promotes to `String?`; `setLensDesktopMatch`
