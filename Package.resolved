@@ -1,5 +1,5 @@
 {
-  "originHash" : "2f060b9f4e8ea64c90e15039a26a7286f5003d64c8fd7e6c577c55abb6751cbe",
+  "originHash" : "b86f341f7f2da3d22d4c1426ace53d011f68d751a1259b712adb654443f87de3",
   "pins" : [
     {
       "identity" : "sill",
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/akira-toriyama/swift-toml-edit.git",
       "state" : {
-        "revision" : "6db9b114e07a5168b2fccf253e0da2af78520a86",
-        "version" : "2.1.0"
+        "revision" : "d028ffb163b8f7a189edf45e9493c7526988a777",
+        "version" : "2.3.0"
       }
     },
     {
