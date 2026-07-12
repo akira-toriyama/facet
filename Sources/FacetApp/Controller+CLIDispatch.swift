@@ -885,6 +885,11 @@ extension Controller {
                 Log.debug("setSectionMatch: n=\(n) → \"\(predicate)\"")
             }
         }
+        // A match edit (set OR revert) is a session config edit with a home in
+        // config.toml (`[desktop.N] match=`, t-sgqk) — schedule the snapshot
+        // export. The revert needs it too: the re-render from config.toml
+        // naturally drops the previously-baked override.
+        markConfigDirty()
         // The match also drives the PHYSICAL park/tile (the lens desktop's whole
         // point — "change the match to change what you see"), so push it across
         // the backend seam. `predicate` promotes to `String?`; `setLensDesktopMatch`

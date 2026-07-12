@@ -37,15 +37,24 @@ public enum ConfigSnapshot {
         /// existing vocabulary untouched). The renderer unions these with the
         /// config's own `[tags] defined` so a hand-authored vocabulary survives.
         public var definedTags: [String]
+        /// `[macDesktopOrdinal: predicate]` — a lens DESKTOP's live-retargeted
+        /// match (`facet section --match` on a `[desktop.N] type="lens"` table,
+        /// D6), keyed exactly like `Controller.lensDesktopMatchOverride`. A
+        /// reverted match has NO entry (the Controller removes the key), so
+        /// the config's own `match` shows through untouched; an empty string
+        /// is treated the same way (nothing to bake).
+        public var lensDesktopMatch: [Int: String]
 
         public init(label: [Int: [String: String]] = [:],
                     workspaceLabel: [Int: [Int: String]] = [:],
                     workspaceLayout: [Int: [Int: String]] = [:],
-                    definedTags: [String] = []) {
+                    definedTags: [String] = [],
+                    lensDesktopMatch: [Int: String] = [:]) {
             self.label = label
             self.workspaceLabel = workspaceLabel
             self.workspaceLayout = workspaceLayout
             self.definedTags = definedTags
+            self.lensDesktopMatch = lensDesktopMatch
         }
 
         /// True when there is nothing to bake — the caller can skip the write.
@@ -54,6 +63,7 @@ public enum ConfigSnapshot {
                 && workspaceLabel.allSatisfy { $0.value.isEmpty }
                 && workspaceLayout.allSatisfy { $0.value.isEmpty }
                 && definedTags.isEmpty
+                && lensDesktopMatch.allSatisfy { $0.value.isEmpty }
         }
     }
 
@@ -131,6 +141,25 @@ public enum ConfigSnapshot {
                         forKey: "layout")
                 }
                 wsSlot += 1
+            }
+        }
+
+        // A lens desktop's live-retargeted match (D6) lands on its single
+        // `[desktop.N]` table — a SCALAR at a std table (`settingValue`,
+        // swift-toml-edit 2.3.0). Only a desktop the config actually TYPES as
+        // a lens takes the write: the override is session state, so a stale
+        // ordinal (config re-typed between edits) must not conjure a
+        // `[desktop.N]` table out of thin air. An empty predicate means
+        // "reverted to the config match" — skip; the config text already
+        // spells it (the Controller also removes the key on revert).
+        if overrides.lensDesktopMatch.contains(where: { !$0.value.isEmpty }) {
+            let cfg = FacetConfig.load(source: configText)
+            for (ordinal, predicate) in overrides.lensDesktopMatch.sorted(by: { $0.key < $1.key }) {
+                guard !predicate.isEmpty, cfg.desktopLens(ordinal: ordinal) != nil
+                else { continue }
+                dom = dom.settingValue(.string(predicate),
+                                       atTable: ["desktop", "\(ordinal)"],
+                                       forKey: "match")
             }
         }
 

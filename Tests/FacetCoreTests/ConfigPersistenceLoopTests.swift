@@ -9,7 +9,8 @@ import Foundation
 /// seam between the pure renderer and the startup promote that the unit tests
 /// exercise separately. (t-ec9s: the section-lens type was retired — every
 /// `[[desktop.N.section]]` is a workspace SPATIAL cell now, so the round-trip is
-/// exercised through a workspace-label rename rather than a lens `match` edit.)
+/// exercised through a workspace-label rename plus — t-sgqk — a lens DESKTOP's
+/// `[desktop.N] match` retarget.)
 final class ConfigPersistenceLoopTests {
 
     private let dir: URL
@@ -75,6 +76,40 @@ final class ConfigPersistenceLoopTests {
         // …and the loaded config reflects it (decode the section back).
         let sec = try #require(cfg1.macDesktopSectionConfigs[1]?.first)
         #expect(sec.label == "Browsers", "loaded config carries the edit")
+    }
+
+    /// Retarget a lens desktop's match → export → restart → the edit is
+    /// promoted and the loaded config drives the lens with it (t-sgqk).
+    @Test func lensMatchExportPromoteRoundTrip() throws {
+        let lensConfig = """
+        [config]
+        export-path  = "config.snapshot.toml"
+        auto-promote = true
+
+        [[desktop.1.section]]
+        label = "Web"
+
+        [desktop.2]
+        type = "lens"
+        match = 'app=Safari'
+        layout = "bsp"
+        """
+        try write(configPath, lensConfig, mtime: Date(timeIntervalSince1970: 1_000))
+
+        var ov = ConfigSnapshot.Overrides()
+        ov.lensDesktopMatch = [2: "tag~=web"]
+        let rendered = ConfigSnapshot.render(
+            configText: try String(contentsOfFile: configPath, encoding: .utf8),
+            overrides: ov)
+        try write(snapshotPath, rendered, mtime: Date(timeIntervalSince1970: 2_000))
+
+        let cfg1 = FacetConfig.bootstrapWithAutoPromote(path: configPath)
+        let onDisk = try String(contentsOfFile: configPath, encoding: .utf8)
+        #expect(onDisk.contains(#"match = "tag~=web""#),
+                "the retargeted match was promoted onto config.toml")
+        #expect(!(onDisk.contains("app=Safari")))
+        let lens = try #require(cfg1.desktopLens(ordinal: 2))
+        #expect(lens.match == "tag~=web", "the promoted config drives the lens")
     }
 
     /// A hand-edit to config.toml between sessions beats a stale snapshot.
