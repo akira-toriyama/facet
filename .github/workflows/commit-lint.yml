@@ -1,6 +1,12 @@
 # Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
 # Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
 # owned, non-fork, non-archived repo. Synced to: .github/workflows/commit-lint.yml
+#
+# Lint engine: glyph (gitmoji-driven — the leading :code: is the type; the
+# retired shell reusable lives on at commit-lint.yml@v1 for stragglers). The pin
+# is a CONCRETE glyph release tag — the workflow and the binary it installs ship
+# lockstep from that one tag, so never a moving ref. Bump the pin here (one
+# fleet-sync PR) per adopted glyph release.
 name: commit-lint
 
 on:
@@ -11,4 +17,4 @@ permissions:
 
 jobs:
   lint:
-    uses: akira-toriyama/.github/.github/workflows/commit-lint.yml@v1
+    uses: akira-toriyama/glyph/.github/workflows/lint.yml@v0.2.0
