@@ -90,8 +90,11 @@ let package = Package(
         // `Toml.Annotated` DOM (board nesting, `parseTOMLNestedTabs`), neither
         // of which 2.0.0 touched — so this is a pin-only bump, no code change.
         // `.upToNextMajor` mirrors sill's own pin for this bedrock dependency.
+        // Floor 2.3.0: ConfigSnapshot writes a lens desktop's retargeted
+        // `[desktop.N] match=` via the scalar `settingValue(_:atTable:forKey:)`
+        // added there (t-sgqk) — an older 2.x has no such symbol.
         .package(url: "https://github.com/akira-toriyama/swift-toml-edit.git",
-                 .upToNextMajor(from: "2.0.0")),
+                 .upToNextMajor(from: "2.3.0")),
     ],
     targets: [
         // FacetCore links sill's PURE `Palette` module (AppKit-free, so it

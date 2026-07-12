@@ -102,6 +102,10 @@ extension Controller {
             ov.workspaceLayout = [ordinal: layouts]
         }
         ov.definedTags = inUseTagNames()
+        // Lens-desktop match overrides accumulate per ordinal for the whole
+        // session (a reverted match has no key), so pass the dict verbatim —
+        // the renderer drops non-lens ordinals + empty predicates itself.
+        ov.lensDesktopMatch = lensDesktopMatchOverride
         return ov
     }
 
