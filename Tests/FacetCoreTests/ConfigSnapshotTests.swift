@@ -281,6 +281,45 @@ struct ConfigSnapshotTests {
         #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
     }
 
+    @Test func lensDesktopMatchResolvesZeroPaddedSpelling() {
+        // `[desktop.02]` decodes to ordinal 2 but its DOM path is
+        // ["desktop","02"] — the write must target the LITERAL spelling, or
+        // settingValue's create-if-missing would append a junk `[desktop.2]`
+        // table (which would then last-wins-shadow the real meta on the next
+        // load). Mirrors `zeroPaddedHeaderSpellingResolves` for sections.
+        let cfg = """
+        [desktop.02]
+        type = "lens"
+        match = 'app=Safari'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.lensDesktopMatch = [2: "tag~=web"]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+        #expect(out == cfg.replacingOccurrences(
+            of: "match = 'app=Safari'", with: #"match = "tag~=web""#),
+            "the zero-padded table is edited in place — no new table")
+        assertStable(out)
+    }
+
+    @Test func lensDesktopMatchAmbiguousSpellingsSkip() {
+        // TWO header spellings decoding to the same ordinal (hand-broken
+        // config): which table "wins" is last-wins nondeterministic at decode,
+        // so the write is ambiguous — skip, byte-identical (the same verdict
+        // the section loop's pathSafe guard reaches).
+        let cfg = """
+        [desktop.2]
+        type = "lens"
+        match = 'app=Safari'
+
+        [desktop.02]
+        type = "lens"
+        match = 'app=Mail'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.lensDesktopMatch = [2: "tag~=web"]
+        #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
+    }
+
     @Test func lensDesktopWithoutMatchIsDroppedSoSkipped() {
         // A [desktop.N] lens table WITHOUT a match is dropped by the decode
         // (match is REQUIRED on a lens desktop), so `desktopLens` is nil and

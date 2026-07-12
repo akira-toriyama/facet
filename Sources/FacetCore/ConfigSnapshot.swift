@@ -144,37 +144,84 @@ public enum ConfigSnapshot {
             }
         }
 
-        // A lens desktop's live-retargeted match (D6) lands on its single
-        // `[desktop.N]` table — a SCALAR at a std table (`settingValue`,
-        // swift-toml-edit 2.3.0). Only a desktop the config actually TYPES as
-        // a lens takes the write: the override is session state, so a stale
-        // ordinal (config re-typed between edits) must not conjure a
-        // `[desktop.N]` table out of thin air. An empty predicate means
-        // "reverted to the config match" — skip; the config text already
-        // spells it (the Controller also removes the key on revert).
-        if overrides.lensDesktopMatch.contains(where: { !$0.value.isEmpty }) {
+        // The two branches below both need the decoded config; `load(source:)`
+        // is a full multi-pass decode + strict schema validate and it LOGS its
+        // config warnings, so run it once, shared — not once per branch.
+        // An empty lens predicate means "reverted to the config match" —
+        // nothing to bake, the config text already spells it (the Controller
+        // also removes the key on revert), so it is filtered out here once.
+        let liveLensMatches = overrides.lensDesktopMatch.filter { !$0.value.isEmpty }
+        if !liveLensMatches.isEmpty || !overrides.definedTags.isEmpty {
             let cfg = FacetConfig.load(source: configText)
-            for (ordinal, predicate) in overrides.lensDesktopMatch.sorted(by: { $0.key < $1.key }) {
-                guard !predicate.isEmpty, cfg.desktopLens(ordinal: ordinal) != nil
-                else { continue }
-                dom = dom.settingValue(.string(predicate),
-                                       atTable: ["desktop", "\(ordinal)"],
-                                       forKey: "match")
+
+            // A lens desktop's live-retargeted match (D6) lands on its single
+            // `[desktop.N]` table — a SCALAR at a std table (`settingValue`,
+            // swift-toml-edit 2.3.0). Two guards, each skip logged (mirroring
+            // the section loop's pathSafe diagnostic):
+            //   • only a desktop the config actually TYPES as a lens takes
+            //     the write — the override is session state, so a stale
+            //     ordinal (config re-typed between edits) must not conjure a
+            //     `[desktop.N]` table out of thin air;
+            //   • the write targets the LITERAL header spelling: `[desktop.02]`
+            //     decodes to ordinal 2 but its DOM path is ["desktop","02"],
+            //     so a canonical-spelling write would CREATE a junk
+            //     `[desktop.2]` table instead of editing the real one. Exactly
+            //     one literal spelling per ordinal is required — two spellings
+            //     decoding to the same ordinal are last-wins-ambiguous, skip.
+            if !liveLensMatches.isEmpty {
+                let spellings = desktopTableSpellings(configText)
+                for (ordinal, predicate) in liveLensMatches {
+                    guard cfg.desktopLens(ordinal: ordinal) != nil else {
+                        Log.debug("config: snapshot skipped lens match for "
+                            + "desktop \(ordinal) — not typed lens")
+                        continue
+                    }
+                    guard let mids = spellings[ordinal], mids.count == 1,
+                          let mid = mids.first else {
+                        Log.debug("config: snapshot skipped lens match for "
+                            + "desktop \(ordinal) — "
+                            + "\(spellings[ordinal]?.count ?? 0) [desktop.N] "
+                            + "header spellings decode to it (need exactly 1)")
+                        continue
+                    }
+                    dom = dom.settingValue(.string(predicate),
+                                           atTable: ["desktop", mid],
+                                           forKey: "match")
+                }
+            }
+
+            // [tags] defined = the config's existing vocabulary UNION the
+            // in-use names (first-wins order). A hand-authored `defined` list
+            // is never shrunk; an absent `[tags]` table is created at
+            // document end.
+            if !overrides.definedTags.isEmpty {
+                let existing = cfg.effectiveDefinedTags
+                var seen: Set<String> = []
+                let union = (existing + overrides.definedTags)
+                    .filter { !$0.isEmpty && seen.insert($0).inserted }
+                dom = dom.settingArrayValue(union.map { Toml.Value.string($0) },
+                                            atTable: ["tags"], forKey: "defined")
             }
         }
 
-        // [tags] defined = the config's existing vocabulary UNION the in-use
-        // names (first-wins order). A hand-authored `defined` list is never
-        // shrunk; an absent `[tags]` table is created at document end.
-        if !overrides.definedTags.isEmpty {
-            let existing = FacetConfig.load(source: configText).effectiveDefinedTags
-            var seen: Set<String> = []
-            let union = (existing + overrides.definedTags)
-                .filter { !$0.isEmpty && seen.insert($0).inserted }
-            dom = dom.settingArrayValue(union.map { Toml.Value.string($0) },
-                                        atTable: ["tags"], forKey: "defined")
-        }
-
         return dom.render()
+    }
+
+    /// The literal `[desktop.<mid>]` header spellings that decode to each
+    /// ordinal (e.g. `[desktop.02]` → `2: ["02"]`) — the same flat map + Int
+    /// normalization `decodeDesktopTables` reads, kept in lock-step so the
+    /// snapshot edits the exact table the decode consumed. A hand-authored
+    /// config can spell two headers that decode to one ordinal; the caller
+    /// treats that as ambiguous and skips.
+    private static func desktopTableSpellings(_ text: String) -> [Int: [String]] {
+        var out: [Int: [String]] = [:]
+        for header in parseTOMLSubset(text).keys {
+            guard header.hasPrefix("desktop.") else { continue }
+            let mid = header.dropFirst("desktop.".count)
+            guard !mid.contains("."), let ordinal = Int(mid), ordinal >= 1
+            else { continue }
+            out[ordinal, default: []].append(String(mid))
+        }
+        return out
     }
 }
