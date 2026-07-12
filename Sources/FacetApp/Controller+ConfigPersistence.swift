@@ -90,7 +90,6 @@ extension Controller {
     /// alone, positionally (the k-th live workspace ↔ the k-th workspace slot).
     private func gatherOverrides() -> ConfigSnapshot.Overrides {
         var ov = ConfigSnapshot.Overrides()
-        ov.match = sectionMatchOverride
         ov.label = sectionLabelOverride
         if let ordinal = currentMacDesktopOrdinal() {
             var labels: [Int: String] = [:]

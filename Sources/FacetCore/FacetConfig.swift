@@ -683,27 +683,6 @@ public struct FacetConfig: Sendable {
         return meta
     }
 
-    /// The synthesized `[DesktopSection]` a `type = "lens"` mac desktop feeds to
-    /// `FilterProjection.project` (board abolition, t-0sbm). A lens desktop has no
-    /// authored sections — its single always-on lens becomes ONE `.lens` section
-    /// (its matched windows, id `section:0:<label>` — the handle the runtime
-    /// change-match uses). When `show-non-matching` is set, a second `unassigned`
-    /// receptacle is appended so the tree ALSO shows the non-matching ("holding")
-    /// windows as the projection's leftover (universe − matched); otherwise the
-    /// tree is the lens section alone. Empty (`[]`) when `ordinal` is not a lens
-    /// desktop, so the caller falls back to the workspace path. Pure.
-    public func lensDesktopSections(ordinal: Int?) -> [DesktopSection] {
-        guard let lens = desktopLens(ordinal: ordinal) else { return [] }
-        var out: [DesktopSection] = [
-            DesktopSection(type: .lens, label: lens.label, match: lens.match,
-                           layout: lens.layout),
-        ]
-        if lens.showNonMatching {
-            out.append(DesktopSection(type: .workspace, unassigned: true))
-        }
-        return out
-    }
-
     /// Whether the section/lens model drives the mac desktop at `ordinal` —
     /// i.e. it has at least one `type = "workspace"` section in the
     /// `[[desktop.N.section]]` list. This is the gate the read path,
@@ -729,12 +708,11 @@ public struct FacetConfig: Sendable {
     private func workspaceSubstrateSections(forOrdinal ordinal: Int)
         -> [DesktopSection]
     {
-        // W2.6: exclude `unassigned` receptacles — a receptacle now carries a
-        // workspace/lens type (the marker, not a `.unassigned` type), but it is
-        // NOT a spatial substrate, so it must not seed a workspace or flip the
-        // section-model gate.
+        // Exclude `unassigned` receptacles — a receptacle is NOT a spatial
+        // substrate, so it must not seed a workspace or flip the section-model
+        // gate. Every other section is a workspace cell (t-ec9s).
         (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
-            .filter { $0.type == .workspace && !$0.unassigned }
+            .filter { !$0.unassigned }
     }
 
     /// Effective `[[exclude]]` rule set (empty when none configured).

@@ -2,242 +2,71 @@ import Foundation
 import Testing
 @testable import FacetCore
 
-/// `[[desktop.N.section]]` config decode (the section/lens model, parse-
-/// only). The wire shape, the `type` discriminator routing, and the
-/// canonical `apply` op order are FROZEN here — PR8's inversion resolver
-/// depends on them. `type` is REQUIRED: an absent / unknown `type`, or a
-/// per-type required field missing, DROPS the row (loud, never a silent
-/// clamp). CI-only (CLT can't run `swift test`).
+/// `[[desktop.N.section]]` config decode (parse-only). Since the section-lens
+/// type was retired (t-ec9s), every section is a WORKSPACE spatial cell
+/// (`{label, layout, unassigned}`); a stray `type` / `match` / `apply` from the
+/// retired section-lens era is IGNORED by decode (and flagged by
+/// `config --validate`). The array order IS the tree display order; non-empty
+/// labels are de-duped per mac desktop (first-wins). CI-only (CLT can't run
+/// `swift test`).
 struct SectionDecodeTests {
 
-    // MARK: - type discriminator routing
+    // MARK: - workspace-cell decode
 
-    @Test func decodesEachExplicitType() {
+    @Test func decodesWorkspaceCells() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "workspace"
         layout = "bsp"
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=web'
+        layout = "stack"
         [[desktop.1.section]]
         unassigned = true
         label = "Other"
         """)
         #expect(s[1]?.count == 3)
-        #expect(s[1]?[0] ==
-            DesktopSection(type: .workspace, layout: "bsp"))
-        #expect(s[1]?[1] ==
-            DesktopSection(type: .lens, label: "Web", match: "tag~=web"))
-        // W2.6: the receptacle is the `unassigned = true` MARKER (type defaults
-        // workspace when none is authored on a flat row — projection-irrelevant).
-        #expect(s[1]?[2] ==
-            DesktopSection(type: .workspace, label: "Other", unassigned: true))
+        #expect(s[1]?[0] == DesktopSection(layout: "bsp"))
+        #expect(s[1]?[1] == DesktopSection(label: "Web", layout: "stack"))
+        #expect(s[1]?[2] == DesktopSection(label: "Other", unassigned: true))
     }
 
-    /// `type` is case-insensitive on the wire (lowercased on decode).
-    @Test func typeIsCaseInsensitive() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "LENS"
-        label = "W"
-        match = 'tag~=w'
-        """)
-        #expect(s[1]?[0].type == .lens)
+    /// A stray `type` / `match` / `apply` (retired section-lens keys) is IGNORED —
+    /// the row decodes as a plain workspace cell, no drop, no note.
+    @Test func straySectionLensKeysIgnored() {
+        let (section, note) = DesktopSection.parse(fromTOMLRow: [
+            "type": .string("lens"), "label": .string("Web"),
+            "match": .string("tag~=web"),
+            "apply": .table(["tags": .array([.string("web")])]),
+        ])
+        #expect(section == DesktopSection(label: "Web"))
+        #expect(note == nil)
     }
 
-    /// Absent `type` → DROP (トミー 2026-06-17: warn + skip, never default-
-    /// guess; this would otherwise silently mis-route the window set).
-    @Test func absentTypeIsDropped() {
+    /// A section with no `type` (the new normal) decodes as a workspace cell —
+    /// the old "absent type drops the row" behavior is gone with section-lens.
+    @Test func absentTypeDecodesAsWorkspaceCell() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
         label = "Web"
-        match = 'tag~=web'
         """)
-        #expect(s.isEmpty)
-        // The parse helper reports the loud drop reason.
-        let (section, note) = DesktopSection.parse(fromTOMLRow: [
-            "label": .string("Web"), "match": .string("tag~=web"),
+        #expect(s[1]?.count == 1)
+        #expect(s[1]?[0] == DesktopSection(label: "Web"))
+    }
+
+    /// An empty-string `layout` is treated as absent (stored nil) so callers see
+    /// "no layout authored" rather than the empty string leaking through.
+    @Test func emptyLayoutIsNil() {
+        let (section, _) = DesktopSection.parse(fromTOMLRow: [
+            "label": .string("Tools"), "layout": .string(""),
         ])
-        #expect(section == nil)
-        #expect(note == "missing `type` (expected workspace / lens)")
-    }
-
-    /// Unknown `type` → DROP (clamp-to-default would discard an authored
-    /// match — the foot-gun; warn + skip instead).
-    @Test func unknownTypeIsDropped() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lenss"
-        label = "Typo"
-        match = 'tag~=t'
-        """)
-        #expect(s.isEmpty)
-        let (section, note) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("lenss"), "label": .string("Typo"),
-            "match": .string("tag~=t"),
-        ])
-        #expect(section == nil)
-        #expect(note?.hasPrefix("unknown `type` \"lenss\"") ?? false)
-    }
-
-    // MARK: - per-type field rules
-
-    /// A workspace section is minimal: no field is required. §A — a non-empty
-    /// `label` NAMES it (stored, reversing the old always-auto-named rule); the
-    /// `match` is implicit (`workspace=<this>`), so an authored `match` is
-    /// ignored with a caveat. Carries optional layout / apply seeds.
-    @Test func workspaceSectionNamesFromLabelIgnoresMatch() {
-        let (bare, n1) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("workspace"),
-        ])
-        #expect(bare == DesktopSection(type: .workspace))
-        #expect(n1 == nil)
-
-        // label honored (§A); authored match dropped with a caveat.
-        let (authored, n2) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("workspace"), "label": .string("Dev"),
-            "match": .string("tag~=x"), "layout": .string("stack"),
-        ])
-        #expect(authored ==
-            DesktopSection(type: .workspace, label: "Dev", layout: "stack"))
-        #expect(authored?.label == "Dev")  // label NAMED (§A reversal)
-        #expect(authored?.match == "")     // match implicit → discarded
-        #expect(n2 != nil)                      // caveat logged loud (match ignored)
-
-        // label set, no match → nothing ignored, so no caveat.
-        let (named, n3) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("workspace"), "label": .string("Web"),
-        ])
-        #expect(named?.label == "Web")
-        #expect(n3 == nil)
-    }
-
-    /// t-qtpx: a workspace section FORBIDS `apply` (it is the exclusive spatial
-    /// substrate, carrying no side-effect). An authored `apply` is dropped with
-    /// a loud caveat; the section still decodes as a bare workspace.
-    @Test func workspaceSectionForbidsApply() {
-        // decode path: the apply is stripped to [].
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "workspace"
-        apply = { tags = ["dev"], floating = true }
-        """)
-        #expect(s[1]?[0].apply == [])
-        // parse path: the loud caveat names `apply`.
-        let (section, note) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("workspace"),
-            "apply": .table(["tags": .array([.string("dev")]),
-                             "floating": .bool(true)]),
-        ])
-        #expect(section == DesktopSection(type: .workspace))
-        #expect(section?.apply == [])
-        #expect(note?.contains("apply") ?? false)
-    }
-
-    /// A workspace with BOTH an authored `match` and `apply` warns about each
-    /// (joined into one note) and still decodes as a bare workspace.
-    @Test func workspaceSectionForbidsMatchAndApplyBothWarn() {
-        let (section, note) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("workspace"),
-            "match": .string("tag~=x"),
-            "apply": .table(["tags": .array([.string("x")])]),
-        ])
-        #expect(section == DesktopSection(type: .workspace))
-        #expect(note?.contains("match") ?? false)
-        #expect(note?.contains("apply") ?? false)
-    }
-
-    /// t-qtpx / W2.6: an `unassigned = true` receptacle FORBIDS both `match` and
-    /// `apply` (it is the leftover by subtraction). Authored ones are dropped
-    /// with a loud caveat; the section still decodes (label only, marker set).
-    @Test func unassignedSectionForbidsMatchAndApply() {
-        let (section, note) = DesktopSection.parse(fromTOMLRow: [
-            "unassigned": .bool(true), "label": .string("Lost"),
-            "match": .string("tag~=x"),
-            "apply": .table(["tags": .array([.string("x")])]),
-        ])
-        #expect(section ==
-            DesktopSection(type: .workspace, label: "Lost", unassigned: true))
-        #expect(note?.contains("match") ?? false)
-        #expect(note?.contains("apply") ?? false)
-    }
-
-    /// §A: a lens section needs a non-empty `match`; `label` is OPTIONAL
-    /// (empty / missing decodes fine). Only the no-match row drops.
-    @Test func lensSectionNeedsMatchLabelOptional() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        match = 'tag~=nolabel'
-        [[desktop.1.section]]
-        type = "lens"
-        label = "NoMatch"
-        [[desktop.1.section]]
-        type = "lens"
-        label = ""
-        match = 'tag~=emptylabel'
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Good"
-        match = 'tag~=good'
-        """)
-        // no-label + empty-label lenses now decode (label ""); only "NoMatch"
-        // (no match) drops. Empty labels are exempt from the uniqueness rule,
-        // so both survive. Decl order: nolabel, emptylabel, Good.
-        #expect(s[1]?.map(\.label) == ["", "", "Good"])
-        #expect(s[1]?.map(\.match) ==
-                       ["tag~=nolabel", "tag~=emptylabel", "tag~=good"])
-    }
-
-    /// A lens section may carry an optional `layout` seed. The value is parsed
-    /// + stored verbatim here; a lens is a pure VIEW (t-0021), so the runtime
-    /// IGNORES `layout` on a lens (parsed for total-parse robustness, not used).
-    @Test func lensSectionDecodesLayout() {
-        let row: [String: TOMLValue] = [
-            "type": .string("lens"),
-            "label": .string("Web"),
-            "match": .string("app~=Chrome"),
-            "layout": .string("spiral"),
-        ]
-        let (section, note) = DesktopSection.parse(fromTOMLRow: row)
-        #expect(note == nil)
-        #expect(section?.type == .lens)
-        #expect(section?.layout == "spiral")
-    }
-
-    /// Any `layout` value is stored VERBATIM at parse time (parse stays total —
-    /// it never rejects). On a lens the value is simply ignored at runtime
-    /// (t-0021 pure VIEW); on a workspace it seeds the tiling engine.
-    @Test func lensSectionStoresForbiddenLayoutVerbatim() {
-        let row: [String: TOMLValue] = [
-            "type": .string("lens"),
-            "label": .string("Dev"),
-            "match": .string("tag~=dev"),
-            "layout": .string("bsp"),
-        ]
-        let (section, _) = DesktopSection.parse(fromTOMLRow: row)
-        #expect(section?.layout == "bsp")
-    }
-
-    /// An empty-string `layout` must be treated as absent (the isEmpty guard)
-    /// and stored as nil, so callers see "no layout authored" rather than the
-    /// empty string leaking through to a layout consumer.
-    @Test func lensSectionEmptyLayoutIsNil() {
-        let row: [String: TOMLValue] = [
-            "type": .string("lens"),
-            "label": .string("Tools"),
-            "match": .string("tag~=tools"),
-            "layout": .string(""),
-        ]
-        let (section, _) = DesktopSection.parse(fromTOMLRow: row)
         #expect(section?.layout == nil)
     }
 
-    /// §A / W2.6: a receptacle's `label` is optional — a label-less
-    /// `unassigned = true` row decodes fine (both rows survive at the decode
-    /// layer; FilterProjection enforces the ≤1-shown rule, not the decoder).
+    // MARK: - unassigned receptacle
+
+    /// §A / W2.6: a receptacle's `label` is optional — both a label-less and a
+    /// labelled `unassigned = true` row decode (FilterProjection enforces the
+    /// ≤1-shown rule, not the decoder).
     @Test func unassignedSectionLabelOptional() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
@@ -257,27 +86,23 @@ struct SectionDecodeTests {
     @Test func duplicateNonEmptyLabelFirstWins() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=first'
+        layout = "bsp"
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=second'
+        layout = "stack"
         """)
         #expect(s[1]?.count == 1)            // first-wins
-        #expect(s[1]?[0].match == "tag~=first")
+        #expect(s[1]?[0].layout == "bsp")
     }
 
     /// EMPTY labels are exempt from uniqueness — they may repeat freely.
     @Test func emptyLabelsMayRepeat() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "lens"
-        match = 'tag~=a'
+        layout = "bsp"
         [[desktop.1.section]]
-        type = "lens"
-        match = 'tag~=b'
+        layout = "stack"
         [[desktop.1.section]]
         unassigned = true
         """)
@@ -289,13 +114,9 @@ struct SectionDecodeTests {
     @Test func sameLabelOnDifferentDesktopsAllowed() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=a'
         [[desktop.2.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=b'
         """)
         #expect(s[1]?[0].label == "Web")
         #expect(s[2]?[0].label == "Web")
@@ -307,48 +128,36 @@ struct SectionDecodeTests {
     @Test func duplicateLabelDedupedAcrossOrdinalSpellings() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=plain'
+        layout = "bsp"
         [[desktop.01.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=zeropad'
+        layout = "stack"
         """)
         #expect(s[1]?.count == 1)
-        #expect(s[1]?[0].match == "tag~=zeropad")
+        #expect(s[1]?[0].layout == "stack")   // "01" < "1" → zero-padded wins
     }
 
     // MARK: - ordering / ordinals
 
-    @Test func mixedTypeArrayPreservesDeclarationOrder() {
+    @Test func arrayPreservesDeclarationOrder() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "lens"
         label = "A"
-        match = 'tag~=a'
         [[desktop.1.section]]
-        type = "workspace"
+        layout = "bsp"
         [[desktop.1.section]]
-        type = "lens"
         label = "B"
-        match = 'tag~=b'
         """)
-        #expect(s[1]?.map(\.type) == [.lens, .workspace, .lens])
-        #expect(s[1]?.compactMap { $0.label.isEmpty ? nil : $0.label } ==
-                       ["A", "B"])
+        #expect(s[1]?.map(\.label) == ["A", "", "B"])
     }
 
     @Test func multipleDesktopsKeyedByOrdinal() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.1.section]]
-        type = "lens"
         label = "One"
-        match = 'tag~=one'
         [[desktop.3.section]]
-        type = "lens"
         label = "Three"
-        match = 'tag~=three'
         """)
         #expect(Set(s.keys) == [1, 3])
         #expect(s[1]?[0].label == "One")
@@ -358,25 +167,15 @@ struct SectionDecodeTests {
     @Test func outOfRangeAndMalformedOrdinalsSkipped() {
         let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
         [[desktop.0.section]]
-        type = "lens"
         label = "Zero"
-        match = 'tag~=z'
         [[desktop.-1.section]]
-        type = "lens"
         label = "Neg"
-        match = 'tag~=n'
         [[desktop.section]]
-        type = "lens"
         label = "NoOrdinal"
-        match = 'tag~=x'
         [[desktop.1.2.section]]
-        type = "lens"
         label = "Dotted"
-        match = 'tag~=d'
         [[desktop.2.section]]
-        type = "lens"
         label = "Good"
-        match = 'tag~=g'
         """)
         #expect(Set(s.keys) == [2])
         #expect(s[2]?[0].label == "Good")
@@ -387,13 +186,9 @@ struct SectionDecodeTests {
     @Test func duplicateOrdinalSpellingsMergeDeterministically() {
         let text = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Plain"
-        match = 'tag~=p'
         [[desktop.01.section]]
-        type = "lens"
         label = "ZeroPad"
-        match = 'tag~=z'
         """
         let first = FacetConfig.decodeDesktopSectionSections(fromTOML: text)
         for _ in 0..<8 {
@@ -407,25 +202,15 @@ struct SectionDecodeTests {
     /// t-hdxb B4: when two DISTINCT-label spellings fold into one ordinal, each
     /// surviving origin keeps its OWN raw header spelling + its per-spelling
     /// `rawOrdinal` — the merge must NOT re-index to a global ordinal or
-    /// normalize the header. Here `desktop.1` (Plain) and `desktop.01` (Zero)
-    /// both land in bucket 1; sorted header order ("desktop.01.section" <
-    /// "desktop.1.section") makes the zero-padded spelling `declOrder` 0. The
-    /// LOAD-BEARING pin: BOTH `rawOrdinal` are 0 (each is row 0 of its own
-    /// spelling) yet the two `headerName` values DIFFER. If the merge assigned a
-    /// global rawOrdinal or a normalized headerName, the snapshot writer would
-    /// replay the wrong element and a rename/match on the folded section would
-    /// edit the WRONG `[[desktop.N.section]]` block. (The label-only merge test
-    /// above can't catch this; snapshot tests use a single spelling.)
+    /// normalize the header. The LOAD-BEARING pin: BOTH `rawOrdinal` are 0 (each
+    /// is row 0 of its own spelling) yet the two `headerName` values DIFFER, so
+    /// the snapshot writer replays the correct `[[desktop.N.section]]` block.
     @Test func bothSurvivingSpellingsKeepOwnHeaderAndRawOrdinal() {
         let text = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Plain"
-        match = 'a'
         [[desktop.01.section]]
-        type = "lens"
         label = "Zero"
-        match = 'b'
         """
         let origins = FacetConfig.decodeDesktopSectionOrigins(
             fromTOML: text, log: false)
@@ -449,152 +234,29 @@ struct SectionDecodeTests {
             fromTOML: "[desktop.1]\n1 = { name = \"Dev\" }\n").isEmpty)
     }
 
-    /// A bare `[desktop.N]` table (no longer decoded — the by-name workspace
-    /// seed was retired) sits in the same file as a `[[desktop.N.section]]`
-    /// array; the section decode keys off the `.section` suffix only, so the
-    /// bare table never shadows or pollutes it.
+    /// A bare `[desktop.N]` table sits in the same file as a
+    /// `[[desktop.N.section]]` array; the section decode keys off the `.section`
+    /// suffix only, so the bare table never shadows or pollutes it.
     @Test func sectionDecodeIgnoresBareDesktopTable() {
         let text = """
         [desktop.1]
         1 = { name = "Dev" }
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=web'
         """
         let sections = FacetConfig.decodeDesktopSectionSections(fromTOML: text)
         #expect(sections[1]?.count == 1)
         #expect(sections[1]?[0].label == "Web")
     }
 
-    // MARK: - apply inline table (lens sections — t-qtpx: tags-only)
-
-    /// t-qtpx: a lens `apply` may ONLY add tags. The single-valued facets
-    /// (workspace / floating / sticky / master) are warned + dropped; only the
-    /// `addTag`s survive, in array order. (The full-op canonical order is still
-    /// exercised by `RuleDecodeTests` — `[[rule]]` keeps every op.)
-    @Test func lensApplyKeepsTagsDropsSingleValuedOps() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Full"
-        match = 'tag~=x'
-        apply = { master = true, floating = false, tags = ["a", "b"], sticky = true, workspace = "Dev" }
-        """)
-        #expect(s[1]?[0].apply == [.addTag("a"), .addTag("b")])
-        // parse() surfaces the loud caveat naming each dropped op.
-        let (_, note) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("lens"), "label": .string("Full"),
-            "match": .string("tag~=x"),
-            "apply": .table(["workspace": .string("Dev"),
-                             "tags": .array([.string("a")]),
-                             "floating": .bool(true)]),
-        ])
-        #expect(note != nil)
-        #expect(note?.contains("workspace") ?? false)
-        #expect(note?.contains("floating") ?? false)
-    }
-
-    @Test func applyTagsKeepArrayOrderAndNormalize() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "T"
-        match = 'tag~=t'
-        apply = { tags = ["my tag", "a:b", "web"] }
-        """)
-        // "my tag" → "my-tag" (space→-), "a:b" dropped (forbidden ':'),
-        // "web" kept; array order preserved.
-        #expect(s[1]?[0].apply == [.addTag("my-tag"), .addTag("web")])
-    }
-
-    @Test func emptyOrMissingApplyIsDropInert() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "NoApply"
-        match = 'tag~=n'
-        [[desktop.1.section]]
-        type = "lens"
-        label = "EmptyApply"
-        match = 'tag~=e'
-        apply = { }
-        """)
-        #expect(s[1]?[0].apply == [])
-        #expect(s[1]?[1].apply == [])
-    }
-
-    @Test func lensApplyIgnoresUnknownKeysAndDropsNonTagOps() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "U"
-        match = 'tag~=u'
-        apply = { bogus = "x", workspace = "", floating = true }
-        """)
-        // unknown key ignored, empty workspace dropped by ApplyOp.list, and
-        // `floating` (single-valued) dropped by the lens tags-only rule → [].
-        #expect(s[1]?[0].apply == [])
-    }
-
-    @Test func nonTableApplyIsDropInert() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "StringApply"
-        match = 'tag~=s'
-        apply = "oops"
-        [[desktop.1.section]]
-        type = "lens"
-        label = "IntApply"
-        match = 'tag~=i'
-        apply = 3
-        """)
-        #expect(s[1]?[0].apply == [])
-        #expect(s[1]?[1].apply == [])
-    }
-
-    /// `removeTag` has NO wire key — it is never produced by `ApplyOp.list`
-    /// (synthesised only by PR8's un-apply inversion).
-    @Test func removeTagNeverDecoded() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "R"
-        match = 'tag~=r'
-        apply = { removeTag = "x", removeTags = ["y"], tags = ["keep"] }
-        """)
-        // Only the real `tags` key produces ops; removeTag* keys are unknown.
-        #expect(s[1]?[0].apply == [.addTag("keep")])
-    }
-
-    // MARK: - parse stays total (frozen: match is NOT compiled at load)
-
-    /// A syntactically GARBAGE `match` on a lens section must still decode
-    /// verbatim, never be dropped or rejected — config-load stays total; the
-    /// filter is compiled (and loud-rejected non-fatally) only by the
-    /// consumer.
-    @Test func malformedMatchStoredVerbatimNotRejected() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Garbage"
-        match = '(((unbalanced and ~=~ ???'
-        """)
-        #expect(s[1]?.count == 1)
-        #expect(s[1]?[0].match == "(((unbalanced and ~=~ ???")
-    }
-
-    // MARK: - effective accessor
+    // MARK: - effective accessor + load wiring
 
     @Test func effectiveSectionsPassThroughInWorkspaceMode() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs =
-            [1: [DesktopSection(type: .lens, label: "W", match: "tag~=w")]]
+            [1: [DesktopSection(label: "W", layout: "bsp")]]
         #expect(c.effectiveMacDesktopSectionConfigs[1]?[0].label == "W")
     }
-
-    // MARK: - load() wiring (raw decode → effective pass-through)
 
     private func loadConfig(_ toml: String) -> FacetConfig {
         let path = NSTemporaryDirectory()
@@ -610,13 +272,10 @@ struct SectionDecodeTests {
     @Test func loadPopulatesSectionsInWorkspaceMode() {
         let c = loadConfig("""
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'tag~=web'
-        apply = { tags = ["web"] }
+        layout = "bsp"
         """)
         #expect(c.macDesktopSectionConfigs[1]?[0].label == "Web")
-        #expect(c.effectiveMacDesktopSectionConfigs[1]?[0].apply ==
-                       [.addTag("web")])
+        #expect(c.effectiveMacDesktopSectionConfigs[1]?[0].layout == "bsp")
     }
 }

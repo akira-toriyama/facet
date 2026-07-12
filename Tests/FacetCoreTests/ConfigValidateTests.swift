@@ -94,16 +94,24 @@ struct ConfigValidateTests {
         }, "desktop section is now strict; got \(errors.map(\.rule))")
     }
 
-    /// A section's `type` is an enum {workspace, lens}; a bogus value is caught.
-    @Test func desktopSectionBadTypeEnumIsReported() throws {
+    /// t-ec9s: a section is a workspace SPATIAL cell now — the retired section-
+    /// lens keys `type` / `match` / `apply` are no longer valid on a section, so
+    /// the strict schema flags each as an UNKNOWN key (parse still tolerates them
+    /// by ignoring — `config --validate` is the loud channel, "typos fail
+    /// visibly"). This pins the Phase-6 strictness decision.
+    @Test func desktopSectionStrayLensKeysAreReportedUnknown() throws {
         let errors = try FacetConfig.validate("""
         [[desktop.1.section]]
-        type = "banana"
+        type = "lens"
+        match = "tag~=web"
+        apply = { tags = ["web"] }
         """)
-        #expect(errors.contains {
-            if case .notInEnum(let k, _, _) = $0.rule { return k == "type" }
-            return false
-        }, "bad `type` enum should be reported; got \(errors.map(\.rule))")
+        for key in ["type", "match", "apply"] {
+            #expect(errors.contains {
+                if case .unknownKey(let k) = $0.rule { return k == key }
+                return false
+            }, "stray section key `\(key)` should be an unknown-key error; got \(errors.map(\.rule))")
+        }
     }
 
     /// The ordinal key must match `^0*[1-9][0-9]*$` (mirrors the runtime

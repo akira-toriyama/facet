@@ -10,7 +10,7 @@
 // desktop), decoded from the flat `parseTOMLSubset` map by `decodeDesktopTables`
 // into `FacetConfig.macDesktopMetaConfigs` and read via `desktopType` /
 // `desktopLens` (the lens desktop's runtime is `applyIsolatePark` +
-// `lensDesktopSections`).
+// `FilterProjection.projectLensDesktop`).
 
 import Foundation
 

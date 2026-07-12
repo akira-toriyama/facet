@@ -51,10 +51,10 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// applies the AX side-effects the catalog hands back.
     var catalog = WorkspaceCatalog()
 
-    /// t-0sbm: runtime lens-desktop `match` overrides, keyed by mac desktop
-    /// ordinal (session-only; the park/tile mirror of the Controller's
-    /// `sectionMatchOverride`). `applyIsolatePark` prefers this over the config
-    /// match so `facet section --match` / the tree Edit-match physically
+    /// Runtime lens-desktop `match` overrides, keyed by mac desktop ordinal
+    /// (session-only; the park/tile mirror of the Controller's ordinal-keyed
+    /// `lensDesktopMatchOverride`, D6). `applyIsolatePark` prefers this over the
+    /// config match so `facet section --match` / the tree Edit-match physically
     /// re-tile + re-park live. cliQueue-only (set + read both on cliQueue).
     var lensDesktopMatchOverride: [Int: String] = [:]
 
@@ -273,41 +273,14 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// catalog-adjacent state.
     var compiledRulesCache: [(rule: Rule, filter: FacetFilter)]?
 
-    /// Lock-guarded, main-readable mirror of the active catalog's
-    /// `activeSection` (EX-1: was a lens-only `String?`). The catalog is
-    /// `cliQueue`-confined, but the Controller's `apply()` (main actor) reads
-    /// the active section back to drive the single active-section highlight —
-    /// including after a mac-desktop swap restored a desktop whose lens
-    /// persists (the swapped-in catalog's `activeSection` is mirrored by the
-    /// `syncSectionLensMirror()` call in `refreshCatalog`, after
-    /// `swapCatalogIfMacDesktopChanged`). Refreshed on `cliQueue` (every
-    /// `refreshCatalog` + each `setSectionLens` / `switchWorkspace`) under the
-    /// lock so the main-thread reads are race-free (same pattern as `config`).
-    private let sectionLensLock = NSLock()
-    private var _activeSection: ActiveSection = .workspace(1)
-
-    /// Refresh the main-readable mirror from the active catalog. Called on
-    /// `cliQueue` wherever `catalog.activeSection` may have changed.
-    func syncSectionLensMirror() {
-        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
-        _activeSection = catalog.activeSection
-    }
-
-    public func currentActiveSection() -> ActiveSection {
-        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
-        return _activeSection
-    }
-
-    /// Lens-only shim over `currentActiveSection()` for existing callers.
-    public func currentSectionLens() -> String? { currentActiveSection().lensLabel }
-
     /// EX-3 迷子: the main-readable mirror of the catalog's orphan windows
     /// (managed, assigned to no workspace). `snapshot` can't carry orphans
     /// (they belong to no `Workspace`), so `Controller.apply` (main) reads this
     /// mirror and feeds it to `FilterProjection.project(…, orphans:)` for the
-    /// views' lens sections. Refreshed on `cliQueue` at the tail of every
-    /// `refreshCatalog` (right after the `snapshot`) under `sectionLensLock`,
-    /// so the main-thread read is race-free — same handoff as `_activeSection`.
+    /// views' sections. The catalog is `cliQueue`-confined, so the lock guards
+    /// the array handoff to the main thread. Refreshed on `cliQueue` at the tail
+    /// of every `refreshCatalog` (right after the `snapshot`).
+    private let orphanLock = NSLock()
     private var _orphanWindows: [Window] = []
 
     /// Refresh the orphan mirror from the active catalog. Called on `cliQueue`
@@ -319,12 +292,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                           populateTags: Bool) {
         let orphans = catalog.orphanWindows(in: live, focused: focused,
                                             populateTags: populateTags)
-        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        orphanLock.lock(); defer { orphanLock.unlock() }
         _orphanWindows = orphans
     }
 
     public func orphanWindows() -> [Window] {
-        sectionLensLock.lock(); defer { sectionLensLock.unlock() }
+        orphanLock.lock(); defer { orphanLock.unlock() }
         return _orphanWindows
     }
 
@@ -499,28 +472,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
 
     // MARK: - Commands
 
-    /// EX-1 throughline: route a section activation to the right machinery.
-    /// `.workspace` clears any active lens (exclusive model); `.lens` activates
-    /// the cross-workspace union. Both delegate to existing methods that
-    /// already `syncSectionLensMirror()`, so the mirror stays current.
-    public func activateSection(_ section: ActiveSection, autoFocus: Bool) {
-        dispatchPrecondition(condition: .onQueue(cliQueue))
-        switch section {
-        case .workspace(let n):
-            // Exclusive model: activating a workspace clears any active lens.
-            // `setActive(activeIndex)` is a no-op (guards `n1Based != activeIndex`)
-            // so `switchWorkspace(sameIndex)` would NOT clear the lens — clear it
-            // explicitly when the target IS the current workspace but a lens is set.
-            if catalog.activeSectionLens != nil && n == catalog.activeIndex {
-                setSectionLens(nil, autoFocus: autoFocus)
-            } else {
-                switchWorkspace(toIndex: n - 1, autoFocus: autoFocus)   // 1-based → 0-based
-            }
-        case .lens(let id):
-            setSectionLens(id, autoFocus: autoFocus)
-        }
-    }
-
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
         // P6: the catalog is cliQueue-confined. Every caller dispatches on
         // cliQueue (DNC `runBackendCommand`, grid/rail/tree, runWindowOps);
@@ -533,11 +484,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // the user-facing CLI) is 1-based. Translate at the seam.
         let target = index + 1
         let rect = activeDisplayRect()
-        // EX-0.4 (exclusive model): workspace switch always clears the active
-        // section-lens — no D1 re-compose on the destination. A lens is a pure
-        // VIEW (moved nothing), so `setActive` just nulls `activeSectionLens`
-        // and returns the unconditional restore plan for the destination's own
-        // members.
         guard let plan = catalog.setActive(target, in: rect) else { return }
 
         // Leave-snapshot only fires on a real transition: setActive
@@ -548,9 +494,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         if let cur = focusedWindow() {
             catalog.recordLeaveFocus(cur, in: plan.oldActive)
         }
-        // The lens-park set + activeSectionLens just changed (cleared by
-        // setActive) — keep the main-readable mirror in lock-step for read-back.
-        syncSectionLensMirror()
         Log.debug("native: switchWorkspace \(plan.oldActive) -> "
             + "\(plan.newActive) autoFocus=\(autoFocus)")
         // Consume the relative-switch direction hint (set just before by
@@ -628,59 +571,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         Log.debug("native: autoFocus WS=\(newActiveWS) "
             + "pick=\(pick.id.serverID) app=\(pick.appName)")
         Focus.assert(pick, backend: self)
-    }
-
-    // MARK: - Section-lens (pure VIEW — t-0021)
-
-    /// Activate / clear the active section-lens (`type="lens"` section, by
-    /// `id`). A lens is a pure VIEW: activating one resolves the id → its
-    /// section, validates the `match` parses, and records the lens as the
-    /// active section — it changes only what the tree/grid/rail DISPLAY (the
-    /// matched windows, via `FilterProjection`), and never moves a real window
-    /// (no park, no tile). The user then clicks a matched window to jump to it
-    /// (the ordinary window-focus path does the workspace switch + focus).
-    /// `nil` clears the lens. No-op outside the section model; an unknown id or
-    /// malformed `match` is a loud-but-non-fatal operational error (the lens is
-    /// left unchanged, D2). The catalog (`activeSectionLens`) is the authority;
-    /// the main-readable mirror is synced so the view's highlight reads back.
-    /// `autoFocus` is unused here (a VIEW never grabs focus); it stays for the
-    /// uniform `activateSection` contract the `.workspace` case honours.
-    public func setSectionLens(_ id: String?, autoFocus: Bool) {
-        dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
-        guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal),
-              config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
-        else { return }
-
-        // Clear — drop the lens authority. The `.refreshNeeded` below drives
-        // a reconcile; on a plain (non-lens) desktop `applyIsolatePark`'s gate
-        // is off there, so anything still isolate-parked unparks.
-        guard let id else {
-            guard catalog.activeSectionLens != nil else { return }
-            catalog.activeSectionLens = nil
-            syncSectionLensMirror()
-            Log.debug("native: setSectionLens cleared (view-only)")
-            eventContinuation.yield(.refreshNeeded)
-            return
-        }
-
-        // Activate. Resolve the id → its section + compile its `match`. D2: an
-        // id that no longer resolves (declOrder out of range / not a lens —
-        // a hot-reload mid-flight) or a `match` that won't parse rejects LOUD
-        // (the lens is left unchanged — no park decision without a sound
-        // filter). The Controller pre-validates the label → id, so a miss here
-        // is defensive (race against config reload).
-        guard let section = lensSection(forID: id) else {
-            errorContinuation.yield("lens \(id): no such lens section")
-            return
-        }
-        guard case .success = FacetFilter.parse(section.match) else {
-            errorContinuation.yield("lens \(section.label): malformed match")
-            return
-        }
-        catalog.activeSectionLens = id
-        syncSectionLensMirror()
-        Log.debug("native: setSectionLens \"\(id)\" (view-only)")
-        eventContinuation.yield(.refreshNeeded)
     }
 
     /// 2-b defocus: when the destination WS is empty, push the

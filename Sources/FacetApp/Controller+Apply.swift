@@ -1,16 +1,15 @@
-// Section-model apply/un-apply DnD orchestration (PR8) — the Controller half
-// of the tree's section-path MOVE (drag / kb-lift). The view hands over
-// section IDs + the dest workspace index; the
-// Controller resolves the executable plan with the PURE `ApplyResolver` over
-// the LIVE section config (read FRESH here, matching `setActiveLens`'s
-// discipline — a `ProjectedSection` carries no apply ops), then dispatches the op
-// sequence on `cliQueue` and schedules one coalesced reconcile.
+// Section-model MOVE orchestration — the Controller half of the tree's
+// section-path drag / kb-lift. The view hands over section IDs + the dest
+// workspace index; the Controller resolves the plan with the PURE
+// `ApplyResolver` and, on a real move, re-files the window into the dest
+// workspace on `cliQueue` (ws→ws membership, or the §G orphan rescue). Since
+// section-lens was retired (t-ec9s), a MOVE carries no tag / apply ops.
 //
-// Snap-back is "do nothing": an inert / stale / non-satisfying plan runs NO
-// backend op, and because the section tree row is never hidden during the drag
-// (only de-emphasised), the next reconcile re-projects the unchanged state —
-// the row simply stays put. (Unlike grid/rail, there is no `OverviewPendingDrop`
-// to roll back.)
+// Snap-back is "do nothing": an inert / stale plan runs NO backend op, and
+// because the section tree row is never hidden during the drag (only
+// de-emphasised), the next reconcile re-projects the unchanged state — the row
+// simply stays put. (Unlike grid/rail, there is no `OverviewPendingDrop` to
+// roll back.)
 
 import FacetCore
 import Foundation
@@ -33,16 +32,12 @@ extension Controller {
         -> ApplyResolver.Plan?
     {
         let ordinal = currentMacDesktopOrdinal()
-        guard config.isSectionModelActive(ordinal: ordinal), let ord = ordinal
-        else { return nil }
-        // Resolve the plan over the SAME section list the projection minted
-        // the dragged row's id from.
-        let sections = desktopSections(forOrdinal: ord)
-        guard let (win, wsName) = findRenderedWindow(windowID) else { return nil }
+        guard config.isSectionModelActive(ordinal: ordinal) else { return nil }
+        guard let (win, _) = findRenderedWindow(windowID) else { return nil }
         let plan = ApplyResolver.plan(
-            window: win, workspaceName: wsName,
+            window: win,
             fromSectionID: fromSectionID, toSectionID: toSectionID,
-            destWorkspaceIndex: destWorkspaceIndex, in: sections)
+            destWorkspaceIndex: destWorkspaceIndex)
         if plan.isInert {
             if let r = plan.reason { Log.debug("apply: inert — \(r)") }
             return nil
@@ -50,46 +45,24 @@ extension Controller {
         return plan
     }
 
-    /// Dispatch a resolved plan's ops onto `cliQueue` in the frozen order
-    /// (un-apply `removeTag`(s) → `setWorkspace` by index → forward apply in
-    /// canonical order), then schedule a single coalesced reconcile. ONE
-    /// `cliQueue.async` block so the multi-op sequence can't interleave with a
-    /// refresh poll; each op yields `.refreshNeeded`, all coalesced by the one
-    /// trailing `scheduleReconcile`. No inter-op sleep — these are focus-free
-    /// single-window writes that settle synchronously on the serial queue.
+    /// Dispatch a resolved plan onto `cliQueue` — a workspace MEMBERSHIP move
+    /// (ws→ws, or the §G unassigned→ws rescue) by 0-based wire index — then
+    /// schedule a single coalesced reconcile. ONE `cliQueue.async` block so the
+    /// move can't interleave with a refresh poll. (Since section-lens was retired
+    /// there are no tag / apply ops left — a MOVE is purely a workspace re-file.)
     private func runApplyPlan(_ plan: ApplyResolver.Plan, on id: WindowID) {
         let bk = backend
         cliQueue.async {
-            for op in plan.inverse {
-                if case .removeTag(let t) = op {
-                    _ = bk.removeTagSection(t, fromWindow: id)
-                }
-            }
-            // A workspace dest (ws→ws membership move, or the §G unassigned→ws
-            // rescue) routes via the 0-based wire index; a lens dest carries no
-            // destWorkspaceIndex. (t-qtpx removed the ws→lens orphaning MOVE, so
-            // there is no orphan-on-drop primitive here any more.) Then the dest
-            // section's forward apply (tags only, for a lens dest).
             if let dst = plan.destWorkspaceIndex {
                 bk.moveWindow(id, toWorkspaceIndex: dst)
-            }
-            for op in plan.forward {
-                switch op {
-                case .addTag(let t):      _ = bk.addTagSection(t, toWindow: id)
-                case .setFloating(let b): bk.setFloating(id, b)
-                case .setSticky(let b):   bk.setSticky(id, b)
-                case .setMaster(let b):   bk.setMaster(id, b)
-                case .removeTag, .setWorkspace: break   // never present in forward
-                }
             }
         }
         scheduleReconcile(after: 0.05)
     }
 
-    /// The live window + its workspace name from the last rendered snapshot —
-    /// the resolver needs the window's current workspace for the lens match
-    /// invariant. Internal (not private): `openTagEditor` reuses it to read the
-    /// window's app name + current tags.
+    /// The live window + its workspace name from the last rendered snapshot.
+    /// Internal (not private): `openTagEditor` reuses it to read the window's
+    /// app name + current tags.
     func findRenderedWindow(_ id: WindowID) -> (Window, String?)? {
         for ws in lastWorkspaces {
             if let w = ws.windows.first(where: { $0.id == id }) {

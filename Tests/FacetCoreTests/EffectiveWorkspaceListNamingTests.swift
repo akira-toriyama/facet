@@ -1,26 +1,27 @@
 import Testing
 @testable import FacetCore
 
-/// The section-aware `effectiveWorkspaceList` naming seed (§A / §B). A
-/// `type="workspace"` section's name is its optional `label`; an empty label
-/// leaves the slot UNNAMED (`name == ""`) — displayed by its 1-based index,
-/// since §B retired the emoji auto-name pool (`WorkspaceNaming`). CI-only (CLT
-/// can't run XCTest). Section-INACTIVE degrade paths live in
+/// The section-aware `effectiveWorkspaceList` naming seed (§A / §B). A workspace
+/// cell section's name is its optional `label`; an empty label leaves the slot
+/// UNNAMED (`name == ""`) — displayed by its 1-based index, since §B retired the
+/// emoji auto-name pool (`WorkspaceNaming`). CI-only (CLT can't run XCTest).
+/// Section-INACTIVE degrade paths live in
 /// `EffectiveWorkspaceListSectionEdgeTests`.
 struct EffectiveWorkspaceListNamingTests {
 
-    /// One slot per `type=workspace` section, in order; an unnamed (empty-label)
+    /// One slot per workspace-cell section, in order; an unnamed (empty-label)
     /// workspace's `config.name` is EMPTY (the view renders its 1-based index).
-    /// lens / unassigned sections do NOT seed a workspace.
+    /// An `unassigned` receptacle does NOT seed a workspace (t-ec9s: the retired
+    /// section-lens exclusion collapsed to the `unassigned` marker).
     @Test func sectionWorkspaceListUnnamedSlotsAreEmpty() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [
-            DesktopSection(type: .workspace, layout: "bsp"),
-            DesktopSection(type: .lens, label: "Web", match: "tag~=web"),
-            DesktopSection(type: .workspace),
+            DesktopSection(layout: "bsp"),
+            DesktopSection(label: "Leftover", unassigned: true),
+            DesktopSection(),
         ]]
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        #expect(list.count == 2)                   // 2 workspace sections
+        #expect(list.count == 2)                   // 2 workspace cells (unassigned excluded)
         #expect(list[0].index == 1)
         #expect(list[0].config.name.isEmpty)      // unnamed → empty (§B)
         #expect(list[0].config.layout == "bsp")    // layout seed carried
@@ -34,8 +35,8 @@ struct EffectiveWorkspaceListNamingTests {
     @Test func sectionWorkspaceListUsesLabelWhenSet() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [
-            DesktopSection(type: .workspace, label: "Dev", layout: "bsp"),
-            DesktopSection(type: .workspace),   // no label → unnamed
+            DesktopSection(label: "Dev", layout: "bsp"),
+            DesktopSection(),   // no label → unnamed
         ]]
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         #expect(list.count == 2)

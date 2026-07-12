@@ -406,35 +406,25 @@ opt-in すればセッション編集を facet が保存する。
   受け取る。 廃止された `[[assign]]` の宣言的後継。 `match` が不正なら loud +
   非 fatal (そのルールのみスキップ・他は走る)。
 - `[[desktop.N.section]]` ブロック — mac desktop ごとの section モデル
-  (`N` は Mission Control 順の位置)。 順序付き section リストで desktop を
-  記述。 各 section は必須の `type` を持つ: `"workspace"` (任意の `label` で
-  命名・無ければ無名で 1始まりの index 表示の空間セル。 任意の `layout` seed 付き。 この個数がその desktop の
-  workspace 数。 **workspace では `match` / `apply` は禁止** — 所属は drag
-  または `facet window --move-to N` でのみ変える)、 `"lens"` (保存フィルタ /
-  view — `label` + `match` + 任意の `apply`。 **`apply` は tag 付与のみ** =
-  `{ tags = [...] }`（additive）。 `workspace` / `floating` / `sticky` /
-  `master` は lens では禁止で drop される。 `facet lens NAME` で有効化すると、
-  現在の mac desktop の**すべての workspace 横断で**一致した窓を集約表示する
-  （lens は pure VIEW＝実窓を一切動かさず、 `layout` も無視）。 どれかの
-  workspace に切り替えると lens は自動解除・`facet lens --clear` で解除)。
-  **DnD は同 type 内のみ**: 窓を workspace 間に drag すれば所属移動、 lens 間
-  なら付け替え（tag の付与/除去）。 workspace ↔ lens の境界を drag で跨ぐことは
-  無い（跨ぐ操作は右クリック / `facet window --tag` / `--move-to`）。
-  `unassigned = true` を付けた section（`type` ではなくマーカー・`label` のみ・
-  `match` / `apply` 無し）が**推奨**の opt-in lost-and-found — 他のどの section
-  にも出ない**全 leftover 窓**を拾い、 lens セルのように並び、 `facet section
-  --focus` で先頭窓を focus、 workspace へ DnD で窓を RESCUE。 最初の 1 つだけ
-  描画。 通常は空（窓は必ずどれかの workspace に居る）だが、 お守りとして 1 つ
-  残す。（旧 `type = "unassigned"` 綴りは退役。）
-  **workspace は任意の `label` で config 命名可**（無ければ無名＝1始まりの index 表示）—
-  実行時 `facet workspace --rename` が上書き。 2 モード:
+  (`N` は Mission Control 順の位置)。 順序付きの **workspace 空間セル**
+  リストで desktop を記述。 各 section は `{ label, layout, unassigned }`:
+  `label` で workspace を命名（任意・無ければ無名で 1始まりの index 表示）、
+  `layout` は任意の layout seed、 この個数がその desktop の workspace 数。
+  窓の所属は drag または `facet window --move-to N` でのみ変える。
+  `unassigned = true` を付けた section（`label` のみ）が**推奨**の opt-in
+  lost-and-found — 他のどの section にも出ない**全 leftover 窓**を拾い、
+  `facet section --focus` で先頭窓を focus、 ここへ DnD で窓を RESCUE。
+  最初の 1 つだけ描画。 通常は空（窓は必ずどれかの workspace に居る）だが、
+  お守りとして 1 つ残す。（section の `type` はもう無い — 保存フィルタは
+  今や **lens desktop 全体** = `[desktop.N] type = "lens"`（下記）。 section
+  に残った `type` / `match` / `apply` は load 時に無視され `config --validate`
+  が警告する。）実行時 `facet workspace --rename` が label を上書き。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの
   ある mac desktop だけ facet が管理し、 無い mac desktop は完全に
   ノータッチ（窓そのまま・パネル非表示）。 3 view すべてが同じ
-  section リストを描画する — lens section は tree・grid・**rail** でセルとして
-  並び、 ちょうど 1 つだけハイライト。 rail では active section が中央の hero
-  になる（active な lens はそこに集約した一致窓を描く）。
+  section リストを描画し、 ちょうど 1 つの workspace だけハイライト。 rail
+  では active workspace が中央の hero になる。
 - `[desktop.N]` テーブル — **typed desktop**: `type = "workspace"` か
   `"lens"`（1 ordinal = 1 desktop = 1 type。 section だけの config は暗黙に
   `workspace`）。 **lens desktop** は常時有効の lens をテーブルに直接書く:
@@ -445,8 +435,8 @@ opt-in すればセッション編集を facet が保存する。
   tree にのみ描画される。
 - **per-window tag** は **実行時** (session 限り) に `facet window --tag
   NAME` (および `--untag` / `--toggle-tag` / `--retag`) で付ける自由記述の
-  文字列。 `match` に `tag~=NAME` を含む `type = "lens"` section が NAME を
-  持つ全窓を表示する。 `facet query --tags` でいま使われている全 tag を一覧。
+  文字列。 `match` に `tag~=NAME` を含む lens desktop や `[[rule]]` が NAME を
+  持つ全窓を対象にする。 `facet query --tags` でいま使われている全 tag を一覧。
   任意で `[tags] defined = ["web", "code", …]` を書くと **語彙** を seed でき、
   どの窓もまだ使っていない名前を tree の tag editor (`t`) の補完候補に出せる
   （名前のみ・tag の色は runtime）。
@@ -510,28 +500,23 @@ facet window --unmark NAME        # マークを消す
                                   # 1:1 — 1 窓 = 1 マーク。同名を付け直すと
                                   # 旧窓から外れる。session のみ・mac desktop ごと。
 
-# Lens (section モデル) — type="lens" の [[desktop.N.section]] を label で
-# 有効化。一致した窓を全 workspace 横断で集約表示（実窓は動かさない）。
-# どれかの workspace に切り替えると lens は自動解除。mac desktop 切替を跨いで持続。
-facet lens "Web"                  # label が Web の lens を有効化
-facet lens --clear                # active lens 表示を解除
-
-# Section — 任意の section (workspace / lens / unassigned) を 1-based の tree
-# index か label で指す。`--focus` は activate (workspace へ切替 / lens を有効化 /
-# unassigned は先頭窓を focus)。`--rename` は表示 label を runtime で変更 (session
-# のみ・relaunch で reset・`facet reload` では消えない・空 label は workspace を index
-# へ、lens / unassigned を config の label へ戻す)。
-# tree からも改名可: section ヘッダ右クリック → Section ▸ Rename。
+# Section — 任意の section (workspace / unassigned) を 1-based の tree
+# index か label で指す。`--focus` は activate (workspace へ切替・unassigned や
+# lens desktop の section は先頭窓を focus)。`--rename` は表示 label を runtime で
+# 変更 (session のみ・relaunch で reset・`facet reload` では消えない・空 label は
+# workspace を index へ、unassigned を config の label へ戻す・lens desktop は
+# `--rename` を拒否)。tree からも改名可: section ヘッダ右クリック → Section ▸ Rename。
 facet section --focus N            # tree 順で N 番目の section を focus
 facet section --focus LABEL        # label が LABEL の section を focus
 facet section --rename N "label"   # N 番目の section の表示 label を改名
 
-# `--match` は LENS section の filter (`facet filter` 述語) を runtime 編集
+# `--match` は LENS DESKTOP の filter (`facet filter` 述語) を runtime 編集
 # (session のみ・`--rename` と同じ寿命: relaunch で reset・`reload` では残る)。
-# lens 専用 — workspace / unassigned は reject。空 PREDICATE は config の match へ戻す。
-# tree からも編集可: lens ヘッダ右クリック → Section ▸ Edit match (`m` キーでも)。
-facet section --match N "tag~=web" # N 番目の lens の match を設定・即 re-filter
-facet section --match N ""          # N 番目の lens の match を config へ revert
+# lens desktop 専用 — workspace / unassigned は reject。空 PREDICATE は config の
+# match へ戻す。tree からも編集可: lens desktop ヘッダ右クリック → Section ▸
+# Edit match (`m` キーでも)。
+facet section --match N "tag~=web" # lens desktop を retarget・即 re-tile
+facet section --match N ""          # lens desktop の match を config へ revert
 
 # Scratchpad — 名前付きの隠し棚 (ドロップダウン端末 / メモ用途)
 facet scratchpad --stash NAME     # focus 中の window を名前付き棚へしまう (画面外へ隠す)
@@ -601,9 +586,9 @@ facet --rescue
 ### Window tag
 
 1 窓は **自由記述の文字列 tag** を好きなだけ持てる — 初出で自動生成・
-session 限り・CLI でライブに付ける。 lens フィルタの材料になる: `match`
-に `tag~=NAME` を含む `type = "lens"` section ([設定](#設定) 参照) が
-NAME を持つ全窓を表示する。
+session 限り・CLI でライブに付ける。 `match` 述語の材料になる: `match`
+に `tag~=NAME` を含む lens desktop や `[[rule]]` ([設定](#設定) 参照) が
+NAME を持つ全窓を対象にする。
 
 ```sh
 facet window --tag NAME           # focus 中の窓に tag を付ける

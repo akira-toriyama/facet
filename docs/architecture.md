@@ -129,18 +129,19 @@ is the index. **Do not relitigate** without explicit grill round.
   moves windows across mac desktops, so it stays SIP-on / public-contract
   (the rejected cross-mac-desktop move was hide 手法4). `[[desktop.N.section]]`
   config customises a mac desktop by Mission-Control ordinal — an ordered
-  list of `type = workspace | lens` sections (workspace =
-  optional `label` + optional `layout` cell — unnamed shows its index;
-  the count sets the WS count; a workspace's `match`/`apply` are forbidden —
-  t-qtpx — membership changes by drag or `facet window --move-to N`). A lens
-  carries a `match` + an optional `apply` of ADDITIVE TAGS ONLY (t-qtpx); it
-  is a pure VIEW that never moves a real window. Tree DnD is SAME-TYPE ONLY:
-  ws→ws moves a window, lens→lens re-tags it; the ws↔lens boundary is never
-  crossed by a drag. `WindowSlot.workspace` is `Int?` — a window can belong
+  list of workspace spatial cells (`{ label, layout, unassigned }`): each cell
+  is one facet workspace (optional `label` — unnamed shows its index — and an
+  optional `layout` seed), and the count sets the WS count. A section has NO
+  `type` / `match` / `apply` (t-ec9s retired the section-lens concept — `lens`
+  is now a typed mac *desktop*, see the typed-desktop layer below; a stray
+  `type` / `match` / `apply` is ignored on decode + flagged by
+  `config --validate`); membership changes only by drag or
+  `facet window --move-to N`. Tree DnD is plain ws→ws membership move plus
+  orphan rescue. `WindowSlot.workspace` is `Int?` — a window can belong
   to NO workspace, but normally belongs to exactly one, so orphans (迷子) are
-  rare (t-qtpx removed the ws→lens DnD that created them). An orphan is
+  rare. An orphan is
   invisible-but-logged until a section with the opt-in `unassigned = true`
-  marker (§G; the retired `type = "unassigned"` spelling now drops loud)
+  marker (§G)
   surfaces every leftover window (in no other section) and a drag out onto a
   workspace rescues it. Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
@@ -202,9 +203,9 @@ is the index. **Do not relitigate** without explicit grill round.
   index-shown (§B); a `[[desktop.N.section]]` block only seeds the WS
   count + `label` + per-WS `layout` (read-only). Runtime rename / layout /
   catalog mutations are all session-only.
-- **Startup**: don't touch existing windows. The first `type=workspace`
+- **Startup**: don't touch existing windows. The first workspace
   section (or WS index 1 with no section config) is the initial
-  [active section](#two-tiling-machineries-one-active-section); no windows
+  [active section](#one-tiling-machinery-one-active-section); no windows
   move on startup. **Shutdown**: restore all hidden windows (treat shutdown
   = workspace feature OFF).
 
@@ -484,15 +485,18 @@ catalog is cliQueue-confined, and the two never share mutable state.
 `Controller.refresh` skips while `backend.isAnimating` so a reconcile can't
 AX-fight the in-flight tween.
 
-## Section / lens read-path (the pivot)
+## Section read-path (projection)
 
-The default read-path is spatial: windows live in facet workspaces, and a
-view renders one cell per workspace. The **pivot** (M11-3 tag model #176,
-then the projection re-design #282–#301) adds a second, orthogonal read-path
-that renders the config's declared **sections** instead — a window shows up
-in every section it matches, not just the one workspace it lives in. The
-whole projection / apply surface is pure `FacetCore`, so it is exhaustively
-unit-tested and the views stay rendering-only.
+The read-path is spatial: windows live in facet workspaces, and a view renders
+one **section** cell per workspace. A workspace desktop's sections come from its
+`[[desktop.N.section]]` blocks (none declared → degrade 1:1 to the built-in
+by-workspace tree); a lens desktop synthesizes its 1–2 sections from the single
+`[desktop.N]` lens (see the typed-desktop layer below). The whole projection
+surface is pure `FacetCore`, so it is exhaustively unit-tested and the views
+stay rendering-only. (t-ec9s retired the old "section-lens" read-path — a
+`[[desktop.N.section]]` can no longer be a saved cross-workspace VIEW filter
+that renders a window in every section it matches; a section is a workspace
+spatial cell, and `lens` lives only at the desktop layer.)
 
 ### The projection (pure)
 
@@ -501,80 +505,69 @@ unit-tested and the views stay rendering-only.
 `Result` — the renderable `[ProjectedSection]` plus loud-but-non-fatal
 diagnostics. Two types are deliberately kept apart:
 
-- **`DesktopSection`** — the *config declaration* (`[[desktop.N.section]]`): a
-  required `type` (`SectionType` = `workspace` / `lens` — NO `.unassigned`),
-  an optional `label`, a raw `match` string, an `apply` op list, and an
-  `unassigned = true` `Bool` marker (W2.6 / t-wrd2 — the lost-and-found
-  receptacle is a flag on a `workspace` / `lens` section, NOT a `type`; the
-  retired `type = "unassigned"` spelling is now an unknown type and drops loud
-  on decode).
+- **`DesktopSection`** — the *config declaration* (`[[desktop.N.section]]`): an
+  optional `label`, an optional `layout` seed, and an `unassigned = true` `Bool`
+  marker (W2.6 / t-wrd2 — the lost-and-found receptacle). There is NO `type` /
+  `match` / `apply` (t-ec9s); a stray one is ignored on decode + flagged by
+  `config --validate`.
 - **`ProjectedSection`** — the *projection result*: one rendered unit, with a
-  stable `id` (`"ws:<index>"` or `"section:<declOrder>:<label>"`), a `label`,
-  the `windows` that landed in it, `sourceWorkspaceIndex` (`nil` for a
-  multi-match lens), and the `sectionType`. (Was `FilterGroup` until the
+  stable `id` (`"ws:<index>"`), a `label`, the `windows` that landed in it,
+  `sourceWorkspaceIndex`, and the `sectionType`. (Was `FilterGroup` until the
   Phase D rename retired the forbidden word `group`.)
 
 Per-type semantics:
 
 - **workspace** — the spatial substrate. Maps positionally onto the live
   workspaces by *wire index* (the k-th workspace section ↔ `workspaces[k]`),
-  takes their windows verbatim (no filter eval), carries the layout seed.
-- **lens** — a saved filter. Its `match` compiles to a `facet filter` and is
-  evaluated over *every* window (multi-match: a window in two lens sections
-  appears in both). A lens narrows; it never re-bundles.
-- **unassigned** (§G) — the opt-in lost-and-found receptacle. NOT a config
-  `type` (which stays `{workspace, lens}`): a section carries the
-  `unassigned = true` marker and `FilterProjection` mints the render-side
-  `ProjectedSectionType.unassigned` for it (the third *projected* kind a
+  takes their windows verbatim, carries the layout seed.
+- **unassigned** (§G) — the opt-in lost-and-found receptacle. A section carries
+  the `unassigned = true` marker and `FilterProjection` mints the render-side
+  `ProjectedSectionType.unassigned` for it (the second *projected* kind a
   config section never declares). When present it
   collects the *leftover* (universe − shown — every window in no other emitted
-  section, in practice the orphans no lens caught); only the first emits,
+  section, i.e. the orphans); only the first emits,
   extras warn; `id = "unassigned:<declOrder>"`. Rendered in tree/grid/rail,
   focuses its first window, rescuable by DnD / Space-lift, and runtime-
-  renamable (a session-only display override, like a lens).
+  renamable (a session-only display override).
 
 **Degrade is a first-class citizen**: a mac desktop with no sections projects
-1:1 to by-workspace, byte-identical to the pre-pivot tree, and an
-all-`workspace` config converges to the same result. The gate is
-`FacetConfig.isSectionModelActive`.
+1:1 to by-workspace, byte-identical to the built-in by-workspace tree. The gate
+is `FacetConfig.isSectionModelActive`.
 
 ### The filter language (`facet filter`)
 
 `FacetFilter` is a small, total WHERE-clause language (`parse` → AST →
-`matches`, with a `description` inverse). A lens `match` is one of these; the
-projection overlays the window's workspace name (`ProjectedWindowFields`) so
-`match='workspace=Dev'` resolves at the seam. A malformed match is
-loud-but-non-fatal (skipped + a diagnostic caret), matching the CLI
-philosophy. A window's free-form tags surface to the filter as the `tag`
-field, so a lens `match='tag~=web'` shows every window carrying the `web`
+`matches`, with a `description` inverse). It powers a lens **desktop**'s
+`match` (`[desktop.N] type = "lens"`, below) and, at the config layer, each
+`[[rule]]` block's match→tag; the projection overlays the window's workspace
+name (`ProjectedWindowFields`) so `match='workspace=Dev'` resolves at the seam.
+A malformed match is loud-but-non-fatal (skipped + a diagnostic caret),
+matching the CLI philosophy. A window's free-form tags surface to the filter as
+the `tag` field, so `match='tag~=web'` matches every window carrying the `web`
 tag (`facet window --tag web`).
 
-### The mutating read-path (`ApplyResolver`, pure)
+### The mutating read-path (DnD)
 
-Dragging a window onto a section (or right-clicking "Add to ▸ lens") routes
-through `ApplyResolver` — the pure brain that turns a section id + the dropped
-window into an executable `Plan` (`un-apply(source) → apply(dest)` for a MOVE,
-apply-only for an ADD). It validates the core invariant — the window must
-satisfy the dest section's `match` *after* the apply — and returns an inert
-plan (snap-back, no backend op) when it can't; the Controller dispatches a
-non-inert plan's ops on `cliQueue`.
+Dragging a window onto a workspace section is a plain membership move: the
+window leaves its source workspace and joins the destination (the same effect
+as `facet window --move-to N`), and the Controller dispatches the backend op on
+`cliQueue`. Dragging an orphan out of the `unassigned` receptacle onto a
+workspace rescues it the same way. There is no section `match` to satisfy and
+no `apply` side-effect (t-ec9s retired both) — auto-tagging on a match is now
+the `[[rule]]` block's job (match→tag), and lens filtering lives at the desktop
+layer.
 
 ### Where it is consumed
 
 The tree (`SidebarView.update(sections:)`) renders `[ProjectedSection]`
-directly. The active section-lens is a **display-only filter** (a pure VIEW,
-t-0021) — it never moves a real OS window (no anchor-park, no "real hide").
-Activating a lens (`facet lens NAME`) only changes what the views DISPLAY:
-`FilterProjection` lists the lens's matched windows aggregated across ALL
-workspaces on the current mac desktop, and the tree / grid / rail show just
-those rows / thumbnails — one projection authority, no view-side `match`
-recompute. The user clicks a matched window to jump to it (workspace switch
-+ focus); `facet lens --clear` drops the view. The read-path is the sole
-window-grouping model, and the section list it renders comes from the
-**typed-desktop layer** (next subsection): a workspace desktop renders its
-flat `[[desktop.N.section]]` blocks (none declared → degrade 1:1 to the
-built-in by-workspace tree), a lens desktop synthesizes its 1–2 sections
-from the single `[desktop.N]` lens.
+directly, as do the grid and rail. The read-path is the sole window-grouping
+model, and the section list it renders comes from the **typed-desktop layer**
+(next subsection): a workspace desktop renders its flat `[[desktop.N.section]]`
+blocks (none declared → degrade 1:1 to the built-in by-workspace tree), and a
+lens desktop synthesizes its 1–2 sections from the single `[desktop.N]` lens.
+There is no per-section VIEW filter to toggle and no `facet lens` verb
+(t-ec9s) — lens filtering is a property of the whole mac desktop, always-on
+while that lens desktop is active (`applyIsolatePark`, below).
 
 ### The typed-desktop layer (lens desktops)
 
@@ -616,34 +609,29 @@ switcher bands — was retired by t-0sbm as one concept too many.)
 
 ### One tiling machinery, one active section
 
-There is always **exactly one** [active section](glossary.md#active-section)
-— `activeSection := activeLens (type=lens) XOR activeWorkspace`. There is now
-ONE real-window tiling machinery — the per-workspace one; a lens is a
-display-only filter over live windows (t-0021), so it never tiles or moves a
-real OS window:
+There is always **exactly one** [active section](glossary.md#active-section):
+on a workspace desktop it is the active workspace, and on a lens desktop it is
+the single synthesized always-on section. (t-ec9s removed the old
+`activeLens XOR activeWorkspace` split — there is no section-lens to activate,
+so the active section is unambiguously the active workspace.) Real-window
+tiling runs the per-workspace machinery on **both** desktop types:
 
-| | `type=workspace` | `type=lens` |
+| | workspace desktop | lens desktop |
 |---|---|---|
-| Frames | stateful `applyLayout` on `activeIndex` (real-window tiling) | none — display-only (no real-window move) |
-| Member set | per-WS members (the active workspace's own windows) | the matched windows aggregated across every workspace on the current mac desktop (display set) |
-| Effect | tiles + moves the OS windows | only changes what tree / grid / rail show |
+| Frames | stateful `applyLayout` on the active workspace | `applyIsolatePark` — always-on tile of the `match` set with the lens `layout` on the N=1 workspace |
+| Member set | the active workspace's own windows | the windows matching the desktop's `match`, aggregated across the desktop |
+| Effect | tiles + moves the active workspace's OS windows | tiles the matched OS windows + anchor-parks the rest |
 
-A `type=workspace` active section runs the per-workspace tiling machinery; an
-active lens runs no tiling at all — it just narrows the displayed set. The
-catalog still enforces the XOR structurally — every workspace switch nulls the
-active lens, so the active section is always a single, unambiguous selection.
-
-All **three views render this one ordered section list** (`FilterProjection.project`
-→ `[ProjectedSection]`): the tree's section headers, the grid's cells, and the
-rail's carousel cells (with the active/selected section as the centre **hero** —
-an active lens renders its aggregated display set there). Each lights **exactly
-one** section, the active one — **3-view unified highlight**, completed across
-tree (EX-1), grid (EX-2a), and rail (EX-2b). `OverviewCell.isActive` bakes the
-single-highlight XOR at cell-build time, so the accent draw is identical across
-surfaces — note the lens lights its section for DISPLAY, not tiling; cell/window
-picks funnel through `WindowBackend.activateSection` (the same throughline the CLI
-+ tree use). Lens cells are browsable but never drag/swap targets (no source
-workspace).
+On a workspace desktop all **three views render this one ordered section list**
+(`FilterProjection.project` → `[ProjectedSection]`): the tree's section headers,
+the grid's cells, and the rail's carousel cells (with the active section as the
+centre **hero**). Each lights **exactly one** section, the active one —
+**3-view unified highlight**, completed across tree (EX-1), grid (EX-2a), and
+rail (EX-2b). `OverviewCell.isActive` bakes the single-highlight at cell-build
+time, so the accent draw is identical across surfaces; cell/window picks funnel
+through `WindowBackend.activateSection` (the same throughline the CLI + tree
+use). A lens desktop is tree-only, so the grid/rail cell path applies only to
+workspace desktops.
 
 ## Non-goals
 

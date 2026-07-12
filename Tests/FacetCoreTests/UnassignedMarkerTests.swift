@@ -2,20 +2,22 @@ import Testing
 @testable import FacetCore
 
 /// W2.6 (t-wrd2): the lost-and-found receptacle is an `unassigned = true`
-/// MARKER on an ordinary section, NOT a `type` value. The config `SectionType`
-/// enum is purified to {workspace, lens}; `type = "unassigned"` is RETIRED
-/// (unknown type → dropped LOUD). The receptacle's projected representation
-/// keeps its own `ProjectedSectionType.unassigned` case (config vs rendered
-/// types are separate concerns). Flat and tab configs are symmetric — both
-/// declare a receptacle with the marker; a tab child inherits the parent type
-/// AND carries the marker.
+/// MARKER on an ordinary `[[desktop.N.section]]` cell, NOT a `type` value.
+/// Since the section-lens type was retired (t-ec9s: `lens` is now ONLY a typed
+/// mac desktop, `[desktop.N] type=lens`), EVERY authored section is a workspace
+/// SPATIAL cell — decode is TOTAL (never drops a row), and a stray `type` /
+/// `match` / `apply` (from the retired section-lens era) is IGNORED. The
+/// receptacle keeps its own rendered `ProjectedSectionType.unassigned` case
+/// (config vs rendered types are separate concerns).
 struct UnassignedMarkerTests {
 
-    // MARK: - SectionType purity
+    // MARK: - SectionType is the DESKTOP discriminator (no unassigned case)
 
     @Test func sectionTypeHasNoUnassignedCase() {
-        // The config enum is {workspace, lens} only — the receptacle moved to a
-        // marker. (CaseIterable makes this a discriminating compile+runtime pin.)
+        // `SectionType` is now the mac-desktop TYPE discriminator
+        // (`[desktop.N] type = "workspace" | "lens"`), not a section field. It
+        // is {workspace, lens} only — the receptacle is a section marker, not a
+        // type. (CaseIterable makes this a discriminating compile+runtime pin.)
         #expect(SectionType.allCases == [.workspace, .lens])
     }
 
@@ -23,8 +25,7 @@ struct UnassignedMarkerTests {
 
     @Test func flatUnassignedMarkerDecodes() {
         // A flat section with `unassigned = true` decodes to a receptacle: the
-        // marker is set, match/apply ignored. Type is optional here (defaults
-        // workspace) — the marker overrides the projection semantics.
+        // marker is set and the optional `label` names it.
         let (s, _) = DesktopSection.parse(fromTOMLRow: [
             "unassigned": .bool(true), "label": .string("Misc"),
         ])
@@ -33,53 +34,29 @@ struct UnassignedMarkerTests {
         #expect(s?.label == "Misc")
     }
 
-    @Test func flatUnassignedMarkerIgnoresMatchAndApply() {
+    @Test func strayLensEraKeysAreIgnored() {
+        // A stray `type` / `match` / `apply` (from the retired section-lens era)
+        // is IGNORED by decode — every section is a workspace cell — with no
+        // caveat note (`config --validate`'s strict schema is what flags it, not
+        // the decoder). The `unassigned` marker still lands.
         let (s, note) = DesktopSection.parse(fromTOMLRow: [
             "unassigned": .bool(true),
+            "type": .string("lens"),
             "match": .string("app=X"),
             "apply": .table(["tags": .array([.string("a")])]),
         ])
         #expect(s?.unassigned == true)
-        #expect(s?.match == "")
-        #expect(s?.apply == [])
-        #expect(note != nil)   // loud caveat about the ignored match/apply
-    }
-
-    @Test func typeUnassignedSpellingRetired() {
-        // `type = "unassigned"` is RETIRED — it is now an unknown type and the
-        // row drops LOUD (never a silent receptacle).
-        let (s, note) = DesktopSection.parse(fromTOMLRow: [
-            "type": .string("unassigned"),
-        ])
-        #expect(s == nil)
-        #expect(note != nil)
-        #expect(note?.contains("unknown") == true)
-    }
-
-    @Test func unassignedMarkerWinsOverInvalidType() {
-        // The receptacle MARKER is checked BEFORE `type`, so a bogus type on a
-        // marker row is projection-irrelevant: `recType` falls through to the
-        // `.workspace` default and the row still decodes as a receptacle (no
-        // drop note). Contrast `unknownTypeIsDropped` — the SAME bogus type
-        // WITHOUT the marker drops LOUD. Regression pin: a refactor that
-        // validated `type` before the marker would silently DROP a typo-typed
-        // receptacle, losing the lost-and-found section.
-        let (s, note) = DesktopSection.parse(fromTOMLRow: [
-            "unassigned": .bool(true), "type": .string("bogus"),
-        ])
-        #expect(s != nil)
-        #expect(s?.type == .workspace)   // bogus type → moot `.workspace` default
-        #expect(s?.unassigned == true)
-        #expect(s?.label == "")
-        #expect(note == nil)             // marker accepts; no drop / caveat
+        #expect(note == nil)
     }
 
     // MARK: - non-receptacle sections keep the marker false
 
     @Test func workspaceSectionMarkerFalse() {
-        let (s, _) = DesktopSection.parse(fromTOMLRow: ["type": .string("workspace")])
-        #expect(s?.type == .workspace)
+        // An ordinary section (no `unassigned` marker) is a workspace cell —
+        // the receptacle marker is false and the label names it.
+        let (s, _) = DesktopSection.parse(fromTOMLRow: ["label": .string("Work")])
         #expect(s?.unassigned != true)
+        #expect(s?.label == "Work")
     }
 
     // MARK: - FilterProjection: marker emits the receptacle
@@ -91,14 +68,15 @@ struct UnassignedMarkerTests {
                             title: "z", isFocused: false, isFloating: false,
                             frame: nil, isOnscreen: true)
         let sections = [
-            DesktopSection(type: .lens, label: "Web", match: "app=Nope"),
-            DesktopSection(type: .lens, label: "Misc", unassigned: true),
+            DesktopSection(label: "Web"),
+            DesktopSection(label: "Misc", unassigned: true),
         ]
         let r = FilterProjection.project(workspaces: [ws], sections: sections,
                                          orphans: [orphan])
         let receptacle = r.sections.first { $0.sectionType == .unassigned }
         #expect(receptacle != nil)
-        // the orphan matches no lens → it is the leftover the receptacle rescues
+        // the orphan lands in no workspace section → it is the leftover the
+        // receptacle rescues (universe − shown).
         #expect(receptacle?.windows.map(\.id) == [WindowID(serverID: 9)])
     }
 }

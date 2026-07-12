@@ -5,9 +5,13 @@ import Toml
 
 /// B4 (t-hdxb): the pure `ConfigSnapshot.render` — surgical session-override →
 /// config.toml back-mapping. The riskiest piece: `declOrder` (projection index)
-/// vs `rawOrdinal` (raw array-of-tables position) diverge under malformed-row
-/// drop, header-spelling merge, and duplicate-label drop, so these fixtures pin
-/// that the RIGHT `[[desktop.N.section]]` element is edited every time.
+/// vs `rawOrdinal` (raw array-of-tables position) diverge under header-spelling
+/// merge and duplicate-label drop, so these fixtures pin that the RIGHT
+/// `[[desktop.N.section]]` element is edited every time. Since the section-lens
+/// type was retired (t-ec9s), EVERY section is a workspace SPATIAL cell — the
+/// snapshot writes workspace `label`/`layout` (by wsSlot) and the unassigned
+/// receptacle's `label` (by id `unassigned:<declOrder>`); it never writes a
+/// section `match` (there are no lens sections).
 struct ConfigSnapshotTests {
 
     /// Re-parse a rendered snapshot back into origins for value assertions.
@@ -27,80 +31,35 @@ struct ConfigSnapshotTests {
                 sourceLocation: sourceLocation)
     }
 
-    // MARK: - lens match override
-
-    @Test func lensMatchOverrideEditsCorrectBlock() {
-        let cfg = """
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Web"
-        match = 'app=Safari'
-        """
-        var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Firefox"]]
-        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
-
-        #expect(out.contains(#"match = "app=Firefox""#),
-                "match rewritten (encode normalises to a basic string)")
-        #expect(!(out.contains("app=Safari")), "old match gone")
-        assertStable(out)
-    }
-
     // MARK: - declOrder ≠ rawOrdinal: duplicate-label drop
 
     @Test func duplicateLabelDropShiftsRawOrdinal() {
         // Survivors: Web(declOrder 0, rawOrdinal 0), Code(declOrder 1,
         // rawOrdinal 2) — the 2nd block (dup "Web") is dropped from the
-        // projection but still occupies raw ordinal 1.
+        // projection but still occupies raw ordinal 1. Editing Code's layout by
+        // its wsSlot (1) must land on rawOrdinal 2, NOT the dropped middle.
         let cfg = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'a'
+        layout = "a"
 
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'b'
+        layout = "b"
 
         [[desktop.1.section]]
-        type = "lens"
         label = "Code"
-        match = 'c'
+        layout = "c"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:1:Code": "app=Xcode"]]  // declOrder 1 = Code
+        ov.workspaceLayout = [1: [1: "xcode"]]  // wsSlot 1 = Code (survivor)
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
         // The THIRD block (Code) must be edited, NOT the second (dup Web).
-        #expect(out.contains(#"match = "app=Xcode""#))
-        #expect(out.contains("match = 'b'"),
+        #expect(out.contains(#"layout = "xcode""#))
+        #expect(out.contains(#"layout = "b""#),
                 "the dropped dup-Web block is untouched")
-        #expect(!(out.contains("match = 'c'")), "Code's old match replaced")
-        assertStable(out)
-    }
-
-    // MARK: - declOrder ≠ rawOrdinal: malformed-row drop
-
-    @Test func malformedRowDropShiftsRawOrdinal() {
-        // Block 0 has no `type` → dropped from projection; Web is declOrder 0
-        // but raw ordinal 1.
-        let cfg = """
-        [[desktop.1.section]]
-        note = "not a section — no type"
-
-        [[desktop.1.section]]
-        type = "lens"
-        label = "Web"
-        match = 'a'
-        """
-        var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Safari"]]
-        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
-
-        #expect(out.contains(#"match = "app=Safari""#))
-        #expect(out.contains(#"note = "not a section — no type""#),
-                "the malformed block is preserved untouched")
+        #expect(!(out.contains(#"layout = "c""#)), "Code's old layout replaced")
         assertStable(out)
     }
 
@@ -109,36 +68,34 @@ struct ConfigSnapshotTests {
     @Test func zeroPaddedHeaderSpellingResolves() {
         let cfg = """
         [[desktop.01.section]]
-        type = "lens"
         label = "Web"
-        match = 'a'
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Safari"]]  // Int("01") == ordinal 1
+        ov.workspaceLabel = [1: [0: "Browsers"]]  // Int("01") == ordinal 1
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
-        #expect(out.contains(#"match = "app=Safari""#),
+        #expect(out.contains(#"label = "Browsers""#),
                 "the desktop.01 spelling is addressed by its own path")
+        #expect(!(out.contains(#"label = "Web""#)))
         assertStable(out)
     }
 
-    // MARK: - lens / unassigned label override
+    // MARK: - workspace / unassigned label override
 
-    @Test func lensAndUnassignedLabelOverride() {
+    @Test func workspaceAndUnassignedLabelOverride() {
+        // A workspace cell renames via `workspaceLabel` (by wsSlot); the
+        // unassigned receptacle renames via `label` (by id unassigned:<declOrder>).
         let cfg = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'a'
 
         [[desktop.1.section]]
         unassigned = true
-        type = "workspace"
         label = "Lost"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.label = [1: ["section:0:Web": "Browsers",
-                        "unassigned:1": "Strays"]]
+        ov.workspaceLabel = [1: [0: "Browsers"]]        // wsSlot 0 = the Web cell
+        ov.label = [1: ["unassigned:1": "Strays"]]      // declOrder 1 = receptacle
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
         #expect(out.contains(#"label = "Browsers""#))
@@ -151,55 +108,50 @@ struct ConfigSnapshotTests {
     // MARK: - workspace label + layout: positional wsSlot mapping
 
     @Test func workspaceLabelAndLayoutPositional() {
-        // ws(slot 0) — lens — ws(slot 1): a lens between the two workspaces
-        // must NOT consume a workspace slot.
+        // Every section is a workspace SPATIAL cell now (t-ec9s): the k-th cell
+        // ↔ wsSlot k, in declaration order. Slots map positionally.
         let cfg = """
         [[desktop.1.section]]
-        type = "workspace"
+        label = "One"
 
         [[desktop.1.section]]
-        type = "lens"
-        label = "Web"
-        match = 'a'
+        label = "Two"
 
         [[desktop.1.section]]
-        type = "workspace"
         layout = "bsp"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.workspaceLabel = [1: [0: "First", 1: "Second"]]
-        ov.workspaceLayout = [1: [0: "stack", 1: "float"]]
+        ov.workspaceLabel = [1: [0: "First", 1: "Second", 2: "Third"]]
+        ov.workspaceLayout = [1: [0: "stack", 1: "float", 2: "grid"]]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
         let secs = origins(out, ordinal: 1).map(\.section)
-        // secs[0] = first workspace, secs[1] = lens, secs[2] = second workspace
         #expect(secs[0].label == "First")
         #expect(secs[0].layout == "stack")
-        #expect(secs[2].label == "Second")
-        #expect(secs[2].layout == "float")
-        #expect(secs[1].label == "Web", "the lens is untouched by ws slots")
+        #expect(secs[1].label == "Second")
+        #expect(secs[1].layout == "float")
+        #expect(secs[2].label == "Third")
+        #expect(secs[2].layout == "grid")
         assertStable(out)
     }
 
     /// An `unassigned` marker sitting BETWEEN two real workspaces must consume
-    /// no workspace slot: the writer `continue`s before the `switch`, so `wsSlot`
-    /// stays put. Pins that slot 0 names the first workspace and slot 1 names the
-    /// THIRD section (the real second workspace) — not the unassigned middle,
-    /// which keeps its config label untouched. (Hoisting `wsSlot += 1` above the
-    /// `continue` would leave the second workspace unnamed; the existing
-    /// positional test uses a LENS, not `unassigned`, between the two.)
+    /// no workspace slot: the writer `continue`s before the workspace branch, so
+    /// `wsSlot` stays put. Pins that slot 0 names the first workspace and slot 1
+    /// names the THIRD section (the real second workspace) — not the unassigned
+    /// middle, which keeps its config label untouched. (Hoisting `wsSlot += 1`
+    /// above the `continue` would leave the second workspace unnamed.)
     @Test func unassignedBetweenWorkspacesConsumesNoSlot() {
         let cfg = """
         [[desktop.1.section]]
-        type = "workspace"
+        label = "A"
 
         [[desktop.1.section]]
         unassigned = true
-        type = "workspace"
         label = "Lost"
 
         [[desktop.1.section]]
-        type = "workspace"
+        label = "B"
         """
         var ov = ConfigSnapshot.Overrides()
         ov.workspaceLabel = [1: [0: "First", 1: "Second"]]
@@ -218,7 +170,7 @@ struct ConfigSnapshotTests {
     @Test func workspaceEmptyNameIsNotWritten() {
         let cfg = """
         [[desktop.1.section]]
-        type = "workspace"
+        layout = "bsp"
         """
         var ov = ConfigSnapshot.Overrides()
         ov.workspaceLabel = [1: [0: ""]]  // empty name → leave unnamed
@@ -275,22 +227,17 @@ struct ConfigSnapshotTests {
     @Test func multipleDesktopsEachApplied() {
         let cfg = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'a'
 
         [[desktop.2.section]]
-        type = "lens"
         label = "Chat"
-        match = 'b'
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Safari"],
-                    2: ["section:0:Chat": "app=Slack"]]
+        ov.workspaceLabel = [1: [0: "Browsers"], 2: [0: "Slack"]]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
-        #expect(out.contains(#"match = "app=Safari""#))
-        #expect(out.contains(#"match = "app=Slack""#))
+        #expect(out.contains(#"label = "Browsers""#))
+        #expect(out.contains(#"label = "Slack""#))
         assertStable(out)
     }
 
@@ -303,24 +250,22 @@ struct ConfigSnapshotTests {
         // misalign — the writer must SKIP, never edit the wrong block.
         let cfg = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'a'
+        layout = "a"
 
         [[desktop."1".section]]
-        type = "lens"
         label = "Ghost"
-        match = 'z'
+        layout = "z"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Safari"]]
+        ov.workspaceLayout = [1: [0: "safari"]]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
-        // Neither block is mis-edited: the canonical Web match is untouched and
+        // Neither block is mis-edited: the canonical Web layout is untouched and
         // the unmanaged quoted block keeps its value.
-        #expect(out.contains("match = 'a'"), "canonical Web block untouched (skipped)")
-        #expect(out.contains("match = 'z'"), "unmanaged quoted block untouched")
-        #expect(!(out.contains("app=Safari")), "no edit applied under ambiguity")
+        #expect(out.contains(#"layout = "a""#), "canonical Web block untouched (skipped)")
+        #expect(out.contains(#"layout = "z""#), "unmanaged quoted block untouched")
+        #expect(!(out.contains("safari")), "no edit applied under ambiguity")
         assertStable(out)
     }
 
@@ -329,9 +274,7 @@ struct ConfigSnapshotTests {
     @Test func emptyOverridesReturnsInputUnchanged() {
         let cfg = """
         [[desktop.1.section]]
-        type = "lens"
         label = "Web"
-        match = 'a'
         """
         #expect(ConfigSnapshot.Overrides().isEmpty)
         // Even a non-empty-but-irrelevant override leaves an unrelated section be.
@@ -345,9 +288,9 @@ struct ConfigSnapshotTests {
     /// to a bare outer `.isEmpty` would flip these and cause spurious disk writes.
     /// (The existing no-op test only exercises the all-defaults case.)
     @Test func isEmptyIgnoresEmptyInnerDicts() {
-        #expect(ConfigSnapshot.Overrides(match: [1: [:]]).isEmpty,
+        #expect(ConfigSnapshot.Overrides(label: [1: [:]]).isEmpty,
                 "outer key present but inner dict empty → still empty")
-        #expect(!ConfigSnapshot.Overrides(match: [1: ["section:0:Web": "a"]]).isEmpty,
+        #expect(!ConfigSnapshot.Overrides(label: [1: ["unassigned:0": "a"]]).isEmpty,
                 "a non-empty inner dict makes it non-empty")
         #expect(ConfigSnapshot.Overrides(workspaceLabel: [1: [:]]).isEmpty,
                 "same for workspaceLabel's empty inner dict")

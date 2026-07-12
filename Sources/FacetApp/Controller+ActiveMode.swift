@@ -199,22 +199,6 @@ extension Controller {
             onSearch: { [weak self] in self?.enterSearchFromMenu() })
     }
 
-    /// Section/lens model: TreeController hook — the user clicked a
-    /// `type="lens"` section header in the tree. Toggle it as the active section
-    /// (clicking the already-active lens clears it back to the active workspace).
-    /// Tree click → `autoFocus: false` (the tree keeps key).
-    func toggleActiveLens(_ sectionID: String) {
-        // §A: the tree passes the stable section id straight from the rendered
-        // section — no label→id lookup, so the toggle is unambiguous even with
-        // non-unique / empty labels.
-        if currentActiveSection == .lens(sectionID) {
-            setActiveLens(nil)                                // toggle off → active workspace
-        } else {
-            activateLensID(sectionID, ordinal: currentMacDesktopOrdinal(),
-                           autoFocus: false)                 // tree keeps key focus
-        }
-    }
-
     /// TreeController (R10): open the per-window tag checklist for `windowID`
     /// (the ops-menu "Tag…" item). Everything the panel needs is derived from
     /// the live snapshot on main — `allTags` is the union of every window's
@@ -414,17 +398,16 @@ extension Controller {
         let capturedOrdinal = currentMacDesktopOrdinal()
 
         // Prefill = the CURRENT effective predicate: the session override if set,
-        // else the config `match` for this lens (matched by the id `project()`
-        // mints). A transient nil ordinal prefills empty.
+        // else the config `match` for this lens. A transient nil ordinal
+        // prefills empty.
         let prefill: String = {
             guard let ordinal = capturedOrdinal else { return "" }
-            if let overridden = sectionMatchOverride[ordinal]?[secID] {
-                return overridden
-            }
-            for (i, s) in desktopSections(forOrdinal: ordinal).enumerated()
-            where s.type == .lens && !s.unassigned
-                && "section:\(i):\(s.label)" == secID {
-                return s.match
+            // A lens section only ever comes from a lens DESKTOP now (t-ec9s),
+            // which carries its `match` on the `[desktop.N]` table. The effective
+            // predicate is the single ordinal-keyed session override (D6) over
+            // the config `match` off `desktopLens`.
+            if let lens = config.desktopLens(ordinal: ordinal) {
+                return lensDesktopMatchOverride[ordinal] ?? lens.match
             }
             return ""
         }()

@@ -75,55 +75,9 @@ extension FacetApp {
         die("facet workspace: dispatch fell through (bug)")
     }
 
-    /// Sub-command parser for ``facet lens <flag>`` — the active visibility
-    /// filter (exclusive section model). One section is active at a time;
-    /// `facet lens NAME` activates the `type="lens"` section labelled NAME,
-    /// `facet lens --clear` deactivates it (back to the active workspace).
-    /// One action per invocation, loud reject on zero / multiple.
-    static func runLensCommand(_ args: [String]) -> Never {
-        var nameArg: String?        // positional: the lens section label
-        var clearFlag = false       // deactivate the active section-lens
-        var cursor = ArgCursor(args)
-        while let a = cursor.next() {
-            switch a {
-            case "--clear":
-                clearFlag = true
-            case "--add", "--remove", "--toggle", "--all":
-                die("`lens \(a)` was removed — the exclusive section model "
-                    + "activates ONE section at a time (no dynamic multi-tag "
-                    + "union). Define each filter as a `type = \"lens\"` "
-                    + "section and `facet lens NAME` to activate it.")
-            case "--section", "--only":
-                die("`lens \(a)` was removed — pass the section label "
-                    + "positionally: `facet lens NAME`")
-            default:
-                // A leading '-' is an unrecognised flag; anything else is the
-                // positional NAME (the lens section to activate).
-                if a.hasPrefix("-") {
-                    die("unknown `lens` flag \"\(a)\" — see `facet --help`")
-                }
-                guard nameArg == nil else {
-                    die("facet lens: takes one NAME — unexpected \"\(a)\" "
-                        + "(see `facet --help`)")
-                }
-                nameArg = a
-            }
-        }
-        let count = [nameArg != nil, clearFlag].filter { $0 }.count
-        requireExactlyOneAction(count, subject: "lens")
-        requireServerAlive()
-        if let name = nameArg {
-            postControl("lens-section:"
-                        + parseLensSectionLabel(name, flag: "lens"))
-        } else {
-            postControl("lens-clear")   // --clear
-        }
-        die("facet lens: dispatch fell through (bug)")
-    }
-
     /// Sub-command parser for ``facet section <flag>`` — address a section
-    /// (workspace OR lens) by its 1-based tree-order index or its label, the
-    /// unified handle over `workspace --focus` / `lens NAME`. Verbs:
+    /// (workspace, unassigned, or a lens desktop's synthesized section) by its
+    /// 1-based tree-order index or its label. Verbs:
     ///   --focus N|LABEL    activate the section (numeric = index, else label)
     ///   --rename N LABEL   rename the Nth section (session-only display label)
     ///   --match N PREDICATE  set the Nth section's lens match (session-only;

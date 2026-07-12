@@ -1,49 +1,13 @@
 import Testing
 @testable import FacetCore
 
-/// Pure tests for the `ActiveSection` concept (EX-1): exactly one section is
-/// active — a lens or a workspace. A0: `.lens` carries the STABLE ID
-/// (`"section:<declOrder>:<label>"`); `lensID` returns it raw and `lensLabel`
-/// parses the display label out of it (the lens-only view existing callers —
-/// `currentSectionLens()`, the tree highlight — consume the label).
+/// Pure tests for the `ActiveSection` concept: since the section-lens ACTIVATE
+/// concept was retired (t-ec9s), a workspace is the only thing ever active — the
+/// enum is a single-case value.
 struct ActiveSectionTests {
-    @Test func lensIDReturnsRawPayload() {
-        #expect(ActiveSection.lens("section:2:Web").lensID == "section:2:Web")
-        #expect(ActiveSection.workspace(2).lensID == nil)
-    }
-
-    @Test func lensLabelParsesLabelOutOfID() {
-        #expect(ActiveSection.lens("section:2:Web").lensLabel == "Web")
-        #expect(ActiveSection.lens("section:0:My Lens").lensLabel == "My Lens")
-    }
-
-    @Test func lensLabelKeepsColonInLabel() {
-        // declOrder runs to the FIRST colon; the label is the remainder, so a
-        // label that itself contains ':' round-trips (mirrors ApplyResolver).
-        #expect(ActiveSection.lens("section:3:a:b").lensLabel == "a:b")
-    }
-
-    @Test func lensLabelNilForWorkspace() {
-        #expect(ActiveSection.workspace(2).lensLabel == nil)
-    }
-
-    @Test func lensLabelNilForMalformedID() {
-        // A non-id payload can't yield a label (never happens for an id minted
-        // by FilterProjection, but the accessor stays total).
-        #expect(ActiveSection.lens("Web").lensLabel == nil)
-        #expect(ActiveSection.lens("section:x:Web").lensLabel == nil)   // non-numeric declOrder
-    }
-
-    @Test func equalityDiscriminatesCases() {
-        // A workspace index and a lens id that happen to print the same must
-        // never compare equal (the structural fix for the EX-0.5 stale-mirror
-        // swallow: `.workspace(N) != .lens(id)`).
-        #expect(ActiveSection.workspace(1) != ActiveSection.lens("1"))
+    @Test func workspaceEquality() {
         #expect(ActiveSection.workspace(3) == ActiveSection.workspace(3))
         #expect(ActiveSection.workspace(2) != ActiveSection.workspace(3))
-        #expect(ActiveSection.lens("section:2:Web") == ActiveSection.lens("section:2:Web"))
-        // Same label, different declOrder ⇒ different id ⇒ different section.
-        #expect(ActiveSection.lens("section:2:Web") != ActiveSection.lens("section:5:Web"))
     }
 }
 

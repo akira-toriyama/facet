@@ -135,56 +135,14 @@
             "section" : {
               "items" : {
                 "additionalProperties" : false,
-                "description" : "One display section: workspace / lens / (unassigned) lost-and-found.",
+                "description" : "One workspace spatial cell (or the `unassigned = true` lost-and-found receptacle).",
                 "properties" : {
-                  "apply" : {
-                    "additionalProperties" : false,
-                    "description" : "Facets applied to a lens's matched windows (a lens uses `tags` only).",
-                    "properties" : {
-                      "floating" : {
-                        "description" : "Force a matched window floating (or tiled = false).",
-                        "type" : "boolean"
-                      },
-                      "master" : {
-                        "description" : "Make a matched window the layout master.",
-                        "type" : "boolean"
-                      },
-                      "sticky" : {
-                        "description" : "Pin a matched window across mac-desktop / workspace switches.",
-                        "type" : "boolean"
-                      },
-                      "tags" : {
-                        "description" : "Tags to add to a matched window.",
-                        "items" : {
-                          "type" : "string"
-                        },
-                        "type" : "array"
-                      },
-                      "workspace" : {
-                        "description" : "Move a matched window to this named workspace.",
-                        "type" : "string"
-                      }
-                    },
-                    "type" : "object"
-                  },
                   "label" : {
                     "description" : "Display name; unset shows the section's 1-based index.",
                     "type" : "string"
                   },
                   "layout" : {
-                    "description" : "workspace only — layout-engine name (ignored on a lens).",
-                    "type" : "string"
-                  },
-                  "match" : {
-                    "description" : "lens only — a facet-filter WHERE-clause selecting its windows.",
-                    "type" : "string"
-                  },
-                  "type" : {
-                    "description" : "workspace = a spatial cell; lens = a filtered view. Omit for an `unassigned = true` receptacle.",
-                    "enum" : [
-                      "workspace",
-                      "lens"
-                    ],
+                    "description" : "Layout-engine name for this workspace cell.",
                     "type" : "string"
                   },
                   "unassigned" : {

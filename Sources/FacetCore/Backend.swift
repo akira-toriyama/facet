@@ -160,44 +160,16 @@ public protocol WindowBackend: Sendable {
     /// move (memory: facet-cli-dynamic-runtime-model).
     func switchWorkspace(named name: String, autoFocus: Bool)
 
-    /// Activate (or clear, with `nil`) the ACTIVE SECTION-lens — a
-    /// `type="lens"` `[[desktop.N.section]]`, keyed by its `label`. This is the
-    /// section/lens model's real-hide path (tag-unification Phase 1). The
-    /// backend resolves the label to the section's `match`, evaluates it over
-    /// the ACTIVE workspace's windows, and parks (anchor sliver) the ones the
-    /// lens EXCLUDES while restoring + re-tiling the ones it includes — so the
-    /// workspace shows only the lens's windows. The lens PERSISTS across
-    /// workspace switches (re-composed for each destination) and lives in the
-    /// per-mac-desktop catalog (session-only + auto-scoped per mac desktop).
-    /// No-op outside the section model (`isSectionModelActive`); an `id` that no
-    /// longer resolves to a lens section / a malformed `match` is surfaced as an
-    /// operational error (loud-but-non-fatal). `autoFocus`: the CLI / hotkey path
-    /// wants `true` (focus lands in the new visible set), the in-panel tree
-    /// lens-header toggle passes `false` (the tree keeps key focus while the user
-    /// picks). A0: keyed by the **stable section id** (`"section:<declOrder>:<label>"`),
-    /// not the raw label — the adapter parses the declOrder to find the section.
-    func setSectionLens(_ id: String?, autoFocus: Bool)
-
-    /// t-0sbm: push the RUNTIME lens-desktop `match` override to the adapter so
+    /// Push the RUNTIME lens-desktop `match` override to the adapter so
     /// `applyIsolatePark` tiles the matched set + parks the rest by the LIVE
     /// match, not just `config.desktopLens.match`. A lens desktop holds exactly
     /// one lens, so the override keys on the mac desktop ordinal alone (no
     /// section-id resolution). `nil` / empty reverts to the config match. The
-    /// tree projection already overlays the same override
-    /// (`sectionMatchOverride`); this keeps the physical park/tile in lock-step,
-    /// which is the lens desktop's whole point ("change the match to change what
-    /// you see"). No-op on a workspace desktop's section-lens (a pure VIEW).
+    /// tree projection overlays the SAME ordinal-keyed override
+    /// (`Controller.lensDesktopMatchOverride`, D6); this keeps the physical
+    /// park/tile in lock-step, which is the lens desktop's whole point ("change
+    /// the match to change what you see").
     func setLensDesktopMatch(_ predicate: String?, ordinal: Int)
-
-    /// Activate a section (EX-1 throughline) — a workspace (clears any active
-    /// lens, exclusive model) or a `type="lens"` section (cross-workspace
-    /// union). Lens-activate and workspace-activate funnel through this one
-    /// seam so the "exactly one active section" invariant has a single home
-    /// (grid/rail clicks join in EX-2; the user-facing CLI collapses to it in
-    /// EX-4). A lens *clear* stays on `setSectionLens(nil)` — clearing returns
-    /// to the active workspace without switching it. `autoFocus` follows
-    /// `setSectionLens` / `switchWorkspace`.
-    func activateSection(_ section: ActiveSection, autoFocus: Bool)
 
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
@@ -408,25 +380,6 @@ public protocol WindowBackend: Sendable {
 
     // MARK: - Section-model apply/un-apply (PR8)
 
-    /// ABSOLUTE, focus-free by-`WindowID` mutators driven by the tree's
-    /// section-path apply/un-apply DnD (the `ApplyOp` set). Unlike the
-    /// `perform(.toggle*)` gestures these target an arbitrary managed window,
-    /// are idempotent (set an absolute value, never flip), and skip lens
-    /// park/restore (the section model is the by-workspace axis). No-op
-    /// outside the section model (the native impl gates on
-    /// `isSectionModelActive`); the protocol defaults are no-ops so other
-    /// backends need not implement them.
-    func setFloating(_ id: WindowID, _ floating: Bool)
-    func setSticky(_ id: WindowID, _ sticky: Bool)
-    func setMaster(_ id: WindowID, _ master: Bool)
-
-    /// Set / clear a tag bit on a SPECIFIC window WITHOUT lens park/restore
-    /// (section-model apply / un-apply). `addTagSection` auto-vivifies +
-    /// keeps the `_default` floor; `removeTagSection` is strict. Both return
-    /// `false` on unknown window / vocab-full (add) / unknown name (remove).
-    func addTagSection(_ name: String, toWindow id: WindowID) -> Bool
-    func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool
-
     /// Stash the focused window onto scratchpad shelf `name`, parking
     /// it off-screen (`facet scratchpad --stash NAME`). A named hidden
     /// shelf, 1:1 like marks; clears any sticky (XOR), force-floats and
@@ -459,22 +412,6 @@ public protocol WindowBackend: Sendable {
     /// `stashedScratchpads()` — the Controller folds it into the status
     /// snapshot on reconcile.
     func definedTagNames() -> [String]
-
-    /// The active SECTION-lens label, or `nil` when none is active / outside
-    /// the section model. EX-1: a thread-safe shim over
-    /// `currentActiveSection().lensLabel` — the lens label derived from the
-    /// lock-guarded `_activeSection` mirror (`currentActiveSection()` is the
-    /// primary read-back since EX-1). Kept for existing callers; the Controller
-    /// reads it on the main actor without a `cliQueue` hop (like `config`).
-    func currentSectionLens() -> String?
-
-    /// The active section (EX-1) — `.lens(id)` when a section-lens is active
-    /// (A0: keyed by the stable section id, not the raw label), else
-    /// `.workspace(activeIndex)`. The unified, main-actor-safe read-back the
-    /// Controller mirrors for the single active-section highlight; supersedes
-    /// `currentSectionLens()` (now a `.lensLabel` shim that parses the label out
-    /// of the id). Lock-guarded mirror of the active catalog's `activeSection`.
-    func currentActiveSection() -> ActiveSection
 
     /// EX-3 迷子: the managed windows assigned to NO workspace
     /// (`WindowSlot.workspace == nil`). The `workspaces()` snapshot can't carry
@@ -565,9 +502,7 @@ public extension WindowBackend {
     // workspace set (and the unit-test stub) need not implement
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
-    func setSectionLens(_ id: String?, autoFocus: Bool) {}
     func setLensDesktopMatch(_ predicate: String?, ordinal: Int) {}
-    func activateSection(_ section: ActiveSection, autoFocus: Bool) {}
     func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
@@ -599,18 +534,11 @@ public extension WindowBackend {
     func removeTag(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func renameTag(_ old: String, to new: String) -> Bool { false }
     func removeTag(_ name: String) -> Bool { false }
-    func setFloating(_ id: WindowID, _ floating: Bool) { }
-    func setSticky(_ id: WindowID, _ sticky: Bool) { }
-    func setMaster(_ id: WindowID, _ master: Bool) { }
-    func addTagSection(_ name: String, toWindow id: WindowID) -> Bool { false }
-    func removeTagSection(_ name: String, fromWindow id: WindowID) -> Bool { false }
     func stashScratchpad(_ name: String) -> Bool { false }
     func toggleScratchpad(_ name: String) -> Bool { false }
     func releaseScratchpad(_ name: String) -> Bool { false }
     func stashedScratchpads() -> [String] { [] }
     func definedTagNames() -> [String] { [] }
-    func currentSectionLens() -> String? { nil }
-    func currentActiveSection() -> ActiveSection { .workspace(1) }
     func orphanWindows() -> [Window] { [] }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:

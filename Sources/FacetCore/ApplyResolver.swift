@@ -1,66 +1,35 @@
-// `ApplyResolver` — the pure, backend-neutral brain of the section
-// apply/un-apply DnD (the pivot's MUTATING read-path, PR8). It wires a
-// dropped / right-clicked `ProjectedSection` (which carries NO apply ops — only
-// its id, by the frozen `OverviewModels` contract) back to its authored
-// `DesktopSection.apply`, produces the forward apply list + the removeTag-only
-// inverse, and validates the CORE INVARIANT: a window must SATISFY the dest
-// section's `match` after the forward apply, else the drop is INERT and the
-// view snaps back WITHOUT any backend mutation.
+// `ApplyResolver` — the pure, backend-neutral validator for the section-model
+// DnD MOVE (the tree's drag / kb-lift). Since the section-lens type was retired
+// (t-ec9s), a MOVE is always a workspace MEMBERSHIP move:
+//
+//   • ws → ws     — file the window into the dest workspace (by 0-based index).
+//   • §G RESCUE   — a TRUE orphan dragged OUT of the unassigned receptacle onto
+//                   a workspace is filed there (the one cross-section case).
+//
+// The dest MUST be a workspace (a `"ws:<index>"` id). A drop onto the
+// `unassigned` receptacle (or any non-workspace id) is INERT — the view snaps
+// back WITHOUT any backend op. No tags, no `apply`: those left with section-lens.
 //
 // No AppKit / no backend / no I/O — unit-tested in `FacetCoreTests` (CLT can't
-// run XCTest; CI covers it, the local bar is `swift build`). Shared with
-// `[[rule]]` (Phase 3), which reuses the same `ApplyOp` vocabulary.
-//
-// GESTURES (model · トミー 2026-06-17, restricted by t-qtpx):
-//   • drag = MOVE: `un-apply(source) → apply(dest)`, SAME-TYPE-ONLY — ws→ws
-//     (membership) or lens→lens (re-tag). A ws↔lens crossing is REMOVED from
-//     DnD (cross-axis edits go via right-click / `t` / CLI); the resolver
-//     returns INERT for it. The one cross-type exception is the §G RESCUE:
-//     a TRUE orphan dragged OUT of the unassigned receptacle ONTO a workspace.
-//     The inverse reverses ONLY `addTag` (→ `removeTag`); a lens `apply` is
-//     tags-only (t-qtpx), so the move's facets are just tag add/remove.
-//   • right-click = ADD: `apply` only (no source, no inverse) → multi-match.
-//
-// WORKSPACE vs LENS dest:
-//   • A `type=workspace` section id is `"ws:<index>"`. Its relocation is the
-//     IMPLICIT `setWorkspace`, surfaced to the caller as `destWorkspaceIndex`
-//     (the dest section's 0-based wire `sourceWorkspaceIndex`) so the caller
-//     routes it through the unified `moveWindow(_:toWorkspaceIndex:)` path,
-//     never an emoji NAME (auto-named workspaces collide on label by design).
-//     A workspace `match` is `""` → the invariant is trivially satisfied.
-//   • A `type=lens` section id is `"section:<declOrder>:<label>"`. Its `apply`
-//     (tags-only by decode; any `setWorkspace` STRIPPED defensively — lenses
-//     don't relocate, "lens は絞るだけ") is the forward list; an empty/
-//     wholly-stripped lens apply is DROP-INERT (snap-back).
+// run XCTest; CI covers it, the local bar is `swift build`).
 
 import Foundation
 
 public enum ApplyResolver {
 
-    /// The executable plan for one MOVE / ADD. `forward` never contains
-    /// `setWorkspace` (a workspace dest surfaces it via `destWorkspaceIndex`;
-    /// a lens dest drops it). `inverse` is `removeTag`-only. `isInert == true`
-    /// ⇒ the caller snaps back WITHOUT any backend op; `reason` is the
-    /// loud-but-non-fatal diagnostic to log.
+    /// The executable plan for one MOVE. `destWorkspaceIndex` is the 0-based wire
+    /// index of the workspace to file the window into. `isInert == true` ⇒ the
+    /// caller snaps back WITHOUT any backend op; `reason` is the loud-but-non-
+    /// fatal diagnostic to log.
     public struct Plan: Equatable, Sendable {
-        /// Synthesised `removeTag(s)` undoing the SOURCE section's additive
-        /// tags (MOVE only; empty for ADD and for a workspace source).
-        public let inverse: [ApplyOp]
-        /// The DEST section's apply, `setWorkspace` stripped (canonical order
-        /// preserved): `addTag(s) → setFloating → setSticky → setMaster`.
-        public let forward: [ApplyOp]
-        /// 0-based wire workspace index for a workspace dest, else `nil`.
+        /// 0-based wire workspace index for the move, else `nil` (inert).
         public let destWorkspaceIndex: Int?
         /// `true` ⇒ snap back, run NO backend op.
         public let isInert: Bool
         /// Diagnostic for the inert case (the caller logs it loud).
         public let reason: String?
 
-        public init(inverse: [ApplyOp], forward: [ApplyOp],
-                    destWorkspaceIndex: Int?,
-                    isInert: Bool, reason: String?) {
-            self.inverse = inverse
-            self.forward = forward
+        public init(destWorkspaceIndex: Int?, isInert: Bool, reason: String?) {
             self.destWorkspaceIndex = destWorkspaceIndex
             self.isInert = isInert
             self.reason = reason
@@ -68,248 +37,36 @@ public enum ApplyResolver {
     }
 
     private static func inert(_ reason: String) -> Plan {
-        Plan(inverse: [], forward: [], destWorkspaceIndex: nil,
-             isInert: true, reason: reason)
+        Plan(destWorkspaceIndex: nil, isInert: true, reason: reason)
     }
 
-    /// Resolve a rendered LENS section id (`"section:<declOrder>:<label>"`) back
-    /// to its `DesktopSection`. `declOrder` is the index into the FULL
-    /// `sections` array (`FilterProjection` enumerates the array verbatim), so
-    /// it indexes back directly; the in-bounds + `type == .lens` + label-suffix
-    /// guards reject a stale config (hot-reload between project and drop).
-    /// Returns `nil` for a `"ws:<index>"` id (the caller handles workspace
-    /// dests via `destWorkspaceIndex`) or any unrecognised / mismatched id.
-    public static func section(forSectionID id: String,
-                               in sections: [DesktopSection]) -> DesktopSection? {
-        guard let (declOrder, label) = parseSectionID(id) else { return nil }
-        guard declOrder >= 0, declOrder < sections.count else { return nil }
-        let s = sections[declOrder]
-        // W2.6: a receptacle (unassigned marker) is never a lens dest, even
-        // though it now carries a lens/workspace type — its id is `unassigned:`,
-        // not `section:`, so a `section:` id landing on its declOrder must miss.
-        guard s.type == .lens, !s.unassigned, s.label == label else { return nil }
-        return s
-    }
-
-    /// Split a rendered section id (`"section:<declOrder>:<label>"`) into its
-    /// parts. The `declOrder` runs up to the FIRST colon; the `label` is the
-    /// remainder (it may itself contain ':'). `nil` for a `"ws:<index>"` id or
-    /// any string without the `section:` prefix / a non-numeric declOrder. The
-    /// single owner of the id's wire format — minted in `FilterProjection`
-    /// (`"section:\(declOrder):\(s.label)"`), consumed here and by
-    /// `ActiveSection.lensLabel`.
-    public static func parseSectionID(_ id: String)
-        -> (declOrder: Int, label: String)? {
-        guard id.hasPrefix("section:") else { return nil }
-        let body = id.dropFirst("section:".count)
-        guard let colon = body.firstIndex(of: ":"),
-              let declOrder = Int(body[..<colon]) else { return nil }
-        return (declOrder, String(body[body.index(after: colon)...]))
-    }
-
-    /// The `removeTag`-only inverse of a forward apply (decision 5: only
-    /// `addTag` is reversible; `setWorkspace`/`setFloating`/`setSticky`/
-    /// `setMaster` are single-valued last-writer-wins → dropped). Order kept.
-    public static func inverse(of apply: [ApplyOp]) -> [ApplyOp] {
-        apply.compactMap {
-            if case .addTag(let t) = $0 { return .removeTag(t) }
-            return nil
-        }
-    }
-
-    /// Whether `window` WOULD satisfy `match` after `ops` are simulated on it,
-    /// IN ORDER. `ops` is the NET runtime sequence — a MOVE's `inverse` THEN
-    /// the dest `forward`, or just `forward` for an ADD — so a tag the inverse
-    /// removes and the forward re-adds (or vice-versa) resolves to the real
-    /// post-state. A workspace section's `match` is `""` → trivially `true`
-    /// (verbatim membership, no eval). A malformed `match` → `false`
-    /// (snap-back, loud). `workspaceName` is the window's CURRENT workspace
-    /// name (a lens drop never relocates it).
-    ///
-    /// LIMITATION (`master`): the `setMaster` overlay is taken at face value,
-    /// but the backend's `setMaster` is a no-op on engines without a master
-    /// slot (bsp / float / grid / spiral). A pure resolver can't see the live
-    /// layout engine, so a lens whose satisfaction hinges SOLELY on
-    /// `master=true` may pass here yet not stick on such an engine (the next
-    /// reconcile evicts it). Authoring a `master=` lens only makes sense on a
-    /// master-* engine.
-    public static func satisfiesAfterApply(_ window: Window,
-                                           workspaceName: String?,
-                                           applying ops: [ApplyOp],
-                                           match: String) -> Bool {
-        if match.isEmpty { return true }
-        guard case .success(let filter) = FacetFilter.parse(match) else { return false }
-        return filter.matches(ApplyPlanWindowFields(
-            base: window, workspaceName: workspaceName, applying: ops))
-    }
-
-    /// Resolve a MOVE (`fromSectionID != nil`) or ADD (`fromSectionID == nil`)
-    /// into an executable `Plan`. `destWorkspaceIndex` is the dest section's
-    /// `sourceWorkspaceIndex` (supplied by the view seam; meaningful only for
-    /// a workspace dest). Total — never throws; an unresolvable / inert drop
-    /// returns `isInert == true` with a `reason`.
+    /// Resolve a MOVE — drop `window` from `fromSectionID` (nil for an ADD-style
+    /// gesture) onto `toSectionID` — into an executable `Plan`.
+    /// `destWorkspaceIndex` is the dest section's 0-based workspace index
+    /// (supplied by the view seam; meaningful only for a workspace dest). Total —
+    /// never throws; an inert / non-workspace drop returns `isInert == true` with
+    /// a `reason`.
     public static func plan(window: Window,
-                            workspaceName: String?,
                             fromSectionID: String?,
                             toSectionID: String,
-                            destWorkspaceIndex: Int?,
-                            in sections: [DesktopSection]) -> Plan {
+                            destWorkspaceIndex: Int?) -> Plan {
         // Same section → nothing to do.
         if let fromSectionID, fromSectionID == toSectionID {
             return inert("same section")
         }
-
-        // Resolve the dest FIRST (a stale lens dest → inert). A "ws:" dest is a
-        // workspace (routed via destWorkspaceIndex); any other id must resolve
-        // to a `type="lens"` section — an "unassigned:" dest never does (the
-        // receptacle is drop-inert), so a drop INTO it snaps back here.
-        let destIsWorkspace = toSectionID.hasPrefix("ws:")
-        let destSection = destIsWorkspace ? nil : section(forSectionID: toSectionID, in: sections)
-        if !destIsWorkspace && destSection == nil {
-            return inert("stale destination \"\(toSectionID)\"")
+        // The dest must be a workspace (a `"ws:"` id). A drop onto the
+        // `unassigned` receptacle (`"unassigned:"`) or anything else is inert —
+        // membership only moves BETWEEN workspaces (or rescues an orphan INTO
+        // one), never into a leftover-by-subtraction receptacle.
+        guard toSectionID.hasPrefix("ws:") else {
+            return inert("destination \"\(toSectionID)\" is not a workspace")
         }
-        // The dest/from kinds here classify PROJECTED section ids (`ws:` /
-        // `unassigned:` / `section:`), so they use `ProjectedSectionType` (which
-        // keeps `.unassigned`), NOT the config `SectionType` (W2.6 purified it).
-        let destType: ProjectedSectionType = destIsWorkspace ? .workspace : .lens
-
-        // SAME-TYPE-ONLY (t-qtpx): a MOVE operates within ONE axis — ws→ws
-        // (membership) or lens→lens (re-tag). A ws↔lens crossing is REMOVED
-        // from DnD (cross-axis edits go via right-click / `t` tag-manage / CLI,
-        // never a drag). The lone cross-type exception is the §G RESCUE: a TRUE
-        // orphan dragged OUT of the unassigned receptacle ONTO a workspace. An
-        // ADD (`fromSectionID == nil`, right-click) is exempt — it is the
-        // intentional multi-match path.
-        if let fromSectionID {
-            let fromType: ProjectedSectionType =
-                fromSectionID.hasPrefix("ws:") ? .workspace
-                : fromSectionID.hasPrefix("unassigned:") ? .unassigned
-                : .lens     // a "section:" lens id
-            let isRescue = fromType == .unassigned && destType == .workspace
-            if fromType != destType && !isRescue {
-                return inert("cross-type DnD (\(fromType) → \(destType)) not allowed")
-            }
+        // A sticky window can't be filed into a workspace (the catalog's
+        // moveWindow rejects it) — snap back rather than silently no-op.
+        if window.isSticky {
+            return inert("sticky window can't move to a workspace")
         }
-
-        // Inverse from the SOURCE section (MOVE only). Only a LENS source
-        // (`section:` id) carries an invertible `apply` to reverse; a workspace
-        // (`ws:`) source has no additive tag, and a §G `unassigned:` rescue
-        // source is an apply-less receptacle — both contribute an empty
-        // inverse. A stale lens source id (config hot-reloaded between render
-        // and drop) → inert, matching the stale-dest treatment, so a MOVE never
-        // silently degrades to an ADD.
-        var inverse: [ApplyOp] = []
-        if let fromSectionID, fromSectionID.hasPrefix("section:") {
-            guard let src = section(forSectionID: fromSectionID, in: sections) else {
-                return inert("stale source \"\(fromSectionID)\"")
-            }
-            inverse = ApplyResolver.inverse(of: src.apply)
-        }
-
-        // Forward = dest apply minus setWorkspace. A lens `apply` is tags-only
-        // (t-qtpx decode), so the setWorkspace strip is now defensive; a
-        // workspace dest relocates via destWorkspaceIndex, never via an apply.
-        let forward = (destSection?.apply ?? []).filter {
-            if case .setWorkspace = $0 { return false }
-            return true
-        }
-
-        if destIsWorkspace {
-            // A sticky window can't be filed into a workspace (the catalog's
-            // moveWindow rejects it) — snap back rather than silently no-op.
-            if window.isSticky {
-                return inert("sticky window can't move to a workspace")
-            }
-        } else {
-            // Lens with no usable apply → drop-inert.
-            if forward.isEmpty {
-                return inert("lens \"\(destSection!.label)\" has no apply")
-            }
-            // Core invariant: the window must satisfy the lens match after the
-            // FULL runtime sequence — `un-apply inverse → forward`, the order
-            // `Controller.runApplyPlan` executes. The inverse runs FIRST and
-            // can strip a tag the dest match NEEDS (→ window lands in neither
-            // lens) or one it EXCLUDES (→ a valid move wrongly refused), so a
-            // forward-only check mispredicts. Simulate the NET set, in order.
-            // A lens drop is same-type (lens→lens) or an ADD — it NEVER
-            // relocates (t-qtpx removed ws→lens), so the window keeps its
-            // CURRENT workspace name for the match. Snap back BEFORE any
-            // mutation.
-            if !satisfiesAfterApply(window, workspaceName: workspaceName,
-                                    applying: inverse + forward,
-                                    match: destSection!.match) {
-                return inert("window won't satisfy \"\(destSection!.label)\" after apply")
-            }
-        }
-
-        return Plan(inverse: inverse, forward: forward,
-                    destWorkspaceIndex: destIsWorkspace ? destWorkspaceIndex : nil,
+        return Plan(destWorkspaceIndex: destWorkspaceIndex,
                     isInert: false, reason: nil)
-    }
-}
-
-/// Simulates a window's post-forward-apply field state for the match
-/// invariant — overlays `addTag` / `setFloating` / `setSticky` / `setMaster`
-/// (and the workspace name) onto a base `Window` WITHOUT mutating it. Mirrors
-/// `ProjectedWindowFields`' workspace overlay; `addedTags` UNION the base tag
-/// list so `tag~=` membership matches a freshly-applied tag. Internal (not
-/// file-private) so `FacetCoreTests` can exercise it directly.
-struct ApplyPlanWindowFields: WindowFields {
-    let base: Window
-    /// `nil` = orphan (no workspace); `""` = assigned but UNNAMED; else the
-    /// label. Mirrors `ProjectedWindowFields` so `not workspace` predicts the
-    /// SAME result the tree renders (§B made `""` the common assigned state).
-    let workspaceName: String?
-    let tags: [String]     // base tags after applying the ordered op list
-    let floating: Bool?
-    let sticky: Bool?
-    let master: Bool?
-
-    /// `ops` is the NET runtime sequence — a MOVE's `inverse` (removeTag)
-    /// THEN the dest `forward`, or just `forward` for an ADD — applied to the
-    /// base window IN ORDER, so a tag removed by the inverse and re-added by
-    /// the forward (or vice-versa) resolves to the real post-state.
-    /// `setFloating` / `setSticky` / `setMaster` are last-writer-wins overlays.
-    init(base: Window, workspaceName: String?, applying ops: [ApplyOp]) {
-        self.base = base
-        self.workspaceName = workspaceName
-        var tags = base.tags
-        var fl: Bool?; var st: Bool?; var ma: Bool?
-        for op in ops {
-            switch op {
-            case .addTag(let t):      if !tags.contains(t) { tags.append(t) }
-            case .removeTag(let t):   tags.removeAll { $0 == t }
-            case .setFloating(let b): fl = b
-            case .setSticky(let b):   st = b
-            case .setMaster(let b):   ma = b
-            case .setWorkspace:       break   // relocation handled out-of-band
-            }
-        }
-        self.tags = tags
-        self.floating = fl
-        self.sticky = st
-        self.master = ma
-    }
-
-    func filterValue(_ field: String) -> String? {
-        switch field {
-        case "workspace": return workspaceName
-        case "tag":       return tags.isEmpty ? nil : tags.joined(separator: " ")
-        case "floating":  return (floating ?? base.isFloating) ? "true" : "false"
-        case "sticky":    return (sticky ?? base.isSticky) ? "true" : "false"
-        case "master":    return (master ?? base.isMaster) ? "true" : "false"
-        default:          return base.filterValue(field)
-        }
-    }
-
-    func filterHas(_ field: String) -> Bool {
-        switch field {
-        case "workspace": return workspaceName != nil
-        case "tag":       return !tags.isEmpty
-        case "floating":  return floating ?? base.isFloating
-        case "sticky":    return sticky ?? base.isSticky
-        case "master":    return master ?? base.isMaster
-        default:          return base.filterHas(field)
-        }
     }
 }

@@ -7,7 +7,9 @@ import Foundation
 /// `[config] export-path` (relative, resolved against the config dir), then
 /// bootstrap (B2) and confirm the edit is promoted onto config.toml. Covers the
 /// seam between the pure renderer and the startup promote that the unit tests
-/// exercise separately.
+/// exercise separately. (t-ec9s: the section-lens type was retired — every
+/// `[[desktop.N.section]]` is a workspace SPATIAL cell now, so the round-trip is
+/// exercised through a workspace-label rename rather than a lens `match` edit.)
 final class ConfigPersistenceLoopTests {
 
     private let dir: URL
@@ -39,12 +41,10 @@ final class ConfigPersistenceLoopTests {
     auto-promote = true
 
     [[desktop.1.section]]
-    type = "lens"
     label = "Web"
-    match = 'app=Safari'
     """
 
-    /// Edit a lens match → export snapshot → restart → the edit is promoted.
+    /// Rename a workspace cell → export snapshot → restart → the edit is promoted.
     @Test func editExportPromoteRoundTrip() throws {
         try write(configPath, configText, mtime: Date(timeIntervalSince1970: 1_000))
 
@@ -57,7 +57,7 @@ final class ConfigPersistenceLoopTests {
         #expect(resolved == snapshotPath, "relative export-path resolves to config dir")
 
         var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Firefox"]]
+        ov.workspaceLabel = [1: [0: "Browsers"]]   // rename wsSlot 0: Web → Browsers
         let rendered = ConfigSnapshot.render(
             configText: try String(contentsOfFile: configPath, encoding: .utf8),
             overrides: ov)
@@ -68,28 +68,28 @@ final class ConfigPersistenceLoopTests {
 
         // config.toml was overwritten with the promoted snapshot…
         let onDisk = try String(contentsOfFile: configPath, encoding: .utf8)
-        #expect(onDisk.contains(#"match = "app=Firefox""#),
-                      "the edited match was promoted onto config.toml")
-        #expect(!(onDisk.contains("app=Safari")))
+        #expect(onDisk.contains(#"label = "Browsers""#),
+                      "the edited label was promoted onto config.toml")
+        #expect(!(onDisk.contains(#""Web""#)))
 
-        // …and the loaded config reflects it (decode the lens section back).
+        // …and the loaded config reflects it (decode the section back).
         let sec = try #require(cfg1.macDesktopSectionConfigs[1]?.first)
-        #expect(sec.match == "app=Firefox", "loaded config carries the edit")
+        #expect(sec.label == "Browsers", "loaded config carries the edit")
     }
 
     /// A hand-edit to config.toml between sessions beats a stale snapshot.
     @Test func handEditBeatsStaleSnapshot() throws {
         // Snapshot is OLDER than config.toml (user hand-edited config since).
         var ov = ConfigSnapshot.Overrides()
-        ov.match = [1: ["section:0:Web": "app=Firefox"]]
+        ov.workspaceLabel = [1: [0: "Browsers"]]
         let rendered = ConfigSnapshot.render(configText: configText, overrides: ov)
         try write(snapshotPath, rendered, mtime: Date(timeIntervalSince1970: 1_000))
         try write(configPath, configText, mtime: Date(timeIntervalSince1970: 2_000)) // newer
 
         let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
         let sec = try #require(cfg.macDesktopSectionConfigs[1]?.first)
-        #expect(sec.match == "app=Safari", "hand-edit wins; stale snapshot ignored")
+        #expect(sec.label == "Web", "hand-edit wins; stale snapshot ignored")
         #expect(!(try String(contentsOfFile: configPath, encoding: .utf8)
-            .contains("Firefox")))
+            .contains("Browsers")))
     }
 }

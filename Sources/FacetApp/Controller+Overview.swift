@@ -35,7 +35,7 @@ extension Controller {
         // park-flag narrowing, nothing extra to seed here.
         v.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         v.sections = lastSections        // EX-2: section list (empty ⇒ degrade)
-        v.activeLensID = lastActiveLensID  // EX-2: active lens id for single-highlight
+        v.activeLensID = nil             // section-lens activate highlight retired (t-ec9s)
         v.screenFrame = screenFrame
         // ③ Context menu: header layout picker + window-ops menu.
         v.backend = backend

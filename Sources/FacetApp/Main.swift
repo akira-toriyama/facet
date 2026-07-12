@@ -38,9 +38,10 @@
 //               / --retag OLD NEW
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
-//   Lens      : facet lens NAME (activate a type="lens" section) / --clear
-//   Section   : facet section --focus N|LABEL (index|label; workspace, lens,
-//               or unassigned) / --rename N LABEL (session-only display label)
+//   Section   : facet section --focus N|LABEL (index|label; workspace,
+//               unassigned, or a lens desktop's synthesized section)
+//               / --rename N LABEL (session-only display label)
+//               / --match N PREDICATE (retarget a lens desktop's match)
 //
 // ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
 // every view op must specify NAME explicitly. Shell aliases handle
@@ -173,19 +174,12 @@ enum FacetApp {
           facet workspace --move N           move the active workspace to
                                              position N (reorder)
 
-        LENS                                 (the active visibility filter;
-                                             exclusive section model)
-          facet lens NAME                    activate the `type="lens"` section
-                                             labelled NAME — its cross-workspace
-                                             union is gathered into view and the
-                                             out-of-lens windows are anchor-parked
-                                             (an unknown label is rejected)
-          facet lens --clear                 deactivate the active lens →
-                                             back to the active workspace
+        SECTION                              (address a section by index/label)
           facet section --focus N            focus the Nth section in tree
-                                             order (1-based; workspace, lens,
-                                             or unassigned — an unassigned
-                                             section focuses its first window)
+                                             order (1-based; a workspace switches,
+                                             an unassigned — or a lens desktop's
+                                             synthesized — section focuses its
+                                             first window)
           facet section --focus LABEL        focus the section labelled LABEL
                                              (numeric = index; else label)
           facet section --rename N LABEL     rename the Nth section's display
@@ -194,11 +188,11 @@ enum FacetApp {
                                              display override; empty LABEL
                                              reverts to the number / config
                                              label)
-          facet section --match N PREDICATE  set the Nth section's lens match to
-                                             a `facet filter` predicate, live
-                                             (session-only; LENS-only — workspace
-                                             / unassigned rejected; the lens re-
-                                             filters at once; empty PREDICATE
+          facet section --match N PREDICATE  set the Nth section's match to a
+                                             `facet filter` predicate, live — on a
+                                             lens desktop this retargets what it
+                                             tiles vs parks (session-only; the tree
+                                             re-filters at once; empty PREDICATE
                                              reverts to the config match;
                                              relaunch resets, `reload` keeps)
         WINDOW                               (focused window)
@@ -505,17 +499,11 @@ enum FacetApp {
         if argv.first == "scratchpad" {
             runScratchpadCommand(Array(argv.dropFirst()))
         }
-        // `facet lens <flag>` — the active visibility filter (exclusive
-        // section model): `facet lens NAME` activates the `type="lens"`
-        // section labelled NAME, `facet lens --clear` deactivates it.
-        if argv.first == "lens" {
-            runLensCommand(Array(argv.dropFirst()))
-        }
         // `facet section <flag>` — address a section (workspace, lens, OR
         // unassigned) by its 1-based tree-order index or its label:
-        // `facet section --focus N|LABEL`. The unified handle over
-        // `workspace --focus` / `lens NAME` (an unassigned section focuses
-        // its first window).
+        // `facet section --focus N|LABEL`. The unified section handle (an
+        // unassigned section — or a lens desktop's synthesized section —
+        // focuses its first window; `--match` retargets a lens desktop).
         if argv.first == "section" {
             runSectionCommand(Array(argv.dropFirst()))
         }
