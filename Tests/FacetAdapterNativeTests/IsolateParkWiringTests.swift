@@ -14,7 +14,7 @@ import Testing
 ///     (like `hiddenMembers`) so the in-lens survivors reflow to fill.
 ///   • ADAPTER (`applyIsolatePark`) — the desktop-lens gate +
 ///     `IsolatePark.parkSet` derivation + the catalog call are covered in
-///     `LensDesktopParkTests` (t-0sbm); this suite keeps the pure catalog
+///     `IsolateDesktopParkTests` (t-0sbm); this suite keeps the pure catalog
 ///     ledger coverage.
 struct IsolateParkWiringTests {
 
@@ -25,7 +25,7 @@ struct IsolateParkWiringTests {
 
     /// Desired (out-of-lens) windows are ledgered + excluded from the layout so
     /// the survivors reflow; the in-lens window stays.
-    @Test func parkLedgersAndDetachesOutOfLens() {
+    @Test func parkLedgersAndDetachesOutOfMatch() {
         var c = seededCatalog(2)
         _ = c.reconcile(live: [window(10), window(30)])   // both → active WS 1
         let plan = c.reconcileIsolatePark(desired: [wid(30)], focused: nil, in: rect)
@@ -62,7 +62,7 @@ struct IsolateParkWiringTests {
     }
 
     /// A sticky (everywhere) window is park-exempt even when out-of-lens.
-    @Test func stickyOutOfLensNotParked() {
+    @Test func stickyOutOfMatchNotParked() {
         var c = seededCatalog(2)
         _ = c.reconcile(live: [window(10), window(30)])
         c.everywhereWindows.insert(wid(30))

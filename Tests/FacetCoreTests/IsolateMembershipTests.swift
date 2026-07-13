@@ -1,16 +1,16 @@
 import Testing
 @testable import FacetCore
 
-/// `LensMembership.matches` — the SINGLE per-window lens-`match` predicate.
-/// ONE predicate drives BOTH faces of a lens desktop (t-c6fm / t-0sbm):
-/// `FilterProjection.projectLensDesktop` builds the tree from it and the adapter
+/// `IsolateMembership.matches` — the SINGLE per-window lens-`match` predicate.
+/// ONE predicate drives BOTH faces of an isolate desktop (t-c6fm / t-0sbm):
+/// `FilterProjection.projectIsolateDesktop` builds the tree from it and the adapter
 /// derives the always-on anchor-park set from it, so display and park cannot
 /// drift. (t-0021 briefly made a lens a pure VIEW with no park at all.)
 /// These lock the two behaviours the predicate must guarantee: (1) it agrees
 /// with `FacetFilter.matches` for ordinary window fields, and (2) it overlays
 /// the workspace NAME so `workspace=` resolves (a bare `Window` can't). Pure;
 /// CI-only (CLT can't run `swift test`).
-struct LensMembershipTests {
+struct IsolateMembershipTests {
 
     // MARK: - fixtures
 
@@ -36,33 +36,33 @@ struct LensMembershipTests {
 
     @Test func appFieldMatch() {
         let f = filter("app=Safari")
-        #expect(LensMembership.matches(win(1, app: "Safari"),
+        #expect(IsolateMembership.matches(win(1, app: "Safari"),
                                        inWorkspaceNamed: "Dev", filter: f))
-        #expect(!LensMembership.matches(win(2, app: "Mail"),
+        #expect(!IsolateMembership.matches(win(2, app: "Mail"),
                                         inWorkspaceNamed: "Dev", filter: f))
     }
 
     @Test func tagContainsAndPresence() {
         let contains = filter("tag~=web")
-        #expect(LensMembership.matches(win(1, tags: ["web", "work"]),
+        #expect(IsolateMembership.matches(win(1, tags: ["web", "work"]),
                                        inWorkspaceNamed: "Dev", filter: contains))
-        #expect(!LensMembership.matches(win(2, tags: ["code"]),
+        #expect(!IsolateMembership.matches(win(2, tags: ["code"]),
                                         inWorkspaceNamed: "Dev", filter: contains))
 
         let untagged = filter("not tag")
-        #expect(LensMembership.matches(win(3, tags: []),
+        #expect(IsolateMembership.matches(win(3, tags: []),
                                        inWorkspaceNamed: "Dev", filter: untagged))
-        #expect(!LensMembership.matches(win(4, tags: ["web"]),
+        #expect(!IsolateMembership.matches(win(4, tags: ["web"]),
                                         inWorkspaceNamed: "Dev", filter: untagged))
     }
 
     @Test func booleanAndCompoundFields() {
         let f = filter("app~=Chrome and not floating")
-        #expect(LensMembership.matches(win(1, app: "Google Chrome", floating: false),
+        #expect(IsolateMembership.matches(win(1, app: "Google Chrome", floating: false),
                                        inWorkspaceNamed: "Dev", filter: f))
-        #expect(!LensMembership.matches(win(2, app: "Google Chrome", floating: true),
+        #expect(!IsolateMembership.matches(win(2, app: "Google Chrome", floating: true),
                                         inWorkspaceNamed: "Dev", filter: f))
-        #expect(!LensMembership.matches(win(3, app: "Mail", floating: false),
+        #expect(!IsolateMembership.matches(win(3, app: "Mail", floating: false),
                                         inWorkspaceNamed: "Dev", filter: f))
     }
 
@@ -74,7 +74,7 @@ struct LensMembershipTests {
         for w in [win(1, app: "Safari"), win(2, app: "Mail", title: "Inbox — Mail"),
                   win(3, app: "Mail", title: "Drafts")] {
             #expect(
-                LensMembership.matches(w, inWorkspaceNamed: "Dev", filter: f)
+                IsolateMembership.matches(w, inWorkspaceNamed: "Dev", filter: f)
                     == f.matches(w),
                 "overlay changed a non-workspace verdict for window \(w.id.serverID)")
         }
@@ -87,23 +87,23 @@ struct LensMembershipTests {
         // Same window, two workspace names → opposite verdicts (proves the
         // name is supplied at the seam, not read off the window).
         let w = win(1, app: "Safari")
-        #expect(LensMembership.matches(w, inWorkspaceNamed: "Dev", filter: f))
-        #expect(!LensMembership.matches(w, inWorkspaceNamed: "Web", filter: f))
+        #expect(IsolateMembership.matches(w, inWorkspaceNamed: "Dev", filter: f))
+        #expect(!IsolateMembership.matches(w, inWorkspaceNamed: "Web", filter: f))
     }
 
     @Test func workspaceCombinedWithAppField() {
         let f = filter("workspace=Dev and app=Safari")
-        #expect(LensMembership.matches(win(1, app: "Safari"),
+        #expect(IsolateMembership.matches(win(1, app: "Safari"),
                                        inWorkspaceNamed: "Dev", filter: f))
-        #expect(!LensMembership.matches(win(2, app: "Safari"),
+        #expect(!IsolateMembership.matches(win(2, app: "Safari"),
                                         inWorkspaceNamed: "Web", filter: f))
-        #expect(!LensMembership.matches(win(3, app: "Mail"),
+        #expect(!IsolateMembership.matches(win(3, app: "Mail"),
                                         inWorkspaceNamed: "Dev", filter: f))
     }
 
     @Test func emptyWorkspaceNameNoMatchesWorkspaceField() {
         let f = filter("workspace=Dev")
-        #expect(!LensMembership.matches(win(1), inWorkspaceNamed: "", filter: f))
+        #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "", filter: f))
     }
 
     /// 迷子 receptacle (`match='not workspace'`): presence is the assignment,
@@ -113,14 +113,14 @@ struct LensMembershipTests {
     /// `FilterProjection` reads for the tree and the adapter reads for the park.
     @Test func notWorkspaceMatchesOrphanNotAssigned() {
         let f = filter("not workspace")
-        #expect(LensMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),
+        #expect(IsolateMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),
                 "an orphan (no workspace) matches `not workspace`")
-        #expect(!LensMembership.matches(win(2), inWorkspaceNamed: "", filter: f),
+        #expect(!IsolateMembership.matches(win(2), inWorkspaceNamed: "", filter: f),
                 "an unnamed-but-assigned window is NOT an orphan")
-        #expect(!LensMembership.matches(win(3), inWorkspaceNamed: "Dev", filter: f),
+        #expect(!IsolateMembership.matches(win(3), inWorkspaceNamed: "Dev", filter: f),
                 "a named-workspace window is NOT an orphan")
         #expect(
-            LensMembership.matches(win(4, tags: ["web"]), inWorkspaceNamed: nil, filter: f),
+            IsolateMembership.matches(win(4, tags: ["web"]), inWorkspaceNamed: nil, filter: f),
             "a tagged orphan still has no workspace")
     }
 
@@ -134,11 +134,11 @@ struct LensMembershipTests {
     /// silently change which windows this common lens shows.
     @Test func negatedWorkspaceValueIncludesOrphan() {
         let f = filter("not workspace=Dev")
-        #expect(LensMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),
+        #expect(IsolateMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),
                 "orphan: nil workspace field → inner compare false → not → true")
-        #expect(!LensMembership.matches(win(2), inWorkspaceNamed: "Dev", filter: f),
+        #expect(!IsolateMembership.matches(win(2), inWorkspaceNamed: "Dev", filter: f),
                 "a window in Dev is excluded by `not workspace=Dev`")
-        #expect(LensMembership.matches(win(3), inWorkspaceNamed: "Web", filter: f),
+        #expect(IsolateMembership.matches(win(3), inWorkspaceNamed: "Web", filter: f),
                 "a window in another named workspace matches `not workspace=Dev`")
     }
 
@@ -151,11 +151,11 @@ struct LensMembershipTests {
     /// user-facing contract at the overlay.
     @Test func workspaceOverlayIsCaseInsensitiveByDefault() {
         let insensitive = filter("workspace=dev")
-        #expect(LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: insensitive),
+        #expect(IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: insensitive),
                 "lowercase literal matches mixed-case workspace name")
 
         let sensitive = filter("workspace=dev s")
-        #expect(!LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: sensitive),
+        #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: sensitive),
                 "case-sensitive flag makes the lowercase literal miss \"Dev\"")
     }
 
@@ -164,17 +164,17 @@ struct LensMembershipTests {
     /// resolve it).
     @Test func desktopFieldStaysNoMatch() {
         let f = filter("desktop=1")
-        #expect(!LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: f))
+        #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: f))
     }
 
     // MARK: - total / edge
 
     @Test func allFilterMatchesEverything() {
-        #expect(LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: .all))
+        #expect(IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: .all))
     }
 
     @Test func unknownFieldNoMatches() {
         let f = filter("bogusField=x")
-        #expect(!LensMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: f))
+        #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: f))
     }
 }

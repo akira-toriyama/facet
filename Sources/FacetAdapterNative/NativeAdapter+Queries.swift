@@ -147,7 +147,7 @@ extension NativeAdapter {
         // never disturb role-auto-float; MULTI-MATCH (a window accumulates
         // every matching rule's ops, in declaration order); matched against the
         // window's PRE-apply snapshot (rules don't chain on tags they add).
-        // Runs BEFORE the reconcile/retile below AND before the lens-inherit
+        // Runs BEFORE the reconcile/retile below AND before the isolate-inherit
         // block, so the facets land in one pass. Global — not gated on the
         // section model (adopt-apply is useful in by-workspace mode too).
         if !result.addedIDs.isEmpty, !compiledRules().isEmpty {
@@ -174,9 +174,9 @@ extension NativeAdapter {
         if result.added > 0 || macDesktopSwapped {
             healOrphanSlivers(live: live, visibleRect: rect)
         }
-        // A lens DESKTOP (`[desktop.N] type=lens`, always-on — t-0sbm) re-parks
-        // the desktop's out-of-lens windows so the screen declutters to the
-        // matched set, tiled with the lens's `layout`. Derived from `match`
+        // An ISOLATE DESKTOP (`[desktop.N] type=isolate`, always-on — t-0sbm) re-parks
+        // the desktop's out-of-match windows so the screen declutters to the
+        // matched set, tiled with the desktop's `layout`. Derived from `match`
         // every reconcile. BEFORE the re-tile (detached parks would otherwise
         // be tiled back on), AFTER healOrphanSlivers (which excludes
         // `anchorParked`). A no-op on plain desktops / when nothing is
@@ -200,8 +200,8 @@ extension NativeAdapter {
         // makes the AX reality catch up. See memory
         // `facet-ws-switch-focus-management`.
         let displayFocus = redirectedFocus(live: live, axFocus: focused)
-        // A lens desktop renders sections too — its 1|2 are synthesized. Get
-        // this wrong and a `match='tag~=X'` lens desktop projects against
+        // An isolate desktop renders sections too — its 1|2 are synthesized. Get
+        // this wrong and a `match='tag~=X'` isolate desktop projects against
         // `tags: []` while the park side overlays tags: tree and screen
         // disagreeing on the SAME predicate.
         let sectionModelLive = config.desktopRenderMode(
@@ -210,14 +210,14 @@ extension NativeAdapter {
             live: live,
             focused: displayFocus,
             activeRect: rect,
-            // Section model (PR8): populate `Window.tags` so a lens
+            // Section model (PR8): populate `Window.tags` so an isolate desktop
             // `match='tag~=X'` / `apply:addTag(X)` round-trips. Gated on the
             // active mac desktop being section-managed — by-workspace / tag
             // degrade unaffected (passes false → `tags: []`).
             populateTags: sectionModelLive)
         // EX-3 迷子: refresh the orphan mirror with the SAME live / focus /
         // section-model gate the snapshot used. `snapshot` drops orphans (no
-        // `Workspace`), so the views' lens sections get them from this mirror
+        // `Workspace`), so the views' matched section get them from this mirror
         // via `Controller.apply` → `FilterProjection.project(…, orphans:)`.
         syncOrphanMirror(in: live, focused: displayFocus,
                          populateTags: sectionModelLive)
@@ -300,9 +300,9 @@ extension NativeAdapter {
         // and `seed`'s idempotence guard then blocks the correction for the
         // rest of the session (the catalog is parked by mac-desktop id and
         // restored tainted). Once a real ordinal resolves AND this desktop has
-        // a CONFIG-DRIVEN workspace list — a section desktop's cells, or a lens
+        // a CONFIG-DRIVEN workspace list — a section desktop's cells, or an isolate desktop
         // desktop's single flat workspace — discard the degenerate catalog so
-        // the fresh `seed` below lands the configured names. (A lens desktop
+        // the fresh `seed` below lands the configured names. (An isolate desktop
         // must be included: leaving it on the default slots breaks the N=1
         // invariant `applyIsolatePark`'s scope depends on.)
         // Gated on `seededUnderNilOrdinal`
@@ -428,63 +428,63 @@ extension NativeAdapter {
     /// A0's single id→section seam: resolve a stable section id
     /// (`"section:<declOrder>:<label>"`) to its `DesktopSection` on the active
     /// mac desktop, or `nil` when the id no longer resolves (out of range, not
-    /// a lens, label-suffix mismatch — a stale hot-reload). `declOrder` indexes
+    /// an isolate desktop, label-suffix mismatch — a stale hot-reload). `declOrder` indexes
     /// the desktop's declared section list — the SAME array `FilterProjection`
     /// enumerated to mint the id — read from the LIVE config so a hot-reload is
     /// picked up immediately.
-    /// Desktop-lens always-on park (t-0sbm, on the t-c6fm machinery). On a
-    /// `[desktop.N] type=lens` mac desktop, anchor-park the OUT-of-lens windows
-    /// so the screen declutters to just the lens's matched set (dwm-style),
-    /// tile the survivors with the lens's declared `layout`, unpark
-    /// re-joiners, and unpark EVERYTHING when the gate is off (not a lens
-    /// desktop). The park set is DERIVED from the lens `match` every reconcile
+    /// Isolate-desktop always-on park (t-0sbm, on the t-c6fm machinery). On a
+    /// `[desktop.N] type=isolate` mac desktop, anchor-park the OUT-of-match windows
+    /// so the screen declutters to just the matched set (dwm-style),
+    /// tile the survivors with the desktop's declared `layout`, unpark
+    /// re-joiners, and unpark EVERYTHING when the gate is off (not an isolate
+    /// desktop). The park set is DERIVED from the isolate desktop `match` every reconcile
     /// so it can't drift from the tree display (both ride
-    /// `LensMembership.matches`). Reuses the anchor-park machinery
+    /// `IsolateMembership.matches`). Reuses the anchor-park machinery
     /// (`applyHide` → `parkAnchor` / `restoreAnchor`); the ledger + layout
     /// detach/attach live in `catalog.reconcileIsolatePark`. cliQueue-only; a
-    /// no-op unless the desktop-lens gate is on or something is still
+    /// no-op unless the isolate-desktop gate is on or something is still
     /// isolate-parked (fast-path guard). `live` is the reconcile's CGWindowList
     /// (tags overlaid here); `focused` feeds the re-attach bsp orientation.
     func applyIsolatePark(live: [Window], focused: WindowID?, rect: CGRect) {
         dispatchPrecondition(condition: .onQueue(cliQueue))
-        // The gate: a typed lens DESKTOP (`[desktop.N] type=lens`) is ALWAYS-ON
-        // — its single `match` parks the out-of-lens windows and its `layout`
+        // The gate: a typed ISOLATE DESKTOP (`[desktop.N] type=isolate`) is ALWAYS-ON
+        // — its single `match` parks the out-of-match windows and its `layout`
         // tiles the matched set (below). Off → empty desired → the catalog
         // unparks all.
         let ord = activeMacDesktopOrdinal
-        var lensMatch: String? = nil
-        if let lens = config.desktopLens(ordinal: ord) {
+        var isolateMatch: String? = nil
+        if let iso = config.desktopIsolate(ordinal: ord) {
             // t-0sbm: a runtime `--match` override (CLI or tree Edit-match) wins
             // over the config match so the physical park/tile tracks what the
             // user just typed — matching the tree projection override.
-            lensMatch = ord.flatMap { lensDesktopMatchOverride[$0] } ?? lens.match
-            // Lens-layout seam: a lens desktop tiles its matched set with the
-            // lens's declared `layout`, asserted on the (N=1) active workspace
+            isolateMatch = ord.flatMap { isolateMatchOverride[$0] } ?? iso.match
+            // Layout seam: an isolate desktop tiles its matched set with the
+            // desktop's declared `layout`, asserted on the (N=1) active workspace
             // BEFORE the retile. Only when it actually CHANGES — `setMode`
             // REBUILDS the tree/stack from scratch, so re-asserting every
             // reconcile would reset a user's bsp split ratios. `nil` layout
             // leaves the seeded / default mode in place.
-            if let layout = lens.layout,
+            if let layout = iso.layout,
                catalog.mode(of: catalog.activeIndex) != layout.lowercased() {
                 catalog.setMode(workspace: catalog.activeIndex, to: layout, in: rect)
             }
         }
 
         var desired: [WindowID] = []
-        if let matchStr = lensMatch,
-           case .success(let lens) = FacetFilter.parse(matchStr) {
-            // ACTIVE-WS scope — at N=1 (a lens desktop) this is the whole
+        if let matchStr = isolateMatch,
+           case .success(let iso) = FacetFilter.parse(matchStr) {
+            // ACTIVE-WS scope — at N=1 (an isolate desktop) this is the whole
             // desktop. The windows carry the FULL catalog management state
             // (t-63h2: floating / mark / master / scratchpad / focused, not
             // just tags), so the park predicate evaluates the SAME `Window`
-            // the tree projected — a lens `match='floating'` (or `mark=…`)
+            // the tree projected — an isolate desktop `match='floating'` (or `mark=…`)
             // now parks exactly the tree's non-members.
             let activeWindows = catalog.activeWorkspacePredicateWindows(
                 live: live, focused: focused)
             desired = IsolatePark.parkSet(
                 windows: activeWindows,
                 inWorkspaceNamed: catalog.workspaceName(catalog.activeIndex),
-                lens: lens,
+                match: iso,
                 sticky: catalog.everywhereWindows)
         }
         // Fast path: idle when nothing is parked and nothing wants parking.
@@ -495,18 +495,18 @@ extension NativeAdapter {
     }
 
     /// t-0sbm change-match: store (or clear) the runtime `match` override for a
-    /// lens desktop, then kick a reconcile so `applyIsolatePark` re-tiles the
+    /// isolate desktop, then kick a reconcile so `applyIsolatePark` re-tiles the
     /// new matched set + re-parks the rest immediately (mirrors `setLayoutMode`
     /// — mutate on cliQueue, then `.refreshNeeded`). `nil` / empty reverts to
     /// the config match by dropping the key.
-    public func setLensDesktopMatch(_ predicate: String?, ordinal: Int) {
+    public func setIsolateMatch(_ predicate: String?, ordinal: Int) {
         dispatchPrecondition(condition: .onQueue(cliQueue))
         if let predicate, !predicate.isEmpty {
-            lensDesktopMatchOverride[ordinal] = predicate
-            Log.debug("native: setLensDesktopMatch ord=\(ordinal) → \"\(predicate)\"")
+            isolateMatchOverride[ordinal] = predicate
+            Log.debug("native: setIsolateMatch ord=\(ordinal) → \"\(predicate)\"")
         } else {
-            lensDesktopMatchOverride.removeValue(forKey: ordinal)
-            Log.debug("native: setLensDesktopMatch ord=\(ordinal) → revert config")
+            isolateMatchOverride.removeValue(forKey: ordinal)
+            Log.debug("native: setIsolateMatch ord=\(ordinal) → revert config")
         }
         eventContinuation.yield(.refreshNeeded)
     }
@@ -539,14 +539,14 @@ extension NativeAdapter {
     func ruleApplyOps(for window: Window, inWorkspaceNamed wsName: String?) -> [ApplyOp] {
         var ops: [ApplyOp] = []
         for (rule, filter) in compiledRules()
-        where LensMembership.matches(window, inWorkspaceNamed: wsName, filter: filter) {
+        where IsolateMembership.matches(window, inWorkspaceNamed: wsName, filter: filter) {
             ops.append(contentsOf: rule.apply)
         }
         return ops
     }
 
     /// Execute one `[[rule]]` adopt op on a freshly-adopted window (cliQueue,
-    /// pre-reconcile). Mirrors the section apply executor + the lens-inherit
+    /// pre-reconcile). Mirrors the section apply executor + the isolate-inherit
     /// loop, but HONOURS `setWorkspace` (a rule may place the window): the
     /// named workspace is resolved at runtime and skipped + logged if absent
     /// (workspaces are auto-named — a rule never creates one). `removeTag` is

@@ -11,9 +11,9 @@ import Toml
 /// type was retired (t-ec9s), EVERY section is a workspace SPATIAL cell — the
 /// snapshot writes workspace `label`/`layout` (by wsSlot) and the unassigned
 /// receptacle's `label` (by id `unassigned:<declOrder>`); it never writes a
-/// section `match` (there are no lens sections). A lens DESKTOP's retargeted
+/// section `match` (there are no matched section). A lens DESKTOP's retargeted
 /// match (`[desktop.N] match=`, a single std table — not a section) is written
-/// via `lensDesktopMatch` (t-sgqk).
+/// via `isolateMatch` (t-sgqk).
 struct ConfigSnapshotTests {
 
     /// Re-parse a rendered snapshot back into origins for value assertions.
@@ -226,7 +226,7 @@ struct ConfigSnapshotTests {
 
     // MARK: - [desktop.N] lens-desktop match (t-sgqk)
 
-    @Test func lensDesktopMatchWritesOntoItsTable() {
+    @Test func isolateMatchWritesOntoItsTable() {
         // The live-retargeted match lands on the single [desktop.N] table;
         // only the match VALUE token changes — every other byte (comments,
         // the section blocks, quoting of other keys) survives verbatim.
@@ -235,13 +235,13 @@ struct ConfigSnapshotTests {
         label = "Main"
 
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         label = "Web"
         match = 'app=Safari or app~=Chrome'
         layout = "bsp"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [2: "tag~=web"]
+        ov.isolateMatch = [2: "tag~=web"]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
         #expect(out == cfg.replacingOccurrences(
@@ -251,23 +251,23 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
-    @Test func lensDesktopMatchEmptyIsNothingToBake() {
+    @Test func isolateMatchEmptyIsNothingToBake() {
         // An empty predicate means "reverted to the config match" — the config
         // text already spells it, so the render is byte-identical. (The
         // Controller removes the key on revert; the empty-string spelling is
         // the defensive twin.) It also counts as nothing-to-bake for isEmpty.
         let cfg = """
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app=Safari'
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [2: ""]
+        ov.isolateMatch = [2: ""]
         #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
         #expect(ov.isEmpty, "an empty predicate alone is nothing to bake")
     }
 
-    @Test func lensDesktopMatchSkipsNonLensOrdinals() {
+    @Test func isolateMatchSkipsNonIsolateOrdinals() {
         // Ordinal 1 is a workspace desktop (sections-only) and ordinal 3 has
         // no [desktop.N] table at all — a stale session override (the config
         // was re-typed / re-shaped between edits) must neither edit a
@@ -277,11 +277,11 @@ struct ConfigSnapshotTests {
         label = "Main"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [1: "tag~=x", 3: "tag~=y"]
+        ov.isolateMatch = [1: "tag~=x", 3: "tag~=y"]
         #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
     }
 
-    @Test func lensDesktopMatchResolvesZeroPaddedSpelling() {
+    @Test func isolateMatchResolvesZeroPaddedSpelling() {
         // `[desktop.02]` decodes to ordinal 2 but its DOM path is
         // ["desktop","02"] — the write must target the LITERAL spelling, or
         // settingValue's create-if-missing would append a junk `[desktop.2]`
@@ -289,11 +289,11 @@ struct ConfigSnapshotTests {
         // load). Mirrors `zeroPaddedHeaderSpellingResolves` for sections.
         let cfg = """
         [desktop.02]
-        type = "lens"
+        type = "isolate"
         match = 'app=Safari'
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [2: "tag~=web"]
+        ov.isolateMatch = [2: "tag~=web"]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
         #expect(out == cfg.replacingOccurrences(
             of: "match = 'app=Safari'", with: #"match = "tag~=web""#),
@@ -301,36 +301,36 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
-    @Test func lensDesktopMatchAmbiguousSpellingsSkip() {
+    @Test func isolateMatchAmbiguousSpellingsSkip() {
         // TWO header spellings decoding to the same ordinal (hand-broken
         // config): which table "wins" is last-wins nondeterministic at decode,
         // so the write is ambiguous — skip, byte-identical (the same verdict
         // the section loop's pathSafe guard reaches).
         let cfg = """
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app=Safari'
 
         [desktop.02]
-        type = "lens"
+        type = "isolate"
         match = 'app=Mail'
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [2: "tag~=web"]
+        ov.isolateMatch = [2: "tag~=web"]
         #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
     }
 
-    @Test func lensDesktopWithoutMatchIsDroppedSoSkipped() {
+    @Test func isolateDesktopWithoutMatchIsDroppedSoSkipped() {
         // A [desktop.N] lens table WITHOUT a match is dropped by the decode
-        // (match is REQUIRED on a lens desktop), so `desktopLens` is nil and
+        // (match is REQUIRED on an isolate desktop), so `desktopIsolate` is nil and
         // the renderer must not append a match key onto a dropped desktop.
         let cfg = """
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         layout = "bsp"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [2: "tag~=web"]
+        ov.isolateMatch = [2: "tag~=web"]
         #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
     }
 

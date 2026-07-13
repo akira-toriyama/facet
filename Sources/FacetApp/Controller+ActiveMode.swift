@@ -295,12 +295,12 @@ extension Controller {
     }
 
     /// Section rename (§E / §G): the user picked the header menu's
-    /// `SECTION ▸ Rename` row (workspace, lens, OR unassigned). Resolve the
+    /// `SECTION ▸ Rename` row (workspace, matched, holding, OR unassigned). Resolve the
     /// render group `g` to the SAME 1-based index + current display label that
     /// `SidebarView.sectionHeaderDisplay(group:)` shows (for the editor caption /
     /// pre-fill), AND capture a STABLE handle for the deferred commit, then open
     /// the inline editor. §G: `.unassigned` renames via the SAME id-keyed
-    /// session-only override path as `.lens` (`renameSection(sectionID:…)` →
+    /// session-only override path as `.matched` (`renameSection(sectionID:…)` →
     /// `applyLabelOverrides`), so the section-model branch handles all three
     /// kinds uniformly. Shares the activation dance + `finishTagEditor` close
     /// with `enterTagManage` (the panel is keyable).
@@ -312,7 +312,7 @@ extension Controller {
     /// capture the stable identity (section `sec.id` / the degrade workspace's
     /// `Workspace.index`) plus the current mac-desktop ordinal, and have the
     /// id-keyed `renameSection` overloads re-resolve to the live position at
-    /// commit (mirrors the lens-layout path; identity = id, campaign rule).
+    /// commit (mirrors the isolate desktop-layout path; identity = id, campaign rule).
     func beginSectionRename(group g: Int, at anchor: CGPoint) {
         // Resolve g → (1-based index, current label), mirroring
         // `sectionHeaderDisplay`. Section mode: g IS the display group ordinal
@@ -328,9 +328,9 @@ extension Controller {
         if !lastSections.isEmpty {
             guard g >= 0, g < lastSections.count else { return }
             let sec = lastSections[g]
-            // §G: workspace / lens / unassigned all rename by the same stable-id
+            // §G: workspace / matched / holding / unassigned all rename by the same stable-id
             // deferred-commit path — `renameSection(sectionID:…)` routes by kind
-            // (workspace → catalog; lens / unassigned → session override).
+            // (workspace → catalog; the rest → session override).
             index1 = g + 1
             label = sec.label
             let secID = sec.id
@@ -379,11 +379,11 @@ extension Controller {
             onClose: { [weak self] in self?.finishTagEditor() })
     }
 
-    /// t-0020: the GUI twin of `facet section --match` — the user picked a LENS
+    /// t-0020: the GUI twin of `facet section --match` — the user picked a MATCHED
     /// header's `SECTION ▸ Edit match` row (or pressed `m` on it). Opens the
-    /// SAME inline editor as `beginSectionRename`, but pre-filled with the lens's
+    /// SAME inline editor as `beginSectionRename`, but pre-filled with the isolate desktop's
     /// CURRENT effective predicate and wired for live filter-tuning:
-    ///   • LENS-ONLY — only a lens header offers the row; guard anyway (a stale
+    ///   • ISOLATE-ONLY — only an isolate desktop header offers the row; guard anyway (a stale
     ///     group after a reorder → no-op).
     ///   • PREFILL = the session override if set, else the config `match` for
     ///     this lens (resolved by the SAME id `project()` mints).
@@ -396,7 +396,7 @@ extension Controller {
     func beginSectionMatchEdit(group g: Int, at anchor: CGPoint) {
         guard g >= 0, g < lastSections.count else { return }
         let sec = lastSections[g]
-        guard sec.sectionType == .lens else { return }
+        guard sec.sectionType == .matched else { return }
         let secID = sec.id
         let capturedOrdinal = currentMacDesktopOrdinal()
 
@@ -405,12 +405,12 @@ extension Controller {
         // prefills empty.
         let prefill: String = {
             guard let ordinal = capturedOrdinal else { return "" }
-            // A lens section only ever comes from a lens DESKTOP now (t-ec9s),
+            // A matched section only ever comes from an ISOLATE DESKTOP now (t-ec9s),
             // which carries its `match` on the `[desktop.N]` table. The effective
             // predicate is the single ordinal-keyed session override (D6) over
-            // the config `match` off `desktopLens`.
-            if let lens = config.desktopLens(ordinal: ordinal) {
-                return lensDesktopMatchOverride[ordinal] ?? lens.match
+            // the config `match` off `desktopIsolate`.
+            if let iso = config.desktopIsolate(ordinal: ordinal) {
+                return isolateMatchOverride[ordinal] ?? iso.match
             }
             return ""
         }()

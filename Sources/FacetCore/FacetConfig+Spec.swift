@@ -68,12 +68,12 @@ private enum DesktopSchema {
     static var valueShape: ObjectShape {
         ObjectShape(fields: [
             SchemaField("type", .string,
-                        doc: "workspace = spatial sections (tree/grid/rail); lens = an always-on filtered view (tree only).",
-                        enumDomain: SectionType.allCases.map(\.rawValue)),
+                        doc: "workspace = spatial sections you file windows into (tree/grid/rail); isolate = membership comes from `match`: facet tiles the matched windows with `layout` and ANCHOR-PARKS the rest, for as long as you are on that desktop (tree only).",
+                        enumDomain: DesktopType.allCases.map(\.rawValue)),
             SchemaField("label", .string, doc: "Display name for this mac desktop."),
-            SchemaField("match", .string, doc: "lens desktop only — a facet-filter WHERE-clause selecting the tiled windows."),
-            SchemaField("layout", .string, doc: "lens desktop only — layout-engine name for the matched windows."),
-            SchemaField("show-non-matching", .boolean, doc: "lens desktop only — also show the non-matching windows as a second tree section."),
+            SchemaField("match", .string, doc: "isolate desktop only — a facet-filter WHERE-clause selecting the tiled windows. Everything it does not select is anchor-parked off-screen."),
+            SchemaField("layout", .string, doc: "isolate desktop only — layout-engine name for the matched windows."),
+            SchemaField("show-non-matching", .boolean, doc: "isolate desktop only — also show the parked non-matching windows as a second tree section (the `holding` section). They are parked either way; this only decides whether the tree lists them."),
         ], nested: [
             NestedTable(key: "section", item: sectionItemShape),
         ], doc: "One mac desktop (N = Mission Control ordinal): its `type`/`label`, plus its display sections.")
@@ -206,7 +206,7 @@ public extension FacetConfig {
                   fields: [
                 .str("export-path", \.exportPath,
                      doc: "Auto-export snapshot target. Set = ON: every session "
-                        + "edit (rename / lens match / layout / tag vocab) writes "
+                        + "edit (rename / isolate match / layout / tag vocab) writes "
                         + "the full effective config here, surgically — config.toml "
                         + "is left untouched. MUST be a different file from "
                         + "config.toml. `~` and config-dir-relative paths resolve."),
@@ -269,7 +269,7 @@ public extension FacetConfig {
             .init("desktop", kind: .dynamicTable,
                   doc: "`[desktop.N]` configures one mac desktop (N = Mission "
                      + "Control ordinal) — a SINGLE TYPED table: `type` is "
-                     + "workspace / lens (omitted = workspace). A `workspace` "
+                     + "workspace / isolate (omitted = workspace). A `workspace` "
                      + "desktop carries ordered `[[desktop.N.section]]` rows; "
                      + "array order = tree display order. Each row is a "
                      + "workspace SPATIAL cell `{ label, layout }` — an optional "
@@ -280,12 +280,12 @@ public extension FacetConfig {
                      + "lost-and-found, an `unassigned = true` bool MARKER: "
                      + "`{ unassigned = true, label }` collects the windows shown "
                      + "in no other section (leftover = universe − shown); only "
-                     + "the first emits, extras warn. A `lens` desktop writes "
+                     + "the first emits, extras warn. An `isolate` desktop writes "
                      + "`match` (REQUIRED — a facet-filter WHERE-clause) plus "
                      + "`layout` / `show-non-matching` / `label` directly on the "
                      + "`[desktop.N]` table and declares NO sections: while that "
                      + "mac desktop is active facet ALWAYS tiles the matched "
-                     + "windows with `layout` and anchor-parks the rest. A lens "
+                     + "windows with `layout` and anchor-parks the rest. An isolate "
                      + "desktop is TREE-ONLY (`--view grid` / `--view rail` "
                      + "loud-reject there). Any `[desktop.N]` or "
                      + "`[[desktop.N.section]]` block makes facet opt-in — it "

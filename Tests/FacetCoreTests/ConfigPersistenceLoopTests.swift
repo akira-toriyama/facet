@@ -78,10 +78,10 @@ final class ConfigPersistenceLoopTests {
         #expect(sec.label == "Browsers", "loaded config carries the edit")
     }
 
-    /// Retarget a lens desktop's match → export → restart → the edit is
+    /// Retarget an isolate desktop's match → export → restart → the edit is
     /// promoted and the loaded config drives the lens with it (t-sgqk).
-    @Test func lensMatchExportPromoteRoundTrip() throws {
-        let lensConfig = """
+    @Test func isolateMatchExportPromoteRoundTrip() throws {
+        let isolateConfig = """
         [config]
         export-path  = "config.snapshot.toml"
         auto-promote = true
@@ -90,14 +90,14 @@ final class ConfigPersistenceLoopTests {
         label = "Web"
 
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app=Safari'
         layout = "bsp"
         """
-        try write(configPath, lensConfig, mtime: Date(timeIntervalSince1970: 1_000))
+        try write(configPath, isolateConfig, mtime: Date(timeIntervalSince1970: 1_000))
 
         var ov = ConfigSnapshot.Overrides()
-        ov.lensDesktopMatch = [2: "tag~=web"]
+        ov.isolateMatch = [2: "tag~=web"]
         let rendered = ConfigSnapshot.render(
             configText: try String(contentsOfFile: configPath, encoding: .utf8),
             overrides: ov)
@@ -108,7 +108,7 @@ final class ConfigPersistenceLoopTests {
         #expect(onDisk.contains(#"match = "tag~=web""#),
                 "the retargeted match was promoted onto config.toml")
         #expect(!(onDisk.contains("app=Safari")))
-        let lens = try #require(cfg1.desktopLens(ordinal: 2))
+        let lens = try #require(cfg1.desktopIsolate(ordinal: 2))
         #expect(lens.match == "tag~=web", "the promoted config drives the lens")
     }
 

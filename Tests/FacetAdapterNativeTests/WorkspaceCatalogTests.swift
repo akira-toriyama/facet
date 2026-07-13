@@ -293,7 +293,7 @@ struct WorkspaceCatalogTests {
     /// The lock-step guarantee end-to-end: a lens `match='floating'` parks
     /// exactly the NON-floating windows (the tree's non-members), not — as the
     /// old tags-only overlay did — every window on the desktop.
-    @Test func floatingLensParksExactlyTheNonFloating() {
+    @Test func floatingMatchParksExactlyTheNonFloating() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20), window(30)])
         _ = c.setFloating(wid(20), true)     // 20 is the lens member
@@ -305,7 +305,7 @@ struct WorkspaceCatalogTests {
         }
         let parked = IsolatePark.parkSet(
             windows: ws, inWorkspaceNamed: c.workspaceName(c.activeIndex),
-            lens: lens, sticky: c.everywhereWindows)
+            match: lens, sticky: c.everywhereWindows)
         #expect(Set(parked) == [wid(10), wid(30)],
                 "only the non-floating windows park; the floating member stays")
     }

@@ -1,7 +1,7 @@
 // Runtime per-window tagging (#191/#228) — the window-ATTRIBUTE mutators
 // that back `facet window --tag/--untag/--toggle-tag/--retag`. The legacy
 // tag-mode lens/park (by=tag) was removed in EX-4; visibility is now owned
-// by the section model (a `type="lens"` section + reconcile), so these are
+// by the section model (a `type="isolate"` section + reconcile), so these are
 // pure attribute writes. Storage is a free-form `Set<String>` per-window
 // tag set (no vocabulary, no cap, no floor — EX-4.3).
 import CoreGraphics

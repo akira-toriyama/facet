@@ -11,14 +11,14 @@ import Testing
 /// (config vs rendered types are separate concerns).
 struct UnassignedMarkerTests {
 
-    // MARK: - SectionType is the DESKTOP discriminator (no unassigned case)
+    // MARK: - DesktopType is the DESKTOP discriminator (no unassigned case)
 
     @Test func sectionTypeHasNoUnassignedCase() {
-        // `SectionType` is now the mac-desktop TYPE discriminator
+        // `DesktopType` is now the mac-desktop TYPE discriminator
         // (`[desktop.N] type = "workspace" | "lens"`), not a section field. It
-        // is {workspace, lens} only — the receptacle is a section marker, not a
+        // is {workspace, isolate} only — the receptacle is a section marker, not a
         // type. (CaseIterable makes this a discriminating compile+runtime pin.)
-        #expect(SectionType.allCases == [.workspace, .lens])
+        #expect(DesktopType.allCases == [.workspace, .isolate])
     }
 
     // MARK: - flat decoder: `unassigned = true` marker

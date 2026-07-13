@@ -106,7 +106,7 @@ struct KbNavTests {
             secHdr(group: 0, workspaceIndex: 5),   // workspace section
             secWin(group: 0, realWS: 5, id: 10),
             secWin(group: 0, realWS: 5, id: 11),
-            secHdr(group: 1, workspaceIndex: nil), // lens section
+            secHdr(group: 1, workspaceIndex: nil), // matched section
             secWin(group: 1, realWS: 5, id: 10),   // window 10 again (matches lens)
         ]
     }

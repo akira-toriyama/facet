@@ -70,7 +70,7 @@ struct CatalogProjectionParityTests {
 
     /// `facet query --windows` reports `parked` straight off `isolateParked`
     /// (t-pvay). This is the ONLY surface that reports it, and it has to work: on
-    /// a lens desktop with `show-non-matching = false` a parked window appears on
+    /// an isolate desktop with `show-non-matching = false` a parked window appears on
     /// NO facet surface at all, so without this key facet moves a real window
     /// somewhere the user can't see and can't then say where it went.
     @Test func facetStateReportsParkedFromTheIsolateLedger() {

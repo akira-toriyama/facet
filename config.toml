@@ -22,7 +22,7 @@
 #
 # ONE exception — opt-in config auto-persistence (see [config] below):
 # set `export-path` and facet auto-EXPORTS a live snapshot of your
-# effective config (rename / lens match / layout / tag edits) to that
+# effective config (rename / isolate match / layout / tag edits) to that
 # SEPARATE file, leaving config.toml untouched. Add `auto-promote = true`
 # and the NEXT launch promotes a snapshot that is newer than config.toml
 # onto it — the single sanctioned write (a hand-edit between sessions
@@ -40,7 +40,7 @@
 # Config auto-persistence (opt-in) — [config]
 # -----------------------------------------------------------------
 # Your session edits (renaming a section / workspace, live-tuning a
-# lens `match`, changing a workspace layout, creating tags) are
+# isolate `match`, changing a workspace layout, creating tags) are
 # normally session-only — they vanish on restart. Turn this on and
 # facet keeps them, WITHOUT ever touching config.toml behind your back.
 #
@@ -542,7 +542,7 @@ action = "ignore"
 #              desktop, onscreen, focused. A malformed match is loud +
 #              non-fatal (that rule is skipped; the rest still run).
 #   workspace — move the matched window to this named workspace.
-#   tags      — tags to add (feeds lens filters; same as `facet window --tag`).
+#   tags      — tags to add (feeds an isolate desktop's `match`; same as `facet window --tag`).
 #   floating / sticky / master — set the matching facet (true / false).
 #
 # Examples — uncomment / adapt:
@@ -566,7 +566,7 @@ action = "ignore"
 #   facet window --tag NAME / --untag NAME / --toggle-tag NAME
 #   facet window --retag OLD NEW
 # Tags are session-only (never persisted) and per-mac-desktop. They
-# feed a lens DESKTOP's filter: a `[desktop.N] type = "lens"` whose
+# feed an isolate DESKTOP's filter: a `[desktop.N] type = "isolate"` whose
 # `match` contains `tag~=NAME` (see [desktop.N] below) tiles every window
 # carrying NAME. `facet query --tags` lists every tag currently in use.
 
@@ -661,7 +661,7 @@ action = "ignore"
 # Typed desktops  [desktop.N]
 # -----------------------------------------------------------------
 # A mac desktop may be TYPED with a single [desktop.N] table (N = the same
-# Mission Control ordinal): type = "workspace" or "lens". One ordinal = one
+# Mission Control ordinal): type = "workspace" or "isolate". One ordinal = one
 # desktop = one type; use two mac desktops to have both kinds. Hierarchy:
 # mac desktop > section > window.
 #
@@ -669,14 +669,14 @@ action = "ignore"
 #       blocks above describe it (the [desktop.N] table just makes the type
 #       explicit). This is the implied type when only section blocks exist,
 #       so a sections-only config needs no [desktop.N] table at all.
-#   type = "lens" — an ALWAYS-ON filtered desktop (no sections, no sub-
+#   type = "isolate" — an ALWAYS-ON filtered desktop (no sections, no sub-
 #       workspaces). Whenever that mac desktop is active, facet tiles the
 #       windows matching `match` with `layout` and anchor-parks the rest to
 #       a screen corner (sticky windows are exempt). Entering the desktop IS
 #       the focus; leaving it un-parks nothing (the parked windows belong to
 #       that desktop). Change what it shows live with `facet section --match
 #       1 "expr"` (session-only) or the tree header's "Edit match".
-#       TREE-ONLY: `--view grid` / `--view rail` are rejected there (a lens
+#       TREE-ONLY: `--view grid` / `--view rail` are rejected there (an isolate desktop
 #       desktop is dynamic — no fixed picture to thumbnail).
 #       Keys (written directly on the [desktop.N] table):
 #         match   — REQUIRED: a facet-filter WHERE-clause (same grammar as
@@ -694,7 +694,7 @@ action = "ignore"
 #
 # ACTIVE SAMPLE — two mac desktops. Desktop 1 is a classic WORKSPACE desktop:
 # a NAMED "Main" workspace + an unnamed one (shown by index) + a Lost & Found
-# receptacle. Desktop 2 is an always-on LENS desktop that tiles your browser
+# receptacle. Desktop 2 is an always-on ISOLATE desktop that tiles your browser
 # windows and parks everything else. Because these blocks exist, facet is
 # OPT-IN: it manages desktops 1–2 and leaves every OTHER mac desktop
 # untouched. Edit to taste, or comment this whole sample out to fall back to
@@ -719,12 +719,12 @@ layout = "stack"
 unassigned = true
 label = "Lost & Found"
 
-# Desktop 2 — an always-on LENS desktop: tiles the browser windows (a
+# Desktop 2 — an always-on ISOLATE desktop: tiles the browser windows (a
 # CONCRETE match, never '') with bsp, parks everything else, and shows the
 # parked ones as a second "holding" tree section. Retarget live with
 # `facet section --match 1 "app~=Slack"` or the tree header's "Edit match".
 [desktop.2]
-type = "lens"
+type = "isolate"
 label = "Web"
 match = 'app~=Chrome or app~=Safari or app~=Firefox'
 layout = "bsp"

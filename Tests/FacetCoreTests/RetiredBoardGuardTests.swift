@@ -52,7 +52,7 @@ struct RetiredBoardGuardTests {
         label = "Code"
 
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app=Safari'
         """)
         #expect(found.isEmpty)

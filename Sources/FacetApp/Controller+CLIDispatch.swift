@@ -26,14 +26,14 @@ extension Controller {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 Log.debug("dnc cmd=\(cmd)")
-                // The two-world gate, in ONE place (`LensDesktopGate` carries
+                // The two-world gate, in ONE place (`IsolateDesktopGate` carries
                 // the rationale). Ordered so the pure classification runs first
                 // — the desktop type is only read for a payload that could be
                 // refused, keeping SkyLight off the hot path for everything else.
-                if let verb = LensDesktopGate.blockedVerb(forControl: cmd),
+                if let verb = IsolateDesktopGate.blockedVerb(forControl: cmd),
                    self.config.desktopType(
-                       ordinal: self.currentMacDesktopOrdinal()) == .lens {
-                    self.setError("\(verb) is not available on a lens desktop")
+                       ordinal: self.currentMacDesktopOrdinal()) == .isolate {
+                    self.setError(IsolateDesktopGate.verbRefusal(verb))
                     return
                 }
                 switch cmd {
@@ -84,7 +84,7 @@ extension Controller {
                 // `decodeSectionRename` splits ONCE and keeps the label verbatim
                 // (same wire form as `window-retag`, but the label half is loose).
                 case let s where s.hasPrefix("section-rename:"):
-                    // A lens desktop's sections are match-synthesized (matched
+                    // An isolate desktop's sections are match-synthesized (matched
                     // + holding) — their labels come from `[desktop.N]`, not a
                     // renameable section, so `--rename` is a loud no-op (D5).
                     // The GUI header Rename still relabels the desktop's display
@@ -98,7 +98,7 @@ extension Controller {
                     self.renameSection(indexN1Based: n, to: label)
 
                 // t-0020: `facet section --match N PREDICATE` → runtime
-                // (session-only) lens-match live edit. Wire =
+                // (session-only) isolate-match live edit. Wire =
                 // `section-match:<index>:<predicate>`; the predicate may contain
                 // ':' (quoted value), so `decodeSectionMatch` splits ONCE and
                 // keeps it verbatim (an empty predicate is a valid revert).
@@ -398,13 +398,13 @@ extension Controller {
         // (The rail otherwise coexists with the tree — different
         // screen regions, complementary surfaces.)
         if name == "grid" && isRailVisible { hideRail() }
-        // 2-world separation (t-0sbm): a lens desktop is TREE-ONLY — a dynamic
-        // lens has no fixed thumbnail, so grid/rail can't render it. A lens
+        // 2-world separation (t-0sbm): an isolate desktop is TREE-ONLY — a dynamic
+        // an isolate desktop has no fixed thumbnail, so grid/rail can't render it. An isolate desktop
         // desktop is valid config (not a typo), but the request is
         // unsatisfiable, so surface it loud rather than silently no-op.
-        if LensDesktopGate.blocksView(name),
-           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
-            setError("\(name) view is not available on a lens desktop (tree only)")
+        if IsolateDesktopGate.blocksView(name),
+           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .isolate {
+            setError(IsolateDesktopGate.viewRefusal(name))
             return
         }
         switch name {
@@ -491,7 +491,7 @@ extension Controller {
 
     /// One addressable section in tree order: its display label, the
     /// `ActiveSection` it activates (nil = an unassigned section — §G — which
-    /// has no workspace/lens behind it), plus the stable `ProjectedSection.id`
+    /// has no workspace behind it), plus the stable `ProjectedSection.id`
     /// (nil only on the degrade-workspace path, which addresses by index). §G:
     /// an unassigned hit (`section == nil`) FOCUSES ITS FIRST WINDOW via the
     /// `sectionID` rather than erroring — see `dispatchSectionFocus`.
@@ -509,8 +509,8 @@ extension Controller {
     /// the numbers the user sees.
     private func addressableSections() -> [SectionAddr] {
         // Since the section-lens ACTIVATE concept was retired (t-ec9s), only a
-        // workspace section has something to switch to. A `.lens` section (a
-        // lens desktop's match-synthesized section) and a `.unassigned`
+        // workspace section has something to switch to. A `.matched` section (a
+        // isolate desktop's match-synthesized section) and a `.unassigned`
         // receptacle both FOCUS THEIR FIRST window (membership is match-driven /
         // by-subtraction, not activatable) — `dispatchSectionFocus` routes a
         // `nil` section with a non-nil id to `focusFirstWindow`.
@@ -523,7 +523,7 @@ extension Controller {
                     return SectionAddr(label: ps.label,
                         section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) },
                         sectionID: ps.id)
-                case .lens, .unassigned:
+                case .matched, .holding, .unassigned:
                     return SectionAddr(label: ps.label, section: nil,
                                        sectionID: ps.id)
                 }
@@ -539,7 +539,7 @@ extension Controller {
     /// `facet section --focus`: resolve a 1-based tree-order index (`index:N`)
     /// or a section label (`label:LABEL`) to its `ActiveSection` and activate
     /// it. Runs on main (DNC). An unknown index / label, or an unassigned
-    /// section (no workspace/lens behind it), is loud-but-non-fatal
+    /// section (no workspace behind it), is loud-but-non-fatal
     /// (`setError`, no change) per facet's typo stance.
     private func dispatchSectionFocus(_ arg: String) {
         let list = addressableSections()
@@ -566,7 +566,7 @@ extension Controller {
         }
         guard let hit else { return }
         guard let section = hit.section else {
-            // §G: an unassigned section has no workspace/lens to activate, but
+            // §G: an unassigned section has no workspace to activate, but
             // it DOES hold orphan windows — focus its first one (the unified
             // focus helper, shared with the grid/rail .unassigned picks + the
             // tree header click). A truly non-focusable nil (no id — the
@@ -576,7 +576,7 @@ extension Controller {
                 return
             }
             setError("section --focus \"\(hit.label)\": unassigned sections "
-                + "aren't focusable (no workspace or lens behind them)")
+                + "aren't focusable (no workspace behind them)")
             scheduleReconcile(after: 0.05)
             return
         }
@@ -585,7 +585,7 @@ extension Controller {
 
     /// §G unified focus helper: focus the FIRST window of the section with
     /// stable id `id` (an `.unassigned` receptacle in practice — its orphan
-    /// windows have no workspace/lens to switch to). Looks the section up in
+    /// windows have no workspace to switch to). Looks the section up in
     /// `lastSections`, takes `.windows.first`, and reveals + focuses it via the
     /// SAME window path the tree window-row click uses (`revealWindow` then
     /// `focusWindow(postSwitch: false)`) — NO workspace switch, ActiveSection
@@ -600,9 +600,9 @@ extension Controller {
             scheduleReconcile(after: 0.05)
             return
         }
-        // Mirror SidebarView+Drag.handleClick's window case EXACTLY — a lens is
-        // a pure VIEW (t-0021) that moves nothing, so only two states remain (an
-        // unassigned orphan can be in either):
+        // Mirror SidebarView+Drag.handleClick's window case EXACTLY. Only two
+        // states exist here — an ISOLATE-parked window is NOT a third one, since
+        // park keeps `isOnscreen == true` (it sits on an on-screen sliver):
         //   • HIDDEN (Cmd+H'd / minimized, `isOnscreen == false`): `revealWindow`
         //     un-hides AND focuses. NOT an unconditional `revealWindow` — that
         //     whole-app `unhide()`s an already-visible orphan.
@@ -627,7 +627,7 @@ extension Controller {
     ///     never the backend): a non-empty `label` SETS it; an empty / all-
     ///     whitespace `label` DELETES the key (revert to the config label —
     ///     storing `""` would blank the header). Re-render via `apply`.
-    ///   • unassigned → §G: SAME session-only override path as lens (id =
+    ///   • unassigned → §G: SAME session-only override path as matched (id =
     ///     `"unassigned:<declOrder>"`, a valid override key — `applyLabelOverrides`
     ///     relabels `.unassigned` too). Non-empty SETS, empty REVERTS to the
     ///     config label.
@@ -643,7 +643,7 @@ extension Controller {
     /// confirm the mac desktop captured at open still matches) before delegating
     /// to the positional `renameSection`, so a shifted slot can't be renamed.
     /// Gone id / desktop changed → loud `setError`, no rename. Mirrors how the
-    /// lens-layout path targets by `sec.id` (identity = id, campaign rule).
+    /// isolate-layout path targets by `sec.id` (identity = id, campaign rule).
     func renameSection(sectionID: String, capturedOrdinal: Int?, to label: String) {
         guard currentMacDesktopOrdinal() == capturedOrdinal else {
             setError("section rename: mac desktop changed — cancelled")
@@ -726,7 +726,7 @@ extension Controller {
                 bk.renameWorkspace(at: pos1, to: trimmed); return nil
             }
             markConfigDirty()   // t-hdxb: persist the workspace rename
-        case .lens, .unassigned:
+        case .matched, .holding, .unassigned:
             // §G: lens AND unassigned share the SAME session-only display-label
             // override (`applyLabelOverrides` relabels both; the ids
             // `"section:…"` / `"unassigned:…"` are equally valid override keys).
@@ -761,7 +761,7 @@ extension Controller {
                 Log.debug("renameSection: n=\(n) section id=\(sec.id) → \"\(trimmed)\"")
             }
             apply(lastWorkspaces)       // re-render with the new display label
-            markConfigDirty()   // t-hdxb: persist the lens/unassigned rename (set OR revert)
+            markConfigDirty()   // t-hdxb: persist the isolate desktop/unassigned rename (set OR revert)
         }
     }
 
@@ -781,9 +781,9 @@ extension Controller {
     /// An EMPTY predicate reverts to the config match by DELETING the override
     /// key (checked BEFORE `parse`, since `parse("")` is `.success(.all)` — an
     /// empty value is a revert gesture, not a stored match-everything). The
-    /// ordinal gate mirrors the lens branch of `renameSection`: a write under
+    /// ordinal gate mirrors the isolate desktop branch of `renameSection`: a write under
     /// `?? -1` would orphan the override in a bucket the seam can't read.
-    /// t-0020 GUI deferred-commit entry: set the lens `match` for the section
+    /// t-0020 GUI deferred-commit entry: set the isolate desktop `match` for the section
     /// with the STABLE `sectionID` captured when the inline editor opened. The
     /// editor is long-lived (the user types a predicate), so `lastSections` can
     /// reorder / a mac-desktop swap can intervene between open and commit;
@@ -816,7 +816,7 @@ extension Controller {
         // Match is LENS-ONLY: the degrade path (section model off) is all
         // workspaces, so there is no lens to retarget — loud reject.
         guard !lastSections.isEmpty else {
-            setError("section --match \(n): no lens sections here "
+            setError("section --match \(n): no isolate desktop here "
                 + "(section model off — workspaces only)")
             scheduleReconcile(after: 0.05)
             return
@@ -828,10 +828,16 @@ extension Controller {
             return
         }
         let sec = lastSections[n - 1]
-        guard sec.sectionType == .lens else {
-            let kind = sec.sectionType == .workspace ? "workspace" : "unassigned"
-            setError("section --match \(n): only a lens accepts a match "
-                + "(section \(n) is a \(kind))")
+        guard sec.sectionType == .matched else {
+            let kind: String
+            switch sec.sectionType {
+            case .workspace:  kind = "workspace"
+            case .holding:    kind = "holding"
+            case .unassigned: kind = "unassigned"
+            case .matched:    kind = "matched"   // unreachable (guarded above)
+            }
+            setError("section --match \(n): only an isolate desktop's matched "
+                + "section accepts a match (section \(n) is a \(kind))")
             scheduleReconcile(after: 0.05)
             return
         }
@@ -843,13 +849,13 @@ extension Controller {
             scheduleReconcile(after: 0.05)
             return
         }
-        // A lens section only ever comes from a lens DESKTOP now (t-ec9s); its
+        // A matched section only ever comes from an isolate desktop DESKTOP now (t-ec9s); its
         // match is a SINGLE ordinal-keyed session override (D6), written here AND
         // pushed to the adapter with the SAME ordinal key so the tree display and
         // the physical park/tile never diverge. Session-only (never persisted —
-        // see `lensDesktopMatchOverride`; `[desktop.N] match=` snapshot = t-sgqk).
+        // see `isolateMatchOverride`; `[desktop.N] match=` snapshot = t-sgqk).
         if predicate.isEmpty {
-            lensDesktopMatchOverride.removeValue(forKey: key)   // revert to config match
+            isolateMatchOverride.removeValue(forKey: key)   // revert to config match
             Log.debug("setSectionMatch: n=\(n) → revert config")
         } else {
             // Classify, but store VERBATIM — `FilterProjection` compiles the same
@@ -868,7 +874,7 @@ extension Controller {
                 scheduleReconcile(after: 0.05)
                 return
             case .ok:
-                lensDesktopMatchOverride[key] = predicate
+                isolateMatchOverride[key] = predicate
                 Log.debug("setSectionMatch: n=\(n) → \"\(predicate)\"")
             }
         }
@@ -877,14 +883,14 @@ extension Controller {
         // export. The revert needs it too: the re-render from config.toml
         // naturally drops the previously-baked override.
         markConfigDirty()
-        // The match also drives the PHYSICAL park/tile (the lens desktop's whole
+        // The match also drives the PHYSICAL park/tile (the isolate desktop's whole
         // point — "change the match to change what you see"), so push it across
-        // the backend seam. `predicate` promotes to `String?`; `setLensDesktopMatch`
+        // the backend seam. `predicate` promotes to `String?`; `setIsolateMatch`
         // treats empty as the revert (drops the key), so no pre-normalize.
         runBackendCommand { bk in
-            bk.setLensDesktopMatch(predicate, ordinal: key); return nil
+            bk.setIsolateMatch(predicate, ordinal: key); return nil
         }
-        apply(lastWorkspaces)       // re-render: the lens re-filters live
+        apply(lastWorkspaces)       // re-render: the isolate desktop re-filters live
     }
 
     /// Controller-side activation throughline: a section activation is now
@@ -967,15 +973,15 @@ extension Controller {
     }
 
     private func dispatchToggle(_ name: String) {
-        // 2-world separation (t-0sbm): grid/rail are unavailable on a lens
+        // 2-world separation (t-0sbm): grid/rail are unavailable on an isolate desktop
         // desktop (tree-only) — same loud reject as the show path, but ONLY
         // for the toggle-ON direction: an overlay that travelled here (they
         // are `.canJoinAllSpaces` panels) must stay closable by its own
         // toggle hotkey.
-        if LensDesktopGate.blocksView(name),
+        if IsolateDesktopGate.blocksView(name),
            !(name == "grid" ? isGridVisible : isRailVisible),
-           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
-            setError("\(name) view is not available on a lens desktop (tree only)")
+           config.desktopType(ordinal: currentMacDesktopOrdinal()) == .isolate {
+            setError(IsolateDesktopGate.viewRefusal(name))
             return
         }
         switch name {

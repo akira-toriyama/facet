@@ -19,7 +19,7 @@ struct OverviewModelsTests {
         #expect(!(c.isReceptacle))
     }
 
-    /// The overviews route on `isReceptacle` (t-pvay replaced the `.lens`-only
+    /// The overviews route on `isReceptacle` (t-pvay replaced the `.matched`-only
     /// `isLens`): ANY non-workspace cell mirrors no workspace, so it has no
     /// source WS (`wsIndex == -1`), is never a move / swap target, and a pick
     /// focuses its first window instead of switching workspace. Routing on the
@@ -27,7 +27,7 @@ struct OverviewModelsTests {
     /// `wsIndex == -1` cell from ever reaching a `.workspace(-1)` pick.
     @Test func nonWorkspaceKindsAreReceptacles() {
         #expect(cell(.unassigned, id: "unassigned:0").isReceptacle)
-        #expect(cell(.lens, id: "section:0:Web").isReceptacle)
+        #expect(cell(.matched, id: "section:0:Web").isReceptacle)
     }
 
     @Test func workspaceKindIsNotAReceptacle() {

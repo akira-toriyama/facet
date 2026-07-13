@@ -20,7 +20,7 @@ import Foundation
 ///
 /// `match` is stored VERBATIM and compiled by the consumer at EVALUATION time
 /// (loud + non-fatal on a malformed expression), so config-load stays total —
-/// the same discipline a `type="lens"` section's `match` follows.
+/// the same discipline a `type="isolate"` section's `match` follows.
 public struct Rule: Sendable, Equatable {
     /// Raw `facet filter` WHERE-clause. Compiled by the consumer, not here.
     public let match: String

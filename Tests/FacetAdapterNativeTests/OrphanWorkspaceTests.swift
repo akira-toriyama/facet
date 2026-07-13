@@ -192,12 +192,12 @@ struct OrphanWorkspaceTests {
     // clearing one parks nothing. `clearSectionLens` itself is gone (a lens
     // clear is just `activeSectionLens = nil`).
 
-    // MARK: - EX-3 GAP fix: orphanWindows() projects orphans for lens sections
+    // MARK: - EX-3 GAP fix: orphanWindows() projects orphans for matched section
 
     /// `orphanWindows` returns EXACTLY the managed windows in no workspace —
-    /// the input the tree/grid/rail lens sections need (snapshot drops them).
+    /// the input the tree/grid/rail matched section need (snapshot drops them).
     /// A lens is a pure VIEW (t-0021): `FilterProjection` lists these orphans
-    /// in any matching lens section (display only — they aren't moved).
+    /// in any matching matched section (display only — they aren't moved).
     @Test func orphanWindowsReturnsOnlyOrphans() {
         var c = seededCatalog(3)
         _ = c.reconcile(live: [window(10)])        // normal → WS1

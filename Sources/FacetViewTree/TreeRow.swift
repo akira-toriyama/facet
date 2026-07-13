@@ -14,9 +14,9 @@ import FacetCore
 ///
 /// `workspaceIndex` is the BACKEND ACTION TARGET, kept SEPARATE from `group`:
 /// the real workspace a click acts on (switch / focus / move). For a window
-/// row it is the window's REAL workspace even inside a lens desktop's
+/// row it is the window's REAL workspace even inside an isolate desktop's
 /// synthesized section; for a `workspace`-section header it is the source
-/// workspace; for a lens-desktop or `unassigned` header it is `nil` — there is
+/// workspace; for an isolate-desktop or `unassigned` header it is `nil` — there is
 /// no workspace to switch to, so a click focuses that section's first window
 /// instead (`focusFirstWindow(inSectionID:)`).
 enum TreeRowKind {

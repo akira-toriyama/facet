@@ -48,7 +48,7 @@ extension BuildTreeRowsTests {
         let w = win(1, "Safari", "GitHub")
         let rows = buildTreeRows(sections: [
             sec("ws:0", "1", .workspace, [w], src: 0),
-            sec("section:0:dev", "dev", .lens, [w], src: nil),   // same window, lens
+            sec("section:0:dev", "dev", .matched, [w], src: nil),   // same window, lens
         ], query: "")
         XCTAssertEqual(rows[1].id, .window(group: 0, WindowID(serverID: 1)))
         XCTAssertEqual(rows[3].id, .window(group: 1, WindowID(serverID: 1)))
@@ -64,13 +64,21 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(rows.map(\.primary), ["workspace · 1", "Safari"])
     }
 
+    /// The four kind words each answer ONE question — "what IS this section"
+    /// (t-mqqw). `lens ·` is gone (a DESKTOP type had been leaking onto a
+    /// section), and an isolate desktop's non-matching bucket says `holding ·`,
+    /// not `unassigned ·` — those windows ARE assigned to workspaces, they just
+    /// failed the `match`. `unassigned ·` survives only on a workspace desktop,
+    /// where it is honest.
     func testHeaderLabelsPerKind() {
         let rows = buildTreeRows(sections: [
-            sec("section:0:dev", "dev", .lens, [], src: nil),
+            sec("section:0:dev", "dev", .matched, [], src: nil),
+            sec("holding:1", "held", .holding, [win(8, "Y", "")], src: nil),
             sec("unassigned:0", "spare", .unassigned, [win(9, "X", "")], src: nil),
         ], query: "")
-        XCTAssertEqual(rows[0].primary, "lens · dev")
-        XCTAssertEqual(rows[1].primary, "unassigned · spare")
+        XCTAssertEqual(rows[0].primary, "matched · dev")
+        XCTAssertEqual(rows[1].primary, "holding · held")
+        XCTAssertEqual(rows[3].primary, "unassigned · spare")
     }
 }
 
@@ -130,11 +138,11 @@ extension BuildTreeRowsTests {
         guard case .header(.workspace, "bsp") = rows[0].kind else { return XCTFail() }
     }
 
-    func testLensHeaderIgnoresLayoutSubtitle() {
+    func testMatchedHeaderIgnoresLayoutSubtitle() {
         let rows = buildTreeRows(
-            sections: [sec("section:0:dev", "dev", .lens, [win(1, "A", "")], src: nil)],
+            sections: [sec("section:0:dev", "dev", .matched, [win(1, "A", "")], src: nil)],
             query: "", layoutMode: { _ in "bsp" })
-        guard case .header(.lens, nil) = rows[0].kind else { return XCTFail() }
+        guard case .header(.matched, nil) = rows[0].kind else { return XCTFail() }
     }
 
     func testUnassignedHeaderIgnoresLayoutSubtitle() {

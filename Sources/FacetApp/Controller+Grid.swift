@@ -85,7 +85,7 @@ extension Controller {
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved from the
                 // snapshot — correct whether the thumb sat in a workspace OR a
-                // lens cell. Switch there (runs on main, updates the mirror),
+                // receptacle cell. Switch there (runs on main, updates the mirror),
                 // then re-assert focus on the pick. Guard home >= 0 so an
                 // unresolvable window focuses without a bogus .workspace(0).
                 if home >= 0 {
@@ -185,7 +185,7 @@ extension Controller {
         // Drop the references synchronously — the fade is cosmetic, the
         // teardown is not (mirrors `hideRail`). Two things break if they
         // linger for the fade's duration: `apply` still finds a live
-        // `gridView` and feeds it this desktop's sections (on a lens desktop
+        // `gridView` and feeds it this desktop's sections (on an isolate desktop
         // that means grid renders a tree-only projection), and `isGridVisible`
         // stays true so a hide→show inside the fade window no-ops instead of
         // building a fresh overlay.

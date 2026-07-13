@@ -147,7 +147,7 @@ public final class RailView: NSView {
     }
     /// Bottom cell whose HEADER the pointer is over — brightens the
     /// band + grip (the grab affordance for a WS swap, Phase R3). Keyed on
-    /// `sectionID` (EX-2b) so a lens cell's `wsIndex == −1` can't light
+    /// `sectionID` (EX-2b) so a receptacle cell's `wsIndex == −1` can't light
     /// every lens header at once.
     var hoverHeaderID: String?
     private var trackingArea: NSTrackingArea?
@@ -226,14 +226,14 @@ public final class RailView: NSView {
 
     /// EX-2b: one carousel cell source per projected section (workspace +
     /// lens), built with the single-highlight already gated. `wsIndex` is the
-    /// 0-based source WS (−1 for a lens, which spans workspaces). A rail-local
+    /// 0-based source WS (−1 for an isolate desktop, which spans workspaces). A rail-local
     /// twin of the grid's `CellSource` (that one is `private` to FacetViewGrid).
     private struct CellSource {
         let wsIndex: Int
         let sectionType: ProjectedSectionType
         let sectionID: String
         let label: String           // §D composed caption: `index (label)`
-        let mode: String            // layout engine; "" for a lens
+        let mode: String            // layout engine; "" for an isolate desktop
         let windows: [Window]
         let isActive: Bool          // single-highlight XOR, baked at build time
     }
@@ -260,12 +260,12 @@ public final class RailView: NSView {
         }
         return sections.enumerated().map { (i, sec) in
             // The projection doesn't carry a workspace's live layoutMode; look
-            // it up by source index (a lens / unassigned section has no source
+            // it up by source index (an isolate desktop / unassigned section has no source
             // workspace → nil → no layout engine).
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
             // §G three-way (mirrors GridView): workspace cells carry layout +
-            // active highlight; a lens cell and an unassigned cell have no
+            // active highlight; a receptacle cell and an unassigned cell have no
             // layout engine (mode = "", wsIndex = -1) and are NEVER the active
             // highlight — only a workspace is ever active.
             let mode: String
@@ -276,11 +276,11 @@ public final class RailView: NSView {
                 // EX-2b single-highlight: a workspace cell lights ⟺ its WS
                 // is active.
                 active = srcWS?.isActive == true
-            case .lens, .unassigned:
+            case .matched, .holding, .unassigned:
                 // A receptacle: no layout engine of its own, never the active
-                // highlight. (`.lens` only reaches the shared enum from the
-                // TREE's lens-desktop projection — the rail never receives one
-                // — but the switch must stay exhaustive over it.)
+                // highlight. (`.matched` / `.holding` only reach the shared enum
+                // from the TREE's isolate-desktop projection — the rail never
+                // receives one — but the switch must stay exhaustive.)
                 mode = ""
                 active = false
             }
@@ -510,8 +510,8 @@ public final class RailView: NSView {
         case .right:
             heroBox.size.width = max(0, (innerEdge - heroGap) - heroBox.minX)
         }
-        // The hero = the centred section. When it's a lens (Decision 1,
-        // トミー 2026-06-22) it renders the lens's cross-workspace union
+        // The hero = the centred section. When it's an isolate desktop (Decision 1,
+        // トミー 2026-06-22) it renders the isolate desktop's cross-workspace union
         // (`act.windows`); a workspace renders its own windows. `isActive` is
         // the baked single-highlight XOR. `sources` is non-empty (guarded
         // above), so the fallback chain never falls through.
@@ -746,7 +746,7 @@ public final class RailView: NSView {
     private func commitSwitch(targetSectionID: String, perform: @escaping () -> Void) {
         guard !commitZoom.isActive else { return }   // a zoom is already in flight
         // Play the hero-zoom transition iff the picked section IS the centred
-        // hero — works for a workspace switch AND a lens-union activation (EX-2b).
+        // hero — works for a workspace switch AND an isolate desktop-union activation (EX-2b).
         guard targetSectionID == selectedSectionID, let h = hero,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               let img = snapshotRegion(h.rect)
@@ -811,7 +811,7 @@ public final class RailView: NSView {
         } else if let d = drag, d.kind == .workspace,
                   reorderDrag ? (c.sectionID == dragSectionID)
                               : (d.sourceWS == c.wsIndex) {
-            // Dim the lifted SOURCE: reorder keys by sectionID (a lens source's
+            // Dim the lifted SOURCE: reorder keys by sectionID (an isolate desktop source's
             // wsIndex −1 is shared); the keyboard swap keys by wsIndex.
             pal.foreground.withAlphaComponent(0.06).setFill(); path.fill()
             pal.foreground.withAlphaComponent(0.40).setStroke(); path.lineWidth = 1
@@ -933,7 +933,7 @@ public final class RailView: NSView {
         // no grip — Decision 6).
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
             // BOTH workspace + lens headers arm a reorder drag (past threshold);
-            // a click still switches / toggles the lens (resolved on mouseUp).
+            // a click still switches / toggles the isolate desktop (resolved on mouseUp).
             pendingHeaderDown = (p, cell.sectionID); return
         }
         // Window-thumb press → window drag (move) or click (switch + focus).
@@ -970,7 +970,7 @@ public final class RailView: NSView {
         let scr = win.convertPoint(toScreen: event.locationInWindow)
         let inStrip = stripRect.isEmpty || stripRect.contains(p)
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            // Only a WORKSPACE header has a layout picker — a lens / unassigned
+            // Only a WORKSPACE header has a layout picker — an isolate desktop / unassigned
             // (§G) cell has no layout engine.
             guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
@@ -998,7 +998,7 @@ public final class RailView: NSView {
         guard let backend, let win = window, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
         if kbSelectedWindowIdx == -1 {
-            // Only a WORKSPACE cell has a layout engine — a lens / unassigned
+            // Only a WORKSPACE cell has a layout engine — an isolate desktop / unassigned
             // (§G) cell has none.
             guard cell.sectionType == .workspace else { return }
             let scr = win.convertPoint(toScreen:
@@ -1038,7 +1038,7 @@ public final class RailView: NSView {
             if let ph = pendingHeaderDown {
                 let dx = p.x - ph.point.x, dy = p.y - ph.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                // Identify by sectionID (a lens header's wsIndex is −1). BOTH
+                // Identify by sectionID (an isolate desktop header's wsIndex is −1). BOTH
                 // workspace + lens headers arm a display-only REORDER drag.
                 guard let src = cells.first(where: { $0.sectionID == ph.cellID })
                 else { return }
@@ -1128,7 +1128,7 @@ public final class RailView: NSView {
             // target is the centred hero, else switch immediately).
             if let pd = pendingDown {
                 // Window thumb → switch to its HOME WS AND focus THAT window
-                // (home resolved via windowHomeWS — correct even inside a lens
+                // (home resolved via windowHomeWS — correct even inside an isolate desktop
                 // cell whose wsIndex is −1; the Controller guards home >= 0).
                 let cell = cells.first { $0.sectionID == pd.cellID }
                 let home = windowHomeWS[pd.hit.id] ?? cell?.wsIndex ?? -1
@@ -1270,7 +1270,7 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWorkspace() {
-        // Only a WORKSPACE cell can be lifted for a swap — a lens / unassigned
+        // Only a WORKSPACE cell can be lifted for a swap — an isolate desktop / unassigned
         // (§G) cell has no source WS (Decision 6).
         guard drag == nil, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }),
@@ -1294,7 +1294,7 @@ public final class RailView: NSView {
     private func syncRailDragToSelection() {
         guard var d = drag, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
-        // Aiming at a lens / unassigned (§G) cell → no valid drop (neither is a
+        // Aiming at an isolate desktop / unassigned (§G) cell → no valid drop (neither is a
         // swap/move destination); the ghost still teleports so the rotation
         // reads. Only a WORKSPACE cell (≠ source) is a target.
         d.dropTargetWS = (cell.sectionType != .workspace || cell.wsIndex == d.sourceWS)

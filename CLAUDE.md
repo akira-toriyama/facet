@@ -7,20 +7,24 @@ Guidance for working in this repository.
 All UI / config / code terminology follows
 [`docs/glossary.md`](docs/glossary.md) — use the canonical names
 (`FacetCore`, `FacetAdapterNative`, `WindowBackend`, `mac desktop`,
-`facet workspace`, `facet view`, `lens desktop`, `AX target`, `pal`,
+`facet workspace`, `facet view`, `isolate desktop`, `AX target`, `pal`,
 `loading skeleton`, …), **not** the `Don't call it:` synonyms.
 The core concepts are kept strictly apart — hierarchy
 **mac desktop (typed) > section > window**: **mac desktop** (= macOS
-native Space, TYPED `workspace` | `lens` via `[desktop.N]`; code
+native Space, TYPED `workspace` | `isolate` via `[desktop.N]`; code
 `MacDesktops` / `DesktopMeta` / `[[desktop.N.section]]`, each a workspace
 SPATIAL cell now — t-ec9s), **facet workspace** (facet's window grouping;
-`WorkspaceCatalog`), **facet view** (UI: `tree`/`grid`/`rail`), **lens
-desktop** (a `[desktop.N] type=lens` mac desktop: ALWAYS-ON match+layout tile
+`WorkspaceCatalog`), **facet view** (UI: `tree`/`grid`/`rail`), **isolate
+desktop** (a `[desktop.N] type=isolate` mac desktop: ALWAYS-ON match+layout tile
 with non-matching windows anchor-parked, tree-only; t-0sbm — this replaced the
 retired browser-tab **board** layer, t-wrd2/#368 → removed t-0sbm). The former
 **section-lens** `lens` — a cross-workspace VIEW filter activated by `facet
-lens NAME` — was retired t-ec9s; `lens` now means ONLY the lens desktop (the
-auto-tag-on-match need its `apply` served moved to `[[rule]]`).
+lens NAME` — was retired t-ec9s (the auto-tag-on-match need its `apply` served
+moved to `[[rule]]`), and the surviving desktop type was renamed `lens` →
+`isolate` by t-mqqw: the optical metaphor claimed the thing does not touch what
+it images, but this desktop tiles the matched windows and anchor-parks the rest,
+and leaving it un-parks nothing. **`lens` is now a dead word** — `type = "lens"`
+is a loud reject, never an alias.
 Apple's own SLS / `NSWorkspace` API names stay verbatim.
 Adding or renaming a term lands in the same PR as the code change.
 
@@ -213,15 +217,15 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   behaviour). `[[desktop.N.section]]` config keys by ordinal; catalog
   state is session-only (never persisted), rebuilt from live windows on
   restart. **A mac desktop may be TYPED** — `[desktop.N]` is a SINGLE
-  table with `type = "workspace" | "lens"` (t-0sbm; one ordinal = one
+  table with `type = "workspace" | "isolate"` (t-0sbm; one ordinal = one
   desktop = one type; a sections-only config implies `workspace`). A
-  **lens desktop** carries `match` (required) + `layout` /
+  **isolate desktop** carries `match` (required) + `layout` /
   `show-non-matching` / `label` directly on the table: while that mac
   desktop is active, facet ALWAYS tiles the matched windows with the
-  lens `layout` and anchor-parks the rest (`applyIsolatePark`; flat —
-  `effectiveWorkspaceList` seeds exactly ONE workspace). Lens desktops
+  isolate `layout` and anchor-parks the rest (`applyIsolatePark`; flat —
+  `effectiveWorkspaceList` seeds exactly ONE workspace). Isolate desktops
   are TREE-ONLY: `--view grid` / `--view rail` there loud-reject. See
-  the glossary `### lens desktop` +
+  the glossary `### isolate desktop` +
   [docs/architecture.md](docs/architecture.md) "The typed-desktop
   layer". (The former board layer — `[[desktop.N.tab]]`, `facet board`,
   the switcher bands — was retired by t-0sbm.) **Opt-in rule**: any
@@ -279,35 +283,35 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``Main.canonicalViews`` + matching cases in
   ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
   don't reintroduce per-view bespoke flags.
-- **``facet section`` addresses ANY section (workspace, unassigned, OR a lens
+- **``facet section`` addresses ANY section (workspace, unassigned, OR an isolate
   desktop's synthesized section) by its 1-based tree-order index or its label** —
   the unified addressing layer. ``--focus N|LABEL`` (switch workspace / — §G —
-  focus an unassigned OR lens-desktop section's FIRST window via the unified
+  focus an unassigned OR isolate-desktop section's FIRST window via the unified
   ``focusFirstWindow(inSectionID:)``, since the section-lens ACTIVATE concept was
   retired t-ec9s; resolves via ``addressableSections()`` reading ``lastSections``).
   ``--rename N "label"`` sets the display label at runtime (§E): workspace →
   catalog ``renameWorkspace``; unassigned (§G) → session-only
   ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection seam by
-  the pure ``applyLabelOverrides``); empty → revert. On a lens desktop ``--rename``
+  the pure ``applyLabelOverrides``); empty → revert. On an isolate desktop ``--rename``
   is a loud reject (its sections are match-synthesized). ``--match N "expr"``
-  retargets a lens desktop's match (session-only ordinal-keyed
-  ``lensDesktopMatchOverride``, D6; pushed to the adapter's ``setLensDesktopMatch``
+  retargets an isolate desktop's match (session-only ordinal-keyed
+  ``isolateMatchOverride``, D6; pushed to the adapter's ``setIsolateMatch``
   so display + park stay in lock-step). Identity stays on the stable section id.
   Session-only: reset on relaunch, NOT on ``facet reload``. GUI twin = the tree
   header right-click ``Section ▸ Rename`` (``beginSectionRename`` →
-  ``SectionRenamePanel``) + ``Edit match`` (``beginSectionMatchEdit``, lens desktop).
+  ``SectionRenamePanel``) + ``Edit match`` (``beginSectionMatchEdit``, isolate desktop).
   Wire ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
-- **The two-world gate — what a lens desktop refuses** (``LensDesktopGate``
+- **The two-world gate — what an isolate desktop refuses** (``IsolateDesktopGate``
   in ``FacetCore``, the single home; ``Controller`` consults it once before
   the DNC ``switch``, and again in ``dispatchView`` / ``dispatchToggle``):
   - **TREE-ONLY** — `--view grid` / `--view rail` (and their toggles) are a
-    loud ``setError`` no-op: a lens desktop's membership is dynamic, so there
+    loud ``setError`` no-op: an isolate desktop's membership is dynamic, so there
     is no fixed picture to thumbnail. The tree renders its 1–2 synthesized
-    sections (``FilterProjection.projectLensDesktop`` — matched + optional
+    sections (``FilterProjection.projectIsolateDesktop`` — matched + optional
     non-matching holding; t-ec9s decoupled it from the config ``DesktopSection``).
   - **Workspace-SET + active-workspace verbs are refused too** — ``workspace
     --add`` / ``--remove`` / ``--rename`` / ``--move`` / ``--focus``,
-    ``workspace --layout``, and ``section --rename``. A lens desktop is FLAT
+    ``workspace --layout``, and ``section --rename``. An isolate desktop is FLAT
     (``effectiveWorkspaceList`` seeds exactly ONE workspace), so they have
     nothing to act on — and ``--add`` actively breaks the N=1 invariant the
     anchor-park scope relies on.
@@ -441,7 +445,7 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 - **The ONE sanctioned write to config.toml is startup `auto-promote`**
   (t-hdxb, opt-in). With `[config] export-path` set, facet *auto-exports*
   a live **snapshot** of the effective config to that separate file on
-  every session edit (rename / lens match / layout / tag vocab) — a
+  every session edit (rename / isolate match / layout / tag vocab) — a
   surgical write via swift-toml-edit that leaves config.toml untouched.
   With `[config] auto-promote = true`, the NEXT launch promotes a snapshot
   that is strictly newer than config.toml onto it (overwrite + load), so a

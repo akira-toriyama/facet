@@ -102,7 +102,7 @@ struct ConfigValidateTests {
     @Test func desktopSectionStrayLensKeysAreReportedUnknown() throws {
         let errors = try FacetConfig.validate("""
         [[desktop.1.section]]
-        type = "lens"
+        type = "isolate"
         match = "tag~=web"
         apply = { tags = ["web"] }
         """)

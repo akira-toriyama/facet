@@ -25,7 +25,7 @@ struct QueryTests {
                          mark: "a", scratchpad: nil))
         let json = try encoded([entry])
         // Schema key names present. `parked` (t-pvay) is the CLI's only view of
-        // a window a lens desktop anchor-parked — keep it in the contract.
+        // a window an isolate desktop anchor-parked — keep it in the contract.
         for key in ["\"id\"", "\"pid\"", "\"app\"", "\"title\"",
                     "\"bundleId\"", "\"desktop\"", "\"frame\"", "\"onscreen\"",
                     "\"focused\"", "\"facet\"", "\"workspaceIndex\"",

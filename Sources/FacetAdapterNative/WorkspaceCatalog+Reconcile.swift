@@ -240,7 +240,7 @@ extension WorkspaceCatalog {
                 pendingHideCandidates.remove(id)
                 // orphan: no home workspace layout to re-attach to (stays
                 // detached even when un-hidden — invisible unless a matching
-                // lens is active).
+                // an isolate desktop parks it).
                 if let ws = slot.workspace {
                     attachToLayout(id, workspace: ws,
                                    focused: focused, in: activeRect)

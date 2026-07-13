@@ -30,7 +30,7 @@ extension Controller {
     ///
     /// `isSectionModelActive` is the RIGHT question here (not
     /// `desktopRenderMode.rendersSections`): a drop has to LAND on a real
-    /// `[[desktop.N.section]]` workspace cell. A lens desktop renders sections,
+    /// `[[desktop.N.section]]` workspace cell. An isolate desktop renders sections,
     /// but they are synthesized from `match` — membership there is a predicate,
     /// not a place, so there is nothing to drop into. (Its holding rows are
     /// inert as a drag SOURCE too — t-63h2.)

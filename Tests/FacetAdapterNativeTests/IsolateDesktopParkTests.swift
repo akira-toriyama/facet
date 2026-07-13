@@ -4,15 +4,15 @@ import Testing
 @testable import FacetAdapterNative
 
 /// t-0sbm Phase 2b — the ADAPTER runtime for a typed `[desktop.N] type=lens`
-/// mac desktop (board abolition). A lens desktop is ALWAYS-ON — there is no
+/// mac desktop (board abolition). An isolate desktop is ALWAYS-ON — there is no
 /// activation verb, entering the desktop IS the activation: whenever it is the
 /// active mac desktop, `applyIsolatePark` parks the out-of-`match` windows and
 /// tiles the matched set with the lens's declared `layout`. Flat by
-/// construction (a lens desktop seeds exactly ONE workspace, so the active-WS
+/// construction (an isolate desktop seeds exactly ONE workspace, so the active-WS
 /// park scope == the whole desktop). Reuses `IsolatePark.parkSet` /
-/// `reconcileIsolatePark` / `LensMembership` verbatim — the only new runtime is
+/// `reconcileIsolatePark` / `IsolateMembership` verbatim — the only new runtime is
 /// the always-on gate + the `layout` seam.
-struct LensDesktopParkTests {
+struct IsolateDesktopParkTests {
 
     private let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
     private func live() -> [Window] {
@@ -22,11 +22,11 @@ struct LensDesktopParkTests {
     /// Adapter on ordinal 1 whose desktop is a `type=lens` table (`match`,
     /// `layout`). Live: 10 = Web (in-lens), 30 = Other (out-of-lens). ONE
     /// workspace → N=1 flat scope.
-    private func lensDesktopAdapter(match: String = "app=Web",
+    private func isolateDesktopAdapter(match: String = "app=Web",
                                     layout: String? = "bsp") -> NativeAdapter {
         var cfg = FacetConfig()
         cfg.macDesktopMetaConfigs = [1: DesktopMeta(
-            type: .lens, label: "Web", match: match, layout: layout)]
+            type: .isolate, label: "Web", match: match, layout: layout)]
         let a = NativeAdapter(config: cfg)
         a.activeMacDesktopOrdinal = 1
         a.catalog.seed(configs: [(index: 1, config: WorkspaceConfig(name: ""))])
@@ -34,18 +34,18 @@ struct LensDesktopParkTests {
         return a
     }
 
-    /// A lens desktop is ALWAYS-ON — the mere presence of `[desktop.N] type=lens`
+    /// An isolate desktop is ALWAYS-ON — the mere presence of `[desktop.N] type=lens`
     /// on the active mac desktop parks the out-of-lens window.
-    @Test func desktopLensAlwaysOnParksOutOfLens() {
-        let a = lensDesktopAdapter()
+    @Test func isolateDesktopAlwaysOnParksNonMatching() {
+        let a = isolateDesktopAdapter()
         cliQueue.sync { a.applyIsolatePark(live: live(), focused: nil, rect: rect) }
         #expect(a.catalog.isolateParked == [wid(30)])        // Other parked
         #expect(!a.catalog.isolateParked.contains(wid(10)))  // Web stays
     }
 
     /// The matched set tiles with the lens's declared `layout`.
-    @Test func desktopLensTilesMatchedWithDeclaredLayout() {
-        let a = lensDesktopAdapter(layout: "bsp")
+    @Test func isolateDesktopTilesMatchedWithDeclaredLayout() {
+        let a = isolateDesktopAdapter(layout: "bsp")
         cliQueue.sync { a.applyIsolatePark(live: live(), focused: nil, rect: rect) }
         #expect(a.catalog.mode(of: 1) == "bsp")
     }
@@ -53,7 +53,7 @@ struct LensDesktopParkTests {
     /// `layout = "float"` (the freeze-safe case): the matched window stays
     /// floating (untouched), the non-match still anchor-parks. No union-tile.
     @Test func floatLayoutLeavesMatchedFloatingAndParksRest() {
-        let a = lensDesktopAdapter(layout: "float")
+        let a = isolateDesktopAdapter(layout: "float")
         cliQueue.sync { a.applyIsolatePark(live: live(), focused: nil, rect: rect) }
         #expect(a.catalog.mode(of: 1) == "float")
         #expect(a.catalog.isolateParked == [wid(30)])        // non-match parks
@@ -64,7 +64,7 @@ struct LensDesktopParkTests {
     /// seam does not re-fire (`mode` unchanged → `setMode` skipped, so a user's
     /// bsp ratios survive).
     @Test func parkAndLayoutAreIdempotent() {
-        let a = lensDesktopAdapter()
+        let a = isolateDesktopAdapter()
         cliQueue.sync {
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
@@ -76,7 +76,7 @@ struct LensDesktopParkTests {
     /// The `match` drives the park set — a different match flips which window is
     /// out-of-lens (matching Other → Web is now parked).
     @Test func matchDrivesTheParkSet() {
-        let a = lensDesktopAdapter(match: "app=Other")
+        let a = isolateDesktopAdapter(match: "app=Other")
         cliQueue.sync { a.applyIsolatePark(live: live(), focused: nil, rect: rect) }
         #expect(a.catalog.isolateParked == [wid(10)])        // Web now out-of-lens
     }
@@ -87,9 +87,9 @@ struct LensDesktopParkTests {
     /// projection override. Config says Web is in-lens; override flips it to
     /// Other, so Web (10) now parks.
     @Test func runtimeMatchOverrideDrivesParkSet() {
-        let a = lensDesktopAdapter(match: "app=Web")
+        let a = isolateDesktopAdapter(match: "app=Web")
         cliQueue.sync {
-            a.setLensDesktopMatch("app=Other", ordinal: 1)
+            a.setIsolateMatch("app=Other", ordinal: 1)
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
         }
         #expect(a.catalog.isolateParked == [wid(10)])   // Web now out-of-lens
@@ -101,14 +101,14 @@ struct LensDesktopParkTests {
     /// parked under `app=Other`), then reverts + reconciles so the config→revert
     /// UNPARK transition is actually exercised — not just the config baseline.
     @Test func emptyOverrideRevertsToConfigMatch() {
-        let a = lensDesktopAdapter(match: "app=Web")
+        let a = isolateDesktopAdapter(match: "app=Web")
         cliQueue.sync {
-            a.setLensDesktopMatch("app=Other", ordinal: 1)   // override → Other
+            a.setIsolateMatch("app=Other", ordinal: 1)   // override → Other
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
         }
         #expect(a.catalog.isolateParked == [wid(10)])   // override active: Web (in config) now parked
         cliQueue.sync {
-            a.setLensDesktopMatch(nil, ordinal: 1)           // revert to config
+            a.setIsolateMatch(nil, ordinal: 1)           // revert to config
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
         }
         #expect(a.catalog.isolateParked == [wid(30)])   // config (Web in-lens) → Other parks, Web UNparked
@@ -120,10 +120,10 @@ struct LensDesktopParkTests {
     /// (`app=Web`, which would flip the result if it leaked) is ignored — so the
     /// assertion distinguishes "per-ordinal isolation works" from "read path dead".
     @Test func overrideIsPerOrdinal() {
-        let a = lensDesktopAdapter(match: "app=Web")
+        let a = isolateDesktopAdapter(match: "app=Web")
         cliQueue.sync {
-            a.setLensDesktopMatch("app=Other", ordinal: 1)   // active ordinal — must win
-            a.setLensDesktopMatch("app=Web", ordinal: 2)     // decoy on wrong ordinal — must be ignored
+            a.setIsolateMatch("app=Other", ordinal: 1)   // active ordinal — must win
+            a.setIsolateMatch("app=Web", ordinal: 2)     // decoy on wrong ordinal — must be ignored
             a.applyIsolatePark(live: live(), focused: nil, rect: rect)
         }
         #expect(a.catalog.isolateParked == [wid(10)])   // ord-1 override (Other) → Web parks; ord-2 decoy ignored

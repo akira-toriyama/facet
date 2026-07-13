@@ -1,13 +1,13 @@
-// The two-world gate (t-0sbm): what a lens desktop refuses, as pure data.
+// The two-world gate (t-0sbm): what an isolate desktop refuses, as pure data.
 //
 // Lives in FacetCore — not beside the dispatch it guards — for one reason:
 // `FacetApp` is an executable target with no test harness, so a gate spread
 // across its `switch` arms cannot be pinned. Here it is one function, and a
 // test can enumerate the whole control vocabulary against it.
 
-/// The verbs and views a **lens desktop** refuses.
+/// The verbs and views a **isolate desktop** refuses.
 ///
-/// A lens desktop is a FLAT, always-on, single-workspace desktop
+/// An isolate desktop is a FLAT, always-on, single-workspace desktop
 /// (`effectiveWorkspaceList` seeds exactly one) whose membership is a live
 /// `match`, not a set of windows the user owns. Two consequences:
 ///
@@ -17,12 +17,12 @@
 ///   stops being desktop-wide the moment a 2nd workspace exists, and
 ///   non-matching windows escape the park.
 /// - **The visual views** (grid / rail) have no fixed picture to thumbnail —
-///   a lens desktop is TREE-ONLY.
+///   an isolate desktop is TREE-ONLY.
 ///
-/// Both reject LOUDLY rather than no-op silently: a lens desktop is valid
+/// Both reject LOUDLY rather than no-op silently: an isolate desktop is valid
 /// config, so the request is *unsatisfiable*, not a typo.
 ///
-/// `workspace --layout` is gated for a subtler reason: the lens `layout` seam
+/// `workspace --layout` is gated for a subtler reason: the isolate desktop `layout` seam
 /// re-asserts the declared layout whenever the mode NAME differs
 /// (`applyIsolatePark` → `setMode` only on a name change), so a runtime
 /// `--layout` would silently revert on the next reconcile. Reject it honestly.
@@ -32,10 +32,10 @@
 /// never re-fires), so they take effect and persist exactly as on a workspace
 /// desktop. (The t-0sbm review corrected an earlier "all refinement reverts"
 /// premise.) Window verbs, scratchpad verbs, tags, `section --focus` and
-/// `section --match` all work on a lens desktop too.
-public enum LensDesktopGate {
+/// `section --match` all work on an isolate desktop too.
+public enum IsolateDesktopGate {
 
-    /// The user-facing verb a lens desktop refuses for this DNC control
+    /// The user-facing verb an isolate desktop refuses for this DNC control
     /// payload, or `nil` when the payload is allowed there.
     ///
     /// ⚠️ Allowed is the DEFAULT, so a NEW control payload passes unless it is
@@ -62,8 +62,20 @@ public enum LensDesktopGate {
         }
     }
 
-    /// Whether this facet view is unrenderable on a lens desktop (tree only).
+    /// Whether this facet view is unrenderable on an isolate desktop (tree only).
     public static func blocksView(_ name: String) -> Bool {
         name == "grid" || name == "rail"
+    }
+
+    /// The two refusal messages live HERE, next to the predicates that raise
+    /// them. `dispatchView` and `dispatchToggle` both refuse a view, and the
+    /// message was written out verbatim in both — two copies of one sentence,
+    /// free to drift. One home, like the gate itself.
+    public static func viewRefusal(_ name: String) -> String {
+        "\(name) view is not available on an isolate desktop (tree only)"
+    }
+
+    public static func verbRefusal(_ verb: String) -> String {
+        "\(verb) is not available on an isolate desktop"
     }
 }

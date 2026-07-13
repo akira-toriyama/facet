@@ -64,7 +64,11 @@ enum TreeListItem {
     private static func headerGlyph(_ type: ProjectedSectionType) -> NSImage? {
         let slug: String?
         switch type {
-        case .lens: slug = "funnel"
+        case .matched: slug = "funnel"
+        // The isolate desktop's holding bucket is NOT the lost-and-found
+        // receptacle (t-mqqw) — give it its own glyph so the chrome stops
+        // asserting a kinship the model does not have.
+        case .holding: slug = "tray"
         case .unassigned: slug = "archive"
         case .workspace: slug = nil
         }

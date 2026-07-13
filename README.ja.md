@@ -42,17 +42,17 @@ facet は menu-bar-less な agent (`LSUIElement`) として常駐し、
   超えた WS は回転（両端 peek 付き）。 `facet --view rail` で呼び出す。
 
 mac desktop は `[desktop.N]` テーブル 1 つで**型付け**できる（`type =
-"workspace"` か `"lens"`。 階層は *mac desktop ▸ section ▸ window*）。
-**lens desktop** は**常時有効の focus 空間**： その desktop に居る間ずっと、
+"workspace"` か `"isolate"`。 階層は *mac desktop ▸ section ▸ window*）。
+**isolate desktop** は**常時有効の focus 空間**： その desktop に居る間ずっと、
 `match` に合う窓を `layout` でタイルし、 合わない窓を画面隅へスライドさせる
 （dwm 風 declutter・sticky は免除）。 トグルは無い——**desktop に入ることが
 focus**。 tree は matched section を表示し、 `show-non-matching = true` で
 park された残りを "holding" section として並べる（＝全窓 inventory になる）。
 そして **tree 専用**：
-lens desktop の membership は動的でサムネイルにできる固定画面が無いため、
+isolate desktop の membership は動的でサムネイルにできる固定画面が無いため、
 そこでの `--view grid` / `--view rail` は loud に拒否される。 workspace 構造を
 変えるコマンド（`facet workspace --add` / `--remove` / `--move` / `--rename` /
-`--focus`・および `--layout`）も同様に拒否される——lens desktop は常時有効な単一
+`--focus`・および `--layout`）も同様に拒否される——isolate desktop は常時有効な単一
 workspace なので、追加も切替も layout 再宣言も対象が無い（tile 微調整の
 `--retile` / `--balance` / `--rotate` / `--mirror` は有効）。 `workspace`
 desktop（section だけ書いた config の暗黙型）は従来どおり。
@@ -416,7 +416,7 @@ opt-in すればセッション編集を facet が保存する。
   `facet section --focus` で先頭窓を focus、 ここへ DnD で窓を RESCUE。
   最初の 1 つだけ描画。 通常は空（窓は必ずどれかの workspace に居る）だが、
   お守りとして 1 つ残す。（section の `type` はもう無い — 保存フィルタは
-  今や **lens desktop 全体** = `[desktop.N] type = "lens"`（下記）。 section
+  今や **isolate desktop 全体** = `[desktop.N] type = "isolate"`（下記）。 section
   に残った `type` / `match` / `apply` は load 時に無視され `config --validate`
   が警告する。）実行時 `facet workspace --rename` が label を上書き。 2 モード:
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
@@ -426,8 +426,8 @@ opt-in すればセッション編集を facet が保存する。
   section リストを描画し、 ちょうど 1 つの workspace だけハイライト。 rail
   では active workspace が中央の hero になる。
 - `[desktop.N]` テーブル — **typed desktop**: `type = "workspace"` か
-  `"lens"`（1 ordinal = 1 desktop = 1 type。 section だけの config は暗黙に
-  `workspace`）。 **lens desktop** は常時有効の lens をテーブルに直接書く:
+  `"isolate"`（1 ordinal = 1 desktop = 1 type。 section だけの config は暗黙に
+  `workspace`）。 **isolate desktop** は常時有効の `match` をテーブルに直接書く:
   `match`（必須・facet-filter の WHERE 句）、 任意の `layout`（一致窓を並べる
   engine。 `"float"` なら浮かせたまま）、 任意の `show-non-matching`（既定
   `false`。 `true` で park された残りを "holding" section として tree に表示）、
@@ -435,13 +435,13 @@ opt-in すればセッション編集を facet が保存する。
   tree にのみ描画される。
 - **per-window tag** は **実行時** (session 限り) に `facet window --tag
   NAME` (および `--untag` / `--toggle-tag` / `--retag`) で付ける自由記述の
-  文字列。 `match` に `tag~=NAME` を含む lens desktop や `[[rule]]` が NAME を
+  文字列。 `match` に `tag~=NAME` を含む isolate desktop や `[[rule]]` が NAME を
   持つ全窓を対象にする。 `facet query --tags` でいま使われている全 tag を一覧。
   任意で `[tags] defined = ["web", "code", …]` を書くと **語彙** を seed でき、
   どの窓もまだ使っていない名前を tree の tag editor (`t`) の補完候補に出せる
   （名前のみ・tag の色は runtime）。
 - `[config]` table — **設定の自動永続化 (opt-in)**。 `export-path` を
-  セットすると facet がセッション編集（rename・lens `match`・layout・tag 語彙）
+  セットすると facet がセッション編集（rename・isolate `match`・layout・tag 語彙）
   のたびに実効 config の snapshot をその別ファイルへ自動 *export* する
   （surgical・config.toml は無傷）。 さらに `auto-promote = true` を足すと、
   次回起動時に config.toml より新しい snapshot をそこへ昇格させる（config.toml
@@ -502,21 +502,21 @@ facet window --unmark NAME        # マークを消す
 
 # Section — 任意の section (workspace / unassigned) を 1-based の tree
 # index か label で指す。`--focus` は activate (workspace へ切替・unassigned や
-# lens desktop の section は先頭窓を focus)。`--rename` は表示 label を runtime で
+# isolate desktop の section は先頭窓を focus)。`--rename` は表示 label を runtime で
 # 変更 (session のみ・relaunch で reset・`facet reload` では消えない・空 label は
-# workspace を index へ、unassigned を config の label へ戻す・lens desktop は
+# workspace を index へ、unassigned を config の label へ戻す・isolate desktop は
 # `--rename` を拒否)。tree からも改名可: section ヘッダ右クリック → Section ▸ Rename。
 facet section --focus N            # tree 順で N 番目の section を focus
 facet section --focus LABEL        # label が LABEL の section を focus
 facet section --rename N "label"   # N 番目の section の表示 label を改名
 
-# `--match` は LENS DESKTOP の filter (`facet filter` 述語) を runtime 編集
+# `--match` は ISOLATE DESKTOP の filter (`facet filter` 述語) を runtime 編集
 # (session のみ・`--rename` と同じ寿命: relaunch で reset・`reload` では残る)。
-# lens desktop 専用 — workspace / unassigned は reject。空 PREDICATE は config の
-# match へ戻す。tree からも編集可: lens desktop ヘッダ右クリック → Section ▸
+# isolate desktop 専用 — workspace / unassigned は reject。空 PREDICATE は config の
+# match へ戻す。tree からも編集可: isolate desktop ヘッダ右クリック → Section ▸
 # Edit match (`m` キーでも)。
-facet section --match N "tag~=web" # lens desktop を retarget・即 re-tile
-facet section --match N ""          # lens desktop の match を config へ revert
+facet section --match N "tag~=web" # isolate desktop を retarget・即 re-tile
+facet section --match N ""          # isolate desktop の match を config へ revert
 
 # Scratchpad — 名前付きの隠し棚 (ドロップダウン端末 / メモ用途)
 facet scratchpad --stash NAME     # focus 中の window を名前付き棚へしまう (画面外へ隠す)
@@ -587,7 +587,7 @@ facet --rescue
 
 1 窓は **自由記述の文字列 tag** を好きなだけ持てる — 初出で自動生成・
 session 限り・CLI でライブに付ける。 `match` 述語の材料になる: `match`
-に `tag~=NAME` を含む lens desktop や `[[rule]]` ([設定](#設定) 参照) が
+に `tag~=NAME` を含む isolate desktop や `[[rule]]` ([設定](#設定) 参照) が
 NAME を持つ全窓を対象にする。
 
 ```sh

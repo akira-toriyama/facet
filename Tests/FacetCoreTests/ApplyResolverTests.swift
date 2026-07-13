@@ -65,7 +65,7 @@ struct ApplyResolverTests {
     }
 
     @Test func planDropOntoStaleSectionIDIsInert() {
-        // A leftover `"section:"` id (there are no lens sections anymore) is not a
+        // A leftover `"section:"` id (there are no matched section anymore) is not a
         // workspace dest → inert. Guards against a stale drop from an old build.
         let p = ApplyResolver.plan(
             window: win(1), fromSectionID: "ws:0", toSectionID: "section:1:Web",

@@ -78,7 +78,7 @@ extension Controller {
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the
                 // view's windowHomeWS — correct whether the thumb sat in a
-                // workspace OR a lens cell. Switch there (updates the mirror
+                // workspace OR a receptacle cell. Switch there (updates the mirror
                 // on main), then re-assert focus on the pick. Guard home >= 0
                 // so an unresolvable window focuses without a bogus
                 // .workspace(0).

@@ -76,7 +76,7 @@ extension FacetApp {
     }
 
     /// Sub-command parser for ``facet section <flag>`` — address a section
-    /// (workspace, unassigned, or a lens desktop's synthesized section) by its
+    /// (workspace, unassigned, or an isolate desktop's synthesized section) by its
     /// 1-based tree-order index or its label. Verbs:
     ///   --focus N|LABEL    activate the section (numeric = index, else label)
     ///   --rename N LABEL   rename the Nth section (session-only display label)
@@ -157,7 +157,7 @@ extension FacetApp {
     ///     field always matches nothing — no legitimate use), unlike a config lens
     ///     `match` (which stays soft / degrade-don't-crash). This keeps the CLI and
     ///     the GUI "Edit match" editor consistent (loud typo rejection).
-    /// Returned VERBATIM on `.ok`: the lens compiles the exact string at projection
+    /// Returned VERBATIM on `.ok`: the isolate desktop compiles the exact string at projection
     /// time (`"   "` is a valid match-all, kept as authored; only `""` is revert).
     static func parseSectionMatchArg(_ value: String, flag: String) -> String {
         if value.isEmpty { return value }            // revert-to-config gesture
@@ -188,7 +188,7 @@ extension FacetApp {
     }
 
     /// Validate the LABEL form of `facet section --focus N|LABEL` — the display
-    /// label of a section (workspace / unassigned / a lens desktop's
+    /// label of a section (workspace / unassigned / an isolate desktop's
     /// synthesized section). Section labels are config-authored TOML strings,
     /// so the policy is loose (spaces and most punctuation are fine, kept
     /// VERBATIM for the server's exact-label match): reject only an empty /
