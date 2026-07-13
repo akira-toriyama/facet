@@ -82,14 +82,15 @@ public final class SidebarView: NSView {
     public internal(set) var searching = false
     public internal(set) var query = ""
 
-    /// Section/lens model (`[[desktop.N.section]]`, PR5): the tree renders
-    /// the config's ordered sections (workspace + lens) via
-    /// `FilterProjection`, with a window shown in EVERY section it matches
-    /// (multi-match duplication). The section render mode, used when the
-    /// Controller takes this path (`isSectionModelActive` — the mac desktop
-    /// has ≥1 `type="workspace"` section). Sticky across internal relayouts (search /
-    /// optimistic / resize) via `rebuild()`. DnD / keyboard-lift are disabled
-    /// here — `apply`-based DnD lands in PR8.
+    /// The section render mode: the tree renders the config's ordered
+    /// `[[desktop.N.section]]` cells via `FilterProjection` instead of the
+    /// by-workspace degrade. Sections are DISJOINT (t-ec9s), so a window shows
+    /// in exactly one — rows are still keyed by `(group, id)` because `group`
+    /// names the SECTION a row belongs to, which is what a click routes on.
+    /// Set when the Controller takes this path (`isSectionModelActive`, or a
+    /// lens desktop). Sticky across internal relayouts (search / optimistic /
+    /// resize) via `rebuild()`; DnD + keyboard-lift are section-aware here
+    /// (they address by `group`, not by workspace index).
     var sectionModeActive = false
     /// Last projected sections pushed via `update(sections:)`; reused by the
     /// internal relayouts in `rebuild()` (the projection is recomputed only
@@ -502,14 +503,12 @@ public final class SidebarView: NSView {
         return y + rh
     }
 
-    /// Render the section/lens model (`[[desktop.N.section]]`, PR5). The
-    /// Controller runs `FilterProjection` (off the by-workspace degrade
-    /// path) and hands the projected `sections` plus the live `workspaces`
-    /// (for header chrome — a workspace section's layout badge + active
-    /// highlight come from its source workspace). A window appears in EVERY
-    /// section it matches (multi-match); rows are keyed by `(group, id)` so a
-    /// duplicated window stays individually addressable. DnD / keyboard-lift
-    /// are disabled in this mode (apply-based DnD is PR8).
+    /// Render the projected sections. The Controller runs `FilterProjection`
+    /// (off the by-workspace degrade path) and hands the projected `sections`
+    /// plus the live `workspaces` (for header chrome — a workspace section's
+    /// layout badge + active highlight come from its source workspace). Rows
+    /// are keyed by `(group, id)`: `group` is the row's SECTION, which is what
+    /// a click resolves against (`lastSections[group]`) to route.
     @discardableResult
     public func update(sections: [ProjectedSection],
                        workspaces: [Workspace],
@@ -811,9 +810,9 @@ public final class SidebarView: NSView {
     /// header row as their popover anchor (the caller stacks
     /// them). The active workspace is always skipped — would just
     /// overlay the visible windows on themselves. Under the section model a
-    /// window row resolves to its real workspace (multi-match — the anchor is
-    /// the ROW, see below), so this skip is per-window; the removed `by=tag`
-    /// flat tree's one always-active synthetic workspace no longer exists.
+    /// window row resolves to its real workspace (the anchor is the ROW, see
+    /// below), so this skip is per-window; the removed `by=tag` flat tree's one
+    /// always-active synthetic workspace no longer exists.
     public func previewTargets()
         -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
     {
@@ -822,9 +821,8 @@ public final class SidebarView: NSView {
         // too, not just plain mode (kbNav clears `hoverIdx` in setSel, so an
         // arrow key hands the preview to the keyboard selection and the next
         // mouseMoved hands it back — "most recent input wins"). Anchoring on
-        // the ROW (not a re-lookup by window id) keeps the anchor correct
-        // under the section model's multi-match, where the same window id
-        // appears in several rows.
+        // the ROW (not a re-lookup by window id) keeps the anchor tied to the
+        // row the user actually pointed at, in the section they pointed at it.
         let srcIdx: Int? = {
             if let h = hoverIdx, rows.indices.contains(h) { return h }
             if kbNav, let s = kbSel { return kbIndex(of: s) }

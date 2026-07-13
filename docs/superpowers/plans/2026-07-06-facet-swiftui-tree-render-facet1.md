@@ -2,6 +2,35 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **⚠️ Retirement note (2026-07-13) — read before executing a single step.**
+> This plan was written 2026-07-06 and predates **two** retirements. It has been
+> corrected in place; the notes below say what was wrong so a stale copy can't
+> mislead you.
+>
+> - **Board layer retired** — `t-0sbm` / PR #403, merged 2026-07-11. A mac
+>   desktop is now TYPED directly (`[desktop.N] type = "workspace" | "lens"`);
+>   `[[desktop.N.tab]]`, `facet board` and the switcher bands are gone. (This
+>   plan never referenced boards, so nothing here changed for it.)
+> - **Section-lens retired** — `t-ec9s` / PR #406, merged 2026-07-12. A section
+>   can no longer carry `type` / `match` / `apply`, `facet lens NAME` is gone,
+>   and there is **no `toggleActiveLens` / active-lens ACTIVATE concept**
+>   anywhere in `Sources/`. **Do NOT follow any instruction to wire one.**
+>   Consequences already fixed below: **Task 12 Step 1** routing, the
+>   **Task 2** `TreeItemID` rationale (sections are **DISJOINT** now — the
+>   old "a window appears in every section it matches" multi-match premise is
+>   FALSE), and **Task 8 Step 3**'s `Controller.apply` gate (it must also cover
+>   a **lens desktop**, which is not section-model-active).
+>
+> **Task 8 WIP was discarded (2026-07-13).** Tasks 1–7 (plus Task 9's pure
+> `layoutMode` parameter) **landed** on `main` as PR #400 (`4e1acb9`,
+> 2026-07-07) — `TreeItemID` / `TreeRowSpec` / `buildTreeRows` /
+> `TreeViewModel` / `TreeContentView` all exist today. The Task 8 branch (the
+> `PanelHost` render swap) was **thrown away** and Task 8 onward is to be
+> **re-implemented from current `main`**; the old WIP is archived as a patch
+> attached to furrow task `t-tsxg`. Re-read the live code before each step —
+> every `file:line` reference in this plan predates #400 / #403 / #406, so
+> resolve them **by symbol**, not by line number.
+
 **Goal:** Render the facet view `tree` (sections + window rows + badges,
 keyboard-nav, #66 focus) with sill's SwiftUI `ThemedListView` hosted inside
 the existing AppKit `KeyablePanel`/`PanelHost`. DnD and search are restored in
@@ -28,7 +57,7 @@ keyDown monitor + #66 activation dance stay host-side unchanged.
 - **3-layer rule**: this is View-layer only. Do NOT touch `FacetAdapterNative` / `FacetAccessibility` / `WindowBackend` / `FacetCore` value types (except the additive `TreeItemID`/`TreeRowSpec` which live in `FacetViewTree`, not FacetCore).
 - **Keep the `pal` var name** at any remaining AppKit call sites (CLAUDE.md hard rule).
 - **`swift build` must pass** at the end of every task. XCTest needs Xcode: run tests with `DEVELOPER_DIR=/Applications/Xcode-26.6.0.app/Contents/Developer swift test` if CLT is the active toolchain (bare `swift test` if Xcode is active).
-- **Row identity is the composite `(group, WindowID)`**, never `WindowID` alone (multi-match duplication).
+- **Row identity is the composite `(group, WindowID)`**, never `WindowID` alone — `group` is the row's SECTION ordinal, and the click / DnD / kb routing needs to know *which section* a row sits in (see Task 2 for the full rationale; the original "multi-match duplication" reason died with the section-lens, t-ec9s).
 - **sill dep**: this phase needs sill product `ThemeKitUI`. During dev use a `../sill` path-dep; before the PR, swap to a URL + SemVer floor and re-pin `Package.resolved` (no path-dep on main).
 - **Custom/upstream glyphs (`spiral`, `bsp`, `master-*`) are vendored by sill-B**, which lands before this phase. Task 9 assumes those slugs resolve from sill's bundle.
 - **Commits**: gitmoji + Conventional Commits (`<:gitmoji:> <type>(<scope>): <subject>`). Local hook at `scripts/hooks/commit-msg`. Commit locally freely; do NOT push without トミー's OK.
@@ -121,6 +150,41 @@ git commit -m ":building_construction: feat(tree): link ThemeKitUI + ThemedListV
 **Interfaces:**
 - Produces: `enum TreeItemID: Hashable, Sendable { case header(String); case window(group: Int, WindowID) }` — the `ID` type parameter for `ThemedListView<TreeItemID>`.
 
+> **✅ LANDED (PR #400).** `Sources/FacetViewTree/TreeItemID.swift` exists on
+> `main`. Its **doc comment still carries the pre-t-ec9s multi-match rationale**
+> (as does `TreeRow.swift`) — correct it to the true rationale below when you
+> next touch the file.
+
+**Why the key is composite (the TRUE rationale — the multi-match one is dead).**
+Since the section-lens was retired (t-ec9s) the projected sections are
+**DISJOINT**: `FilterProjection.project` fills each workspace section from one
+live workspace (and `WorkspaceCatalog.snapshot` partitions windows by their
+single WS assignment via `Dictionary(grouping:)`), and the `unassigned`
+receptacle takes only the LEFTOVER (universe − shown); `projectLensDesktop`
+likewise emits `matched` + a holding section of (universe − matched). **No
+window can appear in two sections**, so a bare `WindowID` would in fact be
+*unique* today. The composite key stays anyway because:
+
+1. **`group` is the row's SECTION MEMBERSHIP**, not just a uniquifier — it is
+   the section's ordinal in the rendered projection (`SidebarView`'s section
+   pass builds it as `sections.enumerated()`, so it indexes `lastSections`).
+   The host **resolves a `TreeItemID` back to its section** to route: a header
+   → `activateSection` vs `focusFirstWindow` by `lastSections[g].sectionType`
+   (`SidebarView+Drag.handleClick`), and a window row → inert if
+   `isLensHoldingRow(group:)` (a lens desktop's holding rows, t-63h2). A bare
+   `WindowID` cannot answer *"which section is this row in?"*.
+2. **Identity is logical, not positional**, so selection / cursor / collapse
+   survive the reconcile rebuild that re-creates every row (same reason the
+   AppKit tree keys `TreeKbSel` on `(group, WindowID)` / `hdr(group:)`).
+
+⚠️ **Ordinal caveat for Task 8/12**: `buildTreeRows` advances `group` only over
+**emitted** sections, while `SidebarView` uses the section's **original** index
+(both drop zero-match sections under a query, but only the AppKit one keeps the
+un-filtered index). They coincide while the query is empty — which is all of
+facet-1 — but the two must be reconciled in **facet-3 (search)** or
+`lastSections[group]` routing will point at the wrong section once a section is
+filtered out.
+
 - [ ] **Step 1: Write the failing test.** Create `Tests/FacetViewTreeTests/BuildTreeRowsTests.swift`:
 
 ```swift
@@ -133,7 +197,10 @@ final class BuildTreeRowsTests: XCTestCase {
         let wid = WindowID(serverID: 42)
         let a = TreeItemID.window(group: 0, wid)
         let b = TreeItemID.window(group: 1, wid)
-        XCTAssertNotEqual(a, b)                       // same window, two sections
+        // Same WindowID, two section ordinals → two distinct rows. (A pure
+        // property of the key: the projection itself is disjoint, so this
+        // input is synthetic — the point is that `group` is part of identity.)
+        XCTAssertNotEqual(a, b)
         XCTAssertEqual(a, .window(group: 0, wid))     // stable
         XCTAssertNotEqual(TreeItemID.header("ws:0"), .header("ws:1"))
     }
@@ -148,10 +215,13 @@ final class BuildTreeRowsTests: XCTestCase {
 ```swift
 import FacetCore
 
-/// Stable identity for one tree row. A window appears in EVERY section it
-/// matches (multi-match), so the render-group ordinal is part of the key —
-/// `WindowID` alone would collide across sections. Header rows key on the
-/// stable `ProjectedSection.id`.
+/// Stable identity for one tree row. The sections are DISJOINT (t-ec9s retired
+/// the section-lens, so no section carries a `match`) — but a row's identity is
+/// still `(section, window)`, not the window alone: `group` is the section
+/// ordinal the host resolves back to `lastSections[group]` to ROUTE the row
+/// (header → activate-workspace vs focus-first-window; a lens desktop's holding
+/// rows → inert). Logical, not positional, so selection / cursor survive the
+/// reconcile rebuild. Header rows key on the stable `ProjectedSection.id`.
 public enum TreeItemID: Hashable, Sendable {
     case header(String)                 // ProjectedSection.id
     case window(group: Int, WindowID)   // group = render-group ordinal
@@ -218,7 +288,10 @@ extension BuildTreeRowsTests {
         let w = win(1, "Safari", "GitHub")
         let rows = buildTreeRows(sections: [
             sec("ws:0", "1", .workspace, [w], src: 0),
-            sec("section:0:dev", "dev", .lens, [w], src: nil),   // same window, lens
+            // SYNTHETIC input: the real projection is disjoint (t-ec9s), so the
+            // same window never lands in two sections. `buildTreeRows` is total
+            // over any `[ProjectedSection]`, and this pins the group ordinal.
+            sec("section:0:dev", "dev", .lens, [w], src: nil),
         ], query: "")
         XCTAssertEqual(rows[1].id, .window(group: 0, WindowID(serverID: 1)))
         XCTAssertEqual(rows[3].id, .window(group: 1, WindowID(serverID: 1)))
@@ -285,9 +358,10 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
 }
 
 /// Flatten `[ProjectedSection]` → ordered `[TreeRowSpec]`. `group` is the
-/// render-group ordinal (0-based, per emitted section) so the same window in
-/// multiple sections gets distinct ids. A section whose windows all fail the
-/// filter is dropped whole (its header does not render).
+/// render-group ordinal (0-based, per emitted section) — the row's SECTION
+/// handle, which the host resolves back to a section to route a click (see
+/// `TreeItemID`). A section whose windows all fail the filter is dropped whole
+/// (its header does not render).
 public func buildTreeRows(sections: [ProjectedSection], query: String) -> [TreeRowSpec] {
     var rows: [TreeRowSpec] = []
     var group = 0
@@ -718,19 +792,21 @@ git commit -m ":sparkles: feat(tree): TreeRowSpec→ListItem mapping + ThemedLis
 
 - [ ] **Step 2: Sizing — do NOT use `NSHostingView.fittingSize`.** sill's `ThemedListView` root is a greedy SwiftUI `ScrollView` (`ThemedListView.swift:253`) that fills its scroll axis and never self-reports a content-fitting height, so `fittingSize.height` would collapse the Spotlight-style shrink-to-content panel. Instead, in `PanelHost.layout`, compute the intended content height by **summing sill's public `ListMetrics.forDensity` over `treeVM.listItems`** — map each `ListItem.kind` to its metric (bare `sectionHeader` → 28 / header with subtitle → 40 / single-line window row → 30 / 2-line window row with `secondary` → 46) and sum. Panel height = `min(sum + chrome, screenMaxHeight)` (reuse the existing screen-relative clamp); when the sum exceeds the clamp, `ThemedListView` scrolls internally. Remove `FlippedClipView`/`ThemedScroller` usages. **(This one line is the panel's core geometry — promoted from a throwaway; verify the exact `ListMetrics` field names/values against sill source before summing.)** (spec §4.1.)
 
-- [ ] **Step 3: Feed the view-model from `Controller.apply`.** Replace `Controller.swift:1367-1377`:
+- [ ] **Step 3: Feed the view-model from `Controller.apply`.** Replace the two `sidebarView.update(...)` calls in `Controller.apply` (find them by symbol — around `Controller.swift:1210`, NOT the stale `1367-1377`). **The gate has TWO section-model arms** — a **lens desktop** is *not* section-model-active (it has no `[[desktop.N.section]]`), yet its 1–2 synthesized sections are already in `lastSections` (t-0sbm), so it MUST take the section arm or its tree renders the by-workspace degrade instead:
 
 ```swift
 panelHost.treeVM.palette = pal
-if config.isSectionModelActive(ordinal: macDesktopOrdinal) {
-    panelHost.treeVM.apply(sections: lastSections)
+if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop {
+    panelHost.treeVM.apply(sections: lastSections)        // incl. a lens desktop
 } else {
     panelHost.treeVM.apply(sections: FilterProjection.project(
         workspaces: displayWss, sections: []).sections)   // degrade → 1:1 sections
 }
 ```
 
-(Keep the `contentH`-based `panelHost.layout(...)` call, now driven by the hosting view's fitting size from Step 2.)
+Also carry the **`isLensDesktop` flag** into the view-model / host (the AppKit call passes it as `sidebarView.update(… lensDesktop: isLensDesktop …)`): a lens desktop's holding section (`.unassigned`) rows are **inert** — no click focus, no drag source (t-63h2, `SidebarView+Drag.isLensHoldingRow`). Without it the SwiftUI tree would focus a parked window on click, which is an invisible no-op.
+
+(Keep the `contentH`-based `panelHost.layout(...)` call, now driven by the summed `ListMetrics` height from Step 2.)
 
 - [ ] **Step 4: Build.** Run: `swift build`
   Expected: clean.
@@ -823,7 +899,7 @@ git commit -m ":sparkles: feat(tree): layout-mode header subtitle + glyphs (face
 
 - [ ] **Step 1: Add cursor helpers to `TreeViewModel`.** Add `func moveCursor(_ delta: Int)` and `func jumpSection(_ delta: Int)` that compute the next `highlight` from `rows` via the existing `KbNav` pure fns (adapt `KbNav`'s `[TreeRow]` index math to the view-model's `rows`/`TreeItemID` — the fns are framework-agnostic; feed them the selectable ids). Add `func activateCursor() -> TreeItemID?` returning the current `highlight` for the host to commit.
 
-- [ ] **Step 2: Repoint `handleKbKey`.** In `Controller+ActiveMode.swift`, change the tree-nav branch: `kbMove` → `panelHost.treeVM.moveCursor(±1)`; `kbJumpWS` → `jumpSection(±1)`; Enter → `exitActive(restore:false)` then commit the `activateCursor()` id via the existing `activateSection`/`focusWindow` routing; keep `s`/`t`/`m`/search-sub-mode exactly as today (they target host chrome, unchanged).
+- [ ] **Step 2: Repoint `handleKbKey`.** In `Controller+ActiveMode.swift`, change the tree-nav branch: `kbMove` → `panelHost.treeVM.moveCursor(±1)`; `kbJumpWS` → `jumpSection(±1)`; Enter → `exitActive(restore:false)` then commit the `activateCursor()` id through the **one** routing helper Task 12 defines (`activateSection` / `focusFirstWindow` / `focusWindow` by row kind — share it, don't fork a second copy); keep `s`/`t`/`m`/search-sub-mode exactly as today (they target host chrome, unchanged).
 
 - [ ] **Step 3: Build.** Run: `swift build`
   Expected: clean.
@@ -868,10 +944,16 @@ git commit -m ":sparkles: feat(tree): host-side skeleton overlay + optimistic hi
 - Modify: `Sources/FacetViewTree/TreeContentView.swift` / `Sources/FacetApp/PanelHost.swift` (finalize `onActivate` wiring)
 
 **Interfaces:**
-- Consumes: `TreeController.exitActive(restore:)`, `focusWindow`/`activateSection`.
+- Consumes: `TreeController.exitActive(restore:)`, `Controller.activateSection(_:autoFocus:)`, `Controller.focusFirstWindow(inSectionID:)`, `focusWindow`.
 - Produces: activating a row (mouse or Enter) runs the **#66 dance** — `exitActive(restore:false)` BEFORE focusing — so same-app focus succeeds.
 
-- [ ] **Step 1: Finalize `onActivate`.** Ensure `TreeContentView`'s `onActivate(id)` (from list click + Enter) resolves the `TreeItemID` to its section/window and calls `controller.exitActive(restore:false)` **first**, then `activateSection`/`focusWindow`/`toggleActiveLens`/`focusFirstWindow` per the row kind (mirror `SidebarView.handleClick`'s routing).
+- [ ] **Step 1: Finalize `onActivate`.** Ensure `TreeContentView`'s `onActivate(id)` (from list click + Enter) resolves the `TreeItemID` to its section (`lastSections[group]`) / window, calls `controller.exitActive(restore: false)` **first**, then routes per the row kind — **mirroring `SidebarView+Drag.handleClick` exactly** (read it; do not improvise):
+
+  - **workspace section header** (`ProjectedSection.sectionType == .workspace`, i.e. `sourceWorkspaceIndex != nil`) → `setOptimistic(...)` then `controller.activateSection(.workspace(i + 1), autoFocus: true)`. **`sourceWorkspaceIndex` is 0-based; `ActiveSection.workspace` is 1-based → `+1`.**
+  - **lens-desktop or unassigned section header** (`sourceWorkspaceIndex == nil`) → `controller.focusFirstWindow(inSectionID: sec.id)`. There is **nothing to activate**: `ActiveSection` is a single-case enum (`.workspace(Int)`) since t-ec9s, and **`toggleActiveLens` DOES NOT EXIST** — the section-lens ACTIVATE concept was retired. A lens desktop's section is match-synthesized and the `unassigned` receptacle is by-subtraction; neither is switchable, so both just focus their FIRST window (the unified §G helper, shared with the CLI `facet section --focus`).
+  - **window row** → **first** bail out if it is a lens desktop's **holding** row (`isLensHoldingRow(group:)` — inert: no click focus, no drag source, t-63h2); otherwise the existing window path: `setOptimistic`, then off `cliQueue` — `switchWorkspace(toIndex: i, autoFocus: false)` when `needSwitch` (the row's REAL workspace `!=` the active one), then `revealWindow(id)` if the window is hidden (`isOnscreen == false`) else `focusWindow(window, postSwitch: needSwitch)` back on main.
+
+  Note there is **no lens un-park / "clear the lens" gesture** to wire: a lens desktop ALWAYS tiles its matched set and anchor-parks the rest, so a click on any row — parked or tiled — is just a focus.
 
 - [ ] **Step 2: Build.** Run: `swift build`
   Expected: clean.

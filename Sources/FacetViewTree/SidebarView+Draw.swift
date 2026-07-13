@@ -524,8 +524,8 @@ extension SidebarView {
         }()
         // The SOURCE group ordinal of the lift (mouse: stored in draggingWid's
         // workspaceIndex — group ordinal in section mode, ws.index in degrade;
-        // kb: carried by kbLifted). Disambiguates multi-match: dim ONLY the
-        // lifted instance, not every copy of the window across sections.
+        // kb: carried by kbLifted). Dims the lifted ROW, so the dim follows the
+        // section the lift started in.
         let liftedGroup: Int? = draggingWid?.workspaceIndex ?? {
             if case .win(let g, _)? = kbLifted { return g }
             return nil

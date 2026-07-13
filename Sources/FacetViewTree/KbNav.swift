@@ -27,9 +27,9 @@ func kbIndexOf(_ sel: TreeKbSel, in rows: [TreeRow]) -> Int? {
     rows.indices.first {
         switch (sel, rows[$0].kind) {
         case (.win(let g, let id), .window(let rg, _, _, let wid, _)):
-            // The group disambiguates the same window shown in several
-            // sections (multi-match); in the degrade path group == ws.index
-            // so this stays a single match per window.
+            // Match on the SECTION too, not the window alone: the selection is
+            // "this window, in this section". In the degrade path
+            // group == ws.index, so this stays a single match per window.
             return g == rg && id == wid
         case (.hdr(let a), .header(let b, _)):
             return a == b

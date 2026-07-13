@@ -101,11 +101,13 @@ public struct Window: Sendable {
     /// off-screen because it falls OUTSIDE the lens on a `[desktop.N] type=lens`
     /// mac desktop. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
     /// window keeps `isOnscreen == true` (it sits on an on-screen sliver). Park is
-    /// a SCREEN-only operation, so this flag drives NO display (a parked window
-    /// shows normally in every section its `match` satisfies — the tree is a
-    /// filter-inventory, not a screen mirror); it is read ONLY so a click on a
-    /// parked tree row exits focus mode (clears the lens + focuses it). Stamped by
-    /// the catalog snapshot from `isolateParked`; `false` in every non-park context.
+    /// a SCREEN-only operation, so this flag drives NO display: a parked window
+    /// still shows in its section, undimmed and unbadged (the tree is an
+    /// inventory, not a screen mirror). Stamped by the catalog snapshot from
+    /// `isolateParked`; `false` in every non-park context.
+    /// ⚠️ Currently has NO production reader — the click-on-a-parked-row path it
+    /// once served was replaced by `isLensHoldingRow` (t-63h2: a lens desktop's
+    /// holding rows are inert). Keep or drop is an open call (t-6n1h).
     public let isParked: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
     /// `nil` when it isn't a scratchpad window. A scratchpad is a
