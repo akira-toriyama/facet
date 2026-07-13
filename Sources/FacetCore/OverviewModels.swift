@@ -19,12 +19,13 @@ import CoreGraphics
 import Foundation
 
 /// Which kind of section a PROJECTED / rendered overview unit is (W2.6 /
-/// t-wrd2). Distinct from the config `SectionType` ({workspace, lens}): the
-/// rendered side has a THIRD kind, the `.unassigned` lost-and-found receptacle,
-/// which a config section never declares as a `type` — it is produced by
-/// `FilterProjection` from a section's `unassigned = true` MARKER. Keeping the
-/// rendered enum separate lets the config enum stay pure (a receptacle is a
-/// marker, not a type) while the views still pattern-match three rendered kinds.
+/// t-wrd2). Distinct from `SectionType` ({workspace, lens}), which now types a
+/// mac DESKTOP (`[desktop.N] type = …`, t-ec9s): the rendered side has a THIRD
+/// kind, the `.unassigned` lost-and-found receptacle, which no config key
+/// declares as a `type` — it is produced by `FilterProjection` from a section's
+/// `unassigned = true` MARKER. Keeping the rendered enum separate lets the
+/// config enum stay pure (a receptacle is a marker, not a type) while the views
+/// still pattern-match three rendered kinds.
 public enum ProjectedSectionType: Sendable, Equatable {
     case workspace
     case lens
@@ -32,36 +33,37 @@ public enum ProjectedSectionType: Sendable, Equatable {
 }
 
 /// One projected section — the pivot's unified overview unit
-/// (`FilterProjection`). A `[[desktop.N.section]]` (type=lens) `match`
-/// filter projected over the live windows, OR — in the degrade path (no
-/// sections configured) — a 1:1 mirror of one facet workspace (by-workspace
-/// stays a first-class citizen). The tree consumes this via
-/// `SidebarView.update(sections:)`; the grid renders every section as a cell
-/// (workspace + lens, EX-2); the rail still renders workspace cells (lens
-/// cells land in EX-2b).
+/// (`FilterProjection`). A `[[desktop.N.section]]` workspace SPATIAL cell (or
+/// its `unassigned` receptacle), OR — in the degrade path (no sections
+/// configured) — a 1:1 mirror of one facet workspace (by-workspace stays a
+/// first-class citizen), OR one of the 1–2 sections a LENS DESKTOP synthesizes
+/// from its `match` (`projectLensDesktop`). The tree consumes this via
+/// `SidebarView.update(sections:)`; the grid + rail render each section as a
+/// cell — but only on a workspace desktop, since a lens desktop is TREE-ONLY
+/// (its membership is dynamic, so there is no fixed picture to thumbnail).
 ///
 /// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
 /// this section maps to (so `--focus` / `--move-to` hit the right WS),
-/// mirroring `Workspace.index`. It is `nil` for a multi-match lens section,
-/// which spans workspaces and has no single source WS.
+/// mirroring `Workspace.index`. It is `nil` for a lens desktop's synthesized
+/// sections, which span the desktop and have no single source WS.
 /// `Sendable` (unlike the view-built `OverviewCell`): the consumer produces
 /// this on the adapter's `cliQueue` and hands it to `main`, so it crosses
 /// threads. All fields are already `Sendable` (`Window` is).
 public struct ProjectedSection: Sendable {
     /// Stable, unique identity for view signatures / cell tracking.
-    /// Degrade / workspace section: `"ws:<index>"`. Lens section:
-    /// `"section:<declOrder>:<label>"`. Unassigned section (§G):
+    /// Degrade / workspace section: `"ws:<index>"`. A lens desktop's matched
+    /// section: `"section:<declOrder>:<label>"` (`declOrder` is always 0 — it
+    /// is the desktop's one lens). Unassigned section (§G):
     /// `"unassigned:<declOrder>"`.
     public let id: String
     public let label: String
     public let windows: [Window]
     public let sourceWorkspaceIndex: Int?
-    /// Which section kind produced this section — `.workspace` for the
-    /// spatial substrate (the degrade path + `type=workspace` sections),
-    /// `.lens` for a cross-workspace saved-filter section. Both kinds render
-    /// as cells in the tree + grid (EX-2), the lit one being the active
-    /// section; the rail renders lens cells in EX-2b. Defaulted so the
-    /// degrade path + existing 4-arg call sites need no edit.
+    /// Which section kind produced this section — `.workspace` for the spatial
+    /// substrate (the degrade path + the `[[desktop.N.section]]` cells),
+    /// `.lens` for the matched section a LENS DESKTOP synthesizes from its
+    /// `match`, `.unassigned` for the lost-and-found receptacle. Defaulted so
+    /// the degrade path + existing 4-arg call sites need no edit.
     public let sectionType: ProjectedSectionType
 
     public init(id: String, label: String, windows: [Window],
@@ -107,16 +109,21 @@ public struct OverviewCell {
     public let windows: [MiniWindowHit]
     public let isHero: Bool
     /// Which section kind this cell renders — `.workspace` (the spatial
-    /// substrate) or `.lens` (a cross-workspace saved-filter section, EX-2).
-    /// Defaulted so every existing 8-arg call site compiles unchanged.
+    /// substrate), `.unassigned` (the lost-and-found receptacle) or `.lens`.
+    /// The overviews only ever run on a workspace desktop (a lens desktop is
+    /// TREE-ONLY), and `FilterProjection.project` mints no `.lens` section, so
+    /// the `.lens` cases here are the shared section vocabulary, not a shape
+    /// the grid / rail build today. Defaulted so every existing 8-arg call site
+    /// compiles unchanged.
     public let sectionType: ProjectedSectionType
     /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /
-    /// `"section:<declOrder>:<label>"`) — stable identity for routing /
+    /// `"unassigned:<declOrder>"`) — stable identity for routing /
     /// signatures. Empty for legacy workspace-built cells.
     public let sectionID: String
 
-    /// True for a `type=lens` cell — a cross-workspace section, never a
-    /// move/swap target (no source workspace; `wsIndex == -1`).
+    /// True for a `.lens` cell — a section that spans the desktop instead of
+    /// mirroring one workspace, so it is never a move/swap target (no source
+    /// workspace; `wsIndex == -1`).
     public var isLens: Bool { sectionType == .lens }
 
     public init(wsIndex: Int, rect: CGRect, headerRect: CGRect,

@@ -68,10 +68,9 @@ extension Controller {
             labelPosition: config.effectiveGridLabelPosition)
         gv.onPick = { [weak self, bk = backend] pick in
             // EX-2: route every pick through the validated `activateSection`
-            // throughline (updates the currentActiveSection mirror on main,
-            // clears any active lens on a workspace pick) — never
-            // `bk.switchWorkspace` directly. The dismiss runs in parallel so
-            // the overlay clears immediately as the switch animation lands.
+            // throughline (updates the currentActiveSection mirror on main) —
+            // never `bk.switchWorkspace` directly. The dismiss runs in parallel
+            // so the overlay clears immediately as the switch animation lands.
             switch pick {
             case .workspace(let ws):
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
@@ -85,15 +84,15 @@ extension Controller {
                 self?.focusFirstWindow(inSectionID: sectionID)
             case .unassigned(let sectionID):
                 // §G: an unassigned cell focuses its FIRST orphan window — no
-                // lens toggle, no workspace switch (the unified focus helper,
-                // shared with the rail pick + CLI --focus + tree header click).
+                // workspace switch (the unified focus helper, shared with the
+                // rail pick + CLI --focus + tree header click).
                 self?.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved from the
                 // snapshot — correct whether the thumb sat in a workspace OR a
-                // lens cell. Switch there (clears any lens; runs on main, updates
-                // the mirror), then re-assert focus on the pick. Guard home >= 0
-                // so an unresolvable window focuses without a bogus .workspace(0).
+                // lens cell. Switch there (runs on main, updates the mirror),
+                // then re-assert focus on the pick. Guard home >= 0 so an
+                // unresolvable window focuses without a bogus .workspace(0).
                 if home >= 0 {
                     self?.activateSection(.workspace(home + 1), autoFocus: false)
                 }
@@ -127,8 +126,8 @@ extension Controller {
         presentOverview(overlay, view: gv)
 
         // Initial keyboard selection: the active (lit) cell — the active
-        // workspace, or the active lens — else the first cell. (EX-2: seeded by
-        // section id after layout, since cells now include lens sections.)
+        // workspace — else the first cell. (EX-2: seeded by section id after
+        // layout, since cells cover more than the workspace sections.)
         gv.kbSeedToActiveCell()
 
         // -- Local key monitor: the shared overview verbs (Esc / Return

@@ -674,8 +674,7 @@ public final class SidebarView: NSView {
                 // Focus highlight is scoped to the ACTIVE section: a window in a
                 // non-active (parked) section never shows as focused. So a
                 // switch to an EMPTY section shows no focused row — focus has
-                // gone to the desktop (Finder), which isn't a window. (Also
-                // de-dupes a window shown in both its WS and an active lens.)
+                // gone to the desktop (Finder), which isn't a window.
                 y = windowRow(win, group: g, workspaceIndex: aws,
                               width: w, y: y, title: eff(win),
                               hot: hot(win) && headerActive(sec))

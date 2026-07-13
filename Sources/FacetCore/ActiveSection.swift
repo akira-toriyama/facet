@@ -14,22 +14,18 @@ public enum ActiveSection: Equatable, Sendable {
 
 /// EX-2b: the stable `ProjectedSection.id` of the **lit** section — the
 /// single-highlight authority shared by the overview surfaces. Matches the
-/// `overviewCellSources` XOR exactly:
-///   • an active lens lights its lens cell (id `"section:<order>:<label>"`);
-///   • otherwise the workspace section whose source index is `activeIndex`;
+/// `overviewCellSources` highlight rule exactly:
+///   • the workspace section whose source index is `activeIndex`;
 ///   • degrade (no section model ⇒ empty `sections`) ⇒ `"ws:<activeIndex>"`.
-/// `nil` when nothing is lit (no active index, or an active lens with no
-/// matching section). Pure — used by the Controller's persistent-rail
-/// re-centre to follow the active section across reconciles.
+/// `nil` when nothing is lit (no active index, or no workspace section carries
+/// it). Pure — used by the Controller's persistent-rail re-centre to follow the
+/// active section across reconciles.
 ///
-/// §A: the active lens is identified by its **stable section id**
+/// §A: the lit section is identified by its **stable section id**
 /// (`ProjectedSection.id`), not the display label — a non-unique / empty
 /// label can't re-centre the wrong section.
-public func activeSectionID(activeLensID: String?, activeIndex: Int?,
+public func activeSectionID(activeIndex: Int?,
                             sections: [ProjectedSection]) -> String? {
-    if let id = activeLensID {
-        return sections.contains { $0.id == id } ? id : nil
-    }
     guard let idx = activeIndex else { return nil }
     if sections.isEmpty { return "ws:\(idx)" }
     return sections.first {

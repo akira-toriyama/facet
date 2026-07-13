@@ -12,10 +12,9 @@ struct ActiveSectionTests {
 }
 
 /// EX-2b / §A: `activeSectionID` resolves the single lit section's stable id,
-/// matching `overviewCellSources`'s XOR (the active lens **id** wins; else the
-/// active workspace's section; degrade ⇒ `"ws:<idx>"`). Keyed on the stable id,
-/// not the display label. Used by the persistent-rail re-centre to follow the
-/// active section.
+/// matching `overviewCellSources` (the active workspace's section; degrade ⇒
+/// `"ws:<idx>"`). Keyed on the stable id, not the display label. Used by the
+/// persistent-rail re-centre to follow the active section.
 struct ActiveSectionIDTests {
     private func ws(_ i: Int) -> ProjectedSection {
         ProjectedSection(id: "ws:\(i)", label: "W\(i)", windows: [],
@@ -26,30 +25,23 @@ struct ActiveSectionIDTests {
                          sourceWorkspaceIndex: nil, sectionType: .lens)
     }
 
-    @Test func lensActiveWins() {
+    @Test func activeWorkspaceSectionWins() {
         let secs = [ws(0), ws(1), lens(2, "Web")]
-        #expect(activeSectionID(activeLensID: "section:2:Web", activeIndex: 0,
-                                       sections: secs) == "section:2:Web")
-    }
-
-    @Test func workspaceActiveWhenNoLens() {
-        let secs = [ws(0), ws(1), lens(2, "Web")]
-        #expect(activeSectionID(activeLensID: nil, activeIndex: 1, sections: secs) == "ws:1")
+        #expect(activeSectionID(activeIndex: 1, sections: secs) == "ws:1")
     }
 
     @Test func degradeEmptySections() {
-        #expect(activeSectionID(activeLensID: nil, activeIndex: 2, sections: []) == "ws:2")
+        #expect(activeSectionID(activeIndex: 2, sections: []) == "ws:2")
     }
 
-    @Test func nilIndexNoLensIsNil() {
-        #expect(activeSectionID(activeLensID: nil, activeIndex: nil, sections: []) == nil)
+    @Test func nilIndexIsNil() {
+        #expect(activeSectionID(activeIndex: nil, sections: []) == nil)
     }
 
-    @Test func unknownLensFallsBackNil() {
-        // An active lens id not present in the section list ⇒ nothing lit.
-        #expect(activeSectionID(activeLensID: "section:9:Ghost", activeIndex: 0,
-                                     sections: [lens(1, "Web")]) == nil)
-        #expect(activeSectionID(activeLensID: "section:2:Web", activeIndex: 0,
-                                     sections: [ws(0), ws(1)]) == nil)
+    @Test func noWorkspaceSectionForActiveIndexIsNil() {
+        // The active index has no workspace section here (a lens desktop's
+        // synthesized sections carry no source workspace) ⇒ nothing lit.
+        #expect(activeSectionID(activeIndex: 0, sections: [lens(1, "Web")]) == nil)
+        #expect(activeSectionID(activeIndex: 5, sections: [ws(0), ws(1)]) == nil)
     }
 }

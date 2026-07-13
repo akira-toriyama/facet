@@ -5,17 +5,19 @@ import Foundation
 /// `[desktop.N]` typed-desktop table decode (t-0sbm) — the SINGLE-table
 /// successor to the retired `[[desktop.N.tab]]` boards. A mac desktop is typed
 /// directly (`type = "workspace" | "lens"`); a lens desktop carries an always-on
-/// `match` + `layout` (+ `show-non-matching`) right on the table. PURE FacetCore,
-/// ADDITIVE at Phase 1: nothing reads `macDesktopMetaConfigs` at runtime yet, so
-/// this layer is proven only by these unit tests + the `desktopType`/`desktopLens`
-/// accessors.
+/// `match` + `layout` (+ `show-non-matching`) right on the table. PURE FacetCore:
+/// these pin the decode plus the `desktopType` / `desktopLens` / workspace-seed
+/// accessors that the typed-desktop runtime (projection, park, catalog seed)
+/// reads.
 ///
 /// Wire rules (FROZEN here):
 ///   • `type` is REQUIRED (workspace / lens) — absent / unknown DROPS the desktop.
 ///   • a lens desktop REQUIRES a non-empty `match`; `layout` + `show-non-matching`
-///     are honoured; `apply` is forbidden (ignored w/ caveat).
-///   • a workspace desktop keeps `match` / `layout` on its `[[desktop.N.section]]`
-///     rows — authored ones on the table are ignored w/ caveat.
+///     are honoured. (`apply` retired with the section-lens, t-ec9s: it is not in
+///     the schema, so `config --validate` rejects it outright.)
+///   • a workspace desktop has NO `match` — its `[[desktop.N.section]]` rows are
+///     spatial cells (`label` / `layout` / `unassigned`), and a `match` authored on
+///     the table is ignored w/ caveat.
 struct DesktopMetaDecodeTests {
 
     // MARK: - decode
@@ -79,8 +81,9 @@ struct DesktopMetaDecodeTests {
     }
 
     @Test func workspaceAuthoredMatchIsIgnored() {
-        // A `match` on a workspace desktop belongs on its sections — dropped
-        // (loud caveat), the desktop still decodes as a bare workspace.
+        // A workspace desktop has no `match` anywhere (its sections are spatial
+        // cells) — dropped (loud caveat), the desktop still decodes as a bare
+        // workspace.
         let m = FacetConfig.decodeDesktopTables(fromTOML: """
         [desktop.1]
         type = "workspace"

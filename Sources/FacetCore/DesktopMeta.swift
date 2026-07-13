@@ -47,9 +47,9 @@ public struct DesktopMeta: Sendable, Equatable {
     /// DROPS the desktop (never a silent clamp, which would mis-route it).
     /// Per-type field rules:
     ///   • lens — `match` REQUIRED (non-empty); `layout` + `show-non-matching`
-    ///     honoured; `apply` is FORBIDDEN (a lens desktop has no drop side-effect).
-    ///   • workspace — `match` / `layout` / `show-non-matching` / `apply` all
-    ///     belong on its `[[desktop.N.section]]` rows, not here — ignored w/ caveat.
+    ///     honoured.
+    ///   • workspace — `match` / `layout` / `show-non-matching` all belong on its
+    ///     `[[desktop.N.section]]` rows, not here — ignored w/ caveat.
     static func parse(fromTOMLRow t: [String: TOMLValue])
         -> (meta: DesktopMeta?, note: String?)
     {
@@ -70,10 +70,6 @@ public struct DesktopMeta: Sendable, Equatable {
             return false
         }()
         let hasShowKey = t["show-non-matching"] != nil
-        let hasApply: Bool = {
-            if case .table(let a)? = t["apply"] { return !a.isEmpty }
-            return false
-        }()
 
         switch type {
         case .lens:
@@ -86,11 +82,9 @@ public struct DesktopMeta: Sendable, Equatable {
                 if case .bool(let b)? = t["show-non-matching"] { return b }
                 return false
             }()
-            let note = hasApply
-                ? "lens desktop can't carry `apply` — ignoring it" : nil
             return (DesktopMeta(type: .lens, label: label, match: match,
                                 layout: layout, showNonMatching: showNonMatching),
-                    note)
+                    nil)
 
         case .workspace:
             var notes: [String] = []
@@ -104,9 +98,6 @@ public struct DesktopMeta: Sendable, Equatable {
             }
             if hasShowKey {
                 notes.append("`show-non-matching` is lens-only — ignoring it")
-            }
-            if hasApply {
-                notes.append("workspace desktop can't carry `apply` — ignoring it")
             }
             return (DesktopMeta(type: .workspace, label: label),
                     notes.isEmpty ? nil : notes.joined(separator: "; "))

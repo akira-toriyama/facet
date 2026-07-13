@@ -77,7 +77,7 @@ struct CLIParseTests {
 
     /// §E loose display-label policy: spaces / punctuation / ':' kept
     /// verbatim; empty is the explicit revert gesture; all-whitespace or ANY
-    /// leading-dash value (flag-guard parity with `parseLensSectionLabel` /
+    /// leading-dash value (flag-guard parity with `parseSectionFocusLabel` /
     /// `CLIName`) rejects; the success value is preserved VERBATIM (untrimmed).
     @Test("validateSectionLabel: loose accept, empty-revert, reject blank/dash",
           arguments: [

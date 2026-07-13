@@ -51,7 +51,7 @@ struct WheelStepsTests {
     /// A delta EXACTLY equal to the threshold drains one step and leaves the
     /// accumulator at 0. Pins the `while abs(accum) >= threshold` boundary:
     /// flipping `>=` to `>` would make an exact-threshold gesture return 0 (no
-    /// board switch). The other precise rows only exercise sub-threshold /
+    /// carousel step). The other precise rows only exercise sub-threshold /
     /// non-exact residuals, so this is the one that would catch that off-by-one.
     @Test func exactThresholdYieldsOneStepAndDrainsToZero() {
         var accum: CGFloat = 0
@@ -101,7 +101,7 @@ struct WheelStepsTests {
     // MARK: - the carousel's load-bearing invariant (RailView.scrollRotate)
 
     /// The rail SECTION carousel uses its OWN threshold (`railScrollStep` = 30)
-    /// and, unlike the bands, emits PER drained step
+    /// and emits one selection move PER drained step
     /// (`for _ in 0..<abs(steps) { kbMoveSelection(...) }`). That loop is only
     /// correct because the returned NET magnitude equals the number of ±1 drains
     /// (all sharing one sign). Pin that invariant at the carousel's threshold so
