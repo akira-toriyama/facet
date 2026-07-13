@@ -36,7 +36,19 @@ extension FacetConfig {
     public static func exclusionRules(fromTOML text: String)
         -> [ExclusionRule]
     {
-        parseTOMLArrayOfTables(text, table: "exclude").compactMap { t in
+        var d: [ConfigDiagnostic] = []
+        return exclusionRules(fromTOML: text, diagnostics: &d)
+    }
+
+    /// `exclusionRules`, reporting each DROPPED table (t-r5yz). The drop was
+    /// previously not even logged — a `[[exclude]]` with no constraint simply
+    /// vanished.
+    public static func exclusionRules(fromTOML text: String,
+                                      diagnostics diags: inout [ConfigDiagnostic])
+        -> [ExclusionRule]
+    {
+        var out: [ExclusionRule] = []
+        for (i, t) in parseTOMLArrayOfTables(text, table: "exclude").enumerated() {
             func str(_ k: String) -> String? {
                 if case .string(let s)? = t[k] { return s }
                 return nil
@@ -58,8 +70,15 @@ extension FacetConfig {
             // Drop a blank `[[exclude]]` (no constraints → matches
             // nothing) — same six-field disjunction as the old inline
             // `hasKey`, single-sourced on the matcher.
-            return rule.matcher.isConstrained ? rule : nil
+            guard rule.matcher.isConstrained else {
+                diags.append(.init(.error, "config: [[exclude]] #\(i + 1): no "
+                    + "constraint (app / title / role / subrole / max-width / "
+                    + "max-height) — it would match nothing; dropping it"))
+                continue
+            }
+            out.append(rule)
         }
+        return out
     }
 
     /// Build the per-mac-desktop `[[desktop.N.section]]` map from the raw
@@ -77,7 +96,16 @@ extension FacetConfig {
     public static func decodeDesktopSectionSections(fromTOML text: String)
         -> [Int: [DesktopSection]]
     {
-        decodeDesktopSectionOrigins(fromTOML: text, log: true)
+        var d: [ConfigDiagnostic] = []
+        return decodeDesktopSectionSections(fromTOML: text, diagnostics: &d)
+    }
+
+    /// `decodeDesktopSectionSections`, reporting every dropped row (t-r5yz).
+    public static func decodeDesktopSectionSections(
+        fromTOML text: String,
+        diagnostics diags: inout [ConfigDiagnostic]) -> [Int: [DesktopSection]]
+    {
+        decodeDesktopSectionOrigins(fromTOML: text, diagnostics: &diags)
             .mapValues { $0.map(\.section) }
     }
 
@@ -88,12 +116,24 @@ extension FacetConfig {
     /// that spelling. The snapshot writer replays THIS (never a re-implemented
     /// index) to map a projected section id back to the exact
     /// `[[desktop.N.section]]` array-of-tables element to edit — so the mapping
-    /// can never drift from the projection's `declOrder`. `log:` mirrors the
-    /// load-path `Log.line` diagnostics (parse notes + dup-label drops); the
-    /// writer passes `false` so re-deriving origins on every snapshot is quiet.
-    public static func decodeDesktopSectionOrigins(fromTOML text: String,
-                                                   log: Bool = true)
+    /// can never drift from the projection's `declOrder`.
+    ///
+    /// t-r5yz: the decoder no longer LOGS — it reports. Pass `diagnostics:` to
+    /// collect the parse notes + dup-label drops (`load` threads them onto
+    /// `FacetConfig.diagnostics`, whence the daemon logs them once and
+    /// `--validate` exits 1); the snapshot writer, which re-derives origins on
+    /// every export, calls the plain overload and discards them — which is what
+    /// the old `log: false` meant, now expressed as "I am not the reporter".
+    public static func decodeDesktopSectionOrigins(fromTOML text: String)
         -> [Int: [DesktopSectionOrigin]]
+    {
+        var d: [ConfigDiagnostic] = []
+        return decodeDesktopSectionOrigins(fromTOML: text, diagnostics: &d)
+    }
+
+    public static func decodeDesktopSectionOrigins(
+        fromTOML text: String,
+        diagnostics diags: inout [ConfigDiagnostic]) -> [Int: [DesktopSectionOrigin]]
     {
         let blocks = parseTOMLArraysOfTables(text) { name in
             name.hasPrefix("desktop.") && name.hasSuffix(".section")
@@ -117,12 +157,23 @@ extension FacetConfig {
             guard let rows = blocks[name] else { continue }
             // header = "desktop.<N>.section" → pull out N.
             let mid = name.dropFirst("desktop.".count).dropLast(".section".count)
-            guard let ordinal = Int(mid), ordinal >= 1 else { continue }
+            guard let ordinal = Int(mid), ordinal >= 1 else {
+                // `[[desktop.0.section]]` / `[[desktop.foo.section]]` — every row
+                // under it is discarded. Was a bare `continue`: the user's
+                // sections simply never existed (t-r5yz).
+                diags.append(.init(.error, "config: [[\(name)]]: not a mac-desktop "
+                    + "ordinal (expected `desktop.N.section`, N ≥ 1 = the Mission "
+                    + "Control position) — dropping its \(rows.count) section(s)"))
+                continue
+            }
             for (i, row) in rows.enumerated() {
                 let (section, note) = DesktopSection.parse(fromTOMLRow: row)
-                if log, let note {
-                    Log.line("config: [[desktop.\(ordinal).section]] "
-                        + "#\(i + 1): \(note)")
+                if let note {
+                    // A note WITH a section = the row survived, facet ignored part
+                    // of it; a note with NO section = the row is gone.
+                    diags.append(.init(section == nil ? .error : .warning,
+                                       "config: [[desktop.\(ordinal).section]] "
+                                        + "#\(i + 1): \(note)"))
                 }
                 if let section {
                     buckets[ordinal, default: []].append(
@@ -144,11 +195,10 @@ extension FacetConfig {
             var origins: [DesktopSectionOrigin] = []
             for p in pend {
                 if !p.section.label.isEmpty, !seen.insert(p.section.label).inserted {
-                    if log {
-                        Log.line("config: [[desktop.\(ordinal).section]]: duplicate "
-                            + "label \"\(p.section.label)\" — keeping first, "
-                            + "dropping this section")
-                    }
+                    diags.append(.init(.error, "config: [[desktop.\(ordinal).section]]: "
+                        + "duplicate label \"\(p.section.label)\" — a label is an "
+                        + "addressing handle and must be unique within one mac "
+                        + "desktop; keeping the first, dropping this section"))
                     continue
                 }
                 origins.append(DesktopSectionOrigin(
@@ -171,13 +221,38 @@ extension FacetConfig {
     /// GRAMMAR is NOT validated here (parse-only stays total); the consumer
     /// compiles it loud + non-fatal at eval time, like an isolate desktop's `match`.
     public static func decodeRuleSections(fromTOML text: String) -> [Rule] {
-        parseTOMLArrayOfTables(text, table: "rule").compactMap { t in
+        var d: [ConfigDiagnostic] = []
+        return decodeRuleSections(fromTOML: text, diagnostics: &d)
+    }
+
+    /// `decodeRuleSections`, reporting each DROPPED table (t-r5yz). Both drops
+    /// were previously not even logged — a `[[rule]]` with a typo'd apply key
+    /// vanished without a trace, and the user's windows silently never adopted.
+    public static func decodeRuleSections(fromTOML text: String,
+                                          diagnostics diags: inout [ConfigDiagnostic])
+        -> [Rule]
+    {
+        var out: [Rule] = []
+        for (i, t) in parseTOMLArrayOfTables(text, table: "rule").enumerated() {
             guard case .string(let match)? = t["match"],
                   !match.trimmingCharacters(in: .whitespaces).isEmpty
-            else { return nil }
+            else {
+                diags.append(.init(.error, "config: [[rule]] #\(i + 1): missing or "
+                    + "blank `match` — a rule with nothing to match on adopts "
+                    + "nothing; dropping it"))
+                continue
+            }
             let apply = ApplyOp.list(from: .table(t))
-            return apply.isEmpty ? nil : Rule(match: match, apply: apply)
+            guard !apply.isEmpty else {
+                diags.append(.init(.error, "config: [[rule]] #\(i + 1) (match "
+                    + "\"\(match)\"): no `apply` key (expected workspace / tags / "
+                    + "floating / sticky / master) — the rule would do nothing; "
+                    + "dropping it"))
+                continue
+            }
+            out.append(Rule(match: match, apply: apply))
         }
+        return out
     }
 
     /// The retired `[[desktop.N.tab]]` board headers this TOML still declares,
@@ -211,17 +286,59 @@ extension FacetConfig {
     public static func decodeDesktopTables(fromTOML text: String)
         -> [Int: DesktopMeta]
     {
+        var d: [ConfigDiagnostic] = []
+        return decodeDesktopTables(fromTOML: text, diagnostics: &d)
+    }
+
+    /// `decodeDesktopTables`, reporting every dropped table (t-r5yz).
+    ///
+    /// Iterates the headers in SORTED order so the result can't depend on the
+    /// per-process Dictionary hash seed. That ordering is a diagnosis, not a
+    /// cure: two spellings of the SAME ordinal (`[desktop.1]` + `[desktop.01]`
+    /// — `Int` accepts zero-pad / leading `+`) still collide, and one of the
+    /// user's two tables is still discarded. Sorting only makes WHICH one
+    /// survives deterministic; the collision itself is now reported LOUD rather
+    /// than being a coin flip that changed between runs.
+    public static func decodeDesktopTables(fromTOML text: String,
+                                           diagnostics diags: inout [ConfigDiagnostic])
+        -> [Int: DesktopMeta]
+    {
         var out: [Int: DesktopMeta] = [:]
-        for (header, row) in parseTOMLSubset(text) {
+        var spellingOf: [Int: String] = [:]
+        let tables = parseTOMLSubset(text)
+        for header in tables.keys.sorted() {
+            guard let row = tables[header] else { continue }
             // Match EXACTLY `desktop.<N>` — one dotted level, ordinal ≥ 1. Skip
-            // the top-level scope (`""`), other `[section]` blocks, and any
-            // deeper `desktop.N.foo` header (arrays live elsewhere anyway).
+            // the top-level scope (`""`) and other `[section]` blocks in silence
+            // (they are not addressed to us); a header that IS addressed to us
+            // but names no ordinal (`[desktop.0]`, `[desktop.foo]`) is a DROP,
+            // and drops are loud.
             guard header.hasPrefix("desktop.") else { continue }
             let mid = header.dropFirst("desktop.".count)
-            guard !mid.contains("."), let ordinal = Int(mid), ordinal >= 1
-            else { continue }
+            // A deeper `desktop.N.foo` single table is not ours either — the
+            // section / tab arrays-of-tables live in their own decoders.
+            guard !mid.contains(".") else { continue }
+            guard let ordinal = Int(mid), ordinal >= 1 else {
+                diags.append(.init(.error, "config: [\(header)]: not a mac-desktop "
+                    + "ordinal (expected `desktop.N`, N ≥ 1 = the Mission Control "
+                    + "position) — dropping the table"))
+                continue
+            }
+            if let prior = spellingOf[ordinal] {
+                diags.append(.init(.error, "config: [\(header)] and [\(prior)] both "
+                    + "name mac desktop \(ordinal) — one desktop is one table, so "
+                    + "only [\(prior)] is kept and [\(header)] is dropped"))
+                continue
+            }
+            spellingOf[ordinal] = header
             let (meta, note) = DesktopMeta.parse(fromTOMLRow: row)
-            if let note { Log.line("config: [desktop.\(ordinal)]: \(note)") }
+            if let note {
+                // Same rule as the section rows: a note with no meta = the whole
+                // `[desktop.N]` table is gone (error); a note WITH a meta = the
+                // table lives and facet ignored a stray key (warning).
+                diags.append(.init(meta == nil ? .error : .warning,
+                                   "config: [desktop.\(ordinal)]: \(note)"))
+            }
             if let meta { out[ordinal] = meta }
         }
         return out
@@ -330,37 +447,82 @@ extension FacetConfig {
     /// re-read the same bytes off disk. No disk I/O; an empty string yields a
     /// default-init config (the missing-file case).
     public static func load(source text: String) -> FacetConfig {
+        var diags: [ConfigDiagnostic] = []
         var c = FacetConfig.from(toml: parseTOMLSubset(text))
-        let rules = exclusionRules(fromTOML: text)
+        let rules = exclusionRules(fromTOML: text, diagnostics: &diags)
         if !rules.isEmpty { c.exclusionRules = rules }
-        let sections = decodeDesktopSectionSections(fromTOML: text)
+        let sections = decodeDesktopSectionSections(fromTOML: text, diagnostics: &diags)
         if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
-        let metas = decodeDesktopTables(fromTOML: text)
+        let metas = decodeDesktopTables(fromTOML: text, diagnostics: &diags)
         if !metas.isEmpty { c.macDesktopMetaConfigs = metas }
         for header in retiredBoardHeaders(inTOML: text) {
-            Log.line("config: [[\(header)]] — boards were retired (t-0sbm) "
-                + "and this block is IGNORED; type the desktop with "
-                + "[desktop.N] and/or [[desktop.N.section]] instead")
+            diags.append(.init(.error, "config: [[\(header)]] — boards were retired "
+                + "(t-0sbm) and this block is IGNORED; type the desktop with "
+                + "[desktop.N] and/or [[desktop.N.section]] instead"))
         }
-        // A `type = "isolate"` desktop has no sections — warn if it ALSO declares
-        // `[[desktop.N.section]]` (they're ignored; the isolate-desktop uses its
+        // A `type = "isolate"` desktop has no sections — flag it if it ALSO declares
+        // `[[desktop.N.section]]` (they're ignored; the isolate desktop uses its
         // single `match`). `desktopType` resolves the explicit meta first, so the
-        // stray sections never render — this is purely a loud heads-up.
+        // stray sections never render. `.error`: the DESKTOP survives, but every
+        // section block the user wrote under it is discarded whole.
         for ordinal in metas.keys.sorted()
         where metas[ordinal]?.type == .isolate && sections[ordinal] != nil {
-            Log.line("config: desktop \(ordinal) is type=isolate but also declares "
-                + "[[desktop.\(ordinal).section]] — an isolate desktop has no sections;"
-                + " ignoring them")
+            diags.append(.init(.error, "config: desktop \(ordinal) is type=isolate but "
+                + "also declares [[desktop.\(ordinal).section]] — an isolate desktop "
+                + "has no sections; dropping them"))
         }
-        let adoptRules = decodeRuleSections(fromTOML: text)
+        let adoptRules = decodeRuleSections(fromTOML: text, diagnostics: &diags)
         if !adoptRules.isEmpty { c.rules = adoptRules }
         // A1: run the STRICT schema validate on the LOAD path and RECORD any
         // violations as warnings — load still clamps/drops (never rejects).
         // The daemon surfaces these via Controller.logConfigWarnings at
-        // startup + hot-reload. `try?`: syntactically-bad TOML can't be
-        // strict-parsed and the lenient decode above already produced a
-        // usable clamped config.
-        c.schemaWarnings = (try? Self.validate(text)) ?? []
+        // startup + hot-reload.
+        do {
+            c.schemaWarnings = try Self.validate(text)
+        } catch {
+            // Syntactically-bad TOML can't be strict-parsed. It used to be
+            // swallowed by a `try?` — and the LENIENT parser above just drops
+            // each malformed line, so facet booted on a half-read config saying
+            // absolutely nothing. Everything after the busted line is gone
+            // (t-r5yz).
+            diags.append(.init(.error, "config: not parseable as TOML — \(error). "
+                + "facet fell back to a partial read: every line the parser could "
+                + "not understand was SKIPPED, so keys may be silently missing"))
+            c.schemaWarnings = []
+        }
+        // (c) OPT-IN SURVIVES ITS OWN BLOCKS. Whether facet is opt-in is declared
+        // by the TEXT ("I wrote desktop blocks"), not by the survivors — but
+        // `isMacDesktopManaged` could only see the survivors, so a config whose
+        // desktop blocks ALL got dropped read as "no desktop config at all" and
+        // flipped facet to manage-EVERY-desktop: it would adopt, park and tile
+        // mac desktops the user explicitly never handed it. That is "a typo broke
+        // the layout" in its most destructive form. Now a declaration that
+        // decoded to nothing means facet manages NOTHING and says why — broken
+        // config → hands off, the same rule a partially-broken config already
+        // followed for its dropped desktops.
+        c.declaresDesktopBlocks = declaresDesktopBlocks(inTOML: text)
+        if c.declaresDesktopBlocks && sections.isEmpty && metas.isEmpty {
+            diags.append(.init(.error, "config: this config declares mac-desktop "
+                + "blocks but NONE of them decoded — facet is opt-in, so it will "
+                + "manage NO mac desktop until at least one [desktop.N] / "
+                + "[[desktop.N.section]] block is valid (see the errors above)"))
+        }
+        c.diagnostics = diags + c.matchDiagnostics()
         return c
+    }
+
+    /// Does this config TEXT declare mac-desktop blocks at all — regardless of
+    /// whether any of them survived decode? The opt-in question (c / t-r5yz).
+    ///
+    /// Matched on the literal header text, so it sees the shapes the decoders
+    /// THREW AWAY as well as the ones they kept: `[desktop.N]`, `[[desktop.N.section]]`,
+    /// a retired `[[desktop.N.tab]]`, and the junk ordinals (`[desktop.0]`,
+    /// `[desktop.foo]`). If any of these is present, the user has asked facet to
+    /// be selective — and a broken block must not un-ask it.
+    static func declaresDesktopBlocks(inTOML text: String) -> Bool {
+        if parseTOMLSubset(text).keys.contains(where: { $0.hasPrefix("desktop.") }) {
+            return true
+        }
+        return !parseTOMLArraysOfTables(text, where: { $0.hasPrefix("desktop.") }).isEmpty
     }
 }

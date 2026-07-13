@@ -591,13 +591,17 @@ facet query --windows --filter EXPR  # post-filter that array with a
 facet query --tags                # every tag currently in use, as a sorted
                                   # JSON array ([] until a window is tagged)
 
-# Config — validate ~/.config/facet/config.toml against the schema (the
-# STRICT counterpart to the lenient loader, which clamps out-of-range values
-# and drops typo'd keys at runtime). CI-friendly exit codes: 0 valid, 1 schema
-# violation (wrong type / bad enum / out-of-range / unknown key), 2 unparseable
-# TOML. Valid → a parsed summary + any clamp warnings print to stderr. Driven
-# by the SAME schema that powers editor completion, so "editor green (taplo)"
-# and "loader accepts it" can't diverge.
+# Config — the STRICT counterpart to the lenient loader. It answers "what will
+# facet actually DO with this file?", so it reports BOTH what is malformed
+# (wrong type / bad enum / out-of-range / unknown key) AND what facet threw
+# AWAY: an `[desktop.N] type = "isolate"` with no `match`, a `[[rule]]` with no
+# apply key, an `[[exclude]]` with no constraint — each of those is
+# schema-perfect and each is discarded whole, and used to vanish in silence.
+# CI-friendly exit codes: 0 valid, 1 violation or dropped block, 2 unparseable
+# TOML. Clamped values are WARNINGS — they print but never fail the check,
+# because a typo can never break the layout. Driven by the SAME schema that
+# powers editor completion, so "editor green (taplo)" and "loader accepts it"
+# can't diverge.
 facet config --validate           # lint the config file
 
 # Server controls

@@ -18,7 +18,7 @@ struct ConfigSnapshotTests {
 
     /// Re-parse a rendered snapshot back into origins for value assertions.
     private func origins(_ text: String, ordinal: Int) -> [DesktopSectionOrigin] {
-        FacetConfig.decodeDesktopSectionOrigins(fromTOML: text, log: false)[ordinal] ?? []
+        FacetConfig.decodeDesktopSectionOrigins(fromTOML: text)[ordinal] ?? []
     }
 
     /// Round-trip stability: a rendered snapshot re-parses to itself (byte id).

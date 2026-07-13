@@ -690,6 +690,16 @@ final class Controller: NSObject {
     private func logConfigWarnings() {
         for warning in config.unknownValueWarnings() { Log.line(warning) }
         for v in config.schemaWarnings { Log.line("config: \(v.message)") }   // A1
+        // t-r5yz: the semantic drops (a discarded `[desktop.N]`, a dropped
+        // `[[rule]]`, …). The DAEMON logs every severity and boots regardless —
+        // a broken config never refuses to start. Only `config --validate`
+        // promotes `.error` to a non-zero exit; severity is data, not control
+        // flow. (The decoders no longer `Log.line` for themselves, so this is
+        // the single place they surface — which also means bootstrap's double
+        // `load` no longer double-logs them.)
+        for d in config.diagnostics {
+            Log.line("config \(d.severity.rawValue): \(d.message)")
+        }
     }
 
     /// Log `diagnostics` once per change, each line carrying `prefix`.

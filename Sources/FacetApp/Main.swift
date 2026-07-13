@@ -330,7 +330,7 @@ enum FacetApp {
           0   success (DNC posted, server started, or query printed;
               `config --validate` = structurally valid)
           1   `--resign` codesign failed, or `config --validate` found
-              schema violations (see stderr)
+              schema violations / a DROPPED block (see stderr)
           2   unknown flag / view / theme name, a bad value, a missing
               argument, or a dropped legacy `--flag=VALUE` form (stderr
               lists what was expected)
@@ -341,16 +341,23 @@ enum FacetApp {
               `./stop.sh && ./run.sh`)
 
         CONFIG
-          facet config --validate            check ~/.config/facet/config.toml
-                                             against the schema (the strict
-                                             counterpart to the lenient load):
-                                             exit 0 valid, 1 schema violation
-                                             (wrong type / bad enum / out-of-
-                                             range / typo'd key — what load()
-                                             silently clamps or drops), 2
-                                             unparseable TOML. Valid → a parsed
-                                             summary + any clamp warnings print
-                                             to stderr.
+          facet config --validate            check ~/.config/facet/config.toml —
+                                             the strict counterpart to the
+                                             lenient load. Answers "what will
+                                             facet actually DO with this file?",
+                                             so it reports both what is
+                                             MALFORMED (wrong type / bad enum /
+                                             out-of-range / typo'd key) and what
+                                             facet THREW AWAY (an isolate desktop
+                                             with no `match`, a `[[rule]]` with
+                                             no apply key, an `[[exclude]]` with
+                                             no constraint — each schema-perfect
+                                             and each discarded whole).
+                                             exit 0 valid, 1 violation or dropped
+                                             block, 2 unparseable TOML. Clamped
+                                             values are warnings — they print but
+                                             never fail the check, because a typo
+                                             can never break the layout.
 
           ~/.config/facet/config.toml is the single source of truth.
           Install template:

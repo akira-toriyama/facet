@@ -597,11 +597,15 @@ facet window --toggle-tag NAME    # focus 中の窓の tag を flip
 facet window --retag OLD NEW      # 窓の tag を別の tag に置換
 facet query --tags                # いま使われている全 tag (sorted JSON)
 
-# Config — ~/.config/facet/config.toml を schema 検証する（runtime の
-# 寛容な loader — 範囲外を clamp・typo key を drop — の STRICT な相棒）。
-# CI 向け exit code: 0 valid / 1 schema 違反 (型・enum・範囲・unknown key) /
-# 2 TOML parse 不能。valid なら要約 + clamp 警告を stderr に出す。editor 補完
-# (taplo) と同じ schema 由来なので「editor は green」と「loader が受理」がズレない。
+# Config — 寛容な loader の STRICT な相棒。「facet はこのファイルで実際に何を
+# するのか」に答えるので、**壊れているもの**（型・enum・範囲・unknown key）と
+# **facet が捨てたもの**の両方を報告する: `match` の無い `[desktop.N]
+# type = "isolate"`・apply キーの無い `[[rule]]`・制約ゼロの `[[exclude]]` ——
+# どれも schema 的には完璧なのにブロックごと破棄され、以前は黙って消えていた。
+# CI 向け exit code: 0 valid / 1 違反 or ブロック破棄 / 2 TOML parse 不能。
+# clamp された値は WARNING —— 表示はするが check は落とさない（typo で
+# レイアウトは壊れない）。editor 補完 (taplo) と同じ schema 由来なので
+# 「editor は green」と「loader が受理」がズレない。
 facet config --validate           # config ファイルを lint
 ```
 

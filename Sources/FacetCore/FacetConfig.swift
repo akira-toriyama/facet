@@ -50,6 +50,22 @@ public struct FacetConfig: Sendable {
     /// rejected) by `load(source:)`; emitted at startup/hot-reload by
     /// `Controller.logConfigWarnings()`. `[]` when clean or unparseable.
     public internal(set) var schemaWarnings: [ValidationError] = []
+    /// t-r5yz: SEMANTIC decode findings — "did facet actually keep what you
+    /// wrote?" — as opposed to `schemaWarnings`, which is sill's STRUCTURAL
+    /// "is this key spelled right?". A block can be schema-perfect and still be
+    /// discarded whole (an isolate desktop with no `match`), which used to be
+    /// invisible: the drop reason went to `Log.line` and `config --validate`
+    /// said "config valid" + exit 0. Recorded here, never acted on: the daemon
+    /// LOGS every severity and boots regardless; only `--validate` promotes
+    /// `.error` to exit 1. See `ConfigDiagnostic`.
+    public internal(set) var diagnostics: [ConfigDiagnostic] = []
+    /// Does the config TEXT declare mac-desktop blocks — even ones that failed
+    /// to decode? Read by `isMacDesktopManaged`, which must answer "is this user
+    /// opt-in?" from the DECLARATION, not from the survivors: a config whose
+    /// desktop blocks all got dropped otherwise looked identical to a config
+    /// with no desktop blocks at all, and facet would flip from opt-in to
+    /// managing EVERY mac desktop (t-r5yz).
+    public internal(set) var declaresDesktopBlocks: Bool = false
     /// Theme color-cycle period (`[theme].color-cycle-ms`, integer ms) —
     /// animatable themes (rainbow / chomp) rotate their accents over
     /// this period. Set → animate; unset → static. Independent of the
@@ -653,7 +669,17 @@ public struct FacetConfig: Sendable {
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
         let metas = macDesktopMetaConfigs
-        if sections.isEmpty && metas.isEmpty { return true }
+        if sections.isEmpty && metas.isEmpty {
+            // Nothing decoded. Two very different reasons — tell them apart by
+            // the TEXT, not by the survivors (t-r5yz):
+            //   • the user wrote no desktop blocks → the shipped default: manage
+            //     every mac desktop.
+            //   • the user wrote desktop blocks and every one of them was DROPPED
+            //     → they ARE opt-in, and facet must not "recover" by seizing
+            //     desktops they never configured. Manage nothing; the load path
+            //     already emitted an error diagnostic saying so.
+            return !declaresDesktopBlocks
+        }
         guard let ordinal else { return true }
         return sections[ordinal] != nil || metas[ordinal] != nil
     }
@@ -774,6 +800,53 @@ public struct FacetConfig: Sendable {
     {
         guard let ordinal else { return [] }
         return effectiveMacDesktopSectionConfigs[ordinal] ?? []
+    }
+
+    /// Grammar-check every `match` predicate the config declares (t-r5yz / D1).
+    ///
+    /// This is the ONE check the DECODERS deliberately don't do — parse-only
+    /// stays total (`RuleDecodeTests.matchGrammarNotValidatedAtDecode`), so a
+    /// malformed `match` is not a block-drop: the block survives. It is arguably
+    /// worse than a drop. The tree renders a caret diagnostic while the PARK side
+    /// just falls out of its `case .success` and does nothing at all, so an
+    /// isolate desktop with a busted predicate is a DEAD desktop — it tiles
+    /// nothing, parks nothing, and never says why.
+    ///
+    /// Severity follows `classifyMatchPredicate`, which is the same verdict the
+    /// projection acts on: malformed SYNTAX is hard (`.error`), an unknown FIELD
+    /// is soft (`.warning` — the predicate is valid, it simply matches nothing).
+    /// Pure; run from `load` so the daemon logs it too, not just `--validate`.
+    public func matchDiagnostics() -> [ConfigDiagnostic] {
+        var out: [ConfigDiagnostic] = []
+        for ordinal in macDesktopMetaConfigs.keys.sorted() {
+            guard let meta = macDesktopMetaConfigs[ordinal],
+                  meta.type == .isolate else { continue }
+            out += Self.diagnose(match: meta.match,
+                                 at: "[desktop.\(ordinal)] match")
+        }
+        for (i, rule) in effectiveRules.enumerated() {
+            out += Self.diagnose(match: rule.match, at: "[[rule]] #\(i + 1) match")
+        }
+        return out
+    }
+
+    private static func diagnose(match: String, at where_: String)
+        -> [ConfigDiagnostic]
+    {
+        switch classifyMatchPredicate(match) {
+        case .ok:
+            return []
+        case .unknownField(let fields):
+            return [.init(.warning, "config: \(where_) \"\(match)\": unknown field"
+                + "\(fields.count == 1 ? "" : "s") "
+                + "\(fields.joined(separator: ", ")) — the predicate is valid but "
+                + "matches nothing")]
+        case .malformed(let error):
+            return [.init(.error, "config: \(where_): \(error.message) — the "
+                + "predicate does not parse, so it selects NOTHING (an isolate "
+                + "desktop with an unparseable match tiles nothing and parks "
+                + "nothing)\n  \(error.caret(in: match))")]
+        }
     }
 
     /// Fatal config errors that should refuse startup (Fail Fast /
