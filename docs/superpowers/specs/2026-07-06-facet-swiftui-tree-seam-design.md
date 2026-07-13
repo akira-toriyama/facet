@@ -14,7 +14,7 @@
 > type = "workspace" | "lens"`) and a **lens desktop is tree-only** (no
 > band). The F2 scope below therefore **excludes board-band** (nothing to
 > migrate), and the "stays intact" invariants have been corrected to drop
-> `BoardBand` / board feed. The 2026-07-06 architecture diagram in §2.2 is a
+> `BoardBand` / board feed. The 2026-07-06 architecture diagram in §3 is a
 > dated snapshot — read its "board band" cell as historical.
 
 ## 1. Goal
@@ -191,10 +191,10 @@ shape is the target for all three phases (no "or feed bindings directly"
 alternative).
 
 `Controller.apply` already projects **once** into
-`lastSections: [ProjectedSection]` + `lastActiveLensID: String?` shared by
-tree/grid/rail (verified: `Controller.swift:1076/1224/1229`, single
-`SectionOrder.apply`). Only the tree push (`sidebarView.update(...)` at
-`Controller.swift:1369-1373`) changes: it feeds the view-model instead.
+`lastSections: [ProjectedSection]`, shared by tree/grid/rail (single
+`SectionOrder.apply`). (Was: "+ `lastActiveLensID: String?`" — that field went
+away with the section-lens ACTIVATE concept, `t-ec9s`.) Only the tree push
+(`sidebarView.update(...)`) changes: it feeds the view-model instead.
 The projection and grid/rail `layoutCells()` push **stay
 intact** (partial migration — two rendering models coexist behind one
 `apply()`). (Was: "projection, board feed, and grid/rail …" — the board

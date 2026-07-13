@@ -176,7 +176,7 @@ is the index. **Do not relitigate** without explicit grill round.
     unit-testable without AppKit; the FacetApp client layer (`Main.swift`
     + `FacetApp+Client*.swift`) drives it and owns the impure exit /
     stderr shell. It translates argv into the canonical DNC
-    control strings (`view:tree+active`, `tag-rename:OLD:NEW`, …) that
+    control strings (`view:rail+edge:left`, `tag-rename:OLD:NEW`, …) that
     `FacetCore` / the adapter consume — so the grammar can change
     without touching the core (the DNC payloads stayed byte-identical
     across the `=`→space migration). `facet query` likewise absorbed

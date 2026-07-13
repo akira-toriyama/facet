@@ -62,11 +62,18 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
     return "\(kind) · \(s.label)"
 }
 
-/// Flatten `[ProjectedSection]` → ordered `[TreeRowSpec]`. `group` is the
-/// render-group ordinal (0-based, per emitted section) so the same window in
-/// multiple sections gets distinct ids. A section whose windows all fail the
-/// filter is dropped whole (its header does not render); an empty query keeps
-/// every section (even one with no windows).
+/// Flatten `[ProjectedSection]` → ordered `[TreeRowSpec]`. `group` names the
+/// row's section, which is how a click resolves back to the section it acted
+/// on. A section whose windows all fail the filter is dropped whole (its
+/// header does not render); an empty query keeps every section (even one with
+/// no windows).
+///
+/// ⚠️ `group` counts EMITTED sections, so under a non-empty query it is NOT an
+/// index into the caller's `sections`. `SidebarView`'s twin pass keeps the
+/// ORIGINAL index instead (`sections.enumerated().compactMap`), precisely so
+/// `lastSections[g]` routing survives a dropped section. The two agree only
+/// while the query is empty. Reconcile them before this feeds a host that
+/// routes by `lastSections[group]` under search (t-tsxg facet-3).
 ///
 /// `layoutMode` supplies the layout-engine abbrev shown as a header subtitle,
 /// and is consulted for `.workspace` sections only (lens / unassigned headers

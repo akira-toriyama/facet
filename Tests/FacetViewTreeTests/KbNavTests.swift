@@ -9,11 +9,13 @@ import FacetCore
 /// does so (tests-03 Option B: a FacetViewTree test target, mirroring
 /// FacetViewGridTests, since `TreeRow` is a view-layer type and stays put).
 ///
-/// Rows are keyed by a `group` ordinal (PR5 — the section/lens model can
-/// show the same window in several sections). In the by-workspace degrade
-/// `group == workspaceIndex == ws.index`, which the first block exercises;
-/// the multi-match block exercises the section case where one window id
-/// appears under two different groups.
+/// Rows are keyed by `(group, WindowID)` — `group` names the row's SECTION.
+/// In the by-workspace degrade `group == workspaceIndex == ws.index`, which
+/// the first block exercises; the second block feeds a SYNTHETIC tree where
+/// one window id appears under two groups, to pin that the key really is the
+/// pair (`kbIndexOf` is total over any `[TreeRow]`, so it must not resolve by
+/// window id alone). The live projection no longer produces that input —
+/// sections are disjoint since t-ec9s.
 struct KbNavTests {
 
     private func wid(_ n: Int) -> WindowID { WindowID(serverID: n) }
@@ -83,13 +85,13 @@ struct KbNavTests {
         #expect(kbJumpTarget(rows: [searchRow()], fromWS: nil, dir: 1) == nil)
     }
 
-    // MARK: - Section model: multi-match (same window id under two groups)
+    // MARK: - Section model: the key is the (group, id) PAIR
 
-    /// A section-style tree where window 10 lives both in group 0 (its
-    /// workspace section) and group 1 (a lens section it matches). The
-    /// `group` ordinal — not the window id — is what disambiguates the two
-    /// rows. `workspaceIndex` is the window's REAL workspace (5 here) in both
-    /// rows, so a click focuses the right window regardless of which copy.
+    /// A SYNTHETIC section tree where window 10 appears under two groups —
+    /// not a shape the live projection can emit (sections are disjoint,
+    /// t-ec9s), but the input that proves `group` — not the window id — is
+    /// what selects the row. `workspaceIndex` is the window's REAL workspace
+    /// (5 here) in both rows, so a click focuses the right window either way.
     private func secWin(group: Int, realWS: Int, id: Int) -> TreeRow {
         TreeRow(rect: .zero,
                 kind: .window(group: group, workspaceIndex: realWS, pid: 1000,
