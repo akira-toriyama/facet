@@ -139,7 +139,7 @@ capture（overview サムネ + tree hover preview）を抽象化。[[WindowBacke
 | 正規名 | 意味 | コード / 設定での所在 |
 |---|---|---|
 | **mac desktop** | macOS の native Space（OS の仮想デスクトップ。Mission Control の "Desktop N"）。**型付き**（`workspace` / `isolate`） | `MacDesktops`, `activeMacDesktopID`, `[desktop.N]` / `[[desktop.N.section]]` |
-| **section** | config が宣言する **順序付きの表示単位**（tree の並び）＝各 [[facet workspace]] の空間セル。`unassigned` 受け皿を含む | `DesktopSection`, `ProjectedSection`, `FilterProjection` |
+| **section** | config が宣言する **順序付きの表示単位**（tree の並び）＝各 [[facet workspace]] の空間セル | `DesktopSection`, `ProjectedSection`, `FilterProjection` |
 | **window** | facet が扱う個々の OS window（title は AX 解決） | `Window`, `WindowSlot`, `AXTitles` |
 | **facet workspace** | facet 独自の window グループ抽象（1 mac desktop に N 個） | `WorkspaceCatalog`, `workspaces()` |
 | **isolate desktop** | `[desktop.N] type=isolate` の **常時有効な filtered mac desktop**。`match` の窓を `layout` でタイルし残りを park（tree 専用）。**旧称 `lens` は t-mqqw で退役** | `desktopType`, `desktopIsolate`, `applyIsolatePark` |
@@ -212,22 +212,24 @@ t-0sbm で廃止——「workspace と isolate を両方使いたい」は board
 - **Don't call it:** lens（🪦退役）, board（旧概念・t-0sbm で廃止）, tab, focus mode,
   filtered space, saved filter, フォーカスモード
 
-### 迷子 (orphan)
-**どの [[facet workspace]] にも属さない窓**（`WindowSlot.workspace == nil`）。窓は
-常にちょうど 1 つの workspace に居るのが原則で、**迷子は稀**＝tree DnD は ws→ws の
-メンバー付け替え（＋受け皿からの rescue）だけで、迷子を *作る* DnD 経路はもう無い
-（残るのは防御的な受け皿のみ）。**迷子は invisible-but-logged**＝
-どの per-workspace view にも出ず（`snapshot` から除外・`facet query` では
-`workspace="迷子"`/index 0）、WS1 へ auto-home し**ない**（ユーザ責任・canon ⑧）。
-**迷子受け皿** = `unassigned = true` section（§G・推奨）＝leftover を差分で集約し
-（[[unassigned]]）、ここから workspace へ DnD で窓を RESCUE（移動）。「workspace を
-持つか」は**割当（`Int?` の nil）で判定**＝無名 workspace（name `""`）の窓は assigned
-扱いで `not workspace` に**出ない**。
-- コード: `WindowSlot.workspace: Int?` / `WorkspaceCatalog.setOrphan` /
-  `WindowBackend.orphanWindow`（t-qtpx で production caller は消えたが、受け皿/rescue
-  の foundation として残置）/ `ProjectedWindowFields.workspaceName: String?`（nil=未割当）
-- **Don't call it:** lost window, untagged（無タグ ≠ 迷子）, homeless, デタッチ窓
-  （※ [[unassigned]] = 迷子窓を**表示する** section＝別概念。「迷子 = unassigned」と混同しない）
+### 🪦 迷子 (orphan) — 退役（t-6rbc）
+**どの [[facet workspace]] にも属さない窓**、という概念だった（`WindowSlot.workspace == nil`）。
+**死語**。**facet は迷子を作れなかった** —— 唯一の生成源 `setOrphan` の唯一の呼び元
+`orphanWindow` は、t-qtpx が ws→lens DnD を消した時点で**呼び元ゼロ**になっていた。
+つまり迷子の集合は 2 リリースにわたり**証明可能に空**で、そのために 6 モジュールが配管を
+抱え、tree は**永久に空の section**（[[unassigned]] 受け皿）を描き続けていた ——
+[[isolate desktop]] の旧称 `lens` が嘘だったのと**同じクラスの欠陥**（UI が持たないものを
+持つと言う）。
+
+**「窓は必ずどれか 1 つの workspace に居る」は、いまや型**: `WindowSlot.workspace: Int`
+（Optional ではない）。adopt 経路（`reconcile` → `WindowSlot(workspace: activeIndex)`）は
+最初から必ず workspace を割り当てていた。
+- 消えたもの: `setOrphan` / `orphanWindow` / `orphanWindows` / `WindowSlot.workspace` の
+  `Int?` / `ProjectedSectionType.unassigned` / §G 受け皿 / `GridPick.unassigned` /
+  `RailPick.unassigned` / `OverviewCell.isReceptacle` / `facet query` の `"Orphans"` 行
+- **`unassigned` は退役キー**（[[unassigned]] 参照）＝黙って消すと section が workspace セルに
+  **昇格して layout が変わる**ので、行ごと **loud drop** する
+- **Don't call it:** lost window, homeless, デタッチ窓 —— そもそも存在しない
 
 ### per-mac-desktop workspaces
 各 [[mac desktop]]（native Space）ごとに **独立した `WorkspaceCatalog`** を
@@ -613,26 +615,22 @@ CLI / tree header クリック / grid・rail のセルクリックは全て `Con
 ### section
 config で宣言する **順序付きの表示単位**（`[[desktop.N.section]]`）。per-mac-desktop の
 順序付き配列で、**配列順 = [[tree view]] の表示順**。**全 section は [[facet workspace]] の
-空間セル**（タイル単位・grid/rail のセル）＝`{ label, layout, unassigned }` だけを持つ。
+空間セル**（タイル単位・grid/rail のセル）＝`{ label, layout }` だけを持つ。
 かつての `type = "lens"` section（保存可視性フィルタ）は **退役**した（t-ec9s）＝その後継は
 [[isolate desktop]] としてのみ存在する。
 - **workspace セル（既定）**: 常設の空間土台。**任意の `label` で命名・無名は 1始まり
   index 表示**。任意の `layout` seed を持つ。所属は DnD / `facet window --move-to N` で
   変える。`type` / `match` / `apply` は無い（stray なキーは decode で無視＝
   `config --validate` が flag）。
-- **`unassigned = true`（マーカー）**: §G の**迷子受け皿**（`label` のみ・`match`/`apply` 無し）。
-  他のどの section にも出ない窓（leftover = 全窓 − 表示済）を集約する OPT-IN。**最初の 1 つ
-  だけ**投影し（余剰は warn）、tree/grid/rail に section セルとして並び、`facet section
-  --focus` で先頭窓を focus、runtime rename 可、ここから workspace へ DnD で窓を RESCUE
-  （移動）。詳細は [[unassigned]] 参照。
+- **🪦 `unassigned = true`（マーカー）は退役**（t-6rbc・[[unassigned]] 参照）。**全 row が
+  workspace セル**になった。
 
 section 未定義の [[mac desktop]] は内蔵の既定 workspace 群へ degrade。**LIVE**（tree が
 消費）＝`FilterProjection.project` が live window 上に section を投影し、1 表示単位として
 `ProjectedSection` を産む。**config の宣言 `DesktopSection` ↔ 投影結果 `ProjectedSection`
 を区別する**（後者は旧称 `FilterGroup`＝Phase D で禁止語 group をリネーム）。
-- コード: `DesktopSection`（config 宣言・`unassigned: Bool` マーカー）/
-  `ProjectedSection`（投影結果＝1 表示単位・
-  `id`〔`"ws:<index>"` / `"unassigned:<declOrder>"`〕/
+- コード: `DesktopSection`（config 宣言・`{ label, layout }`）/
+  `ProjectedSection`（投影結果＝1 表示単位・`id`〔`"ws:<index>"`〕/
   `label` / `windows` / `sourceWorkspaceIndex`・`OverviewModels`）/
   `FilterProjection.project`（投影・純）/
   `FacetConfig.macDesktopSectionConfigs` / `decodeDesktopSectionSections` /
@@ -640,30 +638,30 @@ section 未定義の [[mac desktop]] は内蔵の既定 workspace 群へ degrade
 - **Don't call it:** group（旧称＝旧型名 `FilterGroup`）, lens / `type="lens"` section（🪦両方退役・
   後継は [[isolate desktop]]）, tab, page, グループ, セクション以外
 
-### unassigned
-§G の**迷子受け皿 section**（**`unassigned = true`** マーカー・`label` のみ）。他のどの [[section]] にも
-出ない窓 = **leftover**（全窓 − 表示済窓・実質 [[迷子 (orphan)]]）を引き受ける OPT-IN section。
-[[迷子 (orphan)]] が**窓の状態**なのに対し unassigned は**それを表示する section**＝別物として
-区別する。`match` / `apply` は持たない（leftover は filter でなく差分で算出）。**最初の 1 つだけ**
-projection（余剰は warn）。tree/grid/rail に section セルとして並び、`facet section --focus N|LABEL`
-で**先頭窓を focus**（workspace 切替なし）、`facet section --rename` で session-only rename
-（`sectionLabelOverride`）、ここから workspace へ DnD で窓を RESCUE（移動）。
-- 設定: `[[desktop.N.section]]` に
-  **`unassigned = true`**（`label` 任意・`type` は書いても無視＝旧 `type = "unassigned"` は #366 で退役）
-- CLI: `facet section --focus N|LABEL`（先頭窓 focus）/ `facet section --rename N "label"`
-- コード: `DesktopSection.unassigned: Bool`（マーカー）/ `ProjectedSectionType.unassigned`（投影型）/
-  `FilterProjection.project`（id `unassigned:<declOrder>`・Pass 2 で leftover 充填）/
-  `focusFirstWindow(inSectionID:)` / `ViewContextMenu.showUnassignedMenu`
-- **Don't call it:** orphan section（[[迷子 (orphan)]] は窓状態＝別概念）, catch-all filter
-  （旧 `not workspace` filter 手法＝unassigned が後継）, leftover bucket, ゴミ箱
+### 🪦 unassigned — 退役キー（t-6rbc）
+§G の「迷子受け皿 section」（`unassigned = true` マーカー）だった。**死語**。
+受け皿が集める leftover は [[迷子 (orphan)]] であり、**facet は迷子を作れなかった** ⇒
+この section は**永久に空**＝UI が持たないものを持つと言っていた。
+
+⚠️ **単に消すのではなく「退役キー」として loud reject する**。unknown key は decode で
+**無視**されるので、キーだけ消すと **その section が普通の workspace セルに黙って昇格** →
+**workspace が 1 個増えて layout が黙って変わる**（`workspaceSubstrateSections` が受け皿を
+substrate から除外していた、その filter が消えるため）。だから **行ごと DROP** する ——
+実効の substrate は今日と同一のまま、概念だけが消える。**沈黙こそが最悪**の答えになる箇所。
+- 挙動: `DesktopSection.parse` が `(nil, "…retired…")` を返す → 行が落ちる →
+  `ConfigDiagnostic(.error)` → `config --validate` が **exit 1**（schema 側も
+  `additionalProperties:false` で unknown key として二重に捕まえる）。daemon は
+  従来どおり**寛容**（ログして起動する）
+- **auto-promote ゾンビも封じた**: snapshot writer の `unassigned` 書き出し経路
+  （退役キーが自分で蘇る唯一の道）を削除
+- **Don't call it:** lost & found, catch-all filter, leftover bucket, ゴミ箱 —— 全部無い
 
 ### facet section
-全 [[section]]（workspace / unassigned）を **1始まりの tree index か label で指す統一
-アドレッシング CLI**。`--focus N|LABEL` で activate（workspace 切替 / unassigned は
-[[unassigned]] の先頭窓 focus。[[isolate desktop]] 上では合成 section の先頭窓 focus）、
-`--rename N "label"` で表示 label を runtime 変更（session-only・workspace は catalog 名・
-unassigned は `sectionLabelOverride`・空 label は revert〔workspace=index / unassigned=config
-label〕・relaunch で reset・`facet reload` では消えない。isolate desktop 上では reject）、
+全 [[section]] を **1始まりの tree index か label で指す統一アドレッシング CLI**。
+`--focus N|LABEL` で activate（workspace 切替。[[isolate desktop]] 上では合成 section の
+先頭窓 focus）、`--rename N "label"` で表示 label を runtime 変更（session-only・workspace は
+catalog 名・空 label は revert・relaunch で reset・`facet reload` では消えない。
+isolate desktop 上では reject）、
 `--match N "expr"` で [[isolate desktop]] の `match` を runtime retarget（session-only・
 [[facet filter]] 式・空で config へ revert）。GUI twin = tree ヘッダ右クリック →
 Section ▸ Rename / Edit match。

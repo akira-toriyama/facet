@@ -4,7 +4,7 @@
 // label follows in parens. §D: replaces the old `workspaceShortLabel`
 // ("WS<n>" / "workspace " prefix-strip / emoji-pool) — unnamed sections are
 // addressed by their index, named ones read "index (label)". Applies to
-// every section type (workspace / lens / unassigned) so `facet section
+// every section type (workspace / matched / holding) so `facet section
 // --focus N` and the on-screen caption agree.
 //
 // Pure / display-only: routing / CLI / config keep the section's stable id

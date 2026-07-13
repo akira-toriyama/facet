@@ -6,15 +6,13 @@ import Testing
 /// config (the model's intended shape — workspaces auto-named, user writes
 /// only sections) must be recognised as managed; the all-empty default must
 /// stay byte-identical. Since the section-lens type was retired (t-ec9s),
-/// every `[[desktop.N.section]]` is a workspace spatial cell; the only
-/// managed-but-model-inactive case is an `unassigned`-only receptacle.
+/// every `[[desktop.N.section]]` is a workspace spatial cell — and since t-6rbc
+/// retired the `unassigned` receptacle, there is no managed-but-model-inactive
+/// SECTION shape left at all (a typed isolate desktop is the remaining one).
 /// CI-only (CLT can't run `swift test`).
 struct ManagementGateTests {
 
     private func wsSection() -> DesktopSection { DesktopSection() }
-    private func receptacleSection() -> DesktopSection {
-        DesktopSection(unassigned: true)
-    }
 
     // MARK: - default (byte-identical degrade)
 
@@ -61,17 +59,21 @@ struct ManagementGateTests {
         #expect(c.isMacDesktopManaged(ordinal: nil))
     }
 
-    /// A desktop with ONLY an `unassigned` receptacle (no workspace cell) is
-    /// MANAGED (opt-in fires on any section), but the section MODEL is not
-    /// active — the receptacle is excluded from the workspace substrate, so
-    /// there is nothing to seed and the desktop falls back to default slots.
-    /// (Successor to the retired lens-only test — the only managed-but-model-
-    /// inactive section shape now is the `unassigned` receptacle, t-ec9s.)
-    @Test func receptacleOnlySectionManagedButModelInactive() {
-        var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [receptacleSection()]]
-        #expect(c.isMacDesktopManaged(ordinal: 1))
+    /// ⬅ This test used to assert that a receptacle-ONLY desktop was MANAGED but
+    /// model-inactive (it fell back to default workspace slots). t-6rbc changes
+    /// the answer at the root: a receptacle no longer decodes, so such a desktop
+    /// declares nothing facet keeps — and the opt-in rule (t-r5yz / (c)) says a
+    /// user who declared blocks and had them all dropped gets NOTHING managed,
+    /// not everything. Written through `load` because the whole point is what the
+    /// TEXT does, not what a hand-built struct does.
+    @Test func aReceptacleOnlyDesktopIsNotManagedAtAll() {
+        let c = FacetConfig.load(source: """
+        [[desktop.1.section]]
+        unassigned = true
+        """)
+        #expect(!c.isMacDesktopManaged(ordinal: 1))
         #expect(!c.isSectionModelActive(ordinal: 1))
+        #expect(c.diagnostics.hasErrors, "and it says so")
     }
 
     // MARK: - typed desktops ([desktop.N], t-0sbm): the opt-in gate is the

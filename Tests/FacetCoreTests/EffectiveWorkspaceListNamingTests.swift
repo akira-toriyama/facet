@@ -9,19 +9,25 @@ import Testing
 /// `EffectiveWorkspaceListSectionEdgeTests`.
 struct EffectiveWorkspaceListNamingTests {
 
-    /// One slot per workspace-cell section, in order; an unnamed (empty-label)
-    /// workspace's `config.name` is EMPTY (the view renders its 1-based index).
-    /// An `unassigned` receptacle does NOT seed a workspace (t-ec9s: the retired
-    /// section-lens exclusion collapsed to the `unassigned` marker).
+    /// One slot per section, in order; an unnamed (empty-label) workspace's
+    /// `config.name` is EMPTY (the view renders its 1-based index).
+    ///
+    /// This used to declare THREE sections — the middle one an `unassigned`
+    /// receptacle — and assert that only 2 seeded workspaces, because
+    /// `workspaceSubstrateSections` filtered receptacles out. t-6rbc deleted that
+    /// filter, which is only safe because the receptacle no longer DECODES: the
+    /// row is dropped at parse. Same two workspaces, one less concept. The
+    /// end-to-end proof (from real TOML, through decode) is
+    /// `RetiredUnassignedKeyTests.staleUnassignedRowIsDroppedNotPromotedToAWorkspace`
+    /// — this one now just pins the naming.
     @Test func sectionWorkspaceListUnnamedSlotsAreEmpty() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [
             DesktopSection(layout: "bsp"),
-            DesktopSection(label: "Leftover", unassigned: true),
             DesktopSection(),
         ]]
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        #expect(list.count == 2)                   // 2 workspace cells (unassigned excluded)
+        #expect(list.count == 2)
         #expect(list[0].index == 1)
         #expect(list[0].config.name.isEmpty)      // unnamed → empty (§B)
         #expect(list[0].config.layout == "bsp")    // layout seed carried

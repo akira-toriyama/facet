@@ -27,10 +27,10 @@ struct ApplyLabelOverridesTests {
                          sourceWorkspaceIndex: src, sectionType: .workspace)
     }
 
-    private func unassignedSec(id: String, label: String,
-                               windows: [Window] = []) -> ProjectedSection {
+    private func holdingSec(id: String, label: String,
+                            windows: [Window] = []) -> ProjectedSection {
         ProjectedSection(id: id, label: label, windows: windows,
-                         sourceWorkspaceIndex: nil, sectionType: .unassigned)
+                         sourceWorkspaceIndex: nil, sectionType: .holding)
     }
 
     // MARK: - empty override is a no-op
@@ -94,31 +94,36 @@ struct ApplyLabelOverridesTests {
         #expect(out[1].label == "Browser")             // lens applied
     }
 
-    // MARK: - §G: unassigned sections are relabeled (id frozen)
+    // MARK: - non-workspace sections are relabeled (id frozen)
 
-    @Test func presentKeyRelabelsUnassignedKeepingID() {
-        let secs = [unassignedSec(id: "unassigned:2", label: "Lost",
-                                  windows: [win(1)]),
+    /// ⚠️ The negative guard (`!= .workspace`) means a `.holding` section is
+    /// relabelable too — which it should NOT be: its label is a hardcoded `""`
+    /// synthesized by subtraction, with no config key to write it to. t-j7ps
+    /// replaces this whole function with an `applyIsolateLabelOverride` that
+    /// relabels ONLY `.matched`, making the holding-reject structural rather
+    /// than a policy nobody enforces. Pinned here as it IS, not as it should be.
+    @Test func presentKeyRelabelsNonWorkspaceKeepingID() {
+        let secs = [holdingSec(id: "holding:1", label: "", windows: [win(1)]),
                     isolateSec(id: "section:0:Web", label: "Web"),
                     wsSec(id: "ws:0", label: "Dev", src: 0)]
-        let out = applyLabelOverrides(secs, to: ["unassigned:2": "その他"])
-        #expect(out[0].id == "unassigned:2")            // id NEVER changes
+        let out = applyLabelOverrides(secs, to: ["holding:1": "その他"])
+        #expect(out[0].id == "holding:1")               // id NEVER changes
         #expect(out[0].label == "その他")               // display swapped
-        #expect(out[0].sectionType == .unassigned)
+        #expect(out[0].sectionType == .holding)
         #expect(out[0].windows.map(\.id.serverID) == [1])  // windows intact
-        #expect(out[1].label == "Web")                  // sibling lens untouched
+        #expect(out[1].label == "Web")                  // sibling matched untouched
         #expect(out[2].label == "Dev")                  // sibling workspace untouched
     }
 
     @Test func workspaceStillNeverRelabeled() {
-        // A workspace-id key is ignored even alongside an unassigned relabel.
+        // A workspace-id key is ignored even alongside a non-workspace relabel.
         let secs = [wsSec(id: "ws:0", label: "Dev", src: 0),
-                    unassignedSec(id: "unassigned:1", label: "Lost")]
+                    holdingSec(id: "holding:1", label: "Lost")]
         let out = applyLabelOverrides(secs,
-            to: ["ws:0": "Nope", "unassigned:1": "Misc"])
+            to: ["ws:0": "Nope", "holding:1": "Misc"])
         #expect(out[0].label == "Dev")                  // workspace ignored
-        #expect(out[1].label == "Misc")                 // unassigned applied
-        #expect(out[1].id == "unassigned:1")            // id frozen
+        #expect(out[1].label == "Misc")                 // non-workspace applied
+        #expect(out[1].id == "holding:1")               // id frozen
     }
 
     // MARK: - a stored empty value blanks a lens header (caller never stores it)

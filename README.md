@@ -438,17 +438,20 @@ Frequently-touched keys:
 - `[[desktop.N.section]]` blocks — the per-mac-desktop section model
   (`N` = the mac desktop's Mission Control position). An ordered list of
   **workspace spatial cells** describes that desktop; each is
-  `{ label, layout, unassigned }`. `label` names the workspace (optional,
+  `{ label, layout }`. `label` names the workspace (optional,
   else unnamed and shown by its 1-based index); `layout` is an optional
   layout seed; the count of these is that desktop's workspace count. A
   window's membership changes only by drag or `facet window --move-to N`.
-  A section marked `unassigned = true` (`label` only) is the
-  **recommended** opt-in lost-and-found — it collects **every** leftover
-  window (any window shown in no other section), focuses its first window
-  on `facet section --focus`, and rescues a window dragged out onto it;
-  only the first `unassigned = true` section renders, and it's usually
-  empty (every window lives in a workspace) — keep one as a safety net.
-  (There is no section `type` any more — a saved cross-workspace filter is
+  **`unassigned = true` — the "lost & found" receptacle — is a RETIRED
+  key**, so if your config still has one (the old template called it
+  *Recommended!!*), **delete that section block; you lose nothing.** Every
+  managed window is in exactly one workspace, and nothing in facet could
+  ever put a window in the receptacle — it rendered a section that could
+  only ever be empty. A leftover row is not quietly ignored: the whole
+  section is **DROPPED, loudly** (`facet config --validate` says so and
+  exits 1) rather than becoming an ordinary workspace cell — that would
+  hand you an extra workspace and change your layout in silence.
+  (There is no section `type` any more either — a saved cross-workspace filter is
   now a whole **isolate desktop**, `[desktop.N] type = "isolate"` below; a stray
   `type` / `match` / `apply` on a section is ignored on load and flagged by
   `config --validate`.) `facet workspace --rename` overrides a label at
@@ -546,21 +549,20 @@ facet window --unmark NAME        # remove a mark
                                   # a name moves it off the old window.
                                   # session-only, per mac desktop.
 
-# Section — address ANY section (workspace or unassigned) by its
-# 1-based tree index or its label. `--focus` activates it (switch to the
-# workspace, or focus an unassigned / isolate-desktop section's first window).
-# `--rename` sets its display label at runtime (session-only — reset on
-# relaunch, NOT on `facet reload`; an empty label reverts a workspace to its
-# bare index, an unassigned section to its config label; an isolate desktop
-# rejects `--rename`). You can also rename from the tree: right-click a
-# section header → Section ▸ Rename.
+# Section — address ANY section (a workspace, or an isolate desktop's
+# synthesized section) by its 1-based tree index or its label. `--focus`
+# activates it (switch to the workspace, or focus an isolate-desktop section's
+# first window). `--rename` sets its display label at runtime (session-only —
+# reset on relaunch, NOT on `facet reload`; an empty label reverts a workspace
+# to its bare index; an isolate desktop rejects `--rename`). You can also
+# rename from the tree: right-click a section header → Section ▸ Rename.
 facet section --focus N            # focus the Nth section in tree order
 facet section --focus LABEL        # focus the section labelled LABEL
 facet section --rename N "label"   # rename the Nth section's display label
 
-# `--match` retargets a ISOLATE DESKTOP's filter (the `facet filter` predicate)
+# `--match` retargets an ISOLATE DESKTOP's filter (the `facet filter` predicate)
 # live, session-only (same lifetime as --rename: reset on relaunch, kept on
-# `reload`). Isolate-desktop-only — a workspace / unassigned section is rejected.
+# `reload`). Isolate-desktop-only — a workspace section is rejected.
 # An empty PREDICATE reverts to the config match. You can also edit from the
 # tree: right-click the isolate-desktop header → Section ▸ Edit match (or press `m`).
 facet section --match N "tag~=web" # retarget the isolate desktop, re-tiles at once

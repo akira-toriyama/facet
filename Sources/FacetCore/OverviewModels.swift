@@ -29,10 +29,16 @@ import Foundation
 /// leaking down onto a section, and the isolate desktop's holding bucket was
 /// minted as `.unassigned`, which was a straight-up lie: those windows ARE
 /// assigned to workspaces, they are held back because they failed the `match`.
+///
+/// There were FOUR. `.unassigned` — the lost-and-found receptacle — went with the
+/// orphan concept (t-6rbc): nothing in facet could put a window in it, so it
+/// rendered a section that could only ever be empty. It was not a kind of thing
+/// facet had; it was a kind of thing facet *pretended* to have.
 public enum ProjectedSectionType: Sendable, Equatable {
     /// The spatial substrate — an authored `[[desktop.N.section]]` cell (or, in
     /// the degrade path, a 1:1 mirror of one facet workspace). Membership is
-    /// MANUAL: you put windows here.
+    /// MANUAL: you put windows here. Every window facet manages is in exactly one
+    /// of these (`WindowSlot.workspace: Int` — not Optional, t-6rbc).
     case workspace
     /// An isolate desktop's matched section — the windows its `match` selected,
     /// tiled with its `layout`. Membership is DECLARATIVE: the predicate decides,
@@ -45,15 +51,11 @@ public enum ProjectedSectionType: Sendable, Equatable {
     /// non-matching window is HELD but not PARKED. facet already called this
     /// "holding" everywhere except the GUI. (Was `.unassigned`.)
     case holding
-    /// The lost-and-found receptacle on a WORKSPACE desktop (`unassigned = true`).
-    /// Produced from a MARKER, not a type. ⚠️ It can never actually receive a
-    /// window today — see t-6rbc.
-    case unassigned
 }
 
 /// One projected section — the pivot's unified overview unit
-/// (`FilterProjection`). A `[[desktop.N.section]]` workspace SPATIAL cell (or
-/// its `unassigned` receptacle), OR — in the degrade path (no sections
+/// (`FilterProjection`). A `[[desktop.N.section]]` workspace SPATIAL cell,
+/// OR — in the degrade path (no sections
 /// configured) — a 1:1 mirror of one facet workspace (by-workspace stays a
 /// first-class citizen), OR one of the 1–2 sections a ISOLATE DESKTOP synthesizes
 /// from its `match` (`projectIsolateDesktop`). The tree consumes this via
@@ -72,16 +74,15 @@ public struct ProjectedSection: Sendable {
     /// Stable, unique identity for view signatures / cell tracking.
     /// Degrade / workspace section: `"ws:<index>"`. An isolate desktop's matched
     /// section: `"section:<declOrder>:<label>"` (`declOrder` is always 0 — it
-    /// is the desktop's one lens). Unassigned section (§G):
-    /// `"unassigned:<declOrder>"`.
+    /// is the desktop's one match); its holding section: `"holding:1"`.
     public let id: String
     public let label: String
     public let windows: [Window]
     public let sourceWorkspaceIndex: Int?
     /// Which section kind produced this section — `.workspace` for the spatial
     /// substrate (the degrade path + the `[[desktop.N.section]]` cells),
-    /// `.matched` for the matched section a ISOLATE DESKTOP synthesizes from its
-    /// `match`, `.unassigned` for the lost-and-found receptacle. Defaulted so
+    /// `.matched` / `.holding` for the two sections an ISOLATE DESKTOP
+    /// synthesizes from its `match`. Defaulted so
     /// the degrade path + existing 4-arg call sites need no edit.
     public let sectionType: ProjectedSectionType
 
@@ -146,22 +147,17 @@ public struct OverviewCell {
     public let windows: [MiniWindowHit]
     public let isHero: Bool
     /// Which section kind this cell renders. In practice the overviews only
-    /// ever see `.workspace` (the spatial substrate) and `.unassigned` (the
-    /// lost-and-found receptacle): they run on a workspace desktop only — a
-    /// isolate desktop is TREE-ONLY and loud-rejects `--view grid` / `--view rail`
-    /// — and `FilterProjection.project`, their only source, mints no `.matched`
-    /// section. Defaulted so every existing 8-arg call site compiles unchanged.
+    /// ever see `.workspace` (the spatial substrate): they run on a workspace
+    /// desktop only — an isolate desktop is TREE-ONLY and loud-rejects
+    /// `--view grid` / `--view rail` — and `FilterProjection.project`, their
+    /// only source, mints no `.matched` / `.holding` section. Kept (rather than
+    /// assumed) so a future non-workspace cell can't be rendered as a workspace
+    /// by omission. Defaulted so every existing 8-arg call site compiles
+    /// unchanged.
     public let sectionType: ProjectedSectionType
-    /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /
-    /// `"unassigned:<declOrder>"`) — stable identity for routing /
-    /// signatures. Empty for legacy workspace-built cells.
+    /// The `ProjectedSection.id` this cell came from (`"ws:<i>"`) — stable
+    /// identity for routing / signatures. Empty for legacy workspace-built cells.
     public let sectionID: String
-
-    /// True for any cell that is NOT a workspace — a receptacle that holds
-    /// windows without mirroring one workspace, so it has no source workspace
-    /// (`wsIndex == -1`) and is never a move / swap target. Picking it focuses
-    /// its first window instead of switching workspace.
-    public var isReceptacle: Bool { sectionType != .workspace }
 
     public init(wsIndex: Int, rect: CGRect, headerRect: CGRect,
                 isActive: Bool, label: String, mode: String,

@@ -294,15 +294,15 @@ extension Controller {
         )
     }
 
-    /// Section rename (§E / §G): the user picked the header menu's
-    /// `SECTION ▸ Rename` row (workspace, matched, holding, OR unassigned). Resolve the
+    /// Section rename (§E): the user picked the header menu's
+    /// `SECTION ▸ Rename` row (workspace, matched, OR holding). Resolve the
     /// render group `g` to the SAME 1-based index + current display label that
     /// `SidebarView.sectionHeaderDisplay(group:)` shows (for the editor caption /
     /// pre-fill), AND capture a STABLE handle for the deferred commit, then open
-    /// the inline editor. §G: `.unassigned` renames via the SAME id-keyed
-    /// session-only override path as `.matched` (`renameSection(sectionID:…)` →
-    /// `applyLabelOverrides`), so the section-model branch handles all three
-    /// kinds uniformly. Shares the activation dance + `finishTagEditor` close
+    /// the inline editor. `.matched` / `.holding` rename via an id-keyed
+    /// session-only override (`renameSection(sectionID:…)` →
+    /// `applyLabelOverrides`), so the section-model branch handles every kind
+    /// uniformly. Shares the activation dance + `finishTagEditor` close
     /// with `enterTagManage` (the panel is keyable).
     ///
     /// The inline editor is long-lived (the user types), so `lastSections` /
@@ -328,7 +328,7 @@ extension Controller {
         if !lastSections.isEmpty {
             guard g >= 0, g < lastSections.count else { return }
             let sec = lastSections[g]
-            // §G: workspace / matched / holding / unassigned all rename by the same stable-id
+            // workspace / matched / holding all rename by the same stable-id
             // deferred-commit path — `renameSection(sectionID:…)` routes by kind
             // (workspace → catalog; the rest → session override).
             index1 = g + 1

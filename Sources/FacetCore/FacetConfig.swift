@@ -740,8 +740,8 @@ public struct FacetConfig: Sendable {
     }
 
     /// Whether the **spatial substrate** is config-driven at `ordinal` — i.e. it
-    /// has at least one `[[desktop.N.section]]` workspace cell (the `unassigned`
-    /// receptacle doesn't count — see `workspaceSubstrateSections`). Shares
+    /// has at least one `[[desktop.N.section]]` workspace cell, which since
+    /// t-6rbc is every decoded section (see `workspaceSubstrateSections`). Shares
     /// `workspaceSubstrateSections` with `effectiveWorkspaceList`, so "gate
     /// active" and "seed N workspaces" can never disagree (the SSOT).
     ///
@@ -761,18 +761,27 @@ public struct FacetConfig: Sendable {
     }
 
     /// The sections that form the spatial substrate for `ordinal` — the count +
-    /// per-workspace layout seed source: every `[[desktop.N.section]]` cell but
-    /// the `unassigned` receptacle, in declaration order. The shared SSOT for
+    /// per-workspace layout seed source: every `[[desktop.N.section]]` cell, in
+    /// declaration order. The shared SSOT for
     /// `isSectionModelActive` (non-empty?) and `effectiveWorkspaceList` (the
     /// actual list).
     private func workspaceSubstrateSections(forOrdinal ordinal: Int)
         -> [DesktopSection]
     {
-        // Exclude `unassigned` receptacles — a receptacle is NOT a spatial
-        // substrate, so it must not seed a workspace or flip the section-model
-        // gate. Every other section is a workspace cell (t-ec9s).
-        (effectiveMacDesktopSectionConfigs[ordinal] ?? [])
-            .filter { !$0.unassigned }
+        // EVERY decoded section is a workspace cell now — the `unassigned`
+        // receptacle it used to filter out no longer decodes at all (t-6rbc:
+        // `DesktopSection.parse` drops an `unassigned = true` row, loud). That is
+        // why the filter can go without changing a single user's workspace count:
+        // a receptacle was never part of the substrate, and now it never reaches
+        // this list.
+        //
+        // Both halves of that are load-bearing, in OPPOSITE directions:
+        //   • make `parse` merely IGNORE the retired key and this line silently
+        //     GROWS every affected desktop by a workspace;
+        //   • make `parse` drop the row on any `unassigned` value (not just
+        //     `true`) and it silently SHRINKS one — an `unassigned = false` row
+        //     was always an ordinary workspace cell.
+        effectiveMacDesktopSectionConfigs[ordinal] ?? []
     }
 
     /// Effective `[[exclude]]` rule set (empty when none configured).

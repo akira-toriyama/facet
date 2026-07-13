@@ -69,13 +69,13 @@ public protocol TreeController: AnyObject, Sendable {
                       on window: Window,
                       workspaceIndex: Int)
 
-    /// §G: the user clicked an `type=unassigned` section header (or its grid /
-    /// rail cell, or `section --focus`d it). FOCUS ITS FIRST orphan window — no
-    /// lens toggle, no workspace switch (unassigned has neither behind it). The
-    /// Controller looks the section up by stable id, reveals + focuses
-    /// `.windows.first` via the existing window path; an empty / missing
-    /// section is loud-but-non-fatal. The unified §G focus helper, shared with
-    /// the grid/rail `.unassigned` picks + the CLI `--focus` path.
+    /// The user clicked an isolate desktop's synthesized section header
+    /// (`.matched` / `.holding`), or `section --focus`d it. FOCUS ITS FIRST
+    /// window — no toggle, no workspace switch (a match-synthesized section has
+    /// no workspace behind it). The Controller looks the section up by stable
+    /// id, reveals + focuses `.windows.first` via the existing window path; an
+    /// empty / missing section is loud-but-non-fatal. The unified focus helper,
+    /// shared with the CLI `--focus` path.
     func focusFirstWindow(inSectionID id: String)
 
     /// Section-model apply/un-apply MOVE (PR8): un-apply the SOURCE section's
@@ -106,8 +106,8 @@ public protocol TreeController: AnyObject, Sendable {
     /// controller resolves `g` to the same 1-based index + current display
     /// label `sectionHeaderDisplay(group:)` shows, opens the keyable inline
     /// editor pre-filled with that label, and on commit routes to the shared
-    /// rename entry (workspace → backend name; lens / §G unassigned →
-    /// display-only override; empty → revert). No-op for an out-of-range
+    /// rename entry (workspace → backend name; an isolate desktop's matched /
+    /// holding → display-only override; empty → revert). No-op for an out-of-range
     /// group. `anchor` is the right-click screen point
     /// (the clicked header's height) — the editor opens beside the tree at
     /// that y, not pinned to the tree top.

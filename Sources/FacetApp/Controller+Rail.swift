@@ -70,15 +70,10 @@ extension Controller {
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
                 // is 1-based → +1. autoFocus → the WS's last-touched window.
                 self.activateSection(.workspace(ws + 1), autoFocus: true)
-            case .unassigned(let sectionID):
-                // §G: a receptacle cell focuses its FIRST window — no workspace
-                // switch (the unified focus helper, shared with the grid pick +
-                // CLI --focus + tree header click).
-                self.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the
-                // view's windowHomeWS — correct whether the thumb sat in a
-                // workspace OR a receptacle cell. Switch there (updates the mirror
+                // view's windowHomeWS rather than from the cell it was drawn
+                // in. Switch there (updates the mirror
                 // on main), then re-assert focus on the pick. Guard home >= 0
                 // so an unresolvable window focuses without a bogus
                 // .workspace(0).

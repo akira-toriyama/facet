@@ -74,11 +74,9 @@ extension BuildTreeRowsTests {
         let rows = buildTreeRows(sections: [
             sec("section:0:dev", "dev", .matched, [], src: nil),
             sec("holding:1", "held", .holding, [win(8, "Y", "")], src: nil),
-            sec("unassigned:0", "spare", .unassigned, [win(9, "X", "")], src: nil),
         ], query: "")
         XCTAssertEqual(rows[0].primary, "matched · dev")
         XCTAssertEqual(rows[1].primary, "holding · held")
-        XCTAssertEqual(rows[3].primary, "unassigned · spare")
     }
 }
 
@@ -145,11 +143,11 @@ extension BuildTreeRowsTests {
         guard case .header(.matched, nil) = rows[0].kind else { return XCTFail() }
     }
 
-    func testUnassignedHeaderIgnoresLayoutSubtitle() {
+    func testHoldingHeaderIgnoresLayoutSubtitle() {
         let rows = buildTreeRows(
-            sections: [sec("unassigned:0", "spare", .unassigned, [win(9, "X", "")], src: nil)],
+            sections: [sec("holding:1", "held", .holding, [win(9, "X", "")], src: nil)],
             query: "", layoutMode: { _ in "bsp" })
-        guard case .header(.unassigned, nil) = rows[0].kind else { return XCTFail() }
+        guard case .header(.holding, nil) = rows[0].kind else { return XCTFail() }
     }
 }
 

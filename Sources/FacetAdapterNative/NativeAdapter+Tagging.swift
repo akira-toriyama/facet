@@ -32,16 +32,8 @@ extension NativeAdapter {
         // suppressing default focus), then assert the marked window —
         // the same two-step the tree-click path uses. Same WS → assert
         // straight away.
-        // The `!=` comparison is nil-safe (orphan's nil != activeIndex), but the
-        // `ws - 1` arithmetic needs the value unwrapped. An orphan has no home
-        // WS to switch to → can't focus-jump it (the mark is stored, but there's
-        // nowhere to go); bail loud-but-non-fatal.
         if slot.workspace != catalog.activeIndex {
-            guard let ws = slot.workspace else {
-                Log.debug("native: focus-mark \"\(name)\" — orphan window, no workspace to switch to")
-                return false
-            }
-            switchWorkspace(toIndex: ws - 1, autoFocus: false)
+            switchWorkspace(toIndex: slot.workspace - 1, autoFocus: false)
         }
         guard let win = enumerateCGWindows().first(where: { $0.id == id })
         else {
@@ -50,7 +42,7 @@ extension NativeAdapter {
         }
         Focus.assert(win, backend: self)
         Log.debug("native: focus-mark \"\(name)\" -> \(id.serverID) "
-            + "WS \(slot.workspace.map(String.init) ?? "迷子")")
+            + "WS \(slot.workspace)")
         return true
     }
 

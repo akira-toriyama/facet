@@ -25,6 +25,18 @@ moved to `[[rule]]`), and the surviving desktop type was renamed `lens` →
 it images, but this desktop tiles the matched windows and anchor-parks the rest,
 and leaving it un-parks nothing. **`lens` is now a dead word** — `type = "lens"`
 is a loud reject, never an alias.
+The **orphan** (迷子 — a window in NO facet workspace, `WindowSlot.workspace == nil`)
+is a dead word too, t-6rbc: **facet could never mint one** — the only minter
+(`WorkspaceCatalog.setOrphan`) lost its last caller when t-qtpx removed the ws→lens
+DnD — so the tree's lost-and-found receptacle (the `unassigned = true` section) could
+only ever be EMPTY: a UI claiming something facet does not have, the same class of lie
+`lens` was. **"every managed window is in exactly one workspace" is now a TYPE** —
+`WindowSlot.workspace: Int`, not Optional — and `unassigned = true` is a RETIRED KEY
+(loud drop; see *Configuration*). **Don't confuse it with the surviving `holding`
+section** (`ProjectedSectionType.holding`, id `holding:1`): an isolate desktop's
+NON-matching windows, anchor-parked and listed when `show-non-matching = true`. Those
+windows ARE assigned to workspaces — holding is alive and unchanged. (It used to be
+minted as `.unassigned`, which is precisely the lie t-mqqw renamed away.)
 Apple's own SLS / `NSWorkspace` API names stay verbatim.
 Adding or renaming a term lands in the same PR as the code change.
 
@@ -250,8 +262,8 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   absent `label` leaves it UNNAMED — displayed by its 1-based index (§B
   retired the emoji auto-name pool `WorkspaceNaming`; all section headers
   compose via `sectionDisplayLabel(index:label:)` → `index` or
-  `index (label)`, §D). The `label` is OPTIONAL (the `unassigned` receptacle
-  too); within one mac desktop a non-empty `label` must be unique (loud
+  `index (label)`, §D). The `label` is OPTIONAL; within one mac desktop a
+  non-empty `label` must be unique (loud
   warn + first-wins; empty labels may repeat — name resolution targets only
   labeled workspaces, unnamed ones are index-addressed). Runtime
   `facet workspace --rename` still overrides. (Identity is keyed on the
@@ -290,16 +302,18 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   ``Main.canonicalViews`` + matching cases in
   ``Controller.dispatchView/Hide/Toggle``. Keep this pattern —
   don't reintroduce per-view bespoke flags.
-- **``facet section`` addresses ANY section (workspace, unassigned, OR an isolate
-  desktop's synthesized section) by its 1-based tree-order index or its label** —
-  the unified addressing layer. ``--focus N|LABEL`` (switch workspace / — §G —
-  focus an unassigned OR isolate-desktop section's FIRST window via the unified
+- **``facet section`` addresses ANY section (a workspace cell OR an isolate desktop's
+  synthesized ``matched`` / ``holding`` section) by its 1-based tree-order index or its
+  label** — the unified addressing layer. ``--focus N|LABEL`` (switch workspace / — a
+  synthesized section has no workspace behind it — focus its FIRST window via the unified
   ``focusFirstWindow(inSectionID:)``, since the section-lens ACTIVATE concept was
   retired t-ec9s; resolves via ``addressableSections()`` reading ``lastSections``).
+  There is no third kind: the ``unassigned`` lost-and-found receptacle went with the
+  orphan concept (t-6rbc).
   ``--rename N "label"`` sets the display label at runtime (§E): workspace →
-  catalog ``renameWorkspace``; unassigned (§G) → session-only
-  ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection seam by
-  the pure ``applyLabelOverrides``); empty → revert. On an isolate desktop ``--rename``
+  catalog ``renameWorkspace``; a NON-workspace section (``matched`` / ``holding``) →
+  session-only ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection
+  seam by the pure ``applyLabelOverrides``); empty → revert. On an isolate desktop ``--rename``
   is a loud reject (its sections are match-synthesized). ``--match N "expr"``
   retargets an isolate desktop's match (session-only ordinal-keyed
   ``isolateMatchOverride``, D6; pushed to the adapter's ``setIsolateMatch``
@@ -491,6 +505,28 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   `.error`; value-clamped → `.warning`.** Decoders REPORT, they don't
   `Log.line` for themselves (that would only reach stderr under
   `FACET_DEBUG`, which is how the silence happened).
+- **A RETIRED key is DROPPED, loudly — deleting the field is NOT retiring the key**
+  (t-6rbc). An unknown TOML key is IGNORED by decode, so a key you merely delete from
+  the model does not vanish from the user's file: the row survives and gets re-decoded
+  as **something else**. `unassigned = true` on a `[[desktop.N.section]]` is the worked
+  example — dropping the field alone would have let a stale receptacle row silently
+  PROMOTE to an ordinary workspace cell: the mac desktop gains a workspace and the
+  user's LAYOUT CHANGES with no message anywhere. So the decoder KEEPS a branch for the
+  retired key and throws the ROW away: `DesktopSection.parse` returns
+  `(nil, "…retired…")` → a `ConfigDiagnostic(.error)` → `config --validate` exits 1
+  (from BOTH channels — the semantic diagnostic names it as retired, and the strict
+  schema reports it as an unknown key). The daemon stays permissive as always: it logs
+  and boots. Dropping rather than promoting is also what keeps the effective workspace
+  substrate **byte-identical** to before (`workspaceSubstrateSections` used to filter
+  receptacles out of the workspace list — that filter is what got deleted).
+  **Retiring a key, the checklist**: (1) match it in the decoder and DROP the row /
+  block, naming the task id in the note; (2) match **every value** — a retired
+  `unassigned = false` is just as retired, and letting it fall through conjures the
+  same phantom workspace by the back door; (3) **kill any writer that could emit it
+  again** — the `ConfigSnapshot` branch that wrote `unassigned` back out was the
+  AUTO-PROMOTE ZOMBIE, the one way a retired key could resurrect itself onto
+  config.toml. Silence is the worst possible answer here: an ignored key is a
+  behaviour change you never told the user about.
 - **Section-scoped > bare top-level when adding TOML / CLI surface**.
   New TOML knobs go under a named ``[section]`` — even if the same
   key (``color``, ``size``, …) repeats across sections — over a

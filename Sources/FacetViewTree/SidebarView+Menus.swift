@@ -18,19 +18,15 @@ extension SidebarView {
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         switch row.kind {
         case .header(let g, let ws):
-            // Workspace header → full layout picker; a no-workspace header is
-            // either an isolate desktop's matched section (Rename + Edit match),
-            // its holding section (nothing — display-only), or §G unassigned
-            // (Rename-only — no layout engine). Discriminate by section type at
-            // the CALL SITE so each menu builder's own guard can't fail silently
-            // on the wrong kind — which is exactly what `.holding` did until
-            // t-63h2's guard was repaired: it was routed into the unassigned
-            // menu, whose `== .unassigned` guard then swallowed it.
+            // Workspace header → full layout picker. A no-workspace header is one
+            // of an isolate desktop's two sections: matched (Rename + Edit match)
+            // or holding (nothing). Discriminate at the CALL SITE so a menu
+            // builder's own guard can't fail silently on the wrong kind — which is
+            // exactly what `.holding` did until t-63h2's guard was repaired.
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws) }
             else if g >= 0, g < lastSections.count {
                 switch lastSections[g].sectionType {
                 case .matched:    isolateHeaderMenu(at: scr, group: g)
-                case .unassigned: unassignedHeaderMenu(at: scr, group: g)
                 // t-63h2: the holding section is display-only. It is synthesized
                 // by subtraction from the `match`, so it has no label to rename
                 // (`FilterProjection` mints `""`) and no layout of its own —
@@ -113,30 +109,9 @@ extension SidebarView {
             },
             // t-0020: an isolate desktop also offers "Edit match" — live-tune its filter.
             // Routes to the controller's match-edit panel (the GUI twin of
-            // `facet section --match`); the unassigned header omits it.
+            // `facet section --match`).
             onEditMatch: { [weak self] in
                 self?.controller?.beginSectionMatchEdit(group: g, at: scr)
-            })
-    }
-
-    /// §G unassigned-section header right-click / `m` menu → Rename ONLY (the
-    /// orphan receptacle has no layout engine). `g` is the render group;
-    /// `lastSections[g]` is the `type=unassigned` section. Mirrors
-    /// `isolateHeaderMenu`'s SECTION ▸ Rename wiring (`beginSectionRename(group:)`,
-    /// which now renames unassigned via the id-keyed session override).
-    func unassignedHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
-        guard g >= 0, g < lastSections.count else { return }
-        let sec = lastSections[g]
-        guard sec.sectionType == .unassigned else { return }
-        // §D: the header is the unified `index (label)` caption.
-        ViewContextMenu.showSectionRenameMenu(
-            at: scr,
-            header: sectionDisplayLabel(index: g + 1, label: sec.label),
-            palette: pal, filterable: filterable,
-            // §E: SECTION ▸ Rename → controller resolves `g` to index + label.
-            // `scr` = the header's screen point → editor opens at its height.
-            onRename: { [weak self] in
-                self?.controller?.beginSectionRename(group: g, at: scr)
             })
     }
 

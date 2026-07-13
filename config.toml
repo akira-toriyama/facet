@@ -628,7 +628,13 @@ action = "ignore"
 #             workspace --rename` overrides at runtime.
 #   layout  — (optional) the workspace's startup tiling engine (bsp /
 #             stack / master-left / …); runtime-changeable.
-#   unassigned = true — (§G) the lost-and-found receptacle MARKER (below).
+#
+# 🪦 `unassigned = true` (the "Lost & Found" receptacle) was RETIRED in t-6rbc.
+#    Nothing in facet could ever put a window in it — every managed window is
+#    in a workspace — so it rendered a section that could only ever be EMPTY.
+#    A leftover `unassigned` row is now a LOUD error and the row is DROPPED
+#    (not silently promoted to a workspace cell, which would add a workspace
+#    and change your layout). Delete it; you lose nothing.
 #
 # The tree, the grid (`--view grid`), and the rail (`--view rail`) all
 # render the sections in declaration order. A window's membership changes
@@ -643,19 +649,6 @@ action = "ignore"
 # Caveat: the mapping is by Mission Control position. Reordering your
 # desktops re-points these sections (counts / layouts only — your windows
 # stay correctly scoped to their real desktop).
-#
-#   unassigned = true — the lost-and-found receptacle, and the RECOMMENDED
-#       safety net. Set it on a section to collect every window shown in NO
-#       other section (the "leftover", by subtraction). Just an optional
-#       `label`. Only the FIRST receptacle renders (extras warn). It shows
-#       in every view; click / `facet section --focus` focuses its first
-#       window; a window dragged out onto a workspace is RESCUED (moved
-#       there). KEEP ONE per desktop — without it a stray window that lands
-#       in no section is invisible. Usually empty (every window lives in a
-#       workspace), so it just sits quietly until needed.
-#         [[desktop.1.section]]
-#         unassigned = true
-#         label = "Lost & Found"   # optional
 #
 # -----------------------------------------------------------------
 # Typed desktops  [desktop.N]
@@ -693,31 +686,21 @@ action = "ignore"
 #         label   — (optional) display name for the desktop.
 #
 # ACTIVE SAMPLE — two mac desktops. Desktop 1 is a classic WORKSPACE desktop:
-# a NAMED "Main" workspace + an unnamed one (shown by index) + a Lost & Found
-# receptacle. Desktop 2 is an always-on ISOLATE desktop that tiles your browser
+# a NAMED "Main" workspace + an unnamed one (shown by index).
+# Desktop 2 is an always-on ISOLATE desktop that tiles your browser
 # windows and parks everything else. Because these blocks exist, facet is
 # OPT-IN: it manages desktops 1–2 and leaves every OTHER mac desktop
 # untouched. Edit to taste, or comment this whole sample out to fall back to
 # the zero-config default (every mac desktop gets 5 unnamed workspaces).
 
-# Desktop 1 — a WORKSPACE desktop: a section array + a Lost & Found net.
-# A named "Main" workspace (header `1 (Main)`) next to an unnamed one
-# (header `2`).
+# Desktop 1 — a WORKSPACE desktop: one section per workspace cell. A named
+# "Main" workspace (header `1 (Main)`) next to an unnamed one (header `2`).
 [[desktop.1.section]]
 label = "Main"
 layout = "bsp"
 
 [[desktop.1.section]]
 layout = "stack"
-
-# Recommended!! — the Lost & Found receptacle. It collects any window that
-# ends up in no section so nothing is ever invisible. Usually empty (every
-# window lives in a workspace); keep one per desktop as a safety net —
-# DON'T DELETE. Click / `facet section --focus` focuses its first window;
-# drag a window out onto a workspace to RESCUE it.
-[[desktop.1.section]]
-unassigned = true
-label = "Lost & Found"
 
 # Desktop 2 — an always-on ISOLATE desktop: tiles the browser windows (a
 # CONCRETE match, never '') with bsp, parks everything else, and shows the

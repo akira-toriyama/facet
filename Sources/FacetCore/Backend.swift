@@ -191,15 +191,6 @@ public protocol WindowBackend: Sendable {
 
     func moveWindow(_ id: WindowID, toWorkspaceIndex index: Int)
 
-    /// Relocate `id` OUT of its workspace → 迷子 (`workspace = nil`); the window
-    /// parks if it was on the active workspace. The orphan primitive, kept as a
-    /// foundation: t-qtpx removed the ws→lens DnD that used to call it (drag is
-    /// same-type only now), so it currently has NO production caller — the §G
-    /// unassigned receptacle + rescue read orphans via `orphanWindows()`, which
-    /// stays wired. No-op for a sticky / stashed / already-orphan / unknown
-    /// window.
-    func orphanWindow(_ id: WindowID)
-
     func setLayoutMode(workspaceIndex index: Int, mode: String)
     func closeWindow(_ id: WindowID)
 
@@ -414,19 +405,6 @@ public protocol WindowBackend: Sendable {
     /// snapshot on reconcile.
     func definedTagNames() -> [String]
 
-    /// EX-3 迷子: the managed windows assigned to NO workspace
-    /// (`WindowSlot.workspace == nil`). The `workspaces()` snapshot can't carry
-    /// them (an orphan is in no `Workspace`), so the Controller reads them here
-    /// — main-actor-safe, off a lock-guarded mirror refreshed on `cliQueue` at
-    /// the tail of every catalog refresh — and feeds them to `FilterProjection`
-    /// as `orphans:`, the ONLY way an orphan enters the projection: on a
-    /// workspace desktop the §G `unassigned` receptacle picks it up (it lands in
-    /// no workspace section), on an isolate desktop the `match` gathers it (or the
-    /// holding section does). WITHOUT this an orphan shows in no tree/grid/rail
-    /// section at all — a managed window with nowhere to be seen. `[]` outside
-    /// the section model / for backends without one.
-    func orphanWindows() -> [Window]
-
     /// Per-window facet management state for `facet query --windows`
     /// (#223), keyed by window id, across the active + parked catalogs.
     /// Reads the in-memory catalog structs, so the Controller calls it on
@@ -505,7 +483,6 @@ public extension WindowBackend {
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
     func setIsolateMatch(_ predicate: String?, ordinal: Int) {}
-    func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}
 
@@ -541,7 +518,6 @@ public extension WindowBackend {
     func releaseScratchpad(_ name: String) -> Bool { false }
     func stashedScratchpads() -> [String] { [] }
     func definedTagNames() -> [String] { [] }
-    func orphanWindows() -> [Window] { [] }
     func queryFacetStates() -> [WindowID: WindowQueryEntry.FacetWindowState] { [:] }
     func queryEntries(facetStates:
         [WindowID: WindowQueryEntry.FacetWindowState]) -> [WindowQueryEntry] { [] }

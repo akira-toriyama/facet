@@ -1053,12 +1053,9 @@ final class Controller: NSObject {
             // catches, so it must mutate `project()`'s INPUT. Lens-only +
             // id-preserving (the override key is the isolate desktop id, built from the
             // label, so the projected id is unchanged). No override ⇒ identity.
-            // EX-3 迷子: feed the orphan windows (in no workspace, so absent
-            // from `wss`) so the projection appends them into the `not
-            // workspace` receptacle + any content lens they match. Main-actor-
-            // safe mirror read (lock-guarded, refreshed on cliQueue). Closes the
-            // GAP where an orphan rendered in no tree/grid/rail section even
-            // though the activation path gathered it on-screen.
+            // (The `orphans:` feed is gone with the orphan concept — t-6rbc.
+            // Every window facet manages is in a workspace, so `wss` IS the
+            // universe; there is no second bag of windows to splice in.)
             let projected: FilterProjection.Result
             if isIsolateDesktop, let iso = config.desktopIsolate(ordinal: ordinal) {
                 // A ISOLATE DESKTOP rides its dedicated `DesktopSection`-free route
@@ -1068,14 +1065,12 @@ final class Controller: NSObject {
                 // park can't diverge when the desktop label is edited.
                 let effMatch = isolateMatchOverride[ordinal] ?? iso.match
                 projected = FilterProjection.projectIsolateDesktop(
-                    workspaces: wss, orphans: backend.orphanWindows(),
-                    match: effMatch, label: iso.label,
+                    workspaces: wss, match: effMatch, label: iso.label,
                     showNonMatching: iso.showNonMatching)
             } else {
-                let secs = desktopSections(forOrdinal: ordinal)
                 projected = FilterProjection.project(
-                    workspaces: wss, sections: secs,
-                    orphans: backend.orphanWindows())
+                    workspaces: wss,
+                    sections: desktopSections(forOrdinal: ordinal))
             }
             logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
                                    against: &loggedSectionDiagnostics)

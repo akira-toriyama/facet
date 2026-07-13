@@ -16,22 +16,18 @@ struct OverviewModelsTests {
                              isActive: true, label: "W", mode: "bsp", windows: [])
         #expect(c.sectionType == .workspace)
         #expect(c.sectionID == "")
-        #expect(!(c.isReceptacle))
     }
 
-    /// The overviews route on `isReceptacle` (t-pvay replaced the `.matched`-only
-    /// `isLens`): ANY non-workspace cell mirrors no workspace, so it has no
-    /// source WS (`wsIndex == -1`), is never a move / swap target, and a pick
-    /// focuses its first window instead of switching workspace. Routing on the
-    /// negative — rather than enumerating kinds — is also what keeps a
-    /// `wsIndex == -1` cell from ever reaching a `.workspace(-1)` pick.
-    @Test func nonWorkspaceKindsAreReceptacles() {
-        #expect(cell(.unassigned, id: "unassigned:0").isReceptacle)
-        #expect(cell(.matched, id: "section:0:Web").isReceptacle)
-    }
-
-    @Test func workspaceKindIsNotAReceptacle() {
-        #expect(!(cell(.workspace, id: "ws:0").isReceptacle))
+    /// The grid + rail can only ever see `.workspace` cells — an isolate desktop
+    /// loud-rejects both overviews, and `FilterProjection.project` (their only
+    /// source) mints nothing else. `OverviewCell.isReceptacle` and the
+    /// `GridPick`/`RailPick` `.unassigned` cases that routed on it were therefore
+    /// dead the moment the receptacle went (t-6rbc), and are gone with it.
+    @Test func overviewCellsAreAlwaysWorkspaceKind() {
+        let wss = [Workspace(index: 0, name: "A", isActive: true,
+                             layoutMode: "float", windows: [win(1)])]
+        let r = FilterProjection.project(workspaces: wss, sections: [])
+        #expect(r.sections.allSatisfy { $0.sectionType == .workspace })
     }
 
     private func win(_ id: Int) -> Window {

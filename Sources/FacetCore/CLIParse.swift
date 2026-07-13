@@ -98,18 +98,19 @@ public func validateGeom(posX: Int?, posY: Int?,
 ///
 /// One deliberate asymmetry: a TRULY EMPTY string (`""`) is ALLOWED — it is
 /// the explicit "revert to the number / config label" gesture the server's
-/// resolver acts on (workspace → number, unassigned → drop override). An ALL-
-/// WHITESPACE value (`"   "`) is REJECTED as a typo (it would blank the
-/// header without the revert intent), as is ANY value whose trimmed form
-/// starts with `-`: `--rename`'s LABEL is consumed unconditionally (strict
-/// consumption), so a mistyped flag in the LABEL slot (`facet section
-/// --rename 2 --focus`) reaches here as the value — reject it loudly rather
-/// than silently renaming the section to a flag string. This mirrors the
-/// leading-dash guard in `parseSectionFocusLabel` / `CLIName.isClean` (the
-/// flag-guard convention every sibling two-value flag follows). Pure (no exit
-/// / stderr) so it is unit-testable; the FacetApp wrapper translates
-/// `.failure` into a loud exit(2). The success value is kept VERBATIM
-/// (untrimmed) — normalization (the trim) happens at the server's store site.
+/// resolver acts on (workspace → number, a synthesized section → drop the
+/// override). An ALL-WHITESPACE value (`"   "`) is REJECTED as a typo (it
+/// would blank the header without the revert intent), as is ANY value whose
+/// trimmed form starts with `-`: `--rename`'s LABEL is consumed
+/// unconditionally (strict consumption), so a mistyped flag in the LABEL
+/// slot (`facet section --rename 2 --focus`) reaches here as the value —
+/// reject it loudly rather than silently renaming the section to a flag
+/// string. This mirrors the leading-dash guard in `parseSectionFocusLabel` /
+/// `CLIName.isClean` (the flag-guard convention every sibling two-value flag
+/// follows). Pure (no exit / stderr) so it is unit-testable; the FacetApp
+/// wrapper translates `.failure` into a loud exit(2). The success value is
+/// kept VERBATIM (untrimmed) — normalization (the trim) happens at the
+/// server's store site.
 public func validateSectionLabel(_ value: String)
         -> Result<String, CLIParseError> {
     if value.isEmpty { return .success(value) }     // explicit revert gesture

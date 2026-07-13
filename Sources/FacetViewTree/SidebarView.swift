@@ -48,9 +48,9 @@ public final class SidebarView: NSView {
         let isHidden: Bool     // window: Cmd+H/Cmd+M'd → dim + hidden badge
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
         let tags: [String]       // window: tag names → `#tag` chips (per-window, sorted)
-        /// header (section model, PR5 / §G): which section kind this header
+        /// header (section model, PR5): which section kind this header
         /// renders — `.workspace` (layout sub-line), `.matched` (leading funnel
-        /// glyph, no sub-line), or `.unassigned` (leading archivebox glyph, no
+        /// glyph, no sub-line), or `.holding` (leading tray glyph, no
         /// sub-line). Drives the 3-way header draw in SidebarView+Draw. The
         /// by-workspace degrade path passes `.workspace`.
         let sectionType: ProjectedSectionType
@@ -548,13 +548,13 @@ public final class SidebarView: NSView {
             return wsByIndex[src]?.layoutMode ?? ""
         }
         // Header "active" (drives the `pal.primary` accent + the signature's
-        // `*` marker): a workspace section follows its source workspace. Every
-        // other kind is match-synthesized or a receptacle — none has an "active"
-        // state (the section-lens ACTIVATE concept died with t-ec9s), so they
-        // render dim.
+        // `*` marker): a workspace section follows its source workspace. An
+        // isolate desktop's sections are match-synthesized — neither has an
+        // "active" state (the section-lens ACTIVATE concept died with t-ec9s), so
+        // they render dim.
         func headerActive(_ sec: ProjectedSection) -> Bool {
             switch sec.sectionType {
-            case .matched, .holding, .unassigned: return false
+            case .matched, .holding: return false
             case .workspace: return wsActive(sec.sourceWorkspaceIndex)
             }
         }
@@ -565,16 +565,15 @@ public final class SidebarView: NSView {
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
             + sections.enumerated().map { (g, sec) in
-                // 4-way kind code — W(orkspace) / M(atched) / H(olding) /
-                // U(nassigned). Only a workspace section carries a layout
-                // sub-line. Keep this byte-identical to the width pre-pass +
-                // render pass or the horizontal scroll clips.
+                // 3-way kind code — W(orkspace) / M(atched) / H(olding). Only a
+                // workspace section carries a layout sub-line. Keep this
+                // byte-identical to the width pre-pass + render pass or the
+                // horizontal scroll clips.
                 let typeCode: String
                 switch sec.sectionType {
                 case .workspace:  typeCode = "W"
                 case .matched:    typeCode = "M"
                 case .holding:    typeCode = "H"
-                case .unassigned: typeCode = "U"
                 }
                 let active = headerActive(sec)
                 let layout = sec.sectionType == .workspace
@@ -617,14 +616,14 @@ public final class SidebarView: NSView {
             // §D caption `index (label)` for every type — index = the section's
             // 1-based tree position (`g + 1`, invariant across search filter).
             // MUST byte-match the render-pass label below or horizontal scroll
-            // clips. The leading glyph (lens funnel / §G unassigned archivebox)
-            // is separate chrome (`+22`); only a WORKSPACE section has a layout
+            // clips. The leading glyph (matched funnel / holding tray) is
+            // separate chrome (`+22`); only a WORKSPACE section has a layout
             // sub-line.
             let hasGlyph = sec.sectionType != .workspace
             let nm = sectionDisplayLabel(index: g + 1, label: sec.label)
             let nameW = (nm as NSString).size(
                 withAttributes: [.font: uiFont(headerFontSize, .bold)]).width
-                + (hasGlyph ? 22 : 0)   // leading lens / unassigned glyph
+                + (hasGlyph ? 22 : 0)   // leading matched / holding glyph
             let layout = sec.sectionType == .workspace
                 ? wsLayout(sec.sourceWorkspaceIndex) : ""
             let modeW = layout.isEmpty ? 0
@@ -644,18 +643,19 @@ public final class SidebarView: NSView {
         for (g, sec, wins) in shown {
             let start = y
             let src = sec.sourceWorkspaceIndex
-            // §G: only a WORKSPACE section has a layout sub-line; lens AND
-            // unassigned have none.
+            // Only a WORKSPACE section has a layout sub-line; an isolate
+            // desktop's matched AND holding sections have none.
             let layout = sec.sectionType == .workspace ? wsLayout(src) : ""
             let active = headerActive(sec)
             // §D caption `index (label)` — byte-identical to the width pre-pass.
             let label = sectionDisplayLabel(index: g + 1, label: sec.label)
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
-            // Workspace section → click switches to its source WS; an isolate desktop
-            // section (PR6 activates the isolate desktop) or §G unassigned section (focus
-            // first window) has no workspace to switch to, so the header's
-            // action target is nil (handleClick discriminates by sectionType).
+            // Workspace section → click switches to its source WS; an isolate
+            // desktop's synthesized section (matched / holding) has no workspace
+            // to switch to — a click focuses its first window instead — so the
+            // header's action target is nil (handleClick discriminates by
+            // sectionType).
             rows.append(TreeRow(rect: hr,
                                 kind: .header(group: g,
                                               workspaceIndex: sec.sectionType == .workspace

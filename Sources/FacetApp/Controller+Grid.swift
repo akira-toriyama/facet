@@ -77,15 +77,10 @@ extension Controller {
                 // is 1-based → +1. autoFocus lets the backend focus the
                 // destination's last-touched window (or Finder if empty).
                 self?.activateSection(.workspace(ws + 1), autoFocus: true)
-            case .unassigned(let sectionID):
-                // §G: a receptacle cell focuses its FIRST window — no workspace
-                // switch (the unified focus helper, shared with the rail pick +
-                // CLI --focus + tree header click).
-                self?.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved from the
-                // snapshot — correct whether the thumb sat in a workspace OR a
-                // receptacle cell. Switch there (runs on main, updates the mirror),
+                // snapshot rather than from the cell it was drawn in. Switch
+                // there (runs on main, updates the mirror),
                 // then re-assert focus on the pick. Guard home >= 0 so an
                 // unresolvable window focuses without a bogus .workspace(0).
                 if home >= 0 {

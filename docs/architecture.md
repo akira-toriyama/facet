@@ -129,21 +129,19 @@ is the index. **Do not relitigate** without explicit grill round.
   moves windows across mac desktops, so it stays SIP-on / public-contract
   (the rejected cross-mac-desktop move was hide 手法4). `[[desktop.N.section]]`
   config customises a mac desktop by Mission-Control ordinal — an ordered
-  list of workspace spatial cells (`{ label, layout, unassigned }`): each cell
+  list of workspace spatial cells (`{ label, layout }`): each cell
   is one facet workspace (optional `label` — unnamed shows its index — and an
   optional `layout` seed), and the count sets the WS count. A section has NO
   `type` / `match` / `apply` (t-ec9s retired the section-lens concept; `lens` itself was renamed `isolate` by t-mqqw and
   is now a typed mac *desktop*, see the typed-desktop layer below; a stray
   `type` / `match` / `apply` is ignored on decode + flagged by
   `config --validate`); membership changes only by drag or
-  `facet window --move-to N`. Tree DnD is plain ws→ws membership move plus
-  orphan rescue. `WindowSlot.workspace` is `Int?` — a window can belong
-  to NO workspace, but normally belongs to exactly one, so orphans (迷子) are
-  rare. An orphan is
-  invisible-but-logged until a section with the opt-in `unassigned = true`
-  marker (§G)
-  surfaces every leftover window (in no other section) and a drag out onto a
-  workspace rescues it. Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
+  `facet window --move-to N`. Tree DnD is plain ws→ws membership move.
+  **Every managed window is in exactly one facet workspace — and that is a
+  TYPE, not a hope**: `WindowSlot.workspace` is `Int`, not `Int?` (t-6rbc; the
+  adopt path always assigned one, so the Optional only ever expressed a state
+  facet could not reach — see the orphan tombstone under the section read-path).
+  Catalog state is session-only. Opt-in: any `[[desktop.N.section]]` → facet
   manages only configured mac desktops, others hands-off (panel hidden);
   none → all mac desktops managed by default. SkyLight gone → single shared
   catalog. Memory: facet-per-native-space-ws. (This supersedes the
@@ -506,33 +504,73 @@ spatial cell, and `isolate` lives only at the desktop layer.)
 diagnostics. Two types are deliberately kept apart:
 
 - **`DesktopSection`** — the *config declaration* (`[[desktop.N.section]]`): an
-  optional `label`, an optional `layout` seed, and an `unassigned = true` `Bool`
-  marker (W2.6 / t-wrd2 — the lost-and-found receptacle). There is NO `type` /
-  `match` / `apply` (t-ec9s); a stray one is ignored on decode + flagged by
-  `config --validate`.
+  optional `label` and an optional `layout` seed. That is the whole shape. There
+  is NO `type` / `match` / `apply` (t-ec9s) — a stray one is ignored on decode +
+  flagged by `config --validate` — and no `unassigned` marker (t-6rbc, below).
 - **`ProjectedSection`** — the *projection result*: one rendered unit, with a
   stable `id` (`"ws:<index>"`), a `label`, the `windows` that landed in it,
   `sourceWorkspaceIndex`, and the `sectionType`. (Was `FilterGroup` until the
   Phase D rename retired the forbidden word `group`.)
 
-Per-type semantics:
+Per-type semantics (`ProjectedSectionType`):
 
-- **workspace** — the spatial substrate. Maps positionally onto the live
-  workspaces by *wire index* (the k-th workspace section ↔ `workspaces[k]`),
-  takes their windows verbatim, carries the layout seed.
-- **unassigned** (§G) — the opt-in lost-and-found receptacle. A section carries
-  the `unassigned = true` marker and `FilterProjection` mints the render-side
-  `ProjectedSectionType.unassigned` for it (the second *projected* kind a
-  config section never declares). When present it
-  collects the *leftover* (universe − shown — every window in no other emitted
-  section, i.e. the orphans); only the first emits,
-  extras warn; `id = "unassigned:<declOrder>"`. Rendered in tree/grid/rail,
-  focuses its first window, rescuable by DnD / Space-lift, and runtime-
-  renamable (a session-only display override).
+- **workspace** — the spatial substrate, and the only kind a config section
+  declares. Maps positionally onto the live workspaces by *wire index* (the k-th
+  workspace section ↔ `workspaces[k]`), takes their windows verbatim, carries
+  the layout seed. Membership is MANUAL: you put windows here, and every managed
+  window is in exactly one of them.
+- **matched** / **holding** — synthesized, never declared: `projectIsolateDesktop`
+  mints them for an isolate desktop (the typed-desktop layer below) from its
+  `match` — the windows that matched, and (when `show-non-matching = true`) the
+  ones that did not, anchor-parked, in a **holding** section with `id =
+  "holding:1"`. A held window is not "unassigned": it sits in a facet workspace
+  like every other managed window; it just failed a predicate.
 
 **Degrade is a first-class citizen**: a mac desktop with no sections projects
 1:1 to by-workspace, byte-identical to the built-in by-workspace tree. The gate
 is `FacetConfig.isSectionModelActive`.
+
+### 🪦 orphan (迷子) + the `unassigned` receptacle — retired (t-6rbc)
+
+An **orphan** was a window belonging to no facet workspace
+(`WindowSlot.workspace == nil`), and `unassigned = true` marked the
+`[[desktop.N.section]]` "lost & found" receptacle that displayed them (§G). Both
+are dead words. Don't re-propose either.
+
+**facet could not mint an orphan.** The only minter was
+`WorkspaceCatalog.setOrphan`, whose only caller (`NativeAdapter.orphanWindow`)
+lost ITS only caller when t-qtpx removed the ws→lens DnD. So the orphan set was
+provably EMPTY for two releases while six modules carried plumbing for it — and
+the tree rendered a receptacle section that could only ever be empty: a UI
+claiming something facet does not have. Same class of defect as the `lens`
+desktop name that t-mqqw killed for lying.
+
+The invariant is now stated **positively, in the type system**: `WindowSlot.workspace`
+is `Int`. Deleted with the concept: `setOrphan`, `WindowBackend.orphanWindow` /
+`orphanWindows` + the adapter's orphan mirror, `FilterProjection`'s `orphans:`
+parameter and its §G leftover pass, `ProjectedSectionType.unassigned`,
+`OverviewCell.isReceptacle`, `GridPick.unassigned` / `RailPick.unassigned`, the
+`facet query --windows` `workspace: "Orphans"` row, and the `ConfigSnapshot`
+writer branch that wrote an `unassigned` label back out (the **auto-promote
+zombie** — the one way a retired key could resurrect itself).
+
+**`unassigned = true` is a RETIRED KEY, not merely a removed one — the row is
+DROPPED, loudly.** An unknown TOML key is IGNORED on decode, so simply deleting
+the field would have let a stale `unassigned = true` row **silently become an
+ordinary workspace cell**: the desktop gains a workspace and the user's LAYOUT
+CHANGES, with no message anywhere. Silence is the worst available answer, so
+`DesktopSection.parse` returns `(nil, "…retired…")` for it (`= false` too — it is
+just as retired) and `config --validate` **exits 1 from both channels**: the
+semantic diagnostic names the key as retired, and the strict schema reports it as
+an unknown key. The daemon stays permissive as always — it logs and boots.
+Because the row is dropped rather than promoted, **the effective workspace
+substrate is byte-identical to before**: `workspaceSubstrateSections` used to
+filter receptacles out of the workspace list, and that filter is exactly what got
+deleted.
+
+What survives and must not be confused with it: the isolate desktop's **holding**
+section (above). Its windows are anchor-parked, not unassigned. (It used to be
+minted as `.unassigned` — precisely the lie t-mqqw renamed away.)
 
 ### The filter language (`facet filter`)
 
@@ -551,9 +589,9 @@ tag (`facet window --tag web`).
 Dragging a window onto a workspace section is a plain membership move: the
 window leaves its source workspace and joins the destination (the same effect
 as `facet window --move-to N`), and the Controller dispatches the backend op on
-`cliQueue`. Dragging an orphan out of the `unassigned` receptacle onto a
-workspace rescues it the same way. There is no section `match` to satisfy and
-no `apply` side-effect (t-ec9s retired both) — auto-tagging on a match is now
+`cliQueue`. Every drop lands on a workspace cell and every window comes from one
+— there is no receptacle to rescue out of (t-6rbc), no section `match` to satisfy
+and no `apply` side-effect (t-ec9s retired both) — auto-tagging on a match is now
 the `[[rule]]` block's job (match→tag), and isolate filtering lives at the desktop
 layer.
 
@@ -589,8 +627,8 @@ switcher bands — was retired by t-0sbm as one concept too many.)
   exactly ONE workspace (named by the desktop `label`, seeded with its `layout`),
   which pins the catalog to N=1 so the active-WS park scope IS the whole
   desktop. `isolateDesktopSections(ordinal:)` synthesizes the projection input —
-  one `.matched` section (id `section:0:<label>`), plus a `.holding`
-  receptacle when `show-non-matching = true`. The runtime is
+  one `.matched` section (id `section:0:<label>`), plus the `.holding`
+  section (id `holding:1`) when `show-non-matching = true`. The runtime is
   `NativeAdapter.applyIsolatePark`: ALWAYS-ON — every reconcile derives the
   park set from `match` (`IsolatePark.parkSet`, pure), anchor-parks the
   non-matching windows, and asserts the desktop `layout` on the N=1 workspace

@@ -490,11 +490,12 @@ extension Controller {
     }
 
     /// One addressable section in tree order: its display label, the
-    /// `ActiveSection` it activates (nil = an unassigned section — §G — which
-    /// has no workspace behind it), plus the stable `ProjectedSection.id`
-    /// (nil only on the degrade-workspace path, which addresses by index). §G:
-    /// an unassigned hit (`section == nil`) FOCUSES ITS FIRST WINDOW via the
-    /// `sectionID` rather than erroring — see `dispatchSectionFocus`.
+    /// `ActiveSection` it activates (nil = an isolate desktop's synthesized
+    /// section — `.matched` / `.holding` — which has no workspace behind it),
+    /// plus the stable `ProjectedSection.id` (nil only on the degrade-workspace
+    /// path, which addresses by index). A `section == nil` hit FOCUSES ITS FIRST
+    /// WINDOW via the `sectionID` rather than erroring — see
+    /// `dispatchSectionFocus`.
     private struct SectionAddr {
         let label: String
         let section: ActiveSection?
@@ -509,11 +510,11 @@ extension Controller {
     /// the numbers the user sees.
     private func addressableSections() -> [SectionAddr] {
         // Since the section-lens ACTIVATE concept was retired (t-ec9s), only a
-        // workspace section has something to switch to. A `.matched` section (a
-        // isolate desktop's match-synthesized section) and a `.unassigned`
-        // receptacle both FOCUS THEIR FIRST window (membership is match-driven /
-        // by-subtraction, not activatable) — `dispatchSectionFocus` routes a
-        // `nil` section with a non-nil id to `focusFirstWindow`.
+        // workspace section has something to switch to. An isolate desktop's two
+        // synthesized sections (`.matched` / `.holding`) FOCUS THEIR FIRST window
+        // instead (membership is match-driven, not activatable) —
+        // `dispatchSectionFocus` routes a `nil` section with a non-nil id to
+        // `focusFirstWindow`.
         if !lastSections.isEmpty {
             return lastSections.map { ps in
                 switch ps.sectionType {
@@ -523,7 +524,7 @@ extension Controller {
                     return SectionAddr(label: ps.label,
                         section: ps.sourceWorkspaceIndex.map { .workspace($0 + 1) },
                         sectionID: ps.id)
-                case .matched, .holding, .unassigned:
+                case .matched, .holding:
                     return SectionAddr(label: ps.label, section: nil,
                                        sectionID: ps.id)
                 }
@@ -538,9 +539,10 @@ extension Controller {
 
     /// `facet section --focus`: resolve a 1-based tree-order index (`index:N`)
     /// or a section label (`label:LABEL`) to its `ActiveSection` and activate
-    /// it. Runs on main (DNC). An unknown index / label, or an unassigned
-    /// section (no workspace behind it), is loud-but-non-fatal
-    /// (`setError`, no change) per facet's typo stance.
+    /// it. Runs on main (DNC). A section with no workspace behind it (an isolate
+    /// desktop's `.matched` / `.holding`) focuses its FIRST window instead. An
+    /// unknown index / label is loud-but-non-fatal (`setError`, no change) per
+    /// facet's typo stance.
     private func dispatchSectionFocus(_ arg: String) {
         let list = addressableSections()
         let hit: SectionAddr?
@@ -566,32 +568,33 @@ extension Controller {
         }
         guard let hit else { return }
         guard let section = hit.section else {
-            // §G: an unassigned section has no workspace to activate, but
-            // it DOES hold orphan windows — focus its first one (the unified
-            // focus helper, shared with the grid/rail .unassigned picks + the
-            // tree header click). A truly non-focusable nil (no id — the
-            // degrade path never emits one) keeps the loud error.
+            // An isolate desktop's synthesized section has no workspace to
+            // activate, but it DOES list windows — focus its first one (the
+            // unified focus helper, shared with the tree header click). Every
+            // section without a workspace carries an id, so this is total; the
+            // fallback below is the compiler's, not a reachable state. (It used
+            // to say "unassigned sections aren't focusable", which was already
+            // false — the receptacle focused its first window like anything else
+            // — and became meaningless when the receptacle was retired, t-6rbc.)
             if let id = hit.sectionID {
                 focusFirstWindow(inSectionID: id)
                 return
             }
-            setError("section --focus \"\(hit.label)\": unassigned sections "
-                + "aren't focusable (no workspace behind them)")
+            setError("section --focus \"\(hit.label)\": no window to focus")
             scheduleReconcile(after: 0.05)
             return
         }
         activateSection(section, autoFocus: true)
     }
 
-    /// §G unified focus helper: focus the FIRST window of the section with
-    /// stable id `id` (an `.unassigned` receptacle in practice — its orphan
-    /// windows have no workspace to switch to). Looks the section up in
-    /// `lastSections`, takes `.windows.first`, and reveals + focuses it via the
-    /// SAME window path the tree window-row click uses (`revealWindow` then
-    /// `focusWindow(postSwitch: false)`) — NO workspace switch, ActiveSection
-    /// unchanged (per plan: an orphan's home WS is the active one, or none).
-    /// Backs THREE surfaces: `dispatchSectionFocus` (CLI), the grid/rail
-    /// `.unassigned` pick routing, and the tree header click. A missing /
+    /// Unified focus helper: focus the FIRST window of the section with stable
+    /// id `id` (an isolate desktop's `.matched` / `.holding` in practice — a
+    /// match-synthesized section has no workspace to switch to). Looks the
+    /// section up in `lastSections`, takes `.windows.first`, and reveals +
+    /// focuses it via the SAME window path the tree window-row click uses
+    /// (`revealWindow` then `focusWindow(postSwitch: false)`) — NO workspace
+    /// switch, ActiveSection unchanged. Backs TWO surfaces:
+    /// `dispatchSectionFocus` (CLI) and the tree header click. A missing /
     /// empty section is loud-but-non-fatal (nothing to focus).
     func focusFirstWindow(inSectionID id: String) {
         guard let sec = lastSections.first(where: { $0.id == id }),
@@ -605,7 +608,7 @@ extension Controller {
         // park keeps `isOnscreen == true` (it sits on an on-screen sliver):
         //   • HIDDEN (Cmd+H'd / minimized, `isOnscreen == false`): `revealWindow`
         //     un-hides AND focuses. NOT an unconditional `revealWindow` — that
-        //     whole-app `unhide()`s an already-visible orphan.
+        //     whole-app `unhide()`s an already-visible window.
         //   • on-screen: just focus (`postSwitch: false` → `Focus.withRetry`).
         // No workspace switch in any branch — ActiveSection unchanged (plan §4).
         Log.debug("focusFirstWindow: section=\(id) → window \(w.id.serverID)")
@@ -623,14 +626,11 @@ extension Controller {
     /// resolves through):
     ///   • workspace → route to `backend.renameWorkspace(at:to:)` (the catalog
     ///     owns workspace names — `""` reverts to the number).
-    ///   • lens → a DISPLAY-only override on `sectionLabelOverride` (id-keyed,
-    ///     never the backend): a non-empty `label` SETS it; an empty / all-
-    ///     whitespace `label` DELETES the key (revert to the config label —
-    ///     storing `""` would blank the header). Re-render via `apply`.
-    ///   • unassigned → §G: SAME session-only override path as matched (id =
-    ///     `"unassigned:<declOrder>"`, a valid override key — `applyLabelOverrides`
-    ///     relabels `.unassigned` too). Non-empty SETS, empty REVERTS to the
-    ///     config label.
+    ///   • an isolate desktop's `.matched` / `.holding` → a DISPLAY-only override
+    ///     on `sectionLabelOverride` (id-keyed, never the backend): a non-empty
+    ///     `label` SETS it; an empty / all-whitespace `label` DELETES the key
+    ///     (revert to the config label — storing `""` would blank the header).
+    ///     Re-render via `apply`.
     /// Section-model OFF (degrade — `lastSections` empty) → every slot is a
     /// workspace; resolve `n` against the reorder-applied workspace list (the
     /// same numbers `--focus` + `sectionHeaderDisplay`'s degrade branch show)
@@ -726,10 +726,9 @@ extension Controller {
                 bk.renameWorkspace(at: pos1, to: trimmed); return nil
             }
             markConfigDirty()   // t-hdxb: persist the workspace rename
-        case .matched, .holding, .unassigned:
-            // §G: lens AND unassigned share the SAME session-only display-label
-            // override (`applyLabelOverrides` relabels both; the ids
-            // `"section:…"` / `"unassigned:…"` are equally valid override keys).
+        case .matched, .holding:
+            // An isolate desktop's sections take the session-only display-label
+            // override (`applyLabelOverrides` relabels them by id).
             // The override READ (the projection seam in `apply()`) is gated
             // behind a non-nil mac-desktop ordinal, so it NEVER consults a -1
             // bucket. Writing under `?? -1` here would land the override in a
@@ -754,25 +753,26 @@ extension Controller {
                 Log.debug("renameSection: n=\(n) section id=\(sec.id) → revert config")
             } else {
                 // Store the TRIMMED label so a padded label (`"  Web  "`)
-                // renders identically for lens / unassigned / workspace sections —
-                // the workspace branch passes `trimmed` too (the revert gesture is
-                // already keyed on `trimmed.isEmpty` above).
+                // renders identically for a synthesized section and a workspace
+                // section — the workspace branch passes `trimmed` too (the revert
+                // gesture is already keyed on `trimmed.isEmpty` above).
                 sectionLabelOverride[key, default: [:]][sec.id] = trimmed
                 Log.debug("renameSection: n=\(n) section id=\(sec.id) → \"\(trimmed)\"")
             }
             apply(lastWorkspaces)       // re-render with the new display label
-            markConfigDirty()   // t-hdxb: persist the isolate desktop/unassigned rename (set OR revert)
+            markConfigDirty()   // t-hdxb: persist the isolate desktop rename (set OR revert)
         }
     }
 
     /// t-0020: `facet section --match N PREDICATE` → set the Nth section's
-    /// runtime (session-only) lens `match`, addressed by its 1-based tree-order
-    /// index. The live-tuning twin of `renameSection(indexN1Based:to:)`, but
-    /// MATCH is lens-ONLY, so the seam differs in three ways:
-    ///   1. There is NO workspace / unassigned branch — both are loud-rejected
-    ///      (a workspace is the exclusive substrate; an unassigned receptacle is
-    ///      leftover-by-subtraction). The degrade path (section model off) is all
-    ///      workspaces → also rejected.
+    /// runtime (session-only) isolate `match`, addressed by its 1-based
+    /// tree-order index. The live-tuning twin of `renameSection(indexN1Based:to:)`,
+    /// but MATCH belongs to the `.matched` section ALONE, so the seam differs in
+    /// three ways:
+    ///   1. Only `.matched` is accepted — a workspace (the exclusive substrate)
+    ///      and a `.holding` section (membership is the match's COMPLEMENT, not a
+    ///      match of its own) both loud-reject. The degrade path (section model
+    ///      off) is all workspaces → also rejected.
     ///   2. The override mutates the projection INPUT (`sectionMatchOverride`,
     ///      read via `applyMatchOverrides` BEFORE `project()`), not the output.
     ///   3. The predicate is VALIDATED (`FacetFilter.parse`) but stored VERBATIM;
@@ -833,7 +833,6 @@ extension Controller {
             switch sec.sectionType {
             case .workspace:  kind = "workspace"
             case .holding:    kind = "holding"
-            case .unassigned: kind = "unassigned"
             case .matched:    kind = "matched"   // unreachable (guarded above)
             }
             setError("section --match \(n): only an isolate desktop's matched "

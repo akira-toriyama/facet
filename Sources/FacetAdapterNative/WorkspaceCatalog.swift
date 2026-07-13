@@ -39,17 +39,21 @@ import FacetCore
 /// the adapter performs on the window, so caching it here avoids
 /// re-enumerating CGWindowList on `moveWindow` / `closeWindow`.
 struct WindowSlot: Equatable, Sendable {
-    /// 1-based workspace index, or `nil` for a 迷子 (orphan) — a window
-    /// assigned to NO facet workspace. In the orthogonal model a window
-    /// normally belongs to exactly one workspace, so orphans are RARE:
-    /// t-qtpx removed the ws→lens DnD that used to create them (drag is
-    /// same-type only now — ws→ws moves, lens→lens re-tags), and reconcile
-    /// never adopts a nil. An orphan is invisible in every per-workspace view
-    /// (excluded by `== n1Based` filters, dropped from `snapshot`) until the
-    /// §G `type="unassigned"` receptacle surfaces it (a drag out onto a
-    /// workspace rescues it). This is the membership authority; the section
-    /// model owns visibility, reading `tags` for matching.
-    let workspace: Int?
+    /// 1-based workspace index. NOT Optional — a managed window is in exactly
+    /// one facet workspace, and t-6rbc made that a TYPE rather than a hope.
+    ///
+    /// It used to be `Int?`, where `nil` meant 迷子 (orphan): a window in NO
+    /// workspace. The only thing that could mint one was `setOrphan`, whose only
+    /// caller (`orphanWindow`) lost ITS only caller when t-qtpx removed the
+    /// ws→lens DnD — so for two releases the orphan set was provably empty while
+    /// six modules carried plumbing for it, and the tree rendered a lost-and-found
+    /// section that could only ever be empty. Adopt is the one entry point
+    /// (`reconcile` → `WindowSlot(workspace: activeIndex)`), and it has always
+    /// assigned a workspace.
+    ///
+    /// This is the membership authority; the section model owns visibility,
+    /// reading `tags` for matching.
+    let workspace: Int
     let pid: Int
     /// Free-form per-window tag set (EX-4). Used by lens
     /// `match='tag~=X'` + `facet window --tag/--untag/--toggle-tag/
@@ -59,7 +63,7 @@ struct WindowSlot: Equatable, Sendable {
     /// `WindowSlot` re-creation carries it forward (a Set copies
     /// trivially) or a window silently loses its tags.
     var tags: Set<String>
-    init(workspace: Int?, pid: Int, tags: Set<String> = []) {
+    init(workspace: Int, pid: Int, tags: Set<String> = []) {
         self.workspace = workspace
         self.pid = pid
         self.tags = tags
@@ -122,15 +126,11 @@ struct WorkspaceCatalog {
     var workspaceCount: Int { workspaceNames.count }
 
     /// Display name of the 1-based workspace `n1Based`, or `""` for an
-    /// out-of-range index OR `nil` (a 迷子 / orphan with no workspace — the
-    /// "show the number" / empty sentinel). Used when evaluating an isolate desktop / rule
-    /// `match='workspace=Dev'` (`IsolateMembership` / `ProjectedWindowFields`): an
-    /// orphan resolves to "" so `filterHas("workspace")` is false →
-    /// `match='not workspace'` (e.g. a 迷子-surfacing lens) matches it, and
-    /// `workspace=Dev` does not.
-    func workspaceName(_ n1Based: Int?) -> String {
-        guard let n1Based, n1Based >= 1, n1Based <= workspaceNames.count
-        else { return "" }
+    /// out-of-range index (an UNNAMED workspace is `""` too — it is shown by its
+    /// number). Used when evaluating an isolate desktop / rule
+    /// `match='workspace=Dev'` (`IsolateMembership` / `ProjectedWindowFields`).
+    func workspaceName(_ n1Based: Int) -> String {
+        guard n1Based >= 1, n1Based <= workspaceNames.count else { return "" }
         return workspaceNames[n1Based - 1]
     }
 
@@ -479,11 +479,8 @@ struct WorkspaceCatalog {
         stackOrders = remap(stackOrders)
         layoutParams = remap(layoutParams)
         lastFocusedOnLeave = remap(lastFocusedOnLeave)
-        // orphan (workspace == nil): not keyed in the remap → skip, leave nil
-        // unchanged (position-agnostic). (for-`where` can't `let`-bind, and a
-        // dict subscript with an Int? key won't compile — guard in the body.)
         for (id, slot) in windowMap {
-            guard let ws = slot.workspace, let mapped = map[ws] else { continue }
+            guard let mapped = map[slot.workspace] else { continue }
             windowMap[id] = WindowSlot(workspace: mapped,
                                        pid: slot.pid, tags: slot.tags)
         }
@@ -542,14 +539,12 @@ struct WorkspaceCatalog {
         // shelf and must STAY parked through the switch, so they're
         // excluded too (restoring one when its home WS activates would
         // un-hide the shelf).
-        // Park the old workspace's members AND every orphan (workspace == nil):
-        // an orphan belongs to no workspace, so it must leave the screen on a
-        // switch. An orphan that was already parked no-ops (`shouldParkAnchor`
-        // gates on `anchorParked`), so listing it unconditionally is safe +
-        // idempotent.
+        // Park the old workspace's members. (The `|| workspace == nil` orphan
+        // clause is gone with the orphan concept — t-6rbc: every managed window
+        // has a workspace, so "belongs to no workspace, must leave the screen"
+        // describes nothing.)
         let toPark = windowMap
-            .filter { ($0.value.workspace == old || $0.value.workspace == nil)
-                && isParkEligible($0.key) }
+            .filter { $0.value.workspace == old && isParkEligible($0.key) }
             .map { WindowRef(id: $0.key, pid: $0.value.pid) }
         // Destination: restore every park-eligible member unconditionally.
         // A user-hidden (Cmd+H) member is left exactly as-is — never
@@ -639,31 +634,6 @@ struct WorkspaceCatalog {
         return .stateOnly
     }
 
-    /// Symmetric-move counterpart of `moveWindow(to:)`: relocate `id` OUT of
-    /// its workspace → 迷子 (`workspace = nil`); it parks if it was on the active
-    /// workspace (now belongs to no visible workspace), else state-only. The
-    /// orphan primitive, kept as a foundation: t-qtpx removed the ws→lens DnD
-    /// that used to call it (drag is same-type only now), so it has NO
-    /// production caller today. Mirrors `moveWindow`'s incoherence guards: a
-    /// sticky window is everywhere (can't be orphaned), a stashed scratchpad is
-    /// off-screen, and an already-orphan / unknown window is a no-op.
-    /// `MoveOutcome.restore` is never returned (orphaning never brings a window
-    /// on-screen).
-    @discardableResult
-    mutating func setOrphan(_ id: WindowID) -> MoveOutcome {
-        guard let current = windowMap[id],
-              current.workspace != nil,
-              !everywhereWindows.contains(id),
-              !stashedWindows.contains(id) else { return .rejected }
-        let wasActive = current.workspace == activeIndex
-        windowMap[id] = WindowSlot(workspace: nil, pid: current.pid,
-                                   tags: current.tags)
-        detachFromLayouts(id)
-        clearLeaveFocus(of: id)
-        let ref = WindowRef(id: id, pid: current.pid)
-        return wasActive ? .park(ref) : .stateOnly
-    }
-
     // MARK: - Park bookkeeping (adapter calls after AX success)
 
     /// True when the anchor park should actually run (the window
@@ -743,9 +713,7 @@ struct WorkspaceCatalog {
         for id in isolateParked.filter({ !desiredSet.contains($0) }) {
             isolateParked.remove(id)
             guard let slot = windowMap[id] else { continue }  // closed → forgetWindow owns it
-            if let ws = slot.workspace {
-                attachToLayout(id, workspace: ws, focused: focused, in: rect)
-            }
+            attachToLayout(id, workspace: slot.workspace, focused: focused, in: rect)
             // Restore POSITION only for a window still on the ACTIVE WS (an isolate desktop
             // re-join, or the gate went off in place). One now on another WS
             // keeps its anchor-park — the WS-switch machinery owns its position.
@@ -808,12 +776,11 @@ struct WorkspaceCatalog {
         // `stashed:` line. A *settled* (summoned) scratchpad window is
         // NOT in `stashedWindows`, so it stays and carries its badge.
         let tracked = trackedWindows(in: live)
-        // orphan (workspace == nil): belongs to no workspace section. Bucket it
-        // under the -1 sentinel (no valid 1-based index, never == any
-        // entry.index) so it forms no nil key and is naturally dropped from the
-        // per-WS emit below (invisible). It surfaces only via `facet query`'s
-        // 迷子 label / the §G unassigned receptacle. Orphans are rare now —
-        // t-qtpx removed the ws→lens DnD that created them.
+        // `trackedWindows` guarantees a `windowMap` entry, so the `?? -1` is a
+        // dict-miss guard, not an orphan bucket (t-6rbc: there are no orphans;
+        // `WindowSlot.workspace` is `Int`). -1 is never a valid 1-based index, so
+        // an impossible miss still drops out of the per-WS emit below rather than
+        // crashing.
         let byWS = Dictionary(grouping: tracked) { w in
             windowMap[w.id]?.workspace ?? -1
         }
@@ -847,9 +814,9 @@ struct WorkspaceCatalog {
             let wins = (byWS[entry.index] ?? []).map { w in
                 // Per-window facet attributes read through the shared
                 // `makeWindow` helper (the SINGLE construction site, shared
-                // with `orphanWindows`) so the projections can't drift on the
-                // non-contextual fields. Frame / master stay CONTEXTUAL
-                // (per-WS layout-derived) and are passed in here.
+                // with `activeWorkspacePredicateWindows`) so the projections
+                // can't drift on the non-contextual fields. Frame / master stay
+                // CONTEXTUAL (per-WS layout-derived) and are passed in here.
                 makeWindow(w, focused: focused,
                            frame: wouldBeFrame(
                                for: w, isActiveWS: isActive,
@@ -871,12 +838,12 @@ struct WorkspaceCatalog {
 
     /// Build a `Window` projection for `w` from the catalog's per-window
     /// accessors — the SINGLE construction site shared by `snapshot` (per-WS,
-    /// layout-contextual) and `orphanWindows` (no WS, no layout) so the two
-    /// can't drift on the NON-contextual fields (tags / mark / float / sticky /
-    /// scratchpad / focus / onscreen). The CONTEXTUAL fields —
-    /// `frame` (the per-WS would-be tile slot) and `isMaster` (first in the WS
-    /// tiling order) — are computed by the caller and passed in; an orphan, in
-    /// no workspace, passes the raw live frame + `isMaster: false`.
+    /// layout-contextual) and `activeWorkspacePredicateWindows` (the isolate
+    /// desktop's park predicate) so the two can't drift on the NON-contextual
+    /// fields (tags / mark / float / sticky / scratchpad / focus / onscreen).
+    /// The CONTEXTUAL fields — `frame` (the per-WS would-be tile slot) and
+    /// `isMaster` (first in the WS tiling order) — are computed by the caller
+    /// and passed in.
     ///
     /// `populateTags` (section model, PR8): when on, `Window.tags` carries the
     /// window's tag set (sorted for a deterministic `#tag` chip order) so a
@@ -909,8 +876,8 @@ struct WorkspaceCatalog {
     /// window, leaving `floating`/`mark`/`master`/`scratchpad`/`focused` at
     /// their live defaults, so an isolate desktop `match` referencing one of those fields
     /// parked a DIFFERENT set than the tree showed (tree/park lock-step broke).
-    /// Built through the SAME `makeWindow` construction site as `snapshot` /
-    /// `orphanWindows`, so the park predicate can't drift from the display;
+    /// Built through the SAME `makeWindow` construction site as `snapshot`,
+    /// so the park predicate can't drift from the display;
     /// `master` is computed for the active workspace exactly as `snapshot`
     /// does (only for a layout that `hasMaster`). `frame` is irrelevant to the
     /// predicate, so the live frame passes through.
@@ -923,30 +890,6 @@ struct WorkspaceCatalog {
             .filter { windowMap[$0.id]?.workspace == activeIndex }
             .map { makeWindow($0, focused: focused, frame: $0.frame,
                               isMaster: $0.id == master, populateTags: true) }
-    }
-
-    /// EX-3 迷子: the managed windows assigned to NO workspace
-    /// (`WindowSlot.workspace == nil`), projected as `Window`s for the views'
-    /// LENS sections. `snapshot` buckets these under its `-1` sentinel and
-    /// drops them (they belong to no `Workspace`), so without this they render
-    /// in no tree/grid/rail section even though a content lens may `match` them.
-    /// `Controller.apply` feeds the result to
-    /// `FilterProjection.project(…, orphans:)`, which appends them into the §G
-    /// `type="unassigned"` receptacle (and any lens whose `match` they satisfy,
-    /// e.g. `not workspace`) WITHOUT touching workspace sections.
-    ///
-    /// Stashed windows are excluded (via `trackedWindows`). Frame = the raw
-    /// live bounds (an orphan has no WS layout); `isMaster: false`.
-    /// Built through the SAME `makeWindow` helper as `snapshot`, so the two
-    /// can't drift. `trackedWindows` guarantees a `windowMap` entry, so
-    /// `workspace == nil` identifies a true orphan (never an unmanaged window).
-    func orphanWindows(in live: [Window], focused: WindowID?,
-                       populateTags: Bool) -> [Window] {
-        trackedWindows(in: live).compactMap { w in
-            guard windowMap[w.id]?.workspace == nil else { return nil }
-            return makeWindow(w, focused: focused, frame: w.frame,
-                              isMaster: false, populateTags: populateTags)
-        }
     }
 
     /// Compute the frame the user *perceives* for `w`:

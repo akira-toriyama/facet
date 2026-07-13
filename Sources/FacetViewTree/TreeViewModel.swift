@@ -69,7 +69,6 @@ enum TreeListItem {
         // receptacle (t-mqqw) — give it its own glyph so the chrome stops
         // asserting a kinship the model does not have.
         case .holding: slug = "tray"
-        case .unassigned: slug = "archive"
         case .workspace: slug = nil
         }
         return slug.flatMap { IconResolver.phosphorImage($0, pt: 13) }
