@@ -52,12 +52,24 @@ extension FacetApp {
     /// typo'd keys. Surfaces the type / enum / range / unknown-key mismatches
     /// the loader silently accepts.
     ///
-    /// Exit codes: 2 if config.toml isn't parseable TOML at all (syntax
-    /// error); 1 if it parses but violates the schema; 0 if structurally
-    /// valid — then the lenient `load()` runs so its bespoke clamp /
-    /// did-you-mean / geometry-partial warnings (the checks validate does
-    /// NOT cover) print too, followed by a one-line parsed summary. No
-    /// double-report: an enum typo exits 1 above, before this branch.
+    /// TWO channels are checked, and BOTH gate the exit code (t-r5yz):
+    ///   • STRUCTURAL — the sill schema: unknown key, bad enum, out of range.
+    ///   • SEMANTIC — `cfg.diagnostics`: did facet actually KEEP what you wrote?
+    ///     A `[desktop.N] type = "isolate"` with no `match` is schema-perfect and
+    ///     yet thrown away whole. `--validate` used to print "config valid" +
+    ///     exit 0 over exactly that, with the reason buried in /tmp/facet.log —
+    ///     the silent fallback CLAUDE.md forbids, in the one tool whose entire
+    ///     job is answering "what will facet do with this file?".
+    ///
+    /// Exit codes: 2 if config.toml isn't readable / parseable TOML at all;
+    /// 1 if it violates the schema OR facet discarded a block; 0 if valid —
+    /// warnings (clamps, ignored strays) print but never fail the check, because
+    /// "a typo can never break the layout" is the daemon's contract and this tool
+    /// reports it rather than second-guessing it.
+    ///
+    /// The load is HOISTED above the schema report: a schema error used to
+    /// short-circuit before the config was ever built, so one unknown key hid
+    /// every semantic drop in the file. You now get the whole picture in one run.
     static func runValidate() -> Never {
         let path = FacetConfig.defaultPath
 
@@ -84,34 +96,42 @@ extension FacetApp {
         } catch {
             die("config.toml: not parseable — \(error)")   // exit 2
         }
-        if !errors.isEmpty {
-            // `message` already carries the located one-liner (e.g.
-            // "grid.bogus-key: unknown key 'bogus-key'") — print it verbatim.
-            for e in errors {
-                FileHandle.standardError.write(Data("facet: \(e.message)\n".utf8))
-            }
-            FileHandle.standardError.write(Data(
-                "facet: \(errors.count) validation error(s)\n".utf8))
-            exit(1)
+
+        // Build from the SAME source we just validated (no second disk read / no
+        // TOCTOU). `load` is lenient by design — it clamps, drops, and records
+        // WHY in `diagnostics`; this is the one caller that turns those reasons
+        // into an exit code.
+        let cfg = FacetConfig.load(source: source)
+
+        func emit(_ line: String) {
+            FileHandle.standardError.write(Data("facet: \(line)\n".utf8))
+        }
+        // `message` already carries the located one-liner (e.g.
+        // "grid.bogus-key: unknown key 'bogus-key'") — print it verbatim.
+        for e in errors { emit("error: \(e.message)") }
+        for d in cfg.diagnostics { emit("\(d.severity.rawValue): \(d.message)") }
+        // The bespoke clamp / did-you-mean / geometry-partial hints the schema
+        // can't express. Warnings, always — they never fail the check.
+        for w in cfg.unknownValueWarnings() { emit("warning: \(w)") }
+
+        let code = configValidateExitCode(schemaErrorCount: errors.count,
+                                          diagnostics: cfg.diagnostics)
+        guard code == 0 else {
+            let e = errors.count + cfg.diagnostics.errorCount
+            let w = cfg.diagnostics.warningCount + cfg.unknownValueWarnings().count
+            emit("\(e) error(s), \(w) warning(s) — see above")
+            exit(code)
         }
 
-        // Structurally valid → build the config from the SAME source we just
-        // validated (no second disk read / no TOCTOU) to surface the bespoke
-        // loader warnings validate can't (clamp did-you-mean hints,
-        // geometry-partial) + a one-line summary. Counts read through the
-        // `effective*` accessors (CLAUDE.md: never the raw Optional fields).
-        let cfg = FacetConfig.load(source: source)
-        for w in cfg.unknownValueWarnings() {
-            FileHandle.standardError.write(Data("facet: \(w)\n".utf8))
-        }
+        // Counts read through the `effective*` accessors (CLAUDE.md: never the
+        // raw Optional fields).
         let desktops = Set(cfg.effectiveMacDesktopSectionConfigs.keys)
             .union(cfg.macDesktopMetaConfigs.keys).count
-        FileHandle.standardError.write(Data((
-            "facet: config valid — theme=\(cfg.effectiveTheme), "
+        emit("config valid — theme=\(cfg.effectiveTheme), "
             + "layout=\(cfg.effectiveDefaultLayout), "
             + "\(cfg.exclusionRules?.count ?? 0) exclude, "
             + "\(cfg.rules?.count ?? 0) rule, "
-            + "\(desktops) configured desktop(s)\n").utf8))
+            + "\(desktops) configured desktop(s)")
         exit(0)
     }
 }

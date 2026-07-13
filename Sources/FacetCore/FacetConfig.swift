@@ -50,6 +50,22 @@ public struct FacetConfig: Sendable {
     /// rejected) by `load(source:)`; emitted at startup/hot-reload by
     /// `Controller.logConfigWarnings()`. `[]` when clean or unparseable.
     public internal(set) var schemaWarnings: [ValidationError] = []
+    /// t-r5yz: SEMANTIC decode findings — "did facet actually keep what you
+    /// wrote?" — as opposed to `schemaWarnings`, which is sill's STRUCTURAL
+    /// "is this key spelled right?". A block can be schema-perfect and still be
+    /// discarded whole (an isolate desktop with no `match`), which used to be
+    /// invisible: the drop reason went to `Log.line` and `config --validate`
+    /// said "config valid" + exit 0. Recorded here, never acted on: the daemon
+    /// LOGS every severity and boots regardless; only `--validate` promotes
+    /// `.error` to exit 1. See `ConfigDiagnostic`.
+    public internal(set) var diagnostics: [ConfigDiagnostic] = []
+    /// Does the config TEXT declare mac-desktop blocks — even ones that failed
+    /// to decode? Read by `isMacDesktopManaged`, which must answer "is this user
+    /// opt-in?" from the DECLARATION, not from the survivors: a config whose
+    /// desktop blocks all got dropped otherwise looked identical to a config
+    /// with no desktop blocks at all, and facet would flip from opt-in to
+    /// managing EVERY mac desktop (t-r5yz).
+    public internal(set) var declaresDesktopBlocks: Bool = false
     /// Theme color-cycle period (`[theme].color-cycle-ms`, integer ms) —
     /// animatable themes (rainbow / chomp) rotate their accents over
     /// this period. Set → animate; unset → static. Independent of the
@@ -653,7 +669,17 @@ public struct FacetConfig: Sendable {
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
         let metas = macDesktopMetaConfigs
-        if sections.isEmpty && metas.isEmpty { return true }
+        if sections.isEmpty && metas.isEmpty {
+            // Nothing decoded. Two very different reasons — tell them apart by
+            // the TEXT, not by the survivors (t-r5yz):
+            //   • the user wrote no desktop blocks → the shipped default: manage
+            //     every mac desktop.
+            //   • the user wrote desktop blocks and every one of them was DROPPED
+            //     → they ARE opt-in, and facet must not "recover" by seizing
+            //     desktops they never configured. Manage nothing; the load path
+            //     already emitted an error diagnostic saying so.
+            return !declaresDesktopBlocks
+        }
         guard let ordinal else { return true }
         return sections[ordinal] != nil || metas[ordinal] != nil
     }
@@ -774,6 +800,37 @@ public struct FacetConfig: Sendable {
     {
         guard let ordinal else { return [] }
         return effectiveMacDesktopSectionConfigs[ordinal] ?? []
+    }
+
+    /// Every authored `layout` name that is not a registered engine (t-r5yz).
+    ///
+    /// A `layout` typo is a CLAMP, so it stays a `.warning` and `--validate` still
+    /// exits 0 — but it was previously not reported at all, in EITHER channel:
+    /// `SchemaField("layout", .string)` carries no enum domain (the registry is
+    /// dynamic), and the tile path just falls through `LayoutRegistry.engine(named:)`
+    /// returning nil. `layout = "bps"` therefore meant "this workspace silently
+    /// never tiles", with no signal anywhere. A clamp the user cannot SEE is not a
+    /// clamp, it is a disappearance.
+    func layoutDiagnostics() -> [ConfigDiagnostic] {
+        var out: [ConfigDiagnostic] = []
+        let known = LayoutRegistry.allModeNames
+        func check(_ name: String?, at where_: String) {
+            guard let name, !name.isEmpty, !known.contains(name.lowercased()) else {
+                return
+            }
+            out.append(.init(.warning, "config: \(where_) layout \"\(name)\" is not a "
+                + "registered engine (\(known.sorted().joined(separator: " / "))) — "
+                + "falling back to the default; nothing will tile here"))
+        }
+        for ordinal in macDesktopMetaConfigs.keys.sorted() {
+            check(macDesktopMetaConfigs[ordinal]?.layout, at: "[desktop.\(ordinal)]")
+        }
+        for ordinal in effectiveMacDesktopSectionConfigs.keys.sorted() {
+            for (i, s) in (effectiveMacDesktopSectionConfigs[ordinal] ?? []).enumerated() {
+                check(s.layout, at: "[[desktop.\(ordinal).section]] #\(i + 1)")
+            }
+        }
+        return out
     }
 
     /// Fatal config errors that should refuse startup (Fail Fast /

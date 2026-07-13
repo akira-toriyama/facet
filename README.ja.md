@@ -422,7 +422,13 @@ opt-in すればセッション編集を facet が保存する。
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの
   ある mac desktop だけ facet が管理し、 無い mac desktop は完全に
-  ノータッチ（窓そのまま・パネル非表示）。 3 view すべてが同じ
+  ノータッチ（窓そのまま・パネル非表示）。 **decode できないブロックがあっても、
+  他の desktop が facet に返ってくるわけではない**: 宣言したブロックが**全部
+  drop された**場合（古い `[[desktop.N.tab]]`・typo した `[desktop.N]` 等）、
+  facet は**何も管理しない**＋理由を言う（`facet config --validate`）。 opt-in
+  かどうかは**書いたもの**が決めるのであって、生き残ったものではない —— 壊れた
+  ブロックが「渡していない desktop を facet に掴ませる」ことは決してない。
+  3 view すべてが同じ
   section リストを描画し、 ちょうど 1 つの workspace だけハイライト。 rail
   では active workspace が中央の hero になる。
 - `[desktop.N]` テーブル — **typed desktop**: `type = "workspace"` か
@@ -597,11 +603,15 @@ facet window --toggle-tag NAME    # focus 中の窓の tag を flip
 facet window --retag OLD NEW      # 窓の tag を別の tag に置換
 facet query --tags                # いま使われている全 tag (sorted JSON)
 
-# Config — ~/.config/facet/config.toml を schema 検証する（runtime の
-# 寛容な loader — 範囲外を clamp・typo key を drop — の STRICT な相棒）。
-# CI 向け exit code: 0 valid / 1 schema 違反 (型・enum・範囲・unknown key) /
-# 2 TOML parse 不能。valid なら要約 + clamp 警告を stderr に出す。editor 補完
-# (taplo) と同じ schema 由来なので「editor は green」と「loader が受理」がズレない。
+# Config — 寛容な loader の STRICT な相棒。「facet はこのファイルで実際に何を
+# するのか」に答えるので、**壊れているもの**（型・enum・範囲・unknown key）と
+# **facet が捨てたもの**の両方を報告する: `match` の無い `[desktop.N]
+# type = "isolate"`・apply キーの無い `[[rule]]`・制約ゼロの `[[exclude]]` ——
+# どれも schema 的には完璧なのにブロックごと破棄され、以前は黙って消えていた。
+# CI 向け exit code: 0 valid / 1 違反 or ブロック破棄 / 2 TOML parse 不能。
+# clamp された値は WARNING —— 表示はするが check は落とさない（typo で
+# レイアウトは壊れない）。editor 補完 (taplo) と同じ schema 由来なので
+# 「editor は green」と「loader が受理」がズレない。
 facet config --validate           # config ファイルを lint
 ```
 

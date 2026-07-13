@@ -234,7 +234,14 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   adopt/park, empty `workspaces()` → Controller's empty-list guard
   hides the panel). No `[[desktop.N.section]]` / `[desktop.N]` at all
   → every mac desktop managed with the global default (`FacetConfig.isMacDesktopManaged`
-  gates on EITHER form).
+  gates on EITHER form). **Opt-in is declared by the TEXT, not by the
+  survivors** (t-r5yz): a config whose desktop blocks ALL fail to decode
+  manages **nothing** — it does not "recover" into managing every desktop.
+  The two cases look identical from the decoded config (both yield zero
+  desktops), so `FacetConfig.declaresDesktopBlocks` reads the raw headers
+  to tell them apart. Seizing desktops the user never configured, because
+  the block naming them had a typo, is the one way a typo COULD break the
+  layout — don't reopen it.
   **A workspace section may be named from config via an optional `label`**
   (§A / t-0018 reversed the old "never named from config" rule; the old
   `[desktop.N]` by-name seed stays retired). Every `[[desktop.N.section]]`
@@ -466,6 +473,24 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   user just gets the default for that one key. The `effective*`
   accessors on `FacetConfig` are where the clamping lives; always
   read through them, never the raw Optional fields.
+- **A CLAMP is silent-ish; a DROP is loud** (t-r5yz). Clamping is not the
+  only thing decode does — some blocks are discarded WHOLE (an isolate
+  desktop with no `match`, a `[[rule]]` with no apply key, a zero-constraint
+  `[[exclude]]`), and a discarded block is not a defaulted value: the user
+  wrote something and facet kept none of it. Every such drop appends a
+  `ConfigDiagnostic(.error, …)` to `FacetConfig.diagnostics`; a survived-but-
+  ignored key appends `.warning`. **Severity is DATA, not control flow** —
+  the two consumers read it differently and that is the whole design:
+  - the **daemon** (`Controller.logConfigWarnings`) logs every severity and
+    **boots regardless**. A broken config never refuses to start.
+  - **`facet config --validate`** promotes `.error` to **exit 1**. It is the
+    tool whose entire job is "what will facet do with this file?", so
+    "config valid" over a thrown-away desktop was a lie.
+
+  Adding a decode path? Classify by ONE rule: **wrote-it-and-lost-it →
+  `.error`; value-clamped → `.warning`.** Decoders REPORT, they don't
+  `Log.line` for themselves (that would only reach stderr under
+  `FACET_DEBUG`, which is how the silence happened).
 - **Section-scoped > bare top-level when adding TOML / CLI surface**.
   New TOML knobs go under a named ``[section]`` — even if the same
   key (``color``, ``size``, …) repeats across sections — over a

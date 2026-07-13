@@ -79,8 +79,7 @@ public enum ConfigSnapshot {
             return configText
         }
 
-        let origins = FacetConfig.decodeDesktopSectionOrigins(fromTOML: configText,
-                                                              log: false)
+        let origins = FacetConfig.decodeDesktopSectionOrigins(fromTOML: configText)
 
         // Ordinal-alignment guard (see `rawOrdinal` note in DesktopSectionOrigin):
         // `rawOrdinal` counts within one LITERAL header spelling (facet's

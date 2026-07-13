@@ -212,8 +212,7 @@ struct SectionDecodeTests {
         [[desktop.01.section]]
         label = "Zero"
         """
-        let origins = FacetConfig.decodeDesktopSectionOrigins(
-            fromTOML: text, log: false)
+        let origins = FacetConfig.decodeDesktopSectionOrigins(fromTOML: text)
         #expect(origins[1]?.count == 2)
         // Sorted header order: "desktop.01.section" < "desktop.1.section".
         #expect(origins[1]?[0].section.label == "Zero")

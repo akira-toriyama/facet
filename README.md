@@ -456,7 +456,12 @@ Frequently-touched keys:
   desktop gets the default workspaces automatically; **any** present →
   **opt-in**: facet manages only the mac desktops that have a section
   block; a mac desktop without one is left untouched (windows as-is, panel
-  hidden there). All three views render the same section list, with exactly
+  hidden there). **A block facet cannot decode does not hand the other
+  desktops back**: if every declared block is dropped (a stale
+  `[[desktop.N.tab]]`, one typo'd `[desktop.N]`), facet manages **nothing**
+  and tells you why — run `facet config --validate`. Being opt-in is what
+  you *wrote*, not what survived; a broken block must never promote facet
+  to seizing desktops you never gave it. All three views render the same section list, with exactly
   one workspace highlighted; on the rail the active workspace is the centre
   hero.
 - `[desktop.N]` table — the **typed desktop**: `type = "workspace"` or
@@ -591,13 +596,17 @@ facet query --windows --filter EXPR  # post-filter that array with a
 facet query --tags                # every tag currently in use, as a sorted
                                   # JSON array ([] until a window is tagged)
 
-# Config — validate ~/.config/facet/config.toml against the schema (the
-# STRICT counterpart to the lenient loader, which clamps out-of-range values
-# and drops typo'd keys at runtime). CI-friendly exit codes: 0 valid, 1 schema
-# violation (wrong type / bad enum / out-of-range / unknown key), 2 unparseable
-# TOML. Valid → a parsed summary + any clamp warnings print to stderr. Driven
-# by the SAME schema that powers editor completion, so "editor green (taplo)"
-# and "loader accepts it" can't diverge.
+# Config — the STRICT counterpart to the lenient loader. It answers "what will
+# facet actually DO with this file?", so it reports BOTH what is malformed
+# (wrong type / bad enum / out-of-range / unknown key) AND what facet threw
+# AWAY: an `[desktop.N] type = "isolate"` with no `match`, a `[[rule]]` with no
+# apply key, an `[[exclude]]` with no constraint — each of those is
+# schema-perfect and each is discarded whole, and used to vanish in silence.
+# CI-friendly exit codes: 0 valid, 1 violation or dropped block, 2 unparseable
+# TOML. Clamped values are WARNINGS — they print but never fail the check,
+# because a typo can never break the layout. Driven by the SAME schema that
+# powers editor completion, so "editor green (taplo)" and "loader accepts it"
+# can't diverge.
 facet config --validate           # lint the config file
 
 # Server controls

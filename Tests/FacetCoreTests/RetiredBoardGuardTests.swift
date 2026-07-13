@@ -4,15 +4,17 @@ import Testing
 /// The `[[desktop.N.tab]]` migration guard — the ONE piece of board code that
 /// survived the abolition (t-0sbm), and the only one that must.
 ///
-/// Why it is load-bearing, and why it is worth a test: boards no longer decode.
-/// So a config that types its desktops ONLY with `[[desktop.N.tab]]` declares
-/// nothing facet recognises — `macDesktopSectionConfigs` and
-/// `macDesktopMetaConfigs` both come back empty — and `isMacDesktopManaged`
-/// then falls through to `true` for EVERY ordinal. The user's opt-in
-/// ("manage just desktop 1") silently becomes "manage all of them". The guard
-/// is what makes that flip loud. `boardConfigFlipsToManageEveryDesktop` below
-/// pins the flip itself, so the reason the guard exists cannot rot away
-/// unnoticed.
+/// Why it is load-bearing: boards no longer decode. A config that types its
+/// desktops ONLY with `[[desktop.N.tab]]` declares nothing facet recognises —
+/// `macDesktopSectionConfigs` and `macDesktopMetaConfigs` both come back empty.
+///
+/// That USED to flip `isMacDesktopManaged` to `true` for EVERY ordinal: the
+/// user's opt-in ("manage just desktop 1") silently became "manage all of them",
+/// and facet would adopt, park and tile desktops they had never handed it. The
+/// guard's job was to shout about the flip. t-r5yz FIXED the flip instead —
+/// whether a user is opt-in is declared by the TEXT, not by the survivors, so a
+/// config whose desktop blocks all got dropped now manages NOTHING and says why.
+/// The guard survives as the thing that names the retired block.
 struct RetiredBoardGuardTests {
 
     // MARK: - detection
@@ -68,9 +70,13 @@ struct RetiredBoardGuardTests {
         #expect(found.isEmpty)
     }
 
-    // MARK: - the flip the guard exists to announce
+    // MARK: - the flip, and its repair (t-r5yz / (c))
 
-    @Test func boardConfigFlipsToManageEveryDesktop() {
+    /// ⬅ This test used to assert the OPPOSITE (`boardConfigFlipsToManageEveryDesktop`):
+    /// a board-only config managed every mac desktop. That was the bug. The user
+    /// said "manage desktop 1"; facet heard nothing, concluded no one had ever
+    /// configured it, and seized all of them.
+    @Test func boardOnlyConfigKeepsTheOptInAndManagesNothing() {
         let c = FacetConfig.load(source: """
         [[desktop.1.tab]]
         label = "Web"
@@ -78,10 +84,49 @@ struct RetiredBoardGuardTests {
         // Nothing decoded — the board block is inert.
         #expect(c.effectiveMacDesktopSectionConfigs.isEmpty)
         #expect(c.macDesktopMetaConfigs.isEmpty)
-        // …so the opt-in is GONE: every mac desktop is managed, including ones
-        // the user never mentioned. That is the flip the warn announces.
+        // …but the DECLARATION is right there in the text, so the opt-in stands.
+        #expect(c.declaresDesktopBlocks)
+        #expect(!c.isMacDesktopManaged(ordinal: 1),
+                "a dropped block must not promote facet to manage-everything")
+        #expect(!c.isMacDesktopManaged(ordinal: 7))
+        // And it is LOUD about why it is doing nothing: the retired block, plus
+        // the all-dropped summary.
+        #expect(c.diagnostics.hasErrors)
+        #expect(c.diagnostics.contains { $0.message.contains("desktop.1.tab") })
+        #expect(c.diagnostics.contains { $0.message.contains("NONE of them decoded") })
+    }
+
+    /// The unconfigured default is untouched: no desktop blocks at all → facet
+    /// manages every mac desktop, as it always has. This is the case (c) must NOT
+    /// break — "nothing declared" and "everything I declared died" are different
+    /// questions, and only the TEXT can tell them apart.
+    @Test func aConfigWithNoDesktopBlocksStillManagesEveryDesktop() {
+        let c = FacetConfig.load(source: """
+        [theme]
+        name = "terminal"
+        """)
+        #expect(!c.declaresDesktopBlocks)
         #expect(c.isMacDesktopManaged(ordinal: 1))
         #expect(c.isMacDesktopManaged(ordinal: 7))
+        #expect(!c.diagnostics.hasErrors)
+    }
+
+    /// A PARTIAL failure was already correct and stays so: desktop 1 decodes,
+    /// desktop 2's isolate table is dropped for want of a `match` → desktop 1 is
+    /// managed, everything else (including the broken 2) is hands-off.
+    @Test func oneSurvivingBlockIsEnoughToKeepManagingIt() {
+        let c = FacetConfig.load(source: """
+        [[desktop.1.section]]
+        label = "Code"
+
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        """)
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(!c.isMacDesktopManaged(ordinal: 2))
+        #expect(!c.isMacDesktopManaged(ordinal: 7))
+        #expect(c.diagnostics.hasErrors, "the dropped [desktop.2] is still loud")
     }
 
     /// The contrast: migrate the same intent and the opt-in holds — desktop 1
