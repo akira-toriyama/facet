@@ -87,6 +87,18 @@ public extension ApplyOp {
     /// A missing / non-table `apply` yields `[]` (drop-inert). Unknown
     /// keys are ignored — a typo can never break a sibling op.
     static func list(from value: TOMLValue?) -> [ApplyOp] {
+        var rejected: [String] = []
+        return list(from: value, rejectingTags: &rejected)
+    }
+
+    /// `list`, reporting the tag names it REFUSED (t-r5yz). A raw tag that fails
+    /// `TagName` policy yields no op — so `tags = ["ok", "bad:tag"]` used to
+    /// produce a rule that quietly applied one tag instead of two, and
+    /// `tags = ["bad:tag"]` produced a rule with NO ops that was then dropped
+    /// with a message blaming the missing `apply` key. Both lied by omission.
+    static func list(from value: TOMLValue?,
+                     rejectingTags rejected: inout [String]) -> [ApplyOp]
+    {
         guard case .table(let t)? = value else { return [] }
         var ops: [ApplyOp] = []
         if case .string(let ws)? = t["workspace"], !ws.isEmpty {
@@ -95,6 +107,7 @@ public extension ApplyOp {
         if let tags = t["tags"]?.asStringArray {
             for raw in tags {
                 if let name = TagName.normalized(raw) { ops.append(.addTag(name)) }
+                else { rejected.append(raw) }
             }
         }
         if case .bool(let b)? = t["floating"] { ops.append(.setFloating(b)) }

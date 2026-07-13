@@ -802,51 +802,35 @@ public struct FacetConfig: Sendable {
         return effectiveMacDesktopSectionConfigs[ordinal] ?? []
     }
 
-    /// Grammar-check every `match` predicate the config declares (t-r5yz / D1).
+    /// Every authored `layout` name that is not a registered engine (t-r5yz).
     ///
-    /// This is the ONE check the DECODERS deliberately don't do — parse-only
-    /// stays total (`RuleDecodeTests.matchGrammarNotValidatedAtDecode`), so a
-    /// malformed `match` is not a block-drop: the block survives. It is arguably
-    /// worse than a drop. The tree renders a caret diagnostic while the PARK side
-    /// just falls out of its `case .success` and does nothing at all, so an
-    /// isolate desktop with a busted predicate is a DEAD desktop — it tiles
-    /// nothing, parks nothing, and never says why.
-    ///
-    /// Severity follows `classifyMatchPredicate`, which is the same verdict the
-    /// projection acts on: malformed SYNTAX is hard (`.error`), an unknown FIELD
-    /// is soft (`.warning` — the predicate is valid, it simply matches nothing).
-    /// Pure; run from `load` so the daemon logs it too, not just `--validate`.
-    public func matchDiagnostics() -> [ConfigDiagnostic] {
+    /// A `layout` typo is a CLAMP, so it stays a `.warning` and `--validate` still
+    /// exits 0 — but it was previously not reported at all, in EITHER channel:
+    /// `SchemaField("layout", .string)` carries no enum domain (the registry is
+    /// dynamic), and the tile path just falls through `LayoutRegistry.engine(named:)`
+    /// returning nil. `layout = "bps"` therefore meant "this workspace silently
+    /// never tiles", with no signal anywhere. A clamp the user cannot SEE is not a
+    /// clamp, it is a disappearance.
+    func layoutDiagnostics() -> [ConfigDiagnostic] {
         var out: [ConfigDiagnostic] = []
-        for ordinal in macDesktopMetaConfigs.keys.sorted() {
-            guard let meta = macDesktopMetaConfigs[ordinal],
-                  meta.type == .isolate else { continue }
-            out += Self.diagnose(match: meta.match,
-                                 at: "[desktop.\(ordinal)] match")
+        let known = LayoutRegistry.allModeNames
+        func check(_ name: String?, at where_: String) {
+            guard let name, !name.isEmpty, !known.contains(name.lowercased()) else {
+                return
+            }
+            out.append(.init(.warning, "config: \(where_) layout \"\(name)\" is not a "
+                + "registered engine (\(known.sorted().joined(separator: " / "))) — "
+                + "falling back to the default; nothing will tile here"))
         }
-        for (i, rule) in effectiveRules.enumerated() {
-            out += Self.diagnose(match: rule.match, at: "[[rule]] #\(i + 1) match")
+        for ordinal in macDesktopMetaConfigs.keys.sorted() {
+            check(macDesktopMetaConfigs[ordinal]?.layout, at: "[desktop.\(ordinal)]")
+        }
+        for ordinal in effectiveMacDesktopSectionConfigs.keys.sorted() {
+            for (i, s) in (effectiveMacDesktopSectionConfigs[ordinal] ?? []).enumerated() {
+                check(s.layout, at: "[[desktop.\(ordinal).section]] #\(i + 1)")
+            }
         }
         return out
-    }
-
-    private static func diagnose(match: String, at where_: String)
-        -> [ConfigDiagnostic]
-    {
-        switch classifyMatchPredicate(match) {
-        case .ok:
-            return []
-        case .unknownField(let fields):
-            return [.init(.warning, "config: \(where_) \"\(match)\": unknown field"
-                + "\(fields.count == 1 ? "" : "s") "
-                + "\(fields.joined(separator: ", ")) — the predicate is valid but "
-                + "matches nothing")]
-        case .malformed(let error):
-            return [.init(.error, "config: \(where_): \(error.message) — the "
-                + "predicate does not parse, so it selects NOTHING (an isolate "
-                + "desktop with an unparseable match tiles nothing and parks "
-                + "nothing)\n  \(error.caret(in: match))")]
-        }
     }
 
     /// Fatal config errors that should refuse startup (Fail Fast /

@@ -234,25 +234,78 @@ extension FacetConfig {
     {
         var out: [Rule] = []
         for (i, t) in parseTOMLArrayOfTables(text, table: "rule").enumerated() {
+            // `#N` is the rule's position IN THE FILE, always — never its position
+            // among the survivors. Numbering the grammar check over the decoded
+            // list instead would shift every diagnostic after a dropped rule by
+            // one, and the whole point of this channel is to name the block the
+            // user has to go and edit.
+            let at = "[[rule]] #\(i + 1)"
             guard case .string(let match)? = t["match"],
                   !match.trimmingCharacters(in: .whitespaces).isEmpty
             else {
-                diags.append(.init(.error, "config: [[rule]] #\(i + 1): missing or "
-                    + "blank `match` — a rule with nothing to match on adopts "
-                    + "nothing; dropping it"))
+                diags.append(.init(.error, "config: \(at): missing or blank `match` "
+                    + "— a rule with nothing to match on adopts nothing; dropping it"))
                 continue
             }
-            let apply = ApplyOp.list(from: .table(t))
+            // Tag names that fail `TagName` policy yield no op and used to vanish
+            // in silence — with `tags = ["ok", "bad:tag"]` the rule survived, one
+            // tag short, and nothing said so.
+            var rejectedTags: [String] = []
+            let apply = ApplyOp.list(from: .table(t), rejectingTags: &rejectedTags)
+            for raw in rejectedTags {
+                diags.append(.init(.error, "config: \(at): \"\(raw)\" is not a valid "
+                    + "tag name (no leading `_`, no `:` / `=` / `,`, no internal "
+                    + "spaces) — dropping that tag"))
+            }
             guard !apply.isEmpty else {
-                diags.append(.init(.error, "config: [[rule]] #\(i + 1) (match "
-                    + "\"\(match)\"): no `apply` key (expected workspace / tags / "
-                    + "floating / sticky / master) — the rule would do nothing; "
-                    + "dropping it"))
+                diags.append(.init(.error, "config: \(at) (match \"\(match)\"): no "
+                    + "`apply` key (expected workspace / tags / floating / sticky / "
+                    + "master) — the rule would do nothing; dropping it"))
                 continue
             }
+            // Parse-only stays TOTAL: a malformed `match` is stored verbatim and
+            // the rule LIVES (`RuleDecodeTests.matchGrammarNotValidatedAtDecode`).
+            // We only say so out loud.
+            diags += matchDiagnostics(for: match, at: "\(at) match")
             out.append(Rule(match: match, apply: apply))
         }
         return out
+    }
+
+    /// Grammar-check ONE `match` predicate (t-r5yz / D1). Not a drop — the block
+    /// survives — and yet it is worse than a drop: the tree paints a caret while
+    /// the park side silently falls out of its `case .success` and does nothing,
+    /// so an isolate desktop with an unparseable predicate tiles nothing, parks
+    /// nothing, and never says why. A DEAD desktop.
+    ///
+    /// The verdict comes from `classifyMatchPredicate` — the same pure function
+    /// the live match editor shows — so `--validate` and the GUI can never
+    /// disagree: malformed SYNTAX is hard (`.error`), an unknown FIELD is soft
+    /// (`.warning`; the predicate is valid, it simply selects nothing).
+    ///
+    /// Called from the DECODERS rather than from a pass over the decoded config,
+    /// because only the decoder knows WHICH block this is (the literal
+    /// `[desktop.01]` header, the file position of a `[[rule]]`) — and a
+    /// diagnostic that names the wrong block is worse than none.
+    static func matchDiagnostics(for match: String, at where_: String)
+        -> [ConfigDiagnostic]
+    {
+        switch classifyMatchPredicate(match) {
+        case .ok:
+            return []
+        case .unknownField(let fields):
+            return [.init(.warning, "config: \(where_) \"\(match)\": unknown field"
+                + "\(fields.count == 1 ? "" : "s") \(fields.joined(separator: ", "))"
+                + " — the predicate is valid but matches nothing")]
+        case .malformed(let error):
+            // Indent BOTH lines of the caret, or the `^` lands a column short.
+            let caret = error.caret(in: match)
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .map { "  " + $0 }.joined(separator: "\n")
+            return [.init(.error, "config: \(where_): the predicate does not parse, "
+                + "so it selects NOTHING (an isolate desktop with an unparseable "
+                + "match tiles nothing and parks nothing)\n\(caret)")]
+        }
     }
 
     /// The retired `[[desktop.N.tab]]` board headers this TOML still declares,
@@ -324,6 +377,24 @@ extension FacetConfig {
                     + "position) — dropping the table"))
                 continue
             }
+            let (meta, note) = DesktopMeta.parse(fromTOMLRow: row)
+            if let note {
+                // Same rule as the section rows: a note with no meta = the whole
+                // `[desktop.N]` table is gone (error); a note WITH a meta = the
+                // table lives and facet ignored a stray key (warning). Name the
+                // LITERAL header — `[desktop.01]` must not be reported as
+                // `[desktop.1]`, or the user goes looking at the wrong line.
+                diags.append(.init(meta == nil ? .error : .warning,
+                                   "config: [\(header)]: \(note)"))
+            }
+            // A DROPPED table claims nothing. Reserving the ordinal before the
+            // parse verdict is known would let a broken spelling evict a VALID
+            // sibling — `[desktop.01]` (no `match`) sorts first, dies, and takes
+            // a perfectly good `[desktop.1]` down with it — leaving zero decoded
+            // desktops, which under the opt-in rule means facet manages NOTHING.
+            // Worse, the collision message would then name a "survivor" that did
+            // not survive.
+            guard let meta else { continue }
             if let prior = spellingOf[ordinal] {
                 diags.append(.init(.error, "config: [\(header)] and [\(prior)] both "
                     + "name mac desktop \(ordinal) — one desktop is one table, so "
@@ -331,15 +402,13 @@ extension FacetConfig {
                 continue
             }
             spellingOf[ordinal] = header
-            let (meta, note) = DesktopMeta.parse(fromTOMLRow: row)
-            if let note {
-                // Same rule as the section rows: a note with no meta = the whole
-                // `[desktop.N]` table is gone (error); a note WITH a meta = the
-                // table lives and facet ignored a stray key (warning).
-                diags.append(.init(meta == nil ? .error : .warning,
-                                   "config: [desktop.\(ordinal)]: \(note)"))
+            out[ordinal] = meta
+            // The isolate `match` GRAMMAR — checked here, where the literal header
+            // is in hand (see `matchDiagnostics`). The table still decodes: a
+            // malformed match is not a drop, it is a DEAD desktop.
+            if meta.type == .isolate {
+                diags += matchDiagnostics(for: meta.match, at: "[\(header)] match")
             }
-            if let meta { out[ordinal] = meta }
         }
         return out
     }
@@ -369,7 +438,20 @@ extension FacetConfig {
         }
         FileHandle.standardError.write(Data(
             "facet: could not read \(path)\n".utf8))
-        return .init()
+        // FAIL CLOSED (t-r5yz / (c)). The file EXISTS — the user HAS configured
+        // facet, we simply can't read what they said (bad permissions, not UTF-8).
+        // Returning a bare default here would say "nobody ever configured me" and
+        // facet would seize EVERY mac desktop, which is the same destructive flip
+        // the all-dropped case just closed. An unreadable config is the loudest
+        // possible "I don't know what you want": manage nothing, and say so.
+        // (`config --validate` already refuses this path with exit 2, calling the
+        // lenient collapse "a trap" — the daemon walked straight into it.)
+        var c = FacetConfig()
+        c.declaresDesktopBlocks = true
+        c.diagnostics = [.init(.error, "config: \(path) exists but could not be read "
+            + "(bad permissions? not UTF-8?) — facet is managing NO mac desktop "
+            + "until it can read your config")]
+        return c
     }
 
     /// Startup config load WITH auto-promote (t-hdxb). Behaves exactly like
@@ -507,7 +589,7 @@ extension FacetConfig {
                 + "manage NO mac desktop until at least one [desktop.N] / "
                 + "[[desktop.N.section]] block is valid (see the errors above)"))
         }
-        c.diagnostics = diags + c.matchDiagnostics()
+        c.diagnostics = diags + c.layoutDiagnostics()
         return c
     }
 

@@ -456,7 +456,12 @@ Frequently-touched keys:
   desktop gets the default workspaces automatically; **any** present →
   **opt-in**: facet manages only the mac desktops that have a section
   block; a mac desktop without one is left untouched (windows as-is, panel
-  hidden there). All three views render the same section list, with exactly
+  hidden there). **A block facet cannot decode does not hand the other
+  desktops back**: if every declared block is dropped (a stale
+  `[[desktop.N.tab]]`, one typo'd `[desktop.N]`), facet manages **nothing**
+  and tells you why — run `facet config --validate`. Being opt-in is what
+  you *wrote*, not what survived; a broken block must never promote facet
+  to seizing desktops you never gave it. All three views render the same section list, with exactly
   one workspace highlighted; on the rail the active workspace is the centre
   hero.
 - `[desktop.N]` table — the **typed desktop**: `type = "workspace"` or

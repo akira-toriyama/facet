@@ -422,7 +422,13 @@ opt-in すればセッション編集を facet が保存する。
   `[[desktop.N.section]]` が**1 つも無ければ**全 mac desktop が自動で
   デフォルト workspace を持つ。 **1 つでもあれば opt-in**: section ブロックの
   ある mac desktop だけ facet が管理し、 無い mac desktop は完全に
-  ノータッチ（窓そのまま・パネル非表示）。 3 view すべてが同じ
+  ノータッチ（窓そのまま・パネル非表示）。 **decode できないブロックがあっても、
+  他の desktop が facet に返ってくるわけではない**: 宣言したブロックが**全部
+  drop された**場合（古い `[[desktop.N.tab]]`・typo した `[desktop.N]` 等）、
+  facet は**何も管理しない**＋理由を言う（`facet config --validate`）。 opt-in
+  かどうかは**書いたもの**が決めるのであって、生き残ったものではない —— 壊れた
+  ブロックが「渡していない desktop を facet に掴ませる」ことは決してない。
+  3 view すべてが同じ
   section リストを描画し、 ちょうど 1 つの workspace だけハイライト。 rail
   では active workspace が中央の hero になる。
 - `[desktop.N]` テーブル — **typed desktop**: `type = "workspace"` か

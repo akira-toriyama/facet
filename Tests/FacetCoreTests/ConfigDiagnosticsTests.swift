@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import FacetCore
 
@@ -123,6 +124,35 @@ struct ConfigDiagnosticsTests {
         #expect(a?.label == "Zero", "sorted header order: desktop.01 < desktop.1")
     }
 
+    /// ⬅ The bug the FIRST cut of this feature shipped, caught by adversarial
+    /// review running the real binary. The collision guard claimed the ordinal
+    /// BEFORE the table was known to parse, so a broken spelling that sorts first
+    /// evicted a perfectly valid sibling — and then, because the new opt-in rule
+    /// says "declared but nothing decoded → manage nothing", facet went
+    /// completely dead on a config the user had gotten right. A dropped table
+    /// claims nothing.
+    @Test func aDroppedSpellingDoesNotEvictAValidSibling() {
+        let toml = """
+        [desktop.01]
+        type = "isolate"
+        label = "Bad"
+
+        [desktop.1]
+        type = "workspace"
+        label = "Good"
+        """
+        let c = FacetConfig.load(source: toml)
+        #expect(c.macDesktopMetaConfigs[1]?.label == "Good",
+                "the valid table must survive its broken twin")
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        // The [desktop.01] drop is reported against its LITERAL header — sending
+        // the user to `[desktop.1]` would point at the line that is FINE.
+        #expect(errors(toml).contains { $0.contains("[desktop.01]: isolate desktop") })
+        // …and no collision is claimed, because there wasn't one: only one table
+        // ever held the ordinal.
+        #expect(!errors(toml).contains { $0.contains("both name mac desktop") })
+    }
+
     // MARK: - [[desktop.N.section]]
 
     @Test func duplicateSectionLabelIsAnError() {
@@ -240,6 +270,74 @@ struct ConfigDiagnosticsTests {
         """, contains: "not parseable as TOML")
     }
 
+    /// ⬅ Also from the review. The grammar check used to number `[[rule]] #N` over
+    /// the SURVIVORS while the drop diagnostics numbered by FILE position — so one
+    /// dropped rule made every later rule's match error point at the wrong table.
+    /// In the one tool whose job is "which block of my file is broken", naming the
+    /// wrong block is worse than saying nothing.
+    @Test func ruleDiagnosticsAreNumberedByFilePositionNotBySurvivors() {
+        let found = errors("""
+        [[rule]]
+        match = 'app~=Chrome'
+        tag = "web"
+
+        [[rule]]
+        match = 'app~'
+        tags = ["x"]
+        """)
+        #expect(found.contains { $0.contains("[[rule]] #1") && $0.contains("no `apply` key") })
+        #expect(found.contains { $0.contains("[[rule]] #2 match") },
+                "the malformed predicate is the file's SECOND rule: \(found)")
+        #expect(!found.contains { $0.contains("[[rule]] #1 match") })
+    }
+
+    /// A tag name that fails `TagName` policy yields no op. The rule SURVIVED one
+    /// tag short and nothing said so.
+    @Test func aRejectedTagNameIsReported() {
+        let found = errors("""
+        [[rule]]
+        match = 'app=Safari'
+        tags = ["ok", "bad:tag"]
+        """)
+        #expect(found.contains { $0.contains("\"bad:tag\" is not a valid tag name") })
+        // The rule itself lives — one good tag is still worth applying.
+        let c = FacetConfig.load(source: """
+        [[rule]]
+        match = 'app=Safari'
+        tags = ["ok", "bad:tag"]
+        """)
+        #expect(c.effectiveRules.count == 1)
+        #expect(c.effectiveRules.first?.apply == [.addTag("ok")])
+    }
+
+    // MARK: - clamps that were invisible
+
+    /// `layout = "bps"` (typo for `bsp`) is a CLAMP — the section survives, so it
+    /// stays a warning and exit 0. But it was reported by NEITHER channel: the
+    /// schema has no enum domain for `layout` (the registry is dynamic) and the
+    /// tile path just falls through. The cell silently never tiled. A clamp the
+    /// user cannot SEE is not a clamp, it is a disappearance.
+    @Test func anUnknownLayoutNameIsAWarning() {
+        let toml = """
+        [[desktop.1.section]]
+        label = "Code"
+        layout = "bps"
+        """
+        #expect(warnings(toml).contains { $0.contains("layout \"bps\" is not a registered engine") })
+        #expect(errors(toml).isEmpty, "a clamp never fails the check")
+    }
+
+    @Test func anUnknownIsolateLayoutIsAWarning() {
+        let toml = """
+        [desktop.2]
+        type = "isolate"
+        match = 'app~=Chrome'
+        layout = "bps"
+        """
+        #expect(warnings(toml).contains { $0.contains("not a registered engine") })
+        #expect(errors(toml).isEmpty)
+    }
+
     // MARK: - the exit-code mapping
 
     @Test func exitCodeIsOneOnlyForErrors() {
@@ -252,6 +350,42 @@ struct ConfigDiagnosticsTests {
         #expect(configValidateExitCode(
             schemaErrorCount: 0,
             diagnostics: [.init(.warning, "clamped"), .init(.error, "dropped")]) == 1)
+    }
+
+    // MARK: - the unreadable file (the last door out of the opt-in flip)
+
+    /// ⬅ From the review. `load(path:)` collapsed "file exists but can't be read"
+    /// (bad perms, saved in a non-UTF-8 encoding — plausible: this config carries
+    /// Japanese comments) into a bare default config — which declares no desktop
+    /// blocks — so facet concluded nobody had ever configured it and seized EVERY
+    /// mac desktop. Bit-for-bit the destructive flip (c) exists to close.
+    /// `--validate` already refused this path (exit 2, its comment calls the
+    /// lenient collapse "a trap"); the daemon walked straight into it.
+    @Test func anUnreadableConfigManagesNothing() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("facet-unreadable-\(getpid())")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("config.toml")
+        // Lone 0xFF — not valid UTF-8, so `String(data:encoding:)` returns nil.
+        try Data([0xFF, 0xFE, 0xFD]).write(to: path)
+
+        let c = FacetConfig.load(path: path.path)
+        #expect(c.declaresDesktopBlocks, "an existing config is a configured user")
+        #expect(!c.isMacDesktopManaged(ordinal: 1),
+                "facet must not seize desktops because it failed to read the file")
+        #expect(!c.isMacDesktopManaged(ordinal: Int?.none))
+        #expect(c.diagnostics.hasErrors)
+        #expect(c.diagnostics.contains { $0.message.contains("could not be read") })
+    }
+
+    /// The contrast, and the case this must not break: NO config file at all is a
+    /// fresh install, not a broken one → every mac desktop managed with defaults.
+    @Test func aMissingConfigStillManagesEveryDesktop() {
+        let c = FacetConfig.load(path: "/nonexistent/facet/config.toml")
+        #expect(!c.declaresDesktopBlocks)
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(c.diagnostics.isEmpty)
     }
 
     // MARK: - a clean config stays clean
