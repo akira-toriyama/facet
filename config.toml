@@ -683,7 +683,15 @@ action = "ignore"
 #         show-non-matching — (optional, default false) true → the tree adds
 #                   a second "holding" section listing the parked non-
 #                   matching windows; false → the matched section alone.
-#         label   — (optional) display name for the desktop.
+#         label   — (optional) display name for the desktop. DISPLAY ONLY:
+#                   an isolate desktop's single workspace is UNNAMED, so `label`
+#                   is not a value your `match` can compare against (t-j7ps). It
+#                   used to name that workspace too — which meant renaming the
+#                   desktop could silently break its own `match`, at the NEXT
+#                   launch. A `match` that references `workspace` on an isolate
+#                   desktop is now a loud error: the field is always empty there,
+#                   so the predicate is a constant. Match on what the windows ARE
+#                   (app / title / tag / floating).
 #
 # ACTIVE SAMPLE — two mac desktops. Desktop 1 is a classic WORKSPACE desktop:
 # a NAMED "Main" workspace + an unnamed one (shown by index).

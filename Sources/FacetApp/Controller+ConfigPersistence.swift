@@ -105,6 +105,7 @@ extension Controller {
         // session (a reverted match has no key), so pass the dict verbatim —
         // the renderer drops non-lens ordinals + empty predicates itself.
         ov.isolateMatch = isolateMatchOverride
+        ov.isolateLabel = isolateLabelOverride
         return ov
     }
 

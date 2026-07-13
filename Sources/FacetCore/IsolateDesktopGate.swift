@@ -31,15 +31,26 @@
 /// `--rotate` / `--mirror` refine the tiled set WITHIN the same mode (the seam
 /// never re-fires), so they take effect and persist exactly as on a workspace
 /// desktop. (The t-0sbm review corrected an earlier "all refinement reverts"
-/// premise.) Window verbs, scratchpad verbs, tags, `section --focus` and
-/// `section --match` all work on an isolate desktop too.
+/// premise.) Window verbs, scratchpad verbs, tags, `section --focus`,
+/// `section --match` and `section --rename` all work on an isolate desktop too.
+///
+/// `section --rename` was gated until t-j7ps, and the gate was wrong twice over:
+/// the GUI (tree header ▸ Section ▸ Rename) never went through the DNC, so it
+/// walked straight past the gate — a CLI-first violation — and `--match` could
+/// already retarget the desktop and persist, so refusing `--rename` left the
+/// label LYING about what the desktop holds ("Web" over a set of editors). It now
+/// renames `[desktop.N] label`, ordinal-keyed and snapshot-persisted, exactly
+/// like `--match`. (The HOLDING section still refuses — it is synthesized by
+/// subtraction and has no label to write anywhere — but that reject lives in
+/// `renameSection`, where the section KIND is known; the gate only sees a DNC
+/// payload string.)
 public enum IsolateDesktopGate {
 
     /// The user-facing verb an isolate desktop refuses for this DNC control
     /// payload, or `nil` when the payload is allowed there.
     ///
     /// ⚠️ Allowed is the DEFAULT, so a NEW control payload passes unless it is
-    /// classified here. `LensDesktopGateTests` walks the whole vocabulary —
+    /// classified here. `IsolateDesktopGateTests` walks the whole vocabulary —
     /// add the payload there when you add it to the dispatch.
     public static func blockedVerb(forControl payload: String) -> String? {
         switch payload {
@@ -55,8 +66,6 @@ public enum IsolateDesktopGate {
             "workspace --move"
         case let p where p.hasPrefix("set-layout:"):
             "workspace --layout"
-        case let p where p.hasPrefix("section-rename:"):
-            "section --rename"
         default:
             nil
         }

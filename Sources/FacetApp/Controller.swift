@@ -75,21 +75,35 @@ final class Controller: NSObject {
     /// relaunch resets to config order. See `SectionOrder` for the why
     /// (reorder the OUTPUT, not the input `[DesktopSection]`).
     var macDesktopSectionOrder: [Int: [String]] = [:]
-    /// §E: session-only DISPLAY-LABEL override for `type="isolate"` sections.
-    /// Keyed by mac-desktop ordinal (`currentMacDesktopOrdinal() ?? -1`),
-    /// then by the section's stable id (`"section:<declOrder>:<label>"`),
-    /// value = the new display label. Applied to the PROJECTED result at the
-    /// single seam in `apply()` (via `applyLabelOverrides`), so tree/grid/rail
-    /// all reflect it; NEVER written to disk (config.toml stays read-only) and
-    /// NEVER touches the backend (display-only — windows / ids don't move).
-    /// Same lifetime as `macDesktopSectionOrder`: per-mac-desktop, non-
-    /// persisted, a relaunch resets to config order. Keyed on the FULL stable
-    /// id (not declOrder alone) so a config edit that changes declOrder/label
-    /// naturally orphans a stale override; a reorder leaves the id unchanged so
-    /// the override follows its section. Workspace labels live in the catalog
-    /// (`workspaceNames`), so a
-    /// workspace rename routes to `renameWorkspace` and never lands here.
-    var sectionLabelOverride: [Int: [String: String]] = [:]
+    /// §E / t-j7ps: the session-only DISPLAY-LABEL override for an ISOLATE
+    /// DESKTOP's matched section — keyed by mac-desktop ORDINAL alone, exactly
+    /// like `isolateMatchOverride` below (an isolate desktop has exactly one
+    /// matched section, so there is no id to key on).
+    ///
+    /// ⚠️ Ordinal-keyed is not a style choice, it is the fix. It USED to be
+    /// keyed by the section's stable id — and the matched section's id is
+    /// `"section:0:\(label)"`, with the CONFIG label baked in. Rename the label
+    /// and the id changes; the id-keyed override stops matching itself; the
+    /// rename evaporates on the next reconcile. That desync ALREADY happened
+    /// once (see `isolateMatchOverride`'s note — it was born from exactly this).
+    /// The ordinal is the one handle a rename cannot move.
+    ///
+    /// Applied to the PROJECTED OUTPUT at the single seam in `apply()` (via
+    /// `applyIsolateLabelOverride`), never fed into the projection's input — the
+    /// same reason. Never touches the backend: a label moves no windows, so
+    /// unlike `match` there is no `setIsolateLabel` and there must not be one.
+    ///
+    /// Persisted via the snapshot (`ConfigSnapshot.Overrides.isolateLabel` →
+    /// `[desktop.N] label`) on the SAME terms as `match`: only with `[config]
+    /// export-path` set, and only promoted onto config.toml at the next launch
+    /// with `auto-promote`. Session-only otherwise. Reset on relaunch, NOT on
+    /// `facet reload` — but a config edit to that desktop's `label` DOES drop it
+    /// (see `reloadConfig`), or the snapshot would re-bake the forgotten override
+    /// and auto-promote would revert the user's hand edit.
+    ///
+    /// A workspace label lives in the catalog (`workspaceNames`), so a workspace
+    /// rename routes to `renameWorkspace` and never lands here.
+    var isolateLabelOverride: [Int: String] = [:]
     /// t-ec9s (D6): the session-only runtime `match` override for a ISOLATE DESKTOP,
     /// keyed by mac-desktop ORDINAL alone (an isolate desktop holds exactly one lens,
     /// so there is no section id to key on). This is the SINGLE effective-match
@@ -615,6 +629,15 @@ final class Controller: NSObject {
             config.desktopIsolate(ordinal: ord)?.match
                 != fresh.desktopIsolate(ordinal: ord)?.match
         }
+        // …and the same for the LABEL (t-j7ps). REQUIRED, not a nicety: without
+        // it a hand-edit to `[desktop.N] label` leaves the old session override
+        // live, the snapshot export re-bakes it into a NEWER snapshot, and
+        // auto-promote silently reverts the user's edit at the next launch. The
+        // hand edit must win — that is the whole contract of the mtime guard.
+        let staleIsolateLabelOrdinals = isolateLabelOverride.keys.filter { ord in
+            config.desktopIsolate(ordinal: ord)?.label
+                != fresh.desktopIsolate(ordinal: ord)?.label
+        }
         // A hand-edit that changes a mac desktop's TYPE (workspace ⇄ lens) is
         // OUT OF SCOPE for hot-reload: the per-mac-desktop WorkspaceCatalog is
         // seeded once and never re-seeded (session-authoritative, like the
@@ -633,6 +656,10 @@ final class Controller: NSObject {
         }
         config = fresh
         backend.updateConfig(fresh)   // hot-reload the backend's copy
+        for ord in staleIsolateLabelOrdinals {
+            isolateLabelOverride.removeValue(forKey: ord)
+            Log.debug("reload: dropped stale isolate label override for desktop \(ord)")
+        }
         for ord in staleIsolateOrdinals {
             isolateMatchOverride.removeValue(forKey: ord)
             // Revert the adapter's park-side copy through the same seam the
@@ -1074,13 +1101,14 @@ final class Controller: NSObject {
             }
             logDiagnosticsOnChange(projected.diagnostics, prefix: "overview: ",
                                    against: &loggedSectionDiagnostics)
-            // §E: overlay the session-only lens DISPLAY-LABEL override BEFORE
-            // the reorder — display-only, id-preserving (identity is invariant
-            // so `--focus index:N` + the active-lens highlight stay correct),
-            // and lens-only (a workspace label comes from the catalog). Flows
-            // into all three views via `lastSections`.
-            let relabeled = applyLabelOverrides(projected.sections,
-                                                to: sectionLabelOverride[ordinal] ?? [:])
+            // §E: overlay the isolate desktop's session-only DISPLAY-LABEL
+            // override BEFORE the reorder — display-only and id-preserving (so
+            // `--focus index:N` identity stays invariant), ORDINAL-keyed (so a
+            // rename cannot move its own key), and matched-section-only (a
+            // workspace label comes from the catalog; a holding section has no
+            // label to rename). Flows into all three views via `lastSections`.
+            let relabeled = applyIsolateLabelOverride(
+                projected.sections, label: isolateLabelOverride[ordinal])
             // Apply the session-only reorder to the PROJECTED result (never
             // the config input — see `SectionOrder`). Flows for free into
             // tree/grid/rail since all three read `lastSections`.

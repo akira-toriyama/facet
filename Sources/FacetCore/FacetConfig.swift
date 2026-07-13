@@ -631,9 +631,25 @@ public struct FacetConfig: Sendable {
         // activeIndex` filter in applyIsolatePark) IS the whole desktop. Seeded
         // from the `[desktop.N]` table, never from sections (an isolate desktop has
         // none). Checked BEFORE the section/default branches.
+        //
+        // The workspace is UNNAMED, and deliberately so (t-j7ps). It used to take
+        // the desktop's `label` — which made `label` two things at once: a display
+        // name AND the value of the `workspace` FIELD that a `match` can compare
+        // against. So `facet section --rename` (which writes `[desktop.N] label`)
+        // could silently break the desktop's own `match`: rename a desktop whose
+        // match said `workspace=Web` and, at the NEXT LAUNCH, it selects nothing
+        // and anchor-parks every window. Cause and effect sat on opposite sides of
+        // a restart.
+        //
+        // The name was never load-bearing anyway: an isolate desktop's workspace
+        // is UNADDRESSABLE — every workspace verb (`--add` / `--remove` / `--move`
+        // / `--rename` / `--focus` / `--layout`) is refused by `IsolateDesktopGate`
+        // — because N=1 is an internal invariant that pins the park scope, not a
+        // thing the user owns. Naming that invisible cell, and letting a predicate
+        // depend on the name, was a display label masquerading as a data field.
+        // The label is now exactly what it claims to be.
         if let iso = desktopIsolate(ordinal: ordinal) {
-            return [(index: 1,
-                     config: WorkspaceConfig(name: iso.label, layout: iso.layout))]
+            return [(index: 1, config: WorkspaceConfig(name: "", layout: iso.layout))]
         }
         if isSectionModelActive(ordinal: ordinal), let ordinal {
             let wsSections = workspaceSubstrateSections(forOrdinal: ordinal)

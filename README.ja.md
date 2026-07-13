@@ -513,9 +513,13 @@ facet window --unmark NAME        # マークを消す
 # Section — 任意の section (workspace / isolate desktop の合成 section) を
 # 1-based の tree index か label で指す。`--focus` は activate (workspace へ切替・
 # isolate desktop の section は先頭窓を focus)。`--rename` は表示 label を runtime で
-# 変更 (session のみ・relaunch で reset・`facet reload` では消えない・空 label は
-# workspace を index へ戻す・isolate desktop は
-# `--rename` を拒否)。tree からも改名可: section ヘッダ右クリック → Section ▸ Rename。
+# 変更。**ISOLATE desktop では desktop 自体を改名する** (`[desktop.N] label`) ——
+# `--match` が既にその desktop の中身を retarget できる以上、名前だけ固定だと
+# 「中身について嘘をつく」ので、その対称形。既定は session のみ (relaunch で reset・
+# `facet reload` では消えない)、`[config] export-path` があれば `--match` と同様に
+# snapshot 経由で永続。空 label は revert。holding section は拒否 (match の補集合から
+# 合成されるので与える名前が無い)。tree からも改名可: section ヘッダ右クリック →
+# Section ▸ Rename。
 facet section --focus N            # tree 順で N 番目の section を focus
 facet section --focus LABEL        # label が LABEL の section を focus
 facet section --rename N "label"   # N 番目の section の表示 label を改名

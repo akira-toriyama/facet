@@ -213,38 +213,39 @@ public enum FilterProjection {
     }
 }
 
-/// §E: overlay session-only DISPLAY-LABEL overrides onto a projected section
-/// list. Pure + backend-neutral so it is unit-tested in `FacetCoreTests` and
-/// the production seam (`Controller.apply()`) calls it once before the reorder.
+/// §E / t-j7ps: overlay an isolate desktop's session-only DISPLAY-LABEL override
+/// onto its projected sections. Pure + backend-neutral, so it is unit-tested in
+/// `FacetCoreTests`; the production seam (`Controller.apply()`) calls it once,
+/// before the reorder.
 ///
-/// `.matched` AND `.holding` sections are relabeled — a workspace
-/// section's display name comes from the catalog (`workspaceNames`), so a
-/// workspace rename routes to `renameWorkspace` and never reaches here (any
-/// workspace-id key in `overrides` is ignored). The map is keyed by the
-/// section's STABLE id (`"section:<declOrder>:<label>"` / `"holding:1"`); an
-/// absent key leaves the section untouched, so a
-/// stale override (after a config edit) is a no-op. The id is NEVER
-/// changed — only the display `label` — so identity (which `facet section
-/// --focus N|LABEL` routes on) is invariant.
+/// ONLY the `.matched` section is relabeled. That is a structural fact, not a
+/// policy:
+/// - a WORKSPACE section's display name lives in the catalog (`workspaceNames`),
+///   so a workspace rename routes to `renameWorkspace` and never reaches here;
+/// - a `.holding` section is synthesized by SUBTRACTION from the `match`. Its
+///   label is a hardcoded `""` (see `projectIsolateDesktop`) and there is no
+///   config key anywhere to write a name to. Relabeling it would invent a name
+///   with nowhere to live — which is exactly what the old id-keyed
+///   `applyLabelOverrides` would have done, since its guard was the NEGATIVE
+///   `!= .workspace`.
 ///
-/// Empty-value semantics are the CALLER's job: a "revert to config" is a
-/// DELETED key, not a stored `""`, so this function maps only the keys it is
-/// handed (a stored `""` would, by contract, blank the header — but the caller
-/// never stores one).
-public func applyLabelOverrides(_ sections: [ProjectedSection],
-                               to overrides: [String: String]) -> [ProjectedSection] {
-    guard !overrides.isEmpty else { return sections }
+/// ⚠️ ORDINAL-KEYED, and applied to the OUTPUT — never fed into the projection's
+/// INPUT the way the `match` override is. The matched section's id is
+/// `"section:0:\(label)"`, with the CONFIG label baked in: relabel the input and
+/// the minted id changes, so an id-keyed override would stop matching itself on
+/// the very next reconcile and the rename would evaporate. Keying on the mac
+/// desktop's ordinal — the one thing a rename cannot change — sidesteps the whole
+/// class. The id is never touched, so `--focus N|LABEL` identity stays invariant.
+///
+/// `nil` / empty label = no override (the config label shows through). A "revert
+/// to config" is a REMOVED key, never a stored `""` — the caller owns that.
+public func applyIsolateLabelOverride(_ sections: [ProjectedSection],
+                                      label: String?) -> [ProjectedSection] {
+    guard let label, !label.isEmpty else { return sections }
     return sections.map { ps in
-        // §E: every NON-workspace section carries a session-only display
-        // override (a workspace label lives in the catalog instead). The id is
-        // frozen. Keying off the negative keeps this correct as kinds are added.
-        guard ps.sectionType != .workspace,
-              let newLabel = overrides[ps.id] else {
-            return ps
-        }
-        return ProjectedSection(id: ps.id, label: newLabel, windows: ps.windows,
+        guard ps.sectionType == .matched else { return ps }
+        return ProjectedSection(id: ps.id, label: label, windows: ps.windows,
                                 sourceWorkspaceIndex: ps.sourceWorkspaceIndex,
                                 sectionType: ps.sectionType)
     }
 }
-

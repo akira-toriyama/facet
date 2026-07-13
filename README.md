@@ -552,10 +552,15 @@ facet window --unmark NAME        # remove a mark
 # Section — address ANY section (a workspace, or an isolate desktop's
 # synthesized section) by its 1-based tree index or its label. `--focus`
 # activates it (switch to the workspace, or focus an isolate-desktop section's
-# first window). `--rename` sets its display label at runtime (session-only —
-# reset on relaunch, NOT on `facet reload`; an empty label reverts a workspace
-# to its bare index; an isolate desktop rejects `--rename`). You can also
-# rename from the tree: right-click a section header → Section ▸ Rename.
+# first window). `--rename` sets its display label at runtime; on an ISOLATE
+# desktop it renames the DESKTOP itself (`[desktop.N] label`) — the symmetric
+# twin of `--match`, which can already retarget what that desktop holds, so a
+# frozen name would end up lying about it. Session-only by default (reset on
+# relaunch, NOT on `facet reload`), and persisted through the snapshot if
+# `[config] export-path` is set, exactly like `--match`. An empty label reverts.
+# The holding section refuses — it is synthesized from the match's complement
+# and has no name to give. You can also rename from the tree: right-click a
+# section header → Section ▸ Rename.
 facet section --focus N            # focus the Nth section in tree order
 facet section --focus LABEL        # focus the section labelled LABEL
 facet section --rename N "label"   # rename the Nth section's display label

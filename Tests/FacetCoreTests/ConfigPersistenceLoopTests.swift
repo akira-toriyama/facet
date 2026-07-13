@@ -112,6 +112,43 @@ final class ConfigPersistenceLoopTests {
         #expect(lens.match == "tag~=web", "the promoted config drives the lens")
     }
 
+    /// Rename an isolate desktop → export → restart → the new name is promoted and
+    /// the loaded config carries it (t-j7ps). The twin of the match round-trip
+    /// above, and the gap it closes: the rename USED to work for the session and
+    /// then evaporate, because the snapshot writer baked labels by walking
+    /// authored `[[desktop.N.section]]` rows — and an isolate desktop has none.
+    /// So `--match` persisted while `--rename` did not, and the label was left
+    /// LYING about what the desktop held.
+    @Test func isolateLabelExportPromoteRoundTrip() throws {
+        let isolateConfig = """
+        [config]
+        export-path  = "config.snapshot.toml"
+        auto-promote = true
+
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome'
+        """
+        try write(configPath, isolateConfig, mtime: Date(timeIntervalSince1970: 1_000))
+
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: "Editors"]
+        let rendered = ConfigSnapshot.render(
+            configText: try String(contentsOfFile: configPath, encoding: .utf8),
+            overrides: ov)
+        try write(snapshotPath, rendered, mtime: Date(timeIntervalSince1970: 2_000))
+
+        let cfg = FacetConfig.bootstrapWithAutoPromote(path: configPath)
+        let onDisk = try String(contentsOfFile: configPath, encoding: .utf8)
+        #expect(onDisk.contains(#"label = "Editors""#),
+                "the rename was promoted onto config.toml")
+        #expect(!onDisk.contains(#"label = "Web""#))
+        let iso = try #require(cfg.desktopIsolate(ordinal: 2))
+        #expect(iso.label == "Editors", "the promoted config names the desktop")
+        #expect(iso.match == "app~=Chrome", "and its match is untouched")
+    }
+
     /// A hand-edit to config.toml between sessions beats a stale snapshot.
     @Test func handEditBeatsStaleSnapshot() throws {
         // Snapshot is OLDER than config.toml (user hand-edited config since).
