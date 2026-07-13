@@ -108,6 +108,24 @@ extension ProjectedSection: Equatable {
     }
 }
 
+/// Is render group `g` an isolate desktop's HOLDING row (t-63h2)?
+///
+/// A holding row lists a window the desktop's `match` REJECTED — anchor-parked
+/// at the sliver, listed only under `show-non-matching`. It is DISPLAY-ONLY:
+/// click / Enter are inert and the row is never a drag source. Focusing a parked
+/// window is an invisible no-op, and a drop can't be made to stick (a `match` is
+/// app-shaped in general, so there is no tag to derive from the drop). Hover
+/// preview, the row's right-click tag menu — adding the matching tag by hand IS
+/// the escape hatch — and `facet section --focus` all still address it.
+///
+/// Pure so the tree's four inert-guards can be pinned by a test. The predicate
+/// shipped BROKEN from t-mqqw — it asked for `.unassigned`, which an isolate
+/// desktop never projects, so it was constant-false — precisely because it lived
+/// as an untestable `SidebarView` method.
+public func isHoldingSection(_ sections: [ProjectedSection], group g: Int) -> Bool {
+    g >= 0 && g < sections.count && sections[g].sectionType == .holding
+}
+
 /// `.window` — drag a window thumb to move it to another workspace.
 /// `.workspace` — drag a cell's header to swap two workspaces' contents
 /// (the backend's workspace index never changes; only the windows
