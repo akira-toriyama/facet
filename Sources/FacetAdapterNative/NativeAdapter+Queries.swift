@@ -200,15 +200,12 @@ extension NativeAdapter {
         // makes the AX reality catch up. See memory
         // `facet-ws-switch-focus-management`.
         let displayFocus = redirectedFocus(live: live, axFocus: focused)
-        // A lens DESKTOP is section-driven too (its 1|2 sections are
-        // synthesized, so `isSectionModelActive` — which reads authored
-        // workspace sections — is false there): without the second gate a
-        // `match='tag~=X'` lens desktop would project against `tags: []`
-        // while the park side overlays tags — tree and screen disagreeing
-        // on the SAME predicate.
-        let sectionModelLive =
-            config.isSectionModelActive(ordinal: activeMacDesktopOrdinal)
-            || config.desktopType(ordinal: activeMacDesktopOrdinal) == .lens
+        // A lens desktop renders sections too — its 1|2 are synthesized. Get
+        // this wrong and a `match='tag~=X'` lens desktop projects against
+        // `tags: []` while the park side overlays tags: tree and screen
+        // disagreeing on the SAME predicate.
+        let sectionModelLive = config.desktopRenderMode(
+            ordinal: activeMacDesktopOrdinal).rendersSections
         workspaceList = catalog.snapshot(
             live: live,
             focused: displayFocus,
@@ -302,9 +299,13 @@ extension NativeAdapter {
         // mismatch. That path seeds `defaultWorkspaceCount` UNNAMED slots,
         // and `seed`'s idempotence guard then blocks the correction for the
         // rest of the session (the catalog is parked by mac-desktop id and
-        // restored tainted). Once a real ordinal resolves AND this desktop's
-        // section model is active, discard the degenerate catalog so the fresh
-        // `seed` below lands the configured names. Gated on `seededUnderNilOrdinal`
+        // restored tainted). Once a real ordinal resolves AND this desktop has
+        // a CONFIG-DRIVEN workspace list — a section desktop's cells, or a lens
+        // desktop's single flat workspace — discard the degenerate catalog so
+        // the fresh `seed` below lands the configured names. (A lens desktop
+        // must be included: leaving it on the default slots breaks the N=1
+        // invariant `applyIsolatePark`'s scope depends on.)
+        // Gated on `seededUnderNilOrdinal`
         // (NOT name-emptiness alone): §B made a correctly real-ordinal-seeded
         // section desktop of UNNAMED workspaces also all-empty, so keying on
         // all-empty would re-fire EVERY refresh and wipe activeIndex / windowMap /
@@ -315,7 +316,7 @@ extension NativeAdapter {
         if let ordinal = activeMacDesktopOrdinal,
            catalog.seededUnderNilOrdinal,
            catalog.holdsOnlyUnnamedSlots,
-           config.isSectionModelActive(ordinal: ordinal) {
+           config.desktopRenderMode(ordinal: ordinal).rendersSections {
             Log.debug("native: recovering nil-ordinal seed-taint — "
                 + "re-seeding desktop ordinal=\(ordinal)")
             catalog = WorkspaceCatalog()

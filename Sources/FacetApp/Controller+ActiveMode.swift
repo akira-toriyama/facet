@@ -147,7 +147,8 @@ extension Controller {
         case "h":            sidebarView.kbJumpWS(-1);   return true
         case "m":            sidebarView.kbContextMenu(); return true
         case "s":            enterSearch();              return true
-        case "t" where config.isSectionModelActive(ordinal: currentMacDesktopOrdinal()):
+        case "t" where config.desktopRenderMode(
+            ordinal: currentMacDesktopOrdinal()).rendersSections:
                              enterTagManage();           return true
         default:             return false
         }
@@ -211,7 +212,8 @@ extension Controller {
     /// re-keys the tree on close. The `handlePanelKeyChange` guard keeps the
     /// tree's kbNav alive while the panel holds key.
     func openTagEditor(pid: Int, windowID id: WindowID, title: String, at anchor: CGPoint) {
-        guard config.isSectionModelActive(ordinal: currentMacDesktopOrdinal()),
+        guard config.desktopRenderMode(
+                  ordinal: currentMacDesktopOrdinal()).rendersSections,
               let (win, _) = findRenderedWindow(id) else { return }
         // The implicit tag vocabulary = the union of every rendered window's
         // tags. `Window.tags` is already in the snapshot, so this is a pure
@@ -260,7 +262,8 @@ extension Controller {
     /// tree-panel-level mode, the `s` twin — vocabulary-wide, not row-specific).
     /// Shares the activation dance + `finishTagEditor` close with `openTagEditor`.
     func enterTagManage() {
-        guard config.isSectionModelActive(ordinal: currentMacDesktopOrdinal())
+        guard config.desktopRenderMode(
+            ordinal: currentMacDesktopOrdinal()).rendersSections
         else { return }
         var all = Set<String>()
         for ws in lastWorkspaces { for w in ws.windows { all.formUnion(w.tags) } }
