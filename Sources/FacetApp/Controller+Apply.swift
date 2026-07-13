@@ -25,8 +25,15 @@ extension Controller {
     }
 
     /// Build the plan on the main actor (the pure resolver over the live
-    /// section config + last-rendered workspaces). `nil` ⇒ not section-model /
-    /// window gone / inert — the caller does nothing (snap-back).
+    /// section config + last-rendered workspaces). `nil` ⇒ no spatial substrate
+    /// / window gone / inert — the caller does nothing (snap-back).
+    ///
+    /// `isSectionModelActive` is the RIGHT question here (not
+    /// `desktopRenderMode.rendersSections`): a drop has to LAND on a real
+    /// `[[desktop.N.section]]` workspace cell. A lens desktop renders sections,
+    /// but they are synthesized from `match` — membership there is a predicate,
+    /// not a place, so there is nothing to drop into. (Its holding rows are
+    /// inert as a drag SOURCE too — t-63h2.)
     private func resolveApplyPlan(windowID: WindowID, fromSectionID: String?,
                                   toSectionID: String, destWorkspaceIndex: Int?)
         -> ApplyResolver.Plan?

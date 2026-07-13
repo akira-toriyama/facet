@@ -699,14 +699,32 @@ public struct FacetConfig: Sendable {
         return meta
     }
 
-    /// Whether the section model drives the mac desktop at `ordinal` — i.e. it
-    /// has at least one `[[desktop.N.section]]` spatial cell (the `unassigned`
-    /// receptacle doesn't count — see `workspaceSubstrateSections`). This is the
-    /// gate the read path, naming, and the overview/tree consult to decide
-    /// between the section model and the default unnamed slots.
+    /// How the mac desktop at `ordinal` composes its tree. **Ask this, not
+    /// `isSectionModelActive`**, whenever the question is "does this desktop
+    /// render SECTIONS?" — the one-desktop-one-type model has THREE answers and
+    /// `isSectionModelActive` can only express one of them, so every caller
+    /// that used it had to hand-write `|| isLensDesktop` and some forgot.
     ///
-    /// Shares `workspaceSubstrateSections` with `effectiveWorkspaceList`, so
-    /// "gate active" and "seed N workspaces" can never disagree (the SSOT).
+    /// Precedence mirrors `effectiveWorkspaceList` exactly (lens → sections →
+    /// degrade), so "how it renders" and "how many workspaces it seeds" can
+    /// never disagree.
+    public func desktopRenderMode(ordinal: Int?) -> DesktopRenderMode {
+        if desktopLens(ordinal: ordinal) != nil { return .lens }
+        return isSectionModelActive(ordinal: ordinal) ? .sections : .degrade
+    }
+
+    /// Whether the **spatial substrate** is config-driven at `ordinal` — i.e. it
+    /// has at least one `[[desktop.N.section]]` workspace cell (the `unassigned`
+    /// receptacle doesn't count — see `workspaceSubstrateSections`). Shares
+    /// `workspaceSubstrateSections` with `effectiveWorkspaceList`, so "gate
+    /// active" and "seed N workspaces" can never disagree (the SSOT).
+    ///
+    /// ⚠️ This is NOT "does this desktop render sections?" — a **lens desktop**
+    /// renders sections and is `false` here (its 1–2 sections are synthesized
+    /// from `match`, so it authors no spatial cells). Reach for
+    /// `desktopRenderMode` unless you specifically mean the authored spatial
+    /// substrate — i.e. an operation that needs a real workspace cell to land
+    /// on, like the tree's section-to-section DnD.
     ///
     /// `nil` ordinal (SkyLight unavailable / single-desktop) is `false`: the
     /// section model is a per-ordinal opt-in, and an unresolvable ordinal

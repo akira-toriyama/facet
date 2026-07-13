@@ -1012,12 +1012,10 @@ final class Controller: NSObject {
         // tree render) so all three views share one ordered section list.
         // Section model off ⇒ empty sections ⇒ the overview degrades to `wss`
         // (byte-identical).
-        // A lens DESKTOP (`[desktop.N] type=lens`, board abolition t-0sbm) is
-        // tree-only and synthesizes its own 1|2 sections (matched + optional
-        // non-matching holding). It is NOT `isSectionModelActive` (it has no
-        // workspace sections), so gate on it explicitly alongside.
-        let isLensDesktop = macDesktopOrdinal.map {
-            config.desktopType(ordinal: $0) == .lens } ?? false
+        // A lens DESKTOP is tree-only and synthesizes its own 1|2 sections
+        // (matched + optional non-matching holding).
+        let renderMode = config.desktopRenderMode(ordinal: macDesktopOrdinal)
+        let isLensDesktop = renderMode == .lens
         // Two-world gate, arrival half: grid/rail overlays are
         // `.canJoinAllSpaces` panels, so one opened on a workspace desktop
         // FOLLOWS a mac-desktop switch onto a lens desktop — tear it down
@@ -1033,8 +1031,7 @@ final class Controller: NSObject {
                 hideRail()
             }
         }
-        if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop,
-           let ordinal = macDesktopOrdinal {
+        if renderMode.rendersSections, let ordinal = macDesktopOrdinal {
             // Read the section list through the SAME `desktopSections` seam
             // every other Controller-side section read uses, so the id
             // `declOrder` minted HERE matches what the lens/DnD resolvers
@@ -1208,7 +1205,7 @@ final class Controller: NSObject {
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
         let contentH: CGFloat
-        if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop {
+        if renderMode.rendersSections {
             contentH = sidebarView.update(sections: lastSections,
                                           workspaces: wss,
                                           lensDesktop: isLensDesktop,
