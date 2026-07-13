@@ -27,12 +27,20 @@
 import Foundation
 
 /// The mac-desktop TYPE discriminator — `DesktopMeta.type` (`[desktop.N]
-/// type = "workspace" | "lens"`). NOT a section discriminator anymore (that role
-/// ended with the section-lens retirement, t-ec9s). Raw values are the wire
+/// type = "workspace" | "isolate"`). NOT a section discriminator anymore (that
+/// role ended with the section-lens retirement, t-ec9s). Raw values are the wire
 /// spellings (lowercased on decode).
-public enum SectionType: String, Sendable, Equatable, CaseIterable {
+///
+/// `isolate` was spelled `lens` until t-mqqw. The optical metaphor was a lie:
+/// you look THROUGH an isolate desktop and it does not move what it images, but this desktop
+/// tiles the matched windows and anchor-parks the rest — and leaving it un-parks
+/// nothing. The runtime had already converged on the honest word on its own
+/// (`IsolatePark` / `applyIsolatePark` / `isolateParked` / `facet query`'s
+/// `parked`); the config vocabulary now agrees with it. A `type = "lens"` config
+/// is a LOUD reject (`DesktopMeta.parse`), never a silent alias.
+public enum DesktopType: String, Sendable, Equatable, CaseIterable {
     case workspace
-    case lens
+    case isolate
 }
 
 /// One facet to set on a window matched by a `[[rule]]` adopt-rule — the typed

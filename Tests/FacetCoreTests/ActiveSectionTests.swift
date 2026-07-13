@@ -22,7 +22,7 @@ struct ActiveSectionIDTests {
     }
     private func lens(_ order: Int, _ label: String) -> ProjectedSection {
         ProjectedSection(id: "section:\(order):\(label)", label: label, windows: [],
-                         sourceWorkspaceIndex: nil, sectionType: .lens)
+                         sourceWorkspaceIndex: nil, sectionType: .matched)
     }
 
     @Test func activeWorkspaceSectionWins() {
@@ -39,7 +39,7 @@ struct ActiveSectionIDTests {
     }
 
     @Test func noWorkspaceSectionForActiveIndexIsNil() {
-        // The active index has no workspace section here (a lens desktop's
+        // The active index has no workspace section here (an isolate desktop's
         // synthesized sections carry no source workspace) ⇒ nothing lit.
         #expect(activeSectionID(activeIndex: 0, sections: [lens(1, "Web")]) == nil)
         #expect(activeSectionID(activeIndex: 5, sections: [ws(0), ws(1)]) == nil)

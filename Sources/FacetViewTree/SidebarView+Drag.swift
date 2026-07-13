@@ -64,11 +64,11 @@ extension SidebarView {
                         // `wsBands` key), and dropping it on a WORKSPACE band runs
                         // that workspace's move → the orphan is rescued. Dropping
                         // ON unassigned is inert (no apply) → snap-back.
-                        // A lens DESKTOP's section membership is match-driven
+                        // An ISOLATE DESKTOP's section membership is match-driven
                         // (t-ec9s) — a window can't be hand-moved between the
                         // matched / holding sections, so the drop is inert (snap-
                         // back; the row was never hidden). Retarget via `--match`.
-                        if !lensDesktop, let tgt, tgt != dragGroup,
+                        if !isolateDesktop, let tgt, tgt != dragGroup,
                            dragGroup < lastSections.count, tgt < lastSections.count {
                             controller?.applyMove(
                                 windowID: dragWindowID,
@@ -106,7 +106,7 @@ extension SidebarView {
                     // lens DESKTOP's 1–2 synthesized sections have a fixed order
                     // (matched then holding) — reordering is meaningless, so gate
                     // it (t-ec9s).
-                    if !lensDesktop,
+                    if !isolateDesktop,
                        let hit = wsBands.first(where: { $0.value.contains(cp.y) }),
                        dragGroup < lastSections.count {
                         let mid = (hit.value.lowerBound + hit.value.upperBound) / 2
@@ -132,11 +132,11 @@ extension SidebarView {
                     }
                     needsDisplay = true
                 } else if let row, row.rect.contains(cp) {
-                    // t-63h2: a lens desktop's holding row is inert — bail
+                    // t-63h2: an isolate desktop's holding row is inert — bail
                     // BEFORE exitActive so an active-mode click doesn't drop
-                    // keyboard nav for a no-op (see isLensHoldingRow).
+                    // keyboard nav for a no-op (see isHoldingRow).
                     if case .window(let g, _, _, _, _) = row.kind,
-                       isLensHoldingRow(group: g) { break loop }
+                       isHoldingRow(group: g) { break loop }
                     // #66 safety belt: drop key/active BEFORE acting on
                     // the row, mirroring the Enter path (kbActivate).
                     // Since the tree now opens active, a plain click
@@ -166,10 +166,10 @@ extension SidebarView {
                             mode = 1                   // empty / search → move
                         case .window(let g, let ws, _, let wid, _)?:
                             // t-63h2: a holding row never becomes a drag
-                            // source (display-only; see isLensHoldingRow).
+                            // source (display-only; see isHoldingRow).
                             // Not promoting keeps mode 0 — the eventual
                             // mouseUp lands on the inert-click guard above.
-                            if isLensHoldingRow(group: g) { break }
+                            if isHoldingRow(group: g) { break }
                             mode = 2
                             dragWS = ws
                             dragGroup = g
@@ -202,7 +202,7 @@ extension SidebarView {
                             // separated this from a plain click that
                             // toggles/switches). Both workspace AND lens
                             // headers reorder. By-workspace degrade keeps Theme
-                            // A header-swap (a lens header can't occur there).
+                            // A header-swap (an isolate desktop header can't occur there).
                             // Panel move retreats to ⌘+drag / empty space.
                             if sectionModeActive {
                                 mode = 4
@@ -477,7 +477,7 @@ extension SidebarView {
         case .header(let g, let i):
             // A lens / unassigned header carries `workspaceIndex == nil` (no
             // workspace to switch to). Since the section-lens activate concept
-            // was retired (t-ec9s), a `.lens` section (a lens desktop's
+            // was retired (t-ec9s), a `.matched` section (an isolate desktop's
             // match-synthesized section) and a `.unassigned` receptacle both
             // FOCUS THEIR FIRST window via the unified §G helper — no toggle, no
             // switch (membership is match-driven / by-subtraction, not manual).
@@ -486,7 +486,7 @@ extension SidebarView {
                 if sectionModeActive, g < lastSections.count {
                     let sec = lastSections[g]
                     switch sec.sectionType {
-                    case .lens, .unassigned:
+                    case .matched, .holding, .unassigned:
                         controller?.focusFirstWindow(inSectionID: sec.id)
                     case .workspace:  break   // workspace always has i != nil
                     }
@@ -521,7 +521,7 @@ extension SidebarView {
         case .window(let g, let i, let pid, let id, let title):
             // t-63h2 defensive twin of the mouseUp / kbActivate guards: a
             // holding row is inert whichever path reaches here.
-            if isLensHoldingRow(group: g) { return }
+            if isHoldingRow(group: g) { return }
             // Off main so the click never hitches; skip the switch
             // round-trip when the window is already on the active
             // workspace.
@@ -544,7 +544,7 @@ extension SidebarView {
             let window = Window(id: id, pid: pid, appName: "",
                                 title: title, isFocused: false,
                                 isFloating: false, frame: nil)
-            // A lens DESKTOP always tiles its matched set + anchor-parks the
+            // An ISOLATE DESKTOP always tiles its matched set + anchor-parks the
             // rest by `match` (t-ec9s; the section-lens "clear to un-park"
             // gesture is gone). Clicking any window — parked or tiled — just
             // focuses it; the always-on park re-derives from `match` next
@@ -570,20 +570,20 @@ extension SidebarView {
         }
     }
 
-    /// t-63h2 (2026-07-12 決定): a lens desktop's HOLDING row — a parked
+    /// t-63h2 (2026-07-12 決定): an isolate desktop's HOLDING row — a parked
     /// non-matching window listed under the `show-non-matching` section — is
     /// DISPLAY-ONLY. Its window sits at the anchor sliver, so focusing it is
-    /// an invisible no-op, and a drop into the lens can't be made to "stick"
+    /// an invisible no-op, and a drop into the isolate desktop can't be made to "stick"
     /// (the match is app-shaped in general — no derivable tag). Click / Enter
     /// are inert and the row never becomes a drag source; hover preview and
     /// the right-click tag menu stay (adding the matching tag by hand IS the
     /// explicit escape hatch), and the CLI `facet section --focus` keeps
     /// addressing the section. Only lens desktops project an `.unassigned`
-    /// section with `lensDesktop == true` — the by-workspace rescue
-    /// receptacle (drag-out = rescue) has `lensDesktop == false` and is
+    /// section with `isolateDesktop == true` — the by-workspace rescue
+    /// receptacle (drag-out = rescue) has `isolateDesktop == false` and is
     /// untouched.
-    func isLensHoldingRow(group g: Int) -> Bool {
-        lensDesktop && g < lastSections.count
+    func isHoldingRow(group g: Int) -> Bool {
+        isolateDesktop && g < lastSections.count
             && lastSections[g].sectionType == .unassigned
     }
 

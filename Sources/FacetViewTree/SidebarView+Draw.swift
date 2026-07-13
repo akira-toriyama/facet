@@ -154,73 +154,45 @@ extension SidebarView {
                     .font: uiFont(headerFontSize, nameWeight),
                     .foregroundColor: nameColor,
                     .kern: 0.6, .paragraphStyle: hp]
+                // Kind prefix (トミー 2026-06-19): spell the section KIND out on
+                // the header so it reads at a glance, not just from the glyph.
+                // The four words all answer ONE question — "what IS this
+                // section" — since t-mqqw retired `lens ·` (a DESKTOP type
+                // leaking onto a section) and split the isolate desktop's
+                // holding bucket out of `unassigned ·` (which was a lie: those
+                // windows ARE assigned, they just failed the `match`).
+                //
+                // A glyph fronts every non-workspace kind, each distinct so the
+                // chrome stops asserting a kinship the model does not have.
+                // Workspace headers carry no glyph (they own the layout
+                // sub-line instead). `c.text` is `sectionDisplayLabel`, which
+                // never returns empty ("N" or "N (label)") — so there is no
+                // bare-kind fallback to write; the two that used to sit here
+                // were dead code (t-mqqw).
+                let kindWord: String
+                let kindGlyph: String?
                 switch c.sectionType {
-                case .lens:
-                    // Lens section (section model): a leading filter glyph +
-                    // the label, no layout sub-line — distinguishes a
-                    // saved-filter section from a workspace at a glance. The
-                    // accent (primary when the lens is active) is carried by
-                    // `nameColor` above, like a workspace header.
-                    var lx = nameX0
-                    if let icon = IconResolver.resolve(
-                        "SF:line.3.horizontal.decrease.circle", pointSize: 13,
-                        color: nameColor, scale: .medium) {
-                        let ih = min(icon.size.height, 14)
-                        let iw = icon.size.width * (ih / max(icon.size.height, 1))
-                        icon.draw(in: NSRect(x: lx, y: capY + (nameH - ih) / 2,
-                                             width: iw, height: ih))
-                        lx += iw + 5
-                    }
-                    // Kind prefix (トミー 2026-06-19): spell the section TYPE
-                    // out on the header so workspace vs lens reads at a glance,
-                    // not just from the funnel glyph. Lens always has a label.
-                    (("lens · " + c.text) as NSString).draw(
-                        in: NSRect(x: lx, y: capY,
-                                   width: bounds.width - rowPadX - lx,
-                                   height: nameH),
-                        withAttributes: nameAttrs)
-                case .unassigned:
-                    // §G unassigned (orphan receptacle): a leading archivebox
-                    // glyph + the label, no layout sub-line — same chrome shape
-                    // as a lens (cross-workspace, click-only) but a distinct
-                    // glyph so the lost-and-found bin reads apart from a saved
-                    // filter. Never the active highlight, so `nameColor` is
-                    // always `pal.muted` here (headerActive returns false for
-                    // unassigned). The 13pt size / color / scale match the lens
-                    // funnel above.
-                    var lx = nameX0
-                    if let icon = IconResolver.resolve(
-                        "SF:archivebox", pointSize: 13,
-                        color: nameColor, scale: .medium) {
-                        let ih = min(icon.size.height, 14)
-                        let iw = icon.size.width * (ih / max(icon.size.height, 1))
-                        icon.draw(in: NSRect(x: lx, y: capY + (nameH - ih) / 2,
-                                             width: iw, height: ih))
-                        lx += iw + 5
-                    }
-                    // Kind prefix: "unassigned · " + the (optional) label, the
-                    // パートナー to the lens / workspace prefixes. An unnamed
-                    // unassigned section shows the bare kind word (no dangling
-                    // "· "), like an unnamed workspace.
-                    let unLabel = c.text.isEmpty
-                        ? "unassigned" : "unassigned · " + c.text
-                    (unLabel as NSString).draw(
-                        in: NSRect(x: lx, y: capY,
-                                   width: bounds.width - rowPadX - lx,
-                                   height: nameH),
-                        withAttributes: nameAttrs)
-                case .workspace:
-                    // Workspace header: spell "workspace" out too (パートナー
-                    // to the lens prefix). An unnamed default slot has no name,
-                    // so show the bare kind word rather than a dangling "· ".
-                    let wsLabel = c.text.isEmpty
-                        ? "workspace" : "workspace · " + c.text
-                    (wsLabel as NSString).draw(
-                        in: NSRect(x: nameX0, y: capY,
-                                   width: bounds.width - rowPadX - nameX0,
-                                   height: nameH),
-                        withAttributes: nameAttrs)
+                case .workspace:  kindWord = "workspace";  kindGlyph = nil
+                case .matched:    kindWord = "matched"
+                                  kindGlyph = "SF:line.3.horizontal.decrease.circle"
+                case .holding:    kindWord = "holding";    kindGlyph = "SF:tray"
+                case .unassigned: kindWord = "unassigned"; kindGlyph = "SF:archivebox"
                 }
+                var lx = nameX0
+                if let slug = kindGlyph,
+                   let icon = IconResolver.resolve(slug, pointSize: 13,
+                                                   color: nameColor, scale: .medium) {
+                    let ih = min(icon.size.height, 14)
+                    let iw = icon.size.width * (ih / max(icon.size.height, 1))
+                    icon.draw(in: NSRect(x: lx, y: capY + (nameH - ih) / 2,
+                                         width: iw, height: ih))
+                    lx += iw + 5
+                }
+                ((kindWord + " · " + c.text) as NSString).draw(
+                    in: NSRect(x: lx, y: capY,
+                               width: bounds.width - rowPadX - lx,
+                               height: nameH),
+                    withAttributes: nameAttrs)
                 // Line 2: layout-mode text — the caption's "mini header".
                 // `primary` on the active WS (item 10: layout = primary
                 // accent), `pal.muted` when inactive so non-focused rows

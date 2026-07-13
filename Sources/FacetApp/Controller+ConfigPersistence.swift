@@ -105,7 +105,7 @@ extension Controller {
         // Lens-desktop match overrides accumulate per ordinal for the whole
         // session (a reverted match has no key), so pass the dict verbatim —
         // the renderer drops non-lens ordinals + empty predicates itself.
-        ov.lensDesktopMatch = lensDesktopMatchOverride
+        ov.isolateMatch = isolateMatchOverride
         return ov
     }
 

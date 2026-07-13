@@ -39,9 +39,9 @@
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
 //   Section   : facet section --focus N|LABEL (index|label; workspace,
-//               unassigned, or a lens desktop's synthesized section)
+//               unassigned, or an isolate desktop's synthesized section)
 //               / --rename N LABEL (session-only display label)
-//               / --match N PREDICATE (retarget a lens desktop's match)
+//               / --match N PREDICATE (retarget an isolate desktop's match)
 //
 // ``--show`` / ``--hide`` / ``--toggle`` bare are NOT supported —
 // every view op must specify NAME explicitly. Shell aliases handle
@@ -177,7 +177,7 @@ enum FacetApp {
         SECTION                              (address a section by index/label)
           facet section --focus N            focus the Nth section in tree
                                              order (1-based; a workspace switches,
-                                             an unassigned — or a lens desktop's
+                                             an unassigned — or an isolate desktop's
                                              synthesized — section focuses its
                                              first window)
           facet section --focus LABEL        focus the section labelled LABEL
@@ -190,7 +190,7 @@ enum FacetApp {
                                              label)
           facet section --match N PREDICATE  set the Nth section's match to a
                                              `facet filter` predicate, live — on a
-                                             lens desktop this retargets what it
+                                             isolate desktop this retargets what it
                                              tiles vs parks (session-only; the tree
                                              re-filters at once; empty PREDICATE
                                              reverts to the config match;
@@ -502,8 +502,8 @@ enum FacetApp {
         // `facet section <flag>` — address a section (workspace, lens, OR
         // unassigned) by its 1-based tree-order index or its label:
         // `facet section --focus N|LABEL`. The unified section handle (an
-        // unassigned section — or a lens desktop's synthesized section —
-        // focuses its first window; `--match` retargets a lens desktop).
+        // unassigned section — or an isolate desktop's synthesized section —
+        // focuses its first window; `--match` retargets an isolate desktop).
         if argv.first == "section" {
             runSectionCommand(Array(argv.dropFirst()))
         }

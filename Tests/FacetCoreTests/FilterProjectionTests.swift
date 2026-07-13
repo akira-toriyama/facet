@@ -7,7 +7,7 @@ import Testing
 /// index), and an opt-in `unassigned` section (§G) rescues the leftover
 /// (universe − shown — windows in no other emitted section; first emits, extras
 /// warn). Degrade (no sections) stays byte-identical to by-workspace. The `lens`
-/// concept now lives ONLY on a typed lens DESKTOP (`projectLensDesktop`), never
+/// concept now lives ONLY on a typed lens DESKTOP (`projectIsolateDesktop`), never
 /// on a config section. Pure; CI-only (CLT can't run `swift test`).
 struct FilterProjectionTests {
 
@@ -299,21 +299,21 @@ struct FilterProjectionTests {
             .windows.isEmpty == true)                       // nothing homeless
     }
 
-    /// The grid + rail consume `project()` ONLY (a lens desktop is TREE-ONLY and
-    /// loud-rejects both overviews; the tree's `projectLensDesktop` is the only
-    /// minter of `.lens`). t-pvay deleted `GridPick.lens` / `RailPick.lens` /
+    /// The grid + rail consume `project()` ONLY (an isolate desktop is TREE-ONLY and
+    /// loud-rejects both overviews; the tree's `projectIsolateDesktop` is the only
+    /// minter of `.matched`). t-pvay deleted `GridPick.lens` / `RailPick.lens` (both since deleted) /
     /// `OverviewCell.isLens` on the strength of that — so pin it: `project()` must
-    /// never mint a `.lens` section, or those overviews grow a live lens path
+    /// never mint a `.matched` section, or those overviews grow a live lens path
     /// again with nothing to route it.
-    @Test func projectNeverMintsALensSection() {
+    @Test func projectNeverMintsAMatchedSection() {
         let wss = [ws(0, name: "Main", windows: [win(10)]),
                    ws(1, name: "Web", windows: [win(20)])]
         for sections in [[wsSec()],
                          [wsSec(), unassigned("Lost")],
                          []] {                              // degrade path too
             let r = FilterProjection.project(workspaces: wss, sections: sections)
-            #expect(r.sections.allSatisfy { $0.sectionType != .lens },
-                    "project() minted a .lens section — the overviews cannot route it")
+            #expect(r.sections.allSatisfy { $0.sectionType != .matched },
+                    "project() minted a .matched section — the overviews cannot route it")
         }
     }
 

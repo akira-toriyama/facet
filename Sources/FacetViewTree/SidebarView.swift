@@ -49,7 +49,7 @@ public final class SidebarView: NSView {
         let scratchpad: String?  // window: settled shelf → `scratchpad:NAME`
         let tags: [String]       // window: tag names → `#tag` chips (per-window, sorted)
         /// header (section model, PR5 / §G): which section kind this header
-        /// renders — `.workspace` (layout sub-line), `.lens` (leading funnel
+        /// renders — `.workspace` (layout sub-line), `.matched` (leading funnel
         /// glyph, no sub-line), or `.unassigned` (leading archivebox glyph, no
         /// sub-line). Drives the 3-way header draw in SidebarView+Draw. The
         /// by-workspace degrade path passes `.workspace`.
@@ -88,7 +88,7 @@ public final class SidebarView: NSView {
     /// in exactly one — rows are still keyed by `(group, id)` because `group`
     /// names the SECTION a row belongs to, which is what a click routes on.
     /// Set when the Controller takes this path (`isSectionModelActive`, or a
-    /// lens desktop). Sticky across internal relayouts (search / optimistic /
+    /// isolate desktop). Sticky across internal relayouts (search / optimistic /
     /// resize) via `rebuild()`; DnD + keyboard-lift are section-aware here
     /// (they address by `group`, not by workspace index).
     var sectionModeActive = false
@@ -96,13 +96,13 @@ public final class SidebarView: NSView {
     /// internal relayouts in `rebuild()` (the projection is recomputed only
     /// on a Controller refresh, not on every search keystroke / resize).
     var lastSections: [ProjectedSection] = []
-    /// Whether the mac desktop currently rendered is a lens desktop
-    /// (`[desktop.N] type=lens`), pushed via `update(sections:lensDesktop:)`
-    /// (t-ec9s). A lens desktop's membership is match-driven, so the tree gates
+    /// Whether the mac desktop currently rendered is an isolate desktop
+    /// (`[desktop.N] type=isolate`), pushed via `update(sections:isolateDesktop:)`
+    /// (t-ec9s). An isolate desktop's membership is match-driven, so the tree gates
     /// section-move DnD (a window can't be hand-moved between the matched /
     /// holding sections). Reused by `rebuild()` so an internal relayout (search
     /// / optimistic / resize) keeps the gate. Session-only.
-    var lensDesktop = false
+    var isolateDesktop = false
 
     var wsBands: [Int: ClosedRange<CGFloat>] = [:]
     public internal(set) var signature = ""
@@ -275,7 +275,7 @@ public final class SidebarView: NSView {
     func rebuild() {
         if sectionModeActive {
             _ = update(sections: lastSections, workspaces: lastWorkspaces,
-                       lensDesktop: lensDesktop)
+                       isolateDesktop: isolateDesktop)
         } else {
             _ = update(lastWorkspaces)
         }
@@ -473,7 +473,7 @@ public final class SidebarView: NSView {
     /// by-workspace and section render paths can never drift visually.
     /// `group` is the rendered-group ordinal (degrade: == `workspaceIndex` ==
     /// ws.index); `workspaceIndex` is the backend action target — the
-    /// window's REAL workspace (focus / switch), even inside a lens section.
+    /// window's REAL workspace (focus / switch), even inside a matched section.
     private func windowRow(_ win: Window, group: Int, workspaceIndex: Int,
                            width w: CGFloat, y: CGFloat,
                            title wt: String, hot: Bool) -> CGFloat {
@@ -512,12 +512,12 @@ public final class SidebarView: NSView {
     @discardableResult
     public func update(sections: [ProjectedSection],
                        workspaces: [Workspace],
-                       lensDesktop: Bool = false,
+                       isolateDesktop: Bool = false,
                        titles: [WindowID: String]? = nil,
                        macDesktop: Int?? = nil) -> CGFloat {
         sectionModeActive = true
         lastSections = sections
-        self.lensDesktop = lensDesktop
+        self.isolateDesktop = isolateDesktop
         lastWorkspaces = workspaces
         if let titles { titleOverride = titles }
         if let macDesktop { macDesktopOrdinal = macDesktop }
@@ -530,7 +530,7 @@ public final class SidebarView: NSView {
             win.title.isEmpty ? (titleOverride[win.id] ?? "") : win.title
         }
         // A window's REAL workspace (focus / switch target) — it stays the
-        // same even when the window is shown inside a lens section.
+        // same even when the window is shown inside a matched section.
         var realWS: [WindowID: Int] = [:]
         var wsByIndex: [Int: Workspace] = [:]
         for ws in workspaces {
@@ -548,14 +548,14 @@ public final class SidebarView: NSView {
             return wsByIndex[src]?.layoutMode ?? ""
         }
         // Header "active" (drives the `pal.primary` accent + the signature's
-        // `*` marker): a workspace section follows its source workspace. Since
-        // the section-lens activate concept was retired (t-ec9s), a `.lens`
-        // section (only ever a lens desktop's match-synthesized section now) and
-        // a `.unassigned` receptacle have no "active" state — they render dim.
+        // `*` marker): a workspace section follows its source workspace. Every
+        // other kind is match-synthesized or a receptacle — none has an "active"
+        // state (the section-lens ACTIVATE concept died with t-ec9s), so they
+        // render dim.
         func headerActive(_ sec: ProjectedSection) -> Bool {
             switch sec.sectionType {
-            case .lens, .unassigned: return false
-            case .workspace:         return wsActive(sec.sourceWorkspaceIndex)
+            case .matched, .holding, .unassigned: return false
+            case .workspace: return wsActive(sec.sourceWorkspaceIndex)
             }
         }
 
@@ -565,14 +565,15 @@ public final class SidebarView: NSView {
                 ? "O\(optWindowID?.serverID ?? -1):\(optActiveWS ?? -1);"
                 : "R;")
             + sections.enumerated().map { (g, sec) in
-                // §G: 3-way type code — W(orkspace) / L(ens) / U(nassigned).
-                // Only a workspace section carries a layout sub-line; lens AND
-                // unassigned have none. Keep this byte-identical to the width
-                // pre-pass + render pass or the horizontal scroll clips.
+                // 4-way kind code — W(orkspace) / M(atched) / H(olding) /
+                // U(nassigned). Only a workspace section carries a layout
+                // sub-line. Keep this byte-identical to the width pre-pass +
+                // render pass or the horizontal scroll clips.
                 let typeCode: String
                 switch sec.sectionType {
                 case .workspace:  typeCode = "W"
-                case .lens:       typeCode = "L"
+                case .matched:    typeCode = "M"
+                case .holding:    typeCode = "H"
                 case .unassigned: typeCode = "U"
                 }
                 let active = headerActive(sec)
@@ -651,8 +652,8 @@ public final class SidebarView: NSView {
             let label = sectionDisplayLabel(index: g + 1, label: sec.label)
             let hh = firstHeader ? headerFirstRowH : headerRowH
             let hr = NSRect(x: 0, y: y, width: w, height: hh)
-            // Workspace section → click switches to its source WS; a lens
-            // section (PR6 activates the lens) or §G unassigned section (focus
+            // Workspace section → click switches to its source WS; an isolate desktop
+            // section (PR6 activates the isolate desktop) or §G unassigned section (focus
             // first window) has no workspace to switch to, so the header's
             // action target is nil (handleClick discriminates by sectionType).
             rows.append(TreeRow(rect: hr,

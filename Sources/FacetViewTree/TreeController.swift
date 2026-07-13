@@ -116,9 +116,9 @@ public protocol TreeController: AnyObject, Sendable {
     /// t-0020: lens-match live edit — the user picked a LENS header's
     /// `SECTION ▸ Edit match` row (or pressed `m` on it) at render group `g`.
     /// The controller opens the same keyable inline editor as `beginSectionRename`,
-    /// pre-filled with the lens's current effective predicate, and on commit sets
+    /// pre-filled with the isolate desktop's current effective predicate, and on commit sets
     /// a session-only `match` override (the GUI twin of `facet section --match`);
-    /// the lens re-filters at once. LENS-only (no-op for any other kind / an
+    /// the isolate desktop re-filters at once. LENS-only (no-op for any other kind / an
     /// out-of-range group). `anchor` is the header's screen point.
     func beginSectionMatchEdit(group g: Int, at anchor: CGPoint)
 

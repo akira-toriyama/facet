@@ -208,7 +208,7 @@ public struct FacetConfig: Sendable {
     /// desktop's single `DesktopMeta` (`type` + `label`, plus lens-only `match` /
     /// `layout` / `show-non-matching`). Parsed from the FLAT `parseTOMLSubset`
     /// map by `load` (via `decodeDesktopTables`). Read through `desktopType` /
-    /// `desktopLens`. This is the successor to the retired `[[desktop.N.tab]]`
+    /// `desktopIsolate`. This is the successor to the retired `[[desktop.N.tab]]`
     /// boards — a mac desktop is typed directly rather than grouped.
     public var macDesktopMetaConfigs: [Int: DesktopMeta] = [:]
 
@@ -609,15 +609,15 @@ public struct FacetConfig: Sendable {
         // 1-based index, not an emoji. Runtime `facet workspace --rename`
         // still overrides. `isSectionModelActive` guarantees a non-nil ordinal
         // with ≥1 workspace section, so this list is non-empty.
-        // A lens DESKTOP (`[desktop.N] type=lens`, board abolition t-0sbm) is
-        // FLAT — exactly ONE workspace whose layout is the lens's. This pins the
+        // An ISOLATE DESKTOP (`[desktop.N] type=isolate`, board abolition t-0sbm) is
+        // FLAT — exactly ONE workspace whose layout is the isolate desktop's. This pins the
         // catalog to N=1 so the active-WS park/tile scope (the `workspace ==
         // activeIndex` filter in applyIsolatePark) IS the whole desktop. Seeded
-        // from the `[desktop.N]` table, never from sections (a lens desktop has
+        // from the `[desktop.N]` table, never from sections (an isolate desktop has
         // none). Checked BEFORE the section/default branches.
-        if let lens = desktopLens(ordinal: ordinal) {
+        if let iso = desktopIsolate(ordinal: ordinal) {
             return [(index: 1,
-                     config: WorkspaceConfig(name: lens.label, layout: lens.layout))]
+                     config: WorkspaceConfig(name: iso.label, layout: iso.layout))]
         }
         if isSectionModelActive(ordinal: ordinal), let ordinal {
             let wsSections = workspaceSubstrateSections(forOrdinal: ordinal)
@@ -648,7 +648,7 @@ public struct FacetConfig: Sendable {
     ///   always managed.
     ///
     /// The gate is the UNION of the `[[desktop.N.section]]` and `[desktop.N]`
-    /// ordinal sets (not substrate presence — a lens-only config is
+    /// ordinal sets (not substrate presence — an isolate desktop-only config is
     /// deliberately MANAGED-but-model-inactive, see `isSectionModelActive`).
     public func isMacDesktopManaged(ordinal: Int?) -> Bool {
         let sections = effectiveMacDesktopSectionConfigs
@@ -666,7 +666,7 @@ public struct FacetConfig: Sendable {
     ///     reads as a workspace desktop);
     ///   • else `nil` (no typed desktop / unconfigured — a bare default
     ///     desktop).
-    public func desktopType(ordinal: Int?) -> SectionType? {
+    public func desktopType(ordinal: Int?) -> DesktopType? {
         guard let ordinal else { return nil }
         if let meta = macDesktopMetaConfigs[ordinal] { return meta.type }
         if macDesktopSectionConfigs[ordinal] != nil { return .workspace }
@@ -690,12 +690,12 @@ public struct FacetConfig: Sendable {
             .sorted()
     }
 
-    /// The lens definition for a `type = "lens"` mac desktop at `ordinal`, else
-    /// `nil` (not a lens desktop). The single always-on lens (`match` + `layout`
-    /// + `show-non-matching`) that drives the desktop-lens park + tile.
-    public func desktopLens(ordinal: Int?) -> DesktopMeta? {
+    /// The lens definition for a `type = "isolate"` mac desktop at `ordinal`, else
+    /// `nil` (not an isolate desktop). The single always-on lens (`match` + `layout`
+    /// + `show-non-matching`) that drives the isolate-desktop park + tile.
+    public func desktopIsolate(ordinal: Int?) -> DesktopMeta? {
         guard let ordinal, let meta = macDesktopMetaConfigs[ordinal],
-              meta.type == .lens else { return nil }
+              meta.type == .isolate else { return nil }
         return meta
     }
 
@@ -703,13 +703,13 @@ public struct FacetConfig: Sendable {
     /// `isSectionModelActive`**, whenever the question is "does this desktop
     /// render SECTIONS?" — the one-desktop-one-type model has THREE answers and
     /// `isSectionModelActive` can only express one of them, so every caller
-    /// that used it had to hand-write `|| isLensDesktop` and some forgot.
+    /// that used it had to hand-write `|| isIsolateDesktop` and some forgot.
     ///
     /// Precedence mirrors `effectiveWorkspaceList` exactly (lens → sections →
     /// degrade), so "how it renders" and "how many workspaces it seeds" can
     /// never disagree.
     public func desktopRenderMode(ordinal: Int?) -> DesktopRenderMode {
-        if desktopLens(ordinal: ordinal) != nil { return .lens }
+        if desktopIsolate(ordinal: ordinal) != nil { return .isolate }
         return isSectionModelActive(ordinal: ordinal) ? .sections : .degrade
     }
 
@@ -719,7 +719,7 @@ public struct FacetConfig: Sendable {
     /// `workspaceSubstrateSections` with `effectiveWorkspaceList`, so "gate
     /// active" and "seed N workspaces" can never disagree (the SSOT).
     ///
-    /// ⚠️ This is NOT "does this desktop render sections?" — a **lens desktop**
+    /// ⚠️ This is NOT "does this desktop render sections?" — a **isolate desktop**
     /// renders sections and is `false` here (its 1–2 sections are synthesized
     /// from `match`, so it authors no spatial cells). Reach for
     /// `desktopRenderMode` unless you specifically mean the authored spatial

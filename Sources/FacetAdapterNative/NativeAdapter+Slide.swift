@@ -39,9 +39,10 @@ extension NativeAdapter {
     /// top). Floating windows aren't here — they restore to their
     /// recorded original position (handled in `animateSwitch`).
     ///
-    /// A lens is a pure VIEW (t-0021): it never tiles real windows, so this
-    /// (like `applyLayout`) just computes the per-workspace frames — the
-    /// instant and animated paths agree without any lens special-case.
+    /// This (like `applyLayout`) computes the per-workspace frames only, so the
+    /// instant and animated paths agree. An isolate desktop needs no special
+    /// case here: it is FLAT (exactly one workspace is seeded), and its park set
+    /// is applied separately by `applyIsolatePark`.
     func targetFrames(for n1Based: Int, in rect: CGRect)
         -> [WindowID: CGRect]
     {

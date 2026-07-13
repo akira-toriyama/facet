@@ -279,7 +279,7 @@ extension WorkspaceCatalog {
             floatingWindows.remove(id)
             // Re-enter the WS's layout (no-op if mode is float). orphan: no
             // home workspace layout to re-enter — stays detached (un-floated
-            // but in no tree, parked; invisible unless a matching lens shows it).
+            // but in no tree, parked; invisible unless an isolate desktop's `match` shows it).
             if let ws = slot.workspace {
                 attachToLayout(id, workspace: ws,
                                focused: focused, in: rect)

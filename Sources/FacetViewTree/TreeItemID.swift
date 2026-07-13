@@ -7,7 +7,7 @@ import FacetCore
 /// `WindowID` would in fact be unique. `group` is in the key for what it
 /// TELLS you, not to uniquify: it is the row's SECTION membership, which is
 /// what the host resolves (`lastSections[group]`) to route a click —
-/// `activateSection` vs `focusFirstWindow`, or inert on a lens desktop's
+/// `activateSection` vs `focusFirstWindow`, or inert on an isolate desktop's
 /// holding row. A bare `WindowID` cannot answer "which section is this row in?".
 /// Header rows key on the stable `ProjectedSection.id`.
 public enum TreeItemID: Hashable, Sendable {

@@ -132,7 +132,7 @@ is the index. **Do not relitigate** without explicit grill round.
   list of workspace spatial cells (`{ label, layout, unassigned }`): each cell
   is one facet workspace (optional `label` — unnamed shows its index — and an
   optional `layout` seed), and the count sets the WS count. A section has NO
-  `type` / `match` / `apply` (t-ec9s retired the section-lens concept — `lens`
+  `type` / `match` / `apply` (t-ec9s retired the section-lens concept; `lens` itself was renamed `isolate` by t-mqqw and
   is now a typed mac *desktop*, see the typed-desktop layer below; a stray
   `type` / `match` / `apply` is ignored on decode + flagged by
   `config --validate`); membership changes only by drag or
@@ -490,13 +490,13 @@ AX-fight the in-flight tween.
 The read-path is spatial: windows live in facet workspaces, and a view renders
 one **section** cell per workspace. A workspace desktop's sections come from its
 `[[desktop.N.section]]` blocks (none declared → degrade 1:1 to the built-in
-by-workspace tree); a lens desktop synthesizes its 1–2 sections from the single
-`[desktop.N]` lens (see the typed-desktop layer below). The whole projection
+by-workspace tree); an isolate desktop synthesizes its 1–2 sections from the single
+`[desktop.N]` `match` (see the typed-desktop layer below). The whole projection
 surface is pure `FacetCore`, so it is exhaustively unit-tested and the views
 stay rendering-only. (t-ec9s retired the old "section-lens" read-path — a
 `[[desktop.N.section]]` can no longer be a saved cross-workspace VIEW filter
 that renders a window in every section it matches; a section is a workspace
-spatial cell, and `lens` lives only at the desktop layer.)
+spatial cell, and `isolate` lives only at the desktop layer.)
 
 ### The projection (pure)
 
@@ -537,8 +537,8 @@ is `FacetConfig.isSectionModelActive`.
 ### The filter language (`facet filter`)
 
 `FacetFilter` is a small, total WHERE-clause language (`parse` → AST →
-`matches`, with a `description` inverse). It powers a lens **desktop**'s
-`match` (`[desktop.N] type = "lens"`, below) and, at the config layer, each
+`matches`, with a `description` inverse). It powers an isolate **desktop**'s
+`match` (`[desktop.N] type = "isolate"`, below) and, at the config layer, each
 `[[rule]]` block's match→tag; the projection overlays the window's workspace
 name (`ProjectedWindowFields`) so `match='workspace=Dev'` resolves at the seam.
 A malformed match is loud-but-non-fatal (skipped + a diagnostic caret),
@@ -554,7 +554,7 @@ as `facet window --move-to N`), and the Controller dispatches the backend op on
 `cliQueue`. Dragging an orphan out of the `unassigned` receptacle onto a
 workspace rescues it the same way. There is no section `match` to satisfy and
 no `apply` side-effect (t-ec9s retired both) — auto-tagging on a match is now
-the `[[rule]]` block's job (match→tag), and lens filtering lives at the desktop
+the `[[rule]]` block's job (match→tag), and isolate filtering lives at the desktop
 layer.
 
 ### Where it is consumed
@@ -564,61 +564,61 @@ directly, as do the grid and rail. The read-path is the sole window-grouping
 model, and the section list it renders comes from the **typed-desktop layer**
 (next subsection): a workspace desktop renders its flat `[[desktop.N.section]]`
 blocks (none declared → degrade 1:1 to the built-in by-workspace tree), and a
-lens desktop synthesizes its 1–2 sections from the single `[desktop.N]` lens.
+isolate desktop synthesizes its 1–2 sections from the single `[desktop.N]` `match`.
 There is no per-section VIEW filter to toggle and no `facet lens` verb
-(t-ec9s) — lens filtering is a property of the whole mac desktop, always-on
-while that lens desktop is active (`applyIsolatePark`, below).
+(t-ec9s) — match-driven membership is a property of the whole mac desktop, always-on
+while that isolate desktop is active (`applyIsolatePark`, below).
 
-### The typed-desktop layer (lens desktops)
+### The typed-desktop layer (isolate desktops)
 
-A mac desktop is TYPED (t-0sbm): `[desktop.N] type = "workspace" | "lens"`
+A mac desktop is TYPED (t-0sbm): `[desktop.N] type = "workspace" | "isolate"`
 — the hierarchy is **mac desktop > section > window**. One ordinal = one
 desktop = one type; "both kinds" means two mac desktops. (The former
 browser-tab **board** layer — `[[desktop.N.tab]]`, `facet board`, the
 switcher bands — was retired by t-0sbm as one concept too many.)
 
 - **`DesktopMeta`** (`DesktopMeta.swift`) — the `[desktop.N]` SINGLE-table
-  declaration: `type` + optional `label`, plus the lens-only `match` /
+  declaration: `type` + optional `label`, plus the isolate-only `match` /
   `layout` / `show-non-matching`. Decoded by `decodeDesktopTables`
   (`FacetConfig+Decode.swift`), read via `desktopType(ordinal:)` /
-  `desktopLens(ordinal:)`. A sections-only config implies `.workspace`.
+  `desktopIsolate(ordinal:)`. A sections-only config implies `.workspace`.
 - **Workspace desktop** — the classic path: `desktopSections(forMacDesktopOrdinal:)`
   returns the flat `[[desktop.N.section]]` list; an empty list makes
   `FilterProjection.project` map each workspace 1:1 (`FilterProjection.swift`).
-- **Lens desktop** — flat (NO sub-workspaces): `effectiveWorkspaceList` seeds
-  exactly ONE workspace (named by the lens `label`, seeded with its `layout`),
+- **Isolate desktop** — flat (NO sub-workspaces): `effectiveWorkspaceList` seeds
+  exactly ONE workspace (named by the desktop `label`, seeded with its `layout`),
   which pins the catalog to N=1 so the active-WS park scope IS the whole
-  desktop. `lensDesktopSections(ordinal:)` synthesizes the projection input —
-  one `.lens` section (id `section:0:<label>`), plus an `unassigned` holding
+  desktop. `isolateDesktopSections(ordinal:)` synthesizes the projection input —
+  one `.matched` section (id `section:0:<label>`), plus a `.holding`
   receptacle when `show-non-matching = true`. The runtime is
   `NativeAdapter.applyIsolatePark`: ALWAYS-ON — every reconcile derives the
   park set from `match` (`IsolatePark.parkSet`, pure), anchor-parks the
-  non-matching windows, and asserts the lens `layout` on the N=1 workspace
+  non-matching windows, and asserts the desktop `layout` on the N=1 workspace
   (the `setMode` seam, guarded to fire only on change so bsp split ratios
   survive).
-- **Two-world gate** — a lens desktop is TREE-ONLY (dynamic membership ⇒ no
+- **Two-world gate** — an isolate desktop is TREE-ONLY (dynamic membership ⇒ no
   fixed picture to thumbnail): `--view grid` / `--view rail` there are a loud
   `setError` no-op (`Controller+CLIDispatch.swift`). The same gate
-  (`lensDesktopBlocks`) also rejects the workspace-set / active-workspace verbs
+  (`IsolateDesktopGate`) also rejects the workspace-set / active-workspace verbs
   (`workspace --add` / `--remove` / `--move` / `--rename` / `--focus`) and
-  `--layout` — a lens desktop is a flat single always-on workspace (the N=1
+  `--layout` — an isolate desktop is a flat single always-on workspace (the N=1
   park scope), and a runtime `--layout` would be reverted every reconcile by
-  the lens layout seam. Tile-refinement (`--retile` / `--balance` / `--rotate`
+  the isolate layout seam. Tile-refinement (`--retile` / `--balance` / `--rotate`
   / `--mirror`) is NOT gated: it mutates the tiled set within the same mode and
   persists exactly as on a workspace desktop.
 
 ### One tiling machinery, one active section
 
 There is always **exactly one** [active section](glossary.md#active-section):
-on a workspace desktop it is the active workspace, and on a lens desktop it is
+on a workspace desktop it is the active workspace, and on an isolate desktop it is
 the single synthesized always-on section. (t-ec9s removed the old
 `activeLens XOR activeWorkspace` split — there is no section-lens to activate,
 so the active section is unambiguously the active workspace.) Real-window
 tiling runs the per-workspace machinery on **both** desktop types:
 
-| | workspace desktop | lens desktop |
+| | workspace desktop | isolate desktop |
 |---|---|---|
-| Frames | stateful `applyLayout` on the active workspace | `applyIsolatePark` — always-on tile of the `match` set with the lens `layout` on the N=1 workspace |
+| Frames | stateful `applyLayout` on the active workspace | `applyIsolatePark` — always-on tile of the `match` set with the desktop `layout` on the N=1 workspace |
 | Member set | the active workspace's own windows | the windows matching the desktop's `match`, aggregated across the desktop |
 | Effect | tiles + moves the active workspace's OS windows | tiles the matched OS windows + anchor-parks the rest |
 
@@ -630,7 +630,7 @@ centre **hero**). Each lights **exactly one** section, the active one —
 rail (EX-2b). `OverviewCell.isActive` bakes the single-highlight at cell-build
 time, so the accent draw is identical across surfaces; cell/window picks funnel
 through `WindowBackend.activateSection` (the same throughline the CLI + tree
-use). A lens desktop is tree-only, so the grid/rail cell path applies only to
+use). An isolate desktop is tree-only, so the grid/rail cell path applies only to
 workspace desktops.
 
 ## Non-goals

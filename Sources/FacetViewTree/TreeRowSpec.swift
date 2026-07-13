@@ -56,7 +56,8 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
     let kind: String
     switch s.sectionType {
     case .workspace: kind = "workspace"
-    case .lens: kind = "lens"
+    case .matched: kind = "matched"
+    case .holding: kind = "holding"
     case .unassigned: kind = "unassigned"
     }
     return "\(kind) · \(s.label)"

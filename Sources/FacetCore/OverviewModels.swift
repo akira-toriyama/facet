@@ -19,16 +19,35 @@ import CoreGraphics
 import Foundation
 
 /// Which kind of section a PROJECTED / rendered overview unit is (W2.6 /
-/// t-wrd2). Distinct from `SectionType` ({workspace, lens}), which now types a
-/// mac DESKTOP (`[desktop.N] type = …`, t-ec9s): the rendered side has a THIRD
-/// kind, the `.unassigned` lost-and-found receptacle, which no config key
-/// declares as a `type` — it is produced by `FilterProjection` from a section's
-/// `unassigned = true` MARKER. Keeping the rendered enum separate lets the
-/// config enum stay pure (a receptacle is a marker, not a type) while the views
-/// still pattern-match three rendered kinds.
+/// t-wrd2). Deliberately NOT `DesktopType` ({workspace, isolate}), which types a
+/// mac DESKTOP: the rendered side has kinds no config key declares as a `type`.
+/// Keeping the two enums separate lets the config enum stay pure while the views
+/// pattern-match what is actually on screen.
+///
+/// Each case answers "what IS this section", at one altitude (t-mqqw). The old
+/// three read as type / provenance / leftover — `lens ·` was a DESKTOP type
+/// leaking down onto a section, and the isolate desktop's holding bucket was
+/// minted as `.unassigned`, which was a straight-up lie: those windows ARE
+/// assigned to workspaces, they are held back because they failed the `match`.
 public enum ProjectedSectionType: Sendable, Equatable {
+    /// The spatial substrate — an authored `[[desktop.N.section]]` cell (or, in
+    /// the degrade path, a 1:1 mirror of one facet workspace). Membership is
+    /// MANUAL: you put windows here.
     case workspace
-    case lens
+    /// An isolate desktop's matched section — the windows its `match` selected,
+    /// tiled with its `layout`. Membership is DECLARATIVE: the predicate decides,
+    /// you never file a window into it. (Was `.lens`.)
+    case matched
+    /// An isolate desktop's holding section — the windows that did NOT match, so
+    /// they are anchor-parked and shown only when `show-non-matching`. NOT
+    /// `parked`: `IsolatePark.parkSet` exempts sticky windows from parking while
+    /// this bucket (leftover-by-subtraction) still lists them, so a sticky
+    /// non-matching window is HELD but not PARKED. facet already called this
+    /// "holding" everywhere except the GUI. (Was `.unassigned`.)
+    case holding
+    /// The lost-and-found receptacle on a WORKSPACE desktop (`unassigned = true`).
+    /// Produced from a MARKER, not a type. ⚠️ It can never actually receive a
+    /// window today — see t-6rbc.
     case unassigned
 }
 
@@ -36,22 +55,22 @@ public enum ProjectedSectionType: Sendable, Equatable {
 /// (`FilterProjection`). A `[[desktop.N.section]]` workspace SPATIAL cell (or
 /// its `unassigned` receptacle), OR — in the degrade path (no sections
 /// configured) — a 1:1 mirror of one facet workspace (by-workspace stays a
-/// first-class citizen), OR one of the 1–2 sections a LENS DESKTOP synthesizes
-/// from its `match` (`projectLensDesktop`). The tree consumes this via
+/// first-class citizen), OR one of the 1–2 sections a ISOLATE DESKTOP synthesizes
+/// from its `match` (`projectIsolateDesktop`). The tree consumes this via
 /// `SidebarView.update(sections:)`; the grid + rail render each section as a
-/// cell — but only on a workspace desktop, since a lens desktop is TREE-ONLY
+/// cell — but only on a workspace desktop, since an isolate desktop is TREE-ONLY
 /// (its membership is dynamic, so there is no fixed picture to thumbnail).
 ///
 /// `sourceWorkspaceIndex` is the **0-based wire index** of the workspace
 /// this section maps to (so `--focus` / `--move-to` hit the right WS),
-/// mirroring `Workspace.index`. It is `nil` for a lens desktop's synthesized
+/// mirroring `Workspace.index`. It is `nil` for an isolate desktop's synthesized
 /// sections, which span the desktop and have no single source WS.
 /// `Sendable` (unlike the view-built `OverviewCell`): the consumer produces
 /// this on the adapter's `cliQueue` and hands it to `main`, so it crosses
 /// threads. All fields are already `Sendable` (`Window` is).
 public struct ProjectedSection: Sendable {
     /// Stable, unique identity for view signatures / cell tracking.
-    /// Degrade / workspace section: `"ws:<index>"`. A lens desktop's matched
+    /// Degrade / workspace section: `"ws:<index>"`. An isolate desktop's matched
     /// section: `"section:<declOrder>:<label>"` (`declOrder` is always 0 — it
     /// is the desktop's one lens). Unassigned section (§G):
     /// `"unassigned:<declOrder>"`.
@@ -61,7 +80,7 @@ public struct ProjectedSection: Sendable {
     public let sourceWorkspaceIndex: Int?
     /// Which section kind produced this section — `.workspace` for the spatial
     /// substrate (the degrade path + the `[[desktop.N.section]]` cells),
-    /// `.lens` for the matched section a LENS DESKTOP synthesizes from its
+    /// `.matched` for the matched section a ISOLATE DESKTOP synthesizes from its
     /// `match`, `.unassigned` for the lost-and-found receptacle. Defaulted so
     /// the degrade path + existing 4-arg call sites need no edit.
     public let sectionType: ProjectedSectionType
@@ -111,8 +130,8 @@ public struct OverviewCell {
     /// Which section kind this cell renders. In practice the overviews only
     /// ever see `.workspace` (the spatial substrate) and `.unassigned` (the
     /// lost-and-found receptacle): they run on a workspace desktop only — a
-    /// lens desktop is TREE-ONLY and loud-rejects `--view grid` / `--view rail`
-    /// — and `FilterProjection.project`, their only source, mints no `.lens`
+    /// isolate desktop is TREE-ONLY and loud-rejects `--view grid` / `--view rail`
+    /// — and `FilterProjection.project`, their only source, mints no `.matched`
     /// section. Defaulted so every existing 8-arg call site compiles unchanged.
     public let sectionType: ProjectedSectionType
     /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /

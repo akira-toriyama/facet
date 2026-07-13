@@ -83,7 +83,7 @@ struct ManagementGateTests {
     @Test func managedKeysOnUnionOfSectionAndMetaOrdinals() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: [wsSection()]]
-        c.macDesktopMetaConfigs = [3: DesktopMeta(type: .lens, match: "app=x")]
+        c.macDesktopMetaConfigs = [3: DesktopMeta(type: .isolate, match: "app=x")]
         #expect(c.isMacDesktopManaged(ordinal: 1))
         #expect(!c.isMacDesktopManaged(ordinal: 2))
         #expect(c.isMacDesktopManaged(ordinal: 3))

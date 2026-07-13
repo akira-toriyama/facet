@@ -512,8 +512,6 @@ extension NativeAdapter {
     /// funnels through here.
     func applyLayout(workspace n1Based: Int, rect: CGRect,
                              skip: Set<WindowID> = [], cached: Bool = false) {
-        // A lens is a pure VIEW (t-0021): it never tiles real windows, so even
-        // with a lens active the active workspace tiles normally here.
         let mode = catalog.mode(of: n1Based)
         switch mode {
         case StatefulMode.bsp:   applyTile(workspace: n1Based, rect: rect, skip: skip,

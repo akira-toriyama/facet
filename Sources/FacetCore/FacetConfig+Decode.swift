@@ -169,7 +169,7 @@ extension FacetConfig {
     /// `match`, or whose flat keys yield no usable `apply` op (it would adopt
     /// nothing), is DROPPED — a bad rule never breaks the others. The `match`
     /// GRAMMAR is NOT validated here (parse-only stays total); the consumer
-    /// compiles it loud + non-fatal at eval time, like a lens desktop's `match`.
+    /// compiles it loud + non-fatal at eval time, like an isolate desktop's `match`.
     public static func decodeRuleSections(fromTOML text: String) -> [Rule] {
         parseTOMLArrayOfTables(text, table: "rule").compactMap { t in
             guard case .string(let match)? = t["match"],
@@ -206,7 +206,7 @@ extension FacetConfig {
     /// the FLAT `parseTOMLSubset` map keyed by the literal header text
     /// `desktop.<N>` (a single table, so it lands in `.tables`, NOT the
     /// array-of-tables `.arrays` the section decoders read). A table with an
-    /// absent / unknown `type`, or a lens missing `match`, is DROPPED LOUD.
+    /// absent / unknown `type`, or an isolate desktop missing `match`, is DROPPED LOUD.
     /// Successor to the retired `[[desktop.N.tab]]` board decode.
     public static func decodeDesktopTables(fromTOML text: String)
         -> [Int: DesktopMeta]
@@ -342,14 +342,14 @@ extension FacetConfig {
                 + "and this block is IGNORED; type the desktop with "
                 + "[desktop.N] and/or [[desktop.N.section]] instead")
         }
-        // A `type = "lens"` desktop has no sections — warn if it ALSO declares
-        // `[[desktop.N.section]]` (they're ignored; the desktop-lens uses its
+        // A `type = "isolate"` desktop has no sections — warn if it ALSO declares
+        // `[[desktop.N.section]]` (they're ignored; the isolate-desktop uses its
         // single `match`). `desktopType` resolves the explicit meta first, so the
         // stray sections never render — this is purely a loud heads-up.
         for ordinal in metas.keys.sorted()
-        where metas[ordinal]?.type == .lens && sections[ordinal] != nil {
-            Log.line("config: desktop \(ordinal) is type=lens but also declares "
-                + "[[desktop.\(ordinal).section]] — a lens desktop has no sections;"
+        where metas[ordinal]?.type == .isolate && sections[ordinal] != nil {
+            Log.line("config: desktop \(ordinal) is type=isolate but also declares "
+                + "[[desktop.\(ordinal).section]] — an isolate desktop has no sections;"
                 + " ignoring them")
         }
         let adoptRules = decodeRuleSections(fromTOML: text)

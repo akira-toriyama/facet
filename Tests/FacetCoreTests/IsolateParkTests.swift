@@ -32,50 +32,50 @@ struct IsolateParkTests {
 
     // MARK: - core rule: park = out-of-lens AND not sticky
 
-    @Test func outOfLensWindowIsParked() {
+    @Test func outOfMatchWindowIsParked() {
         let lens = filter("app~=Slack or app=Mail")   // "Chat"
         let park = IsolatePark.parkSet(
             windows: [win(1, app: "Code"), win(2, app: "Google Chrome")],
-            inWorkspaceNamed: "Main", lens: lens, sticky: [])
+            inWorkspaceNamed: "Main", match: lens, sticky: [])
         #expect(ids(park) == [1, 2])   // neither matches Chat → both park
     }
 
-    @Test func inLensWindowNotParked() {
+    @Test func inMatchWindowNotParked() {
         let lens = filter("app~=Slack or app=Mail")
         let park = IsolatePark.parkSet(
             windows: [win(1, app: "Slack"), win(2, app: "Code")],
-            inWorkspaceNamed: "Main", lens: lens, sticky: [])
+            inWorkspaceNamed: "Main", match: lens, sticky: [])
         #expect(ids(park) == [2])   // Slack matches → stays; Code parks
     }
 
-    @Test func stickyOutOfLensIsExempt() {
+    @Test func stickyOutOfMatchIsExempt() {
         let lens = filter("app~=Slack")
         // window 2 is out-of-lens BUT sticky → must stay visible.
         let park = IsolatePark.parkSet(
             windows: [win(1, app: "Code"), win(2, app: "Music")],
-            inWorkspaceNamed: "Main", lens: lens,
+            inWorkspaceNamed: "Main", match: lens,
             sticky: [WindowID(serverID: 2)])
         #expect(ids(park) == [1])   // only the non-sticky out-of-lens parks
     }
 
     /// A float has no special exemption — it parks by the same out-of-lens rule
     /// (a floating out-of-lens window still slides to the corner).
-    @Test func floatOutOfLensIsParked() {
+    @Test func floatOutOfMatchIsParked() {
         let lens = filter("app~=Slack")
         var floater = win(1, app: "Calculator")
         floater = Window(id: floater.id, pid: floater.pid, appName: floater.appName,
                          title: floater.title, isFocused: false, isFloating: true,
                          frame: nil, tags: [])
         let park = IsolatePark.parkSet(windows: [floater],
-                                       inWorkspaceNamed: "Main", lens: lens, sticky: [])
+                                       inWorkspaceNamed: "Main", match: lens, sticky: [])
         #expect(ids(park) == [1])
     }
 
-    @Test func tagLensParksUntaggedKeepsTagged() {
+    @Test func isolateTagMatchParksUntaggedKeepsTagged() {
         let lens = filter("tag~=chat")
         let park = IsolatePark.parkSet(
             windows: [win(1, app: "Slack", tags: ["chat"]), win(2, app: "Code", tags: [])],
-            inWorkspaceNamed: "Main", lens: lens, sticky: [])
+            inWorkspaceNamed: "Main", match: lens, sticky: [])
         #expect(ids(park) == [2])   // untagged parks; tagged stays
     }
 
@@ -83,7 +83,7 @@ struct IsolateParkTests {
         let lens = filter("app~=Slack or app=Code")
         let park = IsolatePark.parkSet(
             windows: [win(1, app: "Slack"), win(2, app: "Code")],
-            inWorkspaceNamed: "Main", lens: lens, sticky: [])
+            inWorkspaceNamed: "Main", match: lens, sticky: [])
         #expect(park.isEmpty)
     }
 }

@@ -136,10 +136,11 @@ public enum ViewContextMenu {
                 filterable: filterable, entries: entries)
     }
 
-    /// Rename-only header menu for a `type="lens"` OR `type="unassigned"`
-    /// section. A lens is a pure VIEW (t-0021) — it tiles nothing, so it has no
-    /// layout to pick; the orphan receptacle never had one either. Both headers
-    /// therefore offer ONLY `SECTION ▸ Rename` (the same row the workspace
+    /// Rename-only header menu for an isolate desktop's synthesized sections
+    /// (matched / holding) and for the lost-and-found receptacle. None of them
+    /// owns a layout to pick: an isolate desktop's `layout` is a key on the
+    /// `[desktop.N]` TABLE, not on a section, and a receptacle never had one.
+    /// So all of them offer ONLY `SECTION ▸ Rename` (the same row the workspace
     /// `showLayout` puts above its LAYOUT group). `header` is the §D
     /// `index (label)` caption.
     public static func showSectionRenameMenu(
@@ -242,7 +243,7 @@ public enum ViewContextMenu {
         var entries = menu.filter { $0.section == "Layout" }.map(makeEntry)
         // Per-window tag editing (R10): a single "Tag…" item opens the tag
         // checklist panel (add / remove / create a tag ON this window). This
-        // replaces the pivot-era "Add to <lens>" — which only applied a lens's
+        // replaces the pivot-era "Add to <lens>" — which only applied an isolate desktop's
         // apply-set, conflating tags with lens membership. Its own "Tags"
         // section (→ secondary tint). Grid / rail pass nil → no item appears.
         if let onEditTags {

@@ -55,10 +55,10 @@ public struct WindowQueryEntry: Codable, Sendable, Equatable {
         public let sticky: Bool
         public let master: Bool
         /// ISOLATE-PARKED: anchor-parked off-screen because the window falls
-        /// OUTSIDE the `match` on a `[desktop.N] type=lens` mac desktop.
+        /// OUTSIDE the `match` on a `[desktop.N] type=isolate` mac desktop.
         ///
         /// This is the ONLY surface that reports it, and it has to exist: a
-        /// lens desktop MOVES REAL WINDOWS, and with `show-non-matching =
+        /// isolate desktop MOVES REAL WINDOWS, and with `show-non-matching =
         /// false` a parked window appears on NO facet surface at all — not the
         /// tree, not an overview. Without this key, facet moves a window
         /// somewhere the user can't see and then can't tell them where it went

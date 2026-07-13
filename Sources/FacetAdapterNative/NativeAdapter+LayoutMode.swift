@@ -15,9 +15,7 @@ extension NativeAdapter {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         let target = index + 1
         let rect = activeDisplayRect()
-        // A lens is a pure VIEW (t-0021) and never tiles real windows, so
-        // `facet workspace --layout` always targets the active workspace —
-        // even with a lens active it just retiles the workspace underneath.
+        // `facet workspace --layout` always targets the active workspace.
         // BSP → Stack migration parks all but the focused window
         // at the anchor sliver. The catalog's setMode discards
         // layoutTrees / stackOrders entries, so we rely on

@@ -160,16 +160,16 @@ public protocol WindowBackend: Sendable {
     /// move (memory: facet-cli-dynamic-runtime-model).
     func switchWorkspace(named name: String, autoFocus: Bool)
 
-    /// Push the RUNTIME lens-desktop `match` override to the adapter so
+    /// Push the RUNTIME isolate-desktop `match` override to the adapter so
     /// `applyIsolatePark` tiles the matched set + parks the rest by the LIVE
-    /// match, not just `config.desktopLens.match`. A lens desktop holds exactly
+    /// match, not just `config.desktopIsolate.match`. An isolate desktop holds exactly
     /// one lens, so the override keys on the mac desktop ordinal alone (no
     /// section-id resolution). `nil` / empty reverts to the config match. The
     /// tree projection overlays the SAME ordinal-keyed override
-    /// (`Controller.lensDesktopMatchOverride`, D6); this keeps the physical
-    /// park/tile in lock-step, which is the lens desktop's whole point ("change
+    /// (`Controller.isolateMatchOverride`, D6); this keeps the physical
+    /// park/tile in lock-step, which is the isolate desktop's whole point ("change
     /// the match to change what you see").
-    func setLensDesktopMatch(_ predicate: String?, ordinal: Int)
+    func setIsolateMatch(_ predicate: String?, ordinal: Int)
 
     /// Append a new, empty (unnamed) workspace at the end. Runtime
     /// state — session-only, not persisted (config stays the seed).
@@ -332,7 +332,7 @@ public protocol WindowBackend: Sendable {
 
     /// Add tag `name` to the focused window (`facet window --tag NAME`).
     /// Tags are a free-form per-window set (EX-4) — `name` is just added,
-    /// no vocabulary, no cap. A lens desktop whose `match` reads `tag~=name`
+    /// no vocabulary, no cap. An isolate desktop whose `match` reads `tag~=name`
     /// then tiles it on the next reconcile (and a `[[rule]]` with that `match`
     /// applies to it on adopt). Returns `false` only when there is no managed
     /// focused window. Caller surfaces the error.
@@ -421,7 +421,7 @@ public protocol WindowBackend: Sendable {
     /// the tail of every catalog refresh — and feeds them to `FilterProjection`
     /// as `orphans:`, the ONLY way an orphan enters the projection: on a
     /// workspace desktop the §G `unassigned` receptacle picks it up (it lands in
-    /// no workspace section), on a lens desktop the `match` gathers it (or the
+    /// no workspace section), on an isolate desktop the `match` gathers it (or the
     /// holding section does). WITHOUT this an orphan shows in no tree/grid/rail
     /// section at all — a managed window with nowhere to be seen. `[]` outside
     /// the section model / for backends without one.
@@ -504,7 +504,7 @@ public extension WindowBackend {
     // workspace set (and the unit-test stub) need not implement
     // these. The native adapter overrides all of them.
     func switchWorkspace(named name: String, autoFocus: Bool) {}
-    func setLensDesktopMatch(_ predicate: String?, ordinal: Int) {}
+    func setIsolateMatch(_ predicate: String?, ordinal: Int) {}
     func orphanWindow(_ id: WindowID) {}
     func addWorkspace() {}
     func removeWorkspace(at position: Int?) {}

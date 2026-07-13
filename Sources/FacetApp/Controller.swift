@@ -75,7 +75,7 @@ final class Controller: NSObject {
     /// relaunch resets to config order. See `SectionOrder` for the why
     /// (reorder the OUTPUT, not the input `[DesktopSection]`).
     var macDesktopSectionOrder: [Int: [String]] = [:]
-    /// §E: session-only DISPLAY-LABEL override for `type="lens"` sections.
+    /// §E: session-only DISPLAY-LABEL override for `type="isolate"` sections.
     /// Keyed by mac-desktop ordinal (`currentMacDesktopOrdinal() ?? -1`),
     /// then by the section's stable id (`"section:<declOrder>:<label>"`),
     /// value = the new display label. Applied to the PROJECTED result at the
@@ -90,20 +90,20 @@ final class Controller: NSObject {
     /// (`workspaceNames`), so a
     /// workspace rename routes to `renameWorkspace` and never lands here.
     var sectionLabelOverride: [Int: [String: String]] = [:]
-    /// t-ec9s (D6): the session-only runtime `match` override for a LENS DESKTOP,
-    /// keyed by mac-desktop ORDINAL alone (a lens desktop holds exactly one lens,
+    /// t-ec9s (D6): the session-only runtime `match` override for a ISOLATE DESKTOP,
+    /// keyed by mac-desktop ORDINAL alone (an isolate desktop holds exactly one lens,
     /// so there is no section id to key on). This is the SINGLE effective-match
-    /// source for the lens desktop: `setSectionMatch` writes it here AND pushes
-    /// the SAME value to the adapter (`bk.setLensDesktopMatch`, also ordinal-
-    /// keyed), so the tree projection (`override ?? config.desktopLens.match`)
+    /// source for the isolate desktop: `setSectionMatch` writes it here AND pushes
+    /// the SAME value to the adapter (`bk.setIsolateMatch`, also ordinal-
+    /// keyed), so the tree projection (`override ?? config.desktopIsolate.match`)
     /// and the physical park (`applyIsolatePark`) can never diverge — the earlier
     /// desync (id-keyed display override vs ordinal-keyed adapter override) came
     /// from editing the desktop `label`, which changed the id but not the ordinal.
-    /// SESSION-ONLY: not persisted to the snapshot (a lens desktop is a single
+    /// SESSION-ONLY: not persisted to the snapshot (an isolate desktop is a single
     /// `[desktop.N]` table, and the snapshot writer only edits `[[desktop.N.
     /// section]]` array elements — the `[desktop.N] match=` write path is a
     /// follow-up, t-ec9s). Reset on relaunch, NOT on `facet reload`.
-    var lensDesktopMatchOverride: [Int: String] = [:]
+    var isolateMatchOverride: [Int: String] = [:]
     /// The mac desktop's declared sections for `ordinal`. EVERY Controller-side
     /// section read goes through this ONE seam so the section-id `declOrder`
     /// agrees with what the `apply()` projection minted (`FilterProjection`
@@ -604,16 +604,16 @@ final class Controller: NSObject {
         let oldThemes = [config.effectiveTreeTheme,
                          config.effectiveGridTheme,
                          config.effectiveRailTheme]
-        // A config edit to a lens desktop's `match` (or dropping its lens-ness)
+        // A config edit to an isolate desktop's `match` (or dropping its lens-ness)
         // drops that ordinal's live `--match` override — config becomes source
         // of truth again, exactly like the theme-key precedent below. An
         // unrelated save keeps the override (a label-only edit must not reset
         // a live retarget). Without this, the snapshot export (t-sgqk) would
         // re-bake the forgotten override into a NEWER snapshot and auto-promote
         // would silently revert the user's hand edit at the next launch.
-        let staleLensOrdinals = lensDesktopMatchOverride.keys.filter { ord in
-            config.desktopLens(ordinal: ord)?.match
-                != fresh.desktopLens(ordinal: ord)?.match
+        let staleIsolateOrdinals = isolateMatchOverride.keys.filter { ord in
+            config.desktopIsolate(ordinal: ord)?.match
+                != fresh.desktopIsolate(ordinal: ord)?.match
         }
         // A hand-edit that changes a mac desktop's TYPE (workspace ⇄ lens) is
         // OUT OF SCOPE for hot-reload: the per-mac-desktop WorkspaceCatalog is
@@ -622,7 +622,7 @@ final class Controller: NSObject {
         // rule). Half-applying just the type gate while the catalog stays stale
         // would strand windows (workspace→lens leaves inactive-workspace windows
         // parked in the corner, unreachable while lens blocks WS switching) or
-        // show the wrong set (lens→workspace keeps the lens's single workspace).
+        // show the wrong set (lens→workspace keeps the isolate desktop's single workspace).
         // Rather than silently half-apply, say so LOUD so the user restarts to
         // pick it up (Fail-Fast; the live layout is left untouched). t-63h2.
         for ord in config.desktopTypeFlips(against: fresh) {
@@ -633,13 +633,13 @@ final class Controller: NSObject {
         }
         config = fresh
         backend.updateConfig(fresh)   // hot-reload the backend's copy
-        for ord in staleLensOrdinals {
-            lensDesktopMatchOverride.removeValue(forKey: ord)
+        for ord in staleIsolateOrdinals {
+            isolateMatchOverride.removeValue(forKey: ord)
             // Revert the adapter's park-side copy through the same seam the
             // set went through, so tree display + physical park/tile stay in
             // lock-step on the (fresh) config match.
             runBackendCommand { bk in
-                bk.setLensDesktopMatch("", ordinal: ord); return nil
+                bk.setIsolateMatch("", ordinal: ord); return nil
             }
             Log.debug("reloadConfig: [desktop.\(ord)] match edited — "
                 + "dropped the session --match override")
@@ -676,8 +676,8 @@ final class Controller: NSObject {
         return id == 0 ? nil : MacDesktops.ordinal(for: id)
     }
 
-    // The grid/rail don't recompute a lens `match` view-side. A lens is a pure
-    // VIEW: `FilterProjection` builds each section's window list (a lens section
+    // The grid/rail don't recompute an isolate desktop `match` view-side. A lens is a pure
+    // VIEW: `FilterProjection` builds each section's window list (a matched section
     // lists its matched windows) and the views render that — one display
     // authority, no view-side recompute to drift from it.
 
@@ -1012,36 +1012,36 @@ final class Controller: NSObject {
         // tree render) so all three views share one ordered section list.
         // Section model off ⇒ empty sections ⇒ the overview degrades to `wss`
         // (byte-identical).
-        // A lens DESKTOP is tree-only and synthesizes its own 1|2 sections
+        // An ISOLATE DESKTOP is tree-only and synthesizes its own 1|2 sections
         // (matched + optional non-matching holding).
         let renderMode = config.desktopRenderMode(ordinal: macDesktopOrdinal)
-        let isLensDesktop = renderMode == .lens
+        let isIsolateDesktop = renderMode == .isolate
         // Two-world gate, arrival half: grid/rail overlays are
         // `.canJoinAllSpaces` panels, so one opened on a workspace desktop
-        // FOLLOWS a mac-desktop switch onto a lens desktop — tear it down
+        // FOLLOWS a mac-desktop switch onto an isolate desktop — tear it down
         // here (the dispatch gate only blocks new summons). The tree is the
-        // only surface a lens desktop keeps.
-        if isLensDesktop {
+        // only surface an isolate desktop keeps.
+        if isIsolateDesktop {
             if isGridVisible {
-                Log.debug("lens desktop: tearing down the travelling grid")
+                Log.debug("isolate desktop: tearing down the travelling grid")
                 hideGrid()
             }
             if isRailVisible {
-                Log.debug("lens desktop: tearing down the travelling rail")
+                Log.debug("isolate desktop: tearing down the travelling rail")
                 hideRail()
             }
         }
         if renderMode.rendersSections, let ordinal = macDesktopOrdinal {
             // Read the section list through the SAME `desktopSections` seam
             // every other Controller-side section read uses, so the id
-            // `declOrder` minted HERE matches what the lens/DnD resolvers
+            // `declOrder` minted HERE matches what the isolate desktop/DnD resolvers
             // parse back.
-            // A LENS DESKTOP instead synthesizes its sections (t-0sbm).
+            // A ISOLATE DESKTOP instead synthesizes its sections (t-0sbm).
             // t-0020: overlay the session-only runtime `match` override BEFORE
             // projection (the seam difference from the label override below,
-            // which runs AFTER). A changed `match` changes which windows a lens
+            // which runs AFTER). A changed `match` changes which windows an isolate desktop
             // catches, so it must mutate `project()`'s INPUT. Lens-only +
-            // id-preserving (the override key is the lens id, built from the
+            // id-preserving (the override key is the isolate desktop id, built from the
             // label, so the projected id is unchanged). No override ⇒ identity.
             // EX-3 迷子: feed the orphan windows (in no workspace, so absent
             // from `wss`) so the projection appends them into the `not
@@ -1050,17 +1050,17 @@ final class Controller: NSObject {
             // GAP where an orphan rendered in no tree/grid/rail section even
             // though the activation path gathered it on-screen.
             let projected: FilterProjection.Result
-            if isLensDesktop, let lens = config.desktopLens(ordinal: ordinal) {
-                // A LENS DESKTOP rides its dedicated `DesktopSection`-free route
+            if isIsolateDesktop, let iso = config.desktopIsolate(ordinal: ordinal) {
+                // A ISOLATE DESKTOP rides its dedicated `DesktopSection`-free route
                 // (t-ec9s). D6: the effective match is the single ORDINAL-keyed
-                // session override (`lensDesktopMatchOverride`) over the config
+                // session override (`isolateMatchOverride`) over the config
                 // `match` — the SAME value the adapter parks by, so display and
                 // park can't diverge when the desktop label is edited.
-                let effMatch = lensDesktopMatchOverride[ordinal] ?? lens.match
-                projected = FilterProjection.projectLensDesktop(
+                let effMatch = isolateMatchOverride[ordinal] ?? iso.match
+                projected = FilterProjection.projectIsolateDesktop(
                     workspaces: wss, orphans: backend.orphanWindows(),
-                    match: effMatch, label: lens.label,
-                    showNonMatching: lens.showNonMatching)
+                    match: effMatch, label: iso.label,
+                    showNonMatching: iso.showNonMatching)
             } else {
                 let secs = desktopSections(forOrdinal: ordinal)
                 projected = FilterProjection.project(
@@ -1195,9 +1195,9 @@ final class Controller: NSObject {
         sidebarView.forceRedraw()
         // `macDesktopOrdinal` + the PR6 mac-desktop swap-reset were computed
         // / applied above. Section model (PR5): when this mac desktop is
-        // section-managed (≥1 `[[desktop.N.section]]` spatial cell) OR a lens
+        // section-managed (≥1 `[[desktop.N.section]]` spatial cell) OR an isolate desktop
         // desktop (whose 1|2 sections were synthesized into `lastSections`
-        // above — t-0sbm; without this the ONLY view a lens desktop permits
+        // above — t-0sbm; without this the ONLY view an isolate desktop permits
         // would never show its sections), the tree renders the ordered
         // sections. Otherwise the by-workspace path.
         // EX-2: the projection is now HOISTED above the grid/rail feed (see
@@ -1208,7 +1208,7 @@ final class Controller: NSObject {
         if renderMode.rendersSections {
             contentH = sidebarView.update(sections: lastSections,
                                           workspaces: wss,
-                                          lensDesktop: isLensDesktop,
+                                          isolateDesktop: isIsolateDesktop,
                                           titles: titles,
                                           macDesktop: macDesktopOrdinal)
         } else {

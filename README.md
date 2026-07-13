@@ -47,18 +47,18 @@ overview, each summoned on demand (`facet --view tree|grid|rail`):
   `facet --view rail`.
 
 A mac desktop may be **typed** with a single `[desktop.N]` table
-(`type = "workspace"` or `"lens"`; the hierarchy is *mac desktop ▸ section ▸
-window*). A **lens desktop** is an **always-on focus space**: while you are
+(`type = "workspace"` or `"isolate"`; the hierarchy is *mac desktop ▸ section ▸
+window*). An **isolate desktop** is an **always-on focus space**: while you are
 on it, facet tiles the windows matching its `match` with its `layout` and
 slides the rest to a corner (a dwm-style declutter, sticky windows exempt) —
 no toggle, entering the desktop *is* the focus. The tree shows the matched
 section; `show-non-matching = true` adds a second "holding" section listing
 the parked rest (making the tree a full inventory). It is **tree-only**:
 `--view grid` / `--view rail` are
-rejected there, since a lens desktop's membership is dynamic — there is no
+rejected there, since an isolate desktop's membership is dynamic — there is no
 fixed picture to thumbnail. Workspace-structure commands (`facet workspace
 --add` / `--remove` / `--move` / `--rename` / `--focus`, plus `--layout`) are
-rejected there too — a lens desktop is a single always-on workspace, so there
+rejected there too — an isolate desktop is a single always-on workspace, so there
 is nothing to add, switch to, or re-declare a layout for (tile-refinement
 `--retile` / `--balance` / `--rotate` / `--mirror` still work). A `workspace`
 desktop (the implied type of a sections-only config) behaves exactly as before.
@@ -449,7 +449,7 @@ Frequently-touched keys:
   only the first `unassigned = true` section renders, and it's usually
   empty (every window lives in a workspace) — keep one as a safety net.
   (There is no section `type` any more — a saved cross-workspace filter is
-  now a whole **lens desktop**, `[desktop.N] type = "lens"` below; a stray
+  now a whole **isolate desktop**, `[desktop.N] type = "isolate"` below; a stray
   `type` / `match` / `apply` on a section is ignored on load and flagged by
   `config --validate`.) `facet workspace --rename` overrides a label at
   runtime. Two modes: **no** `[[desktop.N.section]]` anywhere → every mac
@@ -460,8 +460,8 @@ Frequently-touched keys:
   one workspace highlighted; on the rail the active workspace is the centre
   hero.
 - `[desktop.N]` table — the **typed desktop**: `type = "workspace"` or
-  `"lens"` (one ordinal = one desktop = one type; a sections-only config
-  implies `workspace`). A **lens desktop** writes its single always-on lens
+  `"isolate"` (one ordinal = one desktop = one type; a sections-only config
+  implies `workspace`). An **isolate desktop** writes its single always-on `match`
   directly on the table: `match` (required, a facet-filter WHERE-clause),
   optional `layout` (the engine that tiles the matched windows; `"float"`
   leaves them floating), optional `show-non-matching` (default `false`;
@@ -470,7 +470,7 @@ Frequently-touched keys:
   and renders in the tree only.
 - **Per-window tags** are free-form strings attached at **runtime**
   (session-only) with `facet window --tag NAME` (and `--untag` /
-  `--toggle-tag` / `--retag`). A lens desktop or `[[rule]]` whose `match`
+  `--toggle-tag` / `--retag`). An isolate desktop or `[[rule]]` whose `match`
   contains `tag~=NAME` targets every window carrying NAME; `facet query
   --tags` lists every tag currently in use. Optionally, `[tags] defined
   = ["web", "code", …]` seeds a **vocabulary** — names offered as
@@ -478,7 +478,7 @@ Frequently-touched keys:
   (names only; tag colors stay runtime).
 - `[config]` table — **opt-in config auto-persistence**. Set
   `export-path` and facet auto-*exports* a live snapshot of your effective
-  config (renames, lens `match` edits, layout changes, tag vocabulary) to
+  config (renames, isolate `match` edits, layout changes, tag vocabulary) to
   that separate file on every session edit — surgically, leaving
   config.toml untouched. Add `auto-promote = true` and the next launch
   promotes a snapshot that is newer than config.toml onto it (the one
@@ -543,23 +543,23 @@ facet window --unmark NAME        # remove a mark
 
 # Section — address ANY section (workspace or unassigned) by its
 # 1-based tree index or its label. `--focus` activates it (switch to the
-# workspace, or focus an unassigned / lens-desktop section's first window).
+# workspace, or focus an unassigned / isolate-desktop section's first window).
 # `--rename` sets its display label at runtime (session-only — reset on
 # relaunch, NOT on `facet reload`; an empty label reverts a workspace to its
-# bare index, an unassigned section to its config label; a lens desktop
+# bare index, an unassigned section to its config label; an isolate desktop
 # rejects `--rename`). You can also rename from the tree: right-click a
 # section header → Section ▸ Rename.
 facet section --focus N            # focus the Nth section in tree order
 facet section --focus LABEL        # focus the section labelled LABEL
 facet section --rename N "label"   # rename the Nth section's display label
 
-# `--match` retargets a LENS DESKTOP's filter (the `facet filter` predicate)
+# `--match` retargets a ISOLATE DESKTOP's filter (the `facet filter` predicate)
 # live, session-only (same lifetime as --rename: reset on relaunch, kept on
-# `reload`). Lens-desktop-only — a workspace / unassigned section is rejected.
+# `reload`). Isolate-desktop-only — a workspace / unassigned section is rejected.
 # An empty PREDICATE reverts to the config match. You can also edit from the
-# tree: right-click the lens-desktop header → Section ▸ Edit match (or press `m`).
-facet section --match N "tag~=web" # retarget the lens desktop, re-tiles at once
-facet section --match N ""          # revert the lens desktop's match to config
+# tree: right-click the isolate-desktop header → Section ▸ Edit match (or press `m`).
+facet section --match N "tag~=web" # retarget the isolate desktop, re-tiles at once
+facet section --match N ""          # revert the isolate desktop's match to config
 
 # Scratchpad — named hidden shelves (dropdown-terminal / notes pattern)
 facet scratchpad --stash NAME     # park the focused window onto a named
@@ -645,7 +645,7 @@ It moves any corner-stranded window back on-screen. Notes:
 
 A window can carry any number of **free-form string tags** — created
 on first use, session-only, attached live from the CLI. They feed
-`match` predicates: a lens desktop or `[[rule]]` whose `match` contains
+`match` predicates: an isolate desktop or `[[rule]]` whose `match` contains
 `tag~=NAME` (see [Configuration](#configuration)) targets every window
 carrying NAME.
 

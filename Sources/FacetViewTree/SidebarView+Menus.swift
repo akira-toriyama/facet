@@ -19,15 +19,16 @@ extension SidebarView {
         switch row.kind {
         case .header(let g, let ws):
             // Workspace header → full layout picker; a no-workspace header is
-            // either a lens (stateless-only union layout picker, R9 / Cluster B)
+            // either an isolate desktop (stateless-only union layout picker, R9 / Cluster B)
             // or §G unassigned (Rename-only — no layout engine). Discriminate by
             // section type at the CALL SITE so each menu builder's own guard
             // can't fail silently on the wrong kind.
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws) }
             else if g >= 0, g < lastSections.count {
                 switch lastSections[g].sectionType {
-                case .lens:       lensHeaderMenu(at: scr, group: g)
-                case .unassigned: unassignedHeaderMenu(at: scr, group: g)
+                case .matched:    isolateHeaderMenu(at: scr, group: g)
+                case .unassigned, .holding:
+                    unassignedHeaderMenu(at: scr, group: g)
                 case .workspace:  break   // workspace headers carry ws != nil
                 }
             }
@@ -82,15 +83,15 @@ extension SidebarView {
 
     /// Lens-section header right-click / `m` menu → the stateless-only union
     /// layout picker (R9). `g` is the render group; `lastSections[g]` is the
-    /// `type=lens` section it came from. Picking routes through the controller,
-    /// which activates the lens then sets its union layout.
-    func lensHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
+    /// `type=isolate` section it came from. Picking routes through the controller,
+    /// which activates the isolate desktop then sets its union layout.
+    func isolateHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
         guard g >= 0, g < lastSections.count else { return }
         let sec = lastSections[g]
-        guard sec.sectionType == .lens else { return }
-        // A lens is a pure VIEW (t-0021): it tiles nothing, so the header offers
-        // ONLY SECTION ▸ Rename (no layout picker) — same shape as the
-        // unassigned receptacle.
+        guard sec.sectionType == .matched else { return }
+        // No layout picker: an isolate desktop's `layout` is a key on the
+        // `[desktop.N]` TABLE, not on a section, so the matched section has no
+        // layout of its own to pick. Header offers ONLY SECTION ▸ Rename.
         // §D: the header is the unified `index (label)` caption (e.g. "4 (Web)").
         ViewContextMenu.showSectionRenameMenu(
             at: scr,
@@ -102,7 +103,7 @@ extension SidebarView {
             onRename: { [weak self] in
                 self?.controller?.beginSectionRename(group: g, at: scr)
             },
-            // t-0020: a lens also offers "Edit match" — live-tune its filter.
+            // t-0020: an isolate desktop also offers "Edit match" — live-tune its filter.
             // Routes to the controller's match-edit panel (the GUI twin of
             // `facet section --match`); the unassigned header omits it.
             onEditMatch: { [weak self] in
@@ -113,7 +114,7 @@ extension SidebarView {
     /// §G unassigned-section header right-click / `m` menu → Rename ONLY (the
     /// orphan receptacle has no layout engine). `g` is the render group;
     /// `lastSections[g]` is the `type=unassigned` section. Mirrors
-    /// `lensHeaderMenu`'s SECTION ▸ Rename wiring (`beginSectionRename(group:)`,
+    /// `isolateHeaderMenu`'s SECTION ▸ Rename wiring (`beginSectionRename(group:)`,
     /// which now renames unassigned via the id-keyed session override).
     func unassignedHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
         guard g >= 0, g < lastSections.count else { return }

@@ -51,12 +51,12 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// applies the AX side-effects the catalog hands back.
     var catalog = WorkspaceCatalog()
 
-    /// Runtime lens-desktop `match` overrides, keyed by mac desktop ordinal
+    /// Runtime isolate-desktop `match` overrides, keyed by mac desktop ordinal
     /// (session-only; the park/tile mirror of the Controller's ordinal-keyed
-    /// `lensDesktopMatchOverride`, D6). `applyIsolatePark` prefers this over the
+    /// `isolateMatchOverride`, D6). `applyIsolatePark` prefers this over the
     /// config match so `facet section --match` / the tree Edit-match physically
     /// re-tile + re-park live. cliQueue-only (set + read both on cliQueue).
-    var lensDesktopMatchOverride: [Int: String] = [:]
+    var isolateMatchOverride: [Int: String] = [:]
 
     /// Per-mac-desktop catalogs that aren't currently active.
     /// facet keeps an independent set of virtual workspaces per
@@ -622,11 +622,15 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     }
 
     /// EX-3: relocate `id` OUT of its workspace → 迷子 (mirrors `moveWindow`'s
-    /// outcome handling). A section DnD's ws→lens MOVE routes here (instead of
-    /// `moveWindow`) so the window leaves its workspace. A lens is a pure VIEW
-    /// (t-0021): the orphan stays where it is on screen; if a lens matches it,
-    /// `FilterProjection` lists it in that lens section (display only). The
-    /// loud `Log.line` makes the orphaning visible (canon ⑧ invisible-but-logged).
+    /// outcome handling). The loud `Log.line` makes the orphaning visible
+    /// (canon ⑧ invisible-but-logged).
+    ///
+    /// ⚠️ NO PRODUCTION CALLER — t-qtpx removed the ws→lens section DnD that used
+    /// to route here, and this is the ONLY caller of `WorkspaceCatalog.setOrphan`,
+    /// the ONLY writer of `WindowSlot(workspace: nil)`. So no window can become a
+    /// 迷子 today, which is why the §G lost-and-found receptacle is always empty.
+    /// Retiring the whole concept is t-6rbc (approved); it lands in its own PR so
+    /// this rename stays behaviour-neutral.
     public func orphanWindow(_ id: WindowID) {
         dispatchPrecondition(condition: .onQueue(cliQueue))   // P6
         guard config.isMacDesktopManaged(ordinal: activeMacDesktopOrdinal)
@@ -638,7 +642,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
             return
         case .stateOnly:
             Log.line("native: orphan \(id.serverID) — left its workspace "
-                + "(迷子); invisible unless a 迷子 receptacle lens is active")
+                + "(迷子); invisible unless the receptacle shows it")
         case .park(let ref):
             Log.line("native: orphan \(id.serverID) — left its workspace "
                 + "(迷子); parked")

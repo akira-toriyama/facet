@@ -6,11 +6,11 @@ import Testing
 ///
 /// This exists because of a bug it now makes impossible. The old question,
 /// `isSectionModelActive`, means "does this desktop author `[[desktop.N.section]]`
-/// spatial cells?" — which is **false on a lens desktop**, even though a lens
+/// spatial cells?" — which is **false on an isolate desktop**, even though a lens
 /// desktop very much renders sections (1–2, synthesized from `match`). Every
 /// caller that meant "does it render sections?" had to spell it
-/// `isSectionModelActive(…) || isLensDesktop`, and the three TAG entry points
-/// forgot. Result: you could not tag a window on a lens desktop — the one kind
+/// `isSectionModelActive(…) || isIsolateDesktop`, and the three TAG entry points
+/// forgot. Result: you could not tag a window on an isolate desktop — the one kind
 /// of desktop whose membership a tag can define (`match = 'tag~=web'`).
 ///
 /// `theBugThatMadeThisType` below is that exact hole, pinned.
@@ -38,13 +38,13 @@ struct DesktopRenderModeTests {
         #expect(!c.desktopRenderMode(ordinal: 1).rendersSections)
     }
 
-    @Test func lensDesktopIsItsOwnMode() {
+    @Test func isolateDesktopIsItsOwnMode() {
         let c = cfg("""
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app~=Safari'
         """)
-        #expect(c.desktopRenderMode(ordinal: 2) == .lens)
+        #expect(c.desktopRenderMode(ordinal: 2) == .isolate)
     }
 
     /// An unresolvable ordinal (SkyLight unavailable / single-desktop) takes the
@@ -59,39 +59,39 @@ struct DesktopRenderModeTests {
 
     // MARK: - THE BUG
 
-    /// The hole that made tagging dead on a lens desktop: it renders sections,
+    /// The hole that made tagging dead on an isolate desktop: it renders sections,
     /// yet `isSectionModelActive` says no. Any gate written on the old question
     /// silently loses its feature there.
     @Test func theBugThatMadeThisType() {
         let c = cfg("""
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'tag~=web'
         """)
         #expect(!c.isSectionModelActive(ordinal: 2),
-                "a lens desktop authors no spatial cells — this is why the old gate failed")
+                "an isolate desktop authors no spatial cells — this is why the old gate failed")
         #expect(c.desktopRenderMode(ordinal: 2).rendersSections,
                 "…but it DOES render sections, which is what every caller actually meant")
     }
 
     // MARK: - precedence + the SSOT it shares with effectiveWorkspaceList
 
-    /// `type = "lens"` wins over stray section rows — the same precedence
+    /// `type = "isolate"` wins over stray section rows — the same precedence
     /// `effectiveWorkspaceList` uses (lens → sections → degrade). If these two
     /// ever disagreed, a desktop could render N sections while seeding 1
     /// workspace.
-    @Test func lensWinsOverStraySections() {
+    @Test func isolateWinsOverStraySections() {
         let c = cfg("""
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app~=Safari'
 
         [[desktop.2.section]]
         label = "Stray"
         """)
-        #expect(c.desktopRenderMode(ordinal: 2) == .lens)
+        #expect(c.desktopRenderMode(ordinal: 2) == .isolate)
         #expect(c.effectiveWorkspaceList(forMacDesktopOrdinal: 2).count == 1,
-                "a lens desktop is FLAT — the N=1 the anchor-park scope relies on")
+                "an isolate desktop is FLAT — the N=1 the anchor-park scope relies on")
     }
 
     /// The receptacle is not a spatial cell, so a desktop that declares ONLY an
@@ -116,7 +116,7 @@ struct DesktopRenderModeTests {
         label = "Web"
 
         [desktop.2]
-        type = "lens"
+        type = "isolate"
         match = 'app~=Safari'
 
         [desktop.3]
@@ -125,7 +125,7 @@ struct DesktopRenderModeTests {
         #expect(c.desktopRenderMode(ordinal: 1) == .sections)
         #expect(c.effectiveWorkspaceList(forMacDesktopOrdinal: 1).count == 2)
 
-        #expect(c.desktopRenderMode(ordinal: 2) == .lens)
+        #expect(c.desktopRenderMode(ordinal: 2) == .isolate)
         #expect(c.effectiveWorkspaceList(forMacDesktopOrdinal: 2).count == 1)
 
         #expect(c.desktopRenderMode(ordinal: 3) == .degrade)

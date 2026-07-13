@@ -232,7 +232,7 @@ extension SidebarView {
                 return true
             }
             // By-workspace degrade: keep the Theme A header-swap (parity with
-            // the mouse mode-3 path; a lens header can't occur here).
+            // the mouse mode-3 path; an isolate desktop header can't occur here).
             guard g != tgt else { return true }
             performSwap(sourceWS: g, targetWS: tgt)
         }
@@ -265,8 +265,10 @@ extension SidebarView {
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws, filterable: true) }
             else if g >= 0, g < lastSections.count {
                 switch lastSections[g].sectionType {
-                case .lens:       lensHeaderMenu(at: scr, group: g, filterable: true)
-                case .unassigned: unassignedHeaderMenu(at: scr, group: g, filterable: true)
+                case .matched:
+                    isolateHeaderMenu(at: scr, group: g, filterable: true)
+                case .unassigned, .holding:
+                    unassignedHeaderMenu(at: scr, group: g, filterable: true)
                 case .workspace:  break
                 }
             }
@@ -285,11 +287,11 @@ extension SidebarView {
     public func kbActivate() {
         guard let s = kbSel, let i = kbIndex(of: s) else { return }
         let row = rows[i]
-        // t-63h2: a lens desktop's holding row is inert — bail BEFORE
+        // t-63h2: an isolate desktop's holding row is inert — bail BEFORE
         // exitActive so Enter on it doesn't silently drop keyboard nav
-        // for a no-op (see isLensHoldingRow).
+        // for a no-op (see isHoldingRow).
         if case .window(let g, _, _, _, _) = row.kind,
-           isLensHoldingRow(group: g) { return }
+           isHoldingRow(group: g) { return }
         // Leave keyboard mode FIRST so we act exactly like a mouse
         // click (facet no longer the active app). Otherwise,
         // switching to an empty workspace then dropping .regular

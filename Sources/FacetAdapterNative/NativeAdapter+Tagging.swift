@@ -1,7 +1,7 @@
 // Window metadata commands — marks (focus marks) + runtime per-window
 // tagging (#191 / #228). The legacy tag-mode lens/vocabulary (by=tag) was
 // removed in EX-4; tagging is now a pure window attribute and visibility is
-// owned by the section model (a `type="lens"` section + reconcile).
+// owned by the section model (a `type="isolate"` section + reconcile).
 
 import AppKit
 import ApplicationServices
@@ -124,9 +124,9 @@ extension NativeAdapter {
     }
 
     /// Settle a single-window tag change. The tag set changed; re-tile +
-    /// request a refresh. A lens is a pure VIEW (t-0021): if a lens matches (or
-    /// stops matching) the window by its new tags, the next refresh simply
-    /// re-projects the display (`FilterProjection`) — no park/restore. Shared
+    /// request a refresh. On an ISOLATE desktop the new tags may flip the
+    /// window across its `match` (`tag~=X`), so the refresh re-derives the park
+    /// set as well as the projection — display and screen move together. Shared
     /// by the `window --tag/--untag/--toggle-tag` verbs (`applyWindowRetag`)
     /// and `window --retag` (#228).
     private func settleWindowRetag(_ id: WindowID, logDetail: String) {
@@ -168,7 +168,7 @@ extension NativeAdapter {
 
     /// Tag-manage `t` RENAME: replace tag `old` → `new` on EVERY window that
     /// carries it (vocabulary-wide, not a single window). Re-tiles + requests
-    /// one refresh; an active section lens then re-evaluates membership by the
+    /// one refresh; an isolate desktop's `match` then re-evaluates membership by the
     /// new tags on the reconcile. `false` when unmanaged or no window carried
     /// `old`.
     public func renameTag(_ old: String, to new: String) -> Bool {

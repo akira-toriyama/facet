@@ -32,10 +32,10 @@
 //     extras warn (the leftover set is singular, so a second receptacle is
 //     always empty).
 //
-// A `.lens` section is still MINTED here — but only by `projectLensDesktop`
-// (below), the dedicated route for a `[desktop.N] type=lens` mac desktop,
+// A `.matched` section is still MINTED here — but only by `projectIsolateDesktop`
+// (below), the dedicated route for a `[desktop.N] type=isolate` mac desktop,
 // which synthesizes its 1–2 sections straight from the desktop's `match`. It
-// never comes out of `project()`: there is no lens section to author.
+// never comes out of `project()`: there is no matched section to author.
 //
 // CRITICAL DEGRADE — by-workspace stays a first-class citizen: when no
 // sections are configured for the mac desktop, each `Workspace` maps 1:1 to
@@ -47,7 +47,7 @@
 // degrade — by-workspace and the section model agree.
 //
 // Loud-but-NON-FATAL, matching the `facet filter` philosophy (see
-// `QueryFilter`): a lens desktop's `match` that fails to parse matches
+// `QueryFilter`): an isolate desktop's `match` that fails to parse matches
 // NOTHING (the matched section comes out empty) and its caret is collected in
 // `diagnostics` for the caller to log; it never aborts the projection. An
 // unknown field in a (valid) match no-matches in the evaluator and adds a
@@ -56,16 +56,16 @@
 /// Overlays the containing workspace's NAME onto a `Window` for filter
 /// evaluation. `Window` alone resolves `workspace` to no-match (it doesn't
 /// carry its workspace); the projection knows the workspace at the seam and
-/// supplies it here, so a lens desktop's `match='workspace=Dev'` resolves
-/// correctly. `desktop` stays no-match: a lens desktop's `match` is already
+/// supplies it here, so an isolate desktop's `match='workspace=Dev'` resolves
+/// correctly. `desktop` stays no-match: an isolate desktop's `match` is already
 /// scoped to the mac desktop it is declared on, so matching on `desktop=` is
 /// redundant.
 ///
 /// The seam-overlay every lens-`match` evaluation runs through, wrapped by the
-/// single `LensMembership.matches` predicate — the ONE membership rule shared
-/// by the tree projection (`projectLensDesktop`) and the real-screen park
-/// (`IsolatePark.parkSet`), so what a lens desktop SHOWS and what it PARKS
-/// can't drift apart. Internal (not file-private) so `LensMembership` (same
+/// single `IsolateMembership.matches` predicate — the ONE membership rule shared
+/// by the tree projection (`projectIsolateDesktop`) and the real-screen park
+/// (`IsolatePark.parkSet`), so what an isolate desktop SHOWS and what it PARKS
+/// can't drift apart. Internal (not file-private) so `IsolateMembership` (same
 /// module) can construct it; the public predicate exposes only `Window` +
 /// name + filter.
 struct ProjectedWindowFields: WindowFields {
@@ -230,10 +230,10 @@ public enum FilterProjection {
         return Result(sections: out, diagnostics: diags)
     }
 
-    /// Project a lens DESKTOP (t-0sbm → t-ec9s) DIRECTLY — without synthesizing a
-    /// config `DesktopSection`. This is the lens desktop's dedicated route: it
-    /// does NOT ride the config section-lens `.lens` path in `project()` (which
-    /// is removed with section-lens, t-ec9s). Produces ONE matched lens section
+    /// Project an isolate desktop DESKTOP (t-0sbm → t-ec9s) DIRECTLY — without synthesizing a
+    /// config `DesktopSection`. This is the isolate desktop's dedicated route: it
+    /// does NOT ride the config section-lens `.matched` path in `project()` (which
+    /// is removed with section-lens, t-ec9s). Produces ONE matched matched section
     /// (id `section:0:<label>` — the stable change-match handle) and, when
     /// `showNonMatching`, a holding `unassigned` receptacle (id `unassigned:1`,
     /// the declaration position the old synthesized list used) filled with the
@@ -241,7 +241,7 @@ public enum FilterProjection {
     /// leftover pass produced for that synthesized input. Pure. `match` is the
     /// ALREADY-EFFECTIVE predicate (config `match` or the runtime `--match`
     /// override, resolved by the caller).
-    public static func projectLensDesktop(
+    public static func projectIsolateDesktop(
         workspaces: [Workspace],
         orphans: [Window] = [],
         match: String,
@@ -252,13 +252,13 @@ public enum FilterProjection {
         var matched: [Window] = []
         switch FacetFilter.parse(match) {
         case .failure(let error):
-            diags.append("config: lens \"\(label)\" match: "
+            diags.append("config: isolate desktop \"\(label)\" match: "
                 + error.caret(in: match))
         case .success(let filter):
             let unknown = filter.fieldsReferenced()
                 .subtracting(FacetFilter.knownFields).sorted()
             if !unknown.isEmpty {
-                diags.append("config: lens \"\(label)\" match references "
+                diags.append("config: isolate desktop \"\(label)\" match references "
                     + "unknown field(s): " + unknown.joined(separator: ", "))
             }
             // A lens shows EVERY window its match satisfies (t-c6fm): a parked
@@ -267,13 +267,13 @@ public enum FilterProjection {
             // `inWorkspaceNamed: nil`.
             for ws in workspaces {
                 for w in ws.windows
-                where LensMembership.matches(
+                where IsolateMembership.matches(
                     w, inWorkspaceNamed: ws.name, filter: filter) {
                     matched.append(w)
                 }
             }
             for w in orphans
-            where LensMembership.matches(
+            where IsolateMembership.matches(
                 w, inWorkspaceNamed: nil, filter: filter) {
                 matched.append(w)
             }
@@ -281,7 +281,7 @@ public enum FilterProjection {
         var out: [ProjectedSection] = [
             ProjectedSection(id: "section:0:\(label)", label: label,
                              windows: matched, sourceWorkspaceIndex: nil,
-                             sectionType: .lens),
+                             sectionType: .matched),
         ]
         if showNonMatching {
             var shownIDs = Set<WindowID>()
@@ -292,9 +292,14 @@ public enum FilterProjection {
                 guard seen.insert(w.id).inserted else { continue }   // dedup universe
                 if !shownIDs.contains(w.id) { leftover.append(w) }
             }
+            // `.holding`, NOT `.unassigned` (t-mqqw): these windows ARE assigned
+            // to workspaces — they are held back because they failed the `match`.
+            // Nor `.parked`: `IsolatePark.parkSet` exempts sticky windows from
+            // parking, and this leftover-by-subtraction does not, so a sticky
+            // non-matching window is listed here while staying put on screen.
             out.append(ProjectedSection(
-                id: "unassigned:1", label: "", windows: leftover,
-                sourceWorkspaceIndex: nil, sectionType: .unassigned))
+                id: "holding:1", label: "", windows: leftover,
+                sourceWorkspaceIndex: nil, sectionType: .holding))
         }
         return Result(sections: out, diagnostics: diags)
     }
@@ -304,7 +309,7 @@ public enum FilterProjection {
 /// list. Pure + backend-neutral so it is unit-tested in `FacetCoreTests` and
 /// the production seam (`Controller.apply()`) calls it once before the reorder.
 ///
-/// `.lens` AND `.unassigned` sections are relabeled (§G) — a workspace
+/// `.matched` AND `.unassigned` sections are relabeled (§G) — a workspace
 /// section's display name comes from the catalog (`workspaceNames`), so a
 /// workspace rename routes to `renameWorkspace` and never reaches here (any
 /// workspace-id key in `overrides` is ignored). The map is keyed by the
@@ -322,9 +327,10 @@ public func applyLabelOverrides(_ sections: [ProjectedSection],
                                to overrides: [String: String]) -> [ProjectedSection] {
     guard !overrides.isEmpty else { return sections }
     return sections.map { ps in
-        // §E + §G: lens AND unassigned sections carry a session-only display
-        // override (a workspace label lives in the catalog). The id is frozen.
-        guard ps.sectionType == .lens || ps.sectionType == .unassigned,
+        // §E + §G: every NON-workspace section carries a session-only display
+        // override (a workspace label lives in the catalog instead). The id is
+        // frozen. Keying off the negative keeps this correct as kinds are added.
+        guard ps.sectionType != .workspace,
               let newLabel = overrides[ps.id] else {
             return ps
         }

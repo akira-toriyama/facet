@@ -14,9 +14,9 @@ public enum GridPick: Sendable {
     /// non-unique). The Controller routes it to `focusFirstWindow(inSectionID:)`
     /// — no workspace switch (a receptacle has none behind it).
     ///
-    /// There is no `.lens` sibling: a lens desktop is TREE-ONLY (the grid
+    /// There is no `.matched` sibling: an isolate desktop is TREE-ONLY (the grid
     /// loud-rejects there), `FilterProjection.project` — the grid's only
-    /// source — never mints a `.lens` section, and `hideGrid` now drops
+    /// source — never mints a `.matched` section, and `hideGrid` now drops
     /// `gridView` synchronously so a travelling overlay can't be fed one
     /// mid-fade either. The pick it would have carried was identical to this
     /// one anyway once the section-lens ACTIVATE concept was retired (t-ec9s).

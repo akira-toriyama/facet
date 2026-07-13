@@ -2,7 +2,7 @@
 //
 // `facet filter` is facet's cross-cutting matching primitive: one small
 // language that the pivot uses everywhere a window predicate is needed —
-// `facet query --filter`, `[[desktop.N.section]]` (type=lens) match, lens membership,
+// `facet query --filter`, `[[desktop.N.section]]` (type=isolate) match, lens membership,
 // and `[[rule]]` adopt-rules. It replaces the four ad-hoc matchers
 // (grouping-mode / lens / search / role-float) with a single grammar.
 //

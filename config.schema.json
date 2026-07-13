@@ -106,7 +106,7 @@
           "type" : "boolean"
         },
         "export-path" : {
-          "description" : "Auto-export snapshot target. Set = ON: every session edit (rename / lens match / layout / tag vocab) writes the full effective config here, surgically — config.toml is left untouched. MUST be a different file from config.toml. `~` and config-dir-relative paths resolve.",
+          "description" : "Auto-export snapshot target. Set = ON: every session edit (rename / isolate match / layout / tag vocab) writes the full effective config here, surgically — config.toml is left untouched. MUST be a different file from config.toml. `~` and config-dir-relative paths resolve.",
           "type" : "string"
         }
       },
@@ -114,7 +114,7 @@
     },
     "desktop" : {
       "additionalProperties" : false,
-      "description" : "`[desktop.N]` configures one mac desktop (N = Mission Control ordinal) — a SINGLE TYPED table: `type` is workspace / lens (omitted = workspace). A `workspace` desktop carries ordered `[[desktop.N.section]]` rows; array order = tree display order. Each row is a workspace SPATIAL cell `{ label, layout }` — an optional `label` names it, else it shows its 1-based index; membership changes via DnD / `facet window --move-to N` (sections have NO `type` / `match` / `apply` — a stray one fails --validate). The one other row shape is the lost-and-found, an `unassigned = true` bool MARKER: `{ unassigned = true, label }` collects the windows shown in no other section (leftover = universe − shown); only the first emits, extras warn. A `lens` desktop writes `match` (REQUIRED — a facet-filter WHERE-clause) plus `layout` / `show-non-matching` / `label` directly on the `[desktop.N]` table and declares NO sections: while that mac desktop is active facet ALWAYS tiles the matched windows with `layout` and anchor-parks the rest. A lens desktop is TREE-ONLY (`--view grid` / `--view rail` loud-reject there). Any `[desktop.N]` or `[[desktop.N.section]]` block makes facet opt-in — it then manages ONLY the configured mac desktops.",
+      "description" : "`[desktop.N]` configures one mac desktop (N = Mission Control ordinal) — a SINGLE TYPED table: `type` is workspace / isolate (omitted = workspace). A `workspace` desktop carries ordered `[[desktop.N.section]]` rows; array order = tree display order. Each row is a workspace SPATIAL cell `{ label, layout }` — an optional `label` names it, else it shows its 1-based index; membership changes via DnD / `facet window --move-to N` (sections have NO `type` / `match` / `apply` — a stray one fails --validate). The one other row shape is the lost-and-found, an `unassigned = true` bool MARKER: `{ unassigned = true, label }` collects the windows shown in no other section (leftover = universe − shown); only the first emits, extras warn. An `isolate` desktop writes `match` (REQUIRED — a facet-filter WHERE-clause) plus `layout` / `show-non-matching` / `label` directly on the `[desktop.N]` table and declares NO sections: while that mac desktop is active facet ALWAYS tiles the matched windows with `layout` and anchor-parks the rest. An isolate desktop is TREE-ONLY (`--view grid` / `--view rail` loud-reject there). Any `[desktop.N]` or `[[desktop.N.section]]` block makes facet opt-in — it then manages ONLY the configured mac desktops.",
       "patternProperties" : {
         "^0*[1-9][0-9]*$" : {
           "additionalProperties" : false,
@@ -125,11 +125,11 @@
               "type" : "string"
             },
             "layout" : {
-              "description" : "lens desktop only — layout-engine name for the matched windows.",
+              "description" : "isolate desktop only — layout-engine name for the matched windows.",
               "type" : "string"
             },
             "match" : {
-              "description" : "lens desktop only — a facet-filter WHERE-clause selecting the tiled windows.",
+              "description" : "isolate desktop only — a facet-filter WHERE-clause selecting the tiled windows. Everything it does not select is anchor-parked off-screen.",
               "type" : "string"
             },
             "section" : {
@@ -155,14 +155,14 @@
               "type" : "array"
             },
             "show-non-matching" : {
-              "description" : "lens desktop only — also show the non-matching windows as a second tree section.",
+              "description" : "isolate desktop only — also show the parked non-matching windows as a second tree section (the `holding` section). They are parked either way; this only decides whether the tree lists them.",
               "type" : "boolean"
             },
             "type" : {
-              "description" : "workspace = spatial sections (tree/grid/rail); lens = an always-on filtered view (tree only).",
+              "description" : "workspace = spatial sections you file windows into (tree/grid/rail); isolate = membership comes from `match`: facet tiles the matched windows with `layout` and ANCHOR-PARKS the rest, for as long as you are on that desktop (tree only).",
               "enum" : [
                 "workspace",
-                "lens"
+                "isolate"
               ],
               "type" : "string"
             }

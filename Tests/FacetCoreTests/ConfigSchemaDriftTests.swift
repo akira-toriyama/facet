@@ -24,7 +24,7 @@ struct ConfigSchemaDriftTests {
 
     /// Enum-domain vocabularies are now DERIVED from `.allCases` (t-5qxd
     /// config-DRY: `exclude.action` ← `ExclusionAction`, `desktop.*.type` ←
-    /// `SectionType`), so a hand-mirrored literal can no longer silently drift
+    /// `DesktopType`), so a hand-mirrored literal can no longer silently drift
     /// from the enum. These asserts freeze the WIRE spellings + case order so
     /// adding / renaming / reordering a case fails loudly here — and, for
     /// `action`, keeps the positional `enumDocs` aligned to the cases.
@@ -32,7 +32,7 @@ struct ConfigSchemaDriftTests {
         // Config.toml surface spellings + order; changing these is a
         // user-visible config break and must be a conscious edit.
         #expect(ExclusionAction.allCases.map(\.rawValue) == ["float", "ignore", "manage"])
-        #expect(SectionType.allCases.map(\.rawValue) == ["workspace", "lens"])
+        #expect(DesktopType.allCases.map(\.rawValue) == ["workspace", "isolate"])
 
         // `[[exclude]].action` derives its domain from ExclusionAction, and its
         // enumDocs are index-aligned to the cases — guard both from the spec so

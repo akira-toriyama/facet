@@ -123,8 +123,8 @@ struct WorkspaceCatalog {
 
     /// Display name of the 1-based workspace `n1Based`, or `""` for an
     /// out-of-range index OR `nil` (a 迷子 / orphan with no workspace — the
-    /// "show the number" / empty sentinel). Used when evaluating a lens / rule
-    /// `match='workspace=Dev'` (`LensMembership` / `ProjectedWindowFields`): an
+    /// "show the number" / empty sentinel). Used when evaluating an isolate desktop / rule
+    /// `match='workspace=Dev'` (`IsolateMembership` / `ProjectedWindowFields`): an
     /// orphan resolves to "" so `filterHas("workspace")` is false →
     /// `match='not workspace'` (e.g. a 迷子-surfacing lens) matches it, and
     /// `workspace=Dev` does not.
@@ -336,14 +336,14 @@ struct WorkspaceCatalog {
     /// forgotten.
     var pendingHideCandidates: Set<WindowID> = []
 
-    /// Windows the lens desktop's always-on lens has anchor-parked because
+    /// Windows the isolate desktop's always-on lens has anchor-parked because
     /// they fall OUTSIDE its `match` (t-c6fm machinery, t-0sbm gate).
     /// Like `hiddenMembers`, a member here is detached from the layout so the
-    /// in-lens survivors reflow to fill (`nonFloatingMembers` excludes it); like
+    /// matched survivors reflow to fill (`nonFloatingMembers` excludes it); like
     /// `stashedWindows`, it is a provenance discriminator over the shared
     /// `anchorParked` — so an isolate re-park is told apart from a WS-switch /
     /// scratchpad park, and only ITS windows are un-parked when a window
-    /// re-joins the lens or the gate turns off. Re-derived from the
+    /// re-joins the isolate desktop or the gate turns off. Re-derived from the
     /// lens `match` every reconcile (`reconcileIsolatePark`); session-only,
     /// per-mac-desktop (this catalog is swapped per mac desktop); pruned in
     /// `forgetWindow`.
@@ -520,7 +520,7 @@ struct WorkspaceCatalog {
     ///
     /// The active workspace is the catalog's ONLY selection authority — the
     /// section-lens ACTIVATE concept it once had to clear here was retired
-    /// (t-ec9s), and a lens desktop is always-on rather than activated. The old
+    /// (t-ec9s), and an isolate desktop is always-on rather than activated. The old
     /// workspace's park-eligible windows are parked, the destination's own are
     /// unconditionally restored.
     ///
@@ -702,7 +702,7 @@ struct WorkspaceCatalog {
     /// ledgered window that has LEFT the active workspace is dropped WITHOUT a
     /// restore (the WS-switch park owns it now). Returns the AX work for the
     /// adapter to drive through `applyHide`. `desired` is empty when the park
-    /// gate is off (not a lens desktop) — that path unparks everything.
+    /// gate is off (not an isolate desktop) — that path unparks everything.
     /// `focused` / `rect` feed `attachToLayout`'s
     /// bsp orientation choice.
     ///
@@ -721,7 +721,7 @@ struct WorkspaceCatalog {
 
         // PARK: desired ids not yet isolate-parked, park-eligible (not sticky /
         // stashed), and not already parked by another mechanism (stack non-top /
-        // WS-switch) — detach so the in-lens survivors reflow.
+        // WS-switch) — detach so the matched survivors reflow.
         var toPark: [WindowRef] = []
         for id in desired
         where !isolateParked.contains(id)
@@ -746,7 +746,7 @@ struct WorkspaceCatalog {
             if let ws = slot.workspace {
                 attachToLayout(id, workspace: ws, focused: focused, in: rect)
             }
-            // Restore POSITION only for a window still on the ACTIVE WS (a lens
+            // Restore POSITION only for a window still on the ACTIVE WS (an isolate desktop
             // re-join, or the gate went off in place). One now on another WS
             // keeps its anchor-park — the WS-switch machinery owns its position.
             if activeWSIDs.contains(id) {
@@ -779,9 +779,9 @@ struct WorkspaceCatalog {
     }
 
     /// Whether `id` is eligible for park/restore on a visibility
-    /// transition (WS switch / a lens desktop's always-on park): only if it
+    /// transition (WS switch / an isolate desktop's always-on park): only if it
     /// isn't pinned everywhere (sticky) and isn't already shelved (stashed
-    /// scratchpad). Shared by `setActive` / the lens-desktop park so the
+    /// scratchpad). Shared by `setActive` / the isolate-desktop park so the
     /// exemption rule can't drift. (NOT
     /// `moveWindow`'s `.rejected` guard — that's a different
     /// move-incoherence check that happens to read the same two sets.)
@@ -903,11 +903,11 @@ struct WorkspaceCatalog {
     /// The ACTIVE workspace's live windows, each carrying the FULL catalog
     /// management state — the same fields `makeWindow` surfaces to the tree
     /// (`floating` / `mark` / `sticky` / `scratchpad` / `master` / `focused` /
-    /// tags) — so a lens desktop's park predicate (`IsolatePark.parkSet` in
+    /// tags) — so an isolate desktop's park predicate (`IsolatePark.parkSet` in
     /// `applyIsolatePark`) evaluates the IDENTICAL `Window` the tree projected.
     /// t-63h2: the park side used to overlay ONLY tags on the raw CGWindowList
     /// window, leaving `floating`/`mark`/`master`/`scratchpad`/`focused` at
-    /// their live defaults, so a lens `match` referencing one of those fields
+    /// their live defaults, so an isolate desktop `match` referencing one of those fields
     /// parked a DIFFERENT set than the tree showed (tree/park lock-step broke).
     /// Built through the SAME `makeWindow` construction site as `snapshot` /
     /// `orphanWindows`, so the park predicate can't drift from the display;

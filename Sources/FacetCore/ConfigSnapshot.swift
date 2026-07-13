@@ -37,24 +37,24 @@ public enum ConfigSnapshot {
         /// existing vocabulary untouched). The renderer unions these with the
         /// config's own `[tags] defined` so a hand-authored vocabulary survives.
         public var definedTags: [String]
-        /// `[macDesktopOrdinal: predicate]` — a lens DESKTOP's live-retargeted
+        /// `[macDesktopOrdinal: predicate]` — an isolate desktop DESKTOP's live-retargeted
         /// match (`facet section --match` on a `[desktop.N] type="lens"` table,
-        /// D6), keyed exactly like `Controller.lensDesktopMatchOverride`. A
+        /// D6), keyed exactly like `Controller.isolateMatchOverride`. A
         /// reverted match has NO entry (the Controller removes the key), so
         /// the config's own `match` shows through untouched; an empty string
         /// is treated the same way (nothing to bake).
-        public var lensDesktopMatch: [Int: String]
+        public var isolateMatch: [Int: String]
 
         public init(label: [Int: [String: String]] = [:],
                     workspaceLabel: [Int: [Int: String]] = [:],
                     workspaceLayout: [Int: [Int: String]] = [:],
                     definedTags: [String] = [],
-                    lensDesktopMatch: [Int: String] = [:]) {
+                    isolateMatch: [Int: String] = [:]) {
             self.label = label
             self.workspaceLabel = workspaceLabel
             self.workspaceLayout = workspaceLayout
             self.definedTags = definedTags
-            self.lensDesktopMatch = lensDesktopMatch
+            self.isolateMatch = isolateMatch
         }
 
         /// True when there is nothing to bake — the caller can skip the write.
@@ -63,7 +63,7 @@ public enum ConfigSnapshot {
                 && workspaceLabel.allSatisfy { $0.value.isEmpty }
                 && workspaceLayout.allSatisfy { $0.value.isEmpty }
                 && definedTags.isEmpty
-                && lensDesktopMatch.allSatisfy { $0.value.isEmpty }
+                && isolateMatch.allSatisfy { $0.value.isEmpty }
         }
     }
 
@@ -150,15 +150,15 @@ public enum ConfigSnapshot {
         // An empty lens predicate means "reverted to the config match" —
         // nothing to bake, the config text already spells it (the Controller
         // also removes the key on revert), so it is filtered out here once.
-        let liveLensMatches = overrides.lensDesktopMatch.filter { !$0.value.isEmpty }
-        if !liveLensMatches.isEmpty || !overrides.definedTags.isEmpty {
+        let liveIsolateMatches = overrides.isolateMatch.filter { !$0.value.isEmpty }
+        if !liveIsolateMatches.isEmpty || !overrides.definedTags.isEmpty {
             let cfg = FacetConfig.load(source: configText)
 
-            // A lens desktop's live-retargeted match (D6) lands on its single
+            // An isolate desktop's live-retargeted match (D6) lands on its single
             // `[desktop.N]` table — a SCALAR at a std table (`settingValue`,
             // swift-toml-edit 2.3.0). Two guards, each skip logged (mirroring
             // the section loop's pathSafe diagnostic):
-            //   • only a desktop the config actually TYPES as a lens takes
+            //   • only a desktop the config actually TYPES as an isolate desktop takes
             //     the write — the override is session state, so a stale
             //     ordinal (config re-typed between edits) must not conjure a
             //     `[desktop.N]` table out of thin air;
@@ -168,17 +168,17 @@ public enum ConfigSnapshot {
             //     `[desktop.2]` table instead of editing the real one. Exactly
             //     one literal spelling per ordinal is required — two spellings
             //     decoding to the same ordinal are last-wins-ambiguous, skip.
-            if !liveLensMatches.isEmpty {
+            if !liveIsolateMatches.isEmpty {
                 let spellings = desktopTableSpellings(configText)
-                for (ordinal, predicate) in liveLensMatches {
-                    guard cfg.desktopLens(ordinal: ordinal) != nil else {
-                        Log.debug("config: snapshot skipped lens match for "
-                            + "desktop \(ordinal) — not typed lens")
+                for (ordinal, predicate) in liveIsolateMatches {
+                    guard cfg.desktopIsolate(ordinal: ordinal) != nil else {
+                        Log.debug("config: snapshot skipped isolate match for "
+                            + "desktop \(ordinal) — not typed isolate")
                         continue
                     }
                     guard let mids = spellings[ordinal], mids.count == 1,
                           let mid = mids.first else {
-                        Log.debug("config: snapshot skipped lens match for "
+                        Log.debug("config: snapshot skipped isolate match for "
                             + "desktop \(ordinal) — "
                             + "\(spellings[ordinal]?.count ?? 0) [desktop.N] "
                             + "header spellings decode to it (need exactly 1)")

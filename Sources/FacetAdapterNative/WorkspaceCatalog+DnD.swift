@@ -237,9 +237,9 @@ extension WorkspaceCatalog {
                 // and the bsp re-seed reclaim it (memory
                 // `facet-hide-reclaim-decisions`).
                 && !hiddenMembers.contains($0.key)
-                // Isolate-parked (out-of-lens on a lens desktop, t-c6fm /
+                // Isolate-parked (out-of-match on an isolate desktop, t-c6fm /
                 // t-0sbm) windows give up their slot the same way, so the
-                // in-lens survivors reflow to fill the screen.
+                // matched survivors reflow to fill the screen.
                 && !isolateParked.contains($0.key) }
             .map(\.key)
             .sorted { $0.serverID < $1.serverID }
