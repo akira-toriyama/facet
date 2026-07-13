@@ -8,18 +8,21 @@ import FacetCore
 
 public enum GridPick: Sendable {
     case workspace(workspaceIndex: Int)
-    /// EX-2 / §A: a lens-section cell was picked → activate that lens, keyed
-    /// by its **stable section id** (`ProjectedSection.id`), not the display
-    /// label (which may be empty / non-unique). The Controller routes it
-    /// straight to `activateLensID`, no label→id lookup.
-    case lens(sectionID: String)
-    /// §G: an unassigned-section cell was picked → FOCUS ITS FIRST WINDOW (or
-    /// do nothing if empty). Keyed by stable section id like lens, but the
-    /// Controller routes it to `focusFirstWindow(inSectionID:)` — no lens
-    /// toggle, no workspace switch (unassigned has neither behind it).
+    /// §G: a NON-workspace section cell was picked → FOCUS ITS FIRST WINDOW
+    /// (or do nothing if empty). Keyed by its **stable section id**
+    /// (`ProjectedSection.id`), not the display label (which may be empty /
+    /// non-unique). The Controller routes it to `focusFirstWindow(inSectionID:)`
+    /// — no workspace switch (a receptacle has none behind it).
+    ///
+    /// There is no `.lens` sibling: a lens desktop is TREE-ONLY (the grid
+    /// loud-rejects there), `FilterProjection.project` — the grid's only
+    /// source — never mints a `.lens` section, and `hideGrid` now drops
+    /// `gridView` synchronously so a travelling overlay can't be fed one
+    /// mid-fade either. The pick it would have carried was identical to this
+    /// one anyway once the section-lens ACTIVATE concept was retired (t-ec9s).
     case unassigned(sectionID: String)
     /// A specific window thumb. `homeWorkspaceIndex` is the WINDOW's home WS
     /// (0-based), resolved from the live snapshot — NOT the cell's `wsIndex`
-    /// (a window thumb may sit inside a lens cell whose `wsIndex` is −1).
+    /// (a receptacle cell's `wsIndex` is −1).
     case window(homeWorkspaceIndex: Int, pid: Int, windowID: WindowID)
 }

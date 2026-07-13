@@ -70,15 +70,10 @@ extension Controller {
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
                 // is 1-based → +1. autoFocus → the WS's last-touched window.
                 self.activateSection(.workspace(ws + 1), autoFocus: true)
-            case .lens(let sectionID):
-                // Since the section-lens ACTIVATE concept was retired (t-ec9s), a
-                // lens cell focuses its FIRST window like the unassigned
-                // receptacle — membership is match-driven, not activatable.
-                self.focusFirstWindow(inSectionID: sectionID)
             case .unassigned(let sectionID):
-                // §G: an unassigned cell focuses its FIRST orphan window — no
-                // workspace switch (the unified focus helper, shared with the
-                // grid pick + CLI --focus + tree header click).
+                // §G: a receptacle cell focuses its FIRST window — no workspace
+                // switch (the unified focus helper, shared with the grid pick +
+                // CLI --focus + tree header click).
                 self.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the

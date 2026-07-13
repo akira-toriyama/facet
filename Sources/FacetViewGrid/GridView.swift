@@ -313,10 +313,11 @@ public final class GridView: NSView {
                 // EX-2 single-highlight — mirror of SidebarView.headerActive:
                 // a workspace cell lights ⟺ its WS is active.
                 active = srcWS?.isActive == true
-            case .lens:
-                mode = ""
-                active = false
-            case .unassigned:
+            case .lens, .unassigned:
+                // A receptacle: no layout engine of its own, never the active
+                // highlight. (`.lens` only reaches the shared enum from the
+                // TREE's lens-desktop projection — the grid never receives one
+                // — but the switch must stay exhaustive over it.)
                 mode = ""
                 active = false
             }
@@ -633,7 +634,6 @@ public final class GridView: NSView {
         let activeColor = pal.primary
         let cellFill    = pal.muted.withAlphaComponent(0.08)
         let cellStroke  = pal.muted.withAlphaComponent(0.22)
-        let labelColor  = pal.foreground.withAlphaComponent(0.85)
         let activeFill  = pal.primary.withAlphaComponent(0.10)
         let winFill     = pal.foreground.withAlphaComponent(0.18)
         let winFocused  = pal.primary.withAlphaComponent(0.32)
@@ -923,12 +923,11 @@ public final class GridView: NSView {
             // (−1 for a lens cell) — the window pick switches to its home WS.
             pendingDown = (point: p, hit: win,
                            ws: windowHomeWS[win.id] ?? cell.wsIndex)
-        } else if cell.isLens {
-            onPick?(.lens(sectionID: cell.sectionID))
-        } else if cell.sectionType == .unassigned {
-            // §G: an empty-area click on the unassigned cell focuses its first
-            // orphan window (the Controller's unified focus helper) — no lens
-            // toggle, no workspace switch.
+        } else if cell.isReceptacle {
+            // §G: an empty-area click on a receptacle cell focuses its first
+            // window (the Controller's unified focus helper) — no workspace
+            // switch. Routing on `isReceptacle` rather than the exact kind also
+            // keeps a `wsIndex == -1` cell from ever reaching `.workspace`.
             onPick?(.unassigned(sectionID: cell.sectionID))
         } else {
             onPick?(.workspace(workspaceIndex: cell.wsIndex))
@@ -1034,13 +1033,10 @@ public final class GridView: NSView {
                                 pid: pd.hit.pid,
                                 windowID: pd.hit.id))
             } else if let ph = pendingHeaderDown {
-                // Header click: switch to the workspace, toggle the lens, or
-                // (§G) focus the unassigned section's first window.
+                // Header click: switch to the workspace, or (§G) focus the
+                // receptacle section's first window.
                 if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
-                   cell.isLens {
-                    onPick?(.lens(sectionID: cell.sectionID))
-                } else if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
-                          cell.sectionType == .unassigned {
+                   cell.isReceptacle {
                     onPick?(.unassigned(sectionID: cell.sectionID))
                 } else {
                     onPick?(.workspace(workspaceIndex: ph.ws))
@@ -1391,18 +1387,13 @@ public final class GridView: NSView {
             return
         }
         guard let cell = kbSelectedCell else { return }
-        // A LENS cell → activate the lens (no WS-zoom transition; a lens has
-        // no single workspace to zoom).
-        if cell.isLens {
-            onPick?(.lens(sectionID: cell.sectionID))
-            return
-        }
-        // §G: an UNASSIGNED cell. A keyboard-selected orphan thumb focuses
-        // THAT window (emit `.window`, no zoom — a cross-workspace cell has no
-        // single WS to zoom; the Controller focuses it via its resolved home,
-        // mirroring the mouse thumb-click). With no window selected, the header
-        // action focuses the section's FIRST window via the `.unassigned` pick.
-        if cell.sectionType == .unassigned {
+        // §G: a RECEPTACLE cell. A keyboard-selected orphan thumb focuses THAT
+        // window (emit `.window`, no zoom — a cell that mirrors no workspace
+        // has no single WS to zoom; the Controller focuses it via its resolved
+        // home, mirroring the mouse thumb-click). With no window selected, the
+        // header action focuses the section's FIRST window via the `.unassigned`
+        // pick.
+        if cell.isReceptacle {
             if let s = kbSelectedWindow() {
                 onPick?(.window(
                     homeWorkspaceIndex: windowHomeWS[s.hit.id] ?? -1,

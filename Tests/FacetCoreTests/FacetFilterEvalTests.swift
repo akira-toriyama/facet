@@ -27,9 +27,10 @@ struct FacetFilterEvalTests {
     private func managed(workspace: String = "Dev", index: Int = 1,
                          tags: [String] = [], floating: Bool = false,
                          sticky: Bool = false, master: Bool = false,
+                         parked: Bool = false,
                          mark: String? = nil, scratchpad: String? = nil) -> FWS {
         FWS(workspace: workspace, workspaceIndex: index, tags: tags,
-            floating: floating, sticky: sticky, master: master,
+            floating: floating, sticky: sticky, master: master, parked: parked,
             mark: mark, scratchpad: scratchpad)
     }
     private func entry(app: String = "Safari", title: String = "Home",

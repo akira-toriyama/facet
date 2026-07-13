@@ -135,6 +135,10 @@ extension NativeAdapter {
         // (0 is not a valid 1-based index, the orphan sentinel) and no
         // master/mode lookup (an orphan is in no layout). It is still reported
         // (distinct), never silently dropped from `facet query`.
+        // Parked is read straight off the catalog's `isolateParked` ledger —
+        // the same set `applyIsolatePark` acts on — so the CLI's answer and the
+        // physical park can't drift.
+        let parked = cat.isolateParked.contains(id)
         guard let ws = slot.workspace else {
             return WindowQueryEntry.FacetWindowState(
                 workspace: "Orphans",
@@ -143,6 +147,7 @@ extension NativeAdapter {
                 floating: cat.isFloating(id),
                 sticky: cat.isSticky(id),
                 master: false,
+                parked: parked,
                 mark: cat.mark(forWindow: id),
                 scratchpad: scratchpad)
         }
@@ -160,6 +165,7 @@ extension NativeAdapter {
             floating: cat.isFloating(id),
             sticky: cat.isSticky(id),
             master: master,
+            parked: parked,
             mark: cat.mark(forWindow: id),
             scratchpad: scratchpad)
     }

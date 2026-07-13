@@ -894,7 +894,6 @@ struct WorkspaceCatalog {
                isMaster: isMaster,
                mark: mark(forWindow: w.id),
                isSticky: isSticky(w.id),
-               isParked: isolateParked.contains(w.id),   // t-c6fm phase 4
                scratchpad: scratchpad(forWindow: w.id),
                tags: populateTags
                    ? (windowMap[w.id]?.tags.sorted() ?? [])
