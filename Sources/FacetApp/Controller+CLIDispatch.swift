@@ -26,6 +26,16 @@ extension Controller {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 Log.debug("dnc cmd=\(cmd)")
+                // The two-world gate, in ONE place (`LensDesktopGate` carries
+                // the rationale). Ordered so the pure classification runs first
+                // — the desktop type is only read for a payload that could be
+                // refused, keeping SkyLight off the hot path for everything else.
+                if let verb = LensDesktopGate.blockedVerb(forControl: cmd),
+                   self.config.desktopType(
+                       ordinal: self.currentMacDesktopOrdinal()) == .lens {
+                    self.setError("\(verb) is not available on a lens desktop")
+                    return
+                }
                 switch cmd {
                 case "quit":     NSApp.terminate(nil)
                 case "reload":   self.reloadConfig()
@@ -59,7 +69,6 @@ extension Controller {
                         String(s.dropFirst("toggle:".count)))
 
                 case let s where s.hasPrefix("workspace:"):
-                    if self.lensDesktopBlocks("workspace --focus") { break }
                     self.dispatchWorkspaceTarget(
                         String(s.dropFirst("workspace:".count)))
 
@@ -80,7 +89,6 @@ extension Controller {
                     // renameable section, so `--rename` is a loud no-op (D5).
                     // The GUI header Rename still relabels the desktop's display
                     // via its own path (`renameSection(sectionID:)`).
-                    if self.lensDesktopBlocks("section --rename") { break }
                     guard let (n, label) = decodeSectionRename(s) else {
                         Log.debug("section-rename: malformed \"\(s)\"")
                         self.setError("section --rename: malformed")
@@ -104,11 +112,9 @@ extension Controller {
                     self.setSectionMatch(indexN1Based: n, to: predicate)
 
                 case "workspace-add":
-                    if self.lensDesktopBlocks("workspace --add") { break }
                     self.runBackendCommand { bk in bk.addWorkspace(); return nil }
 
                 case let s where s.hasPrefix("workspace-remove:"):
-                    if self.lensDesktopBlocks("workspace --remove") { break }
                     let raw = String(s.dropFirst("workspace-remove:".count))
                     self.runBackendCommand { bk in
                         bk.removeWorkspace(at: raw.isEmpty ? nil : Int(raw))
@@ -116,14 +122,12 @@ extension Controller {
                     }
 
                 case let s where s.hasPrefix("workspace-rename:"):
-                    if self.lensDesktopBlocks("workspace --rename") { break }
                     let name = String(s.dropFirst("workspace-rename:".count))
                     self.runBackendCommand { bk in
                         bk.renameWorkspace(at: nil, to: name); return nil
                     }
 
                 case let s where s.hasPrefix("workspace-move:"):
-                    if self.lensDesktopBlocks("workspace --move") { break }
                     let to = Int(s.dropFirst("workspace-move:".count)) ?? 0
                     self.runBackendCommand { bk in
                         bk.moveActiveWorkspace(to: to); return nil
@@ -245,7 +249,6 @@ extension Controller {
                     }
 
                 case let s where s.hasPrefix("set-layout:"):
-                    if self.lensDesktopBlocks("workspace --layout") { break }
                     let name = String(s.dropFirst("set-layout:".count))
                     self.dispatchSetLayout(name)
 
@@ -399,7 +402,7 @@ extension Controller {
         // lens has no fixed thumbnail, so grid/rail can't render it. A lens
         // desktop is valid config (not a typo), but the request is
         // unsatisfiable, so surface it loud rather than silently no-op.
-        if (name == "grid" || name == "rail"),
+        if LensDesktopGate.blocksView(name),
            config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
             setError("\(name) view is not available on a lens desktop (tree only)")
             return
@@ -464,28 +467,6 @@ extension Controller {
                 }
             }
         }
-    }
-
-    /// t-0sbm: a lens desktop is a FLAT, always-on, single-workspace desktop
-    /// (`effectiveWorkspaceList` seeds exactly one). Workspace-SET and
-    /// active-workspace mutations (add / remove / move / rename / focus) can't
-    /// be honored there, and `--add` actively breaks the N=1 invariant the
-    /// anchor-park scope relies on (`workspace == activeIndex` stops being
-    /// desktop-wide the moment a 2nd workspace exists → non-matching windows
-    /// escape the park). Reject loudly, mirroring the tree-only view gate in
-    /// `dispatchView`. `--layout` (a workspace mode-NAME change) is gated too:
-    /// the lens `layout` seam re-asserts the declared layout whenever the mode
-    /// name differs (`applyIsolatePark` → `setMode` only on a name change), so a
-    /// runtime `--layout` would silently revert next reconcile — reject it
-    /// honestly. `--retile` / `--balance` / `--rotate` / `--mirror` are NOT gated:
-    /// they refine the tiled set WITHIN the same mode (the seam never re-fires),
-    /// so they take effect and persist exactly as on a workspace desktop
-    /// (t-0sbm review corrected the earlier "all refinement reverts" premise).
-    private func lensDesktopBlocks(_ verb: String) -> Bool {
-        guard config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens
-        else { return false }
-        setError("\(verb) is not available on a lens desktop")
-        return true
     }
 
     /// Route a `workspace:` control payload — either an absolute
@@ -991,7 +972,7 @@ extension Controller {
         // for the toggle-ON direction: an overlay that travelled here (they
         // are `.canJoinAllSpaces` panels) must stay closable by its own
         // toggle hotkey.
-        if (name == "grid" || name == "rail"),
+        if LensDesktopGate.blocksView(name),
            !(name == "grid" ? isGridVisible : isRailVisible),
            config.desktopType(ordinal: currentMacDesktopOrdinal()) == .lens {
             setError("\(name) view is not available on a lens desktop (tree only)")

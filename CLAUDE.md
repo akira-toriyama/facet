@@ -297,13 +297,27 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   header right-click ``Section ▸ Rename`` (``beginSectionRename`` →
   ``SectionRenamePanel``) + ``Edit match`` (``beginSectionMatchEdit``, lens desktop).
   Wire ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
-- **A lens desktop is TREE-ONLY (the two-world gate)** — `--view grid` /
-  `--view rail` (and their toggles) on a `[desktop.N] type=lens` mac
-  desktop are a loud ``setError`` no-op: a lens desktop's membership is
-  dynamic, so there is no fixed picture to thumbnail. The tree renders
-  its 1–2 synthesized sections (``FilterProjection.projectLensDesktop`` —
-  matched + optional non-matching holding; t-ec9s decoupled it from the config
-  ``DesktopSection``). (``facet board`` was removed with the board layer, t-0sbm.)
+- **The two-world gate — what a lens desktop refuses** (``LensDesktopGate``
+  in ``FacetCore``, the single home; ``Controller`` consults it once before
+  the DNC ``switch``, and again in ``dispatchView`` / ``dispatchToggle``):
+  - **TREE-ONLY** — `--view grid` / `--view rail` (and their toggles) are a
+    loud ``setError`` no-op: a lens desktop's membership is dynamic, so there
+    is no fixed picture to thumbnail. The tree renders its 1–2 synthesized
+    sections (``FilterProjection.projectLensDesktop`` — matched + optional
+    non-matching holding; t-ec9s decoupled it from the config ``DesktopSection``).
+  - **Workspace-SET + active-workspace verbs are refused too** — ``workspace
+    --add`` / ``--remove`` / ``--rename`` / ``--move`` / ``--focus``,
+    ``workspace --layout``, and ``section --rename``. A lens desktop is FLAT
+    (``effectiveWorkspaceList`` seeds exactly ONE workspace), so they have
+    nothing to act on — and ``--add`` actively breaks the N=1 invariant the
+    anchor-park scope relies on.
+  - **Tile REFINEMENT is deliberately NOT gated** — ``--retile`` / ``--balance``
+    / ``--rotate`` / ``--mirror`` refine the tiled set within the same layout
+    mode, so they take effect and persist exactly as on a workspace desktop.
+    Window verbs, scratchpad verbs, tags, ``section --focus`` and ``section
+    --match`` work there too. Don't "tidy" these into the gate.
+
+  (``facet board`` was removed with the board layer, t-0sbm.)
 - **The tree opens in keyboard-nav (active) mode directly** —
   there is **no ``--active`` modifier** (it was folded into
   ``--view tree`` itself; the flag, the ``view:tree+active`` DNC

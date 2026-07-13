@@ -180,6 +180,25 @@ extension FacetConfig {
         }
     }
 
+    /// The retired `[[desktop.N.tab]]` board headers this TOML still declares,
+    /// sorted. Empty for a migrated config.
+    ///
+    /// This is the ONE piece of board code left, and it is load-bearing. Boards
+    /// no longer decode, so a leftover tab-only config declares NOTHING facet
+    /// recognises — which silently flips it from **opt-in** (manage just the
+    /// configured mac desktops) to the **manage-every-desktop** default. The
+    /// caller warns once per header, every load, so that flip is never silent.
+    /// (`config --validate` rejects the block separately, via unknown-key.)
+    ///
+    /// Matched on the literal array-of-tables header text, so it is
+    /// nesting-agnostic — `[[desktop.1.tab]]` and any `[[desktop.1.tab.section]]`
+    /// under it both surface.
+    static func retiredBoardHeaders(inTOML text: String) -> [String] {
+        parseTOMLArraysOfTables(text, where: {
+            $0.hasPrefix("desktop.") && $0.hasSuffix(".tab")
+        }).keys.sorted()
+    }
+
     /// Build the per-mac-desktop `[desktop.N]` typed-table map from the raw TOML
     /// text (board abolition, t-0sbm). Each `[desktop.<N>]` is a SINGLE table
     /// (`N` = Mission Control ordinal ≥ 1) carrying `type` (workspace / lens) +
@@ -318,13 +337,7 @@ extension FacetConfig {
         if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
         let metas = decodeDesktopTables(fromTOML: text)
         if !metas.isEmpty { c.macDesktopMetaConfigs = metas }
-        // Migration guard: `[[desktop.N.tab]]` boards were RETIRED (t-0sbm)
-        // and no longer decode. Without this warn a leftover tab-only config
-        // would silently flip facet from opt-in (that ordinal only) to the
-        // manage-every-desktop default. Loud, once per ordinal, every load.
-        for header in parseTOMLArraysOfTables(text, where: {
-            $0.hasPrefix("desktop.") && $0.hasSuffix(".tab")
-        }).keys.sorted() {
+        for header in retiredBoardHeaders(inTOML: text) {
             Log.line("config: [[\(header)]] — boards were retired (t-0sbm) "
                 + "and this block is IGNORED; type the desktop with "
                 + "[desktop.N] and/or [[desktop.N.section]] instead")
