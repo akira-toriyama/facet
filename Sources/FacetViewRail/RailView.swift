@@ -46,9 +46,8 @@ public final class RailView: NSView {
 
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
-    /// EX-2: the projected section list. The rail does not yet consume it
-    /// (rail section rendering is EX-2b); stored to satisfy the `OverviewView`
-    /// protocol so the Controller feed is symmetric with the grid.
+    /// The projected section list — `overviewCellSources()` walks it to build
+    /// the carousel cells.
     public var sections: [ProjectedSection] = []
     /// Keyboard "browse" cursor — the SECTION the centre HERO previews
     /// (←/→ rotate it, Return commits). Keyed on the stable

@@ -61,11 +61,10 @@ extension Controller {
         // active section) — no explicit seed here.
         rv.onPick = { [weak self, bk = backend] pick in
             guard let self else { return }
-            // EX-2b: route every pick through the validated `activateSection`
-            // throughline (updates the currentActiveSection mirror on main) —
-            // never `bk.switchWorkspace` directly. Mirrors the grid's onPick.
-            // The dismiss runs in parallel so the overlay clears as the switch
-            // lands.
+            // Route every pick through the validated `activateSection`
+            // throughline — never `bk.switchWorkspace` directly. Mirrors the
+            // grid's onPick. The dismiss runs in parallel so the overlay clears
+            // as the switch lands.
             switch pick {
             case .workspace(let ws):
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection

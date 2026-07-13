@@ -89,8 +89,8 @@ public struct DesktopMeta: Sendable, Equatable {
         case .workspace:
             var notes: [String] = []
             if !match.isEmpty {
-                notes.append("workspace desktop's `match` belongs on its "
-                    + "`[[desktop.N.section]]` rows — ignoring it")
+                notes.append("`match` is lens-only (did you mean "
+                    + "`type = \"lens\"`?) — ignoring it")
             }
             if hasLayout {
                 notes.append("workspace desktop's `layout` belongs on its "

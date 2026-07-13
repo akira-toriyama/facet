@@ -67,10 +67,10 @@ extension Controller {
             cols: config.effectiveGridCols,
             labelPosition: config.effectiveGridLabelPosition)
         gv.onPick = { [weak self, bk = backend] pick in
-            // EX-2: route every pick through the validated `activateSection`
-            // throughline (updates the currentActiveSection mirror on main) —
-            // never `bk.switchWorkspace` directly. The dismiss runs in parallel
-            // so the overlay clears immediately as the switch animation lands.
+            // Route every pick through the validated `activateSection`
+            // throughline — never `bk.switchWorkspace` directly. The dismiss
+            // runs in parallel so the overlay clears immediately as the switch
+            // animation lands.
             switch pick {
             case .workspace(let ws):
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection

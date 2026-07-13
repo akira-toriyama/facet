@@ -513,11 +513,8 @@ extension SidebarView {
             // `autoFocus: true` path uses the same `predictedFocus` helper as
             // fallback, so the window highlighted above is the one that ends up
             // focused, or Finder activated when the WS is empty). Route through
-            // the Controller (NOT the backend directly) so `currentActiveSection`
-            // is updated optimistically: a same-WS header click while a lens is
-            // active clears the lens via the adapter's same-index edge, and
-            // without the Controller-side mirror update the stale `.lens(…)`
-            // would swallow the next lens activation. `i` is 0-based
+            // the Controller (NOT the backend directly) so every activation
+            // funnels through the one validated seam. `i` is 0-based
             // (Workspace.index, matched at `$0.index == i` above);
             // ActiveSection.workspace is 1-based → `i + 1`.
             controller?.activateSection(.workspace(i + 1), autoFocus: true)
