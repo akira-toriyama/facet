@@ -53,13 +53,6 @@ struct IsolateDesktopGateTests {
                 == "workspace --layout")
     }
 
-    /// An isolate desktop's sections are match-synthesized, so there is no authored
-    /// label to rename.
-    @Test func blocksSectionRename() {
-        #expect(IsolateDesktopGate.blockedVerb(forControl: "section-rename:1:Web")
-                == "section --rename")
-    }
-
     // MARK: - allowed (the half that is easy to break)
 
     /// Tile REFINEMENT stays live on an isolate desktop — it works within the same
@@ -87,11 +80,23 @@ struct IsolateDesktopGateTests {
         }
     }
 
+    /// ⬅ `section-rename:` MOVED here from the blocked half (t-j7ps). The gate was
+    /// wrong twice over: the GUI (tree header ▸ Section ▸ Rename) never went
+    /// through the DNC, so it walked straight past the gate — a CLI-first
+    /// violation — and `--match` could already retarget the desktop AND persist,
+    /// so refusing `--rename` left the label LYING about what the desktop holds
+    /// ("Web" over a set of editors). It now renames `[desktop.N] label`.
+    ///
+    /// The HOLDING section still refuses, but that reject cannot live here: the
+    /// gate sees a DNC payload STRING and has no idea which section kind index N
+    /// names. It belongs in `renameSection`, where the kind is known — and this
+    /// test exists to stop someone "restoring" it to the gate.
     @Test func allowsScratchpadAndSectionAddressing() {
         for payload in ["scratchpad-stash:shelf", "scratchpad-toggle:shelf",
                         "scratchpad-release:shelf",
                         "section-focus:1", "section-focus:label:Web",
-                        "section-match:1:app=Safari"] {
+                        "section-match:1:app=Safari",
+                        "section-rename:1:Web"] {
             #expect(IsolateDesktopGate.blockedVerb(forControl: payload) == nil,
                     "must stay available on an isolate desktop: \(payload)")
         }

@@ -47,15 +47,25 @@ public enum ConfigSnapshot {
         /// the config's own `match` shows through untouched; an empty string
         /// is treated the same way (nothing to bake).
         public var isolateMatch: [Int: String]
+        /// `[macDesktopOrdinal: label]` — an isolate desktop's live display name
+        /// (`facet section --rename` / the tree header's Section ▸ Rename, t-j7ps),
+        /// keyed exactly like `isolateMatch` and written to the SAME `[desktop.N]`
+        /// table. The twin of `isolateMatch` by design: if `--match` can retarget
+        /// what a desktop holds and persist that, a label left frozen at "Web" over
+        /// a set of editors is a lie the snapshot itself would be baking in.
+        /// A reverted label has NO entry (the Controller removes the key).
+        public var isolateLabel: [Int: String]
 
         public init(workspaceLabel: [Int: [Int: String]] = [:],
                     workspaceLayout: [Int: [Int: String]] = [:],
                     definedTags: [String] = [],
-                    isolateMatch: [Int: String] = [:]) {
+                    isolateMatch: [Int: String] = [:],
+                    isolateLabel: [Int: String] = [:]) {
             self.workspaceLabel = workspaceLabel
             self.workspaceLayout = workspaceLayout
             self.definedTags = definedTags
             self.isolateMatch = isolateMatch
+            self.isolateLabel = isolateLabel
         }
 
         /// True when there is nothing to bake — the caller can skip the write.
@@ -64,6 +74,7 @@ public enum ConfigSnapshot {
                 && workspaceLayout.allSatisfy { $0.value.isEmpty }
                 && definedTags.isEmpty
                 && isolateMatch.allSatisfy { $0.value.isEmpty }
+                && isolateLabel.allSatisfy { $0.value.isEmpty }
         }
     }
 
@@ -140,19 +151,24 @@ public enum ConfigSnapshot {
         // The two branches below both need the decoded config; `load(source:)`
         // is a full multi-pass decode + strict schema validate and it LOGS its
         // config warnings, so run it once, shared — not once per branch.
-        // An empty lens predicate means "reverted to the config match" —
-        // nothing to bake, the config text already spells it (the Controller
-        // also removes the key on revert), so it is filtered out here once.
+        // An empty value means "reverted to config" — nothing to bake, the config
+        // text already spells it (the Controller also removes the key on revert),
+        // so both maps are filtered once here.
         let liveIsolateMatches = overrides.isolateMatch.filter { !$0.value.isEmpty }
-        if !liveIsolateMatches.isEmpty || !overrides.definedTags.isEmpty {
+        let liveIsolateLabels = overrides.isolateLabel.filter { !$0.value.isEmpty }
+        if !liveIsolateMatches.isEmpty || !liveIsolateLabels.isEmpty
+            || !overrides.definedTags.isEmpty
+        {
             let cfg = FacetConfig.load(source: configText)
 
-            // An isolate desktop's live-retargeted match (D6) lands on its single
-            // `[desktop.N]` table — a SCALAR at a std table (`settingValue`,
-            // swift-toml-edit 2.3.0). Two guards, each skip logged (mirroring
-            // the section loop's pathSafe diagnostic):
-            //   • only a desktop the config actually TYPES as an isolate desktop takes
-            //     the write — the override is session state, so a stale
+            // An isolate desktop's live-retargeted `match` (D6) and its live
+            // `label` (t-j7ps) both land on its single `[desktop.N]` table — a
+            // SCALAR at a std table (`settingValue`, swift-toml-edit 2.3.0). ONE
+            // loop over the union of ordinals, so the two writes share the two
+            // guards below (each skip logged, mirroring the section loop's
+            // pathSafe diagnostic) and neither can drift from the other:
+            //   • only a desktop the config actually TYPES as an isolate desktop
+            //     takes the write — the override is session state, so a stale
             //     ordinal (config re-typed between edits) must not conjure a
             //     `[desktop.N]` table out of thin air;
             //   • the write targets the LITERAL header spelling: `[desktop.02]`
@@ -161,25 +177,34 @@ public enum ConfigSnapshot {
             //     `[desktop.2]` table instead of editing the real one. Exactly
             //     one literal spelling per ordinal is required — two spellings
             //     decoding to the same ordinal are last-wins-ambiguous, skip.
-            if !liveIsolateMatches.isEmpty {
+            let isolateOrdinals = Set(liveIsolateMatches.keys)
+                .union(liveIsolateLabels.keys).sorted()
+            if !isolateOrdinals.isEmpty {
                 let spellings = desktopTableSpellings(configText)
-                for (ordinal, predicate) in liveIsolateMatches {
+                for ordinal in isolateOrdinals {
                     guard cfg.desktopIsolate(ordinal: ordinal) != nil else {
-                        Log.debug("config: snapshot skipped isolate match for "
+                        Log.debug("config: snapshot skipped isolate edit for "
                             + "desktop \(ordinal) — not typed isolate")
                         continue
                     }
                     guard let mids = spellings[ordinal], mids.count == 1,
                           let mid = mids.first else {
-                        Log.debug("config: snapshot skipped isolate match for "
+                        Log.debug("config: snapshot skipped isolate edit for "
                             + "desktop \(ordinal) — "
                             + "\(spellings[ordinal]?.count ?? 0) [desktop.N] "
                             + "header spellings decode to it (need exactly 1)")
                         continue
                     }
-                    dom = dom.settingValue(.string(predicate),
-                                           atTable: ["desktop", mid],
-                                           forKey: "match")
+                    if let predicate = liveIsolateMatches[ordinal] {
+                        dom = dom.settingValue(.string(predicate),
+                                               atTable: ["desktop", mid],
+                                               forKey: "match")
+                    }
+                    if let label = liveIsolateLabels[ordinal] {
+                        dom = dom.settingValue(.string(label),
+                                               atTable: ["desktop", mid],
+                                               forKey: "label")
+                    }
                 }
             }
 

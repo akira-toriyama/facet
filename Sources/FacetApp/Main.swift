@@ -181,12 +181,18 @@ enum FacetApp {
                                              section focuses its first window)
           facet section --focus LABEL        focus the section labelled LABEL
                                              (numeric = index; else label)
-          facet section --rename N LABEL     rename the Nth WORKSPACE section's
-                                             display label (session-only, the
-                                             catalog name; empty LABEL reverts to
-                                             the number). Loud-rejected on an
-                                             isolate desktop — its sections are
-                                             synthesized from the `match`
+          facet section --rename N LABEL     rename the Nth section. A workspace
+                                             takes the catalog name; an isolate
+                                             desktop's MATCHED section renames the
+                                             DESKTOP itself ([desktop.N] label) —
+                                             the twin of --match, which can already
+                                             retarget what it holds. Session-only,
+                                             persisted via the snapshot if [config]
+                                             export-path is set (same terms as
+                                             --match). Empty LABEL reverts. The
+                                             holding section refuses — it is the
+                                             match's complement and has no name
+                                             to give
           facet section --match N PREDICATE  set the Nth section's match to a
                                              `facet filter` predicate, live — on a
                                              isolate desktop this retargets what it

@@ -247,6 +247,115 @@ struct ConfigSnapshotTests {
         #expect(out == cfg, "no in-use tags → [tags] byte-identical")
     }
 
+    // MARK: - [desktop.N] isolate-desktop LABEL (t-j7ps)
+    //
+    // The twin of the `match` writer, and the whole point of t-j7ps: `--match`
+    // could already retarget an isolate desktop AND persist, while `--rename` was
+    // gated in the CLI and dropped on the floor in the GUI (the snapshot writer
+    // baked labels by walking authored `[[desktop.N.section]]` rows — and an
+    // isolate desktop has NONE). So the desktop's name stayed frozen at "Web"
+    // over a set of editors: the label LIED about what the desktop held.
+
+    @Test func isolateLabelWritesOntoItsTable() {
+        let cfg = """
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: "Editors"]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+        #expect(out == cfg.replacingOccurrences(of: #"label = "Web""#,
+                                                with: #"label = "Editors""#),
+                "only the label value token changes")
+        assertStable(out)
+    }
+
+    /// ⬅ THE trap. A label-only rename must not be classified as "nothing to
+    /// bake". Two gates could swallow it — `Overrides.isEmpty` (the caller skips
+    /// the disk write entirely) and the writer's own outer `if` — and BOTH used to
+    /// ask only about `isolateMatch` / `definedTags` / the workspace maps.
+    @Test func aLabelOnlyRenameStillWrites() {
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: "Editors"]
+        #expect(!ov.isEmpty, "a label-only edit is NOT 'nothing to bake'")
+
+        let cfg = """
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome'
+        """
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+        #expect(out.contains(#"label = "Editors""#))
+        #expect(out.contains("match = 'app~=Chrome'"), "the match is untouched")
+    }
+
+    /// A rename and a retarget in the same session both land, on the same table.
+    @Test func labelAndMatchBothLandOnTheSameTable() {
+        let cfg = """
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: "Editors"]
+        ov.isolateMatch = [2: "app~=Code"]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+        #expect(out.contains(#"label = "Editors""#))
+        #expect(out.contains(#"match = "app~=Code""#))
+        assertStable(out)
+    }
+
+    /// Empty = REVERT: the Controller removes the key, and even a stray `""` bakes
+    /// nothing (the config label shows through).
+    @Test func isolateLabelEmptyIsNothingToBake() {
+        let cfg = """
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: ""]
+        #expect(ov.isEmpty)
+        #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
+    }
+
+    /// The label write reuses the match writer's two guards verbatim — it shares
+    /// the loop, so it cannot drift from them.
+
+    @Test func isolateLabelSkipsNonIsolateOrdinals() {
+        // A stale ordinal (the desktop was re-typed between edits) must not
+        // conjure a `[desktop.N]` table out of thin air.
+        let cfg = """
+        [desktop.2]
+        type = "workspace"
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: "Editors"]
+        #expect(ConfigSnapshot.render(configText: cfg, overrides: ov) == cfg)
+    }
+
+    @Test func isolateLabelResolvesZeroPaddedSpelling() {
+        // `[desktop.02]` decodes to ordinal 2 but its DOM path is ["desktop","02"];
+        // a canonical-spelling write would CREATE a junk `[desktop.2]` table.
+        let cfg = """
+        [desktop.02]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateLabel = [2: "Editors"]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+        #expect(out.contains(#"label = "Editors""#))
+        #expect(!out.contains("[desktop.2]"), "no junk table conjured")
+        assertStable(out)
+    }
+
     // MARK: - [desktop.N] lens-desktop match (t-sgqk)
 
     @Test func isolateMatchWritesOntoItsTable() {

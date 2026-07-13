@@ -726,41 +726,55 @@ extension Controller {
                 bk.renameWorkspace(at: pos1, to: trimmed); return nil
             }
             markConfigDirty()   // t-hdxb: persist the workspace rename
-        case .matched, .holding:
-            // An isolate desktop's sections take the session-only display-label
-            // override (`applyLabelOverrides` relabels them by id).
-            // The override READ (the projection seam in `apply()`) is gated
-            // behind a non-nil mac-desktop ordinal, so it NEVER consults a -1
-            // bucket. Writing under `?? -1` here would land the override in a
-            // bucket the projection can't read → a silent no-op during a
-            // transient SkyLight nil-ordinal blip, plus an orphaned -1 entry.
-            // Refuse loudly instead: reaching here means the section model was
-            // active (non-nil ordinal) moments ago, so a nil here is a transient
-            // the user can simply retry. (The degrade path above keeps `?? -1` —
-            // its `macDesktopSectionOrder` read DOES consult -1.)
+        case .matched:
+            // t-j7ps: an isolate desktop's MATCHED section renames its DESKTOP —
+            // `[desktop.N] label`. That is the only thing the name could mean:
+            // the section is synthesized from the desktop's one `match`, so the
+            // desktop and the section share an identity, and `--match` already
+            // retargets that same table and persists. A `--match` that can
+            // retarget while `--rename` cannot leaves the label LYING about what
+            // the desktop now holds ("Web" over a set of editors).
+            //
+            // ORDINAL-keyed (never id-keyed): the section id bakes in the config
+            // label, so renaming would move the very key the override is stored
+            // under. See `Controller.isolateLabelOverride`.
+            //
+            // The ordinal gate: the override READ (the projection seam in
+            // `apply()`) is gated behind a non-nil mac-desktop ordinal, so a
+            // write under `?? -1` would land in a bucket the projection can't
+            // read — a silent no-op during a transient SkyLight nil blip, plus an
+            // orphaned -1 entry. Refuse loudly instead; reaching here means the
+            // section model was active moments ago, so the user can just retry.
             guard let key = currentMacDesktopOrdinal() else {
                 setError("section --rename \(n): mac desktop unknown (try again)")
                 scheduleReconcile(after: 0.05)
                 return
             }
             if trimmed.isEmpty {
-                // Empty → revert to the config label by DELETING the override
-                // key (storing "" would blank the header).
-                sectionLabelOverride[key]?.removeValue(forKey: sec.id)
-                if sectionLabelOverride[key]?.isEmpty == true {
-                    sectionLabelOverride.removeValue(forKey: key)
-                }
-                Log.debug("renameSection: n=\(n) section id=\(sec.id) → revert config")
+                // Empty → revert to the config label by REMOVING the override
+                // (storing "" would blank the header).
+                isolateLabelOverride.removeValue(forKey: key)
+                Log.debug("renameSection: n=\(n) isolate desktop \(key) → revert config")
             } else {
-                // Store the TRIMMED label so a padded label (`"  Web  "`)
-                // renders identically for a synthesized section and a workspace
-                // section — the workspace branch passes `trimmed` too (the revert
-                // gesture is already keyed on `trimmed.isEmpty` above).
-                sectionLabelOverride[key, default: [:]][sec.id] = trimmed
-                Log.debug("renameSection: n=\(n) section id=\(sec.id) → \"\(trimmed)\"")
+                // Store the TRIMMED label so a padded label (`"  Web  "`) renders
+                // identically to a workspace rename (that branch trims too).
+                isolateLabelOverride[key] = trimmed
+                Log.debug("renameSection: n=\(n) isolate desktop \(key) → \"\(trimmed)\"")
             }
+            // No backend call: a label moves no windows. (`--match` pushes to the
+            // adapter because the PARK set depends on it; a name does not.)
             apply(lastWorkspaces)       // re-render with the new display label
-            markConfigDirty()   // t-hdxb: persist the isolate desktop rename (set OR revert)
+            markConfigDirty()           // t-hdxb: persist via the snapshot
+
+        case .holding:
+            // The holding section is synthesized by SUBTRACTION from the `match`.
+            // Its label is a hardcoded `""` and there is no config key anywhere to
+            // write a name to — a rename would invent a name with nowhere to live.
+            // Only the DESKTOP can be named (rename its matched section instead).
+            setError("section --rename \(n): the holding section is synthesized "
+                + "from the match's complement — it has no label to rename "
+                + "(rename the matched section to name the desktop)")
+            scheduleReconcile(after: 0.05)
         }
     }
 

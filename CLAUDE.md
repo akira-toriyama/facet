@@ -310,18 +310,37 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   retired t-ec9s; resolves via ``addressableSections()`` reading ``lastSections``).
   There is no third kind: the ``unassigned`` lost-and-found receptacle went with the
   orphan concept (t-6rbc).
-  ``--rename N "label"`` sets the display label at runtime (§E): workspace →
-  catalog ``renameWorkspace``; a NON-workspace section (``matched`` / ``holding``) →
-  session-only ``Controller.sectionLabelOverride`` (id-keyed, applied at the projection
-  seam by the pure ``applyLabelOverrides``); empty → revert. On an isolate desktop ``--rename``
-  is a loud reject (its sections are match-synthesized). ``--match N "expr"``
-  retargets an isolate desktop's match (session-only ordinal-keyed
+  ``--rename N "label"`` sets the display label at runtime (§E):
+  - **workspace** → catalog ``renameWorkspace``;
+  - **an isolate desktop's ``matched`` section** → renames the DESKTOP, i.e.
+    ``[desktop.N] label`` (t-j7ps). Session-only ``Controller.isolateLabelOverride``,
+    applied at the projection seam by the pure ``applyIsolateLabelOverride``, and
+    **persisted through the snapshot** (``ConfigSnapshot.Overrides.isolateLabel``)
+    on the SAME terms as ``--match``. No backend call — a label moves no windows.
+  - **an isolate desktop's ``holding`` section** → **loud reject**: it is synthesized
+    by SUBTRACTION from the match, its label is a hardcoded ``""``, and there is no
+    config key to write a name to. (The reject lives in ``renameSection``, where the
+    section KIND is known — NOT in ``IsolateDesktopGate``, which only sees a payload
+    string. Don't "tidy" it back into the gate.)
+  - empty → revert.
+
+  ⚠️ **The isolate label override is ORDINAL-keyed, and applied to the projection's
+  OUTPUT — never its input.** The matched section's id is ``section:0:<label>`` with
+  the CONFIG label baked in, so an id-keyed rename MOVES ITS OWN KEY and evaporates
+  on the next reconcile. That desync already happened once (it is why
+  ``isolateMatchOverride`` is ordinal-keyed). Same reason ``reloadConfig`` must drop
+  a stale label override when the config ``label`` changes: otherwise the snapshot
+  re-bakes the forgotten override and auto-promote silently reverts the hand edit.
+
+  ``--match N "expr"`` retargets an isolate desktop's match (session-only ordinal-keyed
   ``isolateMatchOverride``, D6; pushed to the adapter's ``setIsolateMatch``
   so display + park stay in lock-step). Identity stays on the stable section id.
-  Session-only: reset on relaunch, NOT on ``facet reload``. GUI twin = the tree
-  header right-click ``Section ▸ Rename`` (``beginSectionRename`` →
-  ``SectionRenamePanel``) + ``Edit match`` (``beginSectionMatchEdit``, isolate desktop).
-  Wire ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
+  GUI twin = the tree header right-click ``Section ▸ Rename`` (``beginSectionRename`` →
+  ``SectionRenamePanel``) + ``Edit match`` (``beginSectionMatchEdit``, isolate desktop) —
+  it lands on the SAME ``renameSection``, so CLI and GUI cannot diverge. (Before
+  t-j7ps the GUI bypassed the gate that refused the CLI — a CLI-first violation —
+  and its rename was then dropped on the floor by a snapshot writer with nowhere to
+  put it.) Wire ``section-rename:<index>:<label>`` splits once so a label may contain ``:``.
 - **The two-world gate — what an isolate desktop refuses** (``IsolateDesktopGate``
   in ``FacetCore``, the single home; ``Controller`` consults it once before
   the DNC ``switch``, and again in ``dispatchView`` / ``dispatchToggle``):
@@ -331,11 +350,13 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
     sections (``FilterProjection.projectIsolateDesktop`` — matched + optional
     non-matching holding; t-ec9s decoupled it from the config ``DesktopSection``).
   - **Workspace-SET + active-workspace verbs are refused too** — ``workspace
-    --add`` / ``--remove`` / ``--rename`` / ``--move`` / ``--focus``,
-    ``workspace --layout``, and ``section --rename``. An isolate desktop is FLAT
+    --add`` / ``--remove`` / ``--rename`` / ``--move`` / ``--focus``, and
+    ``workspace --layout``. An isolate desktop is FLAT
     (``effectiveWorkspaceList`` seeds exactly ONE workspace), so they have
     nothing to act on — and ``--add`` actively breaks the N=1 invariant the
-    anchor-park scope relies on.
+    anchor-park scope relies on. (``section --rename`` was in this list until
+    t-j7ps; it now renames ``[desktop.N] label``. The gate is a payload-string
+    classifier — a per-section-KIND reject cannot live in it.)
   - **Tile REFINEMENT is deliberately NOT gated** — ``--retile`` / ``--balance``
     / ``--rotate`` / ``--mirror`` refine the tiled set within the same layout
     mode, so they take effect and persist exactly as on a workspace desktop.
