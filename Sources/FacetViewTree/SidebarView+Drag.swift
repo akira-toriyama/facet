@@ -55,15 +55,11 @@ extension SidebarView {
                         // Controller resolves the apply via the live config +
                         // ApplyResolver and snaps back (runs no op) on an inert
                         // / non-satisfying drop — the row was never hidden.
-                        // SAME-TYPE-ONLY (t-qtpx): the resolver accepts only
-                        // ws→ws and lens→lens MOVEs; a ws↔lens crossing snaps
-                        // back (do cross-axis edits via right-click / `t` / CLI).
-                        // §G RESCUE is the one cross-type exception: an orphan
-                        // row under the unassigned section is a valid drag SOURCE
-                        // (its `dragGroup` is the unassigned ordinal, a real
-                        // `wsBands` key), and dropping it on a WORKSPACE band runs
-                        // that workspace's move → the orphan is rescued. Dropping
-                        // ON unassigned is inert (no apply) → snap-back.
+                        // WS→WS ONLY: the resolver accepts nothing else, and
+                        // nothing else can be authored — every drag source row
+                        // lives in a workspace section (t-6rbc retired the
+                        // orphan rescue, the one cross-kind exception; t-qtpx
+                        // had already retired the ws↔lens crossing).
                         // An ISOLATE DESKTOP's section membership is match-driven
                         // (t-ec9s) — a window can't be hand-moved between the
                         // matched / holding sections, so the drop is inert (snap-
@@ -475,18 +471,17 @@ extension SidebarView {
         case .search:
             break
         case .header(let g, let i):
-            // A lens / unassigned header carries `workspaceIndex == nil` (no
-            // workspace to switch to). Since the section-lens activate concept
-            // was retired (t-ec9s), a `.matched` section (an isolate desktop's
-            // match-synthesized section) and a `.unassigned` receptacle both
-            // FOCUS THEIR FIRST window via the unified §G helper — no toggle, no
-            // switch (membership is match-driven / by-subtraction, not manual).
+            // An isolate desktop's synthesized header (`.matched` / `.holding`)
+            // carries `workspaceIndex == nil` — no workspace to switch to. Since
+            // the section-lens activate concept was retired (t-ec9s), both
+            // FOCUS THEIR FIRST window via the unified helper — no toggle, no
+            // switch (membership is match-driven, not manual).
             guard let i else {
                 kbSel = .hdr(group: g)
                 if sectionModeActive, g < lastSections.count {
                     let sec = lastSections[g]
                     switch sec.sectionType {
-                    case .matched, .holding, .unassigned:
+                    case .matched, .holding:
                         controller?.focusFirstWindow(inSectionID: sec.id)
                     case .workspace:  break   // workspace always has i != nil
                     }

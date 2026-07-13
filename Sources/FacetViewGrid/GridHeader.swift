@@ -43,8 +43,8 @@ extension GridView {
             ho.stroke()
         }
         // Grip dots = the swap-drag affordance. Only a WORKSPACE cell header
-        // is a swap target; an isolate desktop AND a §G unassigned cell are click-only
-        // (no source workspace → no swap), so suppress the grip for both.
+        // is a swap target; a non-workspace cell is click-only (no source
+        // workspace → no swap), so suppress the grip for it.
         if cell.sectionType == .workspace {
             drawGripDots(
                 in: NSRect(x: hb.minX + 4, y: hb.minY,

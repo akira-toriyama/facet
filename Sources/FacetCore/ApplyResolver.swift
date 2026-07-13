@@ -1,14 +1,13 @@
 // `ApplyResolver` — the pure, backend-neutral validator for the section-model
 // DnD MOVE (the tree's drag / kb-lift). Since the section-lens type was retired
-// (t-ec9s), a MOVE is always a workspace MEMBERSHIP move:
+// (t-ec9s), a MOVE is always ws → ws: file the window into the dest workspace
+// (by 0-based index). It is the ONLY move — t-6rbc retired the orphan concept,
+// so there is no window OUTSIDE the workspaces to file back IN.
 //
-//   • ws → ws     — file the window into the dest workspace (by 0-based index).
-//   • §G RESCUE   — a TRUE orphan dragged OUT of the unassigned receptacle onto
-//                   a workspace is filed there (the one cross-section case).
-//
-// The dest MUST be a workspace (a `"ws:<index>"` id). A drop onto the
-// `unassigned` receptacle (or any non-workspace id) is INERT — the view snaps
-// back WITHOUT any backend op. No tags, no `apply`: those left with section-lens.
+// The dest MUST be a workspace (a `"ws:<index>"` id). A drop onto an isolate
+// desktop's synthesized section (`"section:…"` / `"holding:…"`), or any other
+// id, is INERT — the view snaps back WITHOUT any backend op. No tags, no
+// `apply`: those left with section-lens.
 //
 // No AppKit / no backend / no I/O — unit-tested in `FacetCoreTests` (CLT can't
 // run XCTest; CI covers it, the local bar is `swift build`).
@@ -54,10 +53,10 @@ public enum ApplyResolver {
         if let fromSectionID, fromSectionID == toSectionID {
             return inert("same section")
         }
-        // The dest must be a workspace (a `"ws:"` id). A drop onto the
-        // `unassigned` receptacle (`"unassigned:"`) or anything else is inert —
-        // membership only moves BETWEEN workspaces (or rescues an orphan INTO
-        // one), never into a leftover-by-subtraction receptacle.
+        // The dest must be a workspace (a `"ws:"` id). A drop onto a
+        // match-synthesized section (`"section:"` / `"holding:"`) or anything
+        // else is inert — membership only moves BETWEEN workspaces, never into a
+        // section whose members are decided by a predicate.
         guard toSectionID.hasPrefix("ws:") else {
             return inert("destination \"\(toSectionID)\" is not a workspace")
         }

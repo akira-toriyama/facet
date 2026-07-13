@@ -186,12 +186,10 @@ extension SidebarView {
                 // Section model: commit = apply-based MOVE. `tgt` and `g` are
                 // render-group ordinals (kbWsOrder / liftSourceWS, same
                 // namespace). The Controller resolves the apply and snaps back
-                // (runs no op) on an inert / non-satisfying drop.
-                // §G RESCUE: a window row under the unassigned section lifts
-                // here (its `g` is the unassigned ordinal, in kbWsOrder); a
-                // commit aimed at a WORKSPACE section runs that workspace's
-                // `setWorkspace` apply → the orphan is rescued. A commit aimed
-                // at unassigned itself is inert (no apply) → no-op.
+                // (runs no op) on an inert / non-satisfying drop — every source
+                // row lives in a workspace section, so ws→ws is the only commit
+                // there is (t-6rbc retired the orphan rescue that was the one
+                // cross-kind exception).
                 guard tgt != g, g < lastSections.count, tgt < lastSections.count
                 else { return true }
                 controller?.applyMove(
@@ -259,16 +257,16 @@ extension SidebarView {
         // PopupMenu's key monitor receives the typed query).
         switch rows[i].kind {
         case .header(let g, let ws):
-            // Workspace header → full layout picker; lens → stateless-only union
-            // layout picker (R9); §G unassigned → Rename-only. Same call-site
-            // discrimination as `rightMouseDown` (SidebarView+Menus).
+            // Workspace header → full layout picker; an isolate desktop's matched
+            // section → Rename + Edit match; its holding section → no menu
+            // (display-only, t-63h2). Same call-site discrimination as
+            // `rightMouseDown` (SidebarView+Menus).
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws, filterable: true) }
             else if g >= 0, g < lastSections.count {
                 switch lastSections[g].sectionType {
                 case .matched:
                     isolateHeaderMenu(at: scr, group: g, filterable: true)
-                case .unassigned, .holding:
-                    unassignedHeaderMenu(at: scr, group: g, filterable: true)
+                case .holding:    break
                 case .workspace:  break
                 }
             }

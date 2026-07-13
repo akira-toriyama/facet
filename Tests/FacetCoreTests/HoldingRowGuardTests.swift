@@ -32,13 +32,11 @@ struct HoldingRowGuardTests {
     }
 
     @Test func onlyHoldingIsInert() {
-        let sections = [sec(.workspace), sec(.matched), sec(.holding), sec(.unassigned)]
+        let sections = [sec(.workspace), sec(.matched), sec(.holding)]
         #expect(!isHoldingSection(sections, group: 0), "workspace cells are fully interactive")
         #expect(!isHoldingSection(sections, group: 1),
                 "a MATCHED row is a real tiled window — click focuses it")
         #expect(isHoldingSection(sections, group: 2))
-        #expect(!isHoldingSection(sections, group: 3),
-                "the §G receptacle is a rescue DRAG SOURCE — never inert")
     }
 
     @Test func outOfRangeGroupIsNotHolding() {
@@ -55,7 +53,7 @@ struct HoldingRowGuardTests {
     @Test func realIsolateProjectionMarksItsLeftoverRowInert() {
         let wss = [ws(0, [win(1, app: "Google Chrome"), win(2, app: "Terminal")])]
         let r = FilterProjection.projectIsolateDesktop(
-            workspaces: wss, orphans: [], match: "app~=Chrome",
+            workspaces: wss, match: "app~=Chrome",
             label: "Web", showNonMatching: true)
         #expect(r.sections.count == 2)
         #expect(!isHoldingSection(r.sections, group: 0), "matched row stays interactive")
@@ -67,7 +65,7 @@ struct HoldingRowGuardTests {
     @Test func noHoldingRowWhenLeftoverIsHidden() {
         let wss = [ws(0, [win(1, app: "Google Chrome"), win(2, app: "Terminal")])]
         let r = FilterProjection.projectIsolateDesktop(
-            workspaces: wss, orphans: [], match: "app~=Chrome",
+            workspaces: wss, match: "app~=Chrome",
             label: "Web", showNonMatching: false)
         #expect(r.sections.count == 1)
         #expect(!isHoldingSection(r.sections, group: 0))

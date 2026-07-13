@@ -137,12 +137,10 @@ public enum ViewContextMenu {
     }
 
     /// Rename-only header menu for an isolate desktop's synthesized sections
-    /// (matched / holding) and for the lost-and-found receptacle. None of them
-    /// owns a layout to pick: an isolate desktop's `layout` is a key on the
-    /// `[desktop.N]` TABLE, not on a section, and a receptacle never had one.
-    /// So all of them offer ONLY `SECTION ▸ Rename` (the same row the workspace
-    /// `showLayout` puts above its LAYOUT group). `header` is the §D
-    /// `index (label)` caption.
+    /// (matched / holding). Neither owns a layout to pick: an isolate desktop's
+    /// `layout` is a key on the `[desktop.N]` TABLE, not on a section. So both
+    /// offer ONLY `SECTION ▸ Rename` (the same row the workspace `showLayout`
+    /// puts above its LAYOUT group). `header` is the §D `index (label)` caption.
     public static func showSectionRenameMenu(
         at scr: NSPoint,
         header: String,
@@ -157,10 +155,10 @@ public enum ViewContextMenu {
             Entry(label: "Rename", icon: "SF:pencil",
                   section: "Section", run: onRename),
         ]
-        // t-0020: a LENS header also offers "Edit match" (live-tune its
-        // filter). No trailing ellipsis — it matches the sibling "Rename" row
-        // (both open the same inline editor). The unassigned receptacle passes
-        // nil — it is leftover-by-subtraction, so it has no match to edit.
+        // t-0020: the MATCHED header also offers "Edit match" (live-tune the
+        // isolate desktop's filter). No trailing ellipsis — it matches the
+        // sibling "Rename" row (both open the same inline editor). A section
+        // with no match of its own passes nil and gets Rename alone.
         if let onEditMatch {
             entries.append(Entry(label: "Edit match",
                                  icon: "SF:line.3.horizontal.decrease.circle",

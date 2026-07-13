@@ -57,8 +57,11 @@ private enum DesktopSchema {
         ObjectShape(fields: [
             SchemaField("label", .string, doc: "Display name; unset shows the section's 1-based index."),
             SchemaField("layout", .string, doc: "Layout-engine name for this workspace cell."),
-            SchemaField("unassigned", .boolean, doc: "Mark this the opt-in lost-and-found: collects windows shown in no other section."),
-        ], doc: "One workspace spatial cell (or the `unassigned = true` lost-and-found receptacle).")
+            // `unassigned` was RETIRED (t-6rbc). Dropping the field makes
+            // `additionalProperties: false` report a stale one as an unknown key —
+            // belt to the decode diagnostic's braces, which names it as retired
+            // and DROPS the row (so it can't silently become a workspace cell).
+        ], doc: "One workspace spatial cell.")
     }
 
     // The value each `[desktop.<N>]` ordinal key maps to. A SINGLE typed table
@@ -276,11 +279,10 @@ public extension FacetConfig {
                      + "`label` names it, else it shows its 1-based index; "
                      + "membership changes via DnD / `facet window --move-to N` "
                      + "(sections have NO `type` / `match` / `apply` — a stray "
-                     + "one fails --validate). The one other row shape is the "
-                     + "lost-and-found, an `unassigned = true` bool MARKER: "
-                     + "`{ unassigned = true, label }` collects the windows shown "
-                     + "in no other section (leftover = universe − shown); only "
-                     + "the first emits, extras warn. An `isolate` desktop writes "
+                     + "one fails --validate). EVERY row is a workspace cell — "
+                     + "the `unassigned = true` lost-and-found MARKER was retired "
+                     + "(t-6rbc: nothing could put a window in it, so it could "
+                     + "only ever be an empty section). An `isolate` desktop writes "
                      + "`match` (REQUIRED — a facet-filter WHERE-clause) plus "
                      + "`layout` / `show-non-matching` / `label` directly on the "
                      + "`[desktop.N]` table and declares NO sections: while that "

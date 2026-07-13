@@ -147,8 +147,8 @@ public final class RailView: NSView {
     }
     /// Bottom cell whose HEADER the pointer is over — brightens the
     /// band + grip (the grab affordance for a WS swap, Phase R3). Keyed on
-    /// `sectionID` (EX-2b) so a receptacle cell's `wsIndex == −1` can't light
-    /// every lens header at once.
+    /// `sectionID` (EX-2b), never `wsIndex` — a source-WS-less cell reports
+    /// `−1`, so every one of them would light at once.
     var hoverHeaderID: String?
     private var trackingArea: NSTrackingArea?
 
@@ -260,14 +260,15 @@ public final class RailView: NSView {
         }
         return sections.enumerated().map { (i, sec) in
             // The projection doesn't carry a workspace's live layoutMode; look
-            // it up by source index (an isolate desktop / unassigned section has no source
+            // it up by source index (a non-workspace section has no source
             // workspace → nil → no layout engine).
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
-            // §G three-way (mirrors GridView): workspace cells carry layout +
-            // active highlight; a receptacle cell and an unassigned cell have no
-            // layout engine (mode = "", wsIndex = -1) and are NEVER the active
-            // highlight — only a workspace is ever active.
+            // Mirrors GridView: workspace cells carry layout + active highlight.
+            // The other arm is a defensive floor — the rail, like the grid, only
+            // ever runs on a workspace desktop (an isolate desktop is TREE-ONLY),
+            // so nothing reaches it today: no layout engine (mode = "",
+            // wsIndex = -1), never the active highlight.
             let mode: String
             let active: Bool
             switch sec.sectionType {
@@ -276,11 +277,12 @@ public final class RailView: NSView {
                 // EX-2b single-highlight: a workspace cell lights ⟺ its WS
                 // is active.
                 active = srcWS?.isActive == true
-            case .matched, .holding, .unassigned:
-                // A receptacle: no layout engine of its own, never the active
-                // highlight. (`.matched` / `.holding` only reach the shared enum
-                // from the TREE's isolate-desktop projection — the rail never
-                // receives one — but the switch must stay exhaustive.)
+            case .matched, .holding:
+                // An isolate desktop's sections: no layout engine of their own,
+                // never the active highlight. They only reach the shared enum from
+                // the TREE's isolate-desktop projection — the rail never receives
+                // one (an isolate desktop loud-rejects `--view rail`) — but the
+                // switch must stay exhaustive.
                 mode = ""
                 active = false
             }
@@ -875,7 +877,7 @@ public final class RailView: NSView {
         if hh != hoverHeaderID { hoverHeaderID = hh; needsDisplay = true }
         // The overlay is key, so the cursor sticks: an open hand over a
         // WORKSPACE header advertises the grab (header drag = swap, Phase R3).
-        // A lens / unassigned (§G) header is click-only (no swap), so it keeps
+        // A non-workspace header would be click-only (no swap), so it keeps
         // the arrow.
         (headerCell?.sectionType == .workspace
             ? NSCursor.openHand : NSCursor.arrow).set()
@@ -947,11 +949,8 @@ public final class RailView: NSView {
                 pendingDown = (p, w, cell.sectionID)
             } else {
                 // empty cell area → activate+close (zoom if it's the centre).
-                // §G: a receptacle cell focuses its first window instead.
                 commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
-                    if cell.isReceptacle {
-                        self?.onPick?(.unassigned(sectionID: cell.sectionID))
-                    } else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
+                    self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))
                 }
             }
             return
@@ -970,8 +969,8 @@ public final class RailView: NSView {
         let scr = win.convertPoint(toScreen: event.locationInWindow)
         let inStrip = stripRect.isEmpty || stripRect.contains(p)
         if inStrip, let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            // Only a WORKSPACE header has a layout picker — an isolate desktop / unassigned
-            // (§G) cell has no layout engine.
+            // Only a WORKSPACE header has a layout picker — a non-workspace
+            // cell has no layout engine.
             guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
@@ -998,8 +997,8 @@ public final class RailView: NSView {
         guard let backend, let win = window, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
         if kbSelectedWindowIdx == -1 {
-            // Only a WORKSPACE cell has a layout engine — an isolate desktop / unassigned
-            // (§G) cell has none.
+            // Only a WORKSPACE cell has a layout engine — a non-workspace cell
+            // has none.
             guard cell.sectionType == .workspace else { return }
             let scr = win.convertPoint(toScreen:
                 convert(NSPoint(x: cell.headerRect.minX + 12, y: cell.headerRect.minY), to: nil))
@@ -1055,7 +1054,7 @@ public final class RailView: NSView {
             } else if let pd = pendingDown {
                 let dx = p.x - pd.point.x, dy = p.y - pd.point.y
                 if dx * dx + dy * dy < pointerDragThreshold * pointerDragThreshold { return }
-                // A window inside a LENS / unassigned (§G) cell has no source
+                // A window inside a non-workspace cell has no source
                 // workspace → not move-draggable (Decision 6). Resolve the cell
                 // + require it to be a WORKSPACE cell.
                 guard let cell = cells.first(where: { $0.sectionID == pd.cellID }),
@@ -1077,7 +1076,7 @@ public final class RailView: NSView {
             // active WS, already its own strip cell), and only within the
             // viewport clip (a rotated-off cell in the margin isn't a target).
             // A cell == source is not a target (no self-move).
-            // A lens / unassigned (§G) cell is never a drop target (no source
+            // A non-workspace cell is never a drop target (no source
             // WS — Decision 6); only a WORKSPACE cell routes a move.
             let over = stripCellAt(p)
             d.dropTargetWS = (over?.sectionType != .workspace || over?.wsIndex == d.sourceWS)
@@ -1138,12 +1137,9 @@ public final class RailView: NSView {
                 }
             } else if let ph = pendingHeaderDown,
                       let cell = cells.first(where: { $0.sectionID == ph.cellID }) {
-                // Header click → switch to that workspace, or (§G) focus the
-                // receptacle section's first window.
+                // Header click → switch to that workspace.
                 commitSwitch(targetSectionID: ph.cellID) { [weak self] in
-                    if cell.isReceptacle {
-                        self?.onPick?(.unassigned(sectionID: cell.sectionID))
-                    } else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
+                    self?.onPick?(.workspace(workspaceIndex: cell.wsIndex))
                 }
             }
             return
@@ -1249,7 +1245,7 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWindow() {
-        // A window inside a LENS / unassigned (§G) hero is not move-liftable
+        // A window inside a non-workspace hero is not move-liftable
         // (no source WS, Decision 6) — require a WORKSPACE hero so `h.wsIndex`
         // below is a real WS.
         guard drag == nil, let h = hero, h.sectionType == .workspace,
@@ -1270,8 +1266,8 @@ public final class RailView: NSView {
     }
 
     private func kbLiftWorkspace() {
-        // Only a WORKSPACE cell can be lifted for a swap — an isolate desktop / unassigned
-        // (§G) cell has no source WS (Decision 6).
+        // Only a WORKSPACE cell can be lifted for a swap — a non-workspace
+        // cell has no source WS (Decision 6).
         guard drag == nil, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }),
               cell.sectionType == .workspace else { return }
@@ -1294,8 +1290,8 @@ public final class RailView: NSView {
     private func syncRailDragToSelection() {
         guard var d = drag, let id = selectedSectionID,
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
-        // Aiming at an isolate desktop / unassigned (§G) cell → no valid drop (neither is a
-        // swap/move destination); the ghost still teleports so the rotation
+        // Aiming at a non-workspace cell → no valid drop (it is neither a
+        // swap nor a move destination); the ghost still teleports so the rotation
         // reads. Only a WORKSPACE cell (≠ source) is a target.
         d.dropTargetWS = (cell.sectionType != .workspace || cell.wsIndex == d.sourceWS)
             ? nil : cell.wsIndex
@@ -1332,16 +1328,10 @@ public final class RailView: NSView {
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
         // The selected section is the centre, so this always plays the zoom (②).
         if let hit = kbSelectedWindow() {
-            // Window (even inside a receptacle hero) → switch to its HOME WS
-            // + focus it.
+            // Window → switch to its HOME WS + focus it.
             let home = windowHomeWS[hit.id] ?? cell.wsIndex
             commitSwitch(targetSectionID: id) { [weak self] in
                 self?.onPick?(.window(homeWorkspaceIndex: home, pid: hit.pid, windowID: hit.id))
-            }
-        } else if cell.isReceptacle {
-            // §G: receptacle hero → focus its first window.
-            commitSwitch(targetSectionID: id) { [weak self] in
-                self?.onPick?(.unassigned(sectionID: cell.sectionID))
             }
         } else {
             commitSwitch(targetSectionID: id) { [weak self] in

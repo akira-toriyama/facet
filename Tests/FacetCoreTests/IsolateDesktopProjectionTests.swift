@@ -60,34 +60,24 @@ struct IsolateDesktopProjectionTests {
         #expect(r.sections[1].id == "holding:1")
     }
 
-    @Test func orphanWindowsMatchTheIsolateMatch() {
-        let wss = [ws(0, [win(1, app: "Google Chrome")])]
-        let orphan = win(9, app: "Google Chrome")
-        let r = FilterProjection.projectIsolateDesktop(
-            workspaces: wss, orphans: [orphan], match: "app~=Chrome",
-            label: "Web", showNonMatching: false)
-        #expect(Set(r.sections[0].windows.map(\.id.serverID)) == [1, 9])
-    }
-
-    /// The receptacle catches EVERY non-matching window — multiple leftover
-    /// workspace windows AND an orphan — in universe order: non-matching
-    /// workspace windows first (snapshot order), the orphan appended last. Pins
-    /// the core promise that an isolate desktop loses no live window: reordering the
-    /// universe concat or dropping subsequent leftovers would silently hide live
-    /// windows undetected (the single-leftover rows can't catch a concat/order
-    /// regression).
-    @Test func receptacleCatchesMultipleNonMatchingInUniverseOrder() {
+    /// The holding section catches EVERY non-matching window, in universe
+    /// (snapshot) order. Pins the core promise that an isolate desktop loses no
+    /// live window: reordering the concat or dropping subsequent leftovers would
+    /// silently hide live windows undetected (a single-leftover row can't catch
+    /// a concat/order regression).
+    @Test func holdingCatchesMultipleNonMatchingInUniverseOrder() {
         let wss = [ws(0, [win(1, app: "Google Chrome"),
                           win(2, app: "Terminal"),
-                          win(3, app: "Slack")])]
+                          win(3, app: "Slack")]),
+                   ws(1, [win(4, app: "Finder")])]
         let r = FilterProjection.projectIsolateDesktop(
-            workspaces: wss, orphans: [win(9, app: "Finder")],
-            match: "app~=Chrome", label: "Web", showNonMatching: true)
-        #expect(r.sections.count == 2, "lens + receptacle — no workspace tail")
+            workspaces: wss, match: "app~=Chrome", label: "Web",
+            showNonMatching: true)
+        #expect(r.sections.count == 2, "matched + holding — no workspace tail")
         let web = r.sections.first { $0.id == "section:0:Web" }
         #expect(web?.windows.map(\.id.serverID) == [1])
         let holding = r.sections.first { $0.sectionType == .holding }
-        #expect(holding?.windows.map(\.id.serverID) == [2, 3, 9],
-                "non-matching workspace windows (snapshot order) then orphan last")
+        #expect(holding?.windows.map(\.id.serverID) == [2, 3, 4],
+                "every non-matching window, in snapshot order")
     }
 }

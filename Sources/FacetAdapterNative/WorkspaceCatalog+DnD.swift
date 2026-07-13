@@ -14,11 +14,10 @@ extension WorkspaceCatalog {
     /// then defers to `LayoutTree.toggleOrientation`. No-op when
     /// the window isn't in any tree (float / unknown / stack WS).
     mutating func toggleOrientation(of id: WindowID) {
-        // orphan: no home workspace → no tree to rotate (early return).
-        guard let slot = windowMap[id], let ws = slot.workspace,
-              var tree = layoutTrees[ws] else { return }
+        guard let slot = windowMap[id],
+              var tree = layoutTrees[slot.workspace] else { return }
         tree.toggleOrientation(of: id)
-        layoutTrees[ws] = tree
+        layoutTrees[slot.workspace] = tree
     }
 
     /// Rotate the whole bsp tree of `n1Based` clockwise by `degrees`

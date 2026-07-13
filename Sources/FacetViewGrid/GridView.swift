@@ -28,15 +28,16 @@ public final class GridView: NSView {
     /// design).
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
-    /// EX-2: the projected section list — the workspace cells (+ the §G
-    /// `unassigned` receptacle) the grid renders. Empty ⇒ degrade to the
+    /// EX-2: the projected section list the grid renders — workspace cells, and
+    /// only workspace cells (the grid runs on a workspace desktop only, and
+    /// `FilterProjection.project` mints nothing else). Empty ⇒ degrade to the
     /// `workspaces` iteration. Fed by the Controller (apply / show).
     public var sections: [ProjectedSection] = []
     /// EX-2: window id → home workspace index (0-based), rebuilt each
-    /// `layoutCells` from the unfiltered `workspaces` snapshot. A window thumb
-    /// may sit in a source-WS-less cell (the receptacle, `wsIndex == -1`) but
-    /// still has a real home WS; picks resolve through this, never through the
-    /// cell's `wsIndex`.
+    /// `layoutCells` from the unfiltered `workspaces` snapshot. Picks resolve a
+    /// thumb's home WS through this, never through the cell's `wsIndex` — a
+    /// source-WS-less cell reports `wsIndex == -1`, so a cell-derived answer
+    /// would be a lie the moment one ever reached the grid.
     private var windowHomeWS: [WindowID: Int] = [:]
     /// Display's frame at show time. All window-rect math scales
     /// from this so the per-cell mini-screen matches what the
@@ -296,15 +297,15 @@ public final class GridView: NSView {
         }
         return sections.enumerated().map { (i, sec) in
             // The projection doesn't carry a workspace's live layoutMode; look
-            // it up by source index (an isolate desktop / unassigned section has no source
+            // it up by source index (a non-workspace section has no source
             // workspace → nil → no layout engine).
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
-            // §G three-way: workspace cells carry their source WS's layout +
-            // active highlight; a receptacle cell (an isolate desktop's synthesized
-            // section) and an unassigned cell have no layout engine (mode = "",
-            // wsIndex = -1) and are NEVER the active highlight — only a
-            // workspace is ever active.
+            // Workspace cells carry their source WS's layout + active highlight.
+            // The other arm is a defensive floor — an isolate desktop's
+            // synthesized sections are the only non-workspace kinds and the grid
+            // is TREE-ONLY-refused there, so nothing reaches it today: no layout
+            // engine (mode = "", wsIndex = -1), never the active highlight.
             let mode: String
             let active: Bool
             switch sec.sectionType {
@@ -313,11 +314,12 @@ public final class GridView: NSView {
                 // EX-2 single-highlight — mirror of SidebarView.headerActive:
                 // a workspace cell lights ⟺ its WS is active.
                 active = srcWS?.isActive == true
-            case .matched, .holding, .unassigned:
-                // A receptacle: no layout engine of its own, never the active
-                // highlight. (`.matched` / `.holding` only reach the shared enum
-                // from the TREE's isolate-desktop projection — the grid never
-                // receives one — but the switch must stay exhaustive.)
+            case .matched, .holding:
+                // An isolate desktop's sections: no layout engine of their own,
+                // never the active highlight. They only reach the shared enum from
+                // the TREE's isolate-desktop projection — the grid never receives
+                // one (an isolate desktop loud-rejects `--view grid`) — but the
+                // switch must stay exhaustive.
                 mode = ""
                 active = false
             }
@@ -386,13 +388,14 @@ public final class GridView: NSView {
         // Snapshot the prior thumb rects so we can FLIP-animate any thumb that
         // ends up in a different rect after the re-layout (drop, manual backend
         // move, …). Keyed PER CELL-INSTANCE (sectionID + window id), NOT by bare
-        // window id: under the section model a single window appears in BOTH its
-        // home-workspace cell AND every receptacle cell it matches (lenses are
-        // cross-workspace). A bare-id key collapses those duplicates to whichever
-        // cell is written last, so the OTHER instance always reads as "moved" and
-        // the FLIP tween slides it clear across the grid on every refresh — the
-        // t-3q17 entrance jitter. The composite key compares each thumb against
-        // its OWN previous rect in the SAME cell.
+        // window id, so each thumb compares against its OWN previous rect in the
+        // SAME cell. The sections a grid renders are disjoint today (t-6rbc took
+        // the last cross-workspace cell — the receptacle — with the orphan
+        // concept), but a bare-id key is the wrong identity the moment one
+        // window is drawn twice: it collapses the duplicates to whichever cell
+        // is written last, the OTHER instance reads as "moved", and the FLIP
+        // tween slides it clear across the grid on every refresh (the t-3q17
+        // entrance jitter). Keep the composite key.
         var oldRects: [String: NSRect] = [:]
         // The prior CELL scaffold (sectionID → rect): a structural re-layout
         // (sections added / reordered / resized — cold-start degrade→section,
@@ -469,9 +472,9 @@ public final class GridView: NSView {
                                   height: cellSize.height)
             // Pre-compute window thumb rects in cell-local view coords so
             // hit-testing and drawing agree byte-for-byte. Every cell the grid
-            // renders is a workspace cell or the lost-and-found receptacle —
-            // an isolate desktop is TREE-ONLY, so no matched / holding cell
-            // reaches here (t-pvay).
+            // renders is a workspace cell — an isolate desktop is TREE-ONLY, so
+            // no matched / holding cell reaches here (t-pvay), and the
+            // receptacle that was the other kind is gone (t-6rbc).
             var hits: [MiniWindowHit] = []
             if useScreen.width > 0 {
                 for win in src.windows {
@@ -822,8 +825,8 @@ public final class GridView: NSView {
             needsDisplay = true
         }
         // The open-hand (drag) cursor only over a SWAPPABLE header — i.e. a
-        // WORKSPACE header. A lens / unassigned (§G) cell header is a click
-        // target, not a drag handle (neither has a source workspace to swap).
+        // WORKSPACE header. A non-workspace cell header would be a click
+        // target, not a drag handle (no source workspace to swap).
         (headerCell.map { $0.sectionType == .workspace } == true
             ? NSCursor.openHand : NSCursor.arrow).set()
     }
@@ -846,9 +849,8 @@ public final class GridView: NSView {
         let p = convert(e.locationInWindow, from: nil)
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         if let cell = cells.first(where: { $0.headerRect.contains(p) }) {
-            // Only a WORKSPACE cell has a per-WS layout picker — an isolate desktop spans
-            // workspaces and an unassigned cell (§G) has no layout engine at
-            // all. Mirror kbContextMenu's guard.
+            // Only a WORKSPACE cell has a per-WS layout picker — a non-workspace
+            // cell has no layout engine at all. Mirror kbContextMenu's guard.
             guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: scr, backend: backend,
                                        workspaceIndex: cell.wsIndex,
@@ -858,8 +860,9 @@ public final class GridView: NSView {
         }
         if let cell = cells.first(where: { $0.rect.contains(p) }),
            let wh = cell.windows.first(where: { $0.rect.contains(p) }) {
-            // Window ops target the window's HOME WS (resolved) — a thumb may
-            // sit in a receptacle cell whose wsIndex is −1.
+            // Window ops target the window's HOME WS (resolved through
+            // `windowHomeWS`), never the cell's `wsIndex` — a source-WS-less
+            // cell reports −1.
             ViewContextMenu.showWindow(
                 at: scr, backend: backend,
                 workspaceIndex: windowHomeWS[wh.id] ?? cell.wsIndex,
@@ -878,16 +881,17 @@ public final class GridView: NSView {
             win.convertPoint(toScreen: convert(NSPoint(x: r.minX + 12, y: r.minY), to: nil))
         }
         if kbSelectedWindowIdx == -1 {
-            // Only a WORKSPACE cell has a per-WS layout picker — an isolate desktop spans
-            // workspaces, an unassigned cell (§G) has no layout engine.
+            // Only a WORKSPACE cell has a per-WS layout picker — a non-workspace
+            // cell has no layout engine.
             guard cell.sectionType == .workspace else { return }
             ViewContextMenu.showLayout(at: screenPt(cell.headerRect), backend: backend,
                                        workspaceIndex: cell.wsIndex, workspaces: workspaces,
                                        header: cell.label, palette: pal)
         } else if kbSelectedWindowIdx >= 0, kbSelectedWindowIdx < cell.windows.count {
             let wh = cell.windows[kbSelectedWindowIdx]
-            // Window ops target the window's HOME WS (resolved) — a thumb may
-            // sit in a receptacle cell whose wsIndex is −1.
+            // Window ops target the window's HOME WS (resolved through
+            // `windowHomeWS`), never the cell's `wsIndex` — a source-WS-less
+            // cell reports −1.
             ViewContextMenu.showWindow(
                 at: screenPt(wh.rect), backend: backend,
                 workspaceIndex: windowHomeWS[wh.id] ?? cell.wsIndex,
@@ -918,16 +922,10 @@ public final class GridView: NSView {
         if let win = cell.windows.reversed()
             .first(where: { $0.rect.contains(p) })
         {
-            // Arm with the WINDOW's home WS (resolved), NOT the cell's wsIndex
-            // (−1 for a receptacle cell) — the window pick switches to its home WS.
+            // Arm with the WINDOW's home WS (resolved) — the window pick
+            // switches to its home WS.
             pendingDown = (point: p, hit: win,
                            ws: windowHomeWS[win.id] ?? cell.wsIndex)
-        } else if cell.isReceptacle {
-            // §G: an empty-area click on a receptacle cell focuses its first
-            // window (the Controller's unified focus helper) — no workspace
-            // switch. Routing on `isReceptacle` rather than the exact kind also
-            // keeps a `wsIndex == -1` cell from ever reaching `.workspace`.
-            onPick?(.unassigned(sectionID: cell.sectionID))
         } else {
             onPick?(.workspace(workspaceIndex: cell.wsIndex))
         }
@@ -986,12 +984,12 @@ public final class GridView: NSView {
         d.current = p
         if reorderDrag {
             // Section reorder: insertion BOUNDARY from the cell under the cursor
-            // (left half → before it, right half → after) — any cell, lens
-            // included. dropTargetWS stays nil (the swap drop-highlight is off).
+            // (left half → before it, right half → after) — ANY cell kind.
+            // dropTargetWS stays nil (the swap drop-highlight is off).
             reorderInsertAt = reorderBoundary(at: p)
         } else {
-            // A lens / unassigned (§G) cell is never a move target (no source
-            // workspace) — skip both so a window drag can't land on them
+            // A non-workspace cell is never a move target (no source workspace)
+            // — skip it so a window drag can't land there
             // (EX-2, MUST-FIX #2). Only workspace cells route a move.
             d.dropTargetWS = cells.first(where: {
                 ($0.rect.contains(p) || $0.headerRect.contains(p))
@@ -1032,14 +1030,7 @@ public final class GridView: NSView {
                                 pid: pd.hit.pid,
                                 windowID: pd.hit.id))
             } else if let ph = pendingHeaderDown {
-                // Header click: switch to the workspace, or (§G) focus the
-                // receptacle section's first window.
-                if let cell = cells.first(where: { $0.sectionID == ph.sectionID }),
-                   cell.isReceptacle {
-                    onPick?(.unassigned(sectionID: cell.sectionID))
-                } else {
-                    onPick?(.workspace(workspaceIndex: ph.ws))
-                }
+                onPick?(.workspace(workspaceIndex: ph.ws))
             }
             return
         }
@@ -1291,7 +1282,7 @@ public final class GridView: NSView {
 
     private func syncKbDragToSelection() {
         guard var d = drag, let cell = kbSelectedCell else { return }
-        // EX-2 MUST-FIX #2 + §G: an isolate desktop OR unassigned cell is never a valid drop
+        // EX-2 MUST-FIX #2: a non-workspace cell is never a valid drop
         // target (no source workspace) — a keyboard-lifted window/workspace can
         // only commit onto a WORKSPACE cell that isn't the source.
         d.dropTargetWS = (cell.sectionType != .workspace || cell.wsIndex == d.sourceWS)
@@ -1318,7 +1309,7 @@ public final class GridView: NSView {
     /// identically to a mouse-initiated drag.
     public func kbLift() {
         guard !commitZoom.isActive else { return }   // ② zoom in flight
-        // A window inside an isolate desktop / unassigned (§G) cell is not move-draggable
+        // A window inside a non-workspace cell is not move-draggable
         // (no source workspace — `wsIndex == -1`). Lifting works only from a
         // WORKSPACE cell.
         guard drag == nil, let s = kbSelectedWindow(),
@@ -1344,8 +1335,8 @@ public final class GridView: NSView {
     /// might intend "move WS-X's contents here, leaving X empty in
     /// return".
     public func kbLiftWorkspace() {
-        // Only a WORKSPACE cell can be lifted for a swap — an isolate desktop / unassigned
-        // (§G) cell has no source workspace.
+        // Only a WORKSPACE cell can be lifted for a swap — a non-workspace cell
+        // has no source workspace.
         guard drag == nil, let cell = kbSelectedCell,
               cell.sectionType == .workspace else { return }
         let at = NSPoint(x: cell.rect.midX, y: cell.rect.midY)
@@ -1386,22 +1377,6 @@ public final class GridView: NSView {
             return
         }
         guard let cell = kbSelectedCell else { return }
-        // §G: a RECEPTACLE cell. A keyboard-selected orphan thumb focuses THAT
-        // window (emit `.window`, no zoom — a cell that mirrors no workspace
-        // has no single WS to zoom; the Controller focuses it via its resolved
-        // home, mirroring the mouse thumb-click). With no window selected, the
-        // header action focuses the section's FIRST window via the `.unassigned`
-        // pick.
-        if cell.isReceptacle {
-            if let s = kbSelectedWindow() {
-                onPick?(.window(
-                    homeWorkspaceIndex: windowHomeWS[s.hit.id] ?? -1,
-                    pid: s.hit.pid, windowID: s.hit.id))
-            } else {
-                onPick?(.unassigned(sectionID: cell.sectionID))
-            }
-            return
-        }
         // Return on the selected workspace cell → zoom that cell out to full
         // screen (②), then switch + close. A direct mouse click stays instant.
         if let s = kbSelectedWindow() {

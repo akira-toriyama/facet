@@ -58,9 +58,6 @@ extension NativeAdapter {
                     + "unmanaged -> hands-off, panel hidden")
             }
             workspaceList = []
-            // Hands-off desktop carries no orphans either — clear the mirror so
-            // a stale prior-desktop orphan can't leak into the panel.
-            syncOrphanMirror(in: [], focused: nil, populateTags: false)
             return
         }
         seedCatalogFromConfig()
@@ -155,7 +152,7 @@ extension NativeAdapter {
                 guard let w = liveByID[id], let slot = catalog.windowMap[id]
                 else { continue }
                 let tagged = w.withTags(slot.tags.sorted())
-                let wsName = slot.workspace.map { catalog.workspaceName($0) }
+                let wsName = catalog.workspaceName(slot.workspace)
                 for op in ruleApplyOps(for: tagged, inWorkspaceNamed: wsName) {
                     applyRuleOp(op, to: id, focused: focused, in: rect)
                 }
@@ -215,12 +212,6 @@ extension NativeAdapter {
             // active mac desktop being section-managed — by-workspace / tag
             // degrade unaffected (passes false → `tags: []`).
             populateTags: sectionModelLive)
-        // EX-3 迷子: refresh the orphan mirror with the SAME live / focus /
-        // section-model gate the snapshot used. `snapshot` drops orphans (no
-        // `Workspace`), so the views' matched section get them from this mirror
-        // via `Controller.apply` → `FilterProjection.project(…, orphans:)`.
-        syncOrphanMirror(in: live, focused: displayFocus,
-                         populateTags: sectionModelLive)
         // Bootstrap snapshot: lock OFF-SCREEN pre-existing
         // windows (Cmd+H'd apps, windows on other mac desktops,
         // minimized windows) as examined so a later

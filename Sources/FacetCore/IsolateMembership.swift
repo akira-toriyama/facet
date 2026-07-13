@@ -26,10 +26,11 @@ public enum IsolateMembership {
     /// satisfies the compiled lens `filter`. Pure + total: an unknown or
     /// absent field is a no-match, never a crash (see `FacetFilter.matches`).
     /// `workspaceName` is overlaid so an isolate desktop `match='workspace=Dev'` resolves.
-    /// Pass `nil` when the window has NO workspace assignment (EX-3 迷子 /
-    /// orphan) so `not workspace` matches it; pass the name (even `""` for an
-    /// unnamed-but-assigned workspace) otherwise — `""` is assigned, so
-    /// `not workspace` does NOT match it.
+    /// Pass the window's workspace name — even `""` for an unnamed-but-assigned
+    /// workspace, which is PRESENCE, so `not workspace` does NOT match it. The
+    /// Optional is the total form only: since t-6rbc every managed window is in
+    /// a workspace, so no caller passes `nil` and `not workspace` matches
+    /// nothing.
     public static func matches(_ window: Window,
                                inWorkspaceNamed workspaceName: String?,
                                filter: FacetFilter) -> Bool {

@@ -76,7 +76,7 @@ extension FacetApp {
     }
 
     /// Sub-command parser for ``facet section <flag>`` — address a section
-    /// (workspace, unassigned, or an isolate desktop's synthesized section) by its
+    /// (a workspace, or an isolate desktop's synthesized section) by its
     /// 1-based tree-order index or its label. Verbs:
     ///   --focus N|LABEL    activate the section (numeric = index, else label)
     ///   --rename N LABEL   rename the Nth section (session-only display label)
@@ -188,8 +188,8 @@ extension FacetApp {
     }
 
     /// Validate the LABEL form of `facet section --focus N|LABEL` — the display
-    /// label of a section (workspace / unassigned / an isolate desktop's
-    /// synthesized section). Section labels are config-authored TOML strings,
+    /// label of a section (a workspace, or an isolate desktop's synthesized
+    /// section). Section labels are config-authored TOML strings,
     /// so the policy is loose (spaces and most punctuation are fine, kept
     /// VERBATIM for the server's exact-label match): reject only an empty /
     /// all-whitespace value or a leading `-` (an unrecognised flag, caught

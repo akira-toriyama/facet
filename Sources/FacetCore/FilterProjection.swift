@@ -10,7 +10,9 @@
 // SECTION SEMANTICS — the sections are DISJOINT: since the section-lens was
 // retired (t-ec9s) no section carries a `match`, so no window can show in two
 // sections at once.
-//   • a workspace SPATIAL cell — EVERY authored section but the receptacle.
+//   • a workspace SPATIAL cell — EVERY authored section, with no exception
+//     (t-6rbc retired the `unassigned` receptacle, the last kind that was not
+//     one; see `project`).
 //     IMPLICIT match resolved by INDEX, not name (a workspace's name is its
 //     optional `label` / "" when unnamed, so keying on index avoids any
 //     name-collision ambiguity): the k-th workspace section maps onto the k-th
@@ -23,14 +25,6 @@
 //     the workspace-section RUN (the dynamic `facet workspace --add` case);
 //     surplus workspace sections (more than live workspaces) emit no section
 //     + a diagnostic.
-//   • the `unassigned = true` MARKER — PROJECTED (§G): the opt-in
-//     lost-and-found receptacle. When present, it collects the LEFTOVER
-//     (universe − shown): the windows that landed in NO emitted workspace
-//     section — the genuinely invisible windows it rescues.
-//     `id = "unassigned:<declOrder>"`, `sourceWorkspaceIndex = nil`,
-//     `sectionType = .unassigned`. Only the FIRST unassigned section emits;
-//     extras warn (the leftover set is singular, so a second receptacle is
-//     always empty).
 //
 // A `.matched` section is still MINTED here — but only by `projectIsolateDesktop`
 // (below), the dedicated route for a `[desktop.N] type=isolate` mac desktop,
@@ -70,15 +64,16 @@
 /// name + filter.
 struct ProjectedWindowFields: WindowFields {
     let window: Window
-    /// The containing workspace's name, or `nil` when the window has NO
-    /// workspace assignment (迷子 / orphan). `nil` (assignment absent) is
-    /// distinct from `""` (assigned to an unnamed workspace — "show the
-    /// number"): only `nil` makes `not workspace` match, so a `not workspace`
-    /// lens catches orphans WITHOUT also catching windows
-    /// in an unnamed workspace. Presence is keyed off the ASSIGNMENT (`Int?`
-    /// nil vs not), never the display name — which is WHY an unnamed workspace
-    /// (name `""`, but assigned) does not collide with an orphan (`ws=nil`) in
-    /// `not workspace` / bare `workspace` filter logic.
+    /// The containing workspace's name. Presence (`nil` vs not) is what `not
+    /// workspace` / bare `workspace` key off, and it is distinct from `""`
+    /// (ASSIGNED to an unnamed workspace — "show the number"), so an unnamed
+    /// workspace never falls out of a bare `workspace` filter.
+    ///
+    /// `nil` used to mean 迷子 (a window in NO workspace). t-6rbc retired that:
+    /// every managed window is in exactly one workspace, and every production
+    /// call site passes a real name — so nothing reaches `nil` and `not
+    /// workspace` matches nothing. Optional survives only as the total form of
+    /// `WindowFields.filterHas`.
     let workspaceName: String?
 
     func filterValue(_ field: String) -> String? {
@@ -102,40 +97,43 @@ public enum FilterProjection {
         }
     }
 
-    /// Project `workspaces` through `sections`. Total — never throws.
+    /// Project `workspaces` through `sections` — one `ProjectedSection` per LIVE
+    /// workspace, in order, `sourceWorkspaceIndex = ws.index` (0-based),
+    /// `sectionType = .workspace`. Total; never throws.
     ///
-    /// - `sections` empty → the by-workspace degrade: one `ProjectedSection` per
-    ///   workspace, in order, `sourceWorkspaceIndex = ws.index` (0-based),
-    ///   `sectionType = .workspace`.
-    /// - otherwise → one `ProjectedSection` per section in config-declaration
-    ///   order (= display order), with the semantics in the file header: every
-    ///   section is a workspace SPATIAL cell, except an `unassigned` marker
-    ///   (§G), which emits the leftover receptacle (universe − shown); only the
-    ///   first emits, extras warn. Extra live workspaces append at the tail of
-    ///   the workspace-section run; surplus workspace sections are noted in
-    ///   `diagnostics`.
+    /// ## Why `sections` only produces a diagnostic now
     ///
-    /// `orphans` (EX-3 迷子): windows that belong to NO workspace
-    /// (`WindowSlot.workspace == nil`), so the backend's `[Workspace]` snapshot
-    /// can't carry them. They are NEVER added to a workspace section (an orphan
-    /// is in no workspace); their ONE way into the projection is the leftover
-    /// pass — the §G `unassigned` receptacle, which is precisely what rescues
-    /// them. No dedup is needed: an orphan appears in no `workspaces[].windows`.
-    /// Default `[]` keeps every non-orphan caller byte-identical. Without the
-    /// receptacle an orphan renders in NO tree/grid/rail section at all — a
-    /// managed window with nowhere to be seen.
+    /// Every `[[desktop.N.section]]` is a workspace SPATIAL cell — t-ec9s retired
+    /// the section-lens, and t-6rbc retired the `unassigned` receptacle, the last
+    /// section kind that was NOT a workspace. So the sections no longer *shape*
+    /// this projection at all: they already shaped `effectiveWorkspaceList` (the
+    /// workspace COUNT, each one's label and layout seed), and what arrives here
+    /// is the result. Mapping the k-th section onto the k-th workspace and then
+    /// appending the surplus workspaces at the tail of that run is, once every
+    /// section is a workspace cell, an elaborate way to write `workspaces.map`.
+    ///
+    /// `sections` stays in the signature for the one thing it can still tell us
+    /// that `workspaces` cannot: that the user declared MORE cells than there are
+    /// live workspaces (a hot-reload that added a section — the catalog is seeded
+    /// once per session and never re-seeded). That is a diagnostic, not a shape.
+    ///
+    /// ## What t-6rbc removed
+    ///
+    /// The §G lost-and-found receptacle and the `orphans` parameter that fed it.
+    /// An orphan was a window in NO workspace, and nothing in facet could produce
+    /// one — `setOrphan`'s only caller had no callers of its own since t-qtpx. The
+    /// receptacle rescued a set that was provably always empty, so it rendered a
+    /// section that could only ever BE empty: a permanent lie in the tree, which
+    /// is the same class of defect t-mqqw's rename went to war with. Every window
+    /// facet manages is in a workspace — now a TYPE (`WindowSlot.workspace: Int`),
+    /// not a hope.
     public static func project(workspaces: [Workspace],
-                               sections: [DesktopSection],
-                               orphans: [Window] = []) -> Result {
-        // Workspace sections map onto the live workspaces POSITIONALLY (k-th
-        // workspace section ↔ workspaces[k]) — the backend already emits them
-        // index-ascending, so array order == index order. The section's id /
-        // sourceWorkspaceIndex come from `ws.index` (the 0-based WIRE index),
-        // NOT the array position or the label — so a workspace section's
-        // implicit `workspace=<this>` resolves by index, never by a
-        // (possibly-empty / non-unique) label, and `--focus` / `--move-to` stay
-        // correct. Array order (not a re-sort) keeps the degrade byte-
-        // identical to today.
+                               sections: [DesktopSection]) -> Result {
+        // Sections map onto the live workspaces POSITIONALLY — the backend emits
+        // them index-ascending, so array order == index order. id /
+        // sourceWorkspaceIndex come from `ws.index` (the 0-based WIRE index), NOT
+        // the array position or the label, so `--focus` / `--move-to` resolve by
+        // index and never by a (possibly-empty / non-unique) label.
         // A parked window stays in place in its section: the tree is an
         // inventory, not a screen mirror (an inactive workspace's windows are
         // anchor-parked too, and show normally).
@@ -145,105 +143,21 @@ public enum FilterProjection {
                         sourceWorkspaceIndex: ws.index,
                         sectionType: .workspace)
         }
-
-        // Degrade: by-workspace is a first-class citizen (byte-identical).
-        guard !sections.isEmpty else {
-            return Result(sections: workspaces.map(wsSection), diagnostics: [])
-        }
-
-        var out: [ProjectedSection] = []
-        var diags: [String] = []
-        var wsCursor = 0            // next live workspace to fill a workspace section
-        var sawWorkspaceSection = false
-        var insertExtrasAt = 0      // tail of the workspace-section run, in `out`
-        var sawUnassigned = false   // §G: only the FIRST unassigned section emits
-
-        for (declOrder, s) in sections.enumerated() {
-            // W2.6 (t-wrd2): the lost-and-found receptacle is an `unassigned`
-            // MARKER, not a `type` — checked FIRST so it works anywhere in the
-            // list. Emit a PLACEHOLDER at its declaration position (empty
-            // `.windows`); Pass 2 below fills it with the leftover once every
-            // workspace section's membership is known. Only the FIRST receptacle
-            // is shown — extras are loud-but-non-fatal (the "leftover" set is
-            // singular, so a second receptacle would always be empty).
-            if s.unassigned {
-                if sawUnassigned {
-                    diags.append("config: unassigned section #\(declOrder + 1) "
-                        + "ignored (only the first unassigned section is shown)")
-                    continue
-                }
-                sawUnassigned = true
-                out.append(ProjectedSection(
-                    id: "unassigned:\(declOrder)", label: s.label, windows: [],
-                    sourceWorkspaceIndex: nil, sectionType: .unassigned))
-                continue
-            }
-            // Every section is a workspace SPATIAL cell (t-ec9s): fill it with
-            // the next live workspace, in declaration order.
-            sawWorkspaceSection = true
-            if wsCursor < workspaces.count {
-                out.append(wsSection(workspaces[wsCursor]))
-                wsCursor += 1
-                insertExtrasAt = out.count
-            } else {
-                diags.append("config: workspace section #\(declOrder + 1) "
-                    + "has no matching live workspace (more workspace "
-                    + "sections than workspaces)")
-            }
-        }
-
-        // Extra live workspaces (dynamic `facet workspace --add`): append at
-        // the tail of the workspace-section run. Only when there IS a
-        // workspace-section run.
-        if sawWorkspaceSection && wsCursor < workspaces.count {
-            let extras = workspaces[wsCursor...].map(wsSection)
-            out.insert(contentsOf: extras, at: insertExtrasAt)
-        }
-
-        // §G Pass 2 — fill the unassigned receptacle with the LEFTOVER: the
-        // windows that landed in NO emitted section. `universe` = every
-        // workspace window + the orphans (deduped by id, in that order);
-        // `shown` = the union of every emitted workspace section's windows (the
-        // placeholder is still empty here, so it contributes nothing).
-        // `leftover` = universe − shown, in universe order. A workspace window
-        // is always shown in its own workspace section, so in practice the
-        // leftover IS the orphans — the genuinely invisible windows the
-        // receptacle rescues.
-        if sawUnassigned {
-            var shown = Set<WindowID>()
-            for sec in out where sec.sectionType != .unassigned {
-                for w in sec.windows { shown.insert(w.id) }
-            }
-            var seen = Set<WindowID>()
-            var leftover: [Window] = []
-            for w in workspaces.flatMap(\.windows) + orphans {
-                guard seen.insert(w.id).inserted else { continue }   // dedup universe
-                if !shown.contains(w.id) { leftover.append(w) }
-            }
-            out = out.map { sec in
-                guard sec.sectionType == .unassigned else { return sec }
-                return ProjectedSection(id: sec.id, label: sec.label,
-                                        windows: leftover, sourceWorkspaceIndex: nil,
-                                        sectionType: .unassigned)
-            }
-        }
-        return Result(sections: out, diagnostics: diags)
+        let surplus = (workspaces.count..<max(workspaces.count, sections.count))
+            .map { "config: workspace section #\($0 + 1) has no matching live "
+                + "workspace (more workspace sections than workspaces)" }
+        return Result(sections: workspaces.map(wsSection), diagnostics: surplus)
     }
 
-    /// Project an isolate desktop DESKTOP (t-0sbm → t-ec9s) DIRECTLY — without synthesizing a
-    /// config `DesktopSection`. This is the isolate desktop's dedicated route: it
-    /// does NOT ride the config section-lens `.matched` path in `project()` (which
-    /// is removed with section-lens, t-ec9s). Produces ONE matched matched section
-    /// (id `section:0:<label>` — the stable change-match handle) and, when
-    /// `showNonMatching`, a holding `unassigned` receptacle (id `unassigned:1`,
-    /// the declaration position the old synthesized list used) filled with the
-    /// leftover (universe − matched), byte-identical to what `project()`'s
-    /// leftover pass produced for that synthesized input. Pure. `match` is the
-    /// ALREADY-EFFECTIVE predicate (config `match` or the runtime `--match`
-    /// override, resolved by the caller).
+    /// Project an ISOLATE DESKTOP (t-0sbm → t-ec9s) DIRECTLY — without synthesizing
+    /// a config `DesktopSection`. Produces ONE `.matched` section (id
+    /// `section:0:<label>` — the stable change-match handle) and, when
+    /// `showNonMatching`, a `.holding` section (id `holding:1`) filled with the
+    /// leftover (universe − matched). Pure. `match` is the ALREADY-EFFECTIVE
+    /// predicate (config `match` or the runtime `--match` override, resolved by
+    /// the caller).
     public static func projectIsolateDesktop(
         workspaces: [Workspace],
-        orphans: [Window] = [],
         match: String,
         label: String,
         showNonMatching: Bool
@@ -261,21 +175,15 @@ public enum FilterProjection {
                 diags.append("config: isolate desktop \"\(label)\" match references "
                     + "unknown field(s): " + unknown.joined(separator: ", "))
             }
-            // A lens shows EVERY window its match satisfies (t-c6fm): a parked
-            // window still shows (park is a real-screen op, orthogonal to the
-            // display filter). Orphans (in no workspace) match with
-            // `inWorkspaceNamed: nil`.
+            // An isolate desktop shows EVERY window its match satisfies (t-c6fm):
+            // a parked window still shows (park is a real-screen op, orthogonal
+            // to the display filter).
             for ws in workspaces {
                 for w in ws.windows
                 where IsolateMembership.matches(
                     w, inWorkspaceNamed: ws.name, filter: filter) {
                     matched.append(w)
                 }
-            }
-            for w in orphans
-            where IsolateMembership.matches(
-                w, inWorkspaceNamed: nil, filter: filter) {
-                matched.append(w)
             }
         }
         var out: [ProjectedSection] = [
@@ -288,7 +196,7 @@ public enum FilterProjection {
             for w in matched { shownIDs.insert(w.id) }
             var seen = Set<WindowID>()
             var leftover: [Window] = []
-            for w in workspaces.flatMap(\.windows) + orphans {
+            for w in workspaces.flatMap(\.windows) {
                 guard seen.insert(w.id).inserted else { continue }   // dedup universe
                 if !shownIDs.contains(w.id) { leftover.append(w) }
             }
@@ -309,13 +217,13 @@ public enum FilterProjection {
 /// list. Pure + backend-neutral so it is unit-tested in `FacetCoreTests` and
 /// the production seam (`Controller.apply()`) calls it once before the reorder.
 ///
-/// `.matched` AND `.unassigned` sections are relabeled (§G) — a workspace
+/// `.matched` AND `.holding` sections are relabeled — a workspace
 /// section's display name comes from the catalog (`workspaceNames`), so a
 /// workspace rename routes to `renameWorkspace` and never reaches here (any
 /// workspace-id key in `overrides` is ignored). The map is keyed by the
-/// section's STABLE id (`"section:<declOrder>:<label>"` /
-/// `"unassigned:<declOrder>"`); an absent key leaves the section untouched, so
-/// an orphaned override (after a config edit) is a no-op. The id is NEVER
+/// section's STABLE id (`"section:<declOrder>:<label>"` / `"holding:1"`); an
+/// absent key leaves the section untouched, so a
+/// stale override (after a config edit) is a no-op. The id is NEVER
 /// changed — only the display `label` — so identity (which `facet section
 /// --focus N|LABEL` routes on) is invariant.
 ///
@@ -327,7 +235,7 @@ public func applyLabelOverrides(_ sections: [ProjectedSection],
                                to overrides: [String: String]) -> [ProjectedSection] {
     guard !overrides.isEmpty else { return sections }
     return sections.map { ps in
-        // §E + §G: every NON-workspace section carries a session-only display
+        // §E: every NON-workspace section carries a session-only display
         // override (a workspace label lives in the catalog instead). The id is
         // frozen. Keying off the negative keeps this correct as kinds are added.
         guard ps.sectionType != .workspace,

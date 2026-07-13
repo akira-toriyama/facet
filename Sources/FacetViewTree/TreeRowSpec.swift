@@ -58,7 +58,6 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
     case .workspace: kind = "workspace"
     case .matched: kind = "matched"
     case .holding: kind = "holding"
-    case .unassigned: kind = "unassigned"
     }
     return "\(kind) · \(s.label)"
 }
@@ -77,9 +76,10 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
 /// routes by `lastSections[group]` under search (t-tsxg facet-3).
 ///
 /// `layoutMode` supplies the layout-engine abbrev shown as a header subtitle,
-/// and is consulted for `.workspace` sections only (lens / unassigned headers
-/// have no layout, so their subtitle stays `nil` even if the closure returns a
-/// value). The default keeps every existing 2-arg call site subtitle-free.
+/// and is consulted for `.workspace` sections only (an isolate desktop's
+/// matched / holding headers have no layout, so their subtitle stays `nil` even
+/// if the closure returns a value). The default keeps every existing 2-arg call
+/// site subtitle-free.
 public func buildTreeRows(
     sections: [ProjectedSection], query: String,
     layoutMode: (ProjectedSection) -> String? = { _ in nil }

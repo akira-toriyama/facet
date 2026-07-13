@@ -131,26 +131,14 @@ extension NativeAdapter {
         // A stashed (off-screen) scratchpad reports no shelf name — only a
         // settled (summoned) one does, matching the snapshot convention.
         let scratchpad = cat.isStashed(id) ? nil : cat.scratchpad(forWindow: id)
-        // orphan (workspace == nil): no home WS — report "Orphans" + index 0
-        // (0 is not a valid 1-based index, the orphan sentinel) and no
-        // master/mode lookup (an orphan is in no layout). It is still reported
-        // (distinct), never silently dropped from `facet query`.
         // Parked is read straight off the catalog's `isolateParked` ledger —
         // the same set `applyIsolatePark` acts on — so the CLI's answer and the
         // physical park can't drift.
+        // (The `workspace: "Orphans"` row that used to live here is gone with the
+        // orphan concept — t-6rbc. It could never have printed: nothing could
+        // put a window in no workspace.)
         let parked = cat.isolateParked.contains(id)
-        guard let ws = slot.workspace else {
-            return WindowQueryEntry.FacetWindowState(
-                workspace: "Orphans",
-                workspaceIndex: 0,
-                tags: slot.tags.sorted(),
-                floating: cat.isFloating(id),
-                sticky: cat.isSticky(id),
-                master: false,
-                parked: parked,
-                mark: cat.mark(forWindow: id),
-                scratchpad: scratchpad)
-        }
+        let ws = slot.workspace
         let name = (ws >= 1 && ws <= cat.workspaceNames.count)
             ? cat.workspaceNames[ws - 1] : ""
         // Master = first in the WS's tiling order, and only for engines

@@ -84,12 +84,14 @@ extension FacetConfig {
     /// Build the per-mac-desktop `[[desktop.N.section]]` map from the raw
     /// TOML text (the section model). Each block header is
     /// `desktop.<N>.section` (`N` = Mission Control ordinal ≥ 1); rows are
-    /// `{ label, layout, unassigned }` — every row is a workspace SPATIAL cell
-    /// (t-ec9s retired the section `type` / `match` / `apply`), so
-    /// `DesktopSection.parse` is total and no row is dropped for its shape; a
-    /// stray key from the retired section-lens era is ignored here and flagged
-    /// by `config --validate`. A duplicate non-empty `label` within one desktop
-    /// IS dropped, LOUD + first-wins (§A — the label is an addressing handle).
+    /// `{ label, layout }` — every surviving row is a workspace SPATIAL cell
+    /// (t-ec9s retired the section `type` / `match` / `apply`), and a stray key
+    /// from the retired section-lens era is ignored here and flagged by
+    /// `config --validate`. TWO rows ARE dropped, both LOUD: one carrying the
+    /// RETIRED `unassigned` key (t-6rbc — `DesktopSection.parse`; keeping it
+    /// would silently promote a receptacle to a workspace cell), and a duplicate
+    /// non-empty `label` within one desktop (first-wins, §A — the label is an
+    /// addressing handle).
     /// A desktop with no usable rows contributes no entry. Section order within
     /// a desktop is file order. The decoded sections are consumed in production
     /// — read through `effectiveMacDesktopSectionConfigs`.

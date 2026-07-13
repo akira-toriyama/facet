@@ -20,14 +20,10 @@ struct SectionDecodeTests {
         [[desktop.1.section]]
         label = "Web"
         layout = "stack"
-        [[desktop.1.section]]
-        unassigned = true
-        label = "Other"
         """)
-        #expect(s[1]?.count == 3)
+        #expect(s[1]?.count == 2)
         #expect(s[1]?[0] == DesktopSection(layout: "bsp"))
         #expect(s[1]?[1] == DesktopSection(label: "Web", layout: "stack"))
-        #expect(s[1]?[2] == DesktopSection(label: "Other", unassigned: true))
     }
 
     /// A stray `type` / `match` / `apply` (retired section-lens keys) is IGNORED —
@@ -62,23 +58,6 @@ struct SectionDecodeTests {
         #expect(section?.layout == nil)
     }
 
-    // MARK: - unassigned receptacle
-
-    /// §A / W2.6: a receptacle's `label` is optional — both a label-less and a
-    /// labelled `unassigned = true` row decode (FilterProjection enforces the
-    /// ≤1-shown rule, not the decoder).
-    @Test func unassignedSectionLabelOptional() {
-        let s = FacetConfig.decodeDesktopSectionSections(fromTOML: """
-        [[desktop.1.section]]
-        unassigned = true
-        [[desktop.1.section]]
-        unassigned = true
-        label = "Other"
-        """)
-        #expect(s[1]?.map(\.label) == ["", "Other"])
-        #expect(s[1]?.map(\.unassigned) == [true, true])
-    }
-
     // MARK: - §A label uniqueness (non-empty unique per mac desktop)
 
     /// Within one mac desktop a NON-EMPTY label must be unique: a duplicate is
@@ -104,7 +83,7 @@ struct SectionDecodeTests {
         [[desktop.1.section]]
         layout = "stack"
         [[desktop.1.section]]
-        unassigned = true
+        layout = "float"
         """)
         #expect(s[1]?.count == 3)
         #expect(s[1]?.map(\.label) == ["", "", ""])

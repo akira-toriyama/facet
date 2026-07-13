@@ -28,8 +28,9 @@ public struct DesktopMeta: Sendable, Equatable {
     /// isolate desktop only — layout-engine name for the matched windows (`nil` = default).
     public let layout: String?
     /// isolate desktop only — also surface the non-matching windows as a 2nd tree
-    /// section (the "holding" receptacle). Default `false` → tree shows only the
-    /// matched section.
+    /// section (the HOLDING section — anchor-parked, but still IN their
+    /// workspaces; it is not the retired lost-and-found receptacle). Default
+    /// `false` → tree shows only the matched section.
     public let showNonMatching: Bool
 
     public init(type: DesktopType, label: String = "", match: String = "",

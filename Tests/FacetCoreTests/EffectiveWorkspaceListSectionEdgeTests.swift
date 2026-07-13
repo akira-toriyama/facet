@@ -15,15 +15,13 @@ struct EffectiveWorkspaceListSectionEdgeTests {
 
     // MARK: - sections present, but no workspace cell → legacy default
 
-    @Test func unassignedOnlySectionsDoNotActivateModel() {
-        var c = FacetConfig()
-        c.macDesktopSectionConfigs = [1: [DesktopSection(label: "Other",
-                                                         unassigned: true)]]
-        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
-        #expect(list.count == FacetConfig.defaultWorkspaceCount)
-        #expect(list.allSatisfy { $0.config.name.isEmpty })
-    }
-
+    /// The `unassigned`-only case that used to live here is gone: a receptacle
+    /// no longer decodes at all (t-6rbc), so a desktop whose sections were ALL
+    /// receptacles now has NO section entry — which the opt-in rule answers by
+    /// managing nothing, loudly. See
+    /// `RetiredUnassignedKeyTests.aReceptacleOnlyDesktopDecodesToNothingAndIsLoud`.
+    /// An EMPTY section array is the one remaining "sections present, model off"
+    /// shape.
     @Test func emptySectionArrayDegradesToDefault() {
         var c = FacetConfig()
         c.macDesktopSectionConfigs = [1: []]

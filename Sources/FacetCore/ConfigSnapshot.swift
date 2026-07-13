@@ -20,10 +20,13 @@ public enum ConfigSnapshot {
     /// The session overrides to bake into the snapshot, keyed exactly the way
     /// the Controller holds them (see `Controller` + `FilterProjection`).
     public struct Overrides: Sendable, Equatable {
-        /// `[macDesktopOrdinal: [ProjectedSection.id: label]]` — unassigned
-        /// receptacle display renames (a workspace rename lives in
-        /// `workspaceLabel`, not here — its id keys the catalog, not config).
-        public var label: [Int: [String: String]]
+        // (The id-keyed `label` map — the only writer that could bake an
+        // `unassigned` receptacle back into a snapshot, i.e. the AUTO-PROMOTE
+        // ZOMBIE — went with the orphan concept, t-6rbc. The receptacle was its
+        // only consumer: a workspace rename lives in `workspaceLabel`, and an
+        // isolate desktop's matched section has no `[[desktop.N.section]]` row to
+        // write to, so its rename was already being dropped on the floor. Giving
+        // that one an ordinal-keyed home is t-j7ps.)
         /// `[macDesktopOrdinal: [wsSlot: name]]` — workspace names. `wsSlot` is
         /// the 0-based index among `type="workspace"` sections (matching
         /// `FilterProjection`'s `wsCursor`), which the k-th live workspace fills.
@@ -45,12 +48,10 @@ public enum ConfigSnapshot {
         /// is treated the same way (nothing to bake).
         public var isolateMatch: [Int: String]
 
-        public init(label: [Int: [String: String]] = [:],
-                    workspaceLabel: [Int: [Int: String]] = [:],
+        public init(workspaceLabel: [Int: [Int: String]] = [:],
                     workspaceLayout: [Int: [Int: String]] = [:],
                     definedTags: [String] = [],
                     isolateMatch: [Int: String] = [:]) {
-            self.label = label
             self.workspaceLabel = workspaceLabel
             self.workspaceLayout = workspaceLayout
             self.definedTags = definedTags
@@ -59,8 +60,7 @@ public enum ConfigSnapshot {
 
         /// True when there is nothing to bake — the caller can skip the write.
         public var isEmpty: Bool {
-            label.allSatisfy { $0.value.isEmpty }
-                && workspaceLabel.allSatisfy { $0.value.isEmpty }
+            workspaceLabel.allSatisfy { $0.value.isEmpty }
                 && workspaceLayout.allSatisfy { $0.value.isEmpty }
                 && definedTags.isEmpty
                 && isolateMatch.allSatisfy { $0.value.isEmpty }
@@ -112,18 +112,12 @@ public enum ConfigSnapshot {
                         + "\(o.headerName)")
                 }
 
-                // `unassigned` is a MARKER checked before `type` (mirrors
-                // FilterProjection) — id `unassigned:<declOrder>`, label only,
-                // and it advances NO workspace slot.
-                if o.section.unassigned {
-                    let id = "unassigned:\(o.declOrder)"
-                    if pathSafe, let l = overrides.label[ordinal]?[id] {
-                        dom = dom.upsertingValue(.string(l),
-                            inArrayOfTablesElement: path, ordinal: o.rawOrdinal,
-                            forKey: "label")
-                    }
-                    continue
-                }
+                // (The `unassigned` receptacle branch that used to sit here — the
+                // AUTO-PROMOTE ZOMBIE — is gone with the orphan concept, t-6rbc.
+                // It was the one writer that could bake a retired `unassigned`
+                // table back into a snapshot, which auto-promote would then
+                // overwrite config.toml with at the next launch. A retired key
+                // must not be able to resurrect itself.)
 
                 // Every section is a workspace SPATIAL cell (t-ec9s). The k-th
                 // workspace section ↔ the k-th live workspace. An empty name is

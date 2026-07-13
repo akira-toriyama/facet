@@ -38,8 +38,8 @@
 //               / --retag OLD NEW
 //   Scratchpad: facet scratchpad --stash NAME / --toggle NAME
 //               / --release NAME
-//   Section   : facet section --focus N|LABEL (index|label; workspace,
-//               unassigned, or an isolate desktop's synthesized section)
+//   Section   : facet section --focus N|LABEL (index|label; a workspace cell,
+//               or an isolate desktop's synthesized matched / holding section)
 //               / --rename N LABEL (session-only display label)
 //               / --match N PREDICATE (retarget an isolate desktop's match)
 //
@@ -177,17 +177,16 @@ enum FacetApp {
         SECTION                              (address a section by index/label)
           facet section --focus N            focus the Nth section in tree
                                              order (1-based; a workspace switches,
-                                             an unassigned — or an isolate desktop's
-                                             synthesized — section focuses its
-                                             first window)
+                                             an isolate desktop's synthesized
+                                             section focuses its first window)
           facet section --focus LABEL        focus the section labelled LABEL
                                              (numeric = index; else label)
           facet section --rename N LABEL     rename the Nth section's display
                                              label (session-only; workspace →
-                                             catalog name, lens / unassigned →
-                                             display override; empty LABEL
-                                             reverts to the number / config
-                                             label)
+                                             catalog name, an isolate desktop's
+                                             synthesized section → display
+                                             override; empty LABEL reverts to the
+                                             number / config label)
           facet section --match N PREDICATE  set the Nth section's match to a
                                              `facet filter` predicate, live — on a
                                              isolate desktop this retargets what it
@@ -205,9 +204,9 @@ enum FacetApp {
           facet window --unmark NAME         remove a mark
           facet window --tag NAME            add tag NAME (creates NAME if
                                              new; #-prefix ok, e.g. --tag
-                                             #190). Tags are a free-form
-                                             window attribute used by lens
-                                             `match='tag~=NAME'`.
+                                             #190). Tags are a free-form window
+                                             attribute an isolate desktop can
+                                             select on: `match='tag~=NAME'`.
           facet window --untag NAME          remove tag NAME (rejects an
                                              unknown tag)
           facet window --toggle-tag NAME     add / remove tag NAME
@@ -351,8 +350,10 @@ enum FacetApp {
                                              facet THREW AWAY (an isolate desktop
                                              with no `match`, a `[[rule]]` with
                                              no apply key, an `[[exclude]]` with
-                                             no constraint — each schema-perfect
-                                             and each discarded whole).
+                                             no constraint, a section carrying the
+                                             RETIRED `unassigned` key — each
+                                             schema-perfect and each discarded
+                                             whole).
                                              exit 0 valid, 1 violation or dropped
                                              block, 2 unparseable TOML. Clamped
                                              values are warnings — they print but
@@ -506,11 +507,13 @@ enum FacetApp {
         if argv.first == "scratchpad" {
             runScratchpadCommand(Array(argv.dropFirst()))
         }
-        // `facet section <flag>` — address a section (workspace, lens, OR
-        // unassigned) by its 1-based tree-order index or its label:
-        // `facet section --focus N|LABEL`. The unified section handle (an
-        // unassigned section — or an isolate desktop's synthesized section —
-        // focuses its first window; `--match` retargets an isolate desktop).
+        // `facet section <flag>` — address a section (a workspace cell, OR an
+        // isolate desktop's synthesized matched / holding section) by its
+        // 1-based tree-order index or its label: `facet section --focus N|LABEL`.
+        // The unified section handle (a synthesized section has no workspace to
+        // switch to, so it focuses its FIRST window; `--match` retargets an
+        // isolate desktop's match). There is no third kind — the `unassigned`
+        // lost-and-found receptacle went with the orphan concept (t-6rbc).
         if argv.first == "section" {
             runSectionCommand(Array(argv.dropFirst()))
         }

@@ -15,9 +15,12 @@
 //     `workspace=<this>` — but MAY name it with an optional `label` (§A: an
 //     empty label leaves it UNNAMED, displayed by its 1-based index). Carries an
 //     optional `layout` seed (per-section, runtime-changeable).
-//   • the lost-and-found receptacle is an `unassigned = true` MARKER (W2.6):
-//     when present it collects the LEFTOVER (universe − shown) — the windows in
-//     NO other emitted section. Only the first emits; extras warn.
+//
+// There is no second kind. The `unassigned = true` MARKER — the lost-and-found
+// receptacle that collected the leftover (universe − shown) — went with the
+// orphan concept (t-6rbc): the leftover was provably always empty. It is now a
+// RETIRED KEY that DROPS the row loudly (see `DesktopSection.parse`); don't
+// re-add it as a silently-ignored one.
 //
 // A stray `type` / `match` / `apply` on a section (from the retired section-lens
 // era) is IGNORED by decode — every section is a workspace cell — while
@@ -120,7 +123,8 @@ public extension ApplyOp {
 /// One `[[desktop.N.section]]` table — a workspace SPATIAL cell. Order within a
 /// mac desktop is config-declaration order (= tree display order). Since the
 /// section-lens type was retired (t-ec9s), a section carries only a display
-/// `label`, an optional `layout` seed, and the `unassigned` receptacle marker.
+/// `label` and an optional `layout` seed. (The `unassigned` receptacle MARKER
+/// went with the orphan concept — t-6rbc; see `parse`.)
 public struct DesktopSection: Sendable, Equatable {
     /// Display header — an **optional** name (§A): `""` when unset. A non-empty
     /// label NAMES the workspace from config; an empty one leaves it UNNAMED
@@ -129,46 +133,52 @@ public struct DesktopSection: Sendable, Equatable {
     /// Per-section layout seed — drives the workspace's stateful tiling engine.
     /// An empty-string `layout` decodes as `nil` (no layout authored).
     public let layout: String?
-    /// W2.6 (t-wrd2): the lost-and-found MARKER. `true` makes this section the
-    /// per-desktop receptacle that collects the LEFTOVER (universe − shown) —
-    /// the windows that land in NO other emitted section. At most one per
-    /// desktop is honoured; extras warn.
-    public let unassigned: Bool
 
-    public init(label: String = "", layout: String? = nil,
-                unassigned: Bool = false) {
+    public init(label: String = "", layout: String? = nil) {
         self.label = label
         self.layout = layout
-        self.unassigned = unassigned
     }
 
-    /// Parse one `[[desktop.N.section]]` row into a workspace-cell section. Total
-    /// — never drops a row (every authored section is a workspace cell now).
+    /// Parse one `[[desktop.N.section]]` row into a workspace-cell section.
     /// `label` (optional, §A) names the workspace; `layout` seeds its tiling
-    /// engine; `unassigned = true` marks the receptacle. A stray `type` /
-    /// `match` / `apply` (from the retired section-lens era) is IGNORED here —
-    /// `config --validate` flags it via the strict schema. `note` stays for the
-    /// caller's loud log; `nil` in the common case.
+    /// engine. A stray `type` / `match` / `apply` (from the retired section-lens
+    /// era) is IGNORED here — `config --validate` flags it via the strict schema.
+    ///
+    /// ## `unassigned` is a RETIRED KEY, and the row is DROPPED
+    ///
+    /// t-6rbc retired the orphan concept: nothing in facet could put a window in
+    /// the lost-and-found receptacle, so it was a section that could only ever be
+    /// empty — a permanent lie in the tree. Deleting the key alone would NOT have
+    /// been safe: an unknown key is ignored, so a stale `unassigned = true` row
+    /// would silently PROMOTE to an ordinary workspace cell, the desktop would
+    /// gain a workspace, and the user's layout would change under them. Silence is
+    /// the worst possible answer here, so the row is dropped — which reproduces
+    /// today's effective substrate exactly, because `workspaceSubstrateSections`
+    /// already filtered receptacles out of the workspace list.
+    ///
+    /// Detect `unassigned = false` too: it is just as retired, and letting it fall
+    /// through would conjure the same phantom workspace by the back door.
     static func parse(fromTOMLRow t: [String: TOMLValue])
         -> (section: DesktopSection?, note: String?)
     {
+        if case .bool? = t["unassigned"] {
+            return (nil, "`unassigned` was retired (t-6rbc) — no window can ever "
+                + "reach the lost-and-found receptacle, so it could only ever be an "
+                + "empty section. DELETE this section block; keeping it would add a "
+                + "workspace cell and change your layout")
+        }
         let label: String = {
             if case .string(let s)? = t["label"] { return s } else { return "" }
         }()
         var layout: String? = nil
         if case .string(let l)? = t["layout"], !l.isEmpty { layout = l }
-        let unassigned: Bool = {
-            if case .bool(true)? = t["unassigned"] { return true }
-            return false
-        }()
-        return (DesktopSection(label: label, layout: layout,
-                               unassigned: unassigned), nil)
+        return (DesktopSection(label: label, layout: layout), nil)
     }
 }
 
 /// A decoded `[[desktop.N.section]]` section WITH its raw-DOM origin (t-hdxb
 /// B4). The bridge the snapshot writer needs to map a projected section id
-/// (`section:<declOrder>:<label>` / `unassigned:<declOrder>`) back to the exact
+/// (`section:<declOrder>:<label>`) back to the exact
 /// `[[desktop.N.section]]` array-of-tables element to edit.
 ///
 ///   • `declOrder` — the section's position in the SURVIVING (post merge +

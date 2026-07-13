@@ -2,8 +2,9 @@
 // section-path drag / kb-lift. The view hands over section IDs + the dest
 // workspace index; the Controller resolves the plan with the PURE
 // `ApplyResolver` and, on a real move, re-files the window into the dest
-// workspace on `cliQueue` (ws→ws membership, or the §G orphan rescue). Since
-// section-lens was retired (t-ec9s), a MOVE carries no tag / apply ops.
+// workspace on `cliQueue` (ws→ws membership — the ONLY move there is, since
+// t-6rbc retired the orphan concept). Since section-lens was retired (t-ec9s),
+// a MOVE carries no tag / apply ops.
 //
 // Snap-back is "do nothing": an inert / stale plan runs NO backend op, and
 // because the section tree row is never hidden during the drag (only
@@ -53,7 +54,7 @@ extension Controller {
     }
 
     /// Dispatch a resolved plan onto `cliQueue` — a workspace MEMBERSHIP move
-    /// (ws→ws, or the §G unassigned→ws rescue) by 0-based wire index — then
+    /// (ws→ws, the only kind there is) by 0-based wire index — then
     /// schedule a single coalesced reconcile. ONE `cliQueue.async` block so the
     /// move can't interleave with a refresh poll. (Since section-lens was retired
     /// there are no tag / apply ops left — a MOVE is purely a workspace re-file.)
@@ -76,14 +77,10 @@ extension Controller {
                 return (w, ws.name)        // assigned: the ws name (may be "")
             }
         }
-        // §G rescue: a window shown under the unassigned receptacle is a TRUE
-        // orphan (in no workspace → absent from `lastWorkspaces`). Find it in
-        // the orphan set so a drop onto a workspace resolves a real move plan.
-        // `nil` name = orphan (no assignment), distinct from `""` (assigned to
-        // an unnamed workspace) — the resolver's `not workspace` invariant.
-        if let w = backend.orphanWindows().first(where: { $0.id == id }) {
-            return (w, nil)
-        }
+        // (The §G orphan-rescue lookup that used to sit here is gone with the
+        // orphan concept — t-6rbc. `lastWorkspaces` IS the universe: a window
+        // facet manages is in a workspace, so a window absent from it is a
+        // window facet does not manage.)
         return nil
     }
 }

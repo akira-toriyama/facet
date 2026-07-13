@@ -9,8 +9,7 @@ import Toml
 /// merge and duplicate-label drop, so these fixtures pin that the RIGHT
 /// `[[desktop.N.section]]` element is edited every time. Since the section-lens
 /// type was retired (t-ec9s), EVERY section is a workspace SPATIAL cell — the
-/// snapshot writes workspace `label`/`layout` (by wsSlot) and the unassigned
-/// receptacle's `label` (by id `unassigned:<declOrder>`); it never writes a
+/// snapshot writes workspace `label`/`layout` (by wsSlot); it never writes a
 /// section `match` (there are no matched section). A lens DESKTOP's retargeted
 /// match (`[desktop.N] match=`, a single std table — not a section) is written
 /// via `isolateMatch` (t-sgqk).
@@ -82,11 +81,30 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
-    // MARK: - workspace / unassigned label override
+    // MARK: - workspace label override
 
-    @Test func workspaceAndUnassignedLabelOverride() {
-        // A workspace cell renames via `workspaceLabel` (by wsSlot); the
-        // unassigned receptacle renames via `label` (by id unassigned:<declOrder>).
+    @Test func workspaceLabelOverride() {
+        let cfg = """
+        [[desktop.1.section]]
+        label = "Web"
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.workspaceLabel = [1: [0: "Browsers"]]        // wsSlot 0 = the Web cell
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+
+        #expect(out.contains(#"label = "Browsers""#))
+        #expect(!(out.contains(#"label = "Web""#)))
+        assertStable(out)
+    }
+
+    /// 🪦 THE AUTO-PROMOTE ZOMBIE, pinned dead. The writer used to bake an
+    /// `unassigned` receptacle's rename back into the snapshot — and with
+    /// `[config] auto-promote`, the NEXT launch overwrites config.toml with that
+    /// snapshot. So a retired key could have resurrected itself from a file the
+    /// user never edited. The receptacle's write path is gone with the concept
+    /// (t-6rbc): the snapshot must never emit an `unassigned` key, no matter
+    /// what the source config still says.
+    @Test func aRetiredUnassignedRowIsNeverWrittenBackOut() {
         let cfg = """
         [[desktop.1.section]]
         label = "Web"
@@ -96,14 +114,15 @@ struct ConfigSnapshotTests {
         label = "Lost"
         """
         var ov = ConfigSnapshot.Overrides()
-        ov.workspaceLabel = [1: [0: "Browsers"]]        // wsSlot 0 = the Web cell
-        ov.label = [1: ["unassigned:1": "Strays"]]      // declOrder 1 = receptacle
+        ov.workspaceLabel = [1: [0: "Browsers"]]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
-
+        // The surgical writer leaves untouched bytes alone, so the user's stale
+        // row is still THERE verbatim (we do not silently rewrite their file) —
+        // but facet added nothing to it, and re-decoding the snapshot yields
+        // exactly one section, as it must.
         #expect(out.contains(#"label = "Browsers""#))
-        #expect(out.contains(#"label = "Strays""#))
-        #expect(!(out.contains(#"label = "Web""#)))
-        #expect(!(out.contains(#"label = "Lost""#)))
+        #expect(origins(out, ordinal: 1).count == 1,
+                "the retired row must not decode back into a section")
         assertStable(out)
     }
 
@@ -137,13 +156,14 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
-    /// An `unassigned` marker sitting BETWEEN two real workspaces must consume
-    /// no workspace slot: the writer `continue`s before the workspace branch, so
-    /// `wsSlot` stays put. Pins that slot 0 names the first workspace and slot 1
-    /// names the THIRD section (the real second workspace) — not the unassigned
-    /// middle, which keeps its config label untouched. (Hoisting `wsSlot += 1`
-    /// above the `continue` would leave the second workspace unnamed.)
-    @Test func unassignedBetweenWorkspacesConsumesNoSlot() {
+    /// ⬅ The `rawOrdinal` invariant, which the retirement leans on hard. A stale
+    /// `unassigned` row sitting BETWEEN two workspaces is DROPPED at decode
+    /// (t-6rbc) — so the surviving second workspace is `wsSlot 1`, and its DOM
+    /// edit must still land on the THIRD array-of-tables element, not the second.
+    /// `rawOrdinal` is the RAW enumeration index, so dropping a row shifts
+    /// nothing; if it were ever re-derived from the surviving list, this test
+    /// would catch the snapshot writing "B"'s new name onto the dead row.
+    @Test func aDroppedRowShiftsNeitherTheSlotNorTheDOMTarget() {
         let cfg = """
         [[desktop.1.section]]
         label = "A"
@@ -159,13 +179,16 @@ struct ConfigSnapshotTests {
         ov.workspaceLabel = [1: [0: "First", 1: "Second"]]
         let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
 
+        // The retired middle row does not decode, so the surviving pair is
+        // [First, Second] — and "Second" must have been written to the THIRD
+        // element of the array-of-tables, not the second (the dead row's slot).
         let secs = origins(out, ordinal: 1).map(\.section)
-        // secs[0] = first ws (slot 0), secs[1] = unassigned middle (no slot),
-        // secs[2] = second ws (slot 1).
+        #expect(secs.count == 2)
         #expect(secs[0].label == "First")
-        #expect(secs[2].label == "Second",
-                "the unassigned middle consumed no workspace slot")
-        #expect(secs[1].label == "Lost", "the unassigned marker is untouched")
+        #expect(secs[1].label == "Second",
+                "the dropped row must not steal the second workspace's DOM slot")
+        #expect(out.contains(#"label = "Lost""#),
+                "the user's stale row is left verbatim — facet never rewrites it")
         assertStable(out)
     }
 
@@ -400,12 +423,12 @@ struct ConfigSnapshotTests {
     /// to a bare outer `.isEmpty` would flip these and cause spurious disk writes.
     /// (The existing no-op test only exercises the all-defaults case.)
     @Test func isEmptyIgnoresEmptyInnerDicts() {
-        #expect(ConfigSnapshot.Overrides(label: [1: [:]]).isEmpty,
-                "outer key present but inner dict empty → still empty")
-        #expect(!ConfigSnapshot.Overrides(label: [1: ["unassigned:0": "a"]]).isEmpty,
-                "a non-empty inner dict makes it non-empty")
         #expect(ConfigSnapshot.Overrides(workspaceLabel: [1: [:]]).isEmpty,
-                "same for workspaceLabel's empty inner dict")
+                "outer key present but inner dict empty → still empty")
+        #expect(!ConfigSnapshot.Overrides(workspaceLabel: [1: [0: "a"]]).isEmpty,
+                "a non-empty inner dict makes it non-empty")
+        #expect(ConfigSnapshot.Overrides(workspaceLayout: [1: [:]]).isEmpty,
+                "same for workspaceLayout's empty inner dict")
     }
 
     @Test func unparseableConfigReturnedUnchanged() {
