@@ -332,9 +332,10 @@ public protocol WindowBackend: Sendable {
 
     /// Add tag `name` to the focused window (`facet window --tag NAME`).
     /// Tags are a free-form per-window set (EX-4) — `name` is just added,
-    /// no vocabulary, no cap. A `type="lens"` section with `match='tag~=name'`
-    /// then gathers it on the next reconcile. Returns `false` only when there
-    /// is no managed focused window. Caller surfaces the error.
+    /// no vocabulary, no cap. A lens desktop whose `match` reads `tag~=name`
+    /// then tiles it on the next reconcile (and a `[[rule]]` with that `match`
+    /// applies to it on adopt). Returns `false` only when there is no managed
+    /// focused window. Caller surfaces the error.
     func addTagToFocusedWindow(_ name: String) -> Bool
 
     /// Remove tag `name` from the focused window
@@ -378,7 +379,7 @@ public protocol WindowBackend: Sendable {
     /// unmanaged). No-op default for other backends.
     func removeTag(_ name: String) -> Bool
 
-    // MARK: - Section-model apply/un-apply (PR8)
+    // MARK: - Scratchpad shelves
 
     /// Stash the focused window onto scratchpad shelf `name`, parking
     /// it off-screen (`facet scratchpad --stash NAME`). A named hidden
@@ -417,12 +418,13 @@ public protocol WindowBackend: Sendable {
     /// (`WindowSlot.workspace == nil`). The `workspaces()` snapshot can't carry
     /// them (an orphan is in no `Workspace`), so the Controller reads them here
     /// — main-actor-safe, off a lock-guarded mirror refreshed on `cliQueue` at
-    /// the tail of every catalog refresh (same handoff as `currentActiveSection`)
-    /// — and feeds them to `FilterProjection.project(…, orphans:)` so the views'
-    /// lens sections render them (the 迷子 receptacle + any content lens they
-    /// match). WITHOUT this, an orphan shows in no tree/grid/rail section even
-    /// though the activation path gathers it on-screen (display ↔ gather
-    /// disagreement). `[]` outside the section model / for backends without one.
+    /// the tail of every catalog refresh — and feeds them to `FilterProjection`
+    /// as `orphans:`, the ONLY way an orphan enters the projection: on a
+    /// workspace desktop the §G `unassigned` receptacle picks it up (it lands in
+    /// no workspace section), on a lens desktop the `match` gathers it (or the
+    /// holding section does). WITHOUT this an orphan shows in no tree/grid/rail
+    /// section at all — a managed window with nowhere to be seen. `[]` outside
+    /// the section model / for backends without one.
     func orphanWindows() -> [Window]
 
     /// Per-window facet management state for `facet query --windows`

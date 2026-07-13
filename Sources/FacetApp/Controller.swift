@@ -59,11 +59,11 @@ final class Controller: NSObject {
     /// (Setter is internal — the grid / rail cold-start fetch in
     /// Controller+Grid.swift / Controller+Rail.swift re-seeds it.)
     var lastWorkspaces: [Workspace] = []
-    /// EX-2: last projected sections + active lens, refreshed every
-    /// ``apply`` (hoisted above the grid/rail feed) and fed to the overview
-    /// surfaces — the same ordered `[ProjectedSection]` the tree renders, so
-    /// all three views agree. Empty/nil ⇒ section model off here ⇒ the
-    /// overview degrades to `lastWorkspaces`. Snapshot-on-show seeds from these.
+    /// EX-2: the last projected sections, refreshed every ``apply`` (hoisted
+    /// above the grid/rail feed) and fed to the overview surfaces — the same
+    /// ordered `[ProjectedSection]` the tree renders, so all three views agree.
+    /// Empty ⇒ section model off here ⇒ the overview degrades to
+    /// `lastWorkspaces`. Snapshot-on-show seeds from this.
     var lastSections: [ProjectedSection] = []
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
@@ -169,15 +169,6 @@ final class Controller: NSObject {
     /// frame.
     private var loggedSectionDiagnostics: [String] = []
 
-    /// The **1-based** index of the active workspace from the latest snapshot,
-    /// or 1. ⚠️ `Workspace.index` is **0-based** (snapshot seam:
-    /// `index: entry.index - 1`, WorkspaceCatalog) while `ActiveSection.workspace`
-    /// is 1-based — convert with `+ 1`. The `?? 0` only fires on an empty
-    /// snapshot. (The catalog's own `activeIndex` is already 1-based and maps to
-    /// the enum directly; only the `[Workspace]` snapshot crosses this boundary.)
-    func activeWSIndex(in wss: [Workspace]) -> Int {
-        (wss.first(where: { $0.isActive })?.index ?? 0) + 1
-    }
     /// Whether `apply()` has rendered at least once, and the mac-desktop
     /// ordinal it last rendered — together they detect a mac-desktop swap. The
     /// first render only records the ordinal (no reset).
@@ -1097,15 +1088,12 @@ final class Controller: NSObject {
             lastSections = []
         }
         // The open grid/rail show whatever `FilterProjection` projects; `wss`
-        // stays the full set. Since the section-lens ACTIVATE highlight is gone
-        // (t-ec9s), `activeLensID` is fed nil — the active WORKSPACE cell still
-        // lights via `activeIndex`. (The grid/rail `activeLensID` field is
-        // retired in a later sweep.)
+        // stays the full set. The active WORKSPACE cell lights via `activeIndex`
+        // — the only thing that is ever active (t-ec9s).
         if let g = gridView {
             g.workspaces = displayWss          // reorder: degrade-path cell order
             g.activeIndex = wss.first(where: { $0.isActive })?.index
             g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
-            g.activeLensID = nil
             g.layoutCells()       // refresh open grid on backend events
         }
         // The rail is a *persistent* bar (unlike the snapshot-on-show
@@ -1113,20 +1101,17 @@ final class Controller: NSObject {
         // highlight + window counts track switches and add/close.
         if let rv = railView {
             // EX-2b: the active SECTION id BEFORE the field update (reads the
-            // rail's still-old activeLensID/activeIndex/sections).
-            let oldActiveID = activeSectionID(activeLensID: rv.activeLensID,
-                                              activeIndex: rv.activeIndex,
+            // rail's still-old activeIndex/sections).
+            let oldActiveID = activeSectionID(activeIndex: rv.activeIndex,
                                               sections: rv.sections)
             rv.workspaces = displayWss         // reorder: degrade-path cell order
             rv.activeIndex = wss.first(where: { $0.isActive })?.index
             rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
-            rv.activeLensID = nil
-            // 2-b carousel: an EXTERNAL activate (CLI / lens) while the rail
-            // is open re-centres the strip on the new active SECTION — but
-            // only when the user isn't mid-browse (cursor still on the OLD
-            // active section), so a manual rotation isn't yanked back.
-            let newActiveID = activeSectionID(activeLensID: rv.activeLensID,
-                                              activeIndex: rv.activeIndex,
+            // 2-b carousel: an EXTERNAL activate (CLI) while the rail is open
+            // re-centres the strip on the new active SECTION — but only when
+            // the user isn't mid-browse (cursor still on the OLD active
+            // section), so a manual rotation isn't yanked back.
+            let newActiveID = activeSectionID(activeIndex: rv.activeIndex,
                                               sections: rv.sections)
             if rv.selectedSectionID == oldActiveID, let n = newActiveID {
                 rv.selectedSectionID = n
@@ -1211,16 +1196,15 @@ final class Controller: NSObject {
         }
         sidebarView.frame.size.width = panelHost.userWidth
         sidebarView.forceRedraw()
-        // `macDesktopOrdinal` + the PR6 active-lens swap-reset were computed
-        // / applied above. Section/lens model (PR5): when this mac desktop is
-        // section-managed (≥1 `type="workspace"` section) OR a lens desktop
-        // (whose 1|2 sections were synthesized into `lastSections` above —
-        // t-0sbm; without this the ONLY view a lens desktop permits would
-        // never show its sections), the tree renders the ordered sections —
-        // a window shows up in EVERY section it matches. Otherwise the
-        // by-workspace / tag path.
+        // `macDesktopOrdinal` + the PR6 mac-desktop swap-reset were computed
+        // / applied above. Section model (PR5): when this mac desktop is
+        // section-managed (≥1 `[[desktop.N.section]]` spatial cell) OR a lens
+        // desktop (whose 1|2 sections were synthesized into `lastSections`
+        // above — t-0sbm; without this the ONLY view a lens desktop permits
+        // would never show its sections), the tree renders the ordered
+        // sections. Otherwise the by-workspace path.
         // EX-2: the projection is now HOISTED above the grid/rail feed (see
-        // `lastSections`/`lastActiveLensID`), so the tree consumes the SAME
+        // `lastSections`), so the tree consumes the SAME
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
         let contentH: CGFloat

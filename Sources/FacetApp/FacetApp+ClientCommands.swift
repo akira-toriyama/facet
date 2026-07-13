@@ -1,5 +1,5 @@
 // Client mode — the `facet <subject> <verb>` subcommand runners
-// (workspace / lens / tag / window / scratchpad): parse the argv,
+// (workspace / section / window / scratchpad): parse the argv,
 // validate, then post the control notification to the running server
 // (or loud-exit on a usage error). Includes the subcommand-specific
 // parse / validate / canonical-name helpers. Split out of FacetApp+Client.swift (P8-3).
@@ -134,9 +134,9 @@ extension FacetApp {
     /// FacetApp wrapper over the pure `validateSectionLabel` (FacetCore): loud-
     /// exit(2) on the all-whitespace / leading-dash reject, else return the
     /// label VERBATIM (loose — spaces / `:` / punctuation are fine for a display
-    /// label). Mirrors `parseLensSectionLabel`'s leading-dash flag-guard; the
+    /// label). Mirrors `parseSectionFocusLabel`'s leading-dash flag-guard; the
     /// one intended difference is that a TRULY EMPTY `""` is allowed here (the
-    /// `--rename` revert gesture), which `parseLensSectionLabel` rejects.
+    /// `--rename` revert gesture), which `parseSectionFocusLabel` rejects.
     static func validateSectionLabelArg(_ value: String, flag: String) -> String {
         switch validateSectionLabel(value) {
         case .success(let label):
@@ -184,22 +184,23 @@ extension FacetApp {
     /// mirrors `workspace --focus`).
     static func parseSectionFocus(_ value: String) -> String {
         if let n = Int(value), n > 0 { return "index:\(n)" }
-        return "label:" + parseLensSectionLabel(value, flag: "section --focus")
+        return "label:" + parseSectionFocusLabel(value, flag: "section --focus")
     }
 
-    /// Validate the positional NAME of `facet lens NAME` in section mode — a
-    /// `type="lens"` section label. Section labels are config-authored TOML
-    /// strings, so the policy is loose (spaces and most punctuation are fine,
-    /// kept VERBATIM for the server's exact-label match): reject only an empty
-    /// / all-whitespace value or a leading `-` (an unrecognised flag, caught
-    /// earlier — kept here for defence). A comma is rejected by the caller
-    /// (CSV is tag-mode-only). Existence is the server's call. Loud reject
-    /// (exit 2).
-    static func parseLensSectionLabel(_ value: String, flag: String) -> String {
+    /// Validate the LABEL form of `facet section --focus N|LABEL` — the display
+    /// label of a section (workspace / unassigned / a lens desktop's
+    /// synthesized section). Section labels are config-authored TOML strings,
+    /// so the policy is loose (spaces and most punctuation are fine, kept
+    /// VERBATIM for the server's exact-label match): reject only an empty /
+    /// all-whitespace value or a leading `-` (an unrecognised flag, caught
+    /// earlier — kept here for defence). Existence is the server's call. Loud
+    /// reject (exit 2). Sibling of `validateSectionLabelArg` (`--rename`'s
+    /// LABEL), which allows a truly empty `""` as its revert gesture —
+    /// `--focus` has nothing to revert to.
+    static func parseSectionFocusLabel(_ value: String, flag: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else {
-            die("\(flag): expected a lens section label (the `label` of a "
-                + "`type = \"lens\"` section), got \"\(value)\"")
+            die("\(flag): expected a non-empty section label, got \"\(value)\"")
         }
         return value
     }

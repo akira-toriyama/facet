@@ -1,15 +1,16 @@
 // `LensMembership` — the single source of truth for "does this window satisfy
-// a lens `match`?". ONE predicate, consumed by `FilterProjection` to build the
-// display for tree/grid/rail alike. A lens is a pure VIEW (t-0021): it never
-// moves a real window, so this membership decision feeds DISPLAY only — there
-// is no separate park/hide path that could disagree with the tree.
+// a lens `match`?". ONE predicate for BOTH faces of a lens desktop: the tree
+// projection (`FilterProjection.projectLensDesktop`) shows the matched windows
+// and the always-on anchor-park (`IsolatePark.parkSet`, applied by the adapter)
+// removes the rest from the screen — sharing this predicate is what keeps what
+// a lens desktop SHOWS and what it PARKS from drifting apart.
 //
 // A lens `match` is a `facet filter` WHERE-clause (`FacetFilter`) evaluated
 // against each window with its workspace NAME overlaid: a bare `Window`
 // resolves `workspace=` to a no-match (it doesn't carry its own workspace), so
 // the caller passes the containing workspace's name and `ProjectedWindowFields`
-// supplies it at the seam (`desktop=` stays a no-match — sections are already
-// scoped per mac desktop by the `[[desktop.N.section]]` config). Pure +
+// supplies it at the seam (`desktop=` stays a no-match — a lens desktop's
+// `match` is already scoped to the mac desktop it is declared on). Pure +
 // backend-neutral (FacetCore, no AppKit / no AX); unit-tested in
 // `FacetCoreTests`.
 //

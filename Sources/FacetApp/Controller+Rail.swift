@@ -61,11 +61,10 @@ extension Controller {
         // active section) — no explicit seed here.
         rv.onPick = { [weak self, bk = backend] pick in
             guard let self else { return }
-            // EX-2b: route every pick through the validated `activateSection`
-            // throughline (updates the currentActiveSection mirror on main,
-            // clears any active lens on a workspace pick) — never
-            // `bk.switchWorkspace` directly. Mirrors the grid's onPick. The
-            // dismiss runs in parallel so the overlay clears as the switch lands.
+            // Route every pick through the validated `activateSection`
+            // throughline — never `bk.switchWorkspace` directly. Mirrors the
+            // grid's onPick. The dismiss runs in parallel so the overlay clears
+            // as the switch lands.
             switch pick {
             case .workspace(let ws):
                 // ws is 0-based (cell.wsIndex == Workspace.index); ActiveSection
@@ -78,16 +77,16 @@ extension Controller {
                 self.focusFirstWindow(inSectionID: sectionID)
             case .unassigned(let sectionID):
                 // §G: an unassigned cell focuses its FIRST orphan window — no
-                // lens toggle, no workspace switch (the unified focus helper,
-                // shared with the grid pick + CLI --focus + tree header click).
+                // workspace switch (the unified focus helper, shared with the
+                // grid pick + CLI --focus + tree header click).
                 self.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved via the
                 // view's windowHomeWS — correct whether the thumb sat in a
-                // workspace OR a lens cell. Switch there (clears any lens,
-                // updates the mirror on main), then re-assert focus on the
-                // pick. Guard home >= 0 so an unresolvable window focuses
-                // without a bogus .workspace(0).
+                // workspace OR a lens cell. Switch there (updates the mirror
+                // on main), then re-assert focus on the pick. Guard home >= 0
+                // so an unresolvable window focuses without a bogus
+                // .workspace(0).
                 if home >= 0 {
                     self.activateSection(.workspace(home + 1), autoFocus: false)
                 }

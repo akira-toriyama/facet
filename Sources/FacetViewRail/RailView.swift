@@ -46,14 +46,9 @@ public final class RailView: NSView {
 
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
-    /// EX-2: the projected section list. The rail does not yet consume it
-    /// (rail section rendering is EX-2b); stored to satisfy the `OverviewView`
-    /// protocol so the Controller feed is symmetric with the grid.
+    /// The projected section list — `overviewCellSources()` walks it to build
+    /// the carousel cells.
     public var sections: [ProjectedSection] = []
-    /// EX-2b / §A: the active lens's stable section id (`ProjectedSection.id`).
-    /// Keyed on the id, not the label, so a non-unique / empty lens label can't
-    /// light the wrong cell.
-    public var activeLensID: String?
     /// Keyboard "browse" cursor — the SECTION the centre HERO previews
     /// (←/→ rotate it, Return commits). Keyed on the stable
     /// `ProjectedSection.id` (`"ws:<i>"` / `"section:<order>:<label>"`),
@@ -260,7 +255,7 @@ public final class RailView: NSView {
                            label: sectionDisplayLabel(index: i + 1,
                                                       label: ws.name),
                            mode: ws.layoutMode, windows: ws.windows,
-                           isActive: activeLensID == nil && ws.isActive)
+                           isActive: ws.isActive)
             }
         }
         return sections.enumerated().map { (i, sec) in
@@ -270,20 +265,20 @@ public final class RailView: NSView {
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
             // §G three-way (mirrors GridView): workspace cells carry layout +
-            // active highlight; a lens cell has no layout engine and lights only
-            // when active; an unassigned cell renders like a lens (mode = "",
-            // wsIndex = -1) but is NEVER the active highlight.
+            // active highlight; a lens cell and an unassigned cell have no
+            // layout engine (mode = "", wsIndex = -1) and are NEVER the active
+            // highlight — only a workspace is ever active.
             let mode: String
             let active: Bool
             switch sec.sectionType {
             case .workspace:
                 mode = srcWS?.layoutMode ?? ""
-                // EX-2b single-highlight: a workspace cell lights ⟺ no lens
-                // active AND its WS is active.
-                active = activeLensID == nil && srcWS?.isActive == true
+                // EX-2b single-highlight: a workspace cell lights ⟺ its WS
+                // is active.
+                active = srcWS?.isActive == true
             case .lens:
                 mode = ""
-                active = activeLensID != nil && sec.id == activeLensID
+                active = false
             case .unassigned:
                 mode = ""
                 active = false
@@ -741,16 +736,6 @@ public final class RailView: NSView {
         slideTimer?.invalidate(); slideTimer = nil; slideStart = nil
         slideProgress = 0
         prevHeroImage = nil          // crossfade done (①)
-    }
-
-    /// Reset the carousel rotation animation in place — for callers that swap
-    /// the whole section set at once, so the prior set's slide / hero crossfade
-    /// can't bleed into the new set's first paint.
-    public func resetCarouselAnimation() {
-        slideOffset = 0
-        scrollAccum = 0
-        stopSlide()                  // also clears prevHeroImage
-        needsDisplay = true
     }
 
     /// Funnel for a switch-and-close commit. If the destination is the

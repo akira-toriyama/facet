@@ -514,15 +514,15 @@ struct WorkspaceCatalog {
         let toRestore: [WindowRef]
     }
 
-    /// Switch to `n1Based` (EX-0.4: exclusive model — always clears the active
-    /// section-lens). Returns the plan when the switch is valid and meaningful;
-    /// nil when target is invalid or already active. Caller applies AX
-    /// side-effects against the returned `WindowRef` lists.
+    /// Switch to `n1Based`. Returns the plan when the switch is valid and
+    /// meaningful; nil when target is invalid or already active. Caller applies
+    /// AX side-effects against the returned `WindowRef` lists.
     ///
-    /// Switching workspace drops any active section-lens (EX-0.4 exclusive
-    /// model): a lens is a pure VIEW that moved nothing, so the lift is just
-    /// nulling the authority field — the catalog is left in a clean no-lens
-    /// state. The destination's own windows are then unconditionally restored.
+    /// The active workspace is the catalog's ONLY selection authority — the
+    /// section-lens ACTIVATE concept it once had to clear here was retired
+    /// (t-ec9s), and a lens desktop is always-on rather than activated. The old
+    /// workspace's park-eligible windows are parked, the destination's own are
+    /// unconditionally restored.
     ///
     /// `rect` defaults to `.zero` for test call sites; it only feeds the
     /// destination restore's `attachToLayout` (bsp split-orientation choice),
@@ -779,9 +779,9 @@ struct WorkspaceCatalog {
     }
 
     /// Whether `id` is eligible for park/restore on a visibility
-    /// transition (WS switch / section-lens change): only if it isn't
-    /// pinned everywhere (sticky) and isn't already shelved (stashed
-    /// scratchpad). Shared by `setActive` / the section-lens park so the
+    /// transition (WS switch / a lens desktop's always-on park): only if it
+    /// isn't pinned everywhere (sticky) and isn't already shelved (stashed
+    /// scratchpad). Shared by `setActive` / the lens-desktop park so the
     /// exemption rule can't drift. (NOT
     /// `moveWindow`'s `.rejected` guard — that's a different
     /// move-incoherence check that happens to read the same two sets.)

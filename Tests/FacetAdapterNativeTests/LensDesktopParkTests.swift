@@ -4,8 +4,8 @@ import Testing
 @testable import FacetAdapterNative
 
 /// t-0sbm Phase 2b — the ADAPTER runtime for a typed `[desktop.N] type=lens`
-/// mac desktop (board abolition). Unlike a lens BOARD (which needs an explicit
-/// `facet lens` activation), a lens DESKTOP is ALWAYS-ON: whenever it is the
+/// mac desktop (board abolition). A lens desktop is ALWAYS-ON — there is no
+/// activation verb, entering the desktop IS the activation: whenever it is the
 /// active mac desktop, `applyIsolatePark` parks the out-of-`match` windows and
 /// tiles the matched set with the lens's declared `layout`. Flat by
 /// construction (a lens desktop seeds exactly ONE workspace, so the active-WS
@@ -34,8 +34,8 @@ struct LensDesktopParkTests {
         return a
     }
 
-    /// A lens desktop is ALWAYS-ON — no `facet lens` activation needed: the mere
-    /// presence of `[desktop.N] type=lens` parks the out-of-lens window.
+    /// A lens desktop is ALWAYS-ON — the mere presence of `[desktop.N] type=lens`
+    /// on the active mac desktop parks the out-of-lens window.
     @Test func desktopLensAlwaysOnParksOutOfLens() {
         let a = lensDesktopAdapter()
         cliQueue.sync { a.applyIsolatePark(live: live(), focused: nil, rect: rect) }

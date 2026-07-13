@@ -40,9 +40,13 @@ private let perViewThemeDomain = canonicalThemeNames + [""]
 // layer (ObjectShape / NestedTable / NestedObject / SchemaField) rather than a
 // new authoring builder, per t-0avb B1. Canonical spec: t-0avb「値 shape の確定形」.
 // `permissive` defaults false → `additionalProperties: false`, so taplo AND the
-// runtime validator reject typo'd keys / non-ordinal `[desktop.foo]`. Per-type
-// conditionals (workspace forbids `match`, lens requires it) are deferred to
-// `DesktopSection.parse`, the enforcement authority (t-0avb B5).
+// runtime validator reject typo'd keys / non-ordinal `[desktop.foo]`. The
+// per-type conditionals are deferred to `DesktopMeta.parse`, the enforcement
+// authority (t-0avb B5, retargeted by t-ec9s when `type` moved onto the
+// desktop): the shared `valueShape` below declares `match` / `layout` /
+// `show-non-matching` for BOTH types — a schema can't say "lens REQUIRES
+// `match`, workspace IGNORES it" — so `parse` drops a `match`-less lens LOUD
+// and logs-then-ignores those keys on a workspace desktop.
 private enum DesktopSchema {
     // One `[[desktop.N.section]]` row — a workspace SPATIAL cell (t-ec9s: the
     // section-lens type was retired; `lens` is now only a `[desktop.N]` type).

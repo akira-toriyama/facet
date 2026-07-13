@@ -28,18 +28,15 @@ public final class GridView: NSView {
     /// design).
     public var workspaces: [Workspace] = []
     public var activeIndex: Int?
-    /// EX-2: the projected section list (workspace + lens). Empty ⇒ degrade
-    /// to the `workspaces` iteration. Fed by the Controller (apply / show).
+    /// EX-2: the projected section list — the workspace cells (+ the §G
+    /// `unassigned` receptacle) the grid renders. Empty ⇒ degrade to the
+    /// `workspaces` iteration. Fed by the Controller (apply / show).
     public var sections: [ProjectedSection] = []
-    /// EX-2: the active lens's stable section id (`ProjectedSection.id`;
-    /// nil ⇒ a workspace is the active section). Gates the single-highlight
-    /// when building cells. A0/§A keyed this on the id, not the label, so a
-    /// non-unique / empty lens label can't light the wrong cell.
-    public var activeLensID: String?
     /// EX-2: window id → home workspace index (0-based), rebuilt each
     /// `layoutCells` from the unfiltered `workspaces` snapshot. A window thumb
-    /// may sit in a LENS cell (`wsIndex == -1`) but still has a real home WS;
-    /// picks resolve through this, never through the cell's `wsIndex`.
+    /// may sit in a source-WS-less cell (the receptacle, `wsIndex == -1`) but
+    /// still has a real home WS; picks resolve through this, never through the
+    /// cell's `wsIndex`.
     private var windowHomeWS: [WindowID: Int] = [:]
     /// Display's frame at show time. All window-rect math scales
     /// from this so the per-cell mini-screen matches what the
@@ -184,9 +181,9 @@ public final class GridView: NSView {
     /// arrow-browse, which also lands on `-1`. Tab picks a window.
     public var kbSelectedWindowIdx: Int = -1
 
-    /// EX-2: seed the keyboard selection to the active (lit) cell — the one
-    /// the single-highlight lit (active workspace, or the active lens) —
-    /// falling back to the first cell. Called by the Controller after the
+    /// EX-2: seed the keyboard selection to the active (lit) cell — the
+    /// active workspace's, the only cell that is ever lit — falling back to
+    /// the first cell. Called by the Controller after the
     /// grid is laid out (cells must exist).
     public func kbSeedToActiveCell() {
         kbSelectedID = (cells.first(where: { $0.isActive }) ?? cells.first)?.sectionID
@@ -294,7 +291,7 @@ public final class GridView: NSView {
                            label: sectionDisplayLabel(index: i + 1,
                                                       label: ws.name),
                            mode: ws.layoutMode, windows: ws.windows,
-                           isActive: activeLensID == nil && ws.isActive)
+                           isActive: ws.isActive)
             }
         }
         return sections.enumerated().map { (i, sec) in
@@ -304,22 +301,21 @@ public final class GridView: NSView {
             let srcWS = sec.sourceWorkspaceIndex.flatMap { src in
                 workspaces.first { $0.index == src } }
             // §G three-way: workspace cells carry their source WS's layout +
-            // active highlight; a lens cell has no layout engine (mode = "") and
-            // lights only when it IS the active lens; an unassigned cell is like
-            // a lens for rendering (mode = "", wsIndex = -1) but is NEVER the
-            // active highlight (no "active unassigned" concept).
+            // active highlight; a lens cell (a lens desktop's synthesized
+            // section) and an unassigned cell have no layout engine (mode = "",
+            // wsIndex = -1) and are NEVER the active highlight — only a
+            // workspace is ever active.
             let mode: String
             let active: Bool
             switch sec.sectionType {
             case .workspace:
                 mode = srcWS?.layoutMode ?? ""
-                // EX-2 single-highlight — mirror of SidebarView.headerActive XOR:
-                // a workspace cell lights ⟺ no lens active AND its WS is active.
-                active = activeLensID == nil && srcWS?.isActive == true
+                // EX-2 single-highlight — mirror of SidebarView.headerActive:
+                // a workspace cell lights ⟺ its WS is active.
+                active = srcWS?.isActive == true
             case .lens:
                 mode = ""
-                // A lens cell lights ⟺ it IS the active lens.
-                active = activeLensID != nil && sec.id == activeLensID
+                active = false
             case .unassigned:
                 mode = ""
                 active = false

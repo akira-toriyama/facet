@@ -54,13 +54,10 @@ public protocol TreeController: AnyObject, Sendable {
     func focusWindow(_ window: Window, postSwitch: Bool)
 
 
-    /// Activate a section (EX-1 throughline) — a workspace (clears any active
-    /// lens) or a `type=lens` section. The header / cell click routes here
-    /// (not straight to the backend) so the Controller updates its
-    /// `currentActiveSection` highlight mirror up-front: a same-workspace click
-    /// while a lens is active clears the lens via the adapter's same-index edge,
-    /// and without the Controller-side mirror update that stale `.lens(…)` would
-    /// swallow the next lens activation.
+    /// Activate a section — always a workspace switch (the section-lens
+    /// ACTIVATE concept was retired, t-ec9s). The header / cell click routes
+    /// here rather than straight to the backend so every activation funnels
+    /// through the Controller's one seam.
     func activateSection(_ section: ActiveSection, autoFocus: Bool)
 
     /// Switch to `window`'s workspace if needed, focus it, then run

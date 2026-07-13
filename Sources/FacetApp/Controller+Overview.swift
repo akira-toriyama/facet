@@ -30,12 +30,10 @@ extension Controller {
         v.paletteBox = paletteBox
         v.autoresizingMask = [.width, .height]
         v.workspaces = lastWorkspaces
-        // A lens is a pure VIEW (t-0021): the overview shows whatever the
-        // sections project (a lens section lists its matched windows) — no
-        // park-flag narrowing, nothing extra to seed here.
+        // The overview shows whatever the sections project — no park-flag
+        // narrowing, nothing extra to seed here.
         v.activeIndex = lastWorkspaces.first(where: { $0.isActive })?.index
         v.sections = lastSections        // EX-2: section list (empty ⇒ degrade)
-        v.activeLensID = nil             // section-lens activate highlight retired (t-ec9s)
         v.screenFrame = screenFrame
         // ③ Context menu: header layout picker + window-ops menu.
         v.backend = backend

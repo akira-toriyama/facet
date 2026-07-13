@@ -63,15 +63,17 @@ extension FacetConfig {
     }
 
     /// Build the per-mac-desktop `[[desktop.N.section]]` map from the raw
-    /// TOML text (the section/lens model). Each block header is
+    /// TOML text (the section model). Each block header is
     /// `desktop.<N>.section` (`N` = Mission Control ordinal ≥ 1); rows are
-    /// `{ type, label, match, apply, layout }`. A row with an absent /
-    /// unknown `type`, or one missing a required per-type field, is DROPPED
-    /// with a LOUD `Log.line` (the ordinal + row index for context) — never
-    /// a silent clamp (see `DesktopSection.parse`). A desktop with no usable
-    /// rows contributes no entry. Section order within a desktop is file
-    /// order. The decoded sections are consumed in production — read through
-    /// `effectiveMacDesktopSectionConfigs`.
+    /// `{ label, layout, unassigned }` — every row is a workspace SPATIAL cell
+    /// (t-ec9s retired the section `type` / `match` / `apply`), so
+    /// `DesktopSection.parse` is total and no row is dropped for its shape; a
+    /// stray key from the retired section-lens era is ignored here and flagged
+    /// by `config --validate`. A duplicate non-empty `label` within one desktop
+    /// IS dropped, LOUD + first-wins (§A — the label is an addressing handle).
+    /// A desktop with no usable rows contributes no entry. Section order within
+    /// a desktop is file order. The decoded sections are consumed in production
+    /// — read through `effectiveMacDesktopSectionConfigs`.
     public static func decodeDesktopSectionSections(fromTOML text: String)
         -> [Int: [DesktopSection]]
     {
@@ -167,7 +169,7 @@ extension FacetConfig {
     /// `match`, or whose flat keys yield no usable `apply` op (it would adopt
     /// nothing), is DROPPED — a bad rule never breaks the others. The `match`
     /// GRAMMAR is NOT validated here (parse-only stays total); the consumer
-    /// compiles it loud + non-fatal at eval time, like a `type="lens"` match.
+    /// compiles it loud + non-fatal at eval time, like a lens desktop's `match`.
     public static func decodeRuleSections(fromTOML text: String) -> [Rule] {
         parseTOMLArrayOfTables(text, table: "rule").compactMap { t in
             guard case .string(let match)? = t["match"],
@@ -184,7 +186,7 @@ extension FacetConfig {
     /// `label`, plus lens-only `match` / `layout` / `show-non-matching`. Read from
     /// the FLAT `parseTOMLSubset` map keyed by the literal header text
     /// `desktop.<N>` (a single table, so it lands in `.tables`, NOT the
-    /// array-of-tables `.arrays` the section/tab decoders read). A table with an
+    /// array-of-tables `.arrays` the section decoders read). A table with an
     /// absent / unknown `type`, or a lens missing `match`, is DROPPED LOUD.
     /// Successor to the retired `[[desktop.N.tab]]` board decode.
     public static func decodeDesktopTables(fromTOML text: String)

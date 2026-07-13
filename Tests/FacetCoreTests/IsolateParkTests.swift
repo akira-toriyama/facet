@@ -1,13 +1,14 @@
 import Testing
 @testable import FacetCore
 
-/// `IsolatePark.parkSet` — the pure "which windows anchor-park when a lens is
-/// isolate-active?" helper (t-c6fm). When a `type="lens"` board runs in
-/// `isolate` mode and one of its lenses is active, the active workspace's
-/// windows that do NOT satisfy the lens `match` slide to the corner — so the
-/// screen shows only the active lens's world (dwm-style focus). Reviving the
-/// park behaviour t-0021 removed, but DERIVED from `match` every reconcile (no
-/// stored park-set to desync) and WITHOUT the union-tile that actually broke.
+/// `IsolatePark.parkSet` — the pure "which windows anchor-park while a lens
+/// desktop is active?" helper (t-c6fm machinery, t-0sbm gate). On a
+/// `[desktop.N] type="lens"` mac desktop the park is ALWAYS-ON (inherent — no
+/// mode to arm, no lens to activate): the active workspace's windows that do NOT
+/// satisfy the lens `match` slide to the corner, so the screen shows only the
+/// lens's world (dwm-style focus). Reviving the park behaviour t-0021 removed,
+/// but DERIVED from `match` every reconcile (no stored park-set to desync) and
+/// WITHOUT the union-tile that actually broke.
 ///
 /// The rule: park = out-of-lens AND not sticky (`everywhere`). Sticky windows
 /// are "always visible" by definition, so they are exempt; a float has NO

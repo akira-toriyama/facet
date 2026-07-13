@@ -2,8 +2,10 @@ import Testing
 @testable import FacetCore
 
 /// `LensMembership.matches` — the SINGLE per-window lens-`match` predicate.
-/// A lens is a pure VIEW (t-0021): `FilterProjection` reads this to build the
-/// tree/grid/rail display — there is no separate park path to keep in sync.
+/// ONE predicate drives BOTH faces of a lens desktop (t-c6fm / t-0sbm):
+/// `FilterProjection.projectLensDesktop` builds the tree from it and the adapter
+/// derives the always-on anchor-park set from it, so display and park cannot
+/// drift. (t-0021 briefly made a lens a pure VIEW with no park at all.)
 /// These lock the two behaviours the predicate must guarantee: (1) it agrees
 /// with `FacetFilter.matches` for ordinary window fields, and (2) it overlays
 /// the workspace NAME so `workspace=` resolves (a bare `Window` can't). Pure;
@@ -107,9 +109,8 @@ struct LensMembershipTests {
     /// 迷子 receptacle (`match='not workspace'`): presence is the assignment,
     /// not the display name. An orphan (NO workspace → `inWorkspaceNamed: nil`)
     /// matches; an ASSIGNED window — even one in an UNNAMED workspace (name "")
-    /// — does NOT. The predicate behind the receptacle; t-0021 made the lens a
-    /// pure VIEW, so `FilterProjection` reads this same predicate for display
-    /// (no separate adapter gather to keep in sync).
+    /// — does NOT. The predicate behind the receptacle — the same one
+    /// `FilterProjection` reads for the tree and the adapter reads for the park.
     @Test func notWorkspaceMatchesOrphanNotAssigned() {
         let f = filter("not workspace")
         #expect(LensMembership.matches(win(1), inWorkspaceNamed: nil, filter: f),

@@ -26,7 +26,7 @@ import Toml      // sill's pure TOML subset parser (`Toml.Value` accessors)
 
 /// Runtime descriptor for one facet workspace: a display `name` plus an
 /// optional `layout` seed for `facet workspace --layout`. A
-/// `[[desktop.N.section]]` `type = "workspace"` cell is named by its
+/// `[[desktop.N.section]]` spatial cell is named by its
 /// optional `label` (§A); an empty label leaves `name == ""` (unnamed —
 /// displayed by its 1-based index, §B). `name` is also owned at runtime by
 /// `facet workspace --rename`. `layout` comes from the section's `layout`
@@ -192,16 +192,15 @@ public struct FacetConfig: Sendable {
     /// = none). Raw; read `effectiveDefinedTags`.
     public var definedTags: [String]?
 
-    /// Per-mac-desktop `[[desktop.N.section]]` definitions (the section/lens
-    /// model). Outer key is the mac desktop ordinal (Mission Control order,
+    /// Per-mac-desktop `[[desktop.N.section]]` definitions (the section model).
+    /// Outer key is the mac desktop ordinal (Mission Control order,
     /// 1-based); value is that desktop's sections in config-declaration (=
     /// tree display) order. `nil`/empty when none configured. Parsed from the
     /// raw TOML text (nested array-of-tables) by `load`, like
     /// `exclusionRules`. Read through `effectiveMacDesktopSectionConfigs`.
     /// Consumed in production: `FilterProjection` (the single display path for
-    /// tree/grid/rail — a `facet lens` is a pure VIEW that lists its matched
-    /// windows, t-0021), `ApplyResolver` (DnD apply/un-apply), and
-    /// `effectiveWorkspaceList` (workspace count + layout). Shipped #296–#301.
+    /// tree/grid/rail) and `effectiveWorkspaceList` (workspace count + layout).
+    /// Shipped #296–#301.
     public var macDesktopSectionConfigs: [Int: [DesktopSection]] = [:]
 
     /// Per-mac-desktop `[desktop.N]` typed-table definitions (board abolition,
@@ -592,7 +591,7 @@ public struct FacetConfig: Sendable {
 
     /// Workspace list for a given mac-desktop ordinal (1-based, Mission
     /// Control order). When the section model is active there (≥1
-    /// `type = "workspace"` section), the COUNT and
+    /// `[[desktop.N.section]]` spatial cell), the COUNT and
     /// per-workspace layout seed come from those sections (via
     /// `workspaceSubstrateSections`); a section's name is its `label` if set,
     /// else it stays UNNAMED and is shown by its 1-based index (§B — the
@@ -603,8 +602,8 @@ public struct FacetConfig: Sendable {
         -> [(index: Int, config: WorkspaceConfig)]
     {
         // Section model (authoritative when active): the workspace COUNT and
-        // per-workspace layout seed come from the `type = "workspace"`
-        // sections. §A: a non-empty `label` names the workspace FROM CONFIG
+        // per-workspace layout seed come from the `[[desktop.N.section]]`
+        // spatial cells. §A: a non-empty `label` names the workspace FROM CONFIG
         // (the old "always auto-named" rule was reversed). §B: an empty label
         // leaves the workspace UNNAMED (`name == ""`) — displayed by its
         // 1-based index, not an emoji. Runtime `facet workspace --rename`
@@ -700,11 +699,11 @@ public struct FacetConfig: Sendable {
         return meta
     }
 
-    /// Whether the section/lens model drives the mac desktop at `ordinal` —
-    /// i.e. it has at least one `type = "workspace"` section in the
-    /// `[[desktop.N.section]]` list. This is the gate the read path,
-    /// auto-naming, and the overview/tree consult to decide between the
-    /// section model and the default unnamed slots.
+    /// Whether the section model drives the mac desktop at `ordinal` — i.e. it
+    /// has at least one `[[desktop.N.section]]` spatial cell (the `unassigned`
+    /// receptacle doesn't count — see `workspaceSubstrateSections`). This is the
+    /// gate the read path, naming, and the overview/tree consult to decide
+    /// between the section model and the default unnamed slots.
     ///
     /// Shares `workspaceSubstrateSections` with `effectiveWorkspaceList`, so
     /// "gate active" and "seed N workspaces" can never disagree (the SSOT).
@@ -717,11 +716,11 @@ public struct FacetConfig: Sendable {
         return !workspaceSubstrateSections(forOrdinal: ordinal).isEmpty
     }
 
-    /// The `type = "workspace"` sections that form the spatial substrate for
-    /// `ordinal` — the count + per-workspace layout seed source: the
-    /// `[[desktop.N.section]]` workspace sections in declaration order. The
-    /// shared SSOT for `isSectionModelActive` (non-empty?) and
-    /// `effectiveWorkspaceList` (the actual list).
+    /// The sections that form the spatial substrate for `ordinal` — the count +
+    /// per-workspace layout seed source: every `[[desktop.N.section]]` cell but
+    /// the `unassigned` receptacle, in declaration order. The shared SSOT for
+    /// `isSectionModelActive` (non-empty?) and `effectiveWorkspaceList` (the
+    /// actual list).
     private func workspaceSubstrateSections(forOrdinal ordinal: Int)
         -> [DesktopSection]
     {
@@ -742,8 +741,8 @@ public struct FacetConfig: Sendable {
     /// Always read through this, never the raw Optional.
     public var effectiveRules: [Rule] { rules ?? [] }
 
-    /// Effective `[[desktop.N.section]]` definitions (the section/lens
-    /// model). Always read through this, never the raw dict.
+    /// Effective `[[desktop.N.section]]` definitions (the section model).
+    /// Always read through this, never the raw dict.
     public var effectiveMacDesktopSectionConfigs: [Int: [DesktopSection]] {
         macDesktopSectionConfigs
     }
