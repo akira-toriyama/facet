@@ -31,12 +31,6 @@ struct FilterProjectionTests {
     private func unassigned(_ label: String) -> DesktopSection {
         DesktopSection(label: label, unassigned: true)
     }
-    /// An isolate-parked window (t-c6fm) — `isParked` is set, but projection
-    /// treats it like any window: it shows verbatim in its workspace section.
-    private func parked(_ id: Int, app: String = "App") -> Window {
-        Window(id: WindowID(serverID: id), pid: id, appName: app, title: "",
-               isFocused: false, isFloating: false, frame: nil, isParked: true)
-    }
 
     // MARK: - degrade (no sections → 1:1 by-workspace, byte-identical)
 
@@ -287,20 +281,40 @@ struct FilterProjectionTests {
         #expect(recept?.windows.map(\.id.serverID) == [8, 9])
     }
 
-    // MARK: - isolate-parked windows show in place (t-c6fm)
+    // MARK: - the projection is parking-AGNOSTIC (t-c6fm / t-pvay)
 
-    /// An isolate-parked window STAYS in its workspace section — the tree is a
-    /// filter-inventory, not a screen mirror. Park declutters the real screen, but
-    /// the workspace section takes its windows VERBATIM, parked or not (same as a
-    /// non-active workspace's windows, which are also parked).
-    @Test func parkedWindowStaysInWorkspaceSection() {
-        let wss = [ws(0, name: "Main", windows: [win(10), parked(30)])]
+    /// A workspace section takes its windows VERBATIM — the tree is a
+    /// filter-inventory, not a screen mirror. Isolate-park is a SCREEN-only
+    /// concern owned by the catalog's `isolateParked` ledger and the projection
+    /// never learns about it (t-pvay deleted the write-only `Window.isParked`
+    /// that used to leak it into the model), so a parked window is indistinguishable
+    /// here and shows in place exactly like any other.
+    @Test func workspaceSectionTakesItsWindowsVerbatim() {
+        let wss = [ws(0, name: "Main", windows: [win(10), win(30)])]
         let r = FilterProjection.project(
             workspaces: wss, sections: [wsSec(), unassigned("Lost")])
         #expect(r.sections.first { $0.sectionType == .workspace }?
-            .windows.map(\.id.serverID) == [10, 30])        // parked shown in place
+            .windows.map(\.id.serverID) == [10, 30])        // both shown in place
         #expect(r.sections.first { $0.sectionType == .unassigned }?
             .windows.isEmpty == true)                       // nothing homeless
+    }
+
+    /// The grid + rail consume `project()` ONLY (a lens desktop is TREE-ONLY and
+    /// loud-rejects both overviews; the tree's `projectLensDesktop` is the only
+    /// minter of `.lens`). t-pvay deleted `GridPick.lens` / `RailPick.lens` /
+    /// `OverviewCell.isLens` on the strength of that — so pin it: `project()` must
+    /// never mint a `.lens` section, or those overviews grow a live lens path
+    /// again with nothing to route it.
+    @Test func projectNeverMintsALensSection() {
+        let wss = [ws(0, name: "Main", windows: [win(10)]),
+                   ws(1, name: "Web", windows: [win(20)])]
+        for sections in [[wsSec()],
+                         [wsSec(), unassigned("Lost")],
+                         []] {                              // degrade path too
+            let r = FilterProjection.project(workspaces: wss, sections: sections)
+            #expect(r.sections.allSatisfy { $0.sectionType != .lens },
+                    "project() minted a .lens section — the overviews cannot route it")
+        }
     }
 
     // MARK: - orphans (EX-3 迷子: in NO workspace, rescued by the unassigned receptacle)

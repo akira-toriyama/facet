@@ -16,18 +16,22 @@ struct OverviewModelsTests {
                              isActive: true, label: "W", mode: "bsp", windows: [])
         #expect(c.sectionType == .workspace)
         #expect(c.sectionID == "")
-        #expect(!(c.isLens))
+        #expect(!(c.isReceptacle))
     }
 
-    @Test func lensKindFlag() {
-        let l = cell(.lens, id: "section:1:Web")
-        #expect(l.isLens)
-        #expect(l.sectionID == "section:1:Web")
-        #expect(l.sectionType == .lens)
+    /// The overviews route on `isReceptacle` (t-pvay replaced the `.lens`-only
+    /// `isLens`): ANY non-workspace cell mirrors no workspace, so it has no
+    /// source WS (`wsIndex == -1`), is never a move / swap target, and a pick
+    /// focuses its first window instead of switching workspace. Routing on the
+    /// negative — rather than enumerating kinds — is also what keeps a
+    /// `wsIndex == -1` cell from ever reaching a `.workspace(-1)` pick.
+    @Test func nonWorkspaceKindsAreReceptacles() {
+        #expect(cell(.unassigned, id: "unassigned:0").isReceptacle)
+        #expect(cell(.lens, id: "section:0:Web").isReceptacle)
     }
 
-    @Test func workspaceKindIsNotLens() {
-        #expect(!(cell(.workspace, id: "ws:0").isLens))
+    @Test func workspaceKindIsNotAReceptacle() {
+        #expect(!(cell(.workspace, id: "ws:0").isReceptacle))
     }
 
     private func win(_ id: Int) -> Window {

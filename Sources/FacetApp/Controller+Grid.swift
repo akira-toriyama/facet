@@ -77,15 +77,10 @@ extension Controller {
                 // is 1-based → +1. autoFocus lets the backend focus the
                 // destination's last-touched window (or Finder if empty).
                 self?.activateSection(.workspace(ws + 1), autoFocus: true)
-            case .lens(let sectionID):
-                // Since the section-lens ACTIVATE concept was retired (t-ec9s), a
-                // lens cell focuses its FIRST window like the unassigned
-                // receptacle — membership is match-driven, not activatable.
-                self?.focusFirstWindow(inSectionID: sectionID)
             case .unassigned(let sectionID):
-                // §G: an unassigned cell focuses its FIRST orphan window — no
-                // workspace switch (the unified focus helper, shared with the
-                // rail pick + CLI --focus + tree header click).
+                // §G: a receptacle cell focuses its FIRST window — no workspace
+                // switch (the unified focus helper, shared with the rail pick +
+                // CLI --focus + tree header click).
                 self?.focusFirstWindow(inSectionID: sectionID)
             case .window(let home, let pid, let id):
                 // `home` is the WINDOW's home WS (0-based), resolved from the
@@ -187,16 +182,22 @@ extension Controller {
             gridOverlay = nil; gridView = nil; gridBackdrop = nil
             return
         }
+        // Drop the references synchronously — the fade is cosmetic, the
+        // teardown is not (mirrors `hideRail`). Two things break if they
+        // linger for the fade's duration: `apply` still finds a live
+        // `gridView` and feeds it this desktop's sections (on a lens desktop
+        // that means grid renders a tree-only projection), and `isGridVisible`
+        // stays true so a hide→show inside the fade window no-ops instead of
+        // building a fresh overlay.
+        gridOverlay = nil
+        gridView = nil
+        gridBackdrop = nil
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = overviewFadeOut
             overlay.animator().alphaValue = 0
         }) { [weak self] in
-            guard let self else { return }
             overlay.orderOut(nil)
-            self.gridOverlay = nil
-            self.gridView = nil
-            self.gridBackdrop = nil
-            if restoreTree { self.refresh() }       // re-shows the panel
+            if restoreTree { self?.refresh() }      // re-shows the panel
         }
     }
 }

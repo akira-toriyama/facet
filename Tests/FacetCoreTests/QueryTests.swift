@@ -21,15 +21,18 @@ struct QueryTests {
             onscreen: true, focused: false,
             facet: .init(workspace: "web", workspaceIndex: 1, tags: ["190"],
                          floating: false, sticky: false, master: true,
+                         parked: true,
                          mark: "a", scratchpad: nil))
         let json = try encoded([entry])
-        // Schema key names present.
+        // Schema key names present. `parked` (t-pvay) is the CLI's only view of
+        // a window a lens desktop anchor-parked — keep it in the contract.
         for key in ["\"id\"", "\"pid\"", "\"app\"", "\"title\"",
                     "\"bundleId\"", "\"desktop\"", "\"frame\"", "\"onscreen\"",
                     "\"focused\"", "\"facet\"", "\"workspaceIndex\"",
-                    "\"tags\"", "\"master\""] {
+                    "\"tags\"", "\"master\"", "\"parked\""] {
             #expect(json.contains(key), "missing key \(key)")
         }
+        #expect(json.contains("\"parked\" : true"))
         // Round-trip.
         let back = try JSONDecoder().decode([WindowQueryEntry].self,
                                             from: Data(json.utf8))
@@ -62,6 +65,7 @@ struct QueryTests {
             frame: nil, onscreen: true, focused: true,
             facet: .init(workspace: "", workspaceIndex: 3, tags: [],
                          floating: true, sticky: false, master: false,
+                         parked: false,
                          mark: nil, scratchpad: nil))
         let json = try encoded([entry])
         #expect(json.contains("\"mark\" : null"))
@@ -81,6 +85,7 @@ struct QueryTests {
                              facet: .init(workspace: "main", workspaceIndex: 1,
                                           tags: ["x", "y"], floating: false,
                                           sticky: true, master: false,
+                                          parked: false,
                                           mark: nil, scratchpad: "term")),
         ]
         let path = NSTemporaryDirectory() + "facet-query-test-\(getpid()).json"

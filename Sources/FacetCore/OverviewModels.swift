@@ -108,23 +108,23 @@ public struct OverviewCell {
     public let mode: String          // layout engine (bsp / stack), shown in header
     public let windows: [MiniWindowHit]
     public let isHero: Bool
-    /// Which section kind this cell renders — `.workspace` (the spatial
-    /// substrate), `.unassigned` (the lost-and-found receptacle) or `.lens`.
-    /// The overviews only ever run on a workspace desktop (a lens desktop is
-    /// TREE-ONLY), and `FilterProjection.project` mints no `.lens` section, so
-    /// the `.lens` cases here are the shared section vocabulary, not a shape
-    /// the grid / rail build today. Defaulted so every existing 8-arg call site
-    /// compiles unchanged.
+    /// Which section kind this cell renders. In practice the overviews only
+    /// ever see `.workspace` (the spatial substrate) and `.unassigned` (the
+    /// lost-and-found receptacle): they run on a workspace desktop only — a
+    /// lens desktop is TREE-ONLY and loud-rejects `--view grid` / `--view rail`
+    /// — and `FilterProjection.project`, their only source, mints no `.lens`
+    /// section. Defaulted so every existing 8-arg call site compiles unchanged.
     public let sectionType: ProjectedSectionType
     /// The `ProjectedSection.id` this cell came from (`"ws:<i>"` /
     /// `"unassigned:<declOrder>"`) — stable identity for routing /
     /// signatures. Empty for legacy workspace-built cells.
     public let sectionID: String
 
-    /// True for a `.lens` cell — a section that spans the desktop instead of
-    /// mirroring one workspace, so it is never a move/swap target (no source
-    /// workspace; `wsIndex == -1`).
-    public var isLens: Bool { sectionType == .lens }
+    /// True for any cell that is NOT a workspace — a receptacle that holds
+    /// windows without mirroring one workspace, so it has no source workspace
+    /// (`wsIndex == -1`) and is never a move / swap target. Picking it focuses
+    /// its first window instead of switching workspace.
+    public var isReceptacle: Bool { sectionType != .workspace }
 
     public init(wsIndex: Int, rect: CGRect, headerRect: CGRect,
                 isActive: Bool, label: String, mode: String,

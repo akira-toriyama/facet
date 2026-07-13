@@ -81,12 +81,11 @@ extension BuildTreeRowsTests {
     // between isMaster and mark), pass the rest in declaration order.
     fileprivate func rich(_ id: Int, master: Bool = false, floating: Bool = false,
                           sticky: Bool = false, onscreen: Bool = true, mark: String? = nil,
-                          scratch: String? = nil, tags: [String] = [],
-                          parked: Bool = false) -> Window {
+                          scratch: String? = nil, tags: [String] = []) -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: "A", title: "",
                isFocused: false, isFloating: floating, frame: nil,
                isOnscreen: onscreen, isMaster: master, mark: mark, isSticky: sticky,
-               isParked: parked, scratchpad: scratch, tags: tags)
+               scratchpad: scratch, tags: tags)
     }
     fileprivate func badges(_ w: Window) -> [TreeBadge] {
         buildTreeRows(sections: [sec("ws:0", "1", .workspace, [w], src: 0)], query: "")[1].badges
@@ -98,8 +97,9 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky)])
         XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden)])
         // t-c6fm: an isolate-parked window shows as a NORMAL row — no badge (the
-        // tree is an inventory, not a screen mirror; park is screen-only).
-        XCTAssertEqual(badges(rich(1, parked: true)), [])
+        // tree is an inventory, not a screen mirror; park is screen-only). Since
+        // t-pvay that is STRUCTURAL, not a choice: `Window` carries no park flag,
+        // so the tree cannot badge one even by accident. Nothing left to assert.
         XCTAssertEqual(badges(rich(1, mark: "a")), [TreeBadge(.mark, "a")])
         XCTAssertEqual(badges(rich(1, scratch: "shelf")), [TreeBadge(.scratchpad, "shelf")])
     }

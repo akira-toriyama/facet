@@ -68,6 +68,27 @@ struct CatalogProjectionParityTests {
                      "a window not in windowMap has no facet state")
     }
 
+    /// `facet query --windows` reports `parked` straight off `isolateParked`
+    /// (t-pvay). This is the ONLY surface that reports it, and it has to work: on
+    /// a lens desktop with `show-non-matching = false` a parked window appears on
+    /// NO facet surface at all, so without this key facet moves a real window
+    /// somewhere the user can't see and can't then say where it went.
+    @Test func facetStateReportsParkedFromTheIsolateLedger() {
+        let rect = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let a = NativeAdapter(config: FacetConfig())
+        a.catalog.seed(configs: [(index: 1, config: WorkspaceConfig(name: "Main"))])
+        _ = a.catalog.reconcile(live: [window(10), window(30)])
+        _ = a.catalog.reconcileIsolatePark(desired: [wid(30)], focused: nil, in: rect)
+
+        #expect(a.facetState(forWindow: wid(30), in: a.catalog)?.parked == true,
+                "the parked window reports parked")
+        #expect(a.facetState(forWindow: wid(10), in: a.catalog)?.parked == false,
+                "the tiled window does not")
+        // The ledger is the single source — no model-side copy to drift from.
+        a.catalog.isolateParked.remove(wid(30))
+        #expect(a.facetState(forWindow: wid(30), in: a.catalog)?.parked == false)
+    }
+
     // MARK: - cov-04: the snapshot gate
 
     @Test func groupingGateWorkspaceModeYieldsOneWorkspacePerEntry() {

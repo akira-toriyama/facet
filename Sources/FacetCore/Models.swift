@@ -97,18 +97,6 @@ public struct Window: Sendable {
     /// tiling). Session-only, per-mac-desktop; orthogonal to `mark`.
     /// Views surface it as a slanted "sticky" badge.
     public let isSticky: Bool
-    /// Whether this window is currently ISOLATE-PARKED (t-c6fm) — anchor-parked
-    /// off-screen because it falls OUTSIDE the lens on a `[desktop.N] type=lens`
-    /// mac desktop. Unlike a Cmd+H hide (`isOnscreen == false`), a parked
-    /// window keeps `isOnscreen == true` (it sits on an on-screen sliver). Park is
-    /// a SCREEN-only operation, so this flag drives NO display: a parked window
-    /// still shows in its section, undimmed and unbadged (the tree is an
-    /// inventory, not a screen mirror). Stamped by the catalog snapshot from
-    /// `isolateParked`; `false` in every non-park context.
-    /// ⚠️ Currently has NO production reader — the click-on-a-parked-row path it
-    /// once served was replaced by `isLensHoldingRow` (t-63h2: a lens desktop's
-    /// holding rows are inert). Keep or drop is an open call (t-6n1h).
-    public let isParked: Bool
     /// Name of the scratchpad shelf this window is *settled* on, or
     /// `nil` when it isn't a scratchpad window. A scratchpad is a
     /// named hidden shelf (`facet scratchpad --stash NAME`): the
@@ -140,7 +128,6 @@ public struct Window: Sendable {
                 bundleId: String? = nil,
                 mark: String? = nil,
                 isSticky: Bool = false,
-                isParked: Bool = false,
                 scratchpad: String? = nil,
                 tags: [String] = []) {
         self.id = id
@@ -155,7 +142,6 @@ public struct Window: Sendable {
         self.isMaster = isMaster
         self.mark = mark
         self.isSticky = isSticky
-        self.isParked = isParked
         self.scratchpad = scratchpad
         self.tags = tags
     }
@@ -170,7 +156,7 @@ public struct Window: Sendable {
         Window(id: id, pid: pid, appName: appName, title: title,
                isFocused: isFocused, isFloating: isFloating, frame: frame,
                isOnscreen: isOnscreen, isMaster: isMaster, bundleId: bundleId,
-               mark: mark, isSticky: isSticky, isParked: isParked,
+               mark: mark, isSticky: isSticky,
                scratchpad: scratchpad, tags: tags)
     }
 }

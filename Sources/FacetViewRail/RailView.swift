@@ -276,10 +276,11 @@ public final class RailView: NSView {
                 // EX-2b single-highlight: a workspace cell lights ⟺ its WS
                 // is active.
                 active = srcWS?.isActive == true
-            case .lens:
-                mode = ""
-                active = false
-            case .unassigned:
+            case .lens, .unassigned:
+                // A receptacle: no layout engine of its own, never the active
+                // highlight. (`.lens` only reaches the shared enum from the
+                // TREE's lens-desktop projection — the rail never receives one
+                // — but the switch must stay exhaustive over it.)
                 mode = ""
                 active = false
             }
@@ -946,10 +947,9 @@ public final class RailView: NSView {
                 pendingDown = (p, w, cell.sectionID)
             } else {
                 // empty cell area → activate+close (zoom if it's the centre).
-                // §G: an unassigned cell focuses its first orphan window.
+                // §G: a receptacle cell focuses its first window instead.
                 commitSwitch(targetSectionID: cell.sectionID) { [weak self] in
-                    if cell.isLens { self?.onPick?(.lens(sectionID: cell.sectionID)) }
-                    else if cell.sectionType == .unassigned {
+                    if cell.isReceptacle {
                         self?.onPick?(.unassigned(sectionID: cell.sectionID))
                     } else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
@@ -1138,11 +1138,10 @@ public final class RailView: NSView {
                 }
             } else if let ph = pendingHeaderDown,
                       let cell = cells.first(where: { $0.sectionID == ph.cellID }) {
-                // Header click → switch to that workspace, toggle the lens, or
-                // (§G) focus the unassigned section's first window.
+                // Header click → switch to that workspace, or (§G) focus the
+                // receptacle section's first window.
                 commitSwitch(targetSectionID: ph.cellID) { [weak self] in
-                    if cell.isLens { self?.onPick?(.lens(sectionID: cell.sectionID)) }
-                    else if cell.sectionType == .unassigned {
+                    if cell.isReceptacle {
                         self?.onPick?(.unassigned(sectionID: cell.sectionID))
                     } else { self?.onPick?(.workspace(workspaceIndex: cell.wsIndex)) }
                 }
@@ -1333,17 +1332,14 @@ public final class RailView: NSView {
               let cell = cells.first(where: { $0.sectionID == id }) else { return }
         // The selected section is the centre, so this always plays the zoom (②).
         if let hit = kbSelectedWindow() {
-            // Window (even inside a lens hero) → switch to its HOME WS + focus it.
+            // Window (even inside a receptacle hero) → switch to its HOME WS
+            // + focus it.
             let home = windowHomeWS[hit.id] ?? cell.wsIndex
             commitSwitch(targetSectionID: id) { [weak self] in
                 self?.onPick?(.window(homeWorkspaceIndex: home, pid: hit.pid, windowID: hit.id))
             }
-        } else if cell.isLens {
-            commitSwitch(targetSectionID: id) { [weak self] in
-                self?.onPick?(.lens(sectionID: cell.sectionID))  // lens → activate it
-            }
-        } else if cell.sectionType == .unassigned {
-            // §G: unassigned hero → focus its first orphan window.
+        } else if cell.isReceptacle {
+            // §G: receptacle hero → focus its first window.
             commitSwitch(targetSectionID: id) { [weak self] in
                 self?.onPick?(.unassigned(sectionID: cell.sectionID))
             }

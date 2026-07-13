@@ -54,11 +54,26 @@ public struct WindowQueryEntry: Codable, Sendable, Equatable {
         public let floating: Bool
         public let sticky: Bool
         public let master: Bool
+        /// ISOLATE-PARKED: anchor-parked off-screen because the window falls
+        /// OUTSIDE the `match` on a `[desktop.N] type=lens` mac desktop.
+        ///
+        /// This is the ONLY surface that reports it, and it has to exist: a
+        /// lens desktop MOVES REAL WINDOWS, and with `show-non-matching =
+        /// false` a parked window appears on NO facet surface at all — not the
+        /// tree, not an overview. Without this key, facet moves a window
+        /// somewhere the user can't see and then can't tell them where it went
+        /// (the only other way to find it is the geometric corner-sliver
+        /// heuristic in `AXRescue.rescueCornerParked`). facet is CLI-first, so
+        /// the CLI has to be able to answer "what did you park?".
+        ///
+        /// Not to be confused with a Cmd+H hide (`onscreen == false`): a parked
+        /// window keeps `onscreen == true` — it sits on a 1×41 on-screen sliver.
+        public let parked: Bool
         public let mark: String?
         public let scratchpad: String?    // settled shelf name; nil otherwise
 
         public init(workspace: String, workspaceIndex: Int, tags: [String],
-                    floating: Bool, sticky: Bool, master: Bool,
+                    floating: Bool, sticky: Bool, master: Bool, parked: Bool,
                     mark: String?, scratchpad: String?) {
             self.workspace = workspace
             self.workspaceIndex = workspaceIndex
@@ -66,6 +81,7 @@ public struct WindowQueryEntry: Codable, Sendable, Equatable {
             self.floating = floating
             self.sticky = sticky
             self.master = master
+            self.parked = parked
             self.mark = mark
             self.scratchpad = scratchpad
         }
@@ -79,6 +95,7 @@ public struct WindowQueryEntry: Codable, Sendable, Equatable {
             try c.encode(floating, forKey: .floating)
             try c.encode(sticky, forKey: .sticky)
             try c.encode(master, forKey: .master)
+            try c.encode(parked, forKey: .parked)
             try encodeOptional(&c, mark, forKey: .mark)
             try encodeOptional(&c, scratchpad, forKey: .scratchpad)
         }
