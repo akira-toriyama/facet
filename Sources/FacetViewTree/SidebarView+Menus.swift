@@ -19,16 +19,24 @@ extension SidebarView {
         switch row.kind {
         case .header(let g, let ws):
             // Workspace header → full layout picker; a no-workspace header is
-            // either an isolate desktop (stateless-only union layout picker, R9 / Cluster B)
-            // or §G unassigned (Rename-only — no layout engine). Discriminate by
-            // section type at the CALL SITE so each menu builder's own guard
-            // can't fail silently on the wrong kind.
+            // either an isolate desktop's matched section (Rename + Edit match),
+            // its holding section (nothing — display-only), or §G unassigned
+            // (Rename-only — no layout engine). Discriminate by section type at
+            // the CALL SITE so each menu builder's own guard can't fail silently
+            // on the wrong kind — which is exactly what `.holding` did until
+            // t-63h2's guard was repaired: it was routed into the unassigned
+            // menu, whose `== .unassigned` guard then swallowed it.
             if let ws { headerMenu(at: scr, group: g, workspaceIndex: ws) }
             else if g >= 0, g < lastSections.count {
                 switch lastSections[g].sectionType {
                 case .matched:    isolateHeaderMenu(at: scr, group: g)
-                case .unassigned, .holding:
-                    unassignedHeaderMenu(at: scr, group: g)
+                case .unassigned: unassignedHeaderMenu(at: scr, group: g)
+                // t-63h2: the holding section is display-only. It is synthesized
+                // by subtraction from the `match`, so it has no label to rename
+                // (`FilterProjection` mints `""`) and no layout of its own —
+                // there is no menu item that would mean anything. Deliberately
+                // no menu, not an oversight; the CLI carries the loud reject.
+                case .holding:    break
                 case .workspace:  break   // workspace headers carry ws != nil
                 }
             }

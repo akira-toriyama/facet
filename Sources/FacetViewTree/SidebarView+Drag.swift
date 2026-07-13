@@ -570,21 +570,13 @@ extension SidebarView {
         }
     }
 
-    /// t-63h2 (2026-07-12 決定): an isolate desktop's HOLDING row — a parked
-    /// non-matching window listed under the `show-non-matching` section — is
-    /// DISPLAY-ONLY. Its window sits at the anchor sliver, so focusing it is
-    /// an invisible no-op, and a drop into the isolate desktop can't be made to "stick"
-    /// (the match is app-shaped in general — no derivable tag). Click / Enter
-    /// are inert and the row never becomes a drag source; hover preview and
-    /// the right-click tag menu stay (adding the matching tag by hand IS the
-    /// explicit escape hatch), and the CLI `facet section --focus` keeps
-    /// addressing the section. Only lens desktops project an `.unassigned`
-    /// section with `isolateDesktop == true` — the by-workspace rescue
-    /// receptacle (drag-out = rescue) has `isolateDesktop == false` and is
-    /// untouched.
+    /// t-63h2 (2026-07-12 決定): an isolate desktop's HOLDING row is DISPLAY-ONLY —
+    /// see `isHoldingSection` (FacetCore) for the contract and why the predicate
+    /// is pure. The section TYPE carries it: `.holding` is minted only by
+    /// `projectIsolateDesktop`, so no `isolateDesktop` flag is needed to
+    /// discriminate — asking the section what it IS is the whole point of t-mqqw.
     func isHoldingRow(group g: Int) -> Bool {
-        isolateDesktop && g < lastSections.count
-            && lastSections[g].sectionType == .unassigned
+        isHoldingSection(lastSections, group: g)
     }
 
 }
