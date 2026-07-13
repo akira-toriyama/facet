@@ -289,6 +289,40 @@ extension FacetConfig {
     /// because only the decoder knows WHICH block this is (the literal
     /// `[desktop.01]` header, the file position of a `[[rule]]`) — and a
     /// diagnostic that names the wrong block is worse than none.
+    /// An isolate desktop's `match` that references the `workspace` FIELD (t-j7ps).
+    ///
+    /// It cannot mean what the author thinks. An isolate desktop is FLAT — one
+    /// workspace, which is now UNNAMED (see `effectiveWorkspaceList`) and which no
+    /// verb can address. So on that desktop the `workspace` field is CONSTANT,
+    /// always `""`, and any predicate touching it is a constant too: it selects
+    /// every window or none of them, regardless of what the windows are. The one
+    /// thing it cannot do is what a `match` is FOR — select on window content.
+    ///
+    /// `.error`, on the same terms as an unparseable match: the block survives,
+    /// but the desktop is DEAD (it tiles nothing and anchor-parks everything, or
+    /// tiles everything and parks nothing). "Valid" over a desktop that does
+    /// nothing is the lie `config --validate` exists to stop telling.
+    ///
+    /// This ALSO names the one breaking change in t-j7ps out loud. The workspace
+    /// used to be named from `label`, so `label = "Web"` + `match = 'workspace=Web'`
+    /// tiled everything — and today it tiles nothing. A user who wrote that gets a
+    /// message, not a silently empty desktop. (`[[rule]]` matches are unaffected:
+    /// they run on workspace desktops, where `workspace` is a real field.)
+    static func isolateWorkspaceFieldDiagnostics(match: String, at where_: String)
+        -> [ConfigDiagnostic]
+    {
+        guard case .success(let filter) = FacetFilter.parse(match),
+              filter.fieldsReferenced().contains("workspace")
+        else { return [] }
+        return [.init(.error, "config: \(where_) \"\(match)\": an isolate desktop is "
+            + "FLAT — its single workspace is UNNAMED and cannot be addressed, so "
+            + "`workspace` is always empty there and this predicate is a CONSTANT "
+            + "(it selects every window or none, whatever your windows are). Match "
+            + "on what the windows ARE instead (app / title / tag / floating). "
+            + "⚠️ t-j7ps: this used to work — the workspace took the desktop's "
+            + "`label`, which made a rename able to silently kill the desktop")]
+    }
+
     static func matchDiagnostics(for match: String, at where_: String)
         -> [ConfigDiagnostic]
     {
@@ -410,6 +444,8 @@ extension FacetConfig {
             // malformed match is not a drop, it is a DEAD desktop.
             if meta.type == .isolate {
                 diags += matchDiagnostics(for: meta.match, at: "[\(header)] match")
+                diags += isolateWorkspaceFieldDiagnostics(
+                    match: meta.match, at: "[\(header)] match")
             }
         }
         return out

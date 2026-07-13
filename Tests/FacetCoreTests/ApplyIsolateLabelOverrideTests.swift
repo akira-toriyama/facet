@@ -104,3 +104,100 @@ struct ApplyIsolateLabelOverrideTests {
         #expect(applyIsolateLabelOverride(after, label: "Editors")[0].label == "Editors")
     }
 }
+
+/// t-j7ps / (c) — the trap the rename would have sprung, and the cut that removed it.
+///
+/// `[desktop.N] label` used to name the isolate desktop's single workspace as well
+/// as the desktop. `workspace` is a FIELD a `match` can compare against. So the
+/// label was a display name masquerading as data, and `facet section --rename` —
+/// which persists `[desktop.N] label` — could silently break the desktop's own
+/// match.
+///
+/// The insidious part: it did NOT break the running session (the catalog is seeded
+/// once at launch and keeps the old name). It broke the NEXT LAUNCH. Cause and
+/// effect sat on opposite sides of a restart, so nobody could ever have connected
+/// them.
+struct IsolateLabelIsNotAMatchableFieldTests {
+
+    private func win(_ id: Int, app: String) -> Window {
+        Window(id: WindowID(serverID: id), pid: id, appName: app, title: "",
+               isFocused: false, isFloating: false, frame: nil)
+    }
+    private func filter(_ src: String) -> FacetFilter {
+        guard case .success(let f) = FacetFilter.parse(src) else {
+            Issue.record("unparseable: \(src)"); return .all
+        }
+        return f
+    }
+
+    /// ⬅ THE regression pin, driven exactly as the daemon drives it: config →
+    /// `effectiveWorkspaceList` → the workspace NAME → `IsolatePark.parkSet`.
+    ///
+    /// Before the cut, this test's `after` case parked BOTH windows (the desktop
+    /// tiled nothing — dead). Now the label simply cannot reach the park set.
+    @Test func renamingTheDesktopCannotChangeWhatGetsParked() {
+        let windows = [win(1, app: "Safari"), win(2, app: "Xcode")]
+
+        func parkSet(label: String, match: String) -> [Int] {
+            var c = FacetConfig()
+            c.macDesktopMetaConfigs = [2: DesktopMeta(
+                type: .isolate, label: label, match: match)]
+            let ws = c.effectiveWorkspaceList(forMacDesktopOrdinal: 2)
+            return IsolatePark.parkSet(
+                windows: windows,
+                inWorkspaceNamed: ws.first?.config.name,
+                match: filter(match), sticky: []
+            ).map(\.serverID).sorted()
+        }
+
+        // A real, content-based match: Safari tiles, Xcode parks. The label is
+        // irrelevant to it — before AND after a rename.
+        #expect(parkSet(label: "Web", match: "app~=Safari") == [2])
+        #expect(parkSet(label: "Editors", match: "app~=Safari") == [2],
+                "renaming the desktop must not move a single window")
+    }
+
+    /// And the config that USED to lean on the coupling is now loud rather than
+    /// silently dead. `match = 'workspace=Web'` on a desktop labelled "Web" tiled
+    /// everything before; it selects nothing now — so facet says so, and
+    /// `config --validate` exits 1. (This is the one breaking change in t-j7ps.)
+    @Test func aWorkspaceFieldInAnIsolateMatchIsALoudError() {
+        let c = FacetConfig.load(source: """
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'workspace=Web'
+        """)
+        #expect(c.diagnostics.hasErrors)
+        #expect(c.diagnostics.contains { $0.message.contains("is a CONSTANT") },
+                "\(c.diagnostics.map(\.message))")
+        // The desktop still decodes — the daemon is permissive, as always.
+        #expect(c.desktopIsolate(ordinal: 2) != nil)
+    }
+
+    /// A content-based match on the same desktop is clean — no false alarm.
+    @Test func aContentBasedIsolateMatchIsClean() {
+        let c = FacetConfig.load(source: """
+        [desktop.2]
+        type = "isolate"
+        label = "Web"
+        match = 'app~=Chrome or app=Safari'
+        """)
+        #expect(c.diagnostics.isEmpty, "\(c.diagnostics.map(\.message))")
+    }
+
+    /// `[[rule]]` matches are UNAFFECTED — they run on workspace desktops, where
+    /// `workspace` is a real, user-owned field. Only an ISOLATE desktop's match is
+    /// flagged.
+    @Test func ruleMatchesMayStillReferenceWorkspace() {
+        let c = FacetConfig.load(source: """
+        [[desktop.1.section]]
+        label = "Dev"
+
+        [[rule]]
+        match = 'workspace=Dev'
+        tags = ["work"]
+        """)
+        #expect(!c.diagnostics.hasErrors, "\(c.diagnostics.map(\.message))")
+    }
+}

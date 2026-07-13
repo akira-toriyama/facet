@@ -223,17 +223,45 @@ struct DesktopMetaDecodeTests {
     // MARK: - flat N=1 seed (Phase 2c)
 
     /// An isolate desktop is FLAT — `effectiveWorkspaceList` seeds EXACTLY ONE
-    /// workspace, named by the lens label + seeded with its layout. This pins the
-    /// catalog to N=1 so the active-WS park scope is the whole desktop.
-    @Test func isolateDesktopSeedsExactlyOneWorkspace() {
+    /// workspace, seeded with the desktop's layout. This pins the catalog to N=1
+    /// so the active-WS park scope is the whole desktop.
+    ///
+    /// ⬅ It used to be NAMED from the desktop's `label`, and this test pinned
+    /// that. t-j7ps cut the coupling: the name made `label` two things at once —
+    /// a display name AND the value of the `workspace` FIELD a `match` compares
+    /// against. So `facet section --rename` (which writes `[desktop.N] label`)
+    /// could silently break the desktop's own match: rename a desktop whose match
+    /// said `workspace=Web` and at the NEXT LAUNCH it selects nothing and parks
+    /// every window — cause and effect on opposite sides of a restart.
+    ///
+    /// The name was never load-bearing: an isolate desktop's workspace is
+    /// UNADDRESSABLE (every workspace verb is refused by `IsolateDesktopGate`)
+    /// because N=1 is an internal invariant, not a thing the user owns.
+    @Test func isolateDesktopSeedsExactlyOneUNNAMEDWorkspace() {
         var c = FacetConfig()
         c.macDesktopMetaConfigs = [1: DesktopMeta(
             type: .isolate, label: "Web", match: "app~=Chrome", layout: "bsp")]
         let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
         #expect(list.count == 1)
         #expect(list[0].index == 1)
-        #expect(list[0].config.name == "Web")
+        #expect(list[0].config.name == "",
+                "the label names the DESKTOP, not a matchable workspace field")
         #expect(list[0].config.layout == "bsp")
+    }
+
+    /// The rename can no longer reach the match. Renaming the desktop changes the
+    /// display label and NOTHING else — which is what `applyIsolateLabelOverride`
+    /// has always claimed, and is now finally true across a restart too.
+    @Test func renamingAnIsolateDesktopCannotChangeWhatItMatches() {
+        var before = FacetConfig()
+        before.macDesktopMetaConfigs = [1: DesktopMeta(
+            type: .isolate, label: "Web", match: "app~=Chrome")]
+        var after = FacetConfig()
+        after.macDesktopMetaConfigs = [1: DesktopMeta(
+            type: .isolate, label: "Editors", match: "app~=Chrome")]
+        #expect(before.effectiveWorkspaceList(forMacDesktopOrdinal: 1).map(\.config.name)
+                == after.effectiveWorkspaceList(forMacDesktopOrdinal: 1).map(\.config.name),
+                "a rename must not move any field a `match` can see")
     }
 
     /// A workspace desktop with no sections is unaffected by the lens seed — it
