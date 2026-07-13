@@ -686,8 +686,8 @@ action = "ignore"
 #         label   — (optional) display name for the desktop.
 #
 # ACTIVE SAMPLE — two mac desktops. Desktop 1 is a classic WORKSPACE desktop:
-# a NAMED "Main" workspace + an unnamed one (shown by index) + a Lost & Found
-# receptacle. Desktop 2 is an always-on ISOLATE desktop that tiles your browser
+# a NAMED "Main" workspace + an unnamed one (shown by index).
+# Desktop 2 is an always-on ISOLATE desktop that tiles your browser
 # windows and parks everything else. Because these blocks exist, facet is
 # OPT-IN: it manages desktops 1–2 and leaves every OTHER mac desktop
 # untouched. Edit to taste, or comment this whole sample out to fall back to

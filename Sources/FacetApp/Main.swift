@@ -181,12 +181,12 @@ enum FacetApp {
                                              section focuses its first window)
           facet section --focus LABEL        focus the section labelled LABEL
                                              (numeric = index; else label)
-          facet section --rename N LABEL     rename the Nth section's display
-                                             label (session-only; workspace →
-                                             catalog name, an isolate desktop's
-                                             synthesized section → display
-                                             override; empty LABEL reverts to the
-                                             number / config label)
+          facet section --rename N LABEL     rename the Nth WORKSPACE section's
+                                             display label (session-only, the
+                                             catalog name; empty LABEL reverts to
+                                             the number). Loud-rejected on an
+                                             isolate desktop — its sections are
+                                             synthesized from the `match`
           facet section --match N PREDICATE  set the Nth section's match to a
                                              `facet filter` predicate, live — on a
                                              isolate desktop this retargets what it

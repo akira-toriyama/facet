@@ -770,12 +770,17 @@ public struct FacetConfig: Sendable {
     {
         // EVERY decoded section is a workspace cell now — the `unassigned`
         // receptacle it used to filter out no longer decodes at all (t-6rbc:
-        // `DesktopSection.parse` drops the retired row loud). That is why the
-        // filter can go without changing a single user's workspace count: a
-        // receptacle was never part of the substrate, and now it never reaches
-        // this list. If you are tempted to make `parse` merely IGNORE the retired
-        // key instead of dropping the row, this is the line that would then
-        // silently grow every affected desktop by one workspace.
+        // `DesktopSection.parse` drops an `unassigned = true` row, loud). That is
+        // why the filter can go without changing a single user's workspace count:
+        // a receptacle was never part of the substrate, and now it never reaches
+        // this list.
+        //
+        // Both halves of that are load-bearing, in OPPOSITE directions:
+        //   • make `parse` merely IGNORE the retired key and this line silently
+        //     GROWS every affected desktop by a workspace;
+        //   • make `parse` drop the row on any `unassigned` value (not just
+        //     `true`) and it silently SHRINKS one — an `unassigned = false` row
+        //     was always an ordinary workspace cell.
         effectiveMacDesktopSectionConfigs[ordinal] ?? []
     }
 

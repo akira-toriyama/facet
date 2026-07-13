@@ -11,16 +11,26 @@ import Testing
 /// a section that could never hold anything: a permanent lie, and six modules of
 /// plumbing to keep it lit.
 ///
-/// ⚠️ THE TRAP. Deleting the key alone would NOT have been safe. An unknown key
-/// is IGNORED by decode — so a stale `unassigned = true` row would have quietly
-/// become an ordinary workspace cell, the desktop would have gained a workspace,
-/// and the user's layout would have changed under them with no message anywhere.
-/// (`workspaceSubstrateSections` used to filter receptacles OUT of the workspace
-/// list; deleting that filter is what would have promoted them.) So the key is
-/// RETIRED, not merely removed: the row is DROPPED, loudly.
+/// ⚠️ THE TRAP, and it has TWO faces — the first cut of this feature walked into
+/// the second one.
+///
+/// **Ignore the key and you GROW the substrate.** An unknown key is IGNORED by
+/// decode, so a stale `unassigned = true` row would quietly become an ordinary
+/// workspace cell: the desktop gains a workspace and the user's layout changes
+/// under them, with no message anywhere. (`workspaceSubstrateSections` used to
+/// filter receptacles OUT of the workspace list; deleting that filter is what
+/// would promote them.) So the key is RETIRED, not merely removed: the row is
+/// DROPPED, loudly.
+///
+/// **Drop it on ANY value and you SHRINK the substrate.** `unassigned = false`
+/// was never a receptacle — the old parse marked one on `true` alone — so that
+/// row was already an ordinary workspace cell, and dropping it DELETES a
+/// workspace the user has today. The value is what decides.
 ///
 /// That is the whole point of these tests — the retirement must be a no-op for
-/// the substrate. Same config text in, same workspaces out.
+/// the substrate. **Same config text in, same workspaces out**, in BOTH
+/// directions: a `true` row was never a workspace and must not become one; a
+/// `false` row always WAS one and must not stop being one.
 struct RetiredUnassignedKeyTests {
 
     /// ⬅ THE migration test. A config that still carries the receptacle (every
@@ -66,24 +76,58 @@ struct RetiredUnassignedKeyTests {
         """)
         #expect(c.diagnostics.hasErrors)
         #expect(c.diagnostics.contains {
-            $0.message.contains("`unassigned` was retired")
+            $0.message.contains("`unassigned = true` was retired")
         }, "\(c.diagnostics.map(\.message))")
     }
 
-    /// `unassigned = false` is just as retired. Letting it fall through would
-    /// conjure the same phantom workspace by the back door.
-    @Test func evenAFalseUnassignedIsRetired() {
+    /// ⬅ THE OTHER DIRECTION, and the first cut of this feature got it WRONG.
+    ///
+    /// `unassigned = false` was NEVER a receptacle: the old parse set the marker on
+    /// `true` alone, so a `false` row was already an ordinary workspace cell —
+    /// named, laid out, seeding a real workspace. Dropping it (which a
+    /// `if case .bool?` guard does, since it matches `false` too) DELETES a
+    /// workspace the user has today: the very harm the retirement exists to
+    /// prevent, in the opposite direction. And it is REACHABLE — flipping the key
+    /// the old template told you to keep is the natural way to turn the receptacle
+    /// off.
+    ///
+    /// The rule is not "the key is retired, so kill the row". It is "the same
+    /// config text must still yield the same workspaces". Only `true` was a
+    /// receptacle; only `true` drops.
+    @Test func aFalseUnassignedKeepsTheWorkspaceItAlreadyWas() {
         let c = FacetConfig.load(source: """
         [[desktop.1.section]]
         label = "Main"
 
         [[desktop.1.section]]
         unassigned = false
-        label = "Sneaky"
+        label = "Side"
+        layout = "bsp"
+        """)
+        #expect(c.macDesktopSectionConfigs[1]?.count == 2)
+        let list = c.effectiveWorkspaceList(forMacDesktopOrdinal: 1)
+        #expect(list.count == 2, "the retirement removes a CONCEPT, never a workspace")
+        #expect(list.map(\.config.name) == ["Main", "Side"])
+        #expect(list[1].config.layout == "bsp", "its layout survives too")
+        // Kept, so it is a WARNING — nothing the user wrote was discarded.
+        #expect(!c.diagnostics.hasErrors)
+        #expect(c.diagnostics.contains { $0.message.contains("stays the workspace cell") })
+    }
+
+    /// The same row as the ONLY section: on `true` the desktop decodes to nothing
+    /// (and the opt-in rule makes it hands-off — see below). On `false` it must
+    /// still be a managed desktop with one workspace, exactly as today. One boolean
+    /// literal must not flip a managed desktop to hands-off.
+    @Test func aLoneFalseUnassignedStillManagesItsDesktop() {
+        let c = FacetConfig.load(source: """
+        [[desktop.1.section]]
+        unassigned = false
+        label = "Work"
         """)
         #expect(c.macDesktopSectionConfigs[1]?.count == 1)
-        #expect(c.effectiveWorkspaceList(forMacDesktopOrdinal: 1).count == 1)
-        #expect(c.diagnostics.hasErrors)
+        #expect(c.isMacDesktopManaged(ordinal: 1))
+        #expect(c.isSectionModelActive(ordinal: 1))
+        #expect(c.effectiveWorkspaceList(forMacDesktopOrdinal: 1).map(\.config.name) == ["Work"])
     }
 
     /// A desktop whose sections were ALL receptacles now decodes to nothing at

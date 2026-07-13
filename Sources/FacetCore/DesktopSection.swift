@@ -144,35 +144,54 @@ public struct DesktopSection: Sendable, Equatable {
     /// engine. A stray `type` / `match` / `apply` (from the retired section-lens
     /// era) is IGNORED here — `config --validate` flags it via the strict schema.
     ///
-    /// ## `unassigned` is a RETIRED KEY, and the row is DROPPED
+    /// ## `unassigned` is a RETIRED KEY — and the VALUE decides what happens
     ///
     /// t-6rbc retired the orphan concept: nothing in facet could put a window in
     /// the lost-and-found receptacle, so it was a section that could only ever be
-    /// empty — a permanent lie in the tree. Deleting the key alone would NOT have
-    /// been safe: an unknown key is ignored, so a stale `unassigned = true` row
-    /// would silently PROMOTE to an ordinary workspace cell, the desktop would
-    /// gain a workspace, and the user's layout would change under them. Silence is
-    /// the worst possible answer here, so the row is dropped — which reproduces
-    /// today's effective substrate exactly, because `workspaceSubstrateSections`
-    /// already filtered receptacles out of the workspace list.
+    /// empty — a permanent lie in the tree.
     ///
-    /// Detect `unassigned = false` too: it is just as retired, and letting it fall
-    /// through would conjure the same phantom workspace by the back door.
+    /// The ONE rule this parse obeys: **the same config text must still yield the
+    /// same workspaces.** The retirement removes a concept, never a workspace. And
+    /// the value is what decides which row was which, because on the old parse the
+    /// receptacle marker was set on `true` ALONE:
+    ///
+    /// - **`unassigned = true`** — this row WAS the receptacle. It never seeded a
+    ///   workspace (`workspaceSubstrateSections` filtered it out), so DROP it: no
+    ///   workspace before, no workspace after. Dropping rather than ignoring is
+    ///   the whole point — an unknown key is IGNORED by decode, so merely deleting
+    ///   the field would have silently PROMOTED this row to an ordinary workspace
+    ///   cell, growing the desktop by one workspace and changing the user's layout
+    ///   under them. `.error`.
+    /// - **`unassigned = false`** (or any non-`true` value) — this row was NEVER a
+    ///   receptacle. It was already an ordinary workspace cell, with its own label
+    ///   and layout, and it stays one. Dropping it would DELETE a workspace the
+    ///   user has today — the exact harm above, in the opposite direction. Keep the
+    ///   row, ignore the dead key, say so. `.warning`.
+    ///
+    /// (The severity is derived by the caller from `section == nil` — a note with a
+    /// section means "kept, with a caveat".)
     static func parse(fromTOMLRow t: [String: TOMLValue])
         -> (section: DesktopSection?, note: String?)
     {
-        if case .bool? = t["unassigned"] {
-            return (nil, "`unassigned` was retired (t-6rbc) — no window can ever "
-                + "reach the lost-and-found receptacle, so it could only ever be an "
-                + "empty section. DELETE this section block; keeping it would add a "
-                + "workspace cell and change your layout")
+        var note: String? = nil
+        if let raw = t["unassigned"] {
+            if case .bool(true) = raw {
+                return (nil, "`unassigned = true` was retired (t-6rbc) — no window "
+                    + "can ever reach the lost-and-found receptacle, so it could "
+                    + "only ever be an empty section. DELETE this section block; "
+                    + "keeping the key would turn this row into a workspace cell "
+                    + "and change your layout")
+            }
+            note = "`unassigned` was retired (t-6rbc) and is IGNORED here — but it "
+                + "was never a receptacle unless it was `true`, so this row stays "
+                + "the workspace cell it already is. Just delete the key"
         }
         let label: String = {
             if case .string(let s)? = t["label"] { return s } else { return "" }
         }()
         var layout: String? = nil
         if case .string(let l)? = t["layout"], !l.isEmpty { layout = l }
-        return (DesktopSection(label: label, layout: layout), nil)
+        return (DesktopSection(label: label, layout: layout), note)
     }
 }
 
