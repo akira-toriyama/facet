@@ -1274,19 +1274,34 @@ final class Controller: NSObject {
         // `lastSections`), so the tree consumes the SAME
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
-        let contentH: CGFloat
+        // #18/F1 render-swap (t-tsxg Task 8): the SwiftUI `TreeContentView` (on
+        // sill's `ThemedListView`, hosted by PanelHost) is now the render
+        // surface. We still run `sidebarView.update(...)` for its LIVE side
+        // effects — the skeleton auto-clear, `kbNav` selection resolve, and the
+        // `searching` state that gates the search band — because facet-2 (DnD)
+        // and facet-3 (live search) re-wire onto SidebarView before it's
+        // retired; its returned content-height is unused (the panel auto-sizes
+        // from the tree's `ListMetrics`). The tree itself renders from
+        // `treeVM.apply`.
+        let sections: [ProjectedSection]
         if renderMode.rendersSections {
-            contentH = sidebarView.update(sections: lastSections,
-                                          workspaces: wss,
-                                          isolateDesktop: isIsolateDesktop,
-                                          titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+            _ = sidebarView.update(sections: lastSections,
+                                   workspaces: wss,
+                                   isolateDesktop: isIsolateDesktop,
+                                   titles: titles,
+                                   macDesktop: macDesktopOrdinal)
+            sections = lastSections
         } else {
-            contentH = sidebarView.update(displayWss, titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+            _ = sidebarView.update(displayWss, titles: titles,
+                                   macDesktop: macDesktopOrdinal)
+            // Degrade → 1:1 workspace sections (the same shape the tree's
+            // section path feeds, minus config sections).
+            sections = FilterProjection.project(
+                workspaces: displayWss, sections: []).sections
         }
-        panelHost.layout(contentHeight: contentH,
-                         searching: sidebarView.searching)
+        panelHost.treeVM.apply(sections: sections)
+        panelHost.setHandleOrdinal(macDesktopOrdinal)
+        panelHost.layout(searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
         // Deferred activate for the `--loading` show: the skeleton has now
         // given way to the new mac desktop's real content (`update`

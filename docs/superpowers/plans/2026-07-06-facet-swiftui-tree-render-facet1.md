@@ -792,21 +792,27 @@ git commit -m ":sparkles: feat(tree): TreeRowSpec→ListItem mapping + ThemedLis
 
 - [ ] **Step 2: Sizing — do NOT use `NSHostingView.fittingSize`.** sill's `ThemedListView` root is a greedy SwiftUI `ScrollView` (`ThemedListView.swift:253`) that fills its scroll axis and never self-reports a content-fitting height, so `fittingSize.height` would collapse the Spotlight-style shrink-to-content panel. Instead, in `PanelHost.layout`, compute the intended content height by **summing sill's public `ListMetrics.forDensity` over `treeVM.listItems`** — map each `ListItem.kind` to its metric (bare `sectionHeader` → 28 / header with subtitle → 40 / single-line window row → 30 / 2-line window row with `secondary` → 46) and sum. Panel height = `min(sum + chrome, screenMaxHeight)` (reuse the existing screen-relative clamp); when the sum exceeds the clamp, `ThemedListView` scrolls internally. Remove `FlippedClipView`/`ThemedScroller` usages. **(This one line is the panel's core geometry — promoted from a throwaway; verify the exact `ListMetrics` field names/values against sill source before summing.)** (spec §4.1.)
 
-- [ ] **Step 3: Feed the view-model from `Controller.apply`.** Replace the two `sidebarView.update(...)` calls in `Controller.apply` (find them by symbol — around `Controller.swift:1210`, NOT the stale `1367-1377`). **The gate has TWO section-model arms** — a **lens desktop** is *not* section-model-active (it has no `[[desktop.N.section]]`), yet its 1–2 synthesized sections are already in `lastSections` (t-0sbm), so it MUST take the section arm or its tree renders the by-workspace degrade instead:
+- [ ] **Step 3: Feed the view-model from `Controller.apply`.** Replace the two `sidebarView.update(...)` calls in `Controller.apply` (find them by symbol — around `Controller.swift:1210`, NOT the stale `1367-1377`).
+  > **⚠️ 2026-07-16 correction (facet#418, lens→isolate rename)**: the two-arm gate this step
+  > originally spelled — `isSectionModelActive(…) || isLensDesktop` — is **superseded**. #418
+  > introduced `FacetCore.DesktopRenderMode` exactly because callers kept hand-writing (and
+  > forgetting) that disjunction; `Controller.apply` now computes
+  > `let renderMode = config.desktopRenderMode(ordinal: macDesktopOrdinal)` and the section
+  > gate is **`renderMode.rendersSections`** (true for a section-configured workspace desktop
+  > AND an isolate desktop — the retired "lens desktop"). Use THAT gate:
 
 ```swift
-panelHost.treeVM.palette = pal
-if config.isSectionModelActive(ordinal: macDesktopOrdinal) || isLensDesktop {
-    panelHost.treeVM.apply(sections: lastSections)        // incl. a lens desktop
+if renderMode.rendersSections {
+    panelHost.treeVM.apply(sections: lastSections)        // incl. an isolate desktop
 } else {
     panelHost.treeVM.apply(sections: FilterProjection.project(
         workspaces: displayWss, sections: []).sections)   // degrade → 1:1 sections
 }
 ```
 
-Also carry the **`isLensDesktop` flag** into the view-model / host (the AppKit call passes it as `sidebarView.update(… lensDesktop: isLensDesktop …)`): a lens desktop's holding section (`.unassigned`) rows are **inert** — no click focus, no drag source (t-63h2, `SidebarView+Drag.isLensHoldingRow`). Without it the SwiftUI tree would focus a parked window on click, which is an invisible no-op.
+The isolate desktop's holding-section rows are **inert** — no click focus, no drag source (t-63h2; since #419 the AppKit path asks the SECTION what it is — `SidebarView+Drag.isHoldingRow(group:)` keyed off the section type, no `isLensDesktop` flag survives). The SwiftUI tree gets the same answer from `ProjectedSection.sectionType` when the activation callbacks land (Task 12); until then the tree's callbacks are no-ops, so Task 8 needs no inert-row guard.
 
-(Keep the `contentH`-based `panelHost.layout(...)` call, now driven by the summed `ListMetrics` height from Step 2.)
+(The `panelHost.layout(...)` call stays, but drops its `contentHeight:` argument — auto-height is derived inside `PanelHost` from the summed `ListMetrics` of Step 2, exposed as `TreeViewModel.rowContentHeight`.)
 
 - [ ] **Step 4: Build.** Run: `swift build`
   Expected: clean.
