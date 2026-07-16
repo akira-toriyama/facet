@@ -259,6 +259,15 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// live — there is nothing to commit or revert).
     private var lastApplied = ""
 
+    /// The CONFIG match this desktop falls back to when the override is
+    /// cleared (empty for the rename panel). The picker's uncheck-all floor:
+    /// applying `""` reverts to the config match, so the panel RE-SYNCS its
+    /// field + checks to this — the checklist mirrors the EFFECTIVE match at
+    /// all times and never shows "nothing selected" while the config match
+    /// keeps tiling (トミー, 2026-07-16: "@web を外しても Chrome が残る" —
+    /// it must LOOK that way too, with a message saying why).
+    private var configMatch = ""
+
     private var onCommitCB: ((String) -> Void)?
     private var onCloseCB: (() -> Void)?
     /// t-0020 (Option B): when set, the edited text is VALIDATED — live (each
@@ -302,7 +311,8 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
                      onCommit: @escaping (String) -> Void,
                      onClose: @escaping () -> Void,
                      validate: ((String) -> SectionEditValidation)? = nil,
-                     aliases: [String] = []) {
+                     aliases: [String] = [],
+                     configMatch: String = "") {
         close()
         closing = false
         self.onCommitCB = onCommit
@@ -409,6 +419,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         self.panel = pnl
         self.field = f
         self.lastApplied = initialText
+        self.configMatch = configMatch
         refreshAliasChecks()
 
         pnl.makeKeyAndOrderFront(nil)
@@ -506,6 +517,13 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// tag-panel model). A composed OR of defined aliases is always `.ok`;
     /// the non-`.ok` verdicts can only come from residual hand-written
     /// terms, and then the message shows and nothing is applied.
+    ///
+    /// Applying `""` (uncheck-all) is the REVERT gesture: the override is
+    /// dropped and the CONFIG match takes over — so the panel re-syncs its
+    /// field + checks to `configMatch` and says so. Without this the
+    /// checklist showed "nothing selected" while the config match kept
+    /// tiling — a lie by omission (the config default has no uncheck; the
+    /// floor below the checkboxes is config.toml).
     private func applyLive(_ text: String) {
         if let validate = onValidateCB {
             let verdict = validate(text)
@@ -514,9 +532,16 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
                 return
             }
         }
-        showValidation(.ok)
         lastApplied = text
         onCommitCB?(text)
+        if text.isEmpty, !configMatch.isEmpty {
+            field?.stringValue = configMatch
+            lastApplied = configMatch
+            showValidation(.warn("reverted to the config match"))
+            refreshAliasChecks()
+        } else {
+            showValidation(.ok)
+        }
     }
 
     /// Re-derive the checklist's checked set from the CURRENT field text
