@@ -151,6 +151,8 @@ let package = Package(
                     dependencies: ["FacetAdapterNative", "FacetCore"]),
         .testTarget(name: "FacetAccessibilityTests",
                     dependencies: ["FacetAccessibility", "FacetCore"]),
+        .testTarget(name: "FacetViewTests",
+                    dependencies: ["FacetView"]),
         .testTarget(name: "FacetViewGridTests",
                     dependencies: ["FacetViewGrid"]),
         .testTarget(name: "FacetViewTreeTests",

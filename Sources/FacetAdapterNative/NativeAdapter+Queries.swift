@@ -486,6 +486,19 @@ extension NativeAdapter {
                 inWorkspaceNamed: catalog.workspaceName(catalog.activeIndex),
                 match: iso,
                 sticky: catalog.everywhereWindows)
+            // Forensic breadcrumb (the @dev-promotion hunt, t-kywh): the
+            // EFFECTIVE match + who it parks — but only when the park is
+            // about to CHANGE, so a settled isolate desktop stays quiet.
+            if Set(desired) != catalog.isolateParked {
+                Log.debug("isolate-park: ord=\(ord.map(String.init) ?? "nil") "
+                    + "match=\"\(matchStr)\" → \(iso) "
+                    + "windows=[\(activeWindows.map { "\($0.id.serverID):\($0.appName)" }.joined(separator: " "))] "
+                    + "desired=[\(desired.map { String($0.serverID) }.joined(separator: " "))]")
+            }
+        } else if let matchStr = isolateMatch {
+            Log.debug("isolate-park: ord=\(ord.map(String.init) ?? "nil") "
+                + "match=\"\(matchStr)\" did not parse/resolve — parking nothing "
+                + "(aliases=\(config.effectiveFilterAliases.keys.sorted()))")
         }
         // Fast path: idle when nothing is parked and nothing wants parking.
         guard !desired.isEmpty || !catalog.isolateParked.isEmpty else { return }
