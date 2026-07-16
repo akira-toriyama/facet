@@ -212,6 +212,95 @@ extension FacetConfig {
         return out
     }
 
+    /// Build the `[alias]` filter-alias table (t-5312) from the raw TOML
+    /// text's flat `[alias]` table: lowercase kebab NAME → verbatim `facet
+    /// filter` expression, referenced as `@name` anywhere a filter appears.
+    /// Every unusable entry is DROPPED LOUD (`.error` — wrote-it-and-lost-it):
+    ///   • a non-kebab name (`[a-z][a-z0-9-]*` — refs lowercase, so an
+    ///     uppercase definition could never be told apart from its refs);
+    ///   • a non-string value;
+    ///   • an EMPTY / whitespace expression (it would parse to `.all` and a
+    ///     stray `@name` would silently match EVERYTHING);
+    ///   • an expression that doesn't parse (caret included);
+    ///   • an entry that doesn't RESOLVE against the surviving table —
+    ///     undefined reference or reference cycle. Dropping cascades (an
+    ///     alias built on a dropped alias drops too, each with its own
+    ///     diagnostic), so the returned table is fully resolvable — the
+    ///     invariant every consumer leans on.
+    /// A surviving entry referencing an unknown FIELD is kept with a
+    /// `.warning` (valid-but-matches-nothing — the filter philosophy).
+    public static func decodeFilterAliases(fromTOML text: String,
+                                           diagnostics diags: inout [ConfigDiagnostic])
+        -> [String: String]
+    {
+        guard let table = parseTOMLSubset(text)["alias"] else { return [:] }
+        var out: [String: String] = [:]
+        for name in table.keys.sorted() {
+            let at = "[alias] \(name)"
+            guard isValidFilterAliasName(name) else {
+                diags.append(.init(.error, "config: \(at): not a kebab-case alias "
+                    + "name ([a-z][a-z0-9-]*) — dropping it (references are "
+                    + "lowercase `@name`, so it could never be addressed)"))
+                continue
+            }
+            guard case .string(let expr)? = table[name] else {
+                diags.append(.init(.error, "config: \(at): expected a string "
+                    + "(a `facet filter` expression) — dropping it"))
+                continue
+            }
+            guard !expr.trimmingCharacters(in: .whitespaces).isEmpty else {
+                diags.append(.init(.error, "config: \(at): empty expression — an "
+                    + "empty filter matches EVERYTHING, so a stray `@\(name)` "
+                    + "would silently select every window; dropping it"))
+                continue
+            }
+            switch classifyMatchPredicate(expr, aliases: [:]) {
+            case .malformed(let error):
+                let caret = error.caret(in: expr)
+                    .split(separator: "\n", omittingEmptySubsequences: false)
+                    .map { "  " + $0 }.joined(separator: "\n")
+                diags.append(.init(.error, "config: \(at): the expression does "
+                    + "not parse — dropping it\n\(caret)"))
+                continue
+            case .unknownField(let fields):
+                diags.append(.init(.warning, "config: \(at) \"\(expr)\": unknown "
+                    + "field\(fields.count == 1 ? "" : "s") "
+                    + fields.joined(separator: ", ")
+                    + " — the alias is valid but matches nothing"))
+            case .ok, .undefinedAlias, .aliasCycle:
+                break   // alias-vs-alias verdicts come from the fixpoint below
+            }
+            out[name] = expr
+        }
+        // Fixpoint: drop entries that don't fully resolve against the
+        // survivors. Verdicts are taken against the PASS-START table, so both
+        // members of a cycle report the CYCLE (not "undefined" because the
+        // sibling happened to drop first); a later pass then catches the
+        // cascade (an alias referencing a dropped one → undefined).
+        while true {
+            let snapshot = out
+            for name in snapshot.keys.sorted() {
+                guard case .success(let filter) = FacetFilter.parse(snapshot[name]!)
+                else { continue }   // unreachable — parse-checked above
+                let res = filter.resolvingAliases(snapshot)
+                if !res.cycles.isEmpty {
+                    diags.append(.init(.error, "config: [alias] \(name): filter "
+                        + "alias cycle: " + res.cycles.joined(separator: "; ")
+                        + " — dropping it"))
+                    out.removeValue(forKey: name)
+                } else if !res.undefined.isEmpty {
+                    diags.append(.init(.error, "config: [alias] \(name): undefined "
+                        + "filter alias "
+                        + res.undefined.map { "'@\($0)'" }.joined(separator: ", ")
+                        + " — dropping it"))
+                    out.removeValue(forKey: name)
+                }
+            }
+            if out.count == snapshot.count { break }
+        }
+        return out
+    }
+
     /// Build `[Rule]` from the raw TOML text's `[[rule]]` array-of-tables
     /// (the Phase 3 adopt-rules — #282/#286). Each table: `match` (a facet
     /// filter WHERE-clause string) + the FLAT apply keys (`workspace` /
@@ -222,15 +311,22 @@ extension FacetConfig {
     /// nothing), is DROPPED — a bad rule never breaks the others. The `match`
     /// GRAMMAR is NOT validated here (parse-only stays total); the consumer
     /// compiles it loud + non-fatal at eval time, like an isolate desktop's `match`.
-    public static func decodeRuleSections(fromTOML text: String) -> [Rule] {
+    public static func decodeRuleSections(fromTOML text: String,
+                                          aliases: [String: String] = [:]) -> [Rule] {
         var d: [ConfigDiagnostic] = []
-        return decodeRuleSections(fromTOML: text, diagnostics: &d)
+        return decodeRuleSections(fromTOML: text, aliases: aliases, diagnostics: &d)
     }
 
     /// `decodeRuleSections`, reporting each DROPPED table (t-r5yz). Both drops
     /// were previously not even logged — a `[[rule]]` with a typo'd apply key
     /// vanished without a trace, and the user's windows silently never adopted.
+    /// `aliases` is the already-decoded `[alias]` table (t-5312): a `match`
+    /// whose `@name` reference doesn't resolve DROPS the rule loud (unlike a
+    /// malformed match, which survives as documented below — an alias ref is
+    /// a symbol-table lookup, and a rule bound to a missing symbol can only
+    /// ever adopt nothing).
     public static func decodeRuleSections(fromTOML text: String,
+                                          aliases: [String: String] = [:],
                                           diagnostics diags: inout [ConfigDiagnostic])
         -> [Rule]
     {
@@ -265,10 +361,28 @@ extension FacetConfig {
                     + "master) — the rule would do nothing; dropping it"))
                 continue
             }
+            // t-5312: an unresolvable alias reference DROPS the rule (see the
+            // doc comment). Checked before the grammar diagnostics so one
+            // problem yields one message.
+            switch classifyMatchPredicate(match, aliases: aliases) {
+            case .undefinedAlias(let names):
+                diags.append(.init(.error, "config: \(at) (match \"\(match)\"): "
+                    + "undefined filter alias "
+                    + names.map { "'@\($0)'" }.joined(separator: ", ")
+                    + " — dropping the rule"))
+                continue
+            case .aliasCycle(let chains):
+                diags.append(.init(.error, "config: \(at) (match \"\(match)\"): "
+                    + "filter alias cycle: " + chains.joined(separator: "; ")
+                    + " — dropping the rule"))
+                continue
+            case .ok, .unknownField, .malformed:
+                break
+            }
             // Parse-only stays TOTAL: a malformed `match` is stored verbatim and
             // the rule LIVES (`RuleDecodeTests.matchGrammarNotValidatedAtDecode`).
             // We only say so out loud.
-            diags += matchDiagnostics(for: match, at: "\(at) match")
+            diags += matchDiagnostics(for: match, at: "\(at) match", aliases: aliases)
             out.append(Rule(match: match, apply: apply))
         }
         return out
@@ -308,10 +422,14 @@ extension FacetConfig {
     /// tiled everything — and today it tiles nothing. A user who wrote that gets a
     /// message, not a silently empty desktop. (`[[rule]]` matches are unaffected:
     /// they run on workspace desktops, where `workspace` is a real field.)
-    static func isolateWorkspaceFieldDiagnostics(match: String, at where_: String)
+    static func isolateWorkspaceFieldDiagnostics(match: String, at where_: String,
+                                                 aliases: [String: String] = [:])
         -> [ConfigDiagnostic]
     {
-        guard case .success(let filter) = FacetFilter.parse(match),
+        // Resolve alias refs first (t-5312) — an alias can smuggle the
+        // `workspace` field in just as well as writing it inline.
+        guard case .success(let parsed) = FacetFilter.parse(match),
+              case let filter = parsed.resolvingAliases(aliases).filter,
               filter.fieldsReferenced().contains("workspace")
         else { return [] }
         return [.init(.error, "config: \(where_) \"\(match)\": an isolate desktop is "
@@ -323,16 +441,26 @@ extension FacetConfig {
             + "`label`, which made a rename able to silently kill the desktop")]
     }
 
-    static func matchDiagnostics(for match: String, at where_: String)
+    static func matchDiagnostics(for match: String, at where_: String,
+                                 aliases: [String: String] = [:])
         -> [ConfigDiagnostic]
     {
-        switch classifyMatchPredicate(match) {
+        switch classifyMatchPredicate(match, aliases: aliases) {
         case .ok:
             return []
         case .unknownField(let fields):
             return [.init(.warning, "config: \(where_) \"\(match)\": unknown field"
                 + "\(fields.count == 1 ? "" : "s") \(fields.joined(separator: ", "))"
                 + " — the predicate is valid but matches nothing")]
+        // Normally unreachable from the config decoders — an unresolvable
+        // alias DROPS its block before `matchDiagnostics` runs — but the
+        // classifier is shared, so name the problem rather than default it.
+        case .undefinedAlias(let names):
+            return [.init(.error, "config: \(where_) \"\(match)\": undefined filter "
+                + "alias " + names.map { "'@\($0)'" }.joined(separator: ", "))]
+        case .aliasCycle(let chains):
+            return [.init(.error, "config: \(where_) \"\(match)\": filter alias "
+                + "cycle: " + chains.joined(separator: "; "))]
         case .malformed(let error):
             // Indent BOTH lines of the caret, or the `^` lands a column short.
             let caret = error.caret(in: match)
@@ -372,11 +500,12 @@ extension FacetConfig {
     /// array-of-tables `.arrays` the section decoders read). A table with an
     /// absent / unknown `type`, or an isolate desktop missing `match`, is DROPPED LOUD.
     /// Successor to the retired `[[desktop.N.tab]]` board decode.
-    public static func decodeDesktopTables(fromTOML text: String)
+    public static func decodeDesktopTables(fromTOML text: String,
+                                           aliases: [String: String] = [:])
         -> [Int: DesktopMeta]
     {
         var d: [ConfigDiagnostic] = []
-        return decodeDesktopTables(fromTOML: text, diagnostics: &d)
+        return decodeDesktopTables(fromTOML: text, aliases: aliases, diagnostics: &d)
     }
 
     /// `decodeDesktopTables`, reporting every dropped table (t-r5yz).
@@ -389,6 +518,7 @@ extension FacetConfig {
     /// survives deterministic; the collision itself is now reported LOUD rather
     /// than being a coin flip that changed between runs.
     public static func decodeDesktopTables(fromTOML text: String,
+                                           aliases: [String: String] = [:],
                                            diagnostics diags: inout [ConfigDiagnostic])
         -> [Int: DesktopMeta]
     {
@@ -431,6 +561,31 @@ extension FacetConfig {
             // Worse, the collision message would then name a "survivor" that did
             // not survive.
             guard let meta else { continue }
+            // t-5312: an isolate `match` whose alias reference doesn't RESOLVE
+            // drops the whole table — BEFORE the collision bookkeeping (a
+            // dropped table claims nothing). A malformed match stays a DEAD
+            // desktop (below); an unresolved alias must not: degrading it to
+            // never-match would anchor-park EVERY window on that desktop,
+            // while a drop is hands-off — the same posture as an isolate
+            // desktop with no `match` at all.
+            if meta.type == .isolate {
+                switch classifyMatchPredicate(meta.match, aliases: aliases) {
+                case .undefinedAlias(let names):
+                    diags.append(.init(.error, "config: [\(header)] match "
+                        + "\"\(meta.match)\": undefined filter alias "
+                        + names.map { "'@\($0)'" }.joined(separator: ", ")
+                        + " — dropping the desktop"))
+                    continue
+                case .aliasCycle(let chains):
+                    diags.append(.init(.error, "config: [\(header)] match "
+                        + "\"\(meta.match)\": filter alias cycle: "
+                        + chains.joined(separator: "; ")
+                        + " — dropping the desktop"))
+                    continue
+                case .ok, .unknownField, .malformed:
+                    break
+                }
+            }
             if let prior = spellingOf[ordinal] {
                 diags.append(.init(.error, "config: [\(header)] and [\(prior)] both "
                     + "name mac desktop \(ordinal) — one desktop is one table, so "
@@ -443,9 +598,10 @@ extension FacetConfig {
             // is in hand (see `matchDiagnostics`). The table still decodes: a
             // malformed match is not a drop, it is a DEAD desktop.
             if meta.type == .isolate {
-                diags += matchDiagnostics(for: meta.match, at: "[\(header)] match")
+                diags += matchDiagnostics(for: meta.match, at: "[\(header)] match",
+                                          aliases: aliases)
                 diags += isolateWorkspaceFieldDiagnostics(
-                    match: meta.match, at: "[\(header)] match")
+                    match: meta.match, at: "[\(header)] match", aliases: aliases)
             }
         }
         return out
@@ -569,11 +725,16 @@ extension FacetConfig {
     public static func load(source text: String) -> FacetConfig {
         var diags: [ConfigDiagnostic] = []
         var c = FacetConfig.from(toml: parseTOMLSubset(text))
+        // `[alias]` decodes FIRST (t-5312): the desktop / rule decoders below
+        // resolve their `match` predicates against it.
+        let aliases = decodeFilterAliases(fromTOML: text, diagnostics: &diags)
+        if !aliases.isEmpty { c.filterAliasConfigs = aliases }
         let rules = exclusionRules(fromTOML: text, diagnostics: &diags)
         if !rules.isEmpty { c.exclusionRules = rules }
         let sections = decodeDesktopSectionSections(fromTOML: text, diagnostics: &diags)
         if !sections.isEmpty { c.macDesktopSectionConfigs = sections }
-        let metas = decodeDesktopTables(fromTOML: text, diagnostics: &diags)
+        let metas = decodeDesktopTables(fromTOML: text, aliases: aliases,
+                                        diagnostics: &diags)
         if !metas.isEmpty { c.macDesktopMetaConfigs = metas }
         for header in retiredBoardHeaders(inTOML: text) {
             diags.append(.init(.error, "config: [[\(header)]] — boards were retired "
@@ -591,7 +752,8 @@ extension FacetConfig {
                 + "also declares [[desktop.\(ordinal).section]] — an isolate desktop "
                 + "has no sections; dropping them"))
         }
-        let adoptRules = decodeRuleSections(fromTOML: text, diagnostics: &diags)
+        let adoptRules = decodeRuleSections(fromTOML: text, aliases: aliases,
+                                            diagnostics: &diags)
         if !adoptRules.isEmpty { c.rules = adoptRules }
         // A1: run the STRICT schema validate on the LOAD path and RECORD any
         // violations as warnings — load still clamps/drops (never rejects).

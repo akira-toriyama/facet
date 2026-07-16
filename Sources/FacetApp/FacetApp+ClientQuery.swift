@@ -173,7 +173,14 @@ extension FacetApp {
         // Apply the filter. The pure decision (parse → degrade-or-filter +
         // diagnostics) lives in FacetCore (`QueryFilter`, unit-tested);
         // this shell only renders the diagnostics + emits the result.
-        let outcome = QueryFilter.apply(expr, to: entries)
+        // `@name` filter-alias refs resolve against the config `[alias]`
+        // table, which the CLIENT reads itself (t-5312) — `query` is a
+        // client-side post-filter over the on-disk array, so there is no
+        // server round-trip to ask; the theoretical read-skew window right
+        // after a config edit is accepted.
+        let outcome = QueryFilter.apply(
+            expr, to: entries,
+            aliases: FacetConfig.load().effectiveFilterAliases)
         if let caret = outcome.parseErrorCaret {
             let msg = "facet query --filter:\n\(caret)\n"
                 + "       showing all windows (filter ignored)\n"
@@ -184,6 +191,20 @@ extension FacetApp {
             let known = FacetFilter.knownFields.sorted().joined(separator: ", ")
             let msg = "facet query --filter: unknown field(s) "
                 + "\(bad) — they match nothing. Known fields: \(known)\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+        }
+        if !outcome.undefinedAliases.isEmpty {
+            let bad = outcome.undefinedAliases.map { "@\($0)" }
+                .joined(separator: ", ")
+            let msg = "facet query --filter: undefined filter alias(es) "
+                + "\(bad) — they match nothing (define them under [alias] "
+                + "in config.toml)\n"
+            FileHandle.standardError.write(Data(msg.utf8))
+        }
+        if !outcome.aliasCycles.isEmpty {
+            let msg = "facet query --filter: filter alias cycle: "
+                + outcome.aliasCycles.joined(separator: "; ")
+                + " — the cyclic reference matches nothing\n"
             FileHandle.standardError.write(Data(msg.utf8))
         }
         // Re-emit in the on-disk shape (pretty + sorted keys), so a

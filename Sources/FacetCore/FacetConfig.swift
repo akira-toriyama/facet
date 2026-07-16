@@ -228,6 +228,14 @@ public struct FacetConfig: Sendable {
     /// boards — a mac desktop is typed directly rather than grouped.
     public var macDesktopMetaConfigs: [Int: DesktopMeta] = [:]
 
+    /// `[alias]` filter aliases (t-5312) — lowercase kebab name → verbatim
+    /// `facet filter` expression, referenced as `@name` anywhere a filter
+    /// appears. Decode (`decodeFilterAliases`) already dropped invalid
+    /// names / empty / unparseable / unresolvable entries LOUD, so every
+    /// entry here fully resolves. `nil` when the config declares none.
+    /// Read through `effectiveFilterAliases`.
+    public var filterAliasConfigs: [String: String]?
+
     /// `[[exclude]]` rules — windows matching one are floated or
     /// ignored instead of tiled (unnamed popups, auxiliary panels).
     /// `nil` when the config specifies none. Parsed from the raw TOML
@@ -809,6 +817,10 @@ public struct FacetConfig: Sendable {
     /// Effective `[[rule]]` adopt-rule set (empty when none configured).
     /// Always read through this, never the raw Optional.
     public var effectiveRules: [Rule] { rules ?? [] }
+
+    /// Effective `[alias]` filter-alias table (empty when none configured).
+    /// Always read through this, never the raw Optional.
+    public var effectiveFilterAliases: [String: String] { filterAliasConfigs ?? [:] }
 
     /// Effective `[[desktop.N.section]]` definitions (the section model).
     /// Always read through this, never the raw dict.

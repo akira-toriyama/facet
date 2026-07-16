@@ -527,6 +527,33 @@ action = "ignore"
 
 
 # -----------------------------------------------------------------
+# Filter aliases  [alias]
+# -----------------------------------------------------------------
+# Name a facet-filter expression once, reference it as `@NAME` anywhere
+# a filter appears: `[desktop.N] match`, `[[rule]] match`,
+# `facet section --match`, `facet query --filter`.
+#
+#   - Names are kebab-case ([a-z][a-z0-9-]*); references are
+#     case-insensitive. Aliases may reference other aliases; a cycle is
+#     rejected loudly. An empty expression is rejected too (it would
+#     match EVERYTHING).
+#   - A `match` referencing an alias that doesn't exist DROPS that
+#     desktop / rule with an error (`facet config --validate` exits 1)
+#     rather than silently matching nothing.
+#   - Display-name inheritance: an isolate desktop whose `match` is a
+#     single alias reference and whose `label` is omitted shows the
+#     alias name as its section header.
+#   - Definitions live HERE only (hot-reload picks up edits); the CLI
+#     and GUI consume them but never define them.
+#
+# Example — uncomment / adapt:
+#
+# [alias]
+# web = 'app~=Chrome or app~=Safari or app~=Firefox'
+# work = '@web or app=Slack'         # nesting is fine
+
+
+# -----------------------------------------------------------------
 # Adopt-rules  [[rule]]   (the declarative successor to [[assign]])
 # -----------------------------------------------------------------
 # When a NEW window matches `match` (a facet filter WHERE-clause), the
@@ -714,6 +741,8 @@ layout = "stack"
 # CONCRETE match, never '') with bsp, parks everything else, and shows the
 # parked ones as a second "holding" tree section. Retarget live with
 # `facet section --match 1 "app~=Slack"` or the tree header's "Edit match".
+# With an [alias] defined (above), `match = '@web'` works here too — and
+# with `label` omitted the section header shows the alias name.
 [desktop.2]
 type = "isolate"
 label = "Web"

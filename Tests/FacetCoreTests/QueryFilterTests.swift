@@ -55,6 +55,33 @@ struct QueryFilterTests {
         #expect(out.parseErrorCaret == nil)
     }
 
+    // MARK: filter aliases (t-5312) — warn + no-match, the unknown-field twin
+
+    @Test func aliasRefResolvesAgainstTheTable() {
+        let out = QueryFilter.apply("@web", to: fixture(),
+                                    aliases: ["web": "tag~=web or app=Chrome"])
+        #expect(out.entries.map(\.id) == [1, 2])
+        #expect(out.undefinedAliases == [])
+        #expect(out.aliasCycles == [])
+    }
+
+    @Test func undefinedAliasWarnsAndNoMatchesThatRefOnly() {
+        // Non-fatal: the ref matches nothing, the REST of the expression
+        // still filters — exactly the unknown-field treatment.
+        let out = QueryFilter.apply("@ghost or app=Chrome", to: fixture(),
+                                    aliases: [:])
+        #expect(out.entries.map(\.id) == [2])
+        #expect(out.undefinedAliases == ["ghost"])
+        #expect(out.parseErrorCaret == nil)
+    }
+
+    @Test func aliasCycleWarnsAndNoMatches() {
+        let out = QueryFilter.apply("@a", to: fixture(),
+                                    aliases: ["a": "@b", "b": "@a"])
+        #expect(out.entries.isEmpty)
+        #expect(out.aliasCycles == ["@a → @b → @a"])
+    }
+
     @Test func emptyExprKeepsEverything() {
         let out = QueryFilter.apply("   ", to: fixture())   // → .all
         #expect(out.entries.map(\.id) == [1, 2, 3])

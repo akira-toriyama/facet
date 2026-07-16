@@ -873,10 +873,12 @@ extension Controller {
         } else {
             // Classify, but store VERBATIM — `FilterProjection` compiles the same
             // string at projection time. Runtime `--match` is STRICT: a malformed
-            // predicate OR an unknown FIELD is a loud reject that keeps the working
-            // match (a typo'd field always matches nothing — no legitimate use).
+            // predicate, an unknown FIELD, or an unresolvable filter ALIAS
+            // (t-5312) is a loud reject that keeps the working match (a typo'd
+            // field / alias always matches nothing — no legitimate use).
             // Same verdict the client + the GUI editor apply.
-            switch classifyMatchPredicate(predicate) {
+            switch classifyMatchPredicate(predicate,
+                                          aliases: config.effectiveFilterAliases) {
             case .malformed(let error):
                 setError("section --match \(n): " + error.caret(in: predicate))
                 scheduleReconcile(after: 0.05)
@@ -884,6 +886,17 @@ extension Controller {
             case .unknownField(let fields):
                 setError("section --match \(n): unknown field: "
                     + "\(fields.joined(separator: ", ")) — matches nothing")
+                scheduleReconcile(after: 0.05)
+                return
+            case .undefinedAlias(let names):
+                setError("section --match \(n): undefined filter alias: "
+                    + names.map { "@\($0)" }.joined(separator: ", ")
+                    + " — matches nothing")
+                scheduleReconcile(after: 0.05)
+                return
+            case .aliasCycle(let chains):
+                setError("section --match \(n): filter alias cycle: "
+                    + chains.joined(separator: "; "))
                 scheduleReconcile(after: 0.05)
                 return
             case .ok:

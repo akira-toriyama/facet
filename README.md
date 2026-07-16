@@ -435,6 +435,16 @@ Frequently-touched keys:
   every matching rule's facets. The declarative successor to the
   retired `[[assign]]`. A malformed `match` is loud + non-fatal (that
   rule is skipped; the rest still run).
+- `[alias]` filter aliases — name a filter expression once
+  (`web = 'app~=Chrome or app~=Safari'`) and reference it as `@web`
+  anywhere a filter appears: `[desktop.N] match`, `[[rule]] match`,
+  `facet section --match`, `facet query --filter`. Names are
+  kebab-case, references case-insensitive, nesting allowed (cycles are
+  rejected loudly). A `match` referencing a missing alias drops that
+  desktop / rule with an error (`config --validate` exits 1) — never a
+  silent never-match. An isolate desktop whose `match` is a single
+  alias reference and whose `label` is omitted shows the alias name as
+  its section header.
 - `[[desktop.N.section]]` blocks — the per-mac-desktop section model
   (`N` = the mac desktop's Mission Control position). An ordered list of
   **workspace spatial cells** describes that desktop; each is

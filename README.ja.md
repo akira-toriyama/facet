@@ -405,6 +405,15 @@ opt-in すればセッション編集を facet が保存する。
   (全 mac desktop に発火)、 宣言順に評価され窓は一致した全ルールの facet を
   受け取る。 廃止された `[[assign]]` の宣言的後継。 `match` が不正なら loud +
   非 fatal (そのルールのみスキップ・他は走る)。
+- `[alias]` filter alias — filter 式に一度だけ名前を付け
+  (`web = 'app~=Chrome or app~=Safari'`)、 filter が現れる全ての場所
+  (`[desktop.N] match`・`[[rule]] match`・`facet section --match`・
+  `facet query --filter`) で `@web` として参照。 名前は kebab-case・
+  参照は大小無視・ネスト可 (循環は loud に拒否)。 存在しない alias を
+  参照する `match` はその desktop / rule ごと error で drop
+  (`config --validate` が exit 1) — 黙って never-match には決してしない。
+  isolate desktop の `match` が単一の alias 参照だけで `label` 省略なら
+  section ヘッダに alias 名を表示。
 - `[[desktop.N.section]]` ブロック — mac desktop ごとの section モデル
   (`N` は Mission Control 順の位置)。 順序付きの **workspace 空間セル**
   リストで desktop を記述。 各 section は `{ label, layout }`:

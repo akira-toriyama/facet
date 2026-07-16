@@ -2,6 +2,11 @@
   "$schema" : "http://json-schema.org/draft-07/schema#",
   "additionalProperties" : false,
   "properties" : {
+    "alias" : {
+      "additionalProperties" : true,
+      "description" : "Filter aliases: NAME = 'facet filter expression' (e.g. web = 'app~=Chrome or app~=Safari'). Reference as `@NAME` anywhere a filter appears — [desktop.N] match, [[rule]] match, `facet section --match`, `facet query --filter`. Names are kebab-case ([a-z][a-z0-9-]*); references are case-insensitive; aliases may reference other aliases (cycles are rejected loudly). An isolate desktop whose match is a single alias reference and whose label is omitted takes the alias name as its display name.",
+      "type" : "object"
+    },
     "animation" : {
       "additionalProperties" : false,
       "properties" : {

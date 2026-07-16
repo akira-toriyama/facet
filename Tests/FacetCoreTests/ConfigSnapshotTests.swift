@@ -383,6 +383,26 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
+    @Test func isolateMatchAliasRefIsWrittenVerbatim() {
+        // t-5312: a `--match "@web"` override snapshots as the REFERENCE, never
+        // its expansion — expanding would erase the alias indirection the user
+        // asked for (and de-sync from a later `[alias]` edit).
+        let cfg = """
+        [alias]
+        web = 'app~=Chrome or app~=Safari'
+
+        [desktop.2]
+        type = "isolate"
+        match = 'app=Safari'
+        """
+        var ov = ConfigSnapshot.Overrides()
+        ov.isolateMatch = [2: "@web"]
+        let out = ConfigSnapshot.render(configText: cfg, overrides: ov)
+        #expect(out.contains(#"match = "@web""#), "the reference, verbatim")
+        #expect(!out.contains(#"match = "app~=Chrome"#), "never the expansion")
+        assertStable(out)
+    }
+
     @Test func isolateMatchEmptyIsNothingToBake() {
         // An empty predicate means "reverted to the config match" — the config
         // text already spells it, so the render is byte-identical. (The

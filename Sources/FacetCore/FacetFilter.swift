@@ -13,14 +13,16 @@
 // (`FacetFilterParserTests`) is the cheapest, highest-coverage safety net
 // for the whole pivot.
 //
-// Grammar (locked design — `/tmp/facet-pivot-brainstorm.md`, fully
-// decided; do NOT grow it — "a WHERE clause is enough"):
+// Grammar (locked design — `/tmp/facet-pivot-brainstorm.md`; the ONE
+// addition since the lock is the `"@" name` alias reference, t-5312 —
+// combinators / operators are still frozen and do NOT grow: "a WHERE
+// clause is enough"):
 //
 //   expr    := orExpr
 //   orExpr  := andExpr ( "or"  andExpr )*
 //   andExpr := notExpr ( "and" notExpr )*
 //   notExpr := "not" notExpr | primary
-//   primary := "(" expr ")" | atom
+//   primary := "(" expr ")" | "@" name | atom
 //   atom    := field                       // bare presence
 //            | field op value [ "s" ]       // comparison (+ optional case flag)
 //   op      := "=" | "~=" | "^=" | "$=" | "*=" | "|="
@@ -46,6 +48,14 @@
 // - Field names are NOT validated here: an unknown field parses fine and
 //   becomes a no-match at eval (a typo is loud at eval, never a fatal
 //   parse crash). The canonical resolvable set is frozen in PR#2.
+// - `@name` is a FILTER ALIAS reference (t-5312): a named sub-expression
+//   from the config's `[alias]` table, substituted by the separate pure
+//   `resolvingAliases(_:)` step (the parser only records `.aliasRef`).
+//   Lookup is case-insensitive. Inside quotes `@` is LITERAL
+//   (`title*="a@b"`), and in VALUE position a bareword keeps it literal
+//   too (`tag=@web` compares against the literal string "@web") — only a
+//   PRIMARY position `@` is a reference. An unresolved `.aliasRef`
+//   matches nothing at eval (same degrade as an unknown field).
 // - `parse` is total: it returns `.success` or a `ParseError` carrying a
 //   caret offset for loud-but-NON-FATAL reporting (the caller logs the
 //   caret and degrades to show-all — it never aborts).
@@ -63,6 +73,12 @@ public indirect enum FacetFilter: Sendable, Equatable {
     case not(FacetFilter)
     /// Matches everything — the parse of an empty expression.
     case all
+    /// A filter-alias reference `@name` (t-5312) — a named sub-expression
+    /// from the config `[alias]` table. Substituted by `resolvingAliases`;
+    /// left UNRESOLVED it matches nothing (the unknown-field degrade). The
+    /// name is stored as WRITTEN (case preserved for rendering); lookup
+    /// lowercases it.
+    case aliasRef(String)
 
     /// A CSS attribute operator. Raw value is the wire spelling.
     public enum Op: String, Sendable, Equatable, CaseIterable {
@@ -188,6 +204,8 @@ extension FacetFilter: CustomStringConvertible {
             return ""
         case .atom(let a):
             return a.description
+        case .aliasRef(let name):
+            return "@" + name
         case .not(let f):
             // `not` binds tighter than `and`/`or`, so it never needs its
             // own wrap; its operand does when it is looser (an `and`/`or`).
@@ -277,11 +295,25 @@ public extension FacetFilter {
     /// the caller's typo check against `knownFields`.
     func fieldsReferenced() -> Set<String> {
         switch self {
-        case .all: return []
+        case .all, .aliasRef: return []
         case .atom(let a): return [a.field]
         case .not(let f): return f.fieldsReferenced()
         case .and(let parts), .or(let parts):
             return parts.reduce(into: Set()) { $0.formUnion($1.fieldsReferenced()) }
+        }
+    }
+
+    /// Every filter-alias name referenced by this expression, LOWERCASED
+    /// (lookup is case-insensitive) — for the alias-aware typo check and
+    /// the picker UI. Refs inside an alias's own expansion are only seen
+    /// after `resolvingAliases` (which reports them itself).
+    func aliasesReferenced() -> Set<String> {
+        switch self {
+        case .all, .atom: return []
+        case .aliasRef(let name): return [name.lowercased()]
+        case .not(let f): return f.aliasesReferenced()
+        case .and(let parts), .or(let parts):
+            return parts.reduce(into: Set()) { $0.formUnion($1.aliasesReferenced()) }
         }
     }
 
@@ -292,6 +324,10 @@ public extension FacetFilter {
         switch self {
         case .all: return true
         case .atom(let a): return a.matches(window)
+        // An UNRESOLVED alias ref matches nothing — the same total, loud-at-
+        // the-caller degrade as an unknown field. Production paths resolve
+        // (or reject) before eval; this is the safety floor.
+        case .aliasRef: return false
         case .not(let f): return !f.matches(window)
         case .and(let parts): return parts.allSatisfy { $0.matches(window) }
         case .or(let parts): return parts.contains { $0.matches(window) }
@@ -309,24 +345,38 @@ public extension FacetFilter {
 ///     `knownFields`. The predicate is VALID and commits, but matches nothing
 ///     (same as a config lens `match = "abc"`) — a NON-fatal warning, not an
 ///     error. Fields are sorted for a stable message.
+///   • `.undefinedAlias` / `.aliasCycle` — parses, but an `@name` reference
+///     doesn't resolve against the config `[alias]` table (t-5312). Sorted
+///     names / rendered chains for a stable message. Severity is the
+///     CALLER's policy (config drops the block; runtime `--match` rejects;
+///     `query --filter` warns) — the classifier only names the problem.
 ///   • `.malformed` — a genuine SYNTAX error (the `ParseError`, so the caller
 ///     renders either its `.message` inline or its `.caret(in:)` for the CLI).
 public enum MatchPredicateStatus: Equatable, Sendable {
     case ok
     case unknownField([String])
+    case undefinedAlias([String])
+    case aliasCycle([String])
     case malformed(FacetFilter.ParseError)
 }
 
 /// Classify a `facet section --match` predicate — pure, so the GUI validator and
 /// tests share the SAME verdict the projection acts on. Malformed SYNTAX is a
 /// hard error; an unknown FIELD is soft (valid-but-matches-nothing), matching
-/// facet's filter philosophy.
-public func classifyMatchPredicate(_ predicate: String) -> MatchPredicateStatus {
+/// facet's filter philosophy. `aliases` is the config `[alias]` table
+/// (lowercase name → expression); the unknown-field check runs on the
+/// RESOLVED filter, so a field typo inside an alias's expansion surfaces
+/// here too.
+public func classifyMatchPredicate(_ predicate: String,
+                                   aliases: [String: String]) -> MatchPredicateStatus {
     switch FacetFilter.parse(predicate) {
     case .failure(let error):
         return .malformed(error)
     case .success(let filter):
-        let unknown = filter.fieldsReferenced()
+        let res = filter.resolvingAliases(aliases)
+        if !res.cycles.isEmpty { return .aliasCycle(res.cycles) }
+        if !res.undefined.isEmpty { return .undefinedAlias(res.undefined) }
+        let unknown = res.filter.fieldsReferenced()
             .subtracting(FacetFilter.knownFields).sorted()
         return unknown.isEmpty ? .ok : .unknownField(unknown)
     }
@@ -514,6 +564,18 @@ private struct Parser {
             }
             advance()
             return inner
+        }
+        // `@name` — a filter-alias reference (t-5312). Intercepted HERE, in
+        // primary position only: a bareword VALUE keeps a leading `@` literal
+        // (`tag=@web`), and inside quotes the lexer already keeps it literal.
+        if case .word(let w, let off) = peek(), w.hasPrefix("@") {
+            advance()
+            let name = String(w.dropFirst())
+            guard !name.isEmpty else {
+                throw FacetFilter.ParseError(
+                    message: "expected an alias name after '@'", offset: off + 1)
+            }
+            return .aliasRef(name)
         }
         return .atom(try parseAtom())
     }

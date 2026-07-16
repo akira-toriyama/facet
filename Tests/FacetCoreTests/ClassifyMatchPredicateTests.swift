@@ -30,22 +30,54 @@ struct ClassifyMatchPredicateTests {
         (predicate: "app=Safari or bogus", expected: .unknownField(["bogus"])),
     ])
     func okOrUnknownFieldVerdict(predicate: String, expected: MatchPredicateStatus) {
-        #expect(classifyMatchPredicate(predicate) == expected)
+        #expect(classifyMatchPredicate(predicate, aliases: [:]) == expected)
     }
 
     @Test func malformedSyntaxIsError() {
-        guard case .malformed = classifyMatchPredicate("tag~~web") else {
+        guard case .malformed = classifyMatchPredicate("tag~~web", aliases: [:]) else {
             Issue.record("expected .malformed for a syntax error")
             return
         }
     }
 
     @Test func malformedCarriesAUsableMessage() {
-        guard case .malformed(let err) = classifyMatchPredicate("tag~web") else {
+        guard case .malformed(let err) = classifyMatchPredicate("tag~web", aliases: [:]) else {
             Issue.record("expected .malformed")
             return
         }
         #expect(!err.message.isEmpty)          // inline panel shows .message
         #expect(!err.caret(in: "tag~web").isEmpty)  // CLI shows the caret
+    }
+
+    // MARK: - filter aliases (t-5312)
+
+    /// A resolvable alias ref is `.ok`; the unknown-field check runs on the
+    /// RESOLVED filter, so a field typo hiding inside an alias's expansion
+    /// surfaces at the match site; undefined refs and cycles get their own
+    /// verdicts (sorted names / rendered chains, case-insensitive lookup).
+    @Test("alias verdicts", arguments: [
+        (predicate: "@web", aliases: ["web": "app~=Chrome"],
+         expected: MatchPredicateStatus.ok),
+        (predicate: "@WEB", aliases: ["web": "app~=Chrome"],
+         expected: .ok),                                  // refs lowercase
+        (predicate: "@work", aliases: ["work": "@web or app=Slack",
+                                       "web": "app~=Chrome"],
+         expected: .ok),                                  // nested
+        (predicate: "tag=@web", aliases: [:],
+         expected: .ok),                                  // value position: literal
+        (predicate: "@typo", aliases: ["web": "app~=Chrome"],
+         expected: .undefinedAlias(["typo"])),
+        (predicate: "@a or @b", aliases: [:],
+         expected: .undefinedAlias(["a", "b"])),          // sorted
+        (predicate: "@oops", aliases: ["oops": "ap=Chrome"],
+         expected: .unknownField(["ap"])),                // typo inside the expansion
+        (predicate: "@a", aliases: ["a": "@b", "b": "@a"],
+         expected: .aliasCycle(["@a → @b → @a"])),
+        (predicate: "@self", aliases: ["self": "@self"],
+         expected: .aliasCycle(["@self → @self"])),
+    ])
+    func aliasVerdicts(predicate: String, aliases: [String: String],
+                       expected: MatchPredicateStatus) {
+        #expect(classifyMatchPredicate(predicate, aliases: aliases) == expected)
     }
 }

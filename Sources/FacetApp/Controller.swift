@@ -608,6 +608,20 @@ final class Controller: NSObject {
     ///   - [[desktop.N.section]] workspace count / layout — the catalog set is
     ///     seed-once / runtime-authoritative (config is the read-only
     ///     seed); a reload won't clobber runtime add/remove/rename.
+    /// t-5312: does a live `--match` override still RESOLVE under a fresh
+    /// `[alias]` table? Only the alias verdicts count as stale — a `nil`
+    /// (no override) trivially passes, and `.malformed` / `.unknownField`
+    /// can't newly appear on a config edit (the override was vetted at set
+    /// time and the alias table doesn't change field names).
+    private func classifiesOK(_ predicate: String?,
+                              aliases: [String: String]) -> Bool {
+        guard let predicate else { return true }
+        switch classifyMatchPredicate(predicate, aliases: aliases) {
+        case .undefinedAlias, .aliasCycle: return false
+        case .ok, .unknownField, .malformed: return true
+        }
+    }
+
     func reloadConfig() {
         let fresh = FacetConfig.load(path: configPath)
         let oldTheme = config.effectiveTheme
@@ -625,9 +639,18 @@ final class Controller: NSObject {
         // a live retarget). Without this, the snapshot export (t-sgqk) would
         // re-bake the forgotten override into a NEWER snapshot and auto-promote
         // would silently revert the user's hand edit at the next launch.
+        // t-5312 adds a second staleness source: an override referencing a
+        // filter alias whose `[alias]` entry the edit removed (or broke).
+        // Config's own `match` gets the same protection by the DROP at decode
+        // (the whole desktop disappears), but an override lives outside the
+        // config — left in place it would eval to never-match, and on an
+        // isolate desktop never-match means anchor-park EVERYTHING. Reverting
+        // to the (freshly re-vetted) config match is the hands-off answer.
         let staleIsolateOrdinals = isolateMatchOverride.keys.filter { ord in
             config.desktopIsolate(ordinal: ord)?.match
                 != fresh.desktopIsolate(ordinal: ord)?.match
+                || !classifiesOK(isolateMatchOverride[ord],
+                                 aliases: fresh.effectiveFilterAliases)
         }
         // …and the same for the LABEL (t-j7ps). REQUIRED, not a nicety: without
         // it a hand-edit to `[desktop.N] label` leaves the old session override
@@ -1093,7 +1116,8 @@ final class Controller: NSObject {
                 let effMatch = isolateMatchOverride[ordinal] ?? iso.match
                 projected = FilterProjection.projectIsolateDesktop(
                     workspaces: wss, match: effMatch, label: iso.label,
-                    showNonMatching: iso.showNonMatching)
+                    showNonMatching: iso.showNonMatching,
+                    aliases: config.effectiveFilterAliases)
             } else {
                 projected = FilterProjection.project(
                     workspaces: wss,
@@ -1107,8 +1131,21 @@ final class Controller: NSObject {
             // rename cannot move its own key), and matched-section-only (a
             // workspace label comes from the catalog; a holding section has no
             // label to rename). Flows into all three views via `lastSections`.
+            // t-5312 alias display-name inheritance rides the SAME overlay as
+            // the weakest layer: session rename > config `label` (both leave
+            // the helper returning nil) > inherited alias name. Computed from
+            // the EFFECTIVE match, so a runtime `--match @other` re-inherits.
+            let inheritedLabel: String? = {
+                guard isIsolateDesktop,
+                      let iso = config.desktopIsolate(ordinal: ordinal)
+                else { return nil }
+                return isolateAliasInheritedLabel(
+                    match: isolateMatchOverride[ordinal] ?? iso.match,
+                    label: iso.label)
+            }()
             let relabeled = applyIsolateLabelOverride(
-                projected.sections, label: isolateLabelOverride[ordinal])
+                projected.sections,
+                label: isolateLabelOverride[ordinal] ?? inheritedLabel)
             // Apply the session-only reorder to the PROJECTED result (never
             // the config input — see `SectionOrder`). Flows for free into
             // tree/grid/rail since all three read `lastSections`.

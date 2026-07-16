@@ -462,8 +462,17 @@ extension NativeAdapter {
         }
 
         var desired: [WindowID] = []
+        // t-5312: substitute `@name` filter-alias refs before the park set is
+        // computed. `guard isClean` mirrors the malformed-parse fall-through:
+        // an unresolvable match parks NOTHING (hands-off) — degrading it to a
+        // never-matching filter would instead park EVERY window. Normally
+        // unreachable (decode drops such a desktop; `--match` rejects such an
+        // override) — this is the transient-safety floor, same verdict as the
+        // tree projection's empty matched section.
         if let matchStr = isolateMatch,
-           case .success(let iso) = FacetFilter.parse(matchStr) {
+           case .success(let parsed) = FacetFilter.parse(matchStr),
+           case let res = parsed.resolvingAliases(config.effectiveFilterAliases),
+           res.isClean, case let iso = res.filter {
             // ACTIVE-WS scope — at N=1 (an isolate desktop) this is the whole
             // desktop. The windows carry the FULL catalog management state
             // (t-63h2: floating / mark / master / scratchpad / focused, not
@@ -511,12 +520,22 @@ extension NativeAdapter {
         if let c = compiledRulesCache { return c }
         let compiled: [(rule: Rule, filter: FacetFilter)] =
             config.effectiveRules.compactMap { rule in
-                guard case .success(let filter) = FacetFilter.parse(rule.match) else {
+                guard case .success(let parsed) = FacetFilter.parse(rule.match) else {
                     Log.line("[[rule]] match=\"\(rule.match)\" — malformed filter; "
                         + "rule skipped")
                     return nil
                 }
-                return (rule, filter)
+                // t-5312: alias refs resolve against the config table. Decode
+                // already DROPPED a rule that doesn't resolve, so this guard
+                // is the defensive twin of the parse guard above (the cache
+                // is rebuilt on hot-reload, config + aliases move together).
+                let res = parsed.resolvingAliases(config.effectiveFilterAliases)
+                guard res.isClean else {
+                    Log.line("[[rule]] match=\"\(rule.match)\" — unresolved filter "
+                        + "alias; rule skipped")
+                    return nil
+                }
+                return (rule, res.filter)
             }
         compiledRulesCache = compiled
         return compiled

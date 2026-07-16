@@ -422,16 +422,24 @@ extension Controller {
         }
         // Option B: classify live + on commit (shares the pure
         // `classifyMatchPredicate` the projection acts on). Malformed syntax →
-        // `.error` (red, blocks commit); an unknown FIELD → `.warn` (tertiary,
-        // non-blocking — the predicate is valid, it just matches nothing, so
-        // Enter still commits); empty / all-known → `.ok`.
+        // `.error` (red, blocks commit); an unknown FIELD / an unresolvable
+        // filter ALIAS (t-5312) → `.warn` (tertiary, non-blocking in the LIVE
+        // feedback — the commit path `setSectionMatch` still loud-rejects the
+        // alias verdicts, same as the CLI); empty / all-known → `.ok`.
+        let aliases = config.effectiveFilterAliases
         let validate: (String) -> SectionEditValidation = { text in
-            switch classifyMatchPredicate(text) {
+            switch classifyMatchPredicate(text, aliases: aliases) {
             case .ok:
                 return .ok
             case .unknownField(let fields):
                 return .warn("unknown field: \(fields.joined(separator: ", ")) "
                     + "— matches nothing")
+            case .undefinedAlias(let names):
+                return .warn("undefined filter alias: "
+                    + names.map { "@\($0)" }.joined(separator: ", ")
+                    + " — matches nothing")
+            case .aliasCycle(let chains):
+                return .warn("filter alias cycle: " + chains.joined(separator: "; "))
             case .malformed(let error):
                 return .error(error.message)
             }

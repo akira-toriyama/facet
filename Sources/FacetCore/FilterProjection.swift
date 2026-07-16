@@ -160,7 +160,8 @@ public enum FilterProjection {
         workspaces: [Workspace],
         match: String,
         label: String,
-        showNonMatching: Bool
+        showNonMatching: Bool,
+        aliases: [String: String] = [:]
     ) -> Result {
         var diags: [String] = []
         var matched: [Window] = []
@@ -168,7 +169,23 @@ public enum FilterProjection {
         case .failure(let error):
             diags.append("config: isolate desktop \"\(label)\" match: "
                 + error.caret(in: match))
-        case .success(let filter):
+        case .success(let parsed):
+            // t-5312: substitute `@name` filter-alias references. Normally
+            // pre-vetted (config decode DROPS an unresolvable desktop;
+            // runtime `--match` rejects one), so an unresolved ref here is a
+            // transient (e.g. a hot-reload race) — it matches nothing, and
+            // we say so.
+            let res = parsed.resolvingAliases(aliases)
+            if !res.undefined.isEmpty {
+                diags.append("config: isolate desktop \"\(label)\" match: undefined "
+                    + "filter alias "
+                    + res.undefined.map { "'@\($0)'" }.joined(separator: ", "))
+            }
+            if !res.cycles.isEmpty {
+                diags.append("config: isolate desktop \"\(label)\" match: filter "
+                    + "alias cycle: " + res.cycles.joined(separator: "; "))
+            }
+            let filter = res.filter
             let unknown = filter.fieldsReferenced()
                 .subtracting(FacetFilter.knownFields).sorted()
             if !unknown.isEmpty {
