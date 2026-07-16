@@ -460,7 +460,12 @@ extension Controller {
             palette: treePaletteBox.pal,
             onCommit: commit,
             onClose: { [weak self] in self?.finishTagEditor() },
-            validate: validate)
+            validate: validate,
+            // t-kywh: the filter-alias picker — every defined `[alias]` name
+            // as a clickable chip that inserts plain `@name` (CLI-first: the
+            // notation is the canon, the picker just types it). Match-edit
+            // only; the rename panel above passes nothing.
+            aliases: aliases.keys.sorted())
     }
 
     /// Called once on EVERY tag-panel close path (Esc / outside-click / click

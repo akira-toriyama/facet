@@ -53,6 +53,11 @@ final class SectionRenameContainerView: NSView {
     var reservesErrorRow = false
     var messageText: String?
     var messageIsError = false
+    /// t-kywh: total height of the filter-alias chip rows between the field
+    /// and the error row (0 when the picker is absent — the rename panel and
+    /// an alias-less config keep their exact layout). The chips themselves
+    /// are `NSButton` subviews; the container only shifts the error row down.
+    var chipsHeight: CGFloat = 0
 
     static let padX: CGFloat = 12
     static let padV: CGFloat = 10
@@ -61,6 +66,11 @@ final class SectionRenameContainerView: NSView {
     static let fieldGap: CGFloat = 8
     static let errorGap: CGFloat = 6
     static let errorH: CGFloat = 16
+    static let chipsTopGap: CGFloat = 8
+    static let chipH: CGFloat = 20
+    static let chipGapX: CGFloat = 6
+    static let chipGapY: CGFloat = 6
+    static let chipPadX: CGFloat = 8
 
     override var isFlipped: Bool { true }
 
@@ -113,7 +123,7 @@ final class SectionRenameContainerView: NSView {
         if reservesErrorRow, let messageText, !messageText.isEmpty {
             (messageText as NSString).draw(
                 in: NSRect(x: Self.padX,
-                           y: fieldTop + Self.fieldH + Self.errorGap,
+                           y: fieldTop + Self.fieldH + chipsHeight + Self.errorGap,
                            width: bounds.width - Self.padX * 2, height: Self.errorH),
                 withAttributes: [.font: uiFont(11, .regular),
                                  .foregroundColor: messageIsError
@@ -158,13 +168,23 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// invalid `--match` predicate never closes the editor or clobbers the working
     /// lens; a `.warn`/`.ok` commits). nil keeps the rename panel's
     /// commit-unconditionally behaviour (and its layout) byte-identical.
+    ///
+    /// t-kywh: `aliases` (the config `[alias]` names, sorted by the caller) adds
+    /// the filter-alias PICKER — one clickable `@name` chip per alias, in wrapped
+    /// rows under the field. A click INSERTS plain `@name` text at the insertion
+    /// point (replacing any selection — the field opens select-all, so the
+    /// one-click flow is "chip replaces the whole match"); there is no special
+    /// internal representation, the CLI `@name` notation stays the canon and the
+    /// picker just types it for you. Empty (the default, and the rename panel)
+    /// adds nothing and the layout is byte-identical.
     public func show(at screenPt: NSPoint,
                      header: String,
                      initialText: String,
                      palette: ResolvedPalette,
                      onCommit: @escaping (String) -> Void,
                      onClose: @escaping () -> Void,
-                     validate: ((String) -> SectionEditValidation)? = nil) {
+                     validate: ((String) -> SectionEditValidation)? = nil,
+                     aliases: [String] = []) {
         close()
         closing = false
         self.onCommitCB = onCommit
@@ -189,10 +209,21 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         // plain rename panel keeps its exact height.
         let errorRowH = validate == nil ? 0
             : SectionRenameContainerView.errorGap + SectionRenameContainerView.errorH
+        // t-kywh: flow-layout the alias chips against the field's content width
+        // (they wrap; a config has a handful of aliases, not hundreds) so the
+        // panel height can be fixed before the panel exists.
+        let chipTitles = aliases.map { "@\($0)" }
+        let chipFrames = Self.chipFlowFrames(
+            titles: chipTitles,
+            maxWidth: width - SectionRenameContainerView.padX * 2)
+        let chipsHeight: CGFloat = chipFrames.isEmpty ? 0
+            : SectionRenameContainerView.chipsTopGap
+                + (chipFrames.map(\.maxY).max() ?? 0)
         let height = SectionRenameContainerView.padV
             + SectionRenameContainerView.headerH
             + SectionRenameContainerView.fieldGap
             + SectionRenameContainerView.fieldH
+            + chipsHeight
             + errorRowH
             + SectionRenameContainerView.padV
 
@@ -218,6 +249,33 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         cont.header = header
         cont.palette = palette
         cont.reservesErrorRow = validate != nil
+        cont.chipsHeight = chipsHeight
+
+        // t-kywh: one pill button per alias, placed by the flow frames above
+        // (offset to below the field). Buttons live INSIDE the panel, so the
+        // outside-click monitor doesn't fire and the click reaches the chip.
+        let chipsTop = cont.fieldTop + SectionRenameContainerView.fieldH
+            + SectionRenameContainerView.chipsTopGap
+        for (title, frame) in zip(chipTitles, chipFrames) {
+            let chip = NSButton(frame: frame.offsetBy(
+                dx: SectionRenameContainerView.padX, dy: chipsTop))
+            chip.title = title
+            chip.isBordered = false
+            chip.attributedTitle = NSAttributedString(
+                string: title,
+                attributes: [.font: uiFont(11, .regular),
+                             .foregroundColor: palette.primary])
+            chip.wantsLayer = true
+            chip.layer?.backgroundColor =
+                palette.primary.withAlphaComponent(0.12).cgColor
+            chip.layer?.borderColor = palette.border.cgColor
+            chip.layer?.borderWidth = 1
+            chip.layer?.cornerRadius = SectionRenameContainerView.chipH / 2
+            chip.toolTip = "Insert \(title) at the cursor"
+            chip.target = self
+            chip.action = #selector(aliasChipClicked(_:))
+            cont.addSubview(chip)
+        }
 
         let f = NSTextField(frame: NSRect(
             x: SectionRenameContainerView.padX + 24,
@@ -277,6 +335,64 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         let cb = onCommitCB
         close()
         cb?(text)
+    }
+
+    /// t-kywh: left-to-right flow layout for the alias chips, wrapping at
+    /// `maxWidth`. Frames are relative to the chip block's own origin (the
+    /// caller offsets them to below the field), so the height math in `show`
+    /// and the button placement share one geometry and can't disagree.
+    static func chipFlowFrames(titles: [String], maxWidth: CGFloat) -> [NSRect] {
+        var frames: [NSRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        for title in titles {
+            let textW = ceil((title as NSString)
+                .size(withAttributes: [.font: uiFont(11, .regular)]).width)
+            let w = min(maxWidth,
+                        textW + SectionRenameContainerView.chipPadX * 2)
+            if x > 0, x + w > maxWidth {
+                x = 0
+                y += SectionRenameContainerView.chipH
+                    + SectionRenameContainerView.chipGapY
+            }
+            frames.append(NSRect(x: x, y: y, width: w,
+                                 height: SectionRenameContainerView.chipH))
+            x += w + SectionRenameContainerView.chipGapX
+        }
+        return frames
+    }
+
+    @objc private func aliasChipClicked(_ sender: NSButton) {
+        insertAliasText(sender.title)
+    }
+
+    /// t-kywh: insert plain `@name` at the insertion point, replacing any
+    /// selection (the field opens select-all, so the one-click flow REPLACES
+    /// the whole match). A space is added on the glued side when the
+    /// neighbouring glyph would otherwise merge into the inserted token —
+    /// `app=Slack` + `@web` would lex as the single value bareword
+    /// `Slack@web`, which is silently wrong; with the space the combined text
+    /// is at worst a loud validation message the user fixes in place.
+    func insertAliasText(_ text: String) {
+        guard let field else { return }
+        guard let editor = field.currentEditor() as? NSTextView else {
+            field.stringValue += text
+            return
+        }
+        let s = editor.string as NSString
+        let sel = editor.selectedRange()
+        var insert = text
+        if sel.location > 0 {
+            let prev = s.substring(with: NSRange(location: sel.location - 1,
+                                                 length: 1))
+            if !" \t(".contains(prev) { insert = " " + insert }
+        }
+        let selEnd = sel.location + sel.length
+        if selEnd < s.length {
+            let next = s.substring(with: NSRange(location: selEnd, length: 1))
+            if !" \t)".contains(next) { insert += " " }
+        }
+        editor.insertText(insert, replacementRange: sel)
     }
 
     /// t-0020 (Option B): validation is COMMIT-time (not live — see
