@@ -403,16 +403,21 @@ extension Controller {
         // Prefill = the CURRENT effective predicate: the session override if set,
         // else the config `match` for this lens. A transient nil ordinal
         // prefills empty.
+        // The CONFIG match doubles as the picker's revert floor (uncheck-all
+        // drops the override → this is what takes over, so the panel re-syncs
+        // its display to it).
+        let configMatch: String = {
+            guard let ordinal = capturedOrdinal else { return "" }
+            return config.desktopIsolate(ordinal: ordinal)?.match ?? ""
+        }()
         let prefill: String = {
             guard let ordinal = capturedOrdinal else { return "" }
             // A matched section only ever comes from an ISOLATE DESKTOP now (t-ec9s),
             // which carries its `match` on the `[desktop.N]` table. The effective
             // predicate is the single ordinal-keyed session override (D6) over
             // the config `match` off `desktopIsolate`.
-            if let iso = config.desktopIsolate(ordinal: ordinal) {
-                return isolateMatchOverride[ordinal] ?? iso.match
-            }
-            return ""
+            guard !configMatch.isEmpty else { return "" }
+            return capturedOrdinal.flatMap { isolateMatchOverride[$0] } ?? configMatch
         }()
 
         let caption = sectionDisplayLabel(index: g + 1, label: sec.label)
@@ -462,10 +467,11 @@ extension Controller {
             onClose: { [weak self] in self?.finishTagEditor() },
             validate: validate,
             // t-kywh: the filter-alias picker — every defined `[alias]` name
-            // as a clickable chip that inserts plain `@name` (CLI-first: the
-            // notation is the canon, the picker just types it). Match-edit
-            // only; the rename panel above passes nothing.
-            aliases: aliases.keys.sorted())
+            // as a checkbox row toggling a top-level OR term, applied live
+            // (CLI-first: the notation is the canon, the picker just types
+            // it). Match-edit only; the rename panel above passes nothing.
+            aliases: aliases.keys.sorted(),
+            configMatch: configMatch)
     }
 
     /// Called once on EVERY tag-panel close path (Esc / outside-click / click
