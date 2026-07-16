@@ -38,35 +38,52 @@ public enum QueryFilter {
         /// — a loud-but-non-fatal typo warning. Empty when every field is
         /// known (or the parse failed, so no fields resolved).
         public let unknownFields: [String]
+        /// `@name` references that didn't resolve against the `[alias]`
+        /// table, sorted lowercase (t-5312) — the unknown-field treatment:
+        /// warn, and the ref itself matches nothing (the REST of the
+        /// expression still filters).
+        public let undefinedAliases: [String]
+        /// Rendered filter-alias reference cycles (`"@a → @b → @a"`),
+        /// sorted — same non-fatal warn-and-no-match treatment.
+        public let aliasCycles: [String]
 
         public init(entries: [WindowQueryEntry],
                     parseErrorCaret: String?,
-                    unknownFields: [String]) {
+                    unknownFields: [String],
+                    undefinedAliases: [String] = [],
+                    aliasCycles: [String] = []) {
             self.entries = entries
             self.parseErrorCaret = parseErrorCaret
             self.unknownFields = unknownFields
+            self.undefinedAliases = undefinedAliases
+            self.aliasCycles = aliasCycles
         }
     }
 
-    /// Parse `expr` and filter `entries`. Total — never throws. An empty /
-    /// whitespace-only `expr` parses to `.all` and keeps every window (the
-    /// natural "no filter" value).
+    /// Parse `expr`, substitute `@name` filter-alias references against
+    /// `aliases` (the config `[alias]` table), and filter `entries`. Total —
+    /// never throws. An empty / whitespace-only `expr` parses to `.all` and
+    /// keeps every window (the natural "no filter" value).
     public static func apply(_ expr: String,
-                             to entries: [WindowQueryEntry]) -> Outcome {
+                             to entries: [WindowQueryEntry],
+                             aliases: [String: String] = [:]) -> Outcome {
         switch FacetFilter.parse(expr) {
         case .failure(let error):
             // Degrade to show-all; hand the caller the caret to log.
             return Outcome(entries: entries,
                            parseErrorCaret: error.caret(in: expr),
                            unknownFields: [])
-        case .success(let filter):
-            let unknown = filter.fieldsReferenced()
+        case .success(let parsed):
+            let res = parsed.resolvingAliases(aliases)
+            let unknown = res.filter.fieldsReferenced()
                 .subtracting(FacetFilter.knownFields)
                 .sorted()
-            let matched = entries.filter { filter.matches($0) }
+            let matched = entries.filter { res.filter.matches($0) }
             return Outcome(entries: matched,
                            parseErrorCaret: nil,
-                           unknownFields: unknown)
+                           unknownFields: unknown,
+                           undefinedAliases: res.undefined,
+                           aliasCycles: res.cycles)
         }
     }
 }

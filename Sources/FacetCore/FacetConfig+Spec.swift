@@ -228,6 +228,26 @@ public extension FacetConfig {
                              + "auto-export as you create tags."),
             ]),
 
+            // `[alias]` is an OPEN name→string map (t-5312): filter aliases,
+            // NAME = 'facet filter expr', referenced as `@NAME` anywhere a
+            // filter appears. Declared `.dynamicTable` (names can't be
+            // enumerated); the Spec layer has no typed open-STRING-map kind
+            // yet (sill's descriptor layer does — `openStringMap` — but the
+            // `Spec` bridge doesn't reach it), so value typing + name shape +
+            // resolvability are enforced by `decodeFilterAliases`' loud
+            // diagnostics, which `config --validate` promotes to exit 1.
+            .init("alias", kind: .dynamicTable,
+                  doc: "Filter aliases: NAME = 'facet filter expression' "
+                     + "(e.g. web = 'app~=Chrome or app~=Safari'). Reference "
+                     + "as `@NAME` anywhere a filter appears — [desktop.N] "
+                     + "match, [[rule]] match, `facet section --match`, "
+                     + "`facet query --filter`. Names are kebab-case "
+                     + "([a-z][a-z0-9-]*); references are case-insensitive; "
+                     + "aliases may reference other aliases (cycles are "
+                     + "rejected loudly). An isolate desktop whose match is a "
+                     + "single alias reference and whose label is omitted "
+                     + "takes the alias name as its display name."),
+
             // ── Schema-only below (facet decodes these from raw text) ──
 
             .init("exclude", kind: .arrayOfTables,

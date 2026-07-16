@@ -50,6 +50,29 @@ struct IsolateDesktopProjectionTests {
         #expect(Set(r.sections[1].windows.map(\.id.serverID)) == [2, 3])
     }
 
+    // MARK: - filter aliases (t-5312)
+
+    @Test func aliasRefResolvesForMembership() {
+        let wss = [ws(0, [win(1, app: "Google Chrome"), win(2, app: "Code")])]
+        let r = FilterProjection.projectIsolateDesktop(
+            workspaces: wss, match: "@web", label: "Web",
+            showNonMatching: false, aliases: ["web": "app~=Chrome"])
+        #expect(r.sections[0].windows.map(\.id.serverID) == [1])
+        #expect(r.diagnostics.isEmpty)
+    }
+
+    @Test func undefinedAliasMatchesNothingAndSaysSo() {
+        // Transient-only (decode drops such a desktop; `--match` rejects such
+        // an override) — the projection floor: empty matched section + a
+        // diagnostic, never a crash and never match-all.
+        let wss = [ws(0, [win(1, app: "Google Chrome")])]
+        let r = FilterProjection.projectIsolateDesktop(
+            workspaces: wss, match: "@ghost", label: "Web",
+            showNonMatching: false, aliases: [:])
+        #expect(r.sections[0].windows.isEmpty)
+        #expect(r.diagnostics.contains { $0.contains("'@ghost'") })
+    }
+
     @Test func matchedSectionIdIsStableAcrossMatchEdits() {
         let wss = [ws(0, [win(1, app: "Google Chrome")])]
         let r = FilterProjection.projectIsolateDesktop(

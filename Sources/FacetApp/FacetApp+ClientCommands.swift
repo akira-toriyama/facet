@@ -165,12 +165,23 @@ extension FacetApp {
             die("\(flag): expected a `facet filter` predicate, got \"\(value)\" "
                 + "(looks like a flag — quote it or check the value)")
         }
-        switch classifyMatchPredicate(value) {
+        // The CLIENT reads the config `[alias]` table itself (t-5312) — same
+        // deliberate trade as `query --filter`: the fast-fail may disagree
+        // with the server for the instant between a config edit and its
+        // reload, and the server re-classifies authoritatively anyway.
+        switch classifyMatchPredicate(value,
+                                      aliases: FacetConfig.load().effectiveFilterAliases) {
         case .ok:
             return value
         case .unknownField(let fields):
             die("\(flag): unknown field: \(fields.joined(separator: ", ")) "
                 + "— no such filter field (matches nothing)")
+        case .undefinedAlias(let names):
+            die("\(flag): undefined filter alias: "
+                + names.map { "@\($0)" }.joined(separator: ", ")
+                + " — no such [alias] entry (matches nothing)")
+        case .aliasCycle(let chains):
+            die("\(flag): filter alias cycle: " + chains.joined(separator: "; "))
         case .malformed(let error):
             die("\(flag): " + error.caret(in: value))
         }
