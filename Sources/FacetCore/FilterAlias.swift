@@ -111,6 +111,59 @@ public func isValidFilterAliasName(_ name: String) -> Bool {
     }
 }
 
+// MARK: - Alias checklist composition (t-kywh)
+//
+// The Edit-match panel's alias PICKER is a tag-style checklist: checked =
+// "this alias is a top-level OR term of the current match", and toggling a
+// row rewrites the match text (applied LIVE — the isolate desktop re-tiles
+// on every toggle, the tag-panel interaction model). The derive + rewrite
+// logic is pure and lives here so it is unit-tested without AppKit.
+
+/// The top-level OR terms of a match expression: `[]` for empty (`.all`),
+/// the or-parts for an `or`, else the whole expression as one term. `nil`
+/// when the text doesn't parse (the checklist goes inert — a malformed
+/// hand-edit is the field's problem, shown by its validation message).
+public func matchAliasTerms(_ text: String) -> [FacetFilter]? {
+    guard case .success(let filter) = FacetFilter.parse(text) else { return nil }
+    switch filter {
+    case .all: return []
+    case .or(let parts): return parts
+    default: return [filter]
+    }
+}
+
+/// The alias names (lowercased) checked in the checklist for `text` — every
+/// top-level OR term that is a bare `@name` reference. `nil` = malformed.
+public func matchCheckedAliases(_ text: String) -> Set<String>? {
+    guard let terms = matchAliasTerms(text) else { return nil }
+    return Set(terms.compactMap {
+        if case .aliasRef(let n) = $0 { return n.lowercased() } else { return nil }
+    })
+}
+
+/// Rewrite `text` with the `name` alias toggled as a top-level OR term:
+/// present → removed, absent → appended. Non-alias terms survive (re-rendered
+/// via `description` — semantics preserved; `or` is the loosest precedence,
+/// so a plain " or " join needs no extra parens). Unchecking the last term
+/// yields `""` — the revert-to-config gesture, which is exactly what an
+/// empty checklist should mean. `nil` = malformed text (toggle refused).
+public func matchTogglingAlias(_ text: String, name: String) -> String? {
+    guard let terms = matchAliasTerms(text) else { return nil }
+    let lname = name.lowercased()
+    var out: [String] = []
+    var removed = false
+    for term in terms {
+        if case .aliasRef(let n) = term {
+            if n.lowercased() == lname { removed = true; continue }
+            out.append("@" + n.lowercased())
+        } else {
+            out.append(term.description)
+        }
+    }
+    if !removed { out.append("@" + lname) }
+    return out.joined(separator: " or ")
+}
+
 /// t-5312 display-name inheritance: an isolate desktop whose `match` is a
 /// SINGLE alias reference and whose `label` is omitted takes the alias name
 /// as its display name (`match = '@web'`, no `label` → shows "web").

@@ -145,6 +145,49 @@ struct FilterAliasTests {
         #expect(isValidFilterAliasName(name) == ok)
     }
 
+    // MARK: - checklist composition (t-kywh)
+
+    @Test func checkedAliasesAreTheTopLevelOrRefs() {
+        #expect(matchCheckedAliases("@web") == ["web"])
+        #expect(matchCheckedAliases("@web or @dev") == ["web", "dev"])
+        #expect(matchCheckedAliases("@Web or app=Slack") == ["web"])  // case + mixed
+        #expect(matchCheckedAliases("") == [])                        // empty match
+        #expect(matchCheckedAliases("app=Slack") == [])
+        // NOT top-level OR terms: nested / negated refs stay unchecked.
+        #expect(matchCheckedAliases("not @web") == [])
+        #expect(matchCheckedAliases("@web and floating") == [])
+        #expect(matchCheckedAliases("tag~=x") == [])                  // malformed? no — valid, no refs
+        #expect(matchCheckedAliases("tag~~x") == nil)                 // malformed → nil
+    }
+
+    @Test func togglingAddsAndRemovesTopLevelOrTerms() {
+        #expect(matchTogglingAlias("", name: "web") == "@web")
+        #expect(matchTogglingAlias("@web", name: "dev") == "@web or @dev")
+        #expect(matchTogglingAlias("@web or @dev", name: "web") == "@dev")
+        #expect(matchTogglingAlias("@web", name: "web") == "")   // last off → revert gesture
+        #expect(matchTogglingAlias("@Web", name: "WEB") == "")   // case-insensitive
+        #expect(matchTogglingAlias("tag~~x", name: "web") == nil)  // malformed → refuse
+    }
+
+    @Test func togglingPreservesHandWrittenTerms() {
+        #expect(matchTogglingAlias("app=Slack", name: "web")
+            == "app=Slack or @web")
+        #expect(matchTogglingAlias("app=Slack or @web", name: "web")
+            == "app=Slack")
+        // A tighter-binding term survives a plain " or " join (or is the
+        // loosest precedence — no parens needed).
+        #expect(matchTogglingAlias("app=Slack and floating", name: "web")
+            == "app=Slack and floating or @web")
+    }
+
+    @Test func toggleRoundTripsThroughTheParser() {
+        // The rewritten text must re-parse and re-derive the same checks.
+        let t1 = matchTogglingAlias("@web or app=Slack", name: "dev")!
+        #expect(matchCheckedAliases(t1) == ["web", "dev"])
+        let t2 = matchTogglingAlias(t1, name: "web")!
+        #expect(matchCheckedAliases(t2) == ["dev"])
+    }
+
     // MARK: - display-name inheritance
 
     @Test func singleAliasRefInheritsItsName() {

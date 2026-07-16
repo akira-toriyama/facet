@@ -17,6 +17,7 @@
 // band, keycode 36/76 = commit, 53 = cancel.
 
 import AppKit
+import FacetCore
 
 /// t-0020 (Option B): the panel's verdict on the edited text, computed ON COMMIT
 /// (not live — a live check flickers on every field's first keystrokes, since a
@@ -53,11 +54,11 @@ final class SectionRenameContainerView: NSView {
     var reservesErrorRow = false
     var messageText: String?
     var messageIsError = false
-    /// t-kywh: total height of the filter-alias chip rows between the field
-    /// and the error row (0 when the picker is absent — the rename panel and
-    /// an alias-less config keep their exact layout). The chips themselves
-    /// are `NSButton` subviews; the container only shifts the error row down.
-    var chipsHeight: CGFloat = 0
+    /// t-kywh: height of the filter-alias checklist below the error row
+    /// (0 when the picker is absent — the rename panel and an alias-less
+    /// config keep their exact layout). The list itself is a scroll-view
+    /// subview; the container only draws the divider above it.
+    var aliasListHeight: CGFloat = 0
 
     static let padX: CGFloat = 12
     static let padV: CGFloat = 10
@@ -66,11 +67,6 @@ final class SectionRenameContainerView: NSView {
     static let fieldGap: CGFloat = 8
     static let errorGap: CGFloat = 6
     static let errorH: CGFloat = 16
-    static let chipsTopGap: CGFloat = 8
-    static let chipH: CGFloat = 20
-    static let chipGapX: CGFloat = 6
-    static let chipGapY: CGFloat = 6
-    static let chipPadX: CGFloat = 8
 
     override var isFlipped: Bool { true }
 
@@ -123,12 +119,124 @@ final class SectionRenameContainerView: NSView {
         if reservesErrorRow, let messageText, !messageText.isEmpty {
             (messageText as NSString).draw(
                 in: NSRect(x: Self.padX,
-                           y: fieldTop + Self.fieldH + chipsHeight + Self.errorGap,
+                           y: fieldTop + Self.fieldH + Self.errorGap,
                            width: bounds.width - Self.padX * 2, height: Self.errorH),
                 withAttributes: [.font: uiFont(11, .regular),
                                  .foregroundColor: messageIsError
                                      ? palette.error : palette.tertiary,
                                  .paragraphStyle: para])
+        }
+
+        // t-kywh: divider above the alias checklist (mirrors TagEditPanel's
+        // field/list divider).
+        if aliasListHeight > 0 {
+            let sy = bounds.height - Self.padV - aliasListHeight
+                - SectionRenamePanel.aliasListGap / 2
+            palette.border.setStroke()
+            let sp = NSBezierPath()
+            sp.move(to: NSPoint(x: Self.padX, y: sy))
+            sp.line(to: NSPoint(x: bounds.width - Self.padX, y: sy))
+            sp.stroke()
+        }
+    }
+}
+
+// MARK: - Alias checklist (t-kywh)
+
+/// The filter-alias PICKER rows — the tag-checklist interaction grammar
+/// (`TagEditListView`) applied to `[alias]` names: checkbox + `@name`,
+/// hover/keyboard share one selection highlight, a pick TOGGLES. Checked =
+/// "this alias is a top-level OR term of the current match" (derived by
+/// `matchCheckedAliases`); toggling applies LIVE (案A — the tag-panel model:
+/// the isolate desktop re-tiles on every toggle, Esc merely dismisses).
+/// `enabled = false` (a malformed hand-edit in the field) dims the rows and
+/// ignores picks — the field's validation message owns that state.
+final class AliasPickListView: NSView {
+    var names: [String] = []
+    var checked: Set<String> = []
+    var enabled = true
+    var sel = 0
+    var palette: ResolvedPalette = resolve(.terminal)
+    var onPick: ((Int) -> Void)?
+    var onHover: ((Int) -> Void)?
+
+    static let rowH: CGFloat = 28
+
+    override var isFlipped: Bool { true }
+
+    func contentHeight() -> CGFloat {
+        CGFloat(max(names.count, 1)) * Self.rowH
+    }
+
+    private func rowIndex(at p: NSPoint) -> Int? {
+        let i = Int(p.y / Self.rowH)
+        return (i >= 0 && i < names.count) ? i : nil
+    }
+
+    override func draw(_ dirty: NSRect) {
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingTail
+        let boxSide: CGFloat = 14
+        // The picker tint is `secondary` throughout — the tag-checklist
+        // grammar this view borrows (the SECTION menu reads secondary too).
+        let tint = enabled ? palette.secondary : palette.muted
+        for (i, name) in names.enumerated() {
+            let r = NSRect(x: 0, y: CGFloat(i) * Self.rowH,
+                           width: bounds.width, height: Self.rowH)
+            if i == sel, enabled {
+                let pill = r.insetBy(dx: 4, dy: 2)
+                palette.secondary.withAlphaComponent(0.16).setFill()
+                NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
+                palette.secondary.setStroke()
+                let o = NSBezierPath(roundedRect: pill.insetBy(dx: 1, dy: 1),
+                                     xRadius: 6, yRadius: 6)
+                o.lineWidth = 1.5; o.stroke()
+            }
+            let boxRect = NSRect(x: SectionRenameContainerView.padX,
+                                 y: r.minY + (Self.rowH - boxSide) / 2,
+                                 width: boxSide, height: boxSide)
+            let box = NSBezierPath(roundedRect: boxRect, xRadius: 3, yRadius: 3)
+            let isChecked = checked.contains(name.lowercased())
+            if isChecked {
+                tint.setFill(); box.fill()
+                ("✓" as NSString).draw(
+                    in: boxRect.offsetBy(dx: 2.5, dy: 0.5),
+                    withAttributes: [.font: uiFont(11, .bold),
+                                     .foregroundColor: palette.background ?? .white])
+            } else {
+                palette.muted.setStroke(); box.lineWidth = 1; box.stroke()
+            }
+            let textX = SectionRenameContainerView.padX + boxSide + 8
+            ("@\(name)" as NSString).draw(
+                in: NSRect(x: textX, y: r.minY + 5,
+                           width: r.width - textX - SectionRenameContainerView.padX,
+                           height: Self.rowH - 6),
+                withAttributes: [
+                    .font: uiFont(13, isChecked ? .semibold : .regular),
+                    .foregroundColor: tint,
+                    .paragraphStyle: para,
+                ])
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.activeAlways, .inVisibleRect, .mouseMoved],
+            owner: self))
+    }
+
+    override func mouseMoved(with e: NSEvent) {
+        if let i = rowIndex(at: convert(e.locationInWindow, from: nil)),
+           i != sel { onHover?(i) }
+    }
+
+    override func mouseUp(with e: NSEvent) {
+        guard enabled else { return }
+        if let i = rowIndex(at: convert(e.locationInWindow, from: nil)) {
+            onPick?(i)
         }
     }
 }
@@ -141,7 +249,15 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
 
     private var panel: KeyablePanel?
     private var field: NSTextField?
+    private weak var aliasList: AliasPickListView?
     private var monitors: [Any] = []
+
+    /// t-kywh 案A: the text last APPLIED through `onCommitCB` (seeded with
+    /// `initialText` — the already-effective match). Enter is dual-role: a
+    /// DIRTY field (text ≠ lastApplied) commits it; a clean one toggles the
+    /// selected alias row. Esc always just dismisses (toggles are already
+    /// live — there is nothing to commit or revert).
+    private var lastApplied = ""
 
     private var onCommitCB: ((String) -> Void)?
     private var onCloseCB: (() -> Void)?
@@ -170,12 +286,14 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// commit-unconditionally behaviour (and its layout) byte-identical.
     ///
     /// t-kywh: `aliases` (the config `[alias]` names, sorted by the caller) adds
-    /// the filter-alias PICKER — one clickable `@name` chip per alias, in wrapped
-    /// rows under the field. A click INSERTS plain `@name` text at the insertion
-    /// point (replacing any selection — the field opens select-all, so the
-    /// one-click flow is "chip replaces the whole match"); there is no special
-    /// internal representation, the CLI `@name` notation stays the canon and the
-    /// picker just types it for you. Empty (the default, and the rename panel)
+    /// the filter-alias PICKER — a tag-style CHECKLIST below the field (案A,
+    /// 2026-07-16: the TagEditPanel interaction model, not chips). Checked =
+    /// the alias is a top-level OR term of the current match; toggling a row
+    /// rewrites the match to the OR of the checked set (hand-written non-alias
+    /// terms survive) and applies it LIVE through `onCommit` WITHOUT closing —
+    /// the isolate desktop re-tiles on every toggle, exactly like a tag toggle
+    /// hits the window instantly. The inserted text is plain `@name` (CLI-first:
+    /// the notation is the canon). Empty (the default, and the rename panel)
     /// adds nothing and the layout is byte-identical.
     public func show(at screenPt: NSPoint,
                      header: String,
@@ -206,26 +324,13 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
                       headerW + SectionRenameContainerView.padX * 2)
         let width = min(maxWidth, max(minWidth, ceil(fit)))
         // Reserve the error row only when validating (the `--match` edit), so the
-        // plain rename panel keeps its exact height.
-        let errorRowH = validate == nil ? 0
-            : SectionRenameContainerView.errorGap + SectionRenameContainerView.errorH
-        // t-kywh: flow-layout the alias chips against the field's content width
-        // (they wrap; a config has a handful of aliases, not hundreds) so the
-        // panel height can be fixed before the panel exists.
-        let chipTitles = aliases.map { "@\($0)" }
-        let chipFrames = Self.chipFlowFrames(
-            titles: chipTitles,
-            maxWidth: width - SectionRenameContainerView.padX * 2)
-        let chipsHeight: CGFloat = chipFrames.isEmpty ? 0
-            : SectionRenameContainerView.chipsTopGap
-                + (chipFrames.map(\.maxY).max() ?? 0)
-        let height = SectionRenameContainerView.padV
-            + SectionRenameContainerView.headerH
-            + SectionRenameContainerView.fieldGap
-            + SectionRenameContainerView.fieldH
-            + chipsHeight
-            + errorRowH
-            + SectionRenameContainerView.padV
+        // plain rename panel keeps its exact height. The alias checklist rides
+        // below it (match edit + a non-empty `[alias]` table only), capped at
+        // `maxVisibleAliasRows` with an overlay scroller beyond.
+        let showList = validate != nil && !aliases.isEmpty
+        let listH = showList ? Self.aliasListVisibleHeight(count: aliases.count) : 0
+        let height = Self.panelHeight(validating: validate != nil,
+                                      aliasRowsHeight: listH)
 
         let origin = placePopupOrigin(anchor: screenPt,
                                       size: NSSize(width: width, height: height))
@@ -249,33 +354,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         cont.header = header
         cont.palette = palette
         cont.reservesErrorRow = validate != nil
-        cont.chipsHeight = chipsHeight
-
-        // t-kywh: one pill button per alias, placed by the flow frames above
-        // (offset to below the field). Buttons live INSIDE the panel, so the
-        // outside-click monitor doesn't fire and the click reaches the chip.
-        let chipsTop = cont.fieldTop + SectionRenameContainerView.fieldH
-            + SectionRenameContainerView.chipsTopGap
-        for (title, frame) in zip(chipTitles, chipFrames) {
-            let chip = NSButton(frame: frame.offsetBy(
-                dx: SectionRenameContainerView.padX, dy: chipsTop))
-            chip.title = title
-            chip.isBordered = false
-            chip.attributedTitle = NSAttributedString(
-                string: title,
-                attributes: [.font: uiFont(11, .regular),
-                             .foregroundColor: palette.primary])
-            chip.wantsLayer = true
-            chip.layer?.backgroundColor =
-                palette.primary.withAlphaComponent(0.12).cgColor
-            chip.layer?.borderColor = palette.border.cgColor
-            chip.layer?.borderWidth = 1
-            chip.layer?.cornerRadius = SectionRenameContainerView.chipH / 2
-            chip.toolTip = "Insert \(title) at the cursor"
-            chip.target = self
-            chip.action = #selector(aliasChipClicked(_:))
-            cont.addSubview(chip)
-        }
+        cont.aliasListHeight = listH
 
         let f = NSTextField(frame: NSRect(
             x: SectionRenameContainerView.padX + 24,
@@ -294,9 +373,43 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         f.delegate = self
         cont.addSubview(f)
 
+        // t-kywh: the alias checklist (match edit only), below the error row.
+        if showList {
+            let listW = width - SectionRenameContainerView.padX * 2
+            let list = AliasPickListView(frame: NSRect(
+                x: 0, y: 0, width: listW,
+                height: CGFloat(aliases.count) * AliasPickListView.rowH))
+            list.names = aliases
+            list.palette = palette
+            list.onPick = { [weak self] i in self?.toggleAliasRow(i) }
+            list.onHover = { [weak self] i in
+                self?.aliasList?.sel = i
+                self?.aliasList?.needsDisplay = true
+            }
+            let scroll = NSScrollView(frame: NSRect(
+                x: SectionRenameContainerView.padX,
+                y: height - SectionRenameContainerView.padV - listH,
+                width: listW, height: listH))
+            scroll.drawsBackground = false
+            scroll.hasVerticalScroller = true
+            scroll.scrollerStyle = .overlay
+            scroll.autohidesScrollers = true
+            let scroller = ThemedScroller()
+            scroller.paletteBox = PaletteBox(palette)
+            scroll.verticalScroller = scroller
+            let clip = FlippedClipView()
+            clip.drawsBackground = false
+            scroll.contentView = clip
+            scroll.documentView = list
+            cont.addSubview(scroll)
+            self.aliasList = list
+        }
+
         pnl.contentView = cont
         self.panel = pnl
         self.field = f
+        self.lastApplied = initialText
+        refreshAliasChecks()
 
         pnl.makeKeyAndOrderFront(nil)
         pnl.makeFirstResponder(f)
@@ -337,62 +450,114 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         cb?(text)
     }
 
-    /// t-kywh: left-to-right flow layout for the alias chips, wrapping at
-    /// `maxWidth`. Frames are relative to the chip block's own origin (the
-    /// caller offsets them to below the field), so the height math in `show`
-    /// and the button placement share one geometry and can't disagree.
-    static func chipFlowFrames(titles: [String], maxWidth: CGFloat) -> [NSRect] {
-        var frames: [NSRect] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        for title in titles {
-            let textW = ceil((title as NSString)
-                .size(withAttributes: [.font: uiFont(11, .regular)]).width)
-            let w = min(maxWidth,
-                        textW + SectionRenameContainerView.chipPadX * 2)
-            if x > 0, x + w > maxWidth {
-                x = 0
-                y += SectionRenameContainerView.chipH
-                    + SectionRenameContainerView.chipGapY
-            }
-            frames.append(NSRect(x: x, y: y, width: w,
-                                 height: SectionRenameContainerView.chipH))
-            x += w + SectionRenameContainerView.chipGapX
-        }
-        return frames
+    // MARK: - Alias checklist (t-kywh, 案A live apply)
+
+    static let aliasListGap: CGFloat = 8
+    static let maxVisibleAliasRows = 8
+
+    /// Visible height of the checklist for `count` aliases — capped at
+    /// `maxVisibleAliasRows` (the overlay scroller takes over beyond).
+    static func aliasListVisibleHeight(count: Int) -> CGFloat {
+        CGFloat(min(max(count, 1), maxVisibleAliasRows)) * AliasPickListView.rowH
     }
 
-    @objc private func aliasChipClicked(_ sender: NSButton) {
-        insertAliasText(sender.title)
+    /// The panel's total height — the ONE place the layout bands are summed,
+    /// shared by `show` and the tests. `aliasRowsHeight` is 0 for the rename
+    /// panel and an alias-less match edit (their heights stay byte-identical
+    /// to pre-picker).
+    static func panelHeight(validating: Bool,
+                            aliasRowsHeight: CGFloat) -> CGFloat {
+        let errorRowH: CGFloat = validating
+            ? SectionRenameContainerView.errorGap + SectionRenameContainerView.errorH
+            : 0
+        let listBand = aliasRowsHeight > 0 ? aliasListGap + aliasRowsHeight : 0
+        return SectionRenameContainerView.padV
+            + SectionRenameContainerView.headerH
+            + SectionRenameContainerView.fieldGap
+            + SectionRenameContainerView.fieldH
+            + errorRowH
+            + listBand
+            + SectionRenameContainerView.padV
     }
 
-    /// t-kywh: insert plain `@name` at the insertion point, replacing any
-    /// selection (the field opens select-all, so the one-click flow REPLACES
-    /// the whole match). A space is added on the glued side when the
-    /// neighbouring glyph would otherwise merge into the inserted token —
-    /// `app=Slack` + `@web` would lex as the single value bareword
-    /// `Slack@web`, which is silently wrong; with the space the combined text
-    /// is at worst a loud validation message the user fixes in place.
-    func insertAliasText(_ text: String) {
-        guard let field else { return }
-        guard let editor = field.currentEditor() as? NSTextView else {
-            field.stringValue += text
+    /// Toggle the alias at row `i`: rewrite the field to the current match
+    /// with that alias added/removed as a top-level OR term
+    /// (`matchTogglingAlias` — hand-written non-alias terms survive), then
+    /// apply LIVE. A malformed hand-edit refuses the toggle (the checklist
+    /// is derived from the text; there is nothing sound to rewrite) — the
+    /// commit-path validation message explains, in red.
+    private func toggleAliasRow(_ i: Int) {
+        guard let field, let list = aliasList,
+              i >= 0, i < list.names.count else { return }
+        list.sel = i
+        guard let newText = matchTogglingAlias(field.stringValue,
+                                               name: list.names[i]) else {
+            showValidation(.error("fix the predicate first — it does not parse"))
             return
         }
-        let s = editor.string as NSString
-        let sel = editor.selectedRange()
-        var insert = text
-        if sel.location > 0 {
-            let prev = s.substring(with: NSRange(location: sel.location - 1,
-                                                 length: 1))
-            if !" \t(".contains(prev) { insert = " " + insert }
+        field.stringValue = newText
+        applyLive(newText)
+        refreshAliasChecks()
+    }
+
+    /// 案A: push `text` through the SAME commit route the Enter key uses —
+    /// validated first, `onCommit` on `.ok` — but WITHOUT closing, so a
+    /// toggle re-tiles the isolate desktop while the panel stays up (the
+    /// tag-panel model). A composed OR of defined aliases is always `.ok`;
+    /// the non-`.ok` verdicts can only come from residual hand-written
+    /// terms, and then the message shows and nothing is applied.
+    private func applyLive(_ text: String) {
+        if let validate = onValidateCB {
+            let verdict = validate(text)
+            guard case .ok = verdict else {
+                showValidation(verdict)
+                return
+            }
         }
-        let selEnd = sel.location + sel.length
-        if selEnd < s.length {
-            let next = s.substring(with: NSRange(location: selEnd, length: 1))
-            if !" \t)".contains(next) { insert += " " }
+        showValidation(.ok)
+        lastApplied = text
+        onCommitCB?(text)
+    }
+
+    /// Re-derive the checklist's checked set from the CURRENT field text
+    /// (`matchCheckedAliases`), so hand-typing `@dev or @web` checks the
+    /// rows and deleting a ref unchecks it. Malformed text goes inert-dim
+    /// instead of guessing.
+    private func refreshAliasChecks() {
+        guard let list = aliasList, let field else { return }
+        if let checked = matchCheckedAliases(field.stringValue) {
+            list.checked = checked
+            list.enabled = true
+        } else {
+            list.enabled = false
         }
-        editor.insertText(insert, replacementRange: sel)
+        list.needsDisplay = true
+    }
+
+    /// Render a validation verdict into the message row (or clear it, `.ok`).
+    private func showValidation(_ v: SectionEditValidation) {
+        guard let cont = panel?.contentView as? SectionRenameContainerView
+        else { return }
+        switch v {
+        case .ok:
+            cont.messageText = nil
+        case .warn(let message):
+            cont.messageText = message; cont.messageIsError = false
+        case .error(let message):
+            cont.messageText = message; cont.messageIsError = true
+        }
+        cont.needsDisplay = true
+    }
+
+    /// ↑↓ / Ctrl-n/p over the checklist (a single-line field has no use for
+    /// vertical arrows, so the list borrows them — the TagEditPanel keys).
+    private func moveAliasSel(_ d: Int) {
+        guard let list = aliasList, !list.names.isEmpty else { return }
+        list.sel = min(max(list.sel + d, 0), list.names.count - 1)
+        list.needsDisplay = true
+        list.scrollToVisible(NSRect(
+            x: 0, y: CGFloat(list.sel) * AliasPickListView.rowH,
+            width: list.frame.width, height: AliasPickListView.rowH))
     }
 
     /// t-0020 (Option B): validation is COMMIT-time (not live — see
@@ -400,6 +565,9 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// message from the previous rejected commit, so it doesn't linger while they
     /// fix the predicate. The verdict is recomputed + shown on the next commit.
     public func controlTextDidChange(_ obj: Notification) {
+        // t-kywh: the checklist mirrors the text — hand-typing `@dev` checks
+        // its row, deleting a ref unchecks it, malformed dims the list.
+        refreshAliasChecks()
         guard let cont = panel?.contentView as? SectionRenameContainerView,
               cont.messageText != nil else { return }
         cont.messageText = nil
@@ -414,6 +582,8 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         panel?.orderOut(nil)
         panel = nil
         field = nil
+        aliasList = nil
+        lastApplied = ""
         onCommitCB = nil
         onValidateCB = nil
         let cb = onCloseCB
@@ -441,12 +611,33 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
                 // IME composing: let the field handle everything (Enter
                 // commits the conversion, arrows move candidates, Esc cancels).
                 if self.isComposing { return ev }
+                let hasList = self.aliasList?.names.isEmpty == false
                 switch ev.keyCode {
-                case 36, 76: self.commit(); return nil   // Return / keypad Enter
-                case 53:     self.close();  return nil   // Esc → cancel
-                default:     return ev                   // typing → field
+                case 36, 76:                             // Return / keypad Enter
+                    // Dual-role (t-kywh 案A): a DIRTY field commits the typed
+                    // text (apply + close, the historic gesture); a CLEAN one
+                    // toggles the selected alias row live (the panel's primary
+                    // flow once toggles apply instantly — dismissing is Esc).
+                    if let list = self.aliasList, list.enabled, hasList,
+                       self.field?.stringValue == self.lastApplied {
+                        self.toggleAliasRow(list.sel)
+                    } else {
+                        self.commit()
+                    }
+                    return nil
+                case 53:     self.close();  return nil   // Esc → dismiss
+                case 125 where hasList:                  // ↓ → list selection
+                    self.moveAliasSel(1);  return nil
+                case 126 where hasList:                  // ↑
+                    self.moveAliasSel(-1); return nil
+                default:
+                    let c = ev.charactersIgnoringModifiers?.lowercased()
+                    let ctrl = ev.modifierFlags.contains(.control)
+                    if ctrl, c == "n", hasList { self.moveAliasSel(1);  return nil }
+                    if ctrl, c == "p", hasList { self.moveAliasSel(-1); return nil }
+                    return ev                            // typing → field
                     // (live re-validation runs in `controlTextDidChange`, which
-                    //  clears a stale error + shows a live unknown-field warning)
+                    //  clears a stale error + re-derives the checklist)
                 }
             }
             // A click anywhere but our own panel cancels (close, no commit).
