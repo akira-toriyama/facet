@@ -3,10 +3,14 @@
 # .github/zizmor.yml — the policy the reusable zizmor gate reads (fleet/zizmor.yml →
 # .github/workflows/zizmor.yml passes `config: .github/zizmor.yml`).
 #
-# The reusable runs at min-confidence:medium, which drops the low-confidence
-# artipacked (persist-credentials) nags. The unpinned-uses policy encodes the fleet's
-# action-pinning decision: first-party actions/* and self-owned akira-toriyama/* ride
-# version TAGS (ref-pin); everything third-party MUST be a full commit SHA (hash-pin).
+# The reusable runs at min-confidence:low (its default since t-yaxa), so the
+# `artipacked` rule gates every checkout that persists its credential without needing
+# it — declare `persist-credentials` explicitly on new checkouts (`false`, or a
+# commented `true` where a step genuinely pushes).
+#
+# The unpinned-uses policy encodes the fleet's action-pinning decision: first-party
+# actions/* and self-owned akira-toriyama/* ride version TAGS (ref-pin); everything
+# third-party MUST be a full commit SHA (hash-pin).
 # Rationale: akira-toriyama/.github/blob/main/docs/action-pinning-policy.md
 
 rules:
