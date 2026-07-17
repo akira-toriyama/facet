@@ -1,7 +1,7 @@
 # Commit convention
 
-The commit-message convention (gitmoji + Conventional Commits — the types that
-drive release semver, scopes, examples, and breaking-change rules) is shared
+The commit-message convention (gitmoji-driven — the leading gitmoji is the
+type and drives release semver; scopes, examples, breaking-change rules) is shared
 across every repository under this account and lives in a single source of
 truth:
 
