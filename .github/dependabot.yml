@@ -7,6 +7,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Wait 7 days after a release before proposing it — freshly published
+    # versions are where supply-chain compromises surface (xz, tj-actions).
+    cooldown:
+      default-days: 7
     # Batch every action bump into ONE weekly PR (not one PR per action).
     groups:
       actions:
@@ -23,6 +27,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Same 7-day supply-chain cooldown as github-actions above.
+    cooldown:
+      default-days: 7
     groups:
       gomod:
         patterns: ["*"]
