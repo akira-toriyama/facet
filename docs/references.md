@@ -44,9 +44,12 @@ re-confirmation.
   *(reviewed 2026-05-21)* — the commit-message spec facet's
   account-wide
   [CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md)
-  is built on. ``cliff.toml`` parses ``<type>(<scope>)<!>:
-  <subject>`` per this spec; git-cliff derives the next semver
-  from the ``type`` field.
+  is built on. Releases are driven by
+  [glyph](https://github.com/akira-toriyama/glyph): the leading
+  ``:code:`` gitmoji is the change type, and the next semver is
+  derived from each merged PR's individual (pre-squash) commits
+  (`glyph rules` prints the embedded table; the git-cliff era
+  ``cliff.toml`` is gone).
 - [gitmoji](https://gitmoji.dev/)
   *(reviewed 2026-05-21)* — emoji vocabulary the convention
   prepends. Use this site to look up the ``:code:`` form (the
