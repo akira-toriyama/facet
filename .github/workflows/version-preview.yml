@@ -1,0 +1,50 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/workflows/version-preview.yml
+#
+# NOT named pr-verdict.yml, though that is what it calls: glyph is itself in the
+# fleet, and .github/workflows/pr-verdict.yml THERE is the reusable definition —
+# syncing a caller to that path overwrote it with this stub on 2026-07-17. A
+# distributed caller must never share a filename with a glyph reusable; that is
+# why the commit-lint caller is not named lint.yml either. fleet-sync now
+# refuses this class of collision outright (see its reusable-collision guard).
+#
+# Merge preview: one sticky PR comment saying what merging this PR does to the
+# version, computed by glyph from the PR's INDIVIDUAL (pre-squash) commits —
+# the types a squash-merge would erase from main. Advisory only; the lint gate
+# (commit-lint.yml) owns enforcement, and this is deliberately NOT a required
+# check.
+#
+# Fleet-wide by design, not just on repos that keep a glyph rolling draft: the
+# bump arithmetic is the same whether the next release is a draft (release.yml)
+# or a tag cut by hand, so the comment says "the next release" and never names
+# a draft a repo may not have. A repo with NO v* tag reports only the PR's own
+# verdict — glyph's release-floor guard skips the pending walk there, which is
+# what keeps a tagless, thousand-commit repo from paying an API round-trip per
+# commit on every push. A repo that never opens PRs simply never runs this.
+#
+# The pin is a CONCRETE glyph release tag — the workflow and the binary it
+# installs ship lockstep from that one tag, so never a moving ref. Bump the pin
+# here (one fleet-sync PR) per adopted glyph release.
+name: version-preview
+
+on:
+  pull_request:
+    # synchronize is the point — the commits ARE the input, so every push
+    # recomputes the verdict (a title edit changes nothing, unlike a
+    # title-driven preview).
+    types: [opened, synchronize, reopened]
+
+# A push mid-run makes the older verdict stale; drop it rather than race the
+# newer one to the same sticky comment.
+concurrency:
+  group: version-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verdict:
+    uses: akira-toriyama/glyph/.github/workflows/pr-verdict.yml@v0.4.1
