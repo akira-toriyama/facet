@@ -26,6 +26,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Build-only: swift-build and package.sh read and write locally —
+          # package.sh's `git describe` needs no credential and nothing here
+          # pushes. Drop the persisted checkout token. t-yaxa
+          persist-credentials: false
 
       # Shared Swift build (setup-xcode + SPM cache + build + test).
       - uses: akira-toriyama/.github/actions/swift-build@main
