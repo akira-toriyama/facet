@@ -14,4 +14,4 @@ permissions:
 
 jobs:
   zizmor:
-    uses: akira-toriyama/.github/.github/workflows/zizmor.yml@v1
+    uses: akira-toriyama/.github/.github/workflows/zizmor.yml@v1.2.0

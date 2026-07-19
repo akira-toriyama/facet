@@ -16,4 +16,4 @@ permissions:
 
 jobs:
   taplo:
-    uses: akira-toriyama/.github/.github/workflows/taplo.yml@v1
+    uses: akira-toriyama/.github/.github/workflows/taplo.yml@v1.2.0

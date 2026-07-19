@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   bump:
-    uses: akira-toriyama/.github/.github/workflows/update-tap.yml@v1
+    uses: akira-toriyama/.github/.github/workflows/update-tap.yml@v1.2.0
     with:
       formula: facet
       tag: ${{ github.event.inputs.tag || '' }}
