@@ -229,9 +229,8 @@ scientific debugging, bisection.*
   installed under ``~/.claude/skills/``),
   ``/docs/ja/settings`` (per-project / per-user
   ``settings.json``),
-  ``/docs/ja/hooks`` (workflow automation triggers — facet's
-  ``scripts/hooks/commit-msg`` is the local-git form, not the
-  Claude Code form).
+  ``/docs/ja/hooks`` (workflow automation triggers — distinct from the
+  local-git ``commit-msg`` hook that ``glyph hook install`` writes).
 
 ### Packaging / Release
 *Distribution-specific: how the bundle reaches users.*
