@@ -1,9 +1,12 @@
-# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
-# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
-# owned, non-fork, non-archived repo WITHOUT a root go.mod (repos with one get
-# fleet/dependabot-go.yml — the same file plus the gomod ecosystem). gomod is NOT
-# configured here because on a repo without a go.mod it is not a no-op: Dependabot
-# records a FAILING run ("No go.mod files found") every week (t-s3fp).
+# Canonical BASE for each repo's dependabot.yml, managed by fleet-sync
+# (.github/workflows/fleet-sync.yml). Do NOT edit per-repo copies — fleet-sync
+# ASSEMBLES the distributed file per repo: this base (github-actions only, which
+# every repo has) plus one block from fleet/dependabot.d/ per package ecosystem
+# whose ROOT manifest exists on the target (go.mod → gomod, Package.swift →
+# swift, package.json → npm). An ecosystem configured without its manifest is
+# NOT a no-op — Dependabot records a FAILING run every week (t-s3fp) — and a
+# base-only overwrite ERASES a repo's real ecosystems (t-vhr9: chord's swift and
+# study-engine's npm update entries were wiped, killing their bump PRs).
 # Synced to: .github/dependabot.yml
 version: 2
 updates:
@@ -21,5 +24,22 @@ updates:
         patterns: ["*"]
     # gitmoji + Conventional Commits so bot PRs match the house convention
     # (CONTRIBUTING.md). Bots are exempt from commit-lint, so this is decoration.
+    commit-message:
+      prefix: ":arrow_up: build(deps)"
+
+  # Swift package (SPM) updates for the Swift apps (chord, halo, perch, sill, …):
+  # keeps in-family deps like Sill fresh. Appended by fleet-sync only where a
+  # root Package.swift exists (fleet/dependabot.d/swift.yml — see the base
+  # fleet/dependabot.yml header for the assembly scheme).
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+    # Same 7-day supply-chain cooldown as github-actions above.
+    cooldown:
+      default-days: 7
+    groups:
+      swift:
+        patterns: ["*"]
     commit-message:
       prefix: ":arrow_up: build(deps)"
