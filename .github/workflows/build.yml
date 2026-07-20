@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
 
       # Shared Swift build (setup-xcode + SPM cache + build + test).
-      - uses: akira-toriyama/.github/actions/swift-build@main
+      - uses: akira-toriyama/.github/actions/swift-build@v2
 
       - name: Assemble & ad-hoc sign app bundle
         env:
