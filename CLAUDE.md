@@ -600,11 +600,13 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   [[pr-conventions]].
 ## Conventions
 
-- **Commit messages**: gitmoji + Conventional Commits —
-  `<:gitmoji:> <type>(<scope>)<!>: <subject>`. Full spec:
-  [CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md). Enable
-  the local hook: `git config core.hooksPath scripts/hooks` (script
-  at [scripts/hooks/commit-msg](scripts/hooks/commit-msg)).
+- **Commit messages**: gitmoji-driven — `<:gitmoji:>[(<scope>)][!] <subject>`,
+  where the leading `:code:` IS the type (the Conventional `<type>` word is
+  retired; legacy `<type>(scope):` tokens are accepted and ignored by the lint,
+  so old history still passes). Full spec:
+  [CONTRIBUTING.md](https://github.com/akira-toriyama/.github/blob/main/CONTRIBUTING.md);
+  `glyph rules` is the machine source of truth. Install the local hook once per
+  clone: `glyph hook install`.
 - **README is bilingual** ([README.md](README.md) English +
   [README.ja.md](README.ja.md) Japanese). Keep them in sync when
   user-visible behavior changes. Memory [[readme-bilingual]].
