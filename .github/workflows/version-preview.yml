@@ -47,4 +47,4 @@ permissions:
 
 jobs:
   verdict:
-    uses: akira-toriyama/glyph/.github/workflows/pr-verdict.yml@v0.8.1
+    uses: akira-toriyama/glyph/.github/workflows/pr-verdict.yml@v0.10.0
