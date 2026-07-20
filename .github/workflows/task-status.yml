@@ -5,7 +5,10 @@ name: task-status
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, closed]
+    # `edited` re-runs the sync when the PR body changes, so a fixed SetStatus
+    # footer re-evaluates without close→reopen (t-rb4c; needs the reusable at
+    # >= v0.13.0 — older gates map edited to skip, harmlessly).
+    types: [opened, edited, reopened, ready_for_review, closed]
 
 permissions:
   contents: read
@@ -15,7 +18,7 @@ jobs:
   sync:
     # Pin a CONCRETE furrow release tag: the workflow installs the furrow
     # release binary of the same version (skew-free); bump the pin per release.
-    uses: akira-toriyama/furrow/.github/workflows/sync-task-status.yml@v0.10.0
+    uses: akira-toriyama/furrow/.github/workflows/sync-task-status.yml@v0.13.0
     # Pass ONLY the tracker-write PAT — least privilege over `secrets: inherit`,
     # which would expose every caller-repo secret to the reusable workflow.
     secrets:
