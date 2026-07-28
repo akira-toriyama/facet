@@ -77,7 +77,7 @@ let package = Package(
         // the same 2.x, never a split graph. For local, atomic sill↔facet
         // editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "3.2.0")),
+                 .upToNextMinor(from: "5.0.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
@@ -94,7 +94,7 @@ let package = Package(
         // `[desktop.N] match=` via the scalar `settingValue(_:atTable:forKey:)`
         // added there (t-sgqk) — an older 2.x has no such symbol.
         .package(url: "https://github.com/akira-toriyama/swift-toml-edit.git",
-                 .upToNextMajor(from: "2.3.0")),
+                 .upToNextMajor(from: "2.3.1")),
     ],
     targets: [
         // FacetCore links sill's PURE `Palette` module (AppKit-free, so it
