@@ -39,3 +39,14 @@ jobs:
         env:
           CODESIGN_ID: "-"
         run: ./package.sh
+
+  # swift-bite — this pull request's new/changed Swift tests (XCTest and
+  # swift-testing alike) run against the source BEFORE the pull request, and
+  # the job fails when every one of them still passes: a test that would have
+  # been green without the fix it accompanies is not evidence. It stands down,
+  # green and explained, when there is nothing to prove — safe as a required
+  # check. Verdict rules and the two opt-outs (`bite-exempt: <reason>` above a
+  # test / a `Bite-exempt:` commit trailer): akira-toriyama/.github
+  # docs/swift-bite.md. Live-ammunition record: swift-toml-edit#29.
+  bite:
+    uses: akira-toriyama/.github/.github/workflows/swift-bite.yml@v2
