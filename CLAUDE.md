@@ -626,32 +626,9 @@ Moved out of this file to keep it lean: see
 
 ## Roadmap board / task tracker
 
-issue 運用（集約 Project「roadmap」#5・Inbox 既定 / Status フロー / `Closes #N`）は
-family 共通ポリシー。正典 → https://github.com/akira-toriyama/atelier/blob/main/docs/roadmap-board.md
-
 facet の作業タスク（バックログ・設計メモ・引き継ぎ）の**正本は private repo
-[`akira-toriyama/projects`](https://github.com/akira-toriyama/projects)**（自作 furrow 製・
-plain-text の `.furrow/` = JSON index + per-task markdown body）。**local clone =
-`/Volumes/workspace/github.com/akira-toriyama/projects`**（furrow source =
-`/Volumes/workspace/github.com/akira-toriyama/furrow`）・**運用ルールの正典はその
-[`projects/CLAUDE.md`](https://github.com/akira-toriyama/projects/blob/main/CLAUDE.md)**。
-`facet` ラベルで絞る: `furrow ls -l facet`（着手候補 = ready / in-progress）/
-`furrow show <id>`・起票は `furrow add "…" -l facet`（**repo ラベル必須**・無いと exit 2）。
-`furrow next` は actionable（next-lane = ready / in-progress かつ deps 完了）を canonical
-order で出す（`-l facet` で repo 絞り・`-n` で件数制限）。Project #5 はその
-公開ミラー（手動）。**repo-root の `Task.md` は 2026-06-25 に退役**し projects へ移行済み
-（`furrow migrate --label facet`）。`.furrow/index.json` は furrow が機械生成＝手編集禁止・
-`bodies/*.md` は手編集 OK。
-
-**書き込み時の運用（`projects/CLAUDE.md` 正典）**: ① **共有 checkout で並行 git 禁止 —
-書き込みは worktree か別 clone で**（`git worktree add ../projects-<topic> -b <branch>
-origin/main`・複数の人/エージェントが同時に触るため）。② projects の `main` は **direct-push 可
-だが fast-forward only**（PR 不要・push 前 `git pull --rebase origin main`・`pre-push` hook =
-`git config core.hooksPath scripts/hooks` で有効化）。③ commit 前に `furrow lint`・commit 規約 =
-gitmoji + conventional（`:card_file_box: chore(furrow): …`）。④ task id は **衝突しない
-ランダム id**（furrow#18 で `.furrow/seq` を廃止・`t-3q17` 形式）。**furrow は開発活発なので
-install せず source から使うのが安全**（常に最新挙動・install 版は stale 化する）: furrow source
-= `/Volumes/workspace/github.com/akira-toriyama/furrow` を `go build -o /tmp/furrow-dev ./cmd/furrow`
-（or `go run ./cmd/furrow <args>`）。**⚠️ 古い install 版（seq ベース・`furrow version` が #18 前）
-だと並行 `add` で id 衝突**（実際に発生）→ source ビルド版を使う（or `go install …/cmd/furrow@latest`
-で更新）。
+[`akira-toriyama/projects`](https://github.com/akira-toriyama/projects)**（furrow 製の
+中央 board）。運用ルールの正典は
+[projects/CLAUDE.md](https://github.com/akira-toriyama/projects/blob/main/CLAUDE.md)、
+コマンドの正典は [furrow README](https://github.com/akira-toriyama/furrow#readme)。
+入口は checkout 内で `furrow next` 1 本（repo scope は自動）。
