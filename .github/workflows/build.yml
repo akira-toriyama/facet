@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
 
       # Shared Swift build (setup-xcode + SPM cache + build + test).
-      - uses: akira-toriyama/.github/actions/swift-build@v2
+      - uses: akira-toriyama/.github/actions/swift-build@v2.1.2
 
       - name: Assemble & ad-hoc sign app bundle
         env:
@@ -49,4 +49,4 @@ jobs:
   # test / a `Bite-exempt:` commit trailer): akira-toriyama/.github
   # docs/swift-bite.md. Live-ammunition record: swift-toml-edit#29.
   bite:
-    uses: akira-toriyama/.github/.github/workflows/swift-bite.yml@v2
+    uses: akira-toriyama/.github/.github/workflows/swift-bite.yml@v2.1.2
