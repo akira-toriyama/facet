@@ -5,8 +5,6 @@
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![status](https://img.shields.io/badge/status-alpha-orange)
 
-**English** · [日本語](README.ja.md)
-
 A Swift workspace + window manager for macOS. The same workspace
 model viewed through pluggable surfaces — a translucent tree
 sidebar, a full-screen overview grid, and future docks / hovers /
