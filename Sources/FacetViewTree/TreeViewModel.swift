@@ -34,17 +34,141 @@ public final class TreeViewModel {
 
     public init(palette: ResolvedPalette) { self.palette = palette }
 
-    /// Rebuild rows + memoized items from a fresh projection. Selection/highlight/
-    /// collapsed are id-keyed and survive across rebuilds (dropped only if their id
-    /// vanishes). Palette is NOT touched here.
-    public func apply(sections: [ProjectedSection]) {
+    /// Optimistic focus claim (Task 11): the row a click/Enter just acted on,
+    /// held against the backend focus-assert race for 0.85 s (the same window
+    /// `SidebarView.setOptimistic` protects). While the hold stands, `apply()`
+    /// keeps `selection` on the claim instead of the projection's `isFocused`.
+    private var optimisticID: TreeItemID?
+    private var optimisticUntil: Date?
+
+    /// Rebuild rows + memoized items from a fresh projection. Highlight/
+    /// collapsed are id-keyed and survive across rebuilds (dropped only if their
+    /// id vanishes). `selection` (the focus FILL) is derived here: the
+    /// optimistic claim while its hold stands, else the projection's focused
+    /// window scoped to the active section — `hot(win) && headerActive(ws)`
+    /// parity with `SidebarView.update`. Palette is NOT touched here.
+    public func apply(sections: [ProjectedSection],
+                      activeWorkspaceIndex: Int? = nil) {
         rows = buildTreeRows(sections: sections, query: query)
         listItems = rows.map(TreeListItem.make(_:))   // memoize here, NOT in the view body
         rowsRebuildCount += 1
         let ids = Set(rows.map(\.id))
-        selection.formIntersection(ids)
         collapsed.formIntersection(ids)
         if let h = highlight, !ids.contains(h) { highlight = nil }
+
+        if let opt = optimisticID, let until = optimisticUntil, Date() < until {
+            // A vanished claim row (moved/closed mid-hold) clears the fill —
+            // same as the legacy signature dropping the O-token.
+            selection = ids.contains(opt) ? [opt] : []
+        } else {
+            optimisticID = nil; optimisticUntil = nil
+            selection = Set(focusedRowID(sections: sections,
+                                         activeWorkspaceIndex: activeWorkspaceIndex)
+                                .map { [$0] } ?? [])
+        }
+    }
+
+    /// The focused window's row id, scoped to the ACTIVE section (a window in
+    /// a parked / non-active workspace section never shows as focused). An
+    /// isolate desktop's synthesized sections carry no workspace index — their
+    /// focused window keeps the fill (they are the only sections shown there).
+    private func focusedRowID(sections: [ProjectedSection],
+                              activeWorkspaceIndex: Int?) -> TreeItemID? {
+        var group = 0
+        for s in sections {
+            let wins = s.windows.filter { matches(query, $0) }
+            if !query.isEmpty && wins.isEmpty { continue }   // mirror buildTreeRows' group numbering
+            let active = s.sourceWorkspaceIndex == nil
+                || s.sourceWorkspaceIndex == activeWorkspaceIndex
+            if active, let w = wins.first(where: { $0.isFocused }) {
+                return .window(group: group, w.id)
+            }
+            group += 1
+        }
+        return nil
+    }
+
+    /// Claim the fill for an acted-on row NOW (before the backend round-trip
+    /// lands) and hold it for 0.85 s — `SidebarView.setOptimistic` parity.
+    public func setOptimistic(_ id: TreeItemID) {
+        optimisticID = id
+        optimisticUntil = Date().addingTimeInterval(0.85)
+        selection = rows.contains(where: { $0.id == id }) ? [id] : []
+    }
+
+    // MARK: - Keyboard cursor (Task 10)
+    //
+    // The cursor is `highlight` (sill's outline); `selection` (the fill) stays
+    // the focused-window row — cursor ≠ selection, the facet tree invariant.
+    // These mirror the pure `KbNav` math over `rows`: every row is selectable
+    // (`TreeRowSpec` has only header/window kinds — no separators).
+
+    /// Seed the cursor entering keyboard nav: keep a still-valid cursor, else
+    /// the focused row, else the first row — `enterKbNav`/`kbDefault` parity.
+    public func seedCursor() {
+        if let h = highlight, rows.contains(where: { $0.id == h }) { return }
+        highlight = selection.first ?? rows.first?.id
+    }
+
+    public func clearCursor() { highlight = nil }
+
+    /// Arrow-ladder move — `kbMoveTarget` parity: no cursor anchors at the
+    /// top, the ends clamp.
+    public func moveCursor(_ delta: Int) {
+        let ids = rows.map(\.id)
+        guard !ids.isEmpty else { return }
+        let pos = highlight.flatMap { h in ids.firstIndex(of: h) } ?? 0
+        highlight = ids[min(max(pos + delta, 0), ids.count - 1)]
+    }
+
+    /// Jump to the prev/next render group: its first window, else its header
+    /// (empty group) — `kbJumpTarget` parity. Group ordinals ARE the header
+    /// order: `buildTreeRows` numbers emitted sections 0…n in row order.
+    public func jumpSection(_ delta: Int) {
+        let headerIDs: [TreeItemID] = rows.compactMap {
+            if case .header = $0.kind { return $0.id }
+            return nil
+        }
+        guard !headerIDs.isEmpty else { return }
+        let curGroup: Int? = {
+            switch highlight {
+            case .window(let g, _): return g
+            case .header: return headerIDs.firstIndex { $0 == highlight }
+            case nil: return nil
+            }
+        }()
+        let g = min(max((curGroup ?? 0) + delta, 0), headerIDs.count - 1)
+        if let firstWin = rows.first(where: {
+            if case .window(let rg, _) = $0.id { return rg == g }
+            return false
+        }) {
+            highlight = firstWin.id
+        } else {
+            highlight = headerIDs[g]
+        }
+    }
+
+    /// The row the cursor is on — Enter's commit target.
+    public func activateCursor() -> TreeItemID? { highlight }
+
+    /// The cursor row's spec (the `m`-menu needs its kind/pid), or nil.
+    public func cursorRow() -> TreeRowSpec? {
+        guard let h = highlight else { return nil }
+        return rows.first { $0.id == h }
+    }
+
+    /// Content-space offset (y-down from the tree's top) of the row's TOP —
+    /// summed sill `ListMetrics` heights over the visible rows above it — or
+    /// nil when the id isn't visible. The SwiftUI list exposes no row rects,
+    /// so `PanelHost` anchors the keyboard context menu (`m`) from this.
+    public func rowTop(of id: TreeItemID) -> CGFloat? {
+        let m = ListMetrics.forDensity(.comfortable)
+        var y: CGFloat = 0
+        for item in ListItem.visibleRows(listItems, collapsed: collapsed) {
+            if item.id == id { return y }
+            y += Self.itemHeight(item, m)
+        }
+        return nil
     }
 
     /// The tree's own content height = summed sill `ListMetrics` row heights over
@@ -65,16 +189,30 @@ public final class TreeViewModel {
         // this equals the full sum today; it stays correct when header-collapse
         // lands (F2/Task 12).
         return ListItem.visibleRows(listItems, collapsed: collapsed)
-            .reduce(CGFloat(0)) { acc, item in
-                switch item.kind {
-                case let .sectionHeader(subtitle, _):
-                    return acc + (subtitle == nil ? m.header1 : m.header2)
-                case .row:
-                    return acc + (item.secondary == nil ? m.singleRow : m.twoLineRow)
-                case .separator:
-                    return acc + m.separatorBand
-                }
-            }
+            .reduce(CGFloat(0)) { $0 + Self.itemHeight($1, m) }
+    }
+
+    /// Panel body height while the loading skeleton is up — three placeholder
+    /// sections (header + two rows each), the legacy `SidebarView.skeletonHeight`
+    /// shape in sill metrics. Lives here so `ListMetrics` stays confined to
+    /// `FacetViewTree` (the `rowContentHeight` rationale).
+    public static var skeletonContentHeight: CGFloat {
+        let m = ListMetrics.forDensity(.comfortable)
+        return m.header1 * 3 + m.singleRow * 6 + 12
+    }
+
+    /// One row's sill render height — the single source `rowContentHeight`
+    /// (panel auto-size) and `rowTop` (menu anchor) both sum over.
+    private static func itemHeight(_ item: ListItem<TreeItemID>,
+                                   _ m: ListMetrics) -> CGFloat {
+        switch item.kind {
+        case let .sectionHeader(subtitle, _):
+            return subtitle == nil ? m.header1 : m.header2
+        case .row:
+            return item.secondary == nil ? m.singleRow : m.twoLineRow
+        case .separator:
+            return m.separatorBand
+        }
     }
 }
 

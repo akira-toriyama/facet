@@ -27,7 +27,9 @@ public struct TreeBadge: Sendable, Equatable {
 
 /// The fuzzy filter, kept pure (app name + title only — WS/section names are
 /// NOT searched, matching the AppKit tree). Empty query matches everything.
-private func matches(_ query: String, _ w: Window) -> Bool {
+/// Internal (not private): `TreeViewModel.focusedRowID` walks the same
+/// filter + group numbering to scope the focus fill — one predicate, no drift.
+func matches(_ query: String, _ w: Window) -> Bool {
     query.isEmpty || fuzzyMatch(query, w.appName + " " + w.title)
 }
 
