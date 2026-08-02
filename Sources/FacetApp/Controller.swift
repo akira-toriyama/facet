@@ -65,6 +65,15 @@ final class Controller: NSObject {
     /// Empty ⇒ section model off here ⇒ the overview degrades to
     /// `lastWorkspaces`. Snapshot-on-show seeds from this.
     var lastSections: [ProjectedSection] = []
+    /// The EXACT section list the SwiftUI tree last rendered (what fed
+    /// `treeVM.apply`): `lastSections` in section mode, the synthesized 1:1
+    /// workspace projection in the by-workspace degrade. `activateTreeRow` /
+    /// the `m`-menu resolve a `TreeItemID`'s group ordinal against THIS array
+    /// — never against `lastSections`, which is empty in the degrade.
+    /// ⚠️ Group ordinals count EMITTED sections (`buildTreeRows`), which
+    /// matches these indices only while the query is empty — reconcile before
+    /// facet-3 wires live search (the t-tsxg facet-3 caveat).
+    var lastTreeSections: [ProjectedSection] = []
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -361,6 +370,11 @@ final class Controller: NSObject {
         // fires on the kb-nav enter/exit, not on every click.
         panelHost.onKeyChanged = { [weak self] isKey in
             self?.handlePanelKeyChange(isKey: isKey)
+        }
+        // #66 activation for the SwiftUI tree (t-tsxg Task 12): a row click
+        // routes through the ONE helper (Enter shares it — Task 10).
+        panelHost.onActivateRow = { [weak self] id in
+            self?.activateTreeRow(id)
         }
         applyBorderFromConfig()
         resolveSurfacePalettes()      // PR-B: seed all three boxes from config
@@ -1299,7 +1313,15 @@ final class Controller: NSObject {
             sections = FilterProjection.project(
                 workspaces: displayWss, sections: []).sections
         }
-        panelHost.treeVM.apply(sections: sections)
+        lastTreeSections = sections
+        panelHost.treeVM.apply(
+            sections: sections,
+            activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index)
+        // Mirror the skeleton's source of truth (SidebarView's signature
+        // logic, which just ran in `update`) onto the host-side overlay —
+        // clears it on content-ready, holds it through a held mid-switch
+        // apply (Task 11).
+        panelHost.setSkeletonVisible(sidebarView.isSkeleton)
         panelHost.setHandleOrdinal(macDesktopOrdinal)
         panelHost.layout(searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }

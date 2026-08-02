@@ -40,6 +40,7 @@ extension Controller {
         NSApp.activate(ignoringOtherApps: true)
         panelHost.makeKey()
         sidebarView.enterKbNav()
+        panelHost.treeVM.seedCursor()      // SwiftUI cursor (Task 10)
     }
 
     func exitActive(restore: Bool) {
@@ -53,6 +54,7 @@ extension Controller {
         // so a focused window never has to fight facet for the keys.)
         guard sidebarView.kbNav else { return }
         sidebarView.exitKbNav()                    // also clears `searching`
+        panelHost.treeVM.clearCursor()             // SwiftUI cursor (Task 10)
         panelHost.resignKey()
         panelHost.layout(searching: sidebarView.searching)
         NSApp.setActivationPolicy(.accessory)      // back to LSUIElement
@@ -94,18 +96,18 @@ extension Controller {
                     sidebarView.setQuery("")
                 }
                 return true
-            case 36, 76:  sidebarView.kbActivate();      return true
-            case 125:     sidebarView.kbMove(1);         return true
-            case 126:     sidebarView.kbMove(-1);        return true
-            case 48:      sidebarView.kbMove(shift ? -1 : 1)
+            case 36, 76:  activateTreeCursor();               return true
+            case 125:     panelHost.treeVM.moveCursor(1);     return true
+            case 126:     panelHost.treeVM.moveCursor(-1);    return true
+            case 48:      panelHost.treeVM.moveCursor(shift ? -1 : 1)
                           return true
             default:      break
             }
             if ctrl, e.charactersIgnoringModifiers?.lowercased() == "n" {
-                sidebarView.kbMove(1);  return true
+                panelHost.treeVM.moveCursor(1);  return true
             }
             if ctrl, e.charactersIgnoringModifiers?.lowercased() == "p" {
-                sidebarView.kbMove(-1); return true
+                panelHost.treeVM.moveCursor(-1); return true
             }
             return false           // → NSTextField (typing, IME, ⌫)
         }
@@ -114,42 +116,165 @@ extension Controller {
         // didBecomeKey hook below — fall through to the full nav.
 
         // -- Normal keyboard nav --
-        // Theme A keyboard DnD: Space lifts the selected row (window
-        // = move, header = WS-swap); while lifted the arrow keys aim
-        // the drop target (kbMove/kbJumpWS redirect internally),
-        // Return/Space commits, Esc cancels the lift before exiting.
+        // t-tsxg Task 10: the cursor now lives in the SwiftUI view-model
+        // (`treeVM.highlight` — sill's outline; `selection` stays the focus
+        // fill, cursor ≠ selection). The five keys sill's `ThemedListView`
+        // also binds (`.onKeyPress` ↑/↓/Return/Esc/Space) MUST keep returning
+        // true here — the local monitor swallowing them is the load-bearing
+        // invariant that stops a double-act + keeps sill's list focus ring
+        // from ever engaging (spec §4.8, caveat ④).
         switch e.keyCode {
         case 53:      // ESC backs out of a sub-mode but never leaves the
-                      // tree: cancel an in-progress lift, otherwise stay in
-                      // nav. (You leave nav by clicking another app or
+                      // tree. (You leave nav by clicking another app or
                       // pressing Enter on a window — both resign key, and
                       // handlePanelKeyChange reverts the activation policy.)
-                      _ = sidebarView.kbCancelLift()
                       return true
-        case 36, 76:  if sidebarView.kbCommitLift() { return true }
-                      sidebarView.kbActivate();          return true
-        case 125:     sidebarView.kbMove(1);             return true
-        case 126:     sidebarView.kbMove(-1);            return true
-        case 124:     sidebarView.kbJumpWS(1);           return true
-        case 123:     sidebarView.kbJumpWS(-1);          return true
-        case 48:      sidebarView.kbJumpWS(shift ? -1 : 1)
+        case 36, 76:  activateTreeCursor();               return true
+        case 125:     panelHost.treeVM.moveCursor(1);     return true
+        case 126:     panelHost.treeVM.moveCursor(-1);    return true
+        case 124:     panelHost.treeVM.jumpSection(1);    return true
+        case 123:     panelHost.treeVM.jumpSection(-1);   return true
+        case 48:      panelHost.treeVM.jumpSection(shift ? -1 : 1)
                       return true
-        case 49:      sidebarView.kbToggleLift();         return true
+        case 49:      // Space (Theme A keyboard DnD lift) is parked until
+                      // facet-2 lands DnD on the SwiftUI tree — the retired
+                      // AppKit path's lift would commit real moves with NO
+                      // visible aim feedback. Still swallowed (no beep).
+                      return true
         default:      break
         }
         switch e.charactersIgnoringModifiers?.lowercased() {
-        case "n" where ctrl: sidebarView.kbMove(1);      return true
-        case "p" where ctrl: sidebarView.kbMove(-1);     return true
-        case "j":            sidebarView.kbMove(1);      return true
-        case "k":            sidebarView.kbMove(-1);     return true
-        case "l":            sidebarView.kbJumpWS(1);    return true
-        case "h":            sidebarView.kbJumpWS(-1);   return true
-        case "m":            sidebarView.kbContextMenu(); return true
+        case "n" where ctrl: panelHost.treeVM.moveCursor(1);   return true
+        case "p" where ctrl: panelHost.treeVM.moveCursor(-1);  return true
+        case "j":            panelHost.treeVM.moveCursor(1);   return true
+        case "k":            panelHost.treeVM.moveCursor(-1);  return true
+        case "l":            panelHost.treeVM.jumpSection(1);  return true
+        case "h":            panelHost.treeVM.jumpSection(-1); return true
+        case "m":            showTreeCursorMenu();             return true
         case "s":            enterSearch();              return true
         case "t" where config.desktopRenderMode(
             ordinal: currentMacDesktopOrdinal()).rendersSections:
                              enterTagManage();           return true
         default:             return false
+        }
+    }
+
+    // MARK: - SwiftUI tree activation (t-tsxg Tasks 10/12)
+    //
+    // The ONE routing helper for acting on a tree row — a list click
+    // (`PanelHost.onActivateRow`) and Enter (`activateTreeCursor`) both land
+    // here. Mirrors `SidebarView+Drag.handleClick` (which stays alive until
+    // facet-2/3 retire the AppKit tree). #66: drop key FIRST
+    // (`exitActive(restore: false)`), then act, so a same-app focus isn't
+    // fought by facet being the active app.
+
+    /// t-63h2: an isolate desktop's holding row is inert — checked BEFORE
+    /// `exitActive` so acting on it doesn't silently drop keyboard nav for a
+    /// no-op.
+    private func treeRowIsInert(_ id: TreeItemID) -> Bool {
+        guard case .window(let g, _) = id,
+              g >= 0, g < lastTreeSections.count else { return false }
+        return lastTreeSections[g].sectionType == .holding
+    }
+
+    /// Enter on the cursor row — the keyboard twin of a row click.
+    private func activateTreeCursor() {
+        guard let id = panelHost.treeVM.activateCursor() else { return }
+        activateTreeRow(id)
+    }
+
+    func activateTreeRow(_ id: TreeItemID) {
+        guard !treeRowIsInert(id) else { return }
+        exitActive(restore: false)
+        switch id {
+        case .header(let sectionID):
+            guard let g = lastTreeSections.firstIndex(where: { $0.id == sectionID })
+            else { return }
+            let sec = lastTreeSections[g]
+            if let i = sec.sourceWorkspaceIndex {
+                // Workspace header: claim the workspace's predicted focus
+                // optimistically (no row when it's empty), then activate.
+                // `i` is 0-based; `ActiveSection.workspace` is 1-based → +1.
+                if let pred = lastWorkspaces.first(where: { $0.index == i })?
+                    .windows.predictedFocus()?.id {
+                    panelHost.treeVM.setOptimistic(.window(group: g, pred))
+                }
+                activateSection(.workspace(i + 1), autoFocus: true)
+            } else {
+                // An isolate desktop's matched / holding header: nothing to
+                // activate (`ActiveSection` is single-case since t-ec9s) —
+                // focus the section's FIRST window, the unified §G helper.
+                focusFirstWindow(inSectionID: sec.id)
+            }
+        case .window(let g, let wid):
+            guard g >= 0, g < lastTreeSections.count else { return }
+            let sec = lastTreeSections[g]
+            // The row's REAL workspace (a matched-section row lives in its
+            // real ws — the `realWS` resolution), else the section's source,
+            // else the active ws.
+            let activeIdx = lastWorkspaces.first(where: { $0.isActive })?.index
+            let i = lastWorkspaces
+                .first { $0.windows.contains { $0.id == wid } }?.index
+                ?? sec.sourceWorkspaceIndex ?? activeIdx ?? 0
+            guard let winModel = lastWorkspaces
+                .first(where: { $0.index == i })?
+                .windows.first(where: { $0.id == wid })
+                ?? sec.windows.first(where: { $0.id == wid })
+            else { return }
+            let needSwitch = (i != activeIdx)
+            panelHost.treeVM.setOptimistic(id)
+            // A HIDDEN row (Cmd+H'd / minimized — hide-reclaim pulled its
+            // tile slot) is restored on activation; a normal row just
+            // focuses. Off main so the click never hitches (handleClick
+            // parity).
+            let hidden = winModel.isOnscreen == false
+            cliQueue.async { [bk = backend] in
+                if needSwitch {
+                    bk.switchWorkspace(toIndex: i, autoFocus: false)
+                }
+                if hidden {
+                    bk.revealWindow(wid)
+                } else {
+                    Task { @MainActor [weak self] in
+                        self?.focusWindow(winModel, postSwitch: needSwitch)
+                    }
+                }
+            }
+        }
+    }
+
+    /// `m` in keyboard nav: the cursor row's context menu, anchored just past
+    /// the panel's right edge, level with the row — `kbContextMenu` parity
+    /// for the SwiftUI tree (the list exposes no row rects, so the anchor
+    /// derives from the summed `ListMetrics` offset).
+    private func showTreeCursorMenu() {
+        let vm = panelHost.treeVM
+        guard let row = vm.cursorRow(),
+              let top = vm.rowTop(of: row.id),
+              let scr = panelHost.menuAnchorBesideTreeRow(contentOffset: top)
+        else { return }
+        switch row.id {
+        case .header(let sectionID):
+            guard let g = lastTreeSections.firstIndex(where: { $0.id == sectionID })
+            else { return }
+            let sec = lastTreeSections[g]
+            if let ws = sec.sourceWorkspaceIndex {
+                sidebarView.headerMenu(at: scr, group: g, workspaceIndex: ws,
+                                       filterable: true)
+            } else if sec.sectionType == .matched {
+                sidebarView.isolateHeaderMenu(at: scr, group: g, filterable: true)
+            }                       // holding header: no menu (t-63h2)
+        case .window(let g, let wid):
+            guard case .window(let pid) = row.kind else { return }
+            let i = lastWorkspaces
+                .first { $0.windows.contains { $0.id == wid } }?.index
+                ?? (g >= 0 && g < lastTreeSections.count
+                        ? lastTreeSections[g].sourceWorkspaceIndex : nil)
+                ?? lastWorkspaces.first(where: { $0.isActive })?.index ?? 0
+            sidebarView.showWindowMenu(at: scr, workspaceIndex: i, pid: pid,
+                                       windowID: wid,
+                                       title: row.secondary ?? row.primary,
+                                       filterable: true)
         }
     }
 

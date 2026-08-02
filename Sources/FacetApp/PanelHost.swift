@@ -146,6 +146,7 @@ final class PanelHost: NSObject {
         treeVM = TreeViewModel(palette: paletteBox.pal)
         treeHost = NSHostingView(rootView: TreeContentView(model: treeVM))
         treeHost.autoresizingMask = [.width, .height]
+        skeletonView.isHidden = true
 
         effect = NSVisualEffectView()
         // Shown only when pal.background == nil (the `system` theme; every
@@ -180,6 +181,7 @@ final class PanelHost: NSObject {
 
         effect.addSubview(bgView)
         effect.addSubview(treeHost)
+        effect.addSubview(skeletonView)   // loading ghost, over the tree (Task 11)
         effect.addSubview(searchBar)
         effect.addSubview(handleBar)
 
@@ -390,7 +392,41 @@ final class PanelHost: NSObject {
     /// without the old auto-height's ~handle-band clip.
     private func autoContentHeight(searching: Bool) -> CGFloat {
         let sh: CGFloat = searching ? searchRowH : 0
-        return treeVM.rowContentHeight + sh + HandleBar.height
+        // While the loading ghost is up the tree is empty (or stale) — size to
+        // the skeleton's fixed three-section shape instead of the rows
+        // (Task 11; pre-overlay this collapsed the `--loading` panel to
+        // min-height).
+        let body = skeletonVisible ? TreeViewModel.skeletonContentHeight
+                                   : treeVM.rowContentHeight
+        return body + sh + HandleBar.height
+    }
+
+    // MARK: - Loading skeleton (t-tsxg Task 11)
+
+    /// The host-side loading ghost painted over the SwiftUI tree while
+    /// `--loading` masks a mac-desktop switch. `SidebarView.isSkeleton` stays
+    /// the source of truth (its signature logic decides content-ready); the
+    /// Controller mirrors it here from `showLoading` and every `apply()`.
+    private let skeletonView = TreeSkeletonView()
+    private(set) var skeletonVisible = false
+
+    func setSkeletonVisible(_ on: Bool) {
+        guard skeletonVisible != on else { return }
+        skeletonVisible = on
+        skeletonView.isHidden = !on
+    }
+
+    /// Screen point just past the panel's right edge, level with the tree row
+    /// whose TOP sits `contentOffset` below the tree's top — the keyboard
+    /// context menu (`m`) anchor. The SwiftUI list exposes no row rects, so
+    /// the offset comes from `TreeViewModel.rowTop(of:)` (summed sill
+    /// metrics); flip-agnostic via the screen-rect conversion.
+    func menuAnchorBesideTreeRow(contentOffset: CGFloat) -> NSPoint? {
+        guard let win = treeHost.window else { return nil }
+        let hostOnScreen = win.convertToScreen(
+            treeHost.convert(treeHost.bounds, to: nil))
+        return NSPoint(x: win.frame.maxX + 8,
+                       y: hostOnScreen.maxY - contentOffset)
     }
 
     /// Single source of truth for panel + subview frames. Called
@@ -444,6 +480,7 @@ final class PanelHost: NSObject {
         // documentView width.
         let bodyH = max(f.height - sh - hb, 0)
         treeHost.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
+        skeletonView.frame = treeHost.frame
         // Border tracks the panel size. Disable the implicit layer
         // animation so it doesn't lag a frame behind a live resize.
         CATransaction.begin()
@@ -472,6 +509,7 @@ final class PanelHost: NSObject {
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
         handleBar.needsDisplay = true
+        skeletonView.barColor = pal.muted.withAlphaComponent(0.22)
         treeVM.palette = pal      // re-colour the SwiftUI tree (no re-flatten)
     }
 
@@ -573,5 +611,38 @@ extension PanelHost: NSWindowDelegate {
 
     nonisolated func windowDidResignKey(_ notification: Notification) {
         MainActor.assumeIsolated { onKeyChanged?(false) }
+    }
+}
+
+// MARK: - TreeSkeletonView (t-tsxg Task 11)
+
+/// The loading ghost painted over the SwiftUI tree while `--loading` masks a
+/// mac-desktop switch: three placeholder sections — a short header bar + two
+/// full row bars each — in the theme's muted ink. Host-side AppKit chrome
+/// (FacetApp is not sill's widget layer, so no floor policy applies); shown /
+/// hidden by `PanelHost.setSkeletonVisible`.
+final class TreeSkeletonView: NSView {
+    var barColor: NSColor = .secondaryLabelColor.withAlphaComponent(0.22) {
+        didSet { needsDisplay = true }
+    }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirty: NSRect) {
+        let w = bounds.width - 24
+        guard w > 0 else { return }
+        barColor.setFill()
+        var y: CGFloat = 10
+        for _ in 0..<3 {
+            NSBezierPath(roundedRect:
+                NSRect(x: 12, y: y, width: w * 0.45, height: 12),
+                xRadius: 4, yRadius: 4).fill()
+            y += 26
+            for _ in 0..<2 {
+                NSBezierPath(roundedRect:
+                    NSRect(x: 12, y: y, width: w, height: 18),
+                    xRadius: 5, yRadius: 5).fill()
+                y += 28
+            }
+            y += 8
+        }
     }
 }
