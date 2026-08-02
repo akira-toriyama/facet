@@ -141,6 +141,84 @@ final class TreeCursorTests: XCTestCase {
                        "a claim whose row vanished mid-hold shows no fill")
     }
 
+    // MARK: - keyboard drag (facet-2 — host-driven lift/aim/commit)
+
+    func testLiftWindowRowAimsAndCommits() {
+        let m = vm(ladder)
+        m.seedCursor(); m.moveCursor(1)                    // w1 (group 0)
+        let w1 = TreeItemID.window(group: 0, WindowID(serverID: 1))
+        XCTAssertEqual(m.highlight, w1)
+        m.liftCursor()
+        XCTAssertTrue(m.isKbDragging)
+        m.aimDrag(1); m.aimDrag(1)
+        guard let (ctx, target) = m.commitDrag() else { return XCTFail("no commit") }
+        XCTAssertEqual(ctx.sourceID, w1)
+        XCTAssertEqual(ctx.memberIDs, [w1], "a window lifts alone")
+        XCTAssertNotNil(target)
+        XCTAssertFalse(m.isKbDragging, "commit clears the lift")
+    }
+
+    func testLiftHeaderChunksItsWholeSection() {
+        let m = vm(ladder)
+        m.seedCursor()                                     // header ws:0
+        m.liftCursor()
+        XCTAssertTrue(m.isKbDragging)
+        guard let (ctx, target) = m.commitDrag() else { return XCTFail("no commit") }
+        XCTAssertEqual(ctx.sourceID, .header("ws:0"))
+        XCTAssertEqual(ctx.memberIDs,
+                       [.header("ws:0"),
+                        .window(group: 0, WindowID(serverID: 1)),
+                        .window(group: 0, WindowID(serverID: 2))],
+                       "a header lifts its whole section chunk")
+        // Chunk candidates are section gaps only — the first is a BETWEEN.
+        guard case .between = target.placement else {
+            return XCTFail("chunk aims at gaps, got \(target.placement)")
+        }
+    }
+
+    func testLiftSurvivesAReapplyAndCancelsWhenTheSourceVanishes() {
+        let m = vm(ladder)
+        m.seedCursor(); m.moveCursor(1)                    // w1
+        m.liftCursor()
+        m.apply(sections: ladder, activeWorkspaceIndex: nil)   // the 2 s refresh
+        XCTAssertTrue(m.isKbDragging, "a reconcile must not drop the user's lift")
+        var gone = ladder
+        gone[0] = sec("ws:0", "1", .workspace,
+                      [win(2, "Terminal", "zsh")], src: 0)     // w1 closed
+        m.apply(sections: gone, activeWorkspaceIndex: nil)
+        XCTAssertFalse(m.isKbDragging, "a vanished source cancels the lift")
+    }
+
+    func testDragPreviewCarriesLiveSelectionAndHighlight() {
+        let focused = [sec("ws:0", "1", .workspace,
+                           [win(1, "Safari", "G", focused: true),
+                            win(2, "Terminal", "z")], src: 0)]
+        let m = vm(focused, active: 0)
+        m.seedCursor()                                     // the focused row
+        XCTAssertNil(m.dragPreview, "no preview while idle — live bindings drive")
+        m.liftCursor()
+        guard let p = m.dragPreview else { return XCTFail("lift renders via preview") }
+        XCTAssertEqual(p.selection, m.selection,
+                       "the preview must carry the live fill (it OVERRIDES bindings)")
+        XCTAssertEqual(p.highlight, m.highlight)
+        XCTAssertEqual(p.dragSource, m.highlight)
+        XCTAssertNotNil(p.dropTarget)
+    }
+
+    // MARK: - renderedSections (the query-safe ordinal source)
+
+    func testRenderedSectionsAlignWithEmittedGroupOrdinals() {
+        let m = vm(ladder)
+        m.setQuery("mail")                                 // only ws2's window matches
+        XCTAssertEqual(m.renderedSections.map(\.id), ["ws:2"],
+                       "zero-match sections drop from the rendered array too")
+        XCTAssertEqual(m.rows.map(\.id),
+                       [.header("ws:2"), .window(group: 0, WindowID(serverID: 3))],
+                       "…so group 0 correctly indexes ws:2 in renderedSections")
+        m.setQuery("")
+        XCTAssertEqual(m.renderedSections.count, 3, "empty query restores all")
+    }
+
     // MARK: - rowTop (the m-menu anchor)
 
     func testRowTopIsMonotonicFromZeroAndNilOffLadder() {

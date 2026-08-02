@@ -30,6 +30,8 @@ import SwiftUI
 import FacetCore
 import FacetView
 import FacetViewTree
+import ListCore            // DragContext/DropTarget (the tree drop seam)
+import ThemeKit            // ThemedTextField — the search field (facet-3)
 
 @MainActor
 final class PanelHost: NSObject {
@@ -42,7 +44,14 @@ final class PanelHost: NSObject {
     /// old `NSScrollView` — sill's `ThemedListView` owns its own scrolling.
     private let treeHost: NSHostingView<TreeContentView>
     private let bgView = NSView()
-    let searchBar: SearchBar
+    /// facet-3: the type-to-filter field is sill's AppKit `ThemedTextField`
+    /// (the floor-1 edit core — IME marked-text detection + key-seam
+    /// suppression built in), replacing the hand-drawn `SearchBar`. The
+    /// AppKit widget (not the `ThemedTextFieldView` bridge) because the
+    /// host's key monitor needs the live handles the bridge can't expose —
+    /// `isComposing` (the monitor's IME gate), `focus()`, silent
+    /// `stringValue` — and the band lives inside this AppKit chrome anyway.
+    let searchBar: ThemedTextField
     /// The `@Observable` box the SwiftUI tree binds to. Controller feeds it via
     /// `apply(sections:)`; `applyTheme()` repoints its `palette` every tick.
     let treeVM: TreeViewModel
@@ -59,6 +68,8 @@ final class PanelHost: NSObject {
     var onActivateRow: ((TreeItemID) -> Void)?
     var onToggleSectionRow: ((TreeItemID) -> Void)?
     var onHoverRow: ((TreeItemID?) -> Void)?
+    var onDropRow: ((ListCore.DragContext<TreeItemID>,
+                     ListCore.DropTarget<TreeItemID>) -> Void)?
     /// Per-surface palette (PR-B) — the tree box, shared with every piece
     /// of tree chrome (sidebar, search bar, handle bar, border, scrollers)
     /// so a re-theme / cycle updates all of it at once.
@@ -173,11 +184,15 @@ final class PanelHost: NSObject {
         bgView.layer?.backgroundColor = (paletteBox.pal.background ?? .clear).cgColor
         bgView.autoresizingMask = [.width, .height]
 
-        searchBar = SearchBar(frame: .zero)
-        searchBar.paletteBox = paletteBox
+        searchBar = ThemedTextField(palette: paletteBox.pal)
+        searchBar.variant = .standard                 // spec §4.4: placeholder-only
+        searchBar.placeholder = "type to filter…"
+        searchBar.leadingSymbol = "magnifying-glass"
         searchBar.isHidden = true
-        searchBar.applyTheme()
         searchBar.autoresizingMask = [.width, .minYMargin]
+        // The clear-×: appears with text (Controller's onChange syncs the
+        // symbol), tap clears + fires onChange("") → the live filter resets.
+        searchBar.onTrailingTap = { [weak searchBar] in searchBar?.clearText() }
 
         effect.addSubview(bgView)
         effect.addSubview(treeHost)
@@ -244,7 +259,9 @@ final class PanelHost: NSObject {
             model: treeVM,
             onActivate: { [weak self] in self?.onActivateRow?($0) },
             onToggleSection: { [weak self] in self?.onToggleSectionRow?($0) },
-            onHover: { [weak self] in self?.onHoverRow?($0) })
+            onHover: { [weak self] in self?.onHoverRow?($0) },
+            onDrop: { [weak self] in self?.onDropRow?($0, $1) },
+            onRowRects: { [weak self] in self?.treeRowRects = $0 })
         // Every border tick / config / flash repaints the panel border.
         borderFX.onRepaint = { [weak self] in
             guard let self else { return }
@@ -416,10 +433,24 @@ final class PanelHost: NSObject {
         skeletonView.isHidden = !on
     }
 
+    /// LIVE per-row viewport frames streamed by the list (top-left origin,
+    /// y-down, scroll-true — `RowRectPreference`). The preview overlays and
+    /// the `m`-menu anchor from these.
+    private(set) var treeRowRects: [TreeItemID: CGRect] = [:]
+
+    /// The row's frame in SCREEN coordinates, or nil while it isn't laid out
+    /// (scrolled out, or the panel has no window yet).
+    func rowScreenRect(_ id: TreeItemID) -> NSRect? {
+        guard let r = treeRowRects[id], let win = treeHost.window else { return nil }
+        let host = win.convertToScreen(treeHost.convert(treeHost.bounds, to: nil))
+        return NSRect(x: host.minX + r.minX, y: host.maxY - r.maxY,
+                      width: r.width, height: r.height)
+    }
+
     /// Screen point just past the panel's right edge, level with the tree row
     /// whose TOP sits `contentOffset` below the tree's top — the keyboard
-    /// context menu (`m`) anchor. The SwiftUI list exposes no row rects, so
-    /// the offset comes from `TreeViewModel.rowTop(of:)` (summed sill
+    /// context menu (`m`) anchor fallback when the live rect isn't available
+    /// (the offset comes from `TreeViewModel.rowTop(of:)`, summed sill
     /// metrics); flip-agnostic via the screen-rect conversion.
     func menuAnchorBesideTreeRow(contentOffset: CGFloat) -> NSPoint? {
         guard let win = treeHost.window else { return nil }
@@ -507,7 +538,7 @@ final class PanelHost: NSObject {
         // themes — their opaque bgView hides the effect entirely.
         effect.material = pal.vibrancyMaterial ?? .sidebar
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
-        searchBar.applyTheme()
+        searchBar.palette = pal
         handleBar.needsDisplay = true
         skeletonView.barColor = pal.muted.withAlphaComponent(0.22)
         treeVM.palette = pal      // re-colour the SwiftUI tree (no re-flatten)

@@ -1,7 +1,8 @@
 import AppKit              // NSImage (TreeListItem's per-row glyphs)
 import Observation
 import FacetCore
-import ThemeKitUI          // ListItem / Badge / BadgeRole
+import ThemeKitUI          // ListItem / Badge / BadgeRole / ListPreview
+import ListCore            // pure DnD math (dragCandidates / chunkMemberIDs / DropTarget)
 import FacetView           // AppIcons, IconResolver, ResolvedPalette (re-exported)
 
 /// The single @Observable box the SwiftUI tree binds to. Injected via
@@ -34,6 +35,21 @@ public final class TreeViewModel {
 
     public init(palette: ResolvedPalette) { self.palette = palette }
 
+    /// The EXACT sections the current rows were built from — see `apply()`.
+    public private(set) var renderedSections: [ProjectedSection] = []
+    /// The raw inputs of the last `apply`, so `setQuery` can re-project
+    /// without the host re-feeding sections (facet-3 live filter).
+    private var sourceSections: [ProjectedSection] = []
+    private var sourceActiveWS: Int?
+
+    /// Live search filter (facet-3): re-projects rows/renderedSections from
+    /// the stored inputs. Cheap no-op on an unchanged query.
+    public func setQuery(_ q: String) {
+        guard q != query else { return }
+        query = q
+        apply(sections: sourceSections, activeWorkspaceIndex: sourceActiveWS)
+    }
+
     /// Optimistic focus claim (Task 11): the row a click/Enter just acted on,
     /// held against the backend focus-assert race for 0.85 s (the same window
     /// `SidebarView.setOptimistic` protects). While the hold stands, `apply()`
@@ -49,12 +65,24 @@ public final class TreeViewModel {
     /// parity with `SidebarView.update`. Palette is NOT touched here.
     public func apply(sections: [ProjectedSection],
                       activeWorkspaceIndex: Int? = nil) {
+        sourceSections = sections
+        sourceActiveWS = activeWorkspaceIndex
         rows = buildTreeRows(sections: sections, query: query)
+        // The EMITTED sections, aligned with the rows' group ordinals (the
+        // same zero-match drop buildTreeRows walks). Hosts resolve a
+        // TreeItemID's group against THIS array — never against their own
+        // section list, whose indices diverge from emitted ordinals the
+        // moment a query drops a section (the t-tsxg facet-3 ordinal bug,
+        // fixed at the root here).
+        renderedSections = sections.filter { s in
+            query.isEmpty || s.windows.contains { matches(query, $0) }
+        }
         listItems = rows.map(TreeListItem.make(_:))   // memoize here, NOT in the view body
         rowsRebuildCount += 1
         let ids = Set(rows.map(\.id))
         collapsed.formIntersection(ids)
         if let h = highlight, !ids.contains(h) { highlight = nil }
+        reconcileKbDrag(ids)
 
         if let opt = optimisticID, let until = optimisticUntil, Date() < until {
             // A vanished claim row (moved/closed mid-hold) clears the fill —
@@ -150,6 +178,90 @@ public final class TreeViewModel {
 
     /// The row the cursor is on — Enter's commit target.
     public func activateCursor() -> TreeItemID? { highlight }
+
+    // MARK: - Keyboard drag (facet-2)
+    //
+    // The host-driven mirror of sill's internal lift/aim/commit: the host
+    // monitor swallows Space/arrows/Return/Esc in nav mode (the §4.8
+    // load-bearing invariant), so `ThemedListView`'s own `.onKeyPress` drag
+    // can never fire — the SAME pure `ListCore` math runs here instead, and
+    // the lift renders through the list's preview seam (`dragPreview`), which
+    // draws the ghost / insertion line / onto band exactly as an internal
+    // drag would.
+
+    private(set) var kbDragSource: TreeItemID?
+    private var kbDragChunk: [TreeItemID] = []
+    private var kbDragAim: [ListCore.DropTarget<TreeItemID>] = []
+    private var kbDragAimIndex = 0
+
+    public var isKbDragging: Bool { kbDragSource != nil }
+
+    private var visibleAsRows: [ListRow<TreeItemID>] {
+        ListItem.visibleRows(listItems, collapsed: collapsed).map(\.asRow)
+    }
+
+    /// Space on the cursor: lift it (sill `liftKeyboard` parity — a header
+    /// lifts its whole section chunk and aims at section gaps only; aim
+    /// starts on the first candidate).
+    public func liftCursor() {
+        guard kbDragSource == nil, let h = highlight else { return }
+        let rows = visibleAsRows
+        var chunk: [TreeItemID] = []
+        if case .header = h { chunk = chunkMemberIDs(forHeader: h, rows: rows) }
+        let aim = dragCandidates(source: h, rows: rows, mode: .both,
+                                 chunkIDs: chunk, validate: { _, _ in true })
+        guard !aim.isEmpty else { return }
+        kbDragSource = h; kbDragChunk = chunk; kbDragAim = aim; kbDragAimIndex = 0
+    }
+
+    /// Arrow keys while lifted: walk the candidate ladder (clamped).
+    public func aimDrag(_ delta: Int) {
+        guard isKbDragging, !kbDragAim.isEmpty else { return }
+        kbDragAimIndex = max(0, min(kbDragAim.count - 1, kbDragAimIndex + delta))
+    }
+
+    public func cancelDrag() {
+        kbDragSource = nil; kbDragChunk = []; kbDragAim = []; kbDragAimIndex = 0
+    }
+
+    /// Return / second Space: hand the host the (context, target) to commit
+    /// (nil when nothing was lifted). Clears the lift either way.
+    public func commitDrag() -> (ListCore.DragContext<TreeItemID>,
+                                 ListCore.DropTarget<TreeItemID>)? {
+        defer { cancelDrag() }
+        guard let s = kbDragSource,
+              kbDragAim.indices.contains(kbDragAimIndex) else { return nil }
+        let members = kbDragChunk.isEmpty ? [s] : kbDragChunk
+        return (ListCore.DragContext(sourceID: s, memberIDs: members),
+                kbDragAim[kbDragAimIndex])
+    }
+
+    /// The preview the view passes to sill while a keyboard lift is up.
+    /// Live selection/highlight ride along — the preview seam OVERRIDES them
+    /// when non-nil, so leaving them out would blank the fill mid-lift.
+    var dragPreview: ListPreview<TreeItemID>? {
+        guard let s = kbDragSource else { return nil }
+        return ListPreview(
+            selection: selection, highlight: highlight, dragSource: s,
+            dropTarget: kbDragAim.indices.contains(kbDragAimIndex)
+                ? kbDragAim[kbDragAimIndex] : nil,
+            dragChunk: kbDragChunk.isEmpty ? nil : kbDragChunk)
+    }
+
+    /// Keep a lift honest across the 2 s refresh (`apply`): the AppKit tree's
+    /// lift survived reconciles, so this one does too — re-derive the chunk +
+    /// candidates against the NEW rows, clamp the aim, and only a vanished
+    /// source cancels.
+    private func reconcileKbDrag(_ ids: Set<TreeItemID>) {
+        guard let s = kbDragSource else { return }
+        guard ids.contains(s) else { cancelDrag(); return }
+        let rows = visibleAsRows
+        if case .header = s { kbDragChunk = chunkMemberIDs(forHeader: s, rows: rows) }
+        kbDragAim = dragCandidates(source: s, rows: rows, mode: .both,
+                                   chunkIDs: kbDragChunk, validate: { _, _ in true })
+        if kbDragAim.isEmpty { cancelDrag() }
+        else { kbDragAimIndex = min(kbDragAimIndex, kbDragAim.count - 1) }
+    }
 
     /// The cursor row's spec (the `m`-menu needs its kind/pid), or nil.
     public func cursorRow() -> TreeRowSpec? {

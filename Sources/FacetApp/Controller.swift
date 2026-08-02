@@ -65,15 +65,17 @@ final class Controller: NSObject {
     /// Empty ⇒ section model off here ⇒ the overview degrades to
     /// `lastWorkspaces`. Snapshot-on-show seeds from this.
     var lastSections: [ProjectedSection] = []
-    /// The EXACT section list the SwiftUI tree last rendered (what fed
-    /// `treeVM.apply`): `lastSections` in section mode, the synthesized 1:1
-    /// workspace projection in the by-workspace degrade. `activateTreeRow` /
-    /// the `m`-menu resolve a `TreeItemID`'s group ordinal against THIS array
-    /// — never against `lastSections`, which is empty in the degrade.
-    /// ⚠️ Group ordinals count EMITTED sections (`buildTreeRows`), which
-    /// matches these indices only while the query is empty — reconcile before
-    /// facet-3 wires live search (the t-tsxg facet-3 caveat).
-    var lastTreeSections: [ProjectedSection] = []
+    /// Whether the tree's last feed rendered config sections (vs the
+    /// by-workspace degrade) — `treeDrop` gates the section-only commits
+    /// (applyMove / reorderSection) on this. Set in `apply()`. The section
+    /// LIST itself is resolved via `treeVM.renderedSections` (the emitted
+    /// array aligned with the rows' group ordinals — query-safe by
+    /// construction, which is what killed the facet-3 ordinal bug).
+    var treeRenderIsSectionMode = false
+    /// The SwiftUI tree row under the pointer (sill `onHover` edge; nil on
+    /// exit) — the preview overlays' hover source, `SidebarView.hoverIdx`'s
+    /// successor.
+    var treeHoverID: TreeItemID?
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -308,7 +310,6 @@ final class Controller: NSObject {
     /// `finishTagEditor` knows to revert it on close. When the tree was already
     /// in keyboard nav, this stays false and close just re-keys the tree.
     var tagEditorSelfActivated = false
-    private let searchDelegate = SearchFieldDelegate()
 
     // MARK: - Subscription / polling
 
@@ -357,12 +358,12 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
-        searchDelegate.onChange = { [weak self] q in
-            MainActor.assumeIsolated {
-                self?.sidebarView.setQuery(q)
-            }
+        // facet-3: the sill field's onChange IS the live filter (fires per
+        // keystroke, IME composition included — marked text live-filters like
+        // the old NSTextField delegate did).
+        panelHost.searchBar.onChange = { [weak self] q in
+            self?.setTreeQuery(q)
         }
-        panelHost.searchBar.field.delegate = searchDelegate
         // Keep kbNav in sync with the panel's key status. The panel
         // only becomes key via explicit kb-nav entry (`enterActive` →
         // makeKey); a plain tree-row click no longer grabs key (that
@@ -375,6 +376,16 @@ final class Controller: NSObject {
         // routes through the ONE helper (Enter shares it — Task 10).
         panelHost.onActivateRow = { [weak self] id in
             self?.activateTreeRow(id)
+        }
+        // facet-2: mouse drops from the sill drag gesture; the host-driven
+        // keyboard lift commits through the SAME route (handleKbKey).
+        panelHost.onDropRow = { [weak self] ctx, target in
+            self?.treeDrop(ctx, target)
+        }
+        // Hover → thumbnail previews (SidebarView.hoverIdx's successor).
+        panelHost.onHoverRow = { [weak self] id in
+            self?.treeHoverID = id
+            self?.previewTargetChanged()
         }
         applyBorderFromConfig()
         resolveSurfacePalettes()      // PR-B: seed all three boxes from config
@@ -1313,7 +1324,7 @@ final class Controller: NSObject {
             sections = FilterProjection.project(
                 workspaces: displayWss, sections: []).sections
         }
-        lastTreeSections = sections
+        treeRenderIsSectionMode = renderMode.rendersSections
         panelHost.treeVM.apply(
             sections: sections,
             activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index)
