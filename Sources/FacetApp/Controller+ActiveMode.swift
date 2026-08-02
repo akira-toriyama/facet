@@ -54,8 +54,7 @@ extension Controller {
         guard sidebarView.kbNav else { return }
         sidebarView.exitKbNav()                    // also clears `searching`
         panelHost.resignKey()
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
+        panelHost.layout(searching: sidebarView.searching)
         NSApp.setActivationPolicy(.accessory)      // back to LSUIElement
         if restore, let p = prevApp { p.activate() }
         prevApp = nil
@@ -157,8 +156,7 @@ extension Controller {
     private func enterSearch() {
         sidebarView.beginSearch()
         panelHost.searchBar.stringValue = ""
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
+        panelHost.layout(searching: sidebarView.searching)
         // IME input goes to the field.
         panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
     }
@@ -171,8 +169,7 @@ extension Controller {
     private func leaveSearchKeepingNav() {
         sidebarView.endSearch()
         panelHost.panel.makeFirstResponder(nil)
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
+        panelHost.layout(searching: sidebarView.searching)
     }
 
     /// Open search from the "Desktop N" right-click menu when facet is

@@ -10,13 +10,26 @@ import FacetView
 /// (Task 6), invoked only from `apply()`. Callbacks are host-injected (real
 /// #66 activation + collapse land in Tasks 8/10/12).
 @MainActor
-struct TreeContentView: View {
+public struct TreeContentView: View {
     @Bindable var model: TreeViewModel
     var onActivate: (TreeItemID) -> Void = { _ in }
     var onToggleSection: (TreeItemID) -> Void = { _ in }
     var onHover: (TreeItemID?) -> Void = { _ in }
 
-    var body: some View {
+    /// Public so `PanelHost` (FacetApp) can host this in an `NSHostingView`.
+    /// Callbacks default to no-ops — the host wires real #66 activation
+    /// (Task 12), header-collapse, and hover-preview as they land.
+    public init(model: TreeViewModel,
+                onActivate: @escaping (TreeItemID) -> Void = { _ in },
+                onToggleSection: @escaping (TreeItemID) -> Void = { _ in },
+                onHover: @escaping (TreeItemID?) -> Void = { _ in }) {
+        self.model = model
+        self.onActivate = onActivate
+        self.onToggleSection = onToggleSection
+        self.onHover = onHover
+    }
+
+    public var body: some View {
         var style = ThemedListStyle()
         style.selectionMode = .single
         style.highlightStyle = .outline

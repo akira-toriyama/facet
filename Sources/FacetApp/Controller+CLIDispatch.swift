@@ -356,8 +356,11 @@ extension Controller {
         loadingWantsActive = true
         sidebarView.frame.size.width = panelHost.userWidth
         sidebarView.showSkeleton()
-        panelHost.layout(contentHeight: sidebarView.skeletonHeight,
-                         searching: false)
+        // Task 8: the panel auto-sizes from the SwiftUI tree's ListMetrics;
+        // the tree is empty until the first `apply`, so the loading panel sits
+        // at min-height here. The real loading-skeleton overlay + its sizing is
+        // Task 11 (host-side overlay) — until then this is a benign minor.
+        panelHost.layout(searching: false)
         if !panelHost.isVisible { panelHost.show() }
         loadingTimer?.invalidate()
         loadingTimer = Timer.scheduledTimer(

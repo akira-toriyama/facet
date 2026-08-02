@@ -10,14 +10,16 @@ import FacetView           // AppIcons, IconResolver, ResolvedPalette (re-export
 /// The 30 Hz animator tick sets only `palette` (spec §4.6/§7.7).
 @Observable
 @MainActor
-final class TreeViewModel {
+public final class TreeViewModel {
     var rows: [TreeRowSpec] = []
     /// **Memoized** render-ready items — rebuilt ONLY in `apply()` (section-data
     /// change), NEVER read-derived in a SwiftUI body. The expensive per-row
     /// NSImage builds (`AppIcons.icon` / `IconResolver.phosphorImage`) live here,
     /// off the palette-tick path, so a theme animation never re-flattens the list
     /// (spec §4.6/§7.7). The view reads this array; `palette` is passed separately.
-    private(set) var listItems: [ListItem<TreeItemID>] = []
+    /// Public so `PanelHost` can size the panel by summing `ListMetrics` over it
+    /// (via `rowContentHeight`).
+    public private(set) var listItems: [ListItem<TreeItemID>] = []
     /// Test hook for success-criterion 5: increments each time `listItems` is
     /// rebuilt. A palette-only mutation must leave this UNCHANGED.
     private(set) var rowsRebuildCount = 0
@@ -26,14 +28,16 @@ final class TreeViewModel {
     var collapsed: Set<TreeItemID> = []
     var query: String = ""
     var isLoading: Bool = false
-    var palette: ResolvedPalette
+    /// Public get+set — `PanelHost.applyTheme()` repoints this on every theme
+    /// change (hot-reload + the 30 Hz animator tick), the ONLY per-frame write.
+    public var palette: ResolvedPalette
 
-    init(palette: ResolvedPalette) { self.palette = palette }
+    public init(palette: ResolvedPalette) { self.palette = palette }
 
     /// Rebuild rows + memoized items from a fresh projection. Selection/highlight/
     /// collapsed are id-keyed and survive across rebuilds (dropped only if their id
     /// vanishes). Palette is NOT touched here.
-    func apply(sections: [ProjectedSection]) {
+    public func apply(sections: [ProjectedSection]) {
         rows = buildTreeRows(sections: sections, query: query)
         listItems = rows.map(TreeListItem.make(_:))   // memoize here, NOT in the view body
         rowsRebuildCount += 1
@@ -41,6 +45,36 @@ final class TreeViewModel {
         selection.formIntersection(ids)
         collapsed.formIntersection(ids)
         if let h = highlight, !ids.contains(h) { highlight = nil }
+    }
+
+    /// The tree's own content height = summed sill `ListMetrics` row heights over
+    /// the memoized `listItems` (chrome-band-free). sill's `ThemedListView` root
+    /// is a greedy SwiftUI `ScrollView` that never self-reports a fitting height,
+    /// so `PanelHost` sizes the shrink-to-content panel from this instead of
+    /// `NSHostingView.fittingSize` (which would collapse it — spec §4.1 / Task
+    /// 8.2). `PanelHost` adds the pinned chrome bands + screen clamp. Kept HERE
+    /// (not in `PanelHost`) so the ThemeKitUI/`ListMetrics` dependency stays
+    /// confined to `FacetViewTree`. Density matches `TreeContentView`'s
+    /// `ThemedListStyle()` default (`.comfortable`).
+    public var rowContentHeight: CGFloat {
+        let m = ListMetrics.forDensity(.comfortable)
+        // Sum over the VISIBLE rows — `ListItem.visibleRows` is the exact
+        // collapse-filter `ThemedListView` renders through, so a collapsed
+        // header shrinks the panel instead of leaving a blank gap below the
+        // tree. Collapse is inert in facet-1 (nothing writes `collapsed`), so
+        // this equals the full sum today; it stays correct when header-collapse
+        // lands (F2/Task 12).
+        return ListItem.visibleRows(listItems, collapsed: collapsed)
+            .reduce(CGFloat(0)) { acc, item in
+                switch item.kind {
+                case let .sectionHeader(subtitle, _):
+                    return acc + (subtitle == nil ? m.header1 : m.header2)
+                case .row:
+                    return acc + (item.secondary == nil ? m.singleRow : m.twoLineRow)
+                case .separator:
+                    return acc + m.separatorBand
+                }
+            }
     }
 }
 

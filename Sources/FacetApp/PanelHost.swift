@@ -1,9 +1,18 @@
 // Panel scaffolding for the tree view. Owns the `NSPanel`, the
-// `NSVisualEffectView` backdrop, the scroll view holding
-// `SidebarView`, and the search bar above the list. Provides
-// show / hide / move / resize / persist + the single-source-of-
-// truth `layout(contentHeight:searching:)` — every geometry change
-// inside the panel funnels through it.
+// `NSVisualEffectView` backdrop, the `NSHostingView` rendering the
+// SwiftUI `TreeContentView` (on sill's `ThemedListView`), and the
+// search bar above the list. Provides show / hide / move / resize /
+// persist + the single-source-of-truth `layout(searching:)` — every
+// geometry change inside the panel funnels through it. Auto height is
+// summed from the tree's `ListMetrics` (see `autoContentHeight`), since
+// the greedy SwiftUI ScrollView never self-reports a fitting size.
+//
+// #18/F1 render-swap (t-tsxg Task 8): the SwiftUI tree replaced the old
+// `NSScrollView`(FlippedClipView + `SidebarView` documentView +
+// `ThemedScroller`). `SidebarView` stays constructed by the Controller
+// (its `searching` state still gates the search band) but is no longer
+// the render surface; its DnD + live-search re-wire onto the SwiftUI
+// path in facet-2/3.
 //
 // Resize is delegated to AppKit via `.resizable` in the styleMask;
 // drag from any edge / corner of the panel chrome triggers an OS
@@ -17,6 +26,7 @@
 // `Controller`.
 
 import AppKit
+import SwiftUI
 import FacetCore
 import FacetView
 import FacetViewTree
@@ -28,10 +38,27 @@ final class PanelHost: NSObject {
 
     let panel: KeyablePanel
     private let effect: NSVisualEffectView
-    private let scroll: NSScrollView
+    /// Hosts the SwiftUI `TreeContentView` (render-swap, Task 8). Replaces the
+    /// old `NSScrollView` — sill's `ThemedListView` owns its own scrolling.
+    private let treeHost: NSHostingView<TreeContentView>
     private let bgView = NSView()
     let searchBar: SearchBar
+    /// The `@Observable` box the SwiftUI tree binds to. Controller feeds it via
+    /// `apply(sections:)`; `applyTheme()` repoints its `palette` every tick.
+    let treeVM: TreeViewModel
+    /// Retained for its `searching` flag (search-band gate) + facet-2/3 re-wire;
+    /// no longer the render surface. Controller is its other owner.
     private let view: SidebarView
+    /// Mac-desktop ordinal fed by the Controller (was `view.shownMacDesktopOrdinal`,
+    /// which only updated inside the retired `SidebarView.update` render path).
+    /// Drives the HandleBar "Desktop N" label in `applySubviewLayout`.
+    private var handleOrdinal: Int?
+    /// Row-activation / header-collapse / hover hooks the Controller wires (like
+    /// `onKeyChanged`). `TreeContentView`'s callbacks forward here. Real #66
+    /// activation lands in Task 12; keyboard nav in Task 10.
+    var onActivateRow: ((TreeItemID) -> Void)?
+    var onToggleSectionRow: ((TreeItemID) -> Void)?
+    var onHoverRow: ((TreeItemID?) -> Void)?
     /// Per-surface palette (PR-B) — the tree box, shared with every piece
     /// of tree chrome (sidebar, search bar, handle bar, border, scrollers)
     /// so a re-theme / cycle updates all of it at once.
@@ -110,28 +137,15 @@ final class PanelHost: NSObject {
         anchorTL = NSPoint(x: scr.minX + screenMargin,
                            y: scr.maxY - screenMargin)
 
-        scroll = NSScrollView()
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = true   // shows only when content
-                                              // is wider than the panel (B)
-        scroll.scrollerStyle = .overlay
-        scroll.autohidesScrollers = true
-        // Theme-matched scrollbars (pal-coloured knob) instead of the
-        // system grey, keeping the overlay style + auto-fade.
-        let vScroller = ThemedScroller(); vScroller.paletteBox = paletteBox
-        let hScroller = ThemedScroller(); hScroller.paletteBox = paletteBox
-        scroll.verticalScroller = vScroller
-        scroll.horizontalScroller = hScroller
-        scroll.autoresizingMask = [.width, .height]
-        // Flipped clipView so the documentView (SidebarView) is
-        // top-anchored — without this, shrinking the panel via the
-        // grip leaves rows pinned to the bottom (the "top blank on
-        // resize" symptom, memory grid-branch-grip-intermittent).
-        let clip = FlippedClipView()
-        clip.drawsBackground = false
-        scroll.contentView = clip
-        scroll.documentView = view
+        // Render-swap (Task 8): the SwiftUI `TreeContentView` on sill's
+        // `ThemedListView` renders the tree. `ThemedListView` owns its own
+        // vertical + horizontal (title-overflow) scrolling, so the old
+        // NSScrollView / FlippedClipView / ThemedScroller stack is retired
+        // here (those types stay in the module for other consumers). Real
+        // callbacks are wired after `super.init` (they capture `self`).
+        treeVM = TreeViewModel(palette: paletteBox.pal)
+        treeHost = NSHostingView(rootView: TreeContentView(model: treeVM))
+        treeHost.autoresizingMask = [.width, .height]
 
         effect = NSVisualEffectView()
         // Shown only when pal.background == nil (the `system` theme; every
@@ -165,7 +179,7 @@ final class PanelHost: NSObject {
         searchBar.autoresizingMask = [.width, .minYMargin]
 
         effect.addSubview(bgView)
-        effect.addSubview(scroll)
+        effect.addSubview(treeHost)
         effect.addSubview(searchBar)
         effect.addSubview(handleBar)
 
@@ -222,6 +236,13 @@ final class PanelHost: NSObject {
         panel.contentView = effect
         super.init()
         panel.delegate = self
+        // Now that `self` exists, give the SwiftUI tree its real callbacks —
+        // they forward to the Controller-wired hooks (empty until Task 10/12).
+        treeHost.rootView = TreeContentView(
+            model: treeVM,
+            onActivate: { [weak self] in self?.onActivateRow?($0) },
+            onToggleSection: { [weak self] in self?.onToggleSectionRow?($0) },
+            onHover: { [weak self] in self?.onHoverRow?($0) })
         // Every border tick / config / flash repaints the panel border.
         borderFX.onRepaint = { [weak self] in
             guard let self else { return }
@@ -257,8 +278,7 @@ final class PanelHost: NSObject {
     var isVisible: Bool { panel.isVisible }
 
     func show() {
-        layout(contentHeight: view.contentHeight,
-               searching: view.searching)
+        layout(searching: view.searching)
         panel.orderFrontRegardless()
     }
 
@@ -311,8 +331,7 @@ final class PanelHost: NSObject {
         // left, y measured down from the screen top.
         anchorTL = NSPoint(x: scr.minX + frame.minX,
                            y: scr.maxY - frame.minY)
-        layout(contentHeight: view.contentHeight,
-               searching: view.searching)
+        layout(searching: view.searching)
     }
 
     /// Reset to the built-in default geometry: top-left of the main
@@ -325,8 +344,7 @@ final class PanelHost: NSObject {
         userHeight = nil                     // auto = content height
         anchorTL = NSPoint(x: scr.minX + screenMargin,
                            y: scr.maxY - screenMargin)
-        layout(contentHeight: view.contentHeight,
-               searching: view.searching)
+        layout(searching: view.searching)
     }
 
     /// Phase δ: respond to a display reconfiguration. When the
@@ -339,7 +357,7 @@ final class PanelHost: NSObject {
     /// re-validates against any updated bounds.
     @MainActor
     func handleDisplayReconfigure() {
-        let h = (userHeight ?? view.contentHeight)
+        let h = (userHeight ?? autoContentHeight(searching: view.searching))
         // Convert anchorTL (top-left) → NSScreen-coord rect
         // (bottom-left origin: y = topY - height).
         let panelRect = NSRect(x: anchorTL.x,
@@ -357,8 +375,22 @@ final class PanelHost: NSObject {
             let newTopY = dest.midY + h / 2
             anchorTL = NSPoint(x: newX, y: newTopY)
         }
-        layout(contentHeight: view.contentHeight,
-               searching: view.searching)
+        layout(searching: view.searching)
+    }
+
+    /// Intended auto-height for the panel = the tree's summed sill row heights
+    /// (`TreeViewModel.rowContentHeight`, the memoized `listItems` × `ListMetrics`)
+    /// + the pinned chrome bands (search + handle). sill's `ThemedListView` root
+    /// is a greedy SwiftUI `ScrollView` that fills its axis and never self-reports
+    /// a fitting height, so `NSHostingView.fittingSize` would collapse this
+    /// shrink-to-content panel (spec §4.1 / Task 8.2) — we derive geometry from
+    /// the row metrics instead. `layout()` clamps the result to the screen; past
+    /// the clamp the list scrolls internally. Adding the chrome bands (which the
+    /// retired `SidebarView.contentHeight` did NOT) means the tree body fits
+    /// without the old auto-height's ~handle-band clip.
+    private func autoContentHeight(searching: Bool) -> CGFloat {
+        let sh: CGFloat = searching ? searchRowH : 0
+        return treeVM.rowContentHeight + sh + HandleBar.height
     }
 
     /// Single source of truth for panel + subview frames. Called
@@ -366,24 +398,24 @@ final class PanelHost: NSObject {
     /// refresh tick. (Live OS resize is handled by autoresizingMask + the
     /// `windowDidResize` callback, not by re-running layout per
     /// drag event.)
-    func layout(contentHeight contentH: CGFloat, searching: Bool) {
+    func layout(searching: Bool) {
         guard let scr = (NSScreen.main ?? NSScreen.screens.first)?.frame
         else { return }
         let maxH = scr.height - 2 * screenMargin
-        let h = min(userHeight ?? contentH, maxH)
+        let h = min(userHeight ?? autoContentHeight(searching: searching), maxH)
         let w = userWidth
         var x = anchorTL.x, topY = anchorTL.y
         x = min(max(x, scr.minX), scr.maxX - w)
         topY = min(max(topY, scr.minY + h), scr.maxY)
         let frame = NSRect(x: x, y: topY - h, width: w, height: h)
         if panel.frame != frame { panel.setFrame(frame, display: true) }
-        applySubviewLayout(searching: searching, contentH: contentH)
+        applySubviewLayout(searching: searching)
         panel.invalidateShadow()
     }
 
     /// Position the subviews to the panel's *current* size. Called
     /// from layout() and from windowDidResize (OS-driven resize).
-    private func applySubviewLayout(searching: Bool, contentH: CGFloat) {
+    private func applySubviewLayout(searching: Bool) {
         let f = effect.bounds
         bgView.frame = f
         // The search-bar band shows only while filtering.
@@ -404,15 +436,14 @@ final class PanelHost: NSObject {
         let hb = HandleBar.height
         handleBar.frame = NSRect(x: 0, y: f.height - sh - hb,
                                  width: f.width, height: hb)
-        handleBar.ordinal = view.shownMacDesktopOrdinal
+        handleBar.ordinal = handleOrdinal
         handleBar.needsDisplay = true
+        // The SwiftUI tree fills the body region below the pinned bands.
+        // `ThemedListView` owns its own vertical scroll (content taller than
+        // this) + horizontal title-overflow scroll — no NSScrollView / manual
+        // documentView width.
         let bodyH = max(f.height - sh - hb, 0)
-        scroll.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
-        // documentView width = the natural content width (≥ clip width) so
-        // overflowing titles scroll horizontally (B); height as before.
-        view.frame = NSRect(x: 0, y: 0,
-                            width: max(f.width, view.contentWidth),
-                            height: max(contentH, bodyH))
+        treeHost.frame = NSRect(x: 0, y: 0, width: f.width, height: bodyH)
         // Border tracks the panel size. Disable the implicit layer
         // animation so it doesn't lag a frame behind a live resize.
         CATransaction.begin()
@@ -426,7 +457,11 @@ final class PanelHost: NSObject {
     // MARK: - Theme
 
     /// Re-apply the current `pal` to the panel chrome. Call after
-    /// `paletteFor(...)` changes `pal`.
+    /// `paletteFor(...)` changes `pal`. This is also the SINGLE per-frame write
+    /// into the SwiftUI tree's palette: the Controller calls it on both theme
+    /// paths — hot-reload (`reapplyThemes`) and the 30 Hz animator tick — so
+    /// repointing `treeVM.palette` here re-colours the tree WITHOUT rebuilding
+    /// its memoized `listItems` (spec §4.6/§7.7).
     func applyTheme() {
         bgView.layer?.backgroundColor = (pal.background ?? .clear).cgColor
         // Re-honor the material on every theme switch, so toggling TO
@@ -437,8 +472,16 @@ final class PanelHost: NSObject {
         borderFX.apply(to: borderLayer)   // re-reads pal.primary when off
         searchBar.applyTheme()
         handleBar.needsDisplay = true
-        scroll.verticalScroller?.needsDisplay = true
-        scroll.horizontalScroller?.needsDisplay = true
+        treeVM.palette = pal      // re-colour the SwiftUI tree (no re-flatten)
+    }
+
+    /// Feed the mac-desktop ordinal that labels the HandleBar. Set by the
+    /// Controller from its live `macDesktopOrdinal` (the retired render path's
+    /// `SidebarView.update` used to carry this).
+    func setHandleOrdinal(_ ordinal: Int?) {
+        handleOrdinal = ordinal
+        handleBar.ordinal = ordinal
+        handleBar.needsDisplay = true
     }
 
     /// Apply the `[border]` config (shared `BorderFX`). The panel border
@@ -497,9 +540,10 @@ extension PanelHost: NSWindowDelegate {
             userWidth = f.width
             userHeight = f.height
             anchorTL = NSPoint(x: f.minX, y: f.maxY)
-            applySubviewLayout(searching: view.searching,
-                               contentH: view.contentHeight)
-            view.relayout()
+            // The SwiftUI tree reflows itself inside the resized `treeHost`
+            // (autoresizingMask + `ThemedListView`'s own scroll) — no manual
+            // documentView relayout.
+            applySubviewLayout(searching: view.searching)
         }
     }
 
