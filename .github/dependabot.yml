@@ -22,6 +22,15 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    # House pins are moved by house automation, never by Dependabot: @v2 is a
+    # MOVING tag the rollout runbook advances, and the glyph install pin is
+    # glyph-pin-rewrite's. A concrete tag here freezes the repo off the rollout
+    # train — or resolves to a tag that predates the workflow it calls
+    # (swift-toml-edit#31, run 30414639253). The wildcard crosses `/`:
+    # dependabot-core compiles `*` to `.*`, so the full reusable-workflow
+    # dependency name (akira-toriyama/.github/.github/workflows/x.yml) matches.
+    ignore:
+      - dependency-name: "akira-toriyama/*"
     # gitmoji + Conventional Commits so bot PRs match the house convention
     # (CONTRIBUTING.md). Bots are exempt from commit-lint, so this is decoration.
     commit-message:
