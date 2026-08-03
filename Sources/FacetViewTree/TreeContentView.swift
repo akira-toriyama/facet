@@ -46,7 +46,12 @@ public struct TreeContentView: View {
         style.highlightStyle = .outline
         style.showsDividers = true
         style.zebra = true
-        style.horizontalContentScroll = true
+        // Vertical-only scroll: the two-axis ScrollView CENTERS content
+        // shorter/narrower than the viewport (measured on-host 2026-08-03 —
+        // the tree floated mid-panel), while vertical-only keeps rows
+        // top-anchored and full-width. Long titles truncate with … (they
+        // already did — the horizontal axis never visibly engaged).
+        style.horizontalContentScroll = false
         style.hosted = false
         // facet-2: sill-native mouse DnD (drag gesture + ghost + insertion /
         // onto visuals). `.both` resolves onto-vs-between by row fraction; a
