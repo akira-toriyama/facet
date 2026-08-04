@@ -271,8 +271,10 @@ public final class TreeViewModel {
 
     /// Content-space offset (y-down from the tree's top) of the row's TOP —
     /// summed sill `ListMetrics` heights over the visible rows above it — or
-    /// nil when the id isn't visible. The SwiftUI list exposes no row rects,
-    /// so `PanelHost` anchors the keyboard context menu (`m`) from this.
+    /// nil when the id isn't visible. Since sill 7.0.0 the list publishes live
+    /// viewport rects for laid-out rows (`PanelHost.rowScreenRect`); this sum
+    /// is the scroll-blind FALLBACK `PanelHost` anchors from when the row is
+    /// culled out of the viewport.
     public func rowTop(of id: TreeItemID) -> CGFloat? {
         let m = ListMetrics.forDensity(.comfortable)
         var y: CGFloat = 0

@@ -296,8 +296,9 @@ extension Controller {
 
     /// `m` in keyboard nav: the cursor row's context menu, anchored just past
     /// the panel's right edge, level with the row — `kbContextMenu` parity
-    /// for the SwiftUI tree (the list exposes no row rects, so the anchor
-    /// derives from the summed `ListMetrics` offset).
+    /// for the SwiftUI tree. Anchor: the live viewport rect (sill 7.0.0
+    /// publishes rects for laid-out rows), falling back to the scroll-blind
+    /// summed-`ListMetrics` offset when the row is culled out of the viewport.
     private func showTreeCursorMenu() {
         let vm = panelHost.treeVM
         guard let row = vm.cursorRow() else { return }
