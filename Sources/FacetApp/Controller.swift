@@ -1334,7 +1334,15 @@ final class Controller: NSObject {
         treeRenderIsSectionMode = renderMode.rendersSections
         panelHost.treeVM.apply(
             sections: sections,
-            activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index)
+            activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index,
+            // Header sub-line: the workspace's layout engine (bsp/stack/…),
+            // `SidebarView.wsLayout` parity — the header context menu is a
+            // layout PICKER, so the tree must show the current value.
+            layoutMode: { sec in
+                sec.sourceWorkspaceIndex.flatMap { i in
+                    wss.first { $0.index == i }?.layoutMode
+                }
+            })
         // Mirror the skeleton's source of truth (SidebarView's signature
         // logic, which just ran in `update`) onto the host-side overlay —
         // clears it on content-ready, holds it through a held mid-switch

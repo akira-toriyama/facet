@@ -41,6 +41,7 @@ public final class TreeViewModel {
     /// without the host re-feeding sections (facet-3 live filter).
     private var sourceSections: [ProjectedSection] = []
     private var sourceActiveWS: Int?
+    private var layoutModeProvider: (ProjectedSection) -> String? = { _ in nil }
 
     /// Live search filter (facet-3): re-projects rows/renderedSections from
     /// the stored inputs. Cheap no-op on an unchanged query.
@@ -64,10 +65,21 @@ public final class TreeViewModel {
     /// window scoped to the active section — `hot(win) && headerActive(ws)`
     /// parity with `SidebarView.update`. Palette is NOT touched here.
     public func apply(sections: [ProjectedSection],
-                      activeWorkspaceIndex: Int? = nil) {
+                      activeWorkspaceIndex: Int? = nil,
+                      layoutMode: ((ProjectedSection) -> String?)? = nil) {
         sourceSections = sections
         sourceActiveWS = activeWorkspaceIndex
-        rows = buildTreeRows(sections: sections, query: query)
+        // The layout-abbrev provider is STORED so the `setQuery` re-projection
+        // (which re-enters apply with no `layoutMode` argument) keeps the
+        // header sub-lines instead of silently dropping them.
+        if let layoutMode { layoutModeProvider = layoutMode }
+        rows = buildTreeRows(
+            sections: sections, query: query,
+            layoutMode: layoutModeProvider,
+            isActive: { s in
+                s.sectionType == .workspace && activeWorkspaceIndex != nil
+                    && s.sourceWorkspaceIndex == activeWorkspaceIndex
+            })
         // The EMITTED sections, aligned with the rows' group ordinals (the
         // same zero-match drop buildTreeRows walks). Hosts resolve a
         // TreeItemID's group against THIS array — never against their own

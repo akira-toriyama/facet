@@ -37,7 +37,7 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(rows.count, 2)
         guard case .header(.workspace, nil) = rows[0].kind else { return XCTFail() }
         XCTAssertEqual(rows[0].id, .header("ws:0"))
-        XCTAssertEqual(rows[0].primary, "workspace · 1")
+        XCTAssertEqual(rows[0].primary, "workspace · 1 (1)")
         guard case .window(pid: 1) = rows[1].kind else { return XCTFail() }
         XCTAssertEqual(rows[1].id, .window(group: 0, WindowID(serverID: 1)))
         XCTAssertEqual(rows[1].primary, "Safari")
@@ -61,7 +61,22 @@ extension BuildTreeRowsTests {
             sec("ws:1", "2", .workspace, [win(3, "Notes", "todo")], src: 1),
         ], query: "saf")
         // WS1 keeps only Safari; WS2 has no match → whole section dropped.
-        XCTAssertEqual(rows.map(\.primary), ["workspace · 1", "Safari"])
+        XCTAssertEqual(rows.map(\.primary), ["workspace · 1 (1)", "Safari"])
+    }
+
+    /// t-eedb HIGH: the header caption carries the 1-based DISPLAY index (the
+    /// address `--focus index:N` and the `m`-menu caption speak), an unnamed
+    /// workspace stays distinguishable by it, and "●" marks the ACTIVE
+    /// workspace — the accent-bold cue of the old tree, kept textual.
+    func testWorkspaceHeaderIndexUnnamedAndActiveDot() {
+        let rows = buildTreeRows(sections: [
+            sec("ws:0", "Web", .workspace, [], src: 0),
+            sec("ws:1", "", .workspace, [], src: 1),
+        ], query: "", isActive: { $0.id == "ws:0" })
+        XCTAssertEqual(rows[0].primary, "workspace · 1 (Web) ●",
+                       "named + active: index, name, active dot")
+        XCTAssertEqual(rows[1].primary, "workspace · 2",
+                       "unnamed: the index alone keeps it addressable")
     }
 
     /// The four kind words each answer ONE question — "what IS this section"

@@ -54,14 +54,22 @@ private func windowBadges(_ w: Window) -> [TreeBadge] {
     return out
 }
 
-private func headerPrimary(_ s: ProjectedSection) -> String {
-    let kind: String
+private func headerPrimary(_ s: ProjectedSection, displayIndex: Int,
+                           isActive: Bool) -> String {
     switch s.sectionType {
-    case .workspace: kind = "workspace"
-    case .matched: kind = "matched"
-    case .holding: kind = "holding"
+    case .workspace:
+        // "workspace · 1 (Web)" — the 1-based DISPLAY index is the address
+        // `--focus index:N` and the `m`-menu caption speak, and it is what
+        // keeps two unnamed workspaces distinguishable. "●" marks the ACTIVE
+        // workspace: the old header carried that as accent-bold text, which
+        // sill's turnkey header styling doesn't offer — the information
+        // stays, textual.
+        let idx = "\(displayIndex + 1)"
+        let name = s.label.isEmpty ? idx : "\(idx) (\(s.label))"
+        return "workspace · \(name)\(isActive ? " ●" : "")"
+    case .matched: return "matched · \(s.label)"
+    case .holding: return "holding · \(s.label)"
     }
-    return "\(kind) · \(s.label)"
 }
 
 /// Flatten `[ProjectedSection]` → ordered `[TreeRowSpec]`. `group` names the
@@ -84,7 +92,8 @@ private func headerPrimary(_ s: ProjectedSection) -> String {
 /// site subtitle-free.
 public func buildTreeRows(
     sections: [ProjectedSection], query: String,
-    layoutMode: (ProjectedSection) -> String? = { _ in nil }
+    layoutMode: (ProjectedSection) -> String? = { _ in nil },
+    isActive: (ProjectedSection) -> Bool = { _ in false }
 ) -> [TreeRowSpec] {
     var rows: [TreeRowSpec] = []
     var group = 0
@@ -95,7 +104,8 @@ public func buildTreeRows(
         rows.append(TreeRowSpec(
             id: .header(s.id),
             kind: .header(sectionType: s.sectionType, subtitle: subtitle),
-            primary: headerPrimary(s), secondary: nil, badges: []))
+            primary: headerPrimary(s, displayIndex: group, isActive: isActive(s)),
+            secondary: nil, badges: []))
         for w in wins {
             rows.append(TreeRowSpec(
                 id: .window(group: group, w.id),
