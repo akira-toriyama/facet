@@ -836,7 +836,7 @@ final class Controller: NSObject {
             if concrete != name { phase = 0 }   // restart cycle only on a real change
             source = src
             name = concrete
-            box.pal = resolve(paletteFor(concrete))
+            box.pal = resolve(paletteForCanonical(concrete))
         }
         apply(effective: config.effectiveTreeTheme, rawKey: config.treeTheme,
               source: &treeSource, name: &treeThemeName,
@@ -922,7 +922,7 @@ final class Controller: NSObject {
         // selection; fold them onto the steady resolved base so background
         // / foreground / muted / border hold and the UI stays usable.
         guard let f = animatedPalette(theme: name, at: phase) else { return false }
-        let base = resolve(paletteFor(name))
+        let base = resolve(paletteForCanonical(name))
         box.pal = ResolvedPalette(
             background: base.background, foreground: base.foreground,
             muted: base.muted, tertiary: base.tertiary,
