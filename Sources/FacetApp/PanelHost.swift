@@ -270,6 +270,7 @@ final class PanelHost: NSObject {
             onDrop: { [weak self] in self?.onDropRow?($0, $1) },
             onRowRects: { [weak self] in self?.treeRowRects = $0 })
         treeHost.onRightMouseDown = { [weak self] ev in self?.routeTreeRightClick(ev) }
+        treeHost.onMouseDown = { [weak self] ev in self?.routeTreeMouseDown(ev) ?? false }
         // Every border tick / config / flash repaints the panel border.
         borderFX.onRepaint = { [weak self] in
             guard let self else { return }
@@ -469,6 +470,26 @@ final class PanelHost: NSObject {
         let scr = win.convertPoint(toScreen: event.locationInWindow)
         guard let id = rowID(atScreenPoint: scr) else { return }
         onRowRightClick?(id, scr)
+    }
+
+    /// ⌘+drag anywhere on the tree, or a plain drag on EMPTY space (no row
+    /// under the click), moves the PANEL — the two mode-1 handles the old
+    /// surface had (`SidebarView+Drag`): ⌘ overrides a row hit, and the blank
+    /// area below the last row was always panel chrome. Routed BEFORE SwiftUI
+    /// sees the event, because sill's row drag gesture reads no modifier
+    /// flags — without this gate a ⌘+drag silently committed a real
+    /// cross-workspace window move. `performDrag` is the native window-server
+    /// move (HandleBar's path); `windowDidMove` keeps `anchorTL` synced, and
+    /// a bare click is a harmless no-op. Returns false to fall through to
+    /// SwiftUI (row tap / row drag).
+    private func routeTreeMouseDown(_ event: NSEvent) -> Bool {
+        if !event.modifierFlags.contains(.command) {
+            guard let win = treeHost.window else { return false }
+            let scr = win.convertPoint(toScreen: event.locationInWindow)
+            guard rowID(atScreenPoint: scr) == nil else { return false }
+        }
+        panel.performDrag(with: event)
+        return true
     }
 
     /// Screen point just past the panel's right edge, level with the tree row
@@ -707,8 +728,15 @@ final class TreeSkeletonView: NSView {
 /// AppKit event is caught here — left-click, hover and drag stay SwiftUI's.
 @MainActor private final class TreeHostingView: NSHostingView<TreeContentView> {
     var onRightMouseDown: ((NSEvent) -> Void)?
+    /// Return true to consume (the ⌘/empty-space panel move); false falls
+    /// through to SwiftUI's row gestures.
+    var onMouseDown: ((NSEvent) -> Bool)?
     override func rightMouseDown(with event: NSEvent) {
         guard let onRightMouseDown else { return super.rightMouseDown(with: event) }
         onRightMouseDown(event)
+    }
+    override func mouseDown(with event: NSEvent) {
+        if onMouseDown?(event) == true { return }
+        super.mouseDown(with: event)
     }
 }
