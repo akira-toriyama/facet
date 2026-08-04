@@ -207,18 +207,49 @@ public final class TreeViewModel {
         ListItem.visibleRows(listItems, collapsed: collapsed).map(\.asRow)
     }
 
-    /// Space on the cursor: lift it (sill `liftKeyboard` parity — a header
-    /// lifts its whole section chunk and aims at section gaps only; aim
-    /// starts on the first candidate).
+    /// Space on the cursor: lift it. A header lifts its whole section chunk
+    /// and aims at section gaps (sill `liftKeyboard` parity). A WINDOW lift
+    /// aims a COARSE per-section ladder instead of sill's fine per-row run —
+    /// the commit is section-granular (window order inside a workspace is
+    /// backend-derived), so per-row candidates made most presses appear to
+    /// change nothing and crossing an 8-window section took ~16 presses. One
+    /// press = one section, and the aim STARTS on the lifted row's own
+    /// section (old `kbDropWS = liftSourceWS()` parity), not the top of the
+    /// tree.
     public func liftCursor() {
         guard kbDragSource == nil, let h = highlight else { return }
         let rows = visibleAsRows
         var chunk: [TreeItemID] = []
-        if case .header = h { chunk = chunkMemberIDs(forHeader: h, rows: rows) }
-        let aim = dragCandidates(source: h, rows: rows, mode: .both,
+        var aim: [ListCore.DropTarget<TreeItemID>]
+        var start = 0
+        if case .header = h {
+            chunk = chunkMemberIDs(forHeader: h, rows: rows)
+            aim = dragCandidates(source: h, rows: rows, mode: .both,
                                  chunkIDs: chunk, validate: { _, _ in true })
+        } else {
+            (aim, start) = windowLiftAim(for: h)
+        }
         guard !aim.isEmpty else { return }
-        kbDragSource = h; kbDragChunk = chunk; kbDragAim = aim; kbDragAimIndex = 0
+        kbDragSource = h; kbDragChunk = chunk; kbDragAim = aim; kbDragAimIndex = start
+    }
+
+    /// The window lift's ladder: one `.onto(section header)` per
+    /// workspace-backed section (matched/holding are not destinations, and
+    /// `treeDrop` derives the destination section from the header id), plus
+    /// the index of the source's OWN section to seed the aim on. sill draws
+    /// `.onto(header)` as a ring on the header row, so the affordance reads
+    /// "lands in THAT section" — section-granular, like the commit.
+    private func windowLiftAim(for id: TreeItemID)
+        -> ([ListCore.DropTarget<TreeItemID>], Int) {
+        var aim: [ListCore.DropTarget<TreeItemID>] = []
+        var start = 0
+        guard case .window(let g, _) = id else { return ([], 0) }
+        for (k, sec) in renderedSections.enumerated()
+        where sec.sourceWorkspaceIndex != nil {
+            if k == g { start = aim.count }
+            aim.append(ListCore.DropTarget(placement: .onto(id: .header(sec.id))))
+        }
+        return (aim, start)
     }
 
     /// Arrow keys while lifted: walk the candidate ladder (clamped).
@@ -263,9 +294,16 @@ public final class TreeViewModel {
         guard let s = kbDragSource else { return }
         guard ids.contains(s) else { cancelDrag(); return }
         let rows = visibleAsRows
-        if case .header = s { kbDragChunk = chunkMemberIDs(forHeader: s, rows: rows) }
-        kbDragAim = dragCandidates(source: s, rows: rows, mode: .both,
-                                   chunkIDs: kbDragChunk, validate: { _, _ in true })
+        if case .header = s {
+            kbDragChunk = chunkMemberIDs(forHeader: s, rows: rows)
+            kbDragAim = dragCandidates(source: s, rows: rows, mode: .both,
+                                       chunkIDs: kbDragChunk, validate: { _, _ in true })
+        } else {
+            // Same coarse per-section ladder the lift built — re-derived
+            // against the refreshed sections (the aim INDEX is preserved via
+            // the clamp below, matching the fine ladder's behaviour).
+            (kbDragAim, _) = windowLiftAim(for: s)
+        }
         if kbDragAim.isEmpty { cancelDrag() }
         else { kbDragAimIndex = min(kbDragAimIndex, kbDragAim.count - 1) }
     }
