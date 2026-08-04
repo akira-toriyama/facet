@@ -309,7 +309,16 @@ extension Controller {
                 panelHost.menuAnchorBesideTreeRow(contentOffset: $0)?.y
             }
         guard let y = anchorY else { return }
-        let scr = NSPoint(x: panelHost.panel.frame.maxX + 8, y: y)
+        showTreeRowMenu(row, at: NSPoint(x: panelHost.panel.frame.maxX + 8, y: y))
+    }
+
+    /// The row's context menu at a screen point — shared by the `m` key (which
+    /// anchors beside the panel) and the host's right-click (which anchors at
+    /// the event, `PanelHost.onRowRightClick`). Same dispatch the retired
+    /// `SidebarView.rightMouseDown` had: window row → ops menu, workspace
+    /// header → layout + rename, matched header → isolate menu, holding
+    /// header → none (t-63h2).
+    func showTreeRowMenu(_ row: TreeRowSpec, at scr: NSPoint) {
         let secs = panelHost.treeVM.renderedSections
         switch row.id {
         case .header(let sectionID):

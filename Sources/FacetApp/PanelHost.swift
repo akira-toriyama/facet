@@ -42,7 +42,7 @@ final class PanelHost: NSObject {
     private let effect: NSVisualEffectView
     /// Hosts the SwiftUI `TreeContentView` (render-swap, Task 8). Replaces the
     /// old `NSScrollView` — sill's `ThemedListView` owns its own scrolling.
-    private let treeHost: NSHostingView<TreeContentView>
+    private let treeHost: TreeHostingView
     private let bgView = NSView()
     /// facet-3: the type-to-filter field is sill's AppKit `ThemedTextField`
     /// (the floor-1 edit core — IME marked-text detection + key-seam
@@ -70,6 +70,13 @@ final class PanelHost: NSObject {
     var onHoverRow: ((TreeItemID?) -> Void)?
     var onDropRow: ((ListCore.DragContext<TreeItemID>,
                      ListCore.DropTarget<TreeItemID>) -> Void)?
+    /// Right-click on a tree row (point = the event's, in SCREEN coords).
+    /// Caught at the HOST because SwiftUI has no secondary-click gesture: the
+    /// hosting view routes the AppKit event here and the live row rects (#175)
+    /// resolve which row was hit — and, like the retired
+    /// `SidebarView.rightMouseDown`, it works on a PASSIVE panel (AppKit
+    /// delivers right-clicks to a non-key window; no focus steal).
+    var onRowRightClick: ((TreeItemID, NSPoint) -> Void)?
     /// Per-surface palette (PR-B) — the tree box, shared with every piece
     /// of tree chrome (sidebar, search bar, handle bar, border, scrollers)
     /// so a re-theme / cycle updates all of it at once.
@@ -155,7 +162,7 @@ final class PanelHost: NSObject {
         // here (those types stay in the module for other consumers). Real
         // callbacks are wired after `super.init` (they capture `self`).
         treeVM = TreeViewModel(palette: paletteBox.pal)
-        treeHost = NSHostingView(rootView: TreeContentView(model: treeVM))
+        treeHost = TreeHostingView(rootView: TreeContentView(model: treeVM))
         treeHost.autoresizingMask = [.width, .height]
         skeletonView.isHidden = true
 
@@ -262,6 +269,7 @@ final class PanelHost: NSObject {
             onHover: { [weak self] in self?.onHoverRow?($0) },
             onDrop: { [weak self] in self?.onDropRow?($0, $1) },
             onRowRects: { [weak self] in self?.treeRowRects = $0 })
+        treeHost.onRightMouseDown = { [weak self] ev in self?.routeTreeRightClick(ev) }
         // Every border tick / config / flash repaints the panel border.
         borderFX.onRepaint = { [weak self] in
             guard let self else { return }
@@ -445,6 +453,22 @@ final class PanelHost: NSObject {
         let host = win.convertToScreen(treeHost.convert(treeHost.bounds, to: nil))
         return NSRect(x: host.minX + r.minX, y: host.maxY - r.maxY,
                       width: r.width, height: r.height)
+    }
+
+    /// The laid-out row under a SCREEN point — `rowScreenRect` run backwards
+    /// (rects never overlap, so first match is the match).
+    func rowID(atScreenPoint p: NSPoint) -> TreeItemID? {
+        treeRowRects.keys.first { rowScreenRect($0)?.contains(p) == true }
+    }
+
+    /// The hosting view's right-click, resolved to a row for `onRowRightClick`.
+    /// A click on empty space below the last row resolves to no row and stays
+    /// a no-op, matching the retired surface.
+    private func routeTreeRightClick(_ event: NSEvent) {
+        guard let win = treeHost.window else { return }
+        let scr = win.convertPoint(toScreen: event.locationInWindow)
+        guard let id = rowID(atScreenPoint: scr) else { return }
+        onRowRightClick?(id, scr)
     }
 
     /// Screen point just past the panel's right edge, level with the tree row
@@ -675,5 +699,16 @@ final class TreeSkeletonView: NSView {
             }
             y += 8
         }
+    }
+}
+
+/// The tree's hosting view + the host-side right-click seam (see
+/// `PanelHost.onRowRightClick`): SwiftUI has no secondary-click gesture, so the
+/// AppKit event is caught here — left-click, hover and drag stay SwiftUI's.
+@MainActor private final class TreeHostingView: NSHostingView<TreeContentView> {
+    var onRightMouseDown: ((NSEvent) -> Void)?
+    override func rightMouseDown(with event: NSEvent) {
+        guard let onRightMouseDown else { return super.rightMouseDown(with: event) }
+        onRightMouseDown(event)
     }
 }

@@ -266,7 +266,13 @@ public final class TreeViewModel {
     /// The cursor row's spec (the `m`-menu needs its kind/pid), or nil.
     public func cursorRow() -> TreeRowSpec? {
         guard let h = highlight else { return nil }
-        return rows.first { $0.id == h }
+        return row(h)
+    }
+
+    /// Any row's spec by id — the host's right-click hit-test resolves a rect
+    /// to an id and needs the same kind/pid the cursor path gets.
+    public func row(_ id: TreeItemID) -> TreeRowSpec? {
+        rows.first { $0.id == id }
     }
 
     /// Content-space offset (y-down from the tree's top) of the row's TOP —

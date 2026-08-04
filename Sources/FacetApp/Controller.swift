@@ -382,6 +382,13 @@ final class Controller: NSObject {
         panelHost.onDropRow = { [weak self] ctx, target in
             self?.treeDrop(ctx, target)
         }
+        // Right-click on a row → the same context menus as `m`, anchored at
+        // the click. Works on a PASSIVE panel (no focus steal) — the mouse
+        // path the render swap had dropped.
+        panelHost.onRowRightClick = { [weak self] id, scr in
+            guard let self, let row = self.panelHost.treeVM.row(id) else { return }
+            self.showTreeRowMenu(row, at: scr)
+        }
         // Hover → thumbnail previews (SidebarView.hoverIdx's successor).
         panelHost.onHoverRow = { [weak self] id in
             self?.treeHoverID = id
