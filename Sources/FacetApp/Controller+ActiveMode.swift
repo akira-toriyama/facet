@@ -316,7 +316,15 @@ extension Controller {
             else { return }
             let sec = secs[g]
             if let ws = sec.sourceWorkspaceIndex {
-                sidebarView.headerMenu(at: scr, group: g, workspaceIndex: ws,
+                // `headerMenu`'s `group` is a two-coordinate contract
+                // (`sectionHeaderDisplay` / `beginSectionRename`): section mode
+                // = the display ordinal, degrade = `ws.index`. `g` is the
+                // display position in `renderedSections`, which in degrade
+                // diverges from `ws.index` after a reorder — passing it renamed
+                // (and persisted to config.toml) the wrong workspace.
+                sidebarView.headerMenu(at: scr,
+                                       group: treeRenderIsSectionMode ? g : ws,
+                                       workspaceIndex: ws,
                                        filterable: true)
             } else if sec.sectionType == .matched {
                 sidebarView.isolateHeaderMenu(at: scr, group: g, filterable: true)
