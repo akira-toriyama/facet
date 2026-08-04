@@ -236,6 +236,19 @@ extension Controller {
     func activateTreeRow(_ id: TreeItemID) {
         let secs = panelHost.treeVM.renderedSections
         guard !treeRowIsInert(id) else { return }
+        // R12: the first click on a PASSIVE tree (kbNav off — after a
+        // mac-desktop switch, or after acting dropped key via exitActive)
+        // WAKES keyboard nav and parks the cursor on the clicked row instead
+        // of acting; the second click (or Enter) acts. The deliberate
+        // two-step recovery the old tree had (`SidebarView+Drag` R12) — a
+        // stray click on the visible-but-passive panel must not yank the
+        // user to another workspace.
+        if !sidebarView.kbNav {
+            enterActive()                          // seeds the cursor…
+            panelHost.treeVM.parkCursor(on: id)    // …then park on the CLICKED row
+            previewTargetChanged()
+            return
+        }
         exitActive(restore: false)
         switch id {
         case .header(let sectionID):

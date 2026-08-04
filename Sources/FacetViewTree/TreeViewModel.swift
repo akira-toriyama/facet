@@ -140,6 +140,13 @@ public final class TreeViewModel {
 
     public func clearCursor() { highlight = nil }
 
+    /// Park the cursor on a specific row — the wake-on-click path (R12) parks
+    /// on the CLICKED row, not the seed's selection-or-first fallback.
+    public func parkCursor(on id: TreeItemID) {
+        guard rows.contains(where: { $0.id == id }) else { return }
+        highlight = id
+    }
+
     /// Arrow-ladder move — `kbMoveTarget` parity: no cursor anchors at the
     /// top, the ends clamp.
     public func moveCursor(_ delta: Int) {
