@@ -3,8 +3,9 @@ name: update-tap
 # Thin caller — delegates to the shared reusable at
 # akira-toriyama/.github/.github/workflows/update-tap.yml. The bump logic
 # + docs live there; this file only declares the trigger and the formula
-# name. Cross-repo write needs repo secret HOMEBREW_TAP_TOKEN (a
-# fine-grained PAT with Contents: Read & write on homebrew-tap).
+# name. Cross-repo write needs repo secret HOMEBREW_TAP_DEPLOY_KEY (the
+# private half of homebrew-tap's write deploy key; fleet-sync fans it
+# out — t-6bhz).
 
 on:
   release:
@@ -28,4 +29,4 @@ jobs:
       formula: facet
       tag: ${{ github.event.inputs.tag || '' }}
     secrets:
-      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      HOMEBREW_TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
