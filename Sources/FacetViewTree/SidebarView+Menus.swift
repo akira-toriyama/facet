@@ -49,7 +49,7 @@ extension SidebarView {
     // identical themed popup (③).
     /// Header right-click / `m` menu → the workspace layout picker. `g` is the
     /// render group (display position) — drives the §D `index (label)` header.
-    func headerMenu(at scr: NSPoint, group g: Int, workspaceIndex ws: Int,
+    public func headerMenu(at scr: NSPoint, group g: Int, workspaceIndex ws: Int,
                             filterable: Bool = false) {
         showLayoutMenu(at: scr, group: g, workspaceIndex: ws, filterable: filterable)
     }
@@ -89,7 +89,7 @@ extension SidebarView {
     /// layout picker (R9). `g` is the render group; `lastSections[g]` is the
     /// `type=isolate` section it came from. Picking routes through the controller,
     /// which activates the isolate desktop then sets its union layout.
-    func isolateHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
+    public func isolateHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
         guard g >= 0, g < lastSections.count else { return }
         let sec = lastSections[g]
         guard sec.sectionType == .matched else { return }
@@ -115,7 +115,7 @@ extension SidebarView {
             })
     }
 
-    func showWindowMenu(at scr: NSPoint,
+    public func showWindowMenu(at scr: NSPoint,
                                 workspaceIndex ws: Int,
                                 pid: Int,
                                 windowID id: WindowID,

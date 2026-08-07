@@ -65,6 +65,17 @@ final class Controller: NSObject {
     /// Empty ⇒ section model off here ⇒ the overview degrades to
     /// `lastWorkspaces`. Snapshot-on-show seeds from this.
     var lastSections: [ProjectedSection] = []
+    /// Whether the tree's last feed rendered config sections (vs the
+    /// by-workspace degrade) — `treeDrop` gates the section-only commits
+    /// (applyMove / reorderSection) on this. Set in `apply()`. The section
+    /// LIST itself is resolved via `treeVM.renderedSections` (the emitted
+    /// array aligned with the rows' group ordinals — query-safe by
+    /// construction, which is what killed the facet-3 ordinal bug).
+    var treeRenderIsSectionMode = false
+    /// The SwiftUI tree row under the pointer (sill `onHover` edge; nil on
+    /// exit) — the preview overlays' hover source, `SidebarView.hoverIdx`'s
+    /// successor.
+    var treeHoverID: TreeItemID?
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -299,7 +310,6 @@ final class Controller: NSObject {
     /// `finishTagEditor` knows to revert it on close. When the tree was already
     /// in keyboard nav, this stays false and close just re-keys the tree.
     var tagEditorSelfActivated = false
-    private let searchDelegate = SearchFieldDelegate()
 
     // MARK: - Subscription / polling
 
@@ -348,12 +358,12 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
-        searchDelegate.onChange = { [weak self] q in
-            MainActor.assumeIsolated {
-                self?.sidebarView.setQuery(q)
-            }
+        // facet-3: the sill field's onChange IS the live filter (fires per
+        // keystroke, IME composition included — marked text live-filters like
+        // the old NSTextField delegate did).
+        panelHost.searchBar.onChange = { [weak self] q in
+            self?.setTreeQuery(q)
         }
-        panelHost.searchBar.field.delegate = searchDelegate
         // Keep kbNav in sync with the panel's key status. The panel
         // only becomes key via explicit kb-nav entry (`enterActive` →
         // makeKey); a plain tree-row click no longer grabs key (that
@@ -361,6 +371,28 @@ final class Controller: NSObject {
         // fires on the kb-nav enter/exit, not on every click.
         panelHost.onKeyChanged = { [weak self] isKey in
             self?.handlePanelKeyChange(isKey: isKey)
+        }
+        // #66 activation for the SwiftUI tree (t-tsxg Task 12): a row click
+        // routes through the ONE helper (Enter shares it — Task 10).
+        panelHost.onActivateRow = { [weak self] id in
+            self?.activateTreeRow(id)
+        }
+        // facet-2: mouse drops from the sill drag gesture; the host-driven
+        // keyboard lift commits through the SAME route (handleKbKey).
+        panelHost.onDropRow = { [weak self] ctx, target in
+            self?.treeDrop(ctx, target)
+        }
+        // Right-click on a row → the same context menus as `m`, anchored at
+        // the click. Works on a PASSIVE panel (no focus steal) — the mouse
+        // path the render swap had dropped.
+        panelHost.onRowRightClick = { [weak self] id, scr in
+            guard let self, let row = self.panelHost.treeVM.row(id) else { return }
+            self.showTreeRowMenu(row, at: scr)
+        }
+        // Hover → thumbnail previews (SidebarView.hoverIdx's successor).
+        panelHost.onHoverRow = { [weak self] id in
+            self?.treeHoverID = id
+            self?.previewTargetChanged()
         }
         applyBorderFromConfig()
         resolveSurfacePalettes()      // PR-B: seed all three boxes from config
@@ -811,7 +843,7 @@ final class Controller: NSObject {
             if concrete != name { phase = 0 }   // restart cycle only on a real change
             source = src
             name = concrete
-            box.pal = resolve(paletteFor(concrete))
+            box.pal = resolve(paletteForCanonical(concrete))
         }
         apply(effective: config.effectiveTreeTheme, rawKey: config.treeTheme,
               source: &treeSource, name: &treeThemeName,
@@ -897,7 +929,7 @@ final class Controller: NSObject {
         // selection; fold them onto the steady resolved base so background
         // / foreground / muted / border hold and the UI stays usable.
         guard let f = animatedPalette(theme: name, at: phase) else { return false }
-        let base = resolve(paletteFor(name))
+        let base = resolve(paletteForCanonical(name))
         box.pal = ResolvedPalette(
             background: base.background, foreground: base.foreground,
             muted: base.muted, tertiary: base.tertiary,
@@ -1274,19 +1306,50 @@ final class Controller: NSObject {
         // `lastSections`), so the tree consumes the SAME
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
-        let contentH: CGFloat
+        // #18/F1 render-swap (t-tsxg Task 8): the SwiftUI `TreeContentView` (on
+        // sill's `ThemedListView`, hosted by PanelHost) is now the render
+        // surface. We still run `sidebarView.update(...)` for its LIVE side
+        // effects — the skeleton auto-clear, `kbNav` selection resolve, and the
+        // `searching` state that gates the search band — because facet-2 (DnD)
+        // and facet-3 (live search) re-wire onto SidebarView before it's
+        // retired; its returned content-height is unused (the panel auto-sizes
+        // from the tree's `ListMetrics`). The tree itself renders from
+        // `treeVM.apply`.
+        let sections: [ProjectedSection]
         if renderMode.rendersSections {
-            contentH = sidebarView.update(sections: lastSections,
-                                          workspaces: wss,
-                                          isolateDesktop: isIsolateDesktop,
-                                          titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+            _ = sidebarView.update(sections: lastSections,
+                                   workspaces: wss,
+                                   isolateDesktop: isIsolateDesktop,
+                                   titles: titles,
+                                   macDesktop: macDesktopOrdinal)
+            sections = lastSections
         } else {
-            contentH = sidebarView.update(displayWss, titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+            _ = sidebarView.update(displayWss, titles: titles,
+                                   macDesktop: macDesktopOrdinal)
+            // Degrade → 1:1 workspace sections (the same shape the tree's
+            // section path feeds, minus config sections).
+            sections = FilterProjection.project(
+                workspaces: displayWss, sections: []).sections
         }
-        panelHost.layout(contentHeight: contentH,
-                         searching: sidebarView.searching)
+        treeRenderIsSectionMode = renderMode.rendersSections
+        panelHost.treeVM.apply(
+            sections: sections,
+            activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index,
+            // Header sub-line: the workspace's layout engine (bsp/stack/…),
+            // `SidebarView.wsLayout` parity — the header context menu is a
+            // layout PICKER, so the tree must show the current value.
+            layoutMode: { sec in
+                sec.sourceWorkspaceIndex.flatMap { i in
+                    wss.first { $0.index == i }?.layoutMode
+                }
+            })
+        // Mirror the skeleton's source of truth (SidebarView's signature
+        // logic, which just ran in `update`) onto the host-side overlay —
+        // clears it on content-ready, holds it through a held mid-switch
+        // apply (Task 11).
+        panelHost.setSkeletonVisible(sidebarView.isSkeleton)
+        panelHost.setHandleOrdinal(macDesktopOrdinal)
+        panelHost.layout(searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
         // Deferred activate for the `--loading` show: the skeleton has now
         // given way to the new mac desktop's real content (`update`

@@ -9,6 +9,7 @@ import AppKit
 import FacetCore
 import FacetView
 import FacetViewTree
+import ListCore            // DragContext/DropTarget (treeDrop — facet-2)
 
 extension Controller {
 
@@ -40,6 +41,8 @@ extension Controller {
         NSApp.activate(ignoringOtherApps: true)
         panelHost.makeKey()
         sidebarView.enterKbNav()
+        panelHost.treeVM.seedCursor()      // SwiftUI cursor (Task 10)
+        previewTargetChanged()             // popover follows the seeded cursor
     }
 
     func exitActive(restore: Bool) {
@@ -53,9 +56,12 @@ extension Controller {
         // so a focused window never has to fight facet for the keys.)
         guard sidebarView.kbNav else { return }
         sidebarView.exitKbNav()                    // also clears `searching`
+        panelHost.treeVM.clearCursor()             // SwiftUI cursor (Task 10)
+        panelHost.treeVM.cancelDrag()              // drop a lift with the mode
+        panelHost.treeVM.setQuery("")              // un-filter (search died with nav)
+        previewTargetChanged()                     // cursor gone → popovers down
         panelHost.resignKey()
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
+        panelHost.layout(searching: sidebarView.searching)
         NSApp.setActivationPolicy(.accessory)      // back to LSUIElement
         if restore, let p = prevApp { p.activate() }
         prevApp = nil
@@ -91,22 +97,21 @@ extension Controller {
                 if panelHost.searchBar.stringValue.isEmpty {
                     leaveSearchKeepingNav()   // back to nav, stay in tree
                 } else {
-                    panelHost.searchBar.stringValue = ""
-                    sidebarView.setQuery("")
+                    panelHost.searchBar.clearText()   // fires onChange("") → live filter resets
                 }
                 return true
-            case 36, 76:  sidebarView.kbActivate();      return true
-            case 125:     sidebarView.kbMove(1);         return true
-            case 126:     sidebarView.kbMove(-1);        return true
-            case 48:      sidebarView.kbMove(shift ? -1 : 1)
+            case 36, 76:  activateTreeCursor();               return true
+            case 125:     panelHost.treeVM.moveCursor(1);     return true
+            case 126:     panelHost.treeVM.moveCursor(-1);    return true
+            case 48:      panelHost.treeVM.moveCursor(shift ? -1 : 1)
                           return true
             default:      break
             }
             if ctrl, e.charactersIgnoringModifiers?.lowercased() == "n" {
-                sidebarView.kbMove(1);  return true
+                panelHost.treeVM.moveCursor(1);  return true
             }
             if ctrl, e.charactersIgnoringModifiers?.lowercased() == "p" {
-                sidebarView.kbMove(-1); return true
+                panelHost.treeVM.moveCursor(-1); return true
             }
             return false           // → NSTextField (typing, IME, ⌫)
         }
@@ -115,37 +120,46 @@ extension Controller {
         // didBecomeKey hook below — fall through to the full nav.
 
         // -- Normal keyboard nav --
-        // Theme A keyboard DnD: Space lifts the selected row (window
-        // = move, header = WS-swap); while lifted the arrow keys aim
-        // the drop target (kbMove/kbJumpWS redirect internally),
-        // Return/Space commits, Esc cancels the lift before exiting.
+        // t-tsxg Task 10: the cursor now lives in the SwiftUI view-model
+        // (`treeVM.highlight` — sill's outline; `selection` stays the focus
+        // fill, cursor ≠ selection). The five keys sill's `ThemedListView`
+        // also binds (`.onKeyPress` ↑/↓/Return/Esc/Space) MUST keep returning
+        // true here — the local monitor swallowing them is the load-bearing
+        // invariant that stops a double-act + keeps sill's list focus ring
+        // from ever engaging (spec §4.8, caveat ④).
+        //
+        // facet-2 keyboard DnD (Theme A): Space lifts the cursor row (window
+        // = move, header = whole-section chunk); while lifted every movement
+        // key AIMS the drop target (sill draws the lift through the preview
+        // seam), Return / second Space commits via the same `treeDrop` the
+        // mouse gesture uses, Esc cancels the lift and stays in nav.
         switch e.keyCode {
         case 53:      // ESC backs out of a sub-mode but never leaves the
                       // tree: cancel an in-progress lift, otherwise stay in
                       // nav. (You leave nav by clicking another app or
                       // pressing Enter on a window — both resign key, and
                       // handlePanelKeyChange reverts the activation policy.)
-                      _ = sidebarView.kbCancelLift()
+                      panelHost.treeVM.cancelDrag()
                       return true
-        case 36, 76:  if sidebarView.kbCommitLift() { return true }
-                      sidebarView.kbActivate();          return true
-        case 125:     sidebarView.kbMove(1);             return true
-        case 126:     sidebarView.kbMove(-1);            return true
-        case 124:     sidebarView.kbJumpWS(1);           return true
-        case 123:     sidebarView.kbJumpWS(-1);          return true
-        case 48:      sidebarView.kbJumpWS(shift ? -1 : 1)
-                      return true
-        case 49:      sidebarView.kbToggleLift();         return true
+        case 36, 76:  if commitTreeLift() { return true }
+                      activateTreeCursor();               return true
+        case 125:     treeMove(1);                        return true
+        case 126:     treeMove(-1);                       return true
+        case 124:     treeJump(1);                        return true
+        case 123:     treeJump(-1);                       return true
+        case 48:      treeJump(shift ? -1 : 1);           return true
+        case 49:      if commitTreeLift() { return true }   // second Space commits
+                      panelHost.treeVM.liftCursor();      return true
         default:      break
         }
         switch e.charactersIgnoringModifiers?.lowercased() {
-        case "n" where ctrl: sidebarView.kbMove(1);      return true
-        case "p" where ctrl: sidebarView.kbMove(-1);     return true
-        case "j":            sidebarView.kbMove(1);      return true
-        case "k":            sidebarView.kbMove(-1);     return true
-        case "l":            sidebarView.kbJumpWS(1);    return true
-        case "h":            sidebarView.kbJumpWS(-1);   return true
-        case "m":            sidebarView.kbContextMenu(); return true
+        case "n" where ctrl: treeMove(1);                 return true
+        case "p" where ctrl: treeMove(-1);                return true
+        case "j":            treeMove(1);                 return true
+        case "k":            treeMove(-1);                return true
+        case "l":            treeJump(1);                 return true
+        case "h":            treeJump(-1);                return true
+        case "m":            showTreeCursorMenu();             return true
         case "s":            enterSearch();              return true
         case "t" where config.desktopRenderMode(
             ordinal: currentMacDesktopOrdinal()).rendersSections:
@@ -154,13 +168,284 @@ extension Controller {
         }
     }
 
+    /// Cursor move / drag aim + the preview reconcile the old `setSel` used
+    /// to fire (the thumbnail popover follows the keyboard cursor).
+    private func treeMove(_ d: Int) {
+        let vm = panelHost.treeVM
+        vm.isKbDragging ? vm.aimDrag(d) : vm.moveCursor(d)
+        previewTargetChanged()
+    }
+
+    private func treeJump(_ d: Int) {
+        let vm = panelHost.treeVM
+        vm.isKbDragging ? vm.aimDrag(d) : vm.jumpSection(d)
+        previewTargetChanged()
+    }
+
+    /// facet-3: the ONE live-filter entry — the field's `onChange` (typing,
+    /// IME composition, the clear-×) funnels here. Re-projects the SwiftUI
+    /// tree, keeps the legacy `SidebarView` state in step (its `searching`
+    /// flag still gates the band until it is retired), re-lands the cursor on
+    /// the first match (the AppKit tree's per-keystroke behaviour), syncs the
+    /// clear-×, and resizes the panel (dropped sections shrink it).
+    func setTreeQuery(_ q: String) {
+        sidebarView.setQuery(q)
+        panelHost.treeVM.setQuery(q)
+        panelHost.treeVM.clearCursor()
+        panelHost.treeVM.seedCursor()              // land on the first match
+        panelHost.searchBar.trailingSymbol = q.isEmpty ? nil : "x-circle"
+        panelHost.layout(searching: sidebarView.searching)
+        previewTargetChanged()             // follow the re-landed cursor
+    }
+
+    /// Return/Space with a keyboard lift up: commit it through the shared
+    /// drop route. False when nothing was lifted (the caller then activates).
+    private func commitTreeLift() -> Bool {
+        guard panelHost.treeVM.isKbDragging else { return false }
+        if let (ctx, target) = panelHost.treeVM.commitDrag() {
+            treeDrop(ctx, target)
+        }
+        return true
+    }
+
+    // MARK: - SwiftUI tree activation (t-tsxg Tasks 10/12)
+    //
+    // The ONE routing helper for acting on a tree row — a list click
+    // (`PanelHost.onActivateRow`) and Enter (`activateTreeCursor`) both land
+    // here. Mirrors `SidebarView+Drag.handleClick` (which stays alive until
+    // facet-2/3 retire the AppKit tree). #66: drop key FIRST
+    // (`exitActive(restore: false)`), then act, so a same-app focus isn't
+    // fought by facet being the active app.
+
+    /// t-63h2: an isolate desktop's holding row is inert — checked BEFORE
+    /// `exitActive` so acting on it doesn't silently drop keyboard nav for a
+    /// no-op.
+    private func treeRowIsInert(_ id: TreeItemID) -> Bool {
+        let secs = panelHost.treeVM.renderedSections
+        guard case .window(let g, _) = id,
+              g >= 0, g < secs.count else { return false }
+        return secs[g].sectionType == .holding
+    }
+
+    /// Enter on the cursor row — the keyboard twin of a row click.
+    private func activateTreeCursor() {
+        guard let id = panelHost.treeVM.activateCursor() else { return }
+        activateTreeRow(id)
+    }
+
+    func activateTreeRow(_ id: TreeItemID) {
+        let secs = panelHost.treeVM.renderedSections
+        guard !treeRowIsInert(id) else { return }
+        // R12: the first click on a PASSIVE tree (kbNav off — after a
+        // mac-desktop switch, or after acting dropped key via exitActive)
+        // WAKES keyboard nav and parks the cursor on the clicked row instead
+        // of acting; the second click (or Enter) acts. The deliberate
+        // two-step recovery the old tree had (`SidebarView+Drag` R12) — a
+        // stray click on the visible-but-passive panel must not yank the
+        // user to another workspace.
+        if !sidebarView.kbNav {
+            enterActive()                          // seeds the cursor…
+            panelHost.treeVM.parkCursor(on: id)    // …then park on the CLICKED row
+            previewTargetChanged()
+            return
+        }
+        exitActive(restore: false)
+        switch id {
+        case .header(let sectionID):
+            guard let g = secs.firstIndex(where: { $0.id == sectionID })
+            else { return }
+            let sec = secs[g]
+            if let i = sec.sourceWorkspaceIndex {
+                // Workspace header: claim the workspace's predicted focus
+                // optimistically (no row when it's empty), then activate.
+                // `i` is 0-based; `ActiveSection.workspace` is 1-based → +1.
+                if let pred = lastWorkspaces.first(where: { $0.index == i })?
+                    .windows.predictedFocus()?.id {
+                    panelHost.treeVM.setOptimistic(.window(group: g, pred))
+                }
+                activateSection(.workspace(i + 1), autoFocus: true)
+            } else {
+                // An isolate desktop's matched / holding header: nothing to
+                // activate (`ActiveSection` is single-case since t-ec9s) —
+                // focus the section's FIRST window, the unified §G helper.
+                focusFirstWindow(inSectionID: sec.id)
+            }
+        case .window(let g, let wid):
+            guard g >= 0, g < secs.count else { return }
+            let sec = secs[g]
+            // The row's REAL workspace (a matched-section row lives in its
+            // real ws — the `realWS` resolution), else the section's source,
+            // else the active ws.
+            let activeIdx = lastWorkspaces.first(where: { $0.isActive })?.index
+            let i = lastWorkspaces
+                .first { $0.windows.contains { $0.id == wid } }?.index
+                ?? sec.sourceWorkspaceIndex ?? activeIdx ?? 0
+            guard let winModel = lastWorkspaces
+                .first(where: { $0.index == i })?
+                .windows.first(where: { $0.id == wid })
+                ?? sec.windows.first(where: { $0.id == wid })
+            else { return }
+            let needSwitch = (i != activeIdx)
+            panelHost.treeVM.setOptimistic(id)
+            // A HIDDEN row (Cmd+H'd / minimized — hide-reclaim pulled its
+            // tile slot) is restored on activation; a normal row just
+            // focuses. Off main so the click never hitches (handleClick
+            // parity).
+            let hidden = winModel.isOnscreen == false
+            cliQueue.async { [bk = backend] in
+                if needSwitch {
+                    bk.switchWorkspace(toIndex: i, autoFocus: false)
+                }
+                if hidden {
+                    bk.revealWindow(wid)
+                } else {
+                    Task { @MainActor [weak self] in
+                        self?.focusWindow(winModel, postSwitch: needSwitch)
+                    }
+                }
+            }
+        }
+    }
+
+    /// `m` in keyboard nav: the cursor row's context menu, anchored just past
+    /// the panel's right edge, level with the row — `kbContextMenu` parity
+    /// for the SwiftUI tree. Anchor: the live viewport rect (sill 7.0.0
+    /// publishes rects for laid-out rows), falling back to the scroll-blind
+    /// summed-`ListMetrics` offset when the row is culled out of the viewport.
+    private func showTreeCursorMenu() {
+        let vm = panelHost.treeVM
+        guard let row = vm.cursorRow() else { return }
+        // Anchor beside the panel, level with the row's TOP: the LIVE viewport
+        // rect when the row is laid out, else the metric-summed fallback.
+        let anchorY: CGFloat? = panelHost.rowScreenRect(row.id).map(\.maxY)
+            ?? vm.rowTop(of: row.id).flatMap {
+                panelHost.menuAnchorBesideTreeRow(contentOffset: $0)?.y
+            }
+        guard let y = anchorY else { return }
+        showTreeRowMenu(row, at: NSPoint(x: panelHost.panel.frame.maxX + 8, y: y))
+    }
+
+    /// The row's context menu at a screen point — shared by the `m` key (which
+    /// anchors beside the panel) and the host's right-click (which anchors at
+    /// the event, `PanelHost.onRowRightClick`). Same dispatch the retired
+    /// `SidebarView.rightMouseDown` had: window row → ops menu, workspace
+    /// header → layout + rename, matched header → isolate menu, holding
+    /// header → none (t-63h2).
+    func showTreeRowMenu(_ row: TreeRowSpec, at scr: NSPoint) {
+        let secs = panelHost.treeVM.renderedSections
+        switch row.id {
+        case .header(let sectionID):
+            guard let g = secs.firstIndex(where: { $0.id == sectionID })
+            else { return }
+            let sec = secs[g]
+            if let ws = sec.sourceWorkspaceIndex {
+                // `headerMenu`'s `group` is a two-coordinate contract
+                // (`sectionHeaderDisplay` / `beginSectionRename`): section mode
+                // = the display ordinal, degrade = `ws.index`. `g` is the
+                // display position in `renderedSections`, which in degrade
+                // diverges from `ws.index` after a reorder — passing it renamed
+                // (and persisted to config.toml) the wrong workspace.
+                sidebarView.headerMenu(at: scr,
+                                       group: treeRenderIsSectionMode ? g : ws,
+                                       workspaceIndex: ws,
+                                       filterable: true)
+            } else if sec.sectionType == .matched {
+                sidebarView.isolateHeaderMenu(at: scr, group: g, filterable: true)
+            }                       // holding header: no menu (t-63h2)
+        case .window(let g, let wid):
+            guard case .window(let pid) = row.kind else { return }
+            let i = lastWorkspaces
+                .first { $0.windows.contains { $0.id == wid } }?.index
+                ?? (g >= 0 && g < secs.count
+                        ? secs[g].sourceWorkspaceIndex : nil)
+                ?? lastWorkspaces.first(where: { $0.isActive })?.index ?? 0
+            sidebarView.showWindowMenu(at: scr, workspaceIndex: i, pid: pid,
+                                       windowID: wid,
+                                       title: row.secondary ?? row.primary,
+                                       filterable: true)
+        }
+    }
+
+    // MARK: - SwiftUI tree DnD commits (facet-2)
+
+    /// The ONE drop route: the sill mouse drag gesture (`PanelHost.onDropRow`)
+    /// and the host-driven keyboard lift (`handleKbKey` → `treeVM.commitDrag`)
+    /// both land here. Maps sill's placement onto facet's commits — applyMove
+    /// for a window row, reorderSection for a section chunk, the background
+    /// `moveWindow` in the by-workspace degrade (the mode-3 header swap was
+    /// dropped from the pilot, §2.4a). Validity is POST-hoc — no
+    /// `dropTargetValidator` yet (T3 / t-6r5m is the pilot's first
+    /// fast-follow): an inert drop reaches a no-op server plan and the next
+    /// reconcile snaps the row back.
+    func treeDrop(_ ctx: ListCore.DragContext<TreeItemID>,
+                  _ target: ListCore.DropTarget<TreeItemID>) {
+        let secs = panelHost.treeVM.renderedSections
+        switch ctx.sourceID {
+        case .header(let sid):
+            // Section chunk reorder — section mode only. Chunk candidates are
+            // header gaps + the end gap by construction (`dragCandidates`),
+            // so `.onto` never arrives; ignore it defensively.
+            guard treeRenderIsSectionMode,
+                  case .between(let beforeID) = target.placement else { return }
+            let boundary: Int
+            switch beforeID {
+            case nil: boundary = secs.count
+            case .header(let bsid):
+                guard let k = secs.firstIndex(where: { $0.id == bsid }) else { return }
+                boundary = k
+            case .window: return          // never a chunk gap — bad target
+            }
+            reorderSection(move: sid, toBoundary: boundary)
+        case .window(let g, let wid):
+            guard g >= 0, g < secs.count,
+                  secs[g].sectionType != .holding      // inert source (t-63h2)
+            else { return }
+            // Destination section ordinal: `.onto` a row → that row's
+            // section; `.between` → the section the gap belongs to (the gap
+            // ABOVE a header closes the PREVIOUS section; the end gap is the
+            // last section).
+            let dest: Int? = {
+                switch target.placement {
+                case .onto(let id): return sectionOrdinal(of: id, in: secs)
+                case .between(let beforeID):
+                    guard let beforeID else { return secs.count - 1 }
+                    guard let k = sectionOrdinal(of: beforeID, in: secs) else { return nil }
+                    if case .header = beforeID { return max(0, k - 1) }
+                    return k
+                }
+            }()
+            guard let t = dest, t != g, t < secs.count else { return }
+            if treeRenderIsSectionMode {
+                applyMove(windowID: wid, fromSectionID: secs[g].id,
+                          toSectionID: secs[t].id,
+                          destSourceWorkspaceIndex: secs[t].sourceWorkspaceIndex)
+            } else {
+                // Degrade: a background "file it there" move — no switch, no
+                // focus-follow (M9-1 parity with the retired AppKit drop).
+                guard let ws = secs[t].sourceWorkspaceIndex else { return }
+                cliQueue.async { [bk = backend] in
+                    bk.moveWindow(wid, toWorkspaceIndex: ws)
+                }
+                scheduleReconcile(after: 0.05)
+            }
+        }
+    }
+
+    private func sectionOrdinal(of id: TreeItemID,
+                                in secs: [ProjectedSection]) -> Int? {
+        switch id {
+        case .header(let sid): return secs.firstIndex { $0.id == sid }
+        case .window(let g, _): return (g >= 0 && g < secs.count) ? g : nil
+        }
+    }
+
     private func enterSearch() {
         sidebarView.beginSearch()
-        panelHost.searchBar.stringValue = ""
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
-        // IME input goes to the field.
-        panelHost.panel.makeFirstResponder(panelHost.searchBar.field)
+        panelHost.searchBar.stringValue = ""          // silent — no onChange echo
+        panelHost.searchBar.trailingSymbol = nil      // clear-× waits for text
+        panelHost.treeVM.setQuery("")
+        panelHost.layout(searching: sidebarView.searching)
+        _ = panelHost.searchBar.focus()               // IME input goes to the field
     }
 
     /// ESC out of search back to normal nav WITHOUT leaving the tree:
@@ -170,9 +455,9 @@ extension Controller {
     /// key and let `handlePanelKeyChange` revert the activation policy.
     private func leaveSearchKeepingNav() {
         sidebarView.endSearch()
+        panelHost.treeVM.setQuery("")                 // un-filter the tree
         panelHost.panel.makeFirstResponder(nil)
-        panelHost.layout(contentHeight: sidebarView.contentHeight,
-                         searching: sidebarView.searching)
+        panelHost.layout(searching: sidebarView.searching)
     }
 
     /// Open search from the "Desktop N" right-click menu when facet is

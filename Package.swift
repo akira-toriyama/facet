@@ -77,7 +77,7 @@ let package = Package(
         // the same 2.x, never a split graph. For local, atomic sill↔facet
         // editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "5.0.0")),
+                 .upToNextMinor(from: "7.0.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
@@ -124,6 +124,9 @@ let package = Package(
         .target(name: "FacetViewTree", dependencies: [
             "FacetView", "FacetCore",
             .product(name: "ThemeKitUI", package: "sill"),
+            // ListCore: the pure DnD math (dragCandidates / chunkMemberIDs /
+            // DropTarget) behind the host-driven keyboard lift (facet-2).
+            .product(name: "ListCore", package: "sill"),
         ]),
         .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
         .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
@@ -145,6 +148,9 @@ let package = Package(
                 // ConfigSchema: `facet config --validate` surfaces sill's
                 // ValidationError values from FacetConfig.validate (t-0029).
                 .product(name: "ConfigSchema", package: "sill"),
+                // ListCore: DragContext/DropTarget in the tree's drop route
+                // (Controller.treeDrop — facet-2).
+                .product(name: "ListCore", package: "sill"),
             ]),
         .testTarget(name: "FacetCoreTests", dependencies: ["FacetCore"]),
         .testTarget(name: "FacetAdapterNativeTests",
