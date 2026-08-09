@@ -24,8 +24,6 @@ import FacetViewTree
 @MainActor
 final class PanelHost: NSObject {
 
-    // MARK: - Chrome
-
     let panel: KeyablePanel
     private let effect: NSVisualEffectView
     private let scroll: NSScrollView
@@ -68,8 +66,6 @@ final class PanelHost: NSObject {
     /// focused.
     var onKeyChanged: ((Bool) -> Void)?
 
-    // MARK: - Persisted geometry
-
     private(set) var anchorTL: NSPoint      // top-left in screen coords
     private(set) var userWidth: CGFloat = sidebarWidth
     private(set) var userHeight: CGFloat?   // nil = auto (content height)
@@ -81,8 +77,6 @@ final class PanelHost: NSObject {
     private let minWidth: CGFloat = 160
     private let minHeight: CGFloat = 140
     private let cornerRadius: CGFloat = 12
-
-    // MARK: - Init
 
     init(view: SidebarView, paletteBox: PaletteBox) {
         self.view = view
@@ -252,8 +246,6 @@ final class PanelHost: NSObject {
                            display: false)
     }
 
-    // MARK: - Show / hide
-
     var isVisible: Bool { panel.isVisible }
 
     func show() {
@@ -279,8 +271,6 @@ final class PanelHost: NSObject {
         panel.wantsKey = false
         panel.makeFirstResponder(nil)
     }
-
-    // MARK: - Geometry
 
     /// Re-sync panel-derived state after a window-server-driven drag
     /// (the live move runs via `NSWindow.performDrag(with:)` in
@@ -423,8 +413,6 @@ final class PanelHost: NSObject {
         syncPetWindow()
     }
 
-    // MARK: - Theme
-
     /// Re-apply the current `pal` to the panel chrome. Call after
     /// `paletteFor(...)` changes `pal`.
     func applyTheme() {
@@ -455,8 +443,6 @@ final class PanelHost: NSObject {
     /// WS-switch flash burst (no-op when the effect is off).
     func flashBorder() { borderFX.flash() }
 
-    // MARK: - Line-pets
-
     /// Install the `[tree] line-pets` config onto the overlay. Called by
     /// the Controller at startup + on hot-reload.
     func setPets(names: [String], scale: CGFloat, lapSeconds: CGFloat) {
@@ -469,8 +455,6 @@ final class PanelHost: NSObject {
 
     /// Repaint the pets one frame (driven by the Controller's 30 Hz tick).
     func redrawPets() { petView.needsDisplay = true }
-
-    // MARK: - Helpers
 
     /// Resizable rounded-rect mask (cap insets keep corners crisp
     /// at any panel size).

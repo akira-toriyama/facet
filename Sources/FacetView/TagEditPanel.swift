@@ -312,8 +312,6 @@ final class TagEditContainerView: NSView {
     }
 }
 
-// MARK: - Panel controller
-
 @MainActor
 public final class TagEditPanel: NSObject, NSTextFieldDelegate {
     public static let shared = TagEditPanel()
@@ -352,8 +350,6 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
     public var isOpen: Bool { panel != nil }
 
     private override init() { super.init() }
-
-    // MARK: Entry points
 
     /// WINDOW mode (R10): the per-window checklist anchored at `screenPt`.
     /// `allTags` is the union of tags currently in use; `checkedTags` is the
@@ -535,8 +531,6 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         if !closing { closing = true; cb?() }
     }
 
-    // MARK: - Filtering / rows
-
     private var isComposing: Bool {
         (field?.currentEditor() as? NSTextView)?.hasMarkedText() == true
     }
@@ -704,8 +698,6 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         recompute()
     }
 
-    // MARK: - Geometry
-
     private func panelWidth(appName: String, title: String) -> CGFloat {
         let headerLead = manage ? 0 : TagEditContainerView.iconSize + 8
         var w: CGFloat
@@ -725,8 +717,6 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
         }
         return min(max(w + TagEditContainerView.padX * 2, 240), 420)
     }
-
-    // MARK: - Event monitors
 
     private func installMonitors() {
         // Click in another app closes the panel — unless a context menu is up
@@ -777,8 +767,6 @@ public final class TagEditPanel: NSObject, NSTextFieldDelegate {
             return ev
         } as Any)
     }
-
-    // MARK: - NSTextFieldDelegate
 
     public func controlTextDidChange(_ note: Notification) {
         container?.hint = nil

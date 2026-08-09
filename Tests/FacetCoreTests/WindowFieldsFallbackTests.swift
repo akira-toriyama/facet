@@ -17,8 +17,6 @@ import Testing
 /// so those fallback tests are gone.)
 struct WindowFieldsFallbackTests {
 
-    // MARK: - fixtures
-
     private func win(_ id: Int, app: String = "App", title: String = "",
                      tags: [String] = [], floating: Bool = false,
                      sticky: Bool = false, master: Bool = false) -> Window {
@@ -26,8 +24,6 @@ struct WindowFieldsFallbackTests {
                isFocused: false, isFloating: floating, frame: nil,
                isMaster: master, isSticky: sticky, tags: tags)
     }
-
-    // MARK: - ProjectedWindowFields
 
     @Test func projectedWorkspaceOverlay() {
         let f = ProjectedWindowFields(window: win(1), workspaceName: "Dev")

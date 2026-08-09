@@ -8,8 +8,6 @@ import FacetCore
 
 extension WorkspaceCatalog {
 
-    // MARK: - Tree operations
-
     /// Rotate the parent split of `id`. Looks up the owning WS,
     /// then defers to `LayoutTree.toggleOrientation`. No-op when
     /// the window isn't in any tree (float / unknown / stack WS).

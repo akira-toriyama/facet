@@ -15,8 +15,6 @@ struct RealWindowDropTests {
                      frame: CGRect(x: 800, y: 0, width: 800, height: 900))
     private var wins: [(id: WindowID, frame: CGRect)] { [a, b] }
 
-    // MARK: - grab
-
     @Test func windowAtFindsContainingTile() {
         #expect(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 450))
             == wid(1))
@@ -60,8 +58,6 @@ struct RealWindowDropTests {
         // 30px below every tile → outside the 8px band → no arm.
         #expect(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 930)) == nil)
     }
-
-    // MARK: - drop
 
     @Test func dropOnOtherCenterIsSwap() {
         // Drag A, drop in the center of B → swap.

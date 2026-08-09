@@ -11,8 +11,6 @@ import FacetView
 
 public final class SidebarView: NSView {
 
-    // MARK: - Wiring
-
     /// Per-surface palette (PR-B). The Controller wires the tree box at
     /// construction; `pal` reads route through it — the tree panel's own
     /// `[tree].theme`.
@@ -27,8 +25,6 @@ public final class SidebarView: NSView {
         super.init(frame: frame)
     }
     public required init?(coder: NSCoder) { nil }
-
-    // MARK: - Visual state
 
     var rows: [TreeRow] = []
     struct Cell {
@@ -243,8 +239,6 @@ public final class SidebarView: NSView {
     public override var acceptsFirstResponder: Bool { true }
     public override var needsPanelToBecomeKey: Bool { true }
 
-    // MARK: - Optimistic state
-
     /// True while the optimistic highlight is still being held;
     /// auto-clears the optimistic state once expired.
     private func optimisticHeld() -> Bool {
@@ -280,8 +274,6 @@ public final class SidebarView: NSView {
             _ = update(lastWorkspaces)
         }
     }
-
-    // MARK: - Update / layout
 
     @discardableResult
     public func update(_ workspaces: [Workspace],

@@ -13,7 +13,6 @@ import FacetAccessibility
 import FacetCore
 
 extension NativeAdapter {
-    // MARK: - Queries
 
     public func workspaces() -> [Workspace] {
         refreshCatalog()

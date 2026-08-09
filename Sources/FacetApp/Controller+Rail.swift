@@ -12,8 +12,6 @@ import FacetViewRail
 
 extension Controller {
 
-    // MARK: - Rail lifecycle
-
     func toggleRail() {
         if isRailVisible { hideRail() } else { showRail() }
     }

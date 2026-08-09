@@ -241,8 +241,6 @@ final class AliasPickListView: NSView {
     }
 }
 
-// MARK: - Panel controller
-
 @MainActor
 public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     public static let shared = SectionRenamePanel()

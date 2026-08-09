@@ -8,8 +8,6 @@ import FacetCore
 
 extension WorkspaceCatalog {
 
-    // MARK: - Reconcile
-
     struct ReconcileResult: Equatable, Sendable {
         let added: Int
         let removed: Int

@@ -245,7 +245,6 @@ extension SidebarView {
     /// the target window instead of covering it (dropping it inside the
     /// tree hid the very row the user is acting on). (Space is the lift
     /// gesture in Theme A.) facet stays in keyboard nav; pick with the mouse or
-    /// Esc.
     public func kbContextMenu() {
         guard let s = kbSel, let i = kbIndex(of: s),
               let win = window else { return }

@@ -607,8 +607,6 @@ extension FacetConfig {
         return out
     }
 
-    // MARK: - Disk
-
     public static var defaultPath: String {
         let h = ProcessInfo.processInfo.environment["HOME"]
             ?? NSHomeDirectory()

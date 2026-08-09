@@ -205,8 +205,6 @@ struct LayoutTree: Equatable, Sendable {
         }
     }
 
-    // MARK: - Toggle orientation
-
     /// Rotate the *parent split* of `id` 90°. No-op when:
     ///   - `id` isn't in the tree
     ///   - `id` is the root leaf (no parent split exists)
@@ -488,8 +486,6 @@ struct LayoutTree: Equatable, Sendable {
         return (rebuilt(ratio: s.ratio), [])
     }
 
-    // MARK: - Queries
-
     func contains(_ id: WindowID) -> Bool {
         guard let r = root else { return false }
         return contains(r, id: id)
@@ -520,8 +516,6 @@ struct LayoutTree: Equatable, Sendable {
                 + collectLeaves(s.second.node)
         }
     }
-
-    // MARK: - Frame computation
 
     /// Recursively compute the on-screen rect for every leaf
     /// against `rect` (typically the active display's

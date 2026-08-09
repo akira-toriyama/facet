@@ -5,8 +5,6 @@ import CoreGraphics
 
 struct FacetConfigTests {
 
-    // MARK: - effective accessors
-
     @Test func effectiveRailEdgeClampsToBottom() {
         var c = FacetConfig()
         #expect(c.effectiveRailEdge == .bottom, "unset → bottom")
@@ -74,8 +72,6 @@ struct FacetConfigTests {
         #expect(list.allSatisfy { $0.config.layout == nil })
     }
 
-    // MARK: - [tree] line-pets
-
     @Test func effectiveTreeLinePetsDefaultsEmpty() {
         let c = FacetConfig()
         #expect(c.effectiveTreeLinePets == [], "unset → off")
@@ -134,8 +130,6 @@ struct FacetConfigTests {
         #expect(c.effectiveTreePetLapSeconds == 6)
     }
 
-    // MARK: - [[exclude]] rules
-
     @Test func exclusionRulesParsedFromTOML() {
         let rules = FacetConfig.exclusionRules(fromTOML: """
             [[exclude]]
@@ -183,8 +177,6 @@ struct FacetConfigTests {
             cols = 2
             """).isEmpty)
     }
-
-    // MARK: - TOML mapping
 
     @Test func fromTOMLMapsAllRecognisedKeys() {
         let parsed = parseTOMLSubset("""
@@ -240,8 +232,6 @@ struct FacetConfigTests {
         #expect(c.effectiveTheme == "terminal")
         #expect(c.effectiveGridCols == 4)
     }
-
-    // MARK: - Disk loader
 
     @Test func loadFallsBackToDefaultsForMissingConfig() {
         let tmp = NSTemporaryDirectory()
@@ -339,8 +329,6 @@ struct FacetConfigTests {
         #expect(raiseMode("") == .raise)
     }
 
-    // MARK: - effectiveRailStrip
-
     @Test func effectiveRailStripClamps() {
         var c = FacetConfig()
         #expect(c.effectiveRailStrip == 30, "default")
@@ -351,8 +339,6 @@ struct FacetConfigTests {
         c.railStrip = 999
         #expect(c.effectiveRailStrip == 50, "ceiling 50")
     }
-
-    // MARK: - effectiveTreeGeometry
 
     @Test func effectiveTreeGeometryNeedsAllFour() {
         var c = FacetConfig()

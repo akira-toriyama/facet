@@ -93,8 +93,6 @@ public final class GridView: NSView {
     /// agree on (no recomputation drift between paint and click).
     private var cells: [OverviewCell] = []
 
-    // MARK: - Drag state
-
     // `OverviewDrag` / `OverviewDragKind` (FacetCore) carry the active
     // gesture: `.window` moves a thumb to another WS, `.workspace` drags a
     // cell's HEADER to swap its whole contents with the destination cell.
@@ -199,8 +197,6 @@ public final class GridView: NSView {
 
     public override var isFlipped: Bool { true }
     public override var isOpaque: Bool { false }
-
-    // MARK: - Layout
 
     /// Columns actually used for layout. Capped at the CELL count (one cell
     /// per section under the section model — workspace + lens; else one per
@@ -625,8 +621,6 @@ public final class GridView: NSView {
         super.layout(); layoutCells(); updateBorderFrame()
     }
 
-    // MARK: - Draw
-
     public override func draw(_ dirty: NSRect) {
         // Commit zoom (②): the captured cell scales out to fill the
         // screen; then the switch + close fire. Nothing else draws then.
@@ -839,8 +833,6 @@ public final class GridView: NSView {
         }
         NSCursor.arrow.set()
     }
-
-    // MARK: - Mouse
 
     // Right-click: WS header → layout-engine picker; window thumb →
     // window-ops menu (③ — the SAME shared menu the tree shows).
@@ -1073,8 +1065,6 @@ public final class GridView: NSView {
         needsDisplay = true
     }
 
-    // MARK: - Drag ghost
-
     // Construction is the shared FacetView helper (DragGhost.swift),
     // fed the grid's tunables (`gridGhostStyle`). These wrappers map
     // the grid's `OverviewCell` / thumbnail cache into the helper args —
@@ -1126,8 +1116,6 @@ public final class GridView: NSView {
     private func positionDragGhost(at p: NSPoint) {
         positionGhost(dragGhost, at: p)
     }
-
-    // MARK: - Commit / cancel
 
     private func commitDrop(sourceWS: Int, pid: Int, id: WindowID,
                             dstCell: OverviewCell) {
@@ -1268,7 +1256,6 @@ public final class GridView: NSView {
             windowCount: cell.windows.count, forward: forward)
         needsDisplay = true
     }
-
 
     private func kbSelectedWindow() -> (cell: OverviewCell, hit: MiniWindowHit)? {
         guard kbSelectedWindowIdx >= 0,
@@ -1429,7 +1416,6 @@ public final class GridView: NSView {
     }
 }
 
-// MARK: - OverviewView conformance
 //
 // Every requirement is satisfied by members declared above (the
 // snapshot inputs, the run-ops / move / swap callbacks, layoutCells /

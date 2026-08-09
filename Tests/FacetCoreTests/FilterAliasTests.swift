@@ -61,8 +61,6 @@ struct FilterAliasTests {
         #expect(FacetFilter.parse(f.description) == .success(f))
     }
 
-    // MARK: - resolution
-
     @Test func substitutionEqualsInlineExpansion() {
         let res = parsed("@web or app=Slack")
             .resolvingAliases(["web": "app~=Chrome or app~=Safari"])
@@ -127,8 +125,6 @@ struct FilterAliasTests {
         #expect(parsed("@Web or (not @dev and floating)").aliasesReferenced()
             == ["web", "dev"])
     }
-
-    // MARK: - name policy
 
     @Test("kebab name shape", arguments: [
         (name: "web", ok: true),

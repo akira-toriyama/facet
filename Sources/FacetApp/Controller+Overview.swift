@@ -16,8 +16,6 @@ import FacetView
 
 extension Controller {
 
-    // MARK: - Build / present
-
     /// Seed the inputs + callbacks both overview views share. The
     /// per-surface bits (palette box, dismiss target) come in as
     /// parameters; the view-specific inputs (grid `config`, rail
@@ -112,8 +110,6 @@ extension Controller {
         }
     }
 
-    // MARK: - Thumbnails
-
     /// Snapshot-on-show capture kick-off: request every window in every
     /// workspace once. Cells paint app icons / placeholders first and
     /// swap to real thumbnails as captures land. Feeds whichever
@@ -151,8 +147,6 @@ extension Controller {
             for id in ids { self.captureAndPushToOverview(id, wp) }
         }
     }
-
-    // MARK: - Keyboard
 
     /// Dispatch the keyboard verbs both overviews share (Esc / Return /
     /// Space / Tab / `m`). Returns `true` if it consumed the key; the

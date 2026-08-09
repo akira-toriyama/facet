@@ -17,8 +17,6 @@ struct DynamicWorkspaceTests {
         return c
     }
 
-    // MARK: - seed
-
     @Test func seedSortsByIndexAndCompacts() {
         var c = WorkspaceCatalog()
         c.seed(configs: [
@@ -59,8 +57,6 @@ struct DynamicWorkspaceTests {
         #expect(c.mode(of: 3) == "stack")
     }
 
-    // MARK: - add / rename / name lookup
-
     @Test func addAppendsUnnamed() {
         var c = seeded(2)
         let pos = c.addWorkspace()
@@ -78,8 +74,6 @@ struct DynamicWorkspaceTests {
         #expect(c.index(ofName: "") == nil,
                      "empty name is the unnamed sentinel, never matched")
     }
-
-    // MARK: - remove
 
     @Test func removeLastWorkspaceRejected() {
         var c = seeded(1)

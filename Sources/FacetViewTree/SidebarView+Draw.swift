@@ -9,7 +9,6 @@ import FacetCore
 import FacetView
 
 extension SidebarView {
-    // MARK: - Draw
 
     /// Loading placeholder shown via `facet --view tree --loading`.
     /// Mirrors the real layout's rhythm (caption + two window rows

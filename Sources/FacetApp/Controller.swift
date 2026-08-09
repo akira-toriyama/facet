@@ -27,8 +27,6 @@ import FacetViewRail
 @MainActor
 final class Controller: NSObject {
 
-    // MARK: - Wiring
-
     let backend: any WindowBackend
     /// Mutable so `reloadConfig()` can swap in fresh values when
     /// the user edits config.toml (file watcher) or sends
@@ -51,8 +49,6 @@ final class Controller: NSObject {
     /// for the tile / anchor-rescue side. Two observers, each
     /// scoped to its layer.
     private var displayObserver: DisplayChangeObserver?
-
-    // MARK: - State
 
     /// Latest workspaces snapshot — held so the grid view can render
     /// immediately on first show without round-tripping the backend.
@@ -265,8 +261,6 @@ final class Controller: NSObject {
     /// The in-flight gate serialises ticks, so this reads consistently.
     var liveResizePrevResized = false
 
-    // MARK: - Grid overview
-
     var gridOverlay: OverviewPanel?
     var gridView: GridView?
     var gridBackdrop: NSView?
@@ -319,8 +313,6 @@ final class Controller: NSObject {
     /// Wide enough to coalesce a rename→match→layout burst AND to let an
     /// async backend round-trip land in `lastWorkspaces` first.
     let configExportDebounce: TimeInterval = 0.75
-
-    // MARK: - Init
 
     init(backend: any WindowBackend,
          config: FacetConfig,
@@ -465,8 +457,6 @@ final class Controller: NSObject {
             }
         }
     }
-
-    // MARK: - Lifecycle
 
     /// Start the controller: subscribe to backend events, schedule
     /// the fallback poll, run an initial refresh. Idempotent only
@@ -946,8 +936,6 @@ final class Controller: NSObject {
         panelHost.redrawPets()
     }
 
-    // MARK: - Refresh / apply
-
     private func requestRefresh() {
         if refreshPending { return }
         refreshPending = true
@@ -1401,8 +1389,6 @@ final class Controller: NSObject {
         writeStatus(lastWorkspaces)
     }
 
-    // MARK: - Visibility
-
     func setHidden(_ hide: Bool) {
         Log.debug("setHidden hide=\(hide)")
         userHidden = hide
@@ -1433,8 +1419,6 @@ final class Controller: NSObject {
         }
     }
 }
-
-// MARK: - TreeController conformance
 
 extension Controller: TreeController {
 

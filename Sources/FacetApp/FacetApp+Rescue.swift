@@ -24,8 +24,6 @@ import FacetCore
 
 extension FacetApp {
 
-    // MARK: - --rescue
-
     /// Scan the active desktop for anchor-sliver-parked windows and
     /// move each back on-screen. Reuses facet's own `com.facet.app`
     /// AX grant (AX trust is keyed on code signature, so a one-shot

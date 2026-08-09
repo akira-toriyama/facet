@@ -8,8 +8,6 @@ import Testing
 /// `*LayoutTests`; this file covers the registry + shared knobs.
 struct LayoutEngineTests {
 
-    // MARK: - Registry
-
     @Test func registryResolvesCaseInsensitive() {
         #expect(LayoutRegistry.engine(named: "master-left")?.name ==
                 "master-left")

@@ -7,7 +7,6 @@ import FacetCore
 import FacetView
 
 extension SidebarView {
-    // MARK: - Right-click menus
 
     // Right-click: WS header → pick layout engine; window row →
     // window actions.

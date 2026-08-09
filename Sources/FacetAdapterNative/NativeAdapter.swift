@@ -442,8 +442,6 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// that would AX-fight the tween.
     public var isAnimating: Bool { slideInProgress }
 
-    // MARK: - Commands
-
     public func switchWorkspace(toIndex index: Int, autoFocus: Bool) {
         // P6: the catalog is cliQueue-confined. Every caller dispatches on
         // cliQueue (DNC `runBackendCommand`, grid/rail/tree, runWindowOps);

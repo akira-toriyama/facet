@@ -7,14 +7,10 @@ import Testing
 /// playbook as `WorkspaceCatalogTests`.
 struct LayoutTreeTests {
 
-    // MARK: - Helpers
-
     /// Convenience rect: wide display by default so auto-balance
     /// picks vertical splits unless we say otherwise.
     private let wideRect = CGRect(x: 0, y: 0, width: 1600, height: 900)
     private let tallRect = CGRect(x: 0, y: 0, width: 600, height: 1200)
-
-    // MARK: - Empty / single
 
     @Test func emptyTreeHasNoLeaves() {
         #expect(LayoutTree().leaves == [])
@@ -122,8 +118,6 @@ struct LayoutTreeTests {
         #expect(t.leaves == [wid(1)])
     }
 
-    // MARK: - toggleOrientation
-
     @Test func toggleOrientationFlipsParentSplit() {
         // Vertical split (wide rect default).
         var t = LayoutTree()
@@ -154,8 +148,6 @@ struct LayoutTreeTests {
         t.toggleOrientation(of: wid(99))
         #expect(t.leaves == [wid(1)])
     }
-
-    // MARK: - contains
 
     @Test func containsTrueForInsertedLeaf() {
         var t = LayoutTree()

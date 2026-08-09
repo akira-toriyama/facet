@@ -69,8 +69,6 @@ extension WorkspaceCatalog {
         }
     }
 
-    // MARK: - Layout mode
-
     // (`defaultMode` is a stored property, so it lives on the primary
     // declaration — extensions can't hold stored state.)
 
@@ -129,8 +127,6 @@ extension WorkspaceCatalog {
         }
         return normalised
     }
-
-    // MARK: - Stack ops
 
     /// Ordered stack members of `n1Based` (top first), or empty
     /// when the WS isn't in `"stack"` mode.
@@ -237,8 +233,6 @@ extension WorkspaceCatalog {
         }
         return windows.predictedFocus()
     }
-
-    // MARK: - Floating
 
     func isFloating(_ id: WindowID) -> Bool {
         floatingWindows.contains(id)

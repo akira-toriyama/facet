@@ -16,8 +16,6 @@ struct RelativeWorkspaceTests {
         return c
     }
 
-    // MARK: - previousActiveIndex
-
     @Test func previousActiveStartsNil() {
         #expect(WorkspaceCatalog().previousActiveIndex == nil)
     }
@@ -59,8 +57,6 @@ struct RelativeWorkspaceTests {
         #expect(c.relativeTarget(.next) == nil)
         #expect(c.relativeTarget(.prev) == nil)
     }
-
-    // MARK: - relativeTarget: recent
 
     @Test func recentNilBeforeAnySwitch() {
         #expect(seeded(3).relativeTarget(.recent) == nil)
