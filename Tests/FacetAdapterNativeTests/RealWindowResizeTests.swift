@@ -30,8 +30,6 @@ struct RealWindowResizeTests {
         return t
     }
 
-    // MARK: - LayoutTree.resize
-
     @Test func resizeRightEdgeGrowsAndNeighborFollows() {
         var t = twoVertical()                    // 1=(0,0,800,900)
         t.resize(wid(1), to: CGRect(x: 0, y: 0, width: 1000, height: 900),
@@ -143,8 +141,6 @@ struct RealWindowResizeTests {
             in: rect)
         #expect(frozen == [wid(2), wid(3)])
     }
-
-    // MARK: - Catalog.applyResize
 
     @Test func catalogApplyResizeBsp() {
         var c = seeded(2)

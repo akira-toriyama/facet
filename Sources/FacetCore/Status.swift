@@ -109,8 +109,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
     /// `Log.path` (volatile, reboot-cleaned).
     public static let defaultPath = "/tmp/facet-status.json"
 
-    // MARK: - I/O
-
     /// JSON-encode and atomically replace the file at `path`.
     /// Atomicity matters: a client racing the writer never sees a
     /// half-written file. `mktemp` + rename is the standard
@@ -136,8 +134,6 @@ public struct StatusSnapshot: Codable, Sendable, Equatable {
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         return try JSONDecoder().decode(StatusSnapshot.self, from: data)
     }
-
-    // MARK: - Rendering
 
     /// Human-readable, grep-friendly multi-line format. Stable
     /// enough that downstream `grep '^backend:'` keeps working.

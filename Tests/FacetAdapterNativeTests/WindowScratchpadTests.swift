@@ -13,11 +13,7 @@ import Testing
 /// machine without AX / AppKit / OS.
 struct WindowScratchpadTests {
 
-    // MARK: - Helpers
-
     private let rect = CGRect(x: 0, y: 0, width: 1440, height: 900)
-
-    // MARK: - stash
 
     @Test func stashShelvesForcesFloatingAndMarksStashed() {
         var c = seededCatalog()
@@ -158,8 +154,6 @@ struct WindowScratchpadTests {
                        "re-park keeps the shelf entry")
     }
 
-    // MARK: - release
-
     @Test func releaseDropsShelfReHomesAndUnfloats() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])        // home = WS1
@@ -232,8 +226,6 @@ struct WindowScratchpadTests {
                        "the rejected move must not relocate its home WS")
     }
 
-    // MARK: - Prune on close
-
     @Test func scratchpadPrunedWhenWindowCloses() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
@@ -244,8 +236,6 @@ struct WindowScratchpadTests {
         #expect(!c.isStashed(wid(10)))
     }
 
-    // MARK: - status names
-
     @Test func stashedNamesListsStashedOnlyNotSettled() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10), window(20)])
@@ -255,8 +245,6 @@ struct WindowScratchpadTests {
         #expect(c.stashedScratchpadNames() == ["hidden"],
                        "status lists stashed (hidden) shelves only")
     }
-
-    // MARK: - Snapshot
 
     @Test func snapshotOmitsStashedAndStampsSettled() {
         var c = seededCatalog()

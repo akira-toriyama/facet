@@ -17,8 +17,6 @@ import Testing
 /// that swept "everything workspace-shaped" would break that, silently.
 struct IsolateDesktopGateTests {
 
-    // MARK: - blocked
-
     @Test func blocksTheWorkspaceSetMutators() {
         #expect(IsolateDesktopGate.blockedVerb(forControl: "workspace-add")
                 == "workspace --add")

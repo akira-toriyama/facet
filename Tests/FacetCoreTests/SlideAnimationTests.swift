@@ -8,8 +8,6 @@ import CoreGraphics
 /// these compile under CI's XCTest (CLT-only setups can't run them).
 struct SlideAnimationTests {
 
-    // MARK: SlideCurve.easeOutCubic
-
     @Test func easeOutCubicEndpoints() {
         #expect(abs(SlideCurve.easeOutCubic(0) - 0) < 0.0001)
         #expect(abs(SlideCurve.easeOutCubic(1) - 1) < 0.0001)
@@ -35,8 +33,6 @@ struct SlideAnimationTests {
         }
     }
 
-    // MARK: SlideCurve.easeOutQuint
-
     @Test func easeOutQuintEndpointsAndClamp() {
         #expect(abs(SlideCurve.easeOutQuint(0) - 0) < 0.0001)
         #expect(abs(SlideCurve.easeOutQuint(1) - 1) < 0.0001)
@@ -61,8 +57,6 @@ struct SlideAnimationTests {
                                  SlideCurve.easeOutCubic(t))
         }
     }
-
-    // MARK: SlideCurve.easeInOutCubic
 
     @Test func easeInOutCubicEndpointsAndClamp() {
         #expect(abs(SlideCurve.easeInOutCubic(0) - 0) < 0.0001)
@@ -91,8 +85,6 @@ struct SlideAnimationTests {
         }
     }
 
-    // MARK: SlideCurve.spring
-
     @Test func springEndpointsAndClamp() {
         #expect(abs(SlideCurve.spring(0) - 0) < 0.0001)
         #expect(abs(SlideCurve.spring(1) - 1) < 0.0001)
@@ -108,8 +100,6 @@ struct SlideAnimationTests {
         #expect(peak > 1.0,
                              "underdamped spring should overshoot above 1")
     }
-
-    // MARK: WindowSlide.frame
 
     @Test func windowSlideTranslationKeepsSize() {
         // Pure translation (WS-switch slide): size constant, origin
@@ -134,8 +124,6 @@ struct SlideAnimationTests {
         #expect(abs(grow.frame(atEased: 0.5).height - 300) < 0.0001)
         #expect(abs(grow.frame(atEased: 1).width - 600) < 0.0001)
     }
-
-    // MARK: FacetConfig [animation]
 
     @Test func animationDefaultsOff() {
         // Opt-in: a fresh install animates nothing until enabled = true.

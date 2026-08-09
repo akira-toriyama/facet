@@ -99,8 +99,6 @@ public enum ViewContextMenu {
         }
     }
 
-    // MARK: - Builders
-
     /// Layout-engine picker for a workspace header. `ws` is the 0-based
     /// workspace index; `workspaces` the view's current snapshot (for the
     /// checkmark on the active mode). `header` is the §D `index (label)`

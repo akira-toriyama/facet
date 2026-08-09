@@ -23,8 +23,6 @@ struct IsolateDesktopProjectionTests {
                   layoutMode: "float", windows: wins)
     }
 
-    // MARK: - projection
-
     @Test func showFalseYieldsOnlyTheMatchedSection() {
         let wss = [ws(0, [win(1, app: "Google Chrome"), win(2, app: "Code"),
                           win(3, app: "Terminal")])]

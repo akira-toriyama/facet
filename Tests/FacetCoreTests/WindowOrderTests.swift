@@ -10,8 +10,6 @@ struct WindowOrderTests {
         [wid(1), wid(2), wid(3), wid(4)]
     }
 
-    // MARK: - swap
-
     @Test("swap exchanges positions; same / absent → nil", arguments: [
         (a: 1, b: 4, expected: [4, 2, 3, 1] as [Int]?),  // exchange
         (a: 2, b: 2, expected: [Int]?.none),             // same window → nil
@@ -21,8 +19,6 @@ struct WindowOrderTests {
         #expect(WindowOrder.swapped(order(), wid(a), wid(b))
                 == expected?.map(wid))
     }
-
-    // MARK: - insert
 
     @Test("insert beside target per edge; no-move / same / absent → nil", arguments: [
         // Move wid(1) to just after wid(3).

@@ -11,8 +11,6 @@ import Testing
 /// (`projectIsolateDesktop`), never on a config section. Pure; CI-only.
 struct FilterProjectionTests {
 
-    // MARK: - fixtures
-
     private func win(_ id: Int, app: String = "App", title: String = "",
                      tags: [String] = [], floating: Bool = false) -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: app, title: title,

@@ -13,8 +13,6 @@ import FacetViewGrid
 
 extension Controller {
 
-    // MARK: - Grid lifecycle
-
     func toggleGrid() {
         if isGridVisible { hideGrid() } else { showGrid() }
     }

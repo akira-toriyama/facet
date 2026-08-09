@@ -90,7 +90,6 @@ struct WindowRef: Hashable, Sendable {
 /// keeps the catalog unit-testable.
 struct WorkspaceCatalog {
 
-    // MARK: - State
     //
     // Stored state lives ONLY here on the primary declaration — the
     // behaviour clusters were split into WorkspaceCatalog+*.swift
@@ -489,16 +488,12 @@ struct WorkspaceCatalog {
         previousActiveIndex = previousActiveIndex.flatMap { map[$0] }
     }
 
-    // MARK: - Validation
-
     /// True when `n1Based` is a live workspace position (contiguous
     /// 1...count). The dynamic set is the authority (memory
     /// `facet-cli-dynamic-runtime-model`).
     func isValid(_ n1Based: Int) -> Bool {
         n1Based >= 1 && n1Based <= workspaceNames.count
     }
-
-    // MARK: - Switch workspace
 
     struct SwitchPlan: Equatable, Sendable {
         let oldActive: Int
@@ -579,8 +574,6 @@ struct WorkspaceCatalog {
             return n + 1
         }
     }
-
-    // MARK: - Move window
 
     enum MoveOutcome: Equatable, Sendable {
         /// Window left the active workspace — adapter should park it.
@@ -723,8 +716,6 @@ struct WorkspaceCatalog {
         }
         return (toPark, toRestore)
     }
-
-    // MARK: - Snapshot
 
     /// Build the `WindowBackend.workspaces()` return value from
     /// the current state + a fresh live-window list.

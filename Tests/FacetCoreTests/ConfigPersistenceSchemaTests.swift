@@ -6,8 +6,6 @@ import Foundation
 /// schema — raw decode, `effective*` clamping, and the `resolvePath` helper.
 struct ConfigPersistenceSchemaTests {
 
-    // MARK: - [config]
-
     @Test func exportPathDecodesAndTrims() {
         let c = FacetConfig.from(toml: parseTOMLSubset("""
             [config]
@@ -48,8 +46,6 @@ struct ConfigPersistenceSchemaTests {
         #expect(on.effectiveAutoPromote)
     }
 
-    // MARK: - [tags] defined
-
     @Test func definedTagsDecodesArrayOnly() {
         let c = FacetConfig.from(toml: parseTOMLSubset("""
             [tags]
@@ -68,8 +64,6 @@ struct ConfigPersistenceSchemaTests {
     @Test func definedTagsUnsetIsEmpty() {
         #expect(FacetConfig().effectiveDefinedTags == [])
     }
-
-    // MARK: - resolvePath
 
     @Test func resolvePathAbsolutePassesThrough() {
         #expect(

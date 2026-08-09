@@ -7,8 +7,6 @@ import Testing
 /// algorithm was bench-verified standalone before porting; these lock it.
 struct SectionOrderTests {
 
-    // MARK: - fixtures
-
     private func sec(_ id: String) -> ProjectedSection {
         ProjectedSection(id: id, label: id, windows: [], sourceWorkspaceIndex: nil)
     }

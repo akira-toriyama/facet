@@ -43,8 +43,6 @@ struct ApplyIsolateLabelOverrideTests {
             match: "app~=Chrome", label: "Web", showNonMatching: true).sections
     }
 
-    // MARK: - no override
-
     @Test func nilOrEmptyLabelIsANoOp() {
         let secs = isolateSections()
         #expect(applyIsolateLabelOverride(secs, label: nil) == secs)

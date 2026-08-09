@@ -9,8 +9,6 @@ import FacetCore
 
 extension FacetApp {
 
-    // MARK: - --resign
-
     /// `facet --resign` re-signs the installed Facet.app with the
     /// persistent ``facet Local Signing`` self-signed identity and
     /// restarts the daemon. Necessary after every `brew install` /

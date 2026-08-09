@@ -21,8 +21,6 @@ struct RealWindowDnDTests {
         return c
     }
 
-    // MARK: - LayoutTree swap
-
     @Test func treeSwapTradesFrames() {
         var t = twoVertical()
         t.swap(wid(1), wid(2))
@@ -50,8 +48,6 @@ struct RealWindowDnDTests {
         t.swap(wid(1), wid(1))
         #expect(t == t0)
     }
-
-    // MARK: - LayoutTree insert beside
 
     @Test func treeInsertBottomReSplitsHorizontally() {
         var t = twoVertical()                       // wid1 | wid2

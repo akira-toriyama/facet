@@ -9,8 +9,6 @@ import Testing
 /// of having extracted `WorkspaceCatalog` out of `NativeAdapter`.
 struct WorkspaceCatalogTests {
 
-    // MARK: - Initial state
-
     @Test func initialActiveIs1() {
         #expect(seededCatalog().activeIndex == 1)
     }
@@ -21,8 +19,6 @@ struct WorkspaceCatalogTests {
         #expect(c.anchorParked.isEmpty)
         #expect(c.originalPositions.isEmpty)
     }
-
-    // MARK: - Reconcile
 
     @Test func reconcileAssignsNewWindowsToActive() {
         var c = seededCatalog()
@@ -310,8 +306,6 @@ struct WorkspaceCatalogTests {
                 "only the non-floating windows park; the floating member stays")
     }
 
-    // MARK: - setActive
-
     @Test func setActiveReturnsNilForCurrentWorkspace() {
         var c = seededCatalog()
         #expect(c.setActive(1) == nil,
@@ -353,8 +347,6 @@ struct WorkspaceCatalogTests {
         let plan = c.setActive(2)
         #expect(plan?.toPark.first?.pid == 9999)
     }
-
-    // MARK: - moveWindow
 
     @Test func moveWindowRejectsUnknownWindow() {
         var c = seededCatalog()
@@ -997,8 +989,6 @@ struct WorkspaceCatalogTests {
         #expect(c.tiledFrames(for: 3, in: displayRect) == [:],
                        "floating new window must skip the WS3 tree")
     }
-
-    // MARK: - Misc state helpers
 
     @Test func clearParkedStateDropsAllHideFlags() {
         var c = seededCatalog()

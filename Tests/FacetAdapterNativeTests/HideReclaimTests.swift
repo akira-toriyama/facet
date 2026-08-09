@@ -11,8 +11,6 @@ import Testing
 /// `WorkspaceCatalog` extracted. Memory: `facet-hide-reclaim-decisions`.
 struct HideReclaimTests {
 
-    // MARK: - Helpers
-
     private var rect: CGRect { CGRect(x: 0, y: 0, width: 1000, height: 800) }
 
     /// Catalog with windows 10 + 20 adopted into WS1 in `mode`.
@@ -147,8 +145,6 @@ struct HideReclaimTests {
                               focused: nil, activeRect: rect)
         #expect(!c.hiddenMembers.contains(wid(20)))
     }
-
-    // MARK: - Cleanup
 
     @Test func forgettingHiddenWindowClearsState() {
         var c = twoWindowCatalog(mode: "master-left")

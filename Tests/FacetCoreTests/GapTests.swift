@@ -109,8 +109,6 @@ struct GapConfigTests {
         #expect(abs(c.effectiveOuterGapLeft - 24) < 0.001)
     }
 
-    // MARK: - Smart gaps
-
     @Test func smartGapsDefaultsOff() {
         #expect(!FacetConfig().effectiveSmartGaps,
                 "smart gaps must be opt-in (off by default)")

@@ -69,15 +69,11 @@ import FacetViewRail
 @main
 enum FacetApp {
 
-    // MARK: - Canonical names
-
     /// Views the user can address with ``--view`` / ``--hide`` /
     /// ``--toggle``. Adding a new view (dock, palette, …) only
     /// requires extending this list + the server-side
     /// ``Controller.dispatchView/Hide/Toggle`` switches.
     static let canonicalViews = ["tree", "grid", "rail"]
-
-    // MARK: - Help / version
 
     /// Print the marketing version (`CFBundleShortVersionString`, stamped
     /// from the git tag by package.sh) and exit. A binary run outside the
@@ -443,8 +439,6 @@ enum FacetApp {
         FileHandle.standardError.write(Data("facet: \(msg)\n".utf8))
         exit(2)
     }
-
-    // MARK: - Entry
 
     static func main() {
         let argv = Array(CommandLine.arguments.dropFirst())

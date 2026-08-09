@@ -20,8 +20,6 @@ import Foundation
 ///     the table is ignored w/ caveat.
 struct DesktopMetaDecodeTests {
 
-    // MARK: - decode
-
     @Test func decodesIsolateDesktop() {
         let m = FacetConfig.decodeDesktopTables(fromTOML: """
         [desktop.2]
@@ -114,8 +112,6 @@ struct DesktopMetaDecodeTests {
         """)
         #expect(m[1] == DesktopMeta(type: .workspace))
     }
-
-    // MARK: - accessors
 
     @Test func desktopTypeExplicitWins() {
         var c = FacetConfig()

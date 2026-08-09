@@ -18,8 +18,6 @@ struct DesktopRenderModeTests {
 
     private func cfg(_ toml: String) -> FacetConfig { FacetConfig.load(source: toml) }
 
-    // MARK: - the three cases
-
     @Test func workspaceDesktopWithCellsRendersSections() {
         let c = cfg("""
         [[desktop.1.section]]

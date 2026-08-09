@@ -99,8 +99,6 @@ public final class RailView: NSView {
     /// grid; matches the tree panel's border).
     private let borderFX = BorderFX()
 
-    // MARK: - Callbacks
-
     /// Pick a section cell (workspace / lens), a window thumb, or commit a
     /// keyboard browse → the Controller routes through `activateSection`
     /// (EX-2b, mirrors the grid's `onPick(GridPick)`; replaces the old
@@ -128,12 +126,8 @@ public final class RailView: NSView {
     public var onRunWindowOps: ((_ ops: [WindowAction],
                                  _ window: Window, _ ws: Int) -> Void)?
 
-    // MARK: - Captured thumbnails
-
     // internal so the drag-ghost extension (RailDrag.swift) can read it.
     var thumbnails: [WindowID: NSImage] = [:]
-
-    // MARK: - Layout snapshot
 
     // Cells are the shared `OverviewCell` (FacetCore): one workspace
     // mini-screen each, recomputed on every relayout so paint and
@@ -221,8 +215,6 @@ public final class RailView: NSView {
     // (non-opaque) to sit cleanly under the clear, non-opaque
     // `OverviewPanel` — same host-paints-backdrop arrangement as the grid.
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    // MARK: - Layout
 
     /// EX-2b: one carousel cell source per projected section (workspace +
     /// lens), built with the single-highlight already gated. `wsIndex` is the
@@ -590,8 +582,6 @@ public final class RailView: NSView {
         return cells.first { $0.rect.contains(p) || $0.headerRect.contains(p) }
     }
 
-    // MARK: - Thumbnails
-
     public func setThumbnail(_ image: NSImage, for id: WindowID) {
         thumbnails[id] = image
         needsDisplay = true
@@ -600,8 +590,6 @@ public final class RailView: NSView {
     public func clearThumbnails() {
         thumbnails.removeAll()
     }
-
-    // MARK: - Drawing
 
     public override func draw(_ dirty: NSRect) {
         // Backdrop — hides the desktop.
@@ -854,8 +842,6 @@ public final class RailView: NSView {
             pal.primary.setStroke(); ring.lineWidth = c.isHero ? 3 : 2; ring.stroke()
         }
     }
-
-    // MARK: - Hover
 
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -1180,7 +1166,6 @@ public final class RailView: NSView {
     ///    0..n-1 = a specific hero window (Space lifts it for a move)
     public var kbSelectedWindowIdx: Int = -1
 
-
     /// The keyboard-selected window: the kbSelectedWindowIdx-th window
     /// (in reading order) of the SELECTED WS, taken from the HERO (it
     /// shows the full window list large). The ring is drawn in BOTH
@@ -1355,7 +1340,6 @@ public final class RailView: NSView {
     }
 }
 
-// MARK: - OverviewView conformance
 //
 // Every requirement is satisfied by members declared above (the
 // snapshot inputs, the run-ops / move / swap callbacks, the no-arg

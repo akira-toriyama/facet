@@ -66,8 +66,6 @@ public enum SectionOrder {
         return ids
     }
 
-    // MARK: - core
-
     /// Stable-partition: items whose `id` is in `orderedIDs` come first in
     /// override order; the rest keep their input order, appended after.
     /// Total — output is always a permutation of `items` (never drops /

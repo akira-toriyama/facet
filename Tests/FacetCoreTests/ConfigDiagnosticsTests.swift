@@ -153,8 +153,6 @@ struct ConfigDiagnosticsTests {
         #expect(!errors(toml).contains { $0.contains("both name mac desktop") })
     }
 
-    // MARK: - [[desktop.N.section]]
-
     @Test func duplicateSectionLabelIsAnError() {
         expectError("""
         [[desktop.1.section]]

@@ -205,8 +205,6 @@ struct ConfigSnapshotTests {
         assertStable(out)
     }
 
-    // MARK: - [tags] defined union
-
     @Test func tagsDefinedUnionsWithExisting() {
         let cfg = """
         [tags]
@@ -532,8 +530,6 @@ struct ConfigSnapshotTests {
         #expect(!(out.contains("safari")), "no edit applied under ambiguity")
         assertStable(out)
     }
-
-    // MARK: - no-op / fail-soft
 
     @Test func emptyOverridesReturnsInputUnchanged() {
         let cfg = """

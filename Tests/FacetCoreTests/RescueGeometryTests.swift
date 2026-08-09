@@ -18,7 +18,6 @@ struct RescueGeometryTests {
     /// anchor (5759, 2159).
     private static let external = CGRect(x: 1920, y: 0, width: 3840, height: 2160)
 
-    // MARK: - isCornerParked
     //
     // CRITICAL: parkAnchor REQUESTS (maxX-1, maxY-1), but macOS CLAMPS
     // the window back on-screen so ~41px of title bar stays visible — so
@@ -59,8 +58,6 @@ struct RescueGeometryTests {
             RescueGeometry.isCornerParked(origin: origin,
                                           displayBounds: displayBounds) == expected)
     }
-
-    // MARK: - rescueTarget
 
     // visibleFrame top-left (Quartz coords) is below the 25px menu bar; the
     // target nudges in by the inset (default 24px, or a custom value) so the
