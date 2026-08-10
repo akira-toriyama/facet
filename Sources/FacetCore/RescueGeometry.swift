@@ -57,7 +57,7 @@ public enum RescueGeometry {
     /// Approximate on-screen rescue origin: the display's visible
     /// frame top-left nudged in by `inset` so the title bar is
     /// grabbable and clear of the menu bar. Approximate is fine — the
-    /// goal is just to get the window back on-screen ("画面内であれば
+    /// goal is just to get the window back on-screen ("anywhere on
     /// OK"); the exact pre-park position is only restored on graceful
     /// quit (mechanism ①), which has it in memory.
     public static func rescueTarget(visibleFrame: CGRect,

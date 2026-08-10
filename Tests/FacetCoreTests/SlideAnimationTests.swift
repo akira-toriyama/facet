@@ -2,7 +2,7 @@ import Testing
 import CoreGraphics
 @testable import FacetCore
 
-/// Pure-logic tests for the workspace-switch slide (枠 E). The clock +
+/// Pure-logic tests for the workspace-switch slide (Frame E). The clock +
 /// AX writes live in the adapter; only the easing + interpolation are
 /// testable here. Accuracy literals are non-Optional FloatingPoint so
 /// these compile under CI's XCTest (CLT-only setups can't run them).
@@ -50,7 +50,7 @@ struct SlideAnimationTests {
     }
 
     @Test func easeOutQuintSnappierThanCubic() {
-        // "キレ": quint settles faster, so it sits above cubic mid-tween.
+        // "Crisp": quint settles faster, so it sits above cubic mid-tween.
         for i in 1...19 {
             let t = Double(i) / 20
             #expect(SlideCurve.easeOutQuint(t) >
@@ -94,7 +94,7 @@ struct SlideAnimationTests {
 
     @Test func springOvershootsAboveOne() {
         // Underdamped: the response rises past 1 before settling — the
-        // "弾む高級感" bounce. Scan the whole tween for the peak.
+        // The "premium bounce". Scan the whole tween for the peak.
         var peak = 0.0
         for i in 0...100 { peak = max(peak, SlideCurve.spring(Double(i) / 100)) }
         #expect(peak > 1.0,

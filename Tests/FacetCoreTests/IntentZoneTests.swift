@@ -2,7 +2,7 @@ import CoreGraphics
 import Testing
 @testable import FacetCore
 
-/// Pure tests for the real-window-DnD intent-zone classifier (枠C):
+/// Pure tests for the real-window-DnD intent-zone classifier (Frame C):
 /// a central rectangle = swap, four triangular wedges = insert. The
 /// rect is 400×200 (wider than tall) so the wedge diagonals aren't at
 /// 45° — exercising the aspect-correcting normalization.

@@ -1,11 +1,11 @@
 name: Deploy glossary site
 
-# 本リポの docs/glossary.md から専用 SPA を生成し、
-# https://akira-toriyama.github.io/facet/ に公開する。
-# 実体 (builder + viewer) は akira-toriyama/glossary-site の reusable workflow に委譲。
+# Builds a dedicated SPA from this repo's docs/glossary.md and publishes it
+# to https://akira-toriyama.github.io/facet/. The substance (builder +
+# viewer) is delegated to akira-toriyama/glossary-site's reusable workflow.
 #
 # - push to main → build + deploy
-# - pull_request → build のみ (artifact から成果物確認可、deploy なし)
+# - pull_request → build only (artifact inspectable, no deploy)
 # - workflow_dispatch → build + deploy
 
 on:
@@ -26,7 +26,7 @@ permissions:
   id-token: write
 
 concurrency:
-  # PR と main を別グループに (PR build が main deploy を巻き込まない)
+  # PR and main in separate groups (a PR build never drags in a main deploy)
   group: pages-${{ github.event.number || github.ref }}
   cancel-in-progress: false
 

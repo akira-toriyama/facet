@@ -48,7 +48,7 @@ struct RuleEvalTests {
     @Test func multiMatchSetWorkspaceAccumulatesInDeclarationOrder() {
         // Two rules each placing the window pin the declaration-order
         // accumulation of `setWorkspace` — the op the glossary's
-        // "setWorkspace は単数値 last-wins" claim names. ruleApplyOps returns
+        // the "setWorkspace is single-valued last-wins" claim names. ruleApplyOps returns
         // BOTH in order; the executor (applyRuleOp → moveWindow, host-verified)
         // realizes last-wins by overwriting, so the LAST declared workspace wins.
         let a = adapter([

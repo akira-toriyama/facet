@@ -1,4 +1,4 @@
-// Pure window-order operations behind the real-window-DnD verbs (枠C).
+// Pure window-order operations behind the real-window-DnD verbs (Frame C).
 //
 // The native adapter's stateless / stack layouts are driven entirely by
 // a per-workspace window order, and a `LayoutEngine` is a pure function

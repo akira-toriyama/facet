@@ -231,7 +231,7 @@ final class Controller: NSObject {
     var thumbnailTimer: Timer?
     var thumbnailTimerInterval: TimeInterval?
 
-    // MARK: - Real-window DnD (枠C)
+    // MARK: - Real-window DnD (Frame C)
 
     /// Global mouse monitor that turns a drag of a tiled window onto
     /// another into a swap / insert. Installed once at start, lives the
@@ -243,7 +243,7 @@ final class Controller: NSObject {
     /// `predictedDropFrames` requests to the backend's response rate.
     var dndPredictionInFlight = false
 
-    /// Live real-window RESIZE follow (枠C 機能2). The gesture shares the
+    /// Live real-window RESIZE follow (Frame C feature 2). The gesture shares the
     /// DnD monitor; these track the resize half. `liveGestureIsResize`
     /// latches once a tick classifies the drag as a resize, so the move
     /// drop-overlay stays hidden for the rest of the gesture;
@@ -434,8 +434,8 @@ final class Controller: NSObject {
                 // (a deliberate exitActive clears kbNav first — so a row-click /
                 // Enter never lands here, #66). A mac-desktop switch is the
                 // common trigger: the OS strips key from the shared
-                // `.canJoinAllSpaces` panel. Settle CLEANLY to passive (R12 / ト
-                // ミー: facet must NOT auto-grab focus on a switch).
+                // `.canJoinAllSpaces` panel. Settle CLEANLY to passive (R12 /
+                // Tommy: facet must NOT auto-grab focus on a switch).
                 Log.debug("panelKey lost (kbNav-active) → passive")
                 sidebarView.exitKbNav()
                 // Fully relinquish key, not just kbNav: otherwise `wantsKey`
@@ -1197,7 +1197,7 @@ final class Controller: NSObject {
         //       (hide-reclaim restore: Cmd+H unhide / Cmd+M deminiaturize
         //       / tree-click reveal). It couldn't be captured while
         //       hidden, so its cached thumbnail is stale / blank —
-        //       re-capture now. (トミー's hide-reclaim PR2 requirement.)
+        //       re-capture now. (Tommy's hide-reclaim PR2 requirement.)
         // Invalidate drops the stale cache for every surface (tree
         // re-captures lazily on the next hover); the open grid / rail
         // then gets a fresh capture pushed via `pushFreshThumbnails`.

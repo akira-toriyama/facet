@@ -80,7 +80,7 @@ public enum MirrorAxis: Sendable, Equatable {
 }
 
 /// Which side of a target window an insert lands on (real-window DnD,
-/// 枠C `insertWindow`). Layout-interpreted: bsp splits the target on
+/// Frame C `insertWindow`). Layout-interpreted: bsp splits the target on
 /// that side; stateless / stack engines place the moved window before
 /// (`left` / `top`) or after (`right` / `bottom`) the target in the
 /// window order. `top` = the minY side, `bottom` = the maxY side.
@@ -245,7 +245,7 @@ public protocol WindowBackend: Sendable {
     func mirrorActiveWorkspace(_ axis: MirrorAxis)
 
     /// Swap two tiled windows' positions within the active workspace
-    /// (real-window DnD, 枠C). Stateless / stack engines trade the two
+    /// (real-window DnD, Frame C). Stateless / stack engines trade the two
     /// windows' order slots; bsp trades their leaves (frames swap, tree
     /// shape unchanged). No-op unless both are non-floating members of
     /// the active workspace. Not a CLI verb — DnD-only (the UI in PR-2
@@ -253,7 +253,7 @@ public protocol WindowBackend: Sendable {
     func swapWindows(_ a: WindowID, _ b: WindowID)
 
     /// Insert `moved` beside `target` on `edge` within the active
-    /// workspace (real-window DnD, 枠C). The edge is layout-interpreted:
+    /// workspace (real-window DnD, Frame C). The edge is layout-interpreted:
     /// bsp splits the target's `edge` side and drops `moved` there;
     /// stateless / stack engines move `moved` before (`left` / `top`)
     /// or after (`right` / `bottom`) `target` in the window order. The
@@ -264,7 +264,7 @@ public protocol WindowBackend: Sendable {
                       edge: InsertEdge)
 
     /// Follow a real edge-drag resize of `id` to `frame` within the
-    /// active workspace (real-window resize, 枠C 機能2). The window was
+    /// active workspace (real-window resize, Frame C feature 2). The window was
     /// resized natively by the user; facet only updates the controlling
     /// split ratio (bsp) / master divider (master-*) so the
     /// opposite side tracks it, then re-tiles. No-op outside those modes,
@@ -286,7 +286,7 @@ public protocol WindowBackend: Sendable {
 
     /// The window's current on-screen frame in backend (Quartz, top-left)
     /// coords, read live from the OS — or `nil` when it isn't a managed /
-    /// resolvable window. Used by the real-window resize gesture (枠C 機能2)
+    /// resolvable window. Used by the real-window resize gesture (Frame C feature 2)
     /// to poll the natively-resized window each tick and self-classify the
     /// drag (size changed ⇒ resize, position only ⇒ move). Read-only; no
     /// side-effects.
@@ -296,7 +296,7 @@ public protocol WindowBackend: Sendable {
     /// dropped onto `target` with intent `zone` — without committing.
     /// Computed on a copy of the layout state through the SAME swap /
     /// insert + tiling math (incl. inner gap) the commit uses, so the
-    /// real-window-DnD prediction overlay (枠C PR-3) can't drift from
+    /// real-window-DnD prediction overlay (Frame C PR-3) can't drift from
     /// what actually lands. `frames` are backend (Quartz, top-left)
     /// coords; `moved` is which windows the drop relocates (diffed
     /// against the pre-drop computed layout, so it's exact — no live /

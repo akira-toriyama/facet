@@ -3,7 +3,7 @@ import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
-/// Tests for the real-window-DnD backend verbs (枠C): LayoutTree leaf
+/// Tests for the real-window-DnD backend verbs (Frame C): LayoutTree leaf
 /// swap / edge-insert, and the WorkspaceCatalog swap / insert wrappers
 /// across stateless and bsp modes. Pure — no AX / AppKit, same playbook
 /// as `WorkspaceCatalogTests` / `RotateMirrorTests`.

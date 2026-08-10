@@ -53,7 +53,7 @@ let railSlideMaxSlots: CGFloat = 3
 /// keeps the cells from butting against the very edge.
 let railEdgeFloatFrac: CGFloat = 0.035
 /// Gap between the strip cells and the hero (fraction of short edge) —
-/// separates the big preview from the workspace列.
+/// separates the big preview from the workspace row.
 let railHeroGapFrac: CGFloat = 0.05
 /// Hero inset from the three outer screen edges + the carousel
 /// viewport's run-axis inset (fraction of short edge).

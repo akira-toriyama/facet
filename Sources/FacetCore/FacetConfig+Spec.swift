@@ -38,7 +38,7 @@ private let perViewThemeDomain = canonicalThemeNames + [""]
 // The typed value shape for `[desktop.<N>]` ordinal keys — the open-map the
 // bare `.dynamicTable` couldn't express (t-kz0m). Hand-built at the DESCRIPTOR
 // layer (ObjectShape / NestedTable / NestedObject / SchemaField) rather than a
-// new authoring builder, per t-0avb B1. Canonical spec: t-0avb「値 shape の確定形」.
+// new authoring builder, per t-0avb B1. Canonical spec: t-0avb "the settled value shape".
 // `permissive` defaults false → `additionalProperties: false`, so taplo AND the
 // runtime validator reject typo'd keys / non-ordinal `[desktop.foo]`. The
 // per-type conditionals are deferred to `DesktopMeta.parse`, the enforcement

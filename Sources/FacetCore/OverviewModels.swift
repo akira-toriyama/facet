@@ -212,7 +212,7 @@ public struct OverviewDrag {
 /// that can confirm the move landed (the dropped id now lives in
 /// `dstWS`). Gates the source thumb's reveal on the backend reflecting
 /// the move, so a refresh tick racing the round-trip doesn't briefly show
-/// a residual thumb in the source cell (残像).
+/// a residual thumb in the source cell (an afterimage).
 public struct OverviewPendingDrop {
     public let id: WindowID
     public let dstWS: Int

@@ -1,7 +1,7 @@
 import Testing
 @testable import FacetCore
 
-/// Pure tests for the window-order ops behind swap / insert (枠C).
+/// Pure tests for the window-order ops behind swap / insert (Frame C).
 /// `nil` means "no change" (the caller's change-detection signal).
 struct WindowOrderTests {
 

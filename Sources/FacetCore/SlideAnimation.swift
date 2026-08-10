@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// Pure animation math for the window-move animation (枠 E). No AppKit /
+/// Pure animation math for the window-move animation (Frame E). No AppKit /
 /// AX / timer here — FacetCore stays pure. The adapter owns the clock +
 /// the per-frame AX writes; these only turn a normalized progress
 /// `t ∈ [0, 1]` into an eased value. All clamp `t` to [0, 1].
@@ -14,7 +14,7 @@ public enum SlideCurve {
     }
 
     /// Ease-out quint: snappier than cubic (steeper settle), no
-    /// overshoot. The "キレ" feel.
+    /// overshoot. The "crisp" feel.
     public static func easeOutQuint(_ t: Double) -> Double {
         let c = min(1, max(0, t))
         let i = 1 - c
@@ -31,7 +31,7 @@ public enum SlideCurve {
     }
 
     /// Underdamped spring step response: overshoot then settle (the
-    /// "弾む高級感"). `zeta` (damping, 0–1) sets the bounce — lower =
+    /// "premium bounce"). `zeta` (damping, 0–1) sets the bounce — lower =
     /// bigger overshoot / more spring; `omega` the speed. Clamped so a
     /// runaway value can't diverge.
     public static func spring(_ t: Double, zeta: Double = 0.55,

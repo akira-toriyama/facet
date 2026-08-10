@@ -195,7 +195,7 @@ extension NativeAdapter {
         if cached {
             // Live-resize-follow fast path. The per-tick AX-element lookup
             // (AXGeom.window) measured ~14ms/tick — the bulk of the
-            // neighbour's "ワンテンポ遅れ" — so cache the element for the
+            // neighbour's one-beat lag — so cache the element for the
             // drag (cachedFollowAX). No frame-match skip here: the upstream
             // 4pt dead-zone (RealWindowDrag) already drops no-op ticks, so
             // every cached tick is a real move; just write the current
@@ -431,7 +431,7 @@ extension NativeAdapter {
             let direction: WorkspaceCatalog.CycleDirection =
                 action == .cycleStackNext ? .next : .prev
             if config.effectiveAnimationsEnabled {
-                // 枠 E: slide the old top out / next top in.
+                // Frame E: slide the old top out / next top in.
                 animateStackCycle(direction: direction, rect: rect)
             } else {
                 let newTop = catalog.cycleStack(

@@ -23,7 +23,7 @@ stub seam.
               │                 │   - focus rules, layout engines
               │                 │   - WindowBackend + WindowCapturing
               │                 │     ports + event types
-              │                 │  GUI / OS / backend non-依存
+              │                 │  GUI / OS / backend independent
               └───┬─────────┬───┘
                   │         │
    ┌──────────────┴───┐  ┌──┴───────────────────┐
@@ -76,7 +76,7 @@ matches how rift / aerospace operate today.
 
 | Phase | Scope | Reference reading |
 |---|---|---|
-| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (mac desktop × facet workspace), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus N` (α 期の flag は `--workspace=N`、Theme C #81/#82 で subject-verb 化). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
+| **α** | virtual workspace concept self-managed; focus tracking. **Frozen 2026-05-24, shipped 2026-05-26**: (b) hybrid model (mac desktop × facet workspace), default 5 WS dynamic, hide method = `anchor` (1×41 px corner park), CLI = `facet workspace --focus N` (the α-era flag was `--workspace=N`; Theme C #81/#82 made it subject-verb). Workspace state + reconcile + focusedWindow + AX-driven event subscription | rift `workspace` module, AeroSpace `MacWindow.hideInCorner` |
 | **β** | window move across workspaces; off-screen park/unpark; closeWindow. **Shipped 2026-05-26**: anchor hide / closeWindow + windowMenu Close | rift `wm/window`, yabai window mgmt |
 | **γ** | window tiling (BSP / stack layout engines). **Frozen 2026-05-26; γ.1 / γ.2 / γ.3 all shipped (PR #44 / #45 / #46)**: BSP + stack only, always-on auto-tile, auto-balance split, lazy retile, per-WS mode (default `"float"`), `LayoutTree` value type, 5 CLI verbs, AX-role auto-float for sheets / dialogs / palettes | rift `layout`, AeroSpace tree |
 | **δ** | display reconfigure handling; persistence-aware geometry (no new state). **Frozen + shipped 2026-05-27 (PR #53)**: `didChangeScreenParameters` listener, active WS re-tile, anchor-parked rescue to nearest visible display, panel snap to nearest display, pure helpers in `DisplayGeometry`. Single-display dev environment so multi-display polish is rescue-helpers-only | — |
@@ -102,12 +102,12 @@ Canonical: `facet-future-roadmap` memory.
 
 | Theme | Goal | Status |
 |---|---|---|
-| **A. Tree DnD parity** | Tree view で WS / window DnD reorder (grid view と同等機能) | ✅ shipped (#72) |
-| **B. Extended layouts** | Centered Master (3-column, ultrawide 向け) / Scrolling columns (niri 風) を Phase γ の `bsp` + `stack` に追加 | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops。命名整理は #108 (monocle→stack 統合・centered-master→centered) 経て **M9-2 で master 5 辺化に確定**: `master-left` / `master-right` / `master-top` / `master-bottom` / `master-center` + grid / spiral (tall/wide/centered は破壊的リネーム・`--toggle-orientation` の master flip 廃止)。scrolling columns (niri 風) は未実装 (M11-4) |
-| **C. CLI redesign** | yabai 流の豊富 parameter 設計を参考に、整合性 / 一貫性を最優先で再設計。 **破壊的変更 OK** (トミー明示) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
-| **D. New view types** | 当初候補 (i) 自由配置 canvas Google Maps 風 / (ii) WS DnD reorder Mission Control 風 はいずれも却下 → 別案 **rail view** (全画面 WS overview バー) を採用 | ✅ shipped as `facet --view rail` (#109) |
+| **A. Tree DnD parity** | WS / window DnD reorder in tree view (feature parity with grid view) | ✅ shipped (#72) |
+| **B. Extended layouts** | Add Centered Master (3-column, for ultrawide) / Scrolling columns (niri-like) to Phase γ's `bsp` + `stack` | ✅ shipped (#73–80) — monocle / tall / centered-master / grid / spiral + master ops. Naming cleanup went through #108 (monocle folded into stack; centered-master→centered) and **settled as the 5-sided master family in M9-2**: `master-left` / `master-right` / `master-top` / `master-bottom` / `master-center` + grid / spiral (tall/wide/centered were breaking renames; the `--toggle-orientation` master flip retired). Scrolling columns (niri-like) unimplemented (M11-4) |
+| **C. CLI redesign** | Redesign with consistency / coherence first, informed by yabai's rich parameter design. **Breaking changes OK** (Tommy explicit) | ✅ shipped (#81 / #82) — `facet workspace` / `window` subject-verb |
+| **D. New view types** | The initial candidates — (i) free-placement canvas, Google-Maps-like / (ii) WS DnD reorder, Mission-Control-like — were both rejected → the alternative **rail view** (full-screen WS overview bar) adopted | ✅ shipped as `facet --view rail` (#109) |
 
-着手前 invariants: `facet-buddha-palm-principle` (OS 尊重) を壊さない / `facet-scope-exclusions` (15 not-do) と矛盾しない / `WindowBackend` protocol 経由設計を維持 (unit-test stub seam を壊さない)。
+Pre-work invariants: don't break `facet-buddha-palm-principle` (respect the OS) / don't contradict `facet-scope-exclusions` (the 15 not-dos) / keep the `WindowBackend`-protocol-mediated design (don't break the unit-test stub seam).
 
 ### Phase α frozen decisions (2026-05-24)
 
@@ -127,7 +127,7 @@ is the index. **Do not relitigate** without explicit grill round.
   are read read-only via private SkyLight (`MacDesktops`,
   `SLSGetActiveSpace` / `SLSCopyManagedDisplaySpaces`); facet never
   moves windows across mac desktops, so it stays SIP-on / public-contract
-  (the rejected cross-mac-desktop move was hide 手法4). `[[desktop.N.section]]`
+  (the rejected cross-mac-desktop move was hide method 4). `[[desktop.N.section]]`
   config customises a mac desktop by Mission-Control ordinal — an ordered
   list of workspace spatial cells (`{ label, layout }`): each cell
   is one facet workspace (optional `label` — unnamed shows its index — and an
@@ -473,7 +473,7 @@ service the `cliQueue → main` `NSScreen` hop; the edges form no cycle.
 Adding a `main → cliQueue` `.sync` anywhere would close the cycle and
 deadlock — don't.
 
-Slide animations (枠 E) span both: the command commits the catalog on
+Slide animations (Frame E) span both: the command commits the catalog on
 cliQueue, then hands a **value** plan (AX elements + frames) to the
 main-confined driver via a single `DispatchQueue.main.async`. The driver
 and its settle run on main and touch **no catalog** — the settle only
@@ -530,7 +530,7 @@ Per-type semantics (`ProjectedSectionType`):
 1:1 to by-workspace, byte-identical to the built-in by-workspace tree. The gate
 is `FacetConfig.isSectionModelActive`.
 
-### 🪦 orphan (迷子) + the `unassigned` receptacle — retired (t-6rbc)
+### 🪦 orphan + the `unassigned` receptacle — retired (t-6rbc)
 
 An **orphan** was a window belonging to no facet workspace
 (`WindowSlot.workspace == nil`), and `unassigned = true` marked the
@@ -676,7 +676,7 @@ workspace desktops.
 - **SIP-disabled features in `facet`** — out of scope.
   Mouse-follows-focus / true hide / programmable mac desktops / etc.
   all require SIP off + Dock.app injection, which conflicts with
-  facet's "釈迦の掌の上" philosophy (`facet-buddha-palm-principle`).
+  facet's "on the Buddha's palm" philosophy (`facet-buddha-palm-principle`).
   If a user genuinely needs them, the answer is a separate
   fork — not a bolt-on in this repo (`facet-deep-core-deferred-to-fork`
   memory).

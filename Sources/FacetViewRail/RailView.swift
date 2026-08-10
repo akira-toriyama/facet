@@ -505,7 +505,7 @@ public final class RailView: NSView {
             heroBox.size.width = max(0, (innerEdge - heroGap) - heroBox.minX)
         }
         // The hero = the centred section. When it's an isolate desktop (Decision 1,
-        // トミー 2026-06-22) it renders the isolate desktop's cross-workspace union
+        // Tommy 2026-06-22) it renders the isolate desktop's cross-workspace union
         // (`act.windows`); a workspace renders its own windows. `isActive` is
         // the baked single-highlight XOR. `sources` is non-empty (guarded
         // above), so the fallback chain never falls through.

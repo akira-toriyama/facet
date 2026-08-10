@@ -42,7 +42,7 @@ struct WindowSlot: Equatable, Sendable {
     /// 1-based workspace index. NOT Optional — a managed window is in exactly
     /// one facet workspace, and t-6rbc made that a TYPE rather than a hope.
     ///
-    /// It used to be `Int?`, where `nil` meant 迷子 (orphan): a window in NO
+    /// It used to be `Int?`, where `nil` meant an orphan: a window in NO
     /// workspace. The only thing that could mint one was `setOrphan`, whose only
     /// caller (`orphanWindow`) lost ITS only caller when t-qtpx removed the
     /// ws→lens DnD — so for two releases the orphan set was provably empty while

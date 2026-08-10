@@ -26,7 +26,7 @@ extension NativeAdapter {
                                       to: mode, in: rect)
         Log.debug("native: setLayoutMode WS \(target) -> \(applied)")
         if target == catalog.activeIndex {
-            // 枠 E Phase 2: animate the reflow only between all-visible
+            // Frame E Phase 2: animate the reflow only between all-visible
             // layouts. stack parks members (windows appear / disappear),
             // which the slide engine doesn't handle yet — instant there.
             let parks = oldMode == StatefulMode.stack || applied == StatefulMode.stack
@@ -127,7 +127,7 @@ extension NativeAdapter {
             return
         }
         let rect = activeDisplayRect()
-        // 枠 E Phase 2: animate the in-place reflow. animateRetile owns
+        // Frame E Phase 2: animate the in-place reflow. animateRetile owns
         // its settle (applyLayout + refresh); fall through to instant
         // when off / reduce-motion / nothing moved.
         if config.effectiveAnimationsEnabled,

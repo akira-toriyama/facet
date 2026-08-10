@@ -8,7 +8,7 @@ with an "unknown flag" error. There is no compatibility shim.
 Why: facet's command structure already mirrors yabai's `-m DOMAIN`
 (`window` / `workspace` / `section` / `scratchpad` / `query` / `config`);
 bare-word values complete more naturally in a shell; and it matches the
-family CLI convention. See [glossary](glossary.md#cli-文法--flag-value) and
+family CLI convention. See [glossary](glossary.md#cli-grammar---flag-value) and
 [architecture](architecture.md) → *CLI surface* for the design.
 
 ## ⚠️ Silent-break warning for chord / skhd / hammerspoon bindings
