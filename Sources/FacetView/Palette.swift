@@ -2,7 +2,7 @@
 // atelier). facet's hand-rolled `Palette` struct, its presets,
 // `paletteFor`, `blendThrough`, `animatedPalette`, `FontKind`, and the
 // `NSColor(hex:)` convenience all live in sill's Palette / PaletteKit /
-// Effects modules now — the north star: "facet の theme 真似て" never
+// Effects modules now — the north star: "imitate facet's theme" never
 // said twice.
 //
 // These three `@_exported import`s re-publish sill's theming through

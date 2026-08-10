@@ -147,7 +147,7 @@ final class SectionRenameContainerView: NSView {
 /// (`TagEditListView`) applied to `[alias]` names: checkbox + `@name`,
 /// hover/keyboard share one selection highlight, a pick TOGGLES. Checked =
 /// "this alias is a top-level OR term of the current match" (derived by
-/// `matchCheckedAliases`); toggling applies LIVE (案A — the tag-panel model:
+/// `matchCheckedAliases`); toggling applies LIVE (plan A — the tag-panel model:
 /// the isolate desktop re-tiles on every toggle, Esc merely dismisses).
 /// `enabled = false` (a malformed hand-edit in the field) dims the rows and
 /// ignores picks — the field's validation message owns that state.
@@ -250,7 +250,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     private weak var aliasList: AliasPickListView?
     private var monitors: [Any] = []
 
-    /// t-kywh 案A: the text last APPLIED through `onCommitCB` (seeded with
+    /// t-kywh plan A: the text last APPLIED through `onCommitCB` (seeded with
     /// `initialText` — the already-effective match). Enter is dual-role: a
     /// DIRTY field (text ≠ lastApplied) commits it; a clean one toggles the
     /// selected alias row. Esc always just dismisses (toggles are already
@@ -262,7 +262,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// applying `""` reverts to the config match, so the panel RE-SYNCS its
     /// field + checks to this — the checklist mirrors the EFFECTIVE match at
     /// all times and never shows "nothing selected" while the config match
-    /// keeps tiling (トミー, 2026-07-16: "@web を外しても Chrome が残る" —
+    /// keeps tiling (Tommy, 2026-07-16: "removing @web must keep Chrome" —
     /// it must LOOK that way too, with a message saying why).
     private var configMatch = ""
 
@@ -293,7 +293,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
     /// commit-unconditionally behaviour (and its layout) byte-identical.
     ///
     /// t-kywh: `aliases` (the config `[alias]` names, sorted by the caller) adds
-    /// the filter-alias PICKER — a tag-style CHECKLIST below the field (案A,
+    /// the filter-alias PICKER — a tag-style CHECKLIST below the field (plan A,
     /// 2026-07-16: the TagEditPanel interaction model, not chips). Checked =
     /// the alias is a top-level OR term of the current match; toggling a row
     /// rewrites the match to the OR of the checked set (hand-written non-alias
@@ -459,7 +459,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         cb?(text)
     }
 
-    // MARK: - Alias checklist (t-kywh, 案A live apply)
+    // MARK: - Alias checklist (t-kywh, plan-A live apply)
 
     static let aliasListGap: CGFloat = 8
     static let maxVisibleAliasRows = 8
@@ -509,7 +509,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
         refreshAliasChecks()
     }
 
-    /// 案A: push `text` through the SAME commit route the Enter key uses —
+    /// Plan A: push `text` through the SAME commit route the Enter key uses —
     /// validated first, `onCommit` on `.ok` — but WITHOUT closing, so a
     /// toggle re-tiles the isolate desktop while the panel stays up (the
     /// tag-panel model). A composed OR of defined aliases is always `.ok`;
@@ -637,7 +637,7 @@ public final class SectionRenamePanel: NSObject, NSTextFieldDelegate {
                 let hasList = self.aliasList?.names.isEmpty == false
                 switch ev.keyCode {
                 case 36, 76:                             // Return / keypad Enter
-                    // Dual-role (t-kywh 案A): a DIRTY field commits the typed
+                    // Dual-role (t-kywh plan A): a DIRTY field commits the typed
                     // text (apply + close, the historic gesture); a CLEAN one
                     // toggles the selected alias row live (the panel's primary
                     // flow once toggles apply instantly — dismissing is Esc).

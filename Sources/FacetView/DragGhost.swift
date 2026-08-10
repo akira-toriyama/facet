@@ -77,7 +77,7 @@ public struct MiniThumbSpec {
 /// "lifted" size so cursor-follow can start on frame 1 with no pause —
 /// the only animation is the shadow softly fading in (`liftShadow`).
 /// Going instant on size + animated only on shadow gives smooth feel
-/// without the "ガクッ" of a size tween being yanked by mouseDragged
+/// without the jolt of a size tween being yanked by mouseDragged
 /// origin writes.
 ///
 /// Shows the same captured thumbnail the source cell was showing (so

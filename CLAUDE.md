@@ -25,7 +25,7 @@ moved to `[[rule]]`), and the surviving desktop type was renamed `lens` →
 it images, but this desktop tiles the matched windows and anchor-parks the rest,
 and leaving it un-parks nothing. **`lens` is now a dead word** — `type = "lens"`
 is a loud reject, never an alias.
-The **orphan** (迷子 — a window in NO facet workspace, `WindowSlot.workspace == nil`)
+The **orphan** (a window in NO facet workspace, `WindowSlot.workspace == nil`)
 is a dead word too, t-6rbc: **facet could never mint one** — the only minter
 (`WorkspaceCatalog.setOrphan`) lost its last caller when t-qtpx removed the ws→lens
 DnD — so the tree's lost-and-found receptacle (the `unassigned = true` section) could
@@ -49,32 +49,36 @@ public API + AX only. Swift 6, macOS 26+.
 
 ## Shared libraries (atelier)
 
-facet は swift app family の共有ライブラリに乗る（plan
-[atelier](https://github.com/akira-toriyama/atelier)）。かつて facet の
-theme が family の参照実装だった（北極星＝「facet の theme を真似て」を
-二度と言わない）が、Phase V でその theming は **sill** に抽出され、facet
-自身も**共有 lib 側を消費する**側になった。共有 lib が持つ責務は
-**再実装せずライブラリ側を拡張**する。モジュール → target の正確な配線は
-[Package.swift](Package.swift) を正とする。
+facet rides the swift app family's shared libraries (plan:
+[atelier](https://github.com/akira-toriyama/atelier)). facet's theme was
+once the family's reference implementation (the north star: never again
+say "imitate facet's theme"), but Phase V extracted that theming into
+**sill**, and facet itself became a **consumer of the shared libs**. A
+responsibility a shared lib owns is **extended on the library side, never
+reimplemented**. The exact module → target wiring:
+[Package.swift](Package.swift) is the truth.
 
-- **[sill](https://github.com/akira-toriyama/sill)** — 共有 theming /
-  config / CLI 基盤。facet が消費するもの:
-  - `Palette`（pure・AppKit-free）— `canonical(_:)` = 有効な `--theme=`
-    名の単一ソース。`FacetCore` の no-AppKit 則を破らない。
-  - `PaletteKit`（`@MainActor`・`ResolvedPalette`）— `pal` var の実体
-    （[Sources/FacetView/Palette.swift](Sources/FacetView/Palette.swift)
-    で re-export）。preset（`ThemeSpec`）も sill 側。
-  - `Effects` — view の視覚効果（border 等）。
-  - `ConfigSchema` — 1 つの宣言的 `Spec` が config.toml の decode +
-    `config --emit-schema`（taplo 補完）+ `config --validate` を駆動
-    （sill 1.29.0 bridge・t-0029）→ 3 者が drift しない。
+- **[sill](https://github.com/akira-toriyama/sill)** — shared theming /
+  config / CLI foundation. What facet consumes:
+  - `Palette` (pure, AppKit-free) — `canonical(_:)` = the single source
+    of valid `--theme=` names. Does not break `FacetCore`'s no-AppKit
+    rule.
+  - `PaletteKit` (`@MainActor`, `ResolvedPalette`) — the substance of the
+    `pal` var (re-exported by
+    [Sources/FacetView/Palette.swift](Sources/FacetView/Palette.swift)).
+    Presets (`ThemeSpec`) are also sill-side.
+  - `Effects` — view visual effects (borders etc.).
+  - `ConfigSchema` — one declarative `Spec` drives config.toml decode +
+    `config --emit-schema` (taplo completion) + `config --validate`
+    (sill 1.29.0 bridge, t-0029) → the three cannot drift.
 - **[swift-toml-edit](https://github.com/akira-toriyama/swift-toml-edit)**
-  — family 唯一の TOML 実装（`Toml` module）。元は sill in-tree だったが
-  0.11.0 で独立 repo 化・`import Toml` は不変。facet は config パースに使用。
-
-**自己完結しない — 共有候補は sill に PR を模索**: app 単独で実装する前に
-「2 つ以上の app で冗長になりそうか」を問い、そうなら sill への PR を
-検討する（過剰共通化はしない・zero-debt ≠ 全部共有）。
+  — the family's only TOML implementation (the `Toml` module).
+  Originally sill in-tree, split into its own repo at 0.11.0;
+  `import Toml` unchanged. facet uses it to parse config.
+- **Not self-contained — explore a sill PR for shared candidates**:
+  before implementing something app-side, ask "would this end up
+  redundant across 2+ apps?" — if so, consider a PR to sill (no
+  over-sharing either; zero-debt ≠ share everything).
 
 ## Build / run
 
@@ -224,7 +228,7 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   `SLSCopyManagedDisplaySpaces`, dlsym-bound — Apple's SLS symbol
   names stay as-is). **READ-only is the rule** — facet never moves a
   window across mac desktops (that needs SIP-off; see
-  [[facet-hide-fork-scope]] 手法4). SkyLight unavailable →
+  [[facet-hide-fork-scope]] method 4). SkyLight unavailable →
   `activeMacDesktopID == 0` → one shared catalog (pre-feature
   behaviour). `[[desktop.N.section]]` config keys by ordinal; catalog
   state is session-only (never persisted), rebuilt from live windows on
@@ -586,7 +590,7 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 
 - **Don't push without explicit OK**. Quality-first phased
   workflow (memory [[grid-view-work-style]]). Commit locally
-  freely; pushing / merging waits for トミー's go.
+  freely; pushing / merging waits for Tommy's go.
 - **PR-based, no direct main push** (since v1.0.0). `main` has
   branch protection: a PR is required to merge, `build` + `lint`
   status checks must be green (strict / up-to-date), force-push
@@ -626,9 +630,12 @@ Moved out of this file to keep it lean: see
 
 ## Roadmap board / task tracker
 
-facet の作業タスク（バックログ・設計メモ・引き継ぎ）の**正本は private repo
-[`akira-toriyama/projects`](https://github.com/akira-toriyama/projects)**（furrow 製の
-中央 board）。運用ルールの正典は
-[projects/CLAUDE.md](https://github.com/akira-toriyama/projects/blob/main/CLAUDE.md)、
-コマンドの正典は [furrow README](https://github.com/akira-toriyama/furrow#readme)。
-入口は checkout 内で `furrow next` 1 本（repo scope は自動）。
+The **canonical store for facet's work tasks** (backlog, design notes,
+handovers) is the private repo
+[`akira-toriyama/projects`](https://github.com/akira-toriyama/projects)
+(the furrow-built central board). The operating rules' canon is
+[projects/CLAUDE.md](https://github.com/akira-toriyama/projects/blob/main/CLAUDE.md);
+the command canon is the
+[furrow README](https://github.com/akira-toriyama/furrow#readme). The
+entry point inside a checkout is `furrow next` alone (the repo scope is
+automatic).

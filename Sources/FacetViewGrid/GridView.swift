@@ -144,7 +144,7 @@ public final class GridView: NSView {
     /// confirm the move landed (dropped id now lives in dstWS), gating
     /// the source thumb's reveal on the backend reflecting it (otherwise
     /// refresh ticks racing the round-trip briefly show a residual thumb
-    /// in the source cell — 残像).
+    /// in the source cell — an afterimage).
     private var lastDrop: OverviewPendingDrop?
 
     /// Workspace-swap analogue of ``lastDrop`` (`OverviewPendingSwap`,

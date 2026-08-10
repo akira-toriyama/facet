@@ -24,7 +24,7 @@ extension SidebarView {
         // HandleBar, not on a scrolling row.)
 
         // R12: was the tree PASSIVE when this click began? A mac-desktop switch
-        // strips the panel's key (facet never auto-grabs it back — トミー), so
+        // strips the panel's key (facet never auto-grabs it back — Tommy), so
         // the tree commonly sits visible-but-passive. A plain click then WAKES
         // it into keyboard nav rather than acting on the row (handled at
         // leftMouseUp below). Captured up-front so an intervening enterActive
@@ -113,7 +113,7 @@ extension SidebarView {
                 } else if mode == 0, wasPassive {
                     // R12 click-to-activate: a plain click on a PASSIVE tree
                     // (no drag) WAKES it into keyboard nav instead of acting on
-                    // the row. This is the user-initiated recovery トミー asked
+                    // the row. This is the user-initiated recovery Tommy asked
                     // for — facet never grabs key on a mac-desktop switch, but an
                     // explicit click does (works on every desktop, incl. after a
                     // round-trip through an unmanaged one). Land the kb cursor on
@@ -565,7 +565,7 @@ extension SidebarView {
         }
     }
 
-    /// t-63h2 (2026-07-12 決定): an isolate desktop's HOLDING row is DISPLAY-ONLY —
+    /// t-63h2 (decided 2026-07-12): an isolate desktop's HOLDING row is DISPLAY-ONLY —
     /// see `isHoldingSection` (FacetCore) for the contract and why the predicate
     /// is pure. The section TYPE carries it: `.holding` is minted only by
     /// `projectIsolateDesktop`, so no `isolateDesktop` flag is needed to

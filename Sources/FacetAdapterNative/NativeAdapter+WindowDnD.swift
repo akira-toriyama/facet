@@ -1,4 +1,4 @@
-// Real-window drag-and-drop + resize (枠 C) — swap / insert / live
+// Real-window drag-and-drop + resize (Frame C) — swap / insert / live
 // resize, window-frame query, and drop prediction. Extracted unchanged
 // from NativeAdapter+DynamicWS.swift — same-module extension, no logic
 // change.
@@ -72,7 +72,7 @@ extension NativeAdapter {
     public func windowFrame(_ id: WindowID) -> CGRect? {
         // Prefer the window server (CGWindowList): a single-id description
         // is fast and DOESN'T round-trip to the window's app — which
-        // matters during a live resize, when the dragged app (Chrome等) is
+        // matters during a live resize, when the dragged app (Chrome, …) is
         // busy and its AX answers slowly, the main per-tick jank source.
         // kCGWindowBounds is top-left global coords, the same Quartz space
         // as the catalog's tile frames. Fall back to AX if the server has

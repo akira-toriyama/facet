@@ -8,7 +8,7 @@
 // (facet is presumed dead).
 //
 // Stateless (detects purely from live geometry — facet never persists,
-// memory: config-default-behavior) and approximate ("画面内であれば OK":
+// memory: config-default-behavior) and approximate ("anywhere on screen is fine":
 // the goal is just to make them visible, not to restore the exact
 // pre-park position). Active-desktop scope only — public AX can move
 // windows on the current Space only (memory: facet-per-native-space-ws);

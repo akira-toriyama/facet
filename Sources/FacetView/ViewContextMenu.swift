@@ -116,7 +116,7 @@ public enum ViewContextMenu {
     ) {
         let modes = backend.layoutModes
         let cur = workspaces.first { $0.index == ws }?.layoutMode
-        // §E: SECTION ▸ Rename above LAYOUT ▸ … (確定事項 #1). `present()`
+        // §E: SECTION ▸ Rename above LAYOUT ▸ … (settled item #1). `present()`
         // inserts the dim group header when the section name changes, so the
         // single Rename row gets its own "SECTION" caption.
         var entries: [Entry] = []

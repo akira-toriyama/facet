@@ -2,7 +2,7 @@ import Testing
 import CoreGraphics
 @testable import FacetCore
 
-/// Pure tests for the real-window-drag resolution (枠C PR-2): which
+/// Pure tests for the real-window-drag resolution (Frame C PR-2): which
 /// window was grabbed, which it was dropped onto, and the intent zone.
 /// Two side-by-side tiles on a 1600×900 screen: A = left half, B =
 /// right half.
@@ -27,7 +27,7 @@ struct RealWindowDropTests {
         #expect(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 2000)) == nil)
     }
 
-    // MARK: - grab edge band (枠C 機能2: native resize handle grabs)
+    // MARK: - grab edge band (Frame C feature 2: native resize handle grabs)
 
     @Test func edgeGrabJustOutsideArmsNearestWindow() {
         // The native resize handle sits ON / just outside the frame edge,

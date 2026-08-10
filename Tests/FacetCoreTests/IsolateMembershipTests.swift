@@ -104,7 +104,7 @@ struct IsolateMembershipTests {
         #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "", filter: f))
     }
 
-    /// 迷子 receptacle (`match='not workspace'`): presence is the assignment,
+    /// The orphan receptacle (`match='not workspace'`): presence is the assignment,
     /// not the display name. An orphan (NO workspace → `inWorkspaceNamed: nil`)
     /// matches; an ASSIGNED window — even one in an UNNAMED workspace (name "")
     /// — does NOT. The predicate behind the receptacle — the same one

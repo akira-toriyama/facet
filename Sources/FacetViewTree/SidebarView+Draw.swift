@@ -153,7 +153,7 @@ extension SidebarView {
                     .font: uiFont(headerFontSize, nameWeight),
                     .foregroundColor: nameColor,
                     .kern: 0.6, .paragraphStyle: hp]
-                // Kind prefix (トミー 2026-06-19): spell the section KIND out on
+                // Kind prefix (Tommy 2026-06-19): spell the section KIND out on
                 // the header so it reads at a glance, not just from the glyph.
                 // The three words all answer ONE question — "what IS this
                 // section" — since t-mqqw retired `lens ·` (a DESKTOP type

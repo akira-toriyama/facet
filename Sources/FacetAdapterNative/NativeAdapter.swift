@@ -260,7 +260,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     // Live-resize-follow fast path state. During a master/bsp divider
     // drag, the neighbour write happens every tick — re-resolving the AX
     // element each time (`AXGeom.window`) measured ~14ms/tick (the bulk of
-    // the "ワンテンポ遅れ"). Cache the element for the drag; cleared at
+    // the one-beat lag). Cache the element for the drag; cleared at
     // gesture end (`endLiveResize`). Touched only on the cliQueue
     // live-resize path, so no lock.
     var followAXCache: [WindowID: AXUIElement] = [:]
@@ -472,7 +472,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         let hint = slideDirectionHint
         slideDirectionHint = nil
 
-        // 枠 E Phase 1: animate the switch as a directional slide. The
+        // Frame E Phase 1: animate the switch as a directional slide. The
         // animated path owns its own settle (anchor park + tile +
         // auto-focus + refresh) on completion, so we return early.
         if config.effectiveAnimationsEnabled,
@@ -585,7 +585,7 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         // Layout changed for source AND/OR destination — re-apply
         // the active WS if its mode produces an on-screen layout.
         // Inactive WSs catch up on their next switchWorkspace
-        // (Phase γ: lazy retile / re-stack). 枠 E: the remaining
+        // (Phase γ: lazy retile / re-stack). Frame E: the remaining
         // windows animate as they reflow to fill the moved window's
         // slot (the moved window itself already parked off-screen).
         reflowActive(rect: rect)

@@ -12,7 +12,7 @@ extension WorkspaceCatalog {
 
     /// Remove `id` from any layout container (`layoutTrees` and
     /// `stackOrders`) that holds it. Memory: lessons file
-    /// "stackOrders / layoutTrees 並列メンテ" — every mutator
+    /// "stackOrders / layoutTrees maintained in parallel" — every mutator
     /// must touch both, this is the one place to forget.
     /// Idempotent.
     mutating func detachFromLayouts(_ id: WindowID) {
