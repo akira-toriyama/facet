@@ -385,41 +385,19 @@ extension Controller {
     func treeDrop(_ ctx: ListCore.DragContext<TreeItemID>,
                   _ target: ListCore.DropTarget<TreeItemID>) {
         let secs = panelHost.treeVM.renderedSections
-        switch ctx.sourceID {
-        case .header(let sid):
-            // Section chunk reorder — section mode only. Chunk candidates are
-            // header gaps + the end gap by construction (`dragCandidates`),
-            // so `.onto` never arrives; ignore it defensively.
-            guard treeRenderIsSectionMode,
-                  case .between(let beforeID) = target.placement else { return }
-            let boundary: Int
-            switch beforeID {
-            case nil: boundary = secs.count
-            case .header(let bsid):
-                guard let k = secs.firstIndex(where: { $0.id == bsid }) else { return }
-                boundary = k
-            case .window: return          // never a chunk gap — bad target
-            }
+        // ONE rule set for the commit and the pre-validation seam — see
+        // `resolveTreeDrop`. A placement this rejects never drew an affordance
+        // and never joined the keyboard aim, so reaching here with nil means
+        // a stale target (a refresh landed mid-drag): drop it silently.
+        guard let resolution = resolveTreeDrop(
+            ctx, target, sections: secs,
+            sectionMode: treeRenderIsSectionMode,
+            isolateDesktop: treeRenderIsIsolateDesktop) else { return }
+        switch resolution {
+        case .chunk(let boundary):
+            guard case .header(let sid) = ctx.sourceID else { return }
             reorderSection(move: sid, toBoundary: boundary)
-        case .window(let g, let wid):
-            guard g >= 0, g < secs.count,
-                  secs[g].sectionType != .holding      // inert source (t-63h2)
-            else { return }
-            // Destination section ordinal: `.onto` a row → that row's
-            // section; `.between` → the section the gap belongs to (the gap
-            // ABOVE a header closes the PREVIOUS section; the end gap is the
-            // last section).
-            let dest: Int? = {
-                switch target.placement {
-                case .onto(let id): return sectionOrdinal(of: id, in: secs)
-                case .between(let beforeID):
-                    guard let beforeID else { return secs.count - 1 }
-                    guard let k = sectionOrdinal(of: beforeID, in: secs) else { return nil }
-                    if case .header = beforeID { return max(0, k - 1) }
-                    return k
-                }
-            }()
-            guard let t = dest, t != g, t < secs.count else { return }
+        case .window(let wid, let g, let t):
             if treeRenderIsSectionMode {
                 applyMove(windowID: wid, fromSectionID: secs[g].id,
                           toSectionID: secs[t].id,
@@ -436,13 +414,16 @@ extension Controller {
         }
     }
 
-    private func sectionOrdinal(of id: TreeItemID,
-                                in secs: [ProjectedSection]) -> Int? {
-        switch id {
-        case .header(let sid): return secs.firstIndex { $0.id == sid }
-        case .window(let g, _): return (g >= 0 && g < secs.count) ? g : nil
-        }
+    /// sill's `dropTargetValidator` seam: the SAME resolver, so a placement the
+    /// commit would refuse draws no affordance and joins no keyboard aim.
+    func treeDropIsValid(_ ctx: ListCore.DragContext<TreeItemID>,
+                         _ target: ListCore.DropTarget<TreeItemID>) -> Bool {
+        resolveTreeDrop(ctx, target,
+                        sections: panelHost.treeVM.renderedSections,
+                        sectionMode: treeRenderIsSectionMode,
+                        isolateDesktop: treeRenderIsIsolateDesktop) != nil
     }
+
 
     private func enterSearch() {
         sidebarView.beginSearch()

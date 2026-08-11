@@ -70,6 +70,10 @@ final class PanelHost: NSObject {
     var onHoverRow: ((TreeItemID?) -> Void)?
     var onDropRow: ((ListCore.DragContext<TreeItemID>,
                      ListCore.DropTarget<TreeItemID>) -> Void)?
+    /// Pre-validation for the SAME placements `onDropRow` commits (sill's
+    /// `dropTargetValidator`): rejected ⇒ no affordance, no keyboard aim, no drop.
+    var dropIsValidRow: ((ListCore.DragContext<TreeItemID>,
+                          ListCore.DropTarget<TreeItemID>) -> Bool)?
     /// Right-click on a tree row (point = the event's, in SCREEN coords).
     /// Caught at the HOST because SwiftUI has no secondary-click gesture: the
     /// hosting view routes the AppKit event here and the live row rects (#175)
@@ -276,7 +280,8 @@ final class PanelHost: NSObject {
             onToggleSection: { [weak self] in self?.onToggleSectionRow?($0) },
             onHover: { [weak self] in self?.onHoverRow?($0) },
             onDrop: { [weak self] in self?.onDropRow?($0, $1) },
-            onRowRects: { [weak self] in self?.treeRowRects = $0 })
+            onRowRects: { [weak self] in self?.treeRowRects = $0 },
+            dropIsValid: { [weak self] in self?.dropIsValidRow?($0, $1) ?? true })
         treeHost.onRightMouseDown = { [weak self] ev in self?.routeTreeRightClick(ev) }
         treeHost.rowProbe = { [weak self] scr in
             self?.rowID(atScreenPoint: scr) != nil

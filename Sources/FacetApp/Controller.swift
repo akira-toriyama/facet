@@ -72,6 +72,11 @@ final class Controller: NSObject {
     /// array aligned with the rows' group ordinals — query-safe by
     /// construction, which is what killed the facet-3 ordinal bug).
     var treeRenderIsSectionMode = false
+    /// Whether the tree is rendering an ISOLATE desktop's synthesized sections
+    /// (matched + optional holding). Their order is fixed, so chunk reorder is
+    /// refused there — the AppKit tree's mode-4 `if !isolateDesktop` gate, which
+    /// the render swap dropped on the pointer path.
+    var treeRenderIsIsolateDesktop = false
     /// The SwiftUI tree row under the pointer (sill `onHover` edge; nil on
     /// exit) — the preview overlays' hover source, `SidebarView.hoverIdx`'s
     /// successor.
@@ -381,6 +386,12 @@ final class Controller: NSObject {
         // keyboard lift commits through the SAME route (handleKbKey).
         panelHost.onDropRow = { [weak self] ctx, target in
             self?.treeDrop(ctx, target)
+        }
+        // …and the pre-validation twin, so sill only ever OFFERS placements the
+        // commit accepts (t-6r5m / ledger M4: illegal drops used to advertise
+        // themselves as legal and then no-op silently).
+        panelHost.dropIsValidRow = { [weak self] ctx, target in
+            self?.treeDropIsValid(ctx, target) ?? false
         }
         // Blank-space click below the last row: wake keyboard nav when
         // passive (the row-less R12 twin — rows wake in `activateTreeRow`).
@@ -1350,6 +1361,7 @@ final class Controller: NSObject {
                 workspaces: displayWss, sections: []).sections
         }
         treeRenderIsSectionMode = renderMode.rendersSections
+        treeRenderIsIsolateDesktop = isIsolateDesktop
         panelHost.treeVM.apply(
             sections: sections,
             activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index,

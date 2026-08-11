@@ -19,6 +19,12 @@ public struct TreeContentView: View {
     var onDrop: (ListCore.DragContext<TreeItemID>,
                  ListCore.DropTarget<TreeItemID>) -> Void = { _, _ in }
     var onRowRects: ([TreeItemID: CGRect]) -> Void = { _ in }
+    /// Host pre-validation (sill's `dropTargetValidator`): the SAME rule set the
+    /// commit uses, so a placement the host would refuse draws no affordance and
+    /// joins no keyboard aim. Default accepts everything (the pre-wiring
+    /// behaviour), so a bare preview/prism call site is unchanged.
+    var dropIsValid: (ListCore.DragContext<TreeItemID>,
+                      ListCore.DropTarget<TreeItemID>) -> Bool = { _, _ in true }
 
     /// Public so `PanelHost` (FacetApp) can host this in an `NSHostingView`.
     /// Callbacks default to no-ops — the host wires real #66 activation
@@ -31,13 +37,16 @@ public struct TreeContentView: View {
                 onHover: @escaping (TreeItemID?) -> Void = { _ in },
                 onDrop: @escaping (ListCore.DragContext<TreeItemID>,
                                    ListCore.DropTarget<TreeItemID>) -> Void = { _, _ in },
-                onRowRects: @escaping ([TreeItemID: CGRect]) -> Void = { _ in }) {
+                onRowRects: @escaping ([TreeItemID: CGRect]) -> Void = { _ in },
+                dropIsValid: @escaping (ListCore.DragContext<TreeItemID>,
+                                        ListCore.DropTarget<TreeItemID>) -> Bool = { _, _ in true }) {
         self.model = model
         self.onActivate = onActivate
         self.onToggleSection = onToggleSection
         self.onHover = onHover
         self.onDrop = onDrop
         self.onRowRects = onRowRects
+        self.dropIsValid = dropIsValid
     }
 
     public var body: some View {
@@ -74,5 +83,6 @@ public struct TreeContentView: View {
             // The host-driven keyboard lift renders through the preview seam
             // (nil while idle — the live bindings then drive as usual).
             preview: model.dragPreview)
+        .dropTargetValidator(dropIsValid)
     }
 }
