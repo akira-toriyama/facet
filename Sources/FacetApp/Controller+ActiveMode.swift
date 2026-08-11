@@ -100,18 +100,23 @@ extension Controller {
                     panelHost.searchBar.clearText()   // fires onChange("") → live filter resets
                 }
                 return true
+            // Arrows ride `treeMove` (not bare `moveCursor`) so the hover /
+            // thumbnail preview follows the cursor here too — typing already
+            // re-aims via the filter rebuild, but the arrow path used to
+            // leave the preview frozen on the pre-arrow row (ledger L3).
+            // Tab stays `treeMove` — `treeJump` would ADD a section-jump
+            // this sub-mode never had.
             case 36, 76:  activateTreeCursor();               return true
-            case 125:     panelHost.treeVM.moveCursor(1);     return true
-            case 126:     panelHost.treeVM.moveCursor(-1);    return true
-            case 48:      panelHost.treeVM.moveCursor(shift ? -1 : 1)
-                          return true
+            case 125:     treeMove(1);                        return true
+            case 126:     treeMove(-1);                       return true
+            case 48:      treeMove(shift ? -1 : 1);           return true
             default:      break
             }
             if ctrl, e.charactersIgnoringModifiers?.lowercased() == "n" {
-                panelHost.treeVM.moveCursor(1);  return true
+                treeMove(1);  return true
             }
             if ctrl, e.charactersIgnoringModifiers?.lowercased() == "p" {
-                panelHost.treeVM.moveCursor(-1); return true
+                treeMove(-1); return true
             }
             return false           // → NSTextField (typing, IME, ⌫)
         }
@@ -611,12 +616,19 @@ extension Controller {
         let capturedOrdinal = currentMacDesktopOrdinal()
         let commit: (String) -> Void
         if !lastSections.isEmpty {
-            guard g >= 0, g < lastSections.count else { return }
-            let sec = lastSections[g]
+            // Resolve the EMITTED ordinal against `renderedSections` — the
+            // callers (header menu / right-click) mint `g` from the rendered
+            // list, and under a search filter a zero-match section drops, so
+            // `lastSections[g]` would point one section OFF (S2: Rename hit
+            // the wrong workspace and persisted it). The caption index stays
+            // the UNFILTERED position (`--focus index:N`'s address space).
+            let secs = panelHost.treeVM.renderedSections
+            guard g >= 0, g < secs.count else { return }
+            let sec = secs[g]
             // workspace / matched / holding all rename by the same stable-id
             // deferred-commit path — `renameSection(sectionID:…)` routes by kind
             // (workspace → catalog; the rest → session override).
-            index1 = g + 1
+            index1 = (lastSections.firstIndex { $0.id == sec.id } ?? g) + 1
             label = sec.label
             let secID = sec.id
             commit = { [weak self] newLabel in
@@ -679,8 +691,10 @@ extension Controller {
     ///     a typo never closes the editor or clobbers the working lens (an empty
     ///     predicate is the always-allowed revert gesture).
     func beginSectionMatchEdit(group g: Int, at anchor: CGPoint) {
-        guard g >= 0, g < lastSections.count else { return }
-        let sec = lastSections[g]
+        // Same emitted-ordinal resolution as `beginSectionRename` (S2).
+        let secs = panelHost.treeVM.renderedSections
+        guard g >= 0, g < secs.count else { return }
+        let sec = secs[g]
         guard sec.sectionType == .matched else { return }
         let secID = sec.id
         let capturedOrdinal = currentMacDesktopOrdinal()

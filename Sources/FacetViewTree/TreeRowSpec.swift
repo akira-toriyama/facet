@@ -97,14 +97,20 @@ public func buildTreeRows(
 ) -> [TreeRowSpec] {
     var rows: [TreeRowSpec] = []
     var group = 0
-    for s in sections {
+    for (originalIndex, s) in sections.enumerated() {
         let wins = s.windows.filter { matches(query, $0) }
         if !query.isEmpty && wins.isEmpty { continue }   // zero-match drop
         let subtitle = s.sectionType == .workspace ? layoutMode(s) : nil
         rows.append(TreeRowSpec(
             id: .header(s.id),
             kind: .header(sectionType: s.sectionType, subtitle: subtitle),
-            primary: headerPrimary(s, displayIndex: group, isActive: isActive(s)),
+            // The CAPTION keeps the ORIGINAL position — the address
+            // `--focus index:N` speaks, invariant across a search filter
+            // (the old tree's documented contract). `group` stays the
+            // EMITTED ordinal (see the ⚠ note above): rows route against
+            // `renderedSections`, captions speak the unfiltered order.
+            primary: headerPrimary(s, displayIndex: originalIndex,
+                                   isActive: isActive(s)),
             secondary: nil, badges: []))
         for w in wins {
             rows.append(TreeRowSpec(

@@ -486,6 +486,16 @@ final class Controller: NSObject {
                 // ミー: facet must NOT auto-grab focus on a switch).
                 Log.debug("panelKey lost (kbNav-active) → passive")
                 sidebarView.exitKbNav()
+                // Fold the SwiftUI nav state like `exitActive` does — this
+                // branch used to drop only kbNav, so an involuntary loss
+                // mid-search left the tree FILTERED with the band gone
+                // (S1, measured in the capsule VM 2026-08-11: no hint the
+                // filter was active) and kept a live lift / cursor around.
+                panelHost.treeVM.clearCursor()
+                panelHost.treeVM.cancelDrag()
+                panelHost.treeVM.setQuery("")
+                previewTargetChanged()
+                panelHost.layout(searching: sidebarView.searching)
                 // Fully relinquish key, not just kbNav: otherwise `wantsKey`
                 // lingers true and the passive panel re-grabs key on the next OS
                 // activation cycle (e.g. switching desktops back), thrashing key
