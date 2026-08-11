@@ -382,6 +382,14 @@ final class Controller: NSObject {
         panelHost.onDropRow = { [weak self] ctx, target in
             self?.treeDrop(ctx, target)
         }
+        // Blank-space click below the last row: wake keyboard nav when
+        // passive (the row-less R12 twin — rows wake in `activateTreeRow`).
+        // The cursor seeds from selection-or-first; there is no row to park on.
+        panelHost.onBlankMouseDown = { [weak self] in
+            guard let self, !self.sidebarView.kbNav else { return }
+            self.enterActive()
+            self.previewTargetChanged()
+        }
         // Right-click on a row → the same context menus as `m`, anchored at
         // the click. Works on a PASSIVE panel (no focus steal) — the mouse
         // path the render swap had dropped.

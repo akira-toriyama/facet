@@ -77,6 +77,11 @@ final class PanelHost: NSObject {
     /// `SidebarView.rightMouseDown`, it works on a PASSIVE panel (AppKit
     /// delivers right-clicks to a non-key window; no focus steal).
     var onRowRightClick: ((TreeItemID, NSPoint) -> Void)?
+    /// Blank-space (below the last row) mouseDown, BEFORE the panel-move
+    /// drag loop runs: the old tree's whole body was SidebarView, so a
+    /// blank click also woke keyboard nav (R12) — rows wake via
+    /// `onActivateRow`, this is the no-row counterpart.
+    var onBlankMouseDown: (() -> Void)?
     /// Per-surface palette (PR-B) — the tree box, shared with every piece
     /// of tree chrome (sidebar, search bar, handle bar, border, scrollers)
     /// so a re-theme / cycle updates all of it at once.
@@ -96,6 +101,9 @@ final class PanelHost: NSObject {
     /// `pal.primary`, so the panel keeps its plain accent border.
     private let borderLayer = CALayer()
     private let borderFX = BorderFX()
+    /// Pre-dispatch left-mouse router for the tree body (⌘/blank panel
+    /// move + blank wake) — see the init comment for why a monitor.
+    private var treeMouseMonitor: Any?
 
     /// Line-pets overlay — a transparent, click-through child window `pad`
     /// LARGER than the panel, drawing arcade sprites centred ON the panel's
@@ -270,7 +278,26 @@ final class PanelHost: NSObject {
             onDrop: { [weak self] in self?.onDropRow?($0, $1) },
             onRowRects: { [weak self] in self?.treeRowRects = $0 })
         treeHost.onRightMouseDown = { [weak self] ev in self?.routeTreeRightClick(ev) }
-        treeHost.onMouseDown = { [weak self] ev in self?.routeTreeMouseDown(ev) ?? false }
+        treeHost.rowProbe = { [weak self] scr in
+            self?.rowID(atScreenPoint: scr) != nil
+        }
+        // The ⌘/blank panel-move + blank wake ride a LOCAL MONITOR, not a
+        // mouseDown override: the hit view under a click is a SwiftUI
+        // internal view, so on a PASSIVE panel the first click is swallowed
+        // by ITS acceptsFirstMouse=false before any override up the
+        // responder chain runs (measured in the capsule VM: key panel
+        // reached the override, passive panel never did). The monitor sees
+        // the event before window dispatch, so key and passive behave the
+        // same. Row hits return the event untouched — SwiftUI's own
+        // first-mouse handling keeps the R12 row wake working.
+        treeMouseMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: .leftMouseDown
+        ) { [weak self] event in
+            guard let self, event.window === self.panel else { return event }
+            let p = self.treeHost.convert(event.locationInWindow, from: nil)
+            guard self.treeHost.bounds.contains(p) else { return event }
+            return self.routeTreeMouseDown(event) ? nil : event
+        }
         // Every border tick / config / flash repaints the panel border.
         borderFX.onRepaint = { [weak self] in
             guard let self else { return }
@@ -487,7 +514,11 @@ final class PanelHost: NSObject {
             guard let win = treeHost.window else { return false }
             let scr = win.convertPoint(toScreen: event.locationInWindow)
             guard rowID(atScreenPoint: scr) == nil else { return false }
+            // Wake BEFORE the (blocking) drag loop: a bare blank click is
+            // then the R12 wake, and a blank drag both wakes and moves.
+            onBlankMouseDown?()
         }
+        Log.debug("treeMouseDown: \(event.modifierFlags.contains(.command) ? "⌘" : "blank") → performDrag")
         panel.performDrag(with: event)
         return true
     }
@@ -728,15 +759,31 @@ final class TreeSkeletonView: NSView {
 /// AppKit event is caught here — left-click, hover and drag stay SwiftUI's.
 @MainActor private final class TreeHostingView: NSHostingView<TreeContentView> {
     var onRightMouseDown: ((NSEvent) -> Void)?
-    /// Return true to consume (the ⌘/empty-space panel move); false falls
-    /// through to SwiftUI's row gestures.
-    var onMouseDown: ((NSEvent) -> Bool)?
+    /// Is there a tree row under this SCREEN point? (PanelHost's live
+    /// row-rect reverse lookup.) nil-safe: no probe = treat as row.
+    var rowProbe: ((NSPoint) -> Bool)?
+    /// First-mouse delivery for the BLANK area below the last row.
+    ///
+    /// AppKit asks the HIT view's `acceptsFirstMouse` before delivering a
+    /// click to a non-key window of an inactive app; SwiftUI's rows answer
+    /// yes (row clicks reach the passive panel — the R12 wake), but the
+    /// internal scroll view under the blank area answers no, so a blank
+    /// click on a passive panel was dropped BEFORE `sendEvent` — even a
+    /// local monitor never saw it (measured in the capsule VM, 2026-08-11).
+    /// Claiming the blank hit makes AppKit ask US, and we say yes.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let winPt = superview?.convert(point, to: nil)
+        if let winPt, let window,
+           let probe = rowProbe,
+           !probe(window.convertPoint(toScreen: winPt)),
+           super.hitTest(point) != nil {
+            return self
+        }
+        return super.hitTest(point)
+    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func rightMouseDown(with event: NSEvent) {
         guard let onRightMouseDown else { return super.rightMouseDown(with: event) }
         onRightMouseDown(event)
-    }
-    override func mouseDown(with event: NSEvent) {
-        if onMouseDown?(event) == true { return }
-        super.mouseDown(with: event)
     }
 }
