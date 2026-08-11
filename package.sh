@@ -37,6 +37,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$PLIST" "$APP/Contents/Info.plist"
 cp .build/release/facet "$APP/Contents/MacOS/facet"   # = CFBundleExecutable
 
+# SwiftPM resource bundles (sill's vendored SVG icons, …): without them
+# the first phosphor glyph lookup is a FATAL crash on any machine that
+# lacks this checkout's .build dir (the generated accessor's only other
+# fallback — measured in the capsule VM, 2026-08-11). Contents/Resources
+# is the sealed location codesign accepts; sill resolves it there since
+# sill#188. `ditto` preserves structure; the glob guard tolerates none.
+for b in .build/release/*.bundle; do
+  [[ -e "$b" ]] && ditto "$b" "$APP/Contents/Resources/$(basename "$b")"
+done
+
 # Stamp the bundle's marketing version from git so `facet --version` is
 # accurate (the committed Info.plist value is only a fallback for a
 # tag-less tarball build). `git describe` → e.g. v4.0.0-3-g1e77545 →
