@@ -1051,8 +1051,14 @@ final class Controller: NSObject {
         }
     }
 
+    /// `titles` is nil for a RE-RENDER (a rename / label / filter change that
+    /// re-projects the last snapshot): only `refresh()` runs `AXTitles.resolve`,
+    /// so a re-render must leave the tree's stored map alone. Passing an empty
+    /// dictionary instead would blank every Electron-class row until the next
+    /// 2 s refresh tick — the same flicker the AppKit tree had, since its
+    /// `if let titles` guard sat behind a non-optional Controller argument.
     func apply(_ wss: [Workspace],
-               _ titles: [WindowID: String] = [:]) {
+               _ titles: [WindowID: String]? = nil) {
         // First non-empty snapshot? Warm the thumbnail cache one-shot
         // so the very first `--view grid` (especially right after
         // launch) shows screenshots instead of falling back to app
@@ -1349,7 +1355,7 @@ final class Controller: NSObject {
             _ = sidebarView.update(sections: lastSections,
                                    workspaces: wss,
                                    isolateDesktop: isIsolateDesktop,
-                                   titles: titles,
+                                   titles: titles,      // nil on a re-render ⇒ the VM keeps its map
                                    macDesktop: macDesktopOrdinal)
             sections = lastSections
         } else {

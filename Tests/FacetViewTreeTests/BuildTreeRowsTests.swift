@@ -208,6 +208,18 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(vm.listItems.count, 2)          // header + the still-matching row
     }
 
+    func testARerenderWithoutTitlesKeepsThem() {
+        let vm = TreeViewModel(palette: resolve(.terminal))
+        let secs = [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)]
+        vm.apply(sections: secs, titles: [WindowID(serverID: 1): "Icons.swift"])
+        // A re-render (rename / label / filter change) re-projects the last
+        // snapshot WITHOUT re-resolving AX titles — passing none must keep the
+        // stored map, not blank every Electron-class row until the next tick.
+        vm.apply(sections: secs)
+        XCTAssertEqual(vm.listItems.count, 2)
+        XCTAssertEqual(vm.listItems[1].secondary, "Icons.swift")
+    }
+
     func testPaletteMutationDoesNotRebuildItems() {
         let vm = TreeViewModel(palette: resolve(.terminal))      // any preset
         vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)])
