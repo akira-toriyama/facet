@@ -25,12 +25,23 @@ public struct TreeBadge: Sendable, Equatable {
     public init(_ kind: Kind, _ text: String = "") { self.kind = kind; self.text = text }
 }
 
+/// The AX-resolved title for a window: the backend's own title wins, and the
+/// AX map fills in for the ones it left blank (Chrome / VS Code / Electron and
+/// any window whose title lands late). `SidebarView.update`'s rule verbatim —
+/// `win.title.isEmpty ? (titleOverride[win.id] ?? "") : win.title`.
+func resolvedTitle(_ w: Window, _ titles: [WindowID: String]) -> String {
+    w.title.isEmpty ? (titles[w.id] ?? "") : w.title
+}
+
 /// The fuzzy filter, kept pure (app name + title only — WS/section names are
 /// NOT searched, matching the AppKit tree). Empty query matches everything.
 /// Internal (not private): `TreeViewModel.focusedRowID` walks the same
 /// filter + group numbering to scope the focus fill — one predicate, no drift.
-func matches(_ query: String, _ w: Window) -> Bool {
-    query.isEmpty || fuzzyMatch(query, w.appName + " " + w.title)
+/// `titles` is the same AX fallback map the rows render, so a window is
+/// findable by the title the user can actually SEE.
+func matches(_ query: String, _ w: Window,
+             _ titles: [WindowID: String] = [:]) -> Bool {
+    query.isEmpty || fuzzyMatch(query, w.appName + " " + resolvedTitle(w, titles))
 }
 
 /// Max tag chips shown before collapsing the remainder into a `+N` badge.
@@ -92,13 +103,14 @@ private func headerPrimary(_ s: ProjectedSection, displayIndex: Int,
 /// site subtitle-free.
 public func buildTreeRows(
     sections: [ProjectedSection], query: String,
+    titles: [WindowID: String] = [:],
     layoutMode: (ProjectedSection) -> String? = { _ in nil },
     isActive: (ProjectedSection) -> Bool = { _ in false }
 ) -> [TreeRowSpec] {
     var rows: [TreeRowSpec] = []
     var group = 0
     for (originalIndex, s) in sections.enumerated() {
-        let wins = s.windows.filter { matches(query, $0) }
+        let wins = s.windows.filter { matches(query, $0, titles) }
         if !query.isEmpty && wins.isEmpty { continue }   // zero-match drop
         let subtitle = s.sectionType == .workspace ? layoutMode(s) : nil
         rows.append(TreeRowSpec(
@@ -117,7 +129,8 @@ public func buildTreeRows(
                 id: .window(group: group, w.id),
                 kind: .window(pid: w.pid),
                 primary: w.appName,
-                secondary: w.title.isEmpty ? nil : w.title,
+                secondary: resolvedTitle(w, titles).isEmpty
+                    ? nil : resolvedTitle(w, titles),
                 badges: windowBadges(w)))
         }
         group += 1

@@ -42,6 +42,11 @@ public final class TreeViewModel {
     private var sourceSections: [ProjectedSection] = []
     private var sourceActiveWS: Int?
     private var layoutModeProvider: (ProjectedSection) -> String? = { _ in nil }
+    /// AX-resolved titles for windows the backend left blank, STORED for the
+    /// same reason `layoutModeProvider` is: `setQuery`'s re-projection re-enters
+    /// `apply` without them, and dropping them there would blank every
+    /// Electron-class row (and un-find it in the filter) on the first keystroke.
+    private var titleOverride: [WindowID: String] = [:]
 
     /// Live search filter (facet-3): re-projects rows/renderedSections from
     /// the stored inputs. Cheap no-op on an unchanged query.
@@ -66,6 +71,7 @@ public final class TreeViewModel {
     /// parity with `SidebarView.update`. Palette is NOT touched here.
     public func apply(sections: [ProjectedSection],
                       activeWorkspaceIndex: Int? = nil,
+                      titles: [WindowID: String]? = nil,
                       layoutMode: ((ProjectedSection) -> String?)? = nil) {
         sourceSections = sections
         sourceActiveWS = activeWorkspaceIndex
@@ -73,8 +79,10 @@ public final class TreeViewModel {
         // (which re-enters apply with no `layoutMode` argument) keeps the
         // header sub-lines instead of silently dropping them.
         if let layoutMode { layoutModeProvider = layoutMode }
+        if let titles { titleOverride = titles }
         rows = buildTreeRows(
             sections: sections, query: query,
+            titles: titleOverride,
             layoutMode: layoutModeProvider,
             isActive: { s in
                 s.sectionType == .workspace && activeWorkspaceIndex != nil
@@ -87,7 +95,7 @@ public final class TreeViewModel {
         // moment a query drops a section (the t-tsxg facet-3 ordinal bug,
         // fixed at the root here).
         renderedSections = sections.filter { s in
-            query.isEmpty || s.windows.contains { matches(query, $0) }
+            query.isEmpty || s.windows.contains { matches(query, $0, titleOverride) }
         }
         listItems = rows.map(TreeListItem.make(_:))   // memoize here, NOT in the view body
         rowsRebuildCount += 1
@@ -116,7 +124,7 @@ public final class TreeViewModel {
                               activeWorkspaceIndex: Int?) -> TreeItemID? {
         var group = 0
         for s in sections {
-            let wins = s.windows.filter { matches(query, $0) }
+            let wins = s.windows.filter { matches(query, $0, titleOverride) }
             if !query.isEmpty && wins.isEmpty { continue }   // mirror buildTreeRows' group numbering
             let active = s.sourceWorkspaceIndex == nil
                 || s.sourceWorkspaceIndex == activeWorkspaceIndex

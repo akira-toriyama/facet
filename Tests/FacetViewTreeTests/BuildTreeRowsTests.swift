@@ -158,6 +158,33 @@ extension BuildTreeRowsTests {
         guard case .header(.matched, nil) = rows[0].kind else { return XCTFail() }
     }
 
+    // MARK: AX-resolved titles (ledger M2 / t-pfhs S3)
+
+    func testAXTitleFillsABlankBackendTitle() {
+        let rows = buildTreeRows(
+            sections: [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)],
+            query: "", titles: [WindowID(serverID: 1): "sill — Icons.swift"])
+        XCTAssertEqual(rows[1].secondary, "sill — Icons.swift")
+    }
+
+    func testBackendTitleWinsOverTheAXMap() {
+        let rows = buildTreeRows(
+            sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)],
+            query: "", titles: [WindowID(serverID: 1): "stale"])
+        XCTAssertEqual(rows[1].secondary, "GitHub")
+    }
+
+    func testFilterMatchesTheAXResolvedTitle() {
+        let sections = [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)]
+        let titles = [WindowID(serverID: 1): "Icons.swift"]
+        // Findable by the title the user can SEE …
+        XCTAssertEqual(
+            buildTreeRows(sections: sections, query: "icons", titles: titles).count, 2)
+        // … and the section drops whole without the map (the pre-fix behaviour).
+        XCTAssertEqual(buildTreeRows(sections: sections, query: "icons").count, 0)
+    }
+
+
     func testHoldingHeaderIgnoresLayoutSubtitle() {
         let rows = buildTreeRows(
             sections: [sec("holding:1", "held", .holding, [win(9, "X", "")], src: nil)],
@@ -170,6 +197,17 @@ extension BuildTreeRowsTests {
 
 @MainActor
 extension BuildTreeRowsTests {
+    func testSetQueryKeepsTheStoredTitles() {
+        let vm = TreeViewModel(palette: resolve(.terminal))
+        vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)],
+                 titles: [WindowID(serverID: 1): "Icons.swift"])
+        // `setQuery` re-enters apply() with NO titles argument — the stored map
+        // must survive, or the first keystroke un-finds every Electron-class row.
+        vm.setQuery("icons")
+        XCTAssertEqual(vm.renderedSections.count, 1)
+        XCTAssertEqual(vm.listItems.count, 2)          // header + the still-matching row
+    }
+
     func testPaletteMutationDoesNotRebuildItems() {
         let vm = TreeViewModel(palette: resolve(.terminal))      // any preset
         vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)])

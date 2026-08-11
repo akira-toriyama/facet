@@ -1353,6 +1353,11 @@ final class Controller: NSObject {
         panelHost.treeVM.apply(
             sections: sections,
             activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index,
+            // AX-resolved titles for the windows the backend left blank — the
+            // map only ever reached the retired `SidebarView.update` above, so
+            // the SwiftUI tree rendered Chrome / VS Code / Electron rows with
+            // no title line and the filter could not find them (ledger M2).
+            titles: titles,
             // Header sub-line: the workspace's layout engine (bsp/stack/…),
             // `SidebarView.wsLayout` parity — the header context menu is a
             // layout PICKER, so the tree must show the current value.
