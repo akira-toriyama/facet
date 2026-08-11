@@ -617,6 +617,9 @@ final class PanelHost: NSObject {
         searchBar.palette = pal
         handleBar.needsDisplay = true
         skeletonView.barColor = pal.muted.withAlphaComponent(0.22)
+        // Opaque even for vibrancy themes: masking the switch is the whole
+        // job (`--loading` fires to HIDE the previous desktop's tree).
+        skeletonView.backdropColor = pal.background ?? .windowBackgroundColor
         treeVM.palette = pal      // re-colour the SwiftUI tree (no re-flatten)
     }
 
@@ -732,8 +735,20 @@ final class TreeSkeletonView: NSView {
     var barColor: NSColor = .secondaryLabelColor.withAlphaComponent(0.22) {
         didSet { needsDisplay = true }
     }
+    /// Opaque backdrop under the ghost bars. The old SidebarView skeleton
+    /// REPLACED the tree wholesale; the host-side ghost was see-through, so
+    /// the live tree kept showing (and updating) beneath it — ledger M9,
+    /// measured in the capsule VM 2026-08-11. nil = clear (never desired,
+    /// but keeps a missing palette from painting black).
+    var backdropColor: NSColor? {
+        didSet { needsDisplay = true }
+    }
     override var isFlipped: Bool { true }
     override func draw(_ dirty: NSRect) {
+        if let backdropColor {
+            backdropColor.setFill()
+            bounds.fill()
+        }
         let w = bounds.width - 24
         guard w > 0 else { return }
         barColor.setFill()
