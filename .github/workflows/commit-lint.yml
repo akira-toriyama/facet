@@ -12,9 +12,15 @@ name: commit-lint
 on:
   pull_request:
 
+# A reusable can only downgrade the caller's token, never raise it. From glyph
+# v2.0.0 the lint reads the pull request's TITLE — the subject a squash merge
+# lands — over the API, so pull-requests:read has to be granted HERE. Measured
+# on .github#186: with contents:read alone the run does not even start
+# (startup_failure), because the reusable declares more than this block grants.
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   lint:
-    uses: akira-toriyama/glyph/.github/workflows/lint.yml@v1.0.0
+    uses: akira-toriyama/glyph/.github/workflows/lint.yml@v2.0.0
