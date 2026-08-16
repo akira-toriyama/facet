@@ -529,8 +529,22 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// matches the same pred chain the sidebar's optimistic
     /// highlight uses (memory `facet-ws-switch-focus-management`).
     func applyAutoFocus(newActiveWS: Int) {
-        let wsWindows = enumerateCGWindows().filter {
+        // Candidates are restricted to ONSCREEN windows: a window filed in
+        // this desktop's catalog can physically sit on another mac desktop
+        // (filed at launch, before its Space was ever visited), and raising
+        // one makes macOS follow it there — a workspace click teleported the
+        // user to Desktop 2 (t-hxsr). `kCGWindowIsOnscreen` is the public-API
+        // proxy for "on the current desktop": facet's own parked slivers stay
+        // onscreen, so only cross-desktop / minimized / ⌘H windows drop out.
+        // The no-pick convenience must never travel; an EXPLICIT pick (row
+        // Enter, #66) still follows its window wherever it lives.
+        let all = enumerateCGWindows().filter {
             catalog.windowMap[$0.id]?.workspace == newActiveWS
+        }
+        let wsWindows = all.filter(\.isOnscreen)
+        if wsWindows.count != all.count {
+            Log.debug("native: autoFocus excluded "
+                + "\(all.count - wsWindows.count) offscreen candidate(s)")
         }
         guard let pick = catalog.autoFocusTarget(
                 in: newActiveWS, windows: wsWindows)
