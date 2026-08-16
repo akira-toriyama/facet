@@ -13,31 +13,11 @@ public func gridRowCount(wsCount: Int, cols: Int) -> Int {
     return max(1, (max(0, wsCount) + c - 1) / c)
 }
 
-/// Cell size that mirrors the display's aspect ratio, shrunk if
-/// needed to keep every row + gap inside the available area.
-/// `usableW` / `usableH` exclude outer padding.
-public func gridCellSize(usableW: CGFloat,
-                         usableH: CGFloat,
-                         cols: Int,
-                         rows: Int,
-                         screenAspect: CGFloat) -> CGSize {
-    let cs = max(1, cols), rs = max(1, rows)
-    let widthAvail  = max(1, usableW - gridCellGap * CGFloat(cs - 1))
-    let heightAvail = max(1, usableH - gridCellGap * CGFloat(rs - 1))
-    let cellW = widthAvail / CGFloat(cs)
-    let cellHByAspect = cellW / max(0.0001, screenAspect)
-    let cellHByFit    = heightAvail / CGFloat(rs)
-    let cellH = min(cellHByAspect, cellHByFit)
-    // Recompute width so aspect stays true even if height was the
-    // limiting dimension.
-    let finalW = cellH * screenAspect
-    return CGSize(width: min(cellW, finalW), height: cellH)
-}
-
 /// Map a window's logical frame onto a cell rect in the grid view —
 /// delegates to the shared `scaledWindowRect` (FacetCore) so grid /
-/// rail mini-thumbnail rects stay identical. Kept as a thin
-/// module-local name for the existing call sites + `GridMathTests`.
+/// rail mini-thumbnail rects stay identical. The SwiftUI cell feeds a
+/// UNIT cell rect and scales by the live mini-screen size, so the same
+/// function serves both the old absolute and the new normalized layout.
 public func gridScaledWindowRect(windowFrame: CGRect,
                                  screenFrame: CGRect,
                                  cellRect: CGRect) -> CGRect {
@@ -79,15 +59,40 @@ public func gridWrapIndex(index: Int, dx: Int, dy: Int,
     return i
 }
 
-/// Usable cell-area height inside the outer pad. Pure / testable.
-public func gridUsableHeight(boundsHeight: CGFloat, outerPad: CGFloat) -> CGFloat {
-    boundsHeight - 2 * outerPad
-}
-
-/// Y-origin (flipped view, top-down) that centres a `totalH`-tall cell block
-/// in the usable area — exactly `(boundsHeight - totalH) / 2`. Pure / testable.
-public func gridOriginY(boundsHeight: CGFloat, outerPad: CGFloat,
-                        totalH: CGFloat) -> CGFloat {
-    outerPad + (gridUsableHeight(boundsHeight: boundsHeight,
-                                 outerPad: outerPad) - totalH) / 2
+/// What `ThemedGridView.fitsViewport` needs to reproduce the grid's exact
+/// old sizing rule: a full-cell `aspect` ratio that bakes in the
+/// proportional header band, plus the resolved band height `labelH`.
+///
+/// The kit fits cells from ONE width/height ratio; the header band is an
+/// absolute, clamped height (32…64 pt), so the ratio must be derived
+/// against the FINAL cell width. That is a closed form, not a fixed
+/// point, because the band height depends only on the ROW count:
+///   width-driven:  W = (usableW − gap·(c−1)) / c,
+///                  H = W/A + labelH + labelGap   (fits if H ≤ nominal)
+///   height-driven: H = nominal, W = (H − labelH − labelGap)·A
+/// Either way `aspect = W/H` reproduces (W, H) inside the kit's own
+/// `gridFittedCellSize`, and the mini-screen keeps EXACTLY the screen's
+/// aspect — the property the whole thumb map rests on. `pad`/`gap` are
+/// the kit's own spacing tokens, passed in so this stays pure.
+public func gridFitMetrics(availW: CGFloat, availH: CGFloat,
+                           cols: Int, count: Int,
+                           screenAspect: CGFloat,
+                           pad: CGFloat, gap: CGFloat)
+    -> (aspect: CGFloat, labelH: CGFloat) {
+    let c = max(1, cols)
+    let rows = gridRowCount(wsCount: count, cols: c)
+    let a = max(0.0001, screenAspect)
+    let usableW = max(1, availW - 2 * pad)
+    let usableH = max(1, availH - 2 * pad)
+    let w = max(1, (usableW - gap * CGFloat(c - 1)) / CGFloat(c))
+    let nominal = max(1, (usableH - gap * CGFloat(rows - 1)) / CGFloat(rows))
+    let labelH = min(gridHeaderMaxH,
+                     max(gridHeaderMinH, (nominal * gridHeaderRatio).rounded()))
+    let widthDrivenH = w / a + labelH + gridLabelGap
+    if widthDrivenH <= nominal {
+        return (aspect: w / widthDrivenH, labelH: labelH)
+    }
+    let h = nominal
+    let w2 = max(1, (h - labelH - gridLabelGap) * a)
+    return (aspect: w2 / h, labelH: labelH)
 }

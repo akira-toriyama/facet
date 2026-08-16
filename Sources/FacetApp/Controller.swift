@@ -20,6 +20,7 @@ import FacetCore
 import FacetAccessibility
 import FacetCapture
 import FacetView
+import ThemeKit
 import FacetViewTree
 import FacetViewGrid
 import FacetViewRail
@@ -284,10 +285,13 @@ final class Controller: NSObject {
     /// The in-flight gate serialises ticks, so this reads consistently.
     var liveResizePrevResized = false
 
-    var gridOverlay: OverviewPanel?
-    var gridView: GridView?
-    var gridBackdrop: NSView?
+    var gridOverlay: ShellPanel?
+    var gridVM: GridViewModel?
+    /// The `NSHostingView` rendering the SwiftUI grid — kept as a plain
+    /// `NSView` for coordinate conversion + `snapshotRegion` (commit zoom).
+    var gridHosting: NSView?
     var gridKbMonitor: Any?
+    var gridMouseMonitor: Any?
     /// Remembered while the grid is up so we can restore exactly the
     /// pre-show visibility state on dismiss.
     var treeWasHidden = false
@@ -466,8 +470,8 @@ final class Controller: NSObject {
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         // The grid + rail borders (when their overlay is up) —
         // reconfigure on a hot-reload too.
-        gridView?.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
+        gridVM?.applyBorder(effectName: e, glow: g, width: w,
+                            cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
         railView?.applyBorder(effectName: e, glow: g, width: w,
                               cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
     }
@@ -909,7 +913,7 @@ final class Controller: NSObject {
     func reapplyThemes() {
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
-        gridView?.needsDisplay = true
+        gridVM?.palette = gridPaletteBox.pal
         railView?.needsDisplay = true
         updateThemeAnimator()
     }
@@ -992,7 +996,7 @@ final class Controller: NSObject {
         }
         if tickSurfaceCycle(name: gridThemeName, phase: &gridFXPhase,
                             box: gridPaletteBox) {
-            gridView?.needsDisplay = true
+            gridVM?.palette = gridPaletteBox.pal
         }
         if tickSurfaceCycle(name: railThemeName, phase: &railFXPhase,
                             box: railPaletteBox) {
@@ -1107,7 +1111,7 @@ final class Controller: NSObject {
         // apply (startup): skip so the steady border just appears.
         if let prev = prevActive, prevActiveWSIndex != prev {
             if panelHost.isVisible { panelHost.flashBorder() }
-            gridView?.flashBorder()
+            gridVM?.flashBorder()
             railView?.flashBorder()
         }
         // Mac desktop ordinal (read-only SkyLight): the tree's top handle
@@ -1232,12 +1236,11 @@ final class Controller: NSObject {
         // The open grid/rail show whatever `FilterProjection` projects; `wss`
         // stays the full set. The active WORKSPACE cell lights via `activeIndex`
         // — the only thing that is ever active (t-ec9s).
-        if let g = gridView {
-            g.workspaces = displayWss          // reorder: degrade-path cell order
-            g.activeIndex = wss.first(where: { $0.isActive })?.index
-            g.sections = lastSections          // EX-2: section list (empty ⇒ degrade)
-            g.layoutCells()       // refresh open grid on backend events
-        }
+        // The open grid shows whatever the projection yields; `displayWss`
+        // stays the reorder-applied degrade list and `lastSections` the
+        // section list (empty = degrade). The VM owns the landing gates +
+        // mid-gesture suppression the old view kept in `layoutCells`.
+        gridVM?.apply(workspaces: displayWss, sections: lastSections)
         // The rail is a *persistent* bar (unlike the snapshot-on-show
         // grid), so keep it live with every reconcile — the active-WS
         // highlight + window counts track switches and add/close.
