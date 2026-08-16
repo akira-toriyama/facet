@@ -523,15 +523,27 @@ final class PanelHost: NSObject {
     /// a bare click is a harmless no-op. Returns false to fall through to
     /// SwiftUI (row tap / row drag).
     private func routeTreeMouseDown(_ event: NSEvent) -> Bool {
-        if !event.modifierFlags.contains(.command) {
+        let isCommandDrag = event.modifierFlags.contains(.command)
+        if !isCommandDrag {
             guard let win = treeHost.window else { return false }
             let scr = win.convertPoint(toScreen: event.locationInWindow)
             guard rowID(atScreenPoint: scr) == nil else { return false }
+        }
+        // This mousedown is CONSUMED below (the monitor returns nil), so the
+        // transient surfaces' own "a click anywhere but my panel closes me"
+        // local monitors never see it — a menu opened from the tree outlived
+        // every blank/⌘ click inside the tree (t-ytrf). Run their dismissal
+        // contract here, mirroring each monitor's semantics: TagEdit defers
+        // wholly to an open menu; Rename cancels on any outside click.
+        let menuWasOpen = PopupMenu.shared.isOpen
+        if menuWasOpen { PopupMenu.shared.close() } else { TagEditPanel.shared.close() }
+        SectionRenamePanel.shared.close()
+        if !isCommandDrag {
             // Wake BEFORE the (blocking) drag loop: a bare blank click is
             // then the R12 wake, and a blank drag both wakes and moves.
             onBlankMouseDown?()
         }
-        Log.debug("treeMouseDown: \(event.modifierFlags.contains(.command) ? "⌘" : "blank") → performDrag")
+        Log.debug("treeMouseDown: \(isCommandDrag ? "⌘" : "blank") → performDrag")
         panel.performDrag(with: event)
         return true
     }
