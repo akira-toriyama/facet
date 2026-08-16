@@ -371,4 +371,63 @@ struct GridViewModelTests {
         #expect(got?.0 == "ws:0")
         #expect(got?.1 == 2)
     }
+
+    // MARK: - Guards around the kit's private drag + gesture-death backstop
+
+    @Test func reorderRefusedWhileHostDragLive() {
+        let vm = makeVM(workspaces: [ws(0, windows: [win(1)]), ws(1)])
+        seedFrames(vm)
+        var got: (String, Int)?
+        vm.onReorder = { got = ($0, $1) }
+        vm.kbSeedToActiveCell()
+        vm.kbCycleWindow(forward: true)
+        vm.kbSpaceLift()                     // host drag live
+        vm.commitReorder(sectionID: "ws:0", toBoundary: 2)
+        #expect(got == nil)                  // a feedback-less reorder is refused
+        vm.kbEscape()
+        vm.commitReorder(sectionID: "ws:0", toBoundary: 2)
+        #expect(got != nil)                  // normal path unaffected
+    }
+
+    @Test func pointerFallbackEndsAGestureDeadDrag() {
+        let a = win(1)
+        let vm = makeVM(workspaces: [ws(0, windows: [a]), ws(1)])
+        seedFrames(vm)
+        var moved = false
+        vm.onMoveWindow = { _, _, _, _ in moved = true }
+        let cell = vm.cells[0]
+        // A drag whose gesture died after aiming at the second cell: only the
+        // monitor's up arrives — the fallback must commit exactly once.
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0], thumbIndex: 0,
+                            location: CGPoint(x: 160, y: 50))
+        #expect(vm.kitPreview?.dropTargetID == "ws:1")
+        vm.pointerDragEndFallback()
+        #expect(moved)
+        vm.pointerDragEndFallback()          // idempotent: drag is gone
+        #expect(vm.hiddenThumbID == a.id)    // landing gate holds the reveal
+    }
+
+    @Test func fallbackNeverTouchesAKeyboardLift() {
+        let vm = makeVM(workspaces: [ws(0, windows: [win(1)]), ws(1)])
+        seedFrames(vm)
+        vm.kbSeedToActiveCell()
+        vm.kbSpaceLift()                     // keyboard workspace lift
+        vm.pointerDragEndFallback()
+        #expect(vm.kitPreview != nil)        // still lifted — keys own its end
+    }
+
+    @Test func kbLiftRefusedWhilePointerIsDown() {
+        let vm = makeVM(workspaces: [ws(0, windows: [win(1)]), ws(1)])
+        seedFrames(vm)
+        vm.kbSeedToActiveCell()
+        vm.pointerBusy = true                // the kit's own drag may be live
+        vm.kbSpaceLift()
+        #expect(vm.kitPreview == nil)        // no second, host drag
+        vm.kbCycleWindow(forward: true)
+        vm.kbSpaceLift()
+        #expect(vm.kitPreview == nil)
+        vm.pointerBusy = false
+        vm.kbSpaceLift()                     // window slot lifts again
+        #expect(vm.kitPreview != nil)
+    }
 }

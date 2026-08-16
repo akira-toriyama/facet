@@ -388,9 +388,11 @@ public final class GridViewModel {
     }
 
     /// Lift the keyboard-selected window for a move. Workspace cells only —
-    /// a lens cell's thumb has no source workspace to move from.
+    /// a lens cell's thumb has no source workspace to move from. Refused while
+    /// a pointer button is down: the kit's own reorder drag may be live then
+    /// (its state is private), and a second, host drag would fight it.
     public func kbLift() {
-        guard zoom == nil, drag == nil, let s = kbSelectedThumb,
+        guard zoom == nil, drag == nil, !pointerBusy, let s = kbSelectedThumb,
               s.cell.sectionType == .workspace else { return }
         let size = thumbAbsRect(cellID: s.cell.id, thumbIndex: s.thumbIndex)?.size
             ?? CGSize(width: 96, height: 64)
@@ -408,7 +410,7 @@ public final class GridViewModel {
     /// slot). Arrows then re-aim, Return commits. An empty source can still
     /// lift ("move WS-X's contents here, leaving X empty in return").
     public func kbLiftWorkspace() {
-        guard zoom == nil, drag == nil, let cell = cursorCell,
+        guard zoom == nil, drag == nil, !pointerBusy, let cell = cursorCell,
               cell.sectionType == .workspace else { return }
         drag = HostDrag(
             kind: .workspaceSwap(sourceCellID: cell.id, sourceWS: cell.wsIndex),
@@ -592,8 +594,22 @@ public final class GridViewModel {
     /// The kit's pointer reorder landed: `boundary` is the insertion index in
     /// the projected section order (cells order — the same coords the
     /// Controller's `reorderSection` expects). Display-only, no gate.
+    /// Refused while a HOST drag is live: the preview seam owns the display
+    /// then, so the kit's own drag ran with zero affordances — committing it
+    /// would reorder sections with no visual feedback at all.
     public func commitReorder(sectionID: String, toBoundary boundary: Int) {
+        guard drag == nil else { return }
         onReorder?(sectionID, boundary)
+    }
+
+    /// Backstop for a pointer drag whose SwiftUI gesture died without an
+    /// `onEnded` (the mouse monitor always sees the up event; the gesture may
+    /// not — e.g. a mid-drag view rebuild). Commits or cancels at the current
+    /// target, exactly like `thumbDragEnded`. A keyboard lift is untouched
+    /// (it ends by key, not by button).
+    public func pointerDragEndFallback() {
+        guard let d = drag, !d.isKeyboard else { return }
+        thumbDragEnded()
     }
 
     // MARK: - sill preview seam (kb drag + window drag render through it)

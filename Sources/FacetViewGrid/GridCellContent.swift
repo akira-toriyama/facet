@@ -102,11 +102,17 @@ struct GridCellContent: View {
                 ForEach(Array(cell.thumbs.enumerated()), id: \.element.id) { ti, thumb in
                     let r = absRect(thumb.norm, in: g.size)
                     // The ≥2 px cull the old layout applied at layout time.
-                    if r.width >= 2, r.height >= 2, model.hiddenThumbID != thumb.id {
+                    if r.width >= 2, r.height >= 2 {
                         GridThumbView(model: model, cell: cell, thumb: thumb,
                                       thumbIndex: ti, rect: r)
                             .frame(width: r.width, height: r.height)
                             .position(x: r.midX, y: r.midY)
+                            // The dragged thumb hides via OPACITY, never by
+                            // leaving the hierarchy: removing the view whose
+                            // DragGesture is live kills the gesture mid-flight
+                            // (no onEnded ⇒ no commit, and the drag suppressed
+                            // refreshes forever — measured in the VM, 2026-08-17).
+                            .opacity(model.hiddenThumbID == thumb.id ? 0 : 1)
                     }
                 }
             }

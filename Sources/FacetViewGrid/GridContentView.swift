@@ -39,8 +39,11 @@ public struct GridContentView: View {
                     .onTapGesture { model.tapBackdrop() }
 
                 gridLayer(geo.size)
-                    // Commit zoom draws EXCLUSIVELY (the old early-return).
+                    // Commit zoom draws EXCLUSIVELY (the old early-return) —
+                    // and swallows input: opacity alone would leave the kit's
+                    // gestures hit-testable under the zoom.
                     .opacity(model.zoom == nil ? 1 : 0)
+                    .allowsHitTesting(model.zoom == nil)
 
                 ghostLayer
 
@@ -87,6 +90,7 @@ public struct GridContentView: View {
                             bandH: metrics.labelH)
         }
         .fitsViewport()
+        .takesKeyboardFocus(false)     // host-driven keyboard (the tree invariant)
         .draggable(.reorderAt)
         .onGridDrop { ctx, target in
             // The kit's pointer reorder: display-only, session-only — the

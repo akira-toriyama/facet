@@ -52,6 +52,10 @@ struct GridHeaderView: View {
                     color: headerHot ? Color(nsColor: pal.primary) : labelColor,
                     alpha: headerHot ? 0.85 : 0.5)
                     .frame(width: gridHeaderGripW, height: bandH)
+            } else {
+                // Reserve the grip's box even without dots (old parity: the
+                // caption x-offset was unconditional, so lens captions align).
+                Color.clear.frame(width: gridHeaderGripW, height: bandH)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(cell.caption)

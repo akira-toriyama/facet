@@ -201,13 +201,22 @@ extension Controller {
         ) { [weak self] e in
             guard let self, let vm = self.gridVM,
                   let panel = self.gridOverlay, e.window === panel else { return e }
+            // A context menu is up: every click belongs to the menu's own
+            // monitor (dismiss / pick) — don't freeze the snapshot for it and
+            // don't open a second menu over it (the key monitor's twin guard).
+            if PopupMenu.shared.isOpen { return e }
             switch e.type {
             case .leftMouseDown:
                 vm.pointerBusy = true
             case .leftMouseUp:
                 // Release AFTER SwiftUI finishes this turn's gesture handling
-                // so the flush can't reshuffle cells under the drop.
+                // so the flush can't reshuffle cells under the drop — and end
+                // a pointer drag whose SwiftUI gesture died without an
+                // onEnded (the monitor always sees the up; the gesture may
+                // not). By this async hop the healthy path has already
+                // committed and cleared `drag`, so the fallback is a no-op.
                 DispatchQueue.main.async { [weak self] in
+                    self?.gridVM?.pointerDragEndFallback()
                     self?.gridVM?.pointerBusy = false
                 }
             case .rightMouseDown:
