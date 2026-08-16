@@ -25,6 +25,18 @@ public struct TreeContentView: View {
     /// behaviour), so a bare preview/prism call site is unchanged.
     var dropIsValid: (ListCore.DragContext<TreeItemID>,
                       ListCore.DropTarget<TreeItemID>) -> Bool = { _, _ in true }
+    /// Host veto over BEGINNING a lift (sill's `dragSourceValidator`): the
+    /// holding rows are display-only (t-63h2) — no ghost, no dim, while click
+    /// / hover / selection stay alive (`isDisabled` would take those down).
+    var dragSourceIsValid: (TreeItemID) -> Bool = { _ in true }
+    /// What a pointer lift carries (sill's `dragChunk`): the model's rule —
+    /// section mode chunks a header (reorder), the degrade lifts it alone
+    /// (workspace swap aims `.onto`).
+    var dragChunk: (TreeItemID) -> [TreeItemID]
+    /// The rows a resolved drop actually affects (sill's `dropBand`): the
+    /// destination SECTION painted as an area for the section-granular
+    /// commits (window move / workspace swap); `[]` keeps the line/ring.
+    var dropBand: (ListCore.DropTarget<TreeItemID>) -> [TreeItemID] = { _ in [] }
 
     /// Public so `PanelHost` (FacetApp) can host this in an `NSHostingView`.
     /// Callbacks default to no-ops — the host wires real #66 activation
@@ -39,7 +51,10 @@ public struct TreeContentView: View {
                                    ListCore.DropTarget<TreeItemID>) -> Void = { _, _ in },
                 onRowRects: @escaping ([TreeItemID: CGRect]) -> Void = { _ in },
                 dropIsValid: @escaping (ListCore.DragContext<TreeItemID>,
-                                        ListCore.DropTarget<TreeItemID>) -> Bool = { _, _ in true }) {
+                                        ListCore.DropTarget<TreeItemID>) -> Bool = { _, _ in true },
+                dragSourceIsValid: @escaping (TreeItemID) -> Bool = { _ in true },
+                dropBand: @escaping (ListCore.DropTarget<TreeItemID>)
+                    -> [TreeItemID] = { _ in [] }) {
         self.model = model
         self.onActivate = onActivate
         self.onToggleSection = onToggleSection
@@ -47,6 +62,13 @@ public struct TreeContentView: View {
         self.onDrop = onDrop
         self.onRowRects = onRowRects
         self.dropIsValid = dropIsValid
+        self.dragSourceIsValid = dragSourceIsValid
+        // The chunk rule lives on the model (it owns the rows + render mode);
+        // an injected closure would just re-derive the same thing.
+        self.dragChunk = { [weak model] id in
+            model?.dragChunkMembers(for: id) ?? []
+        }
+        self.dropBand = dropBand
     }
 
     public var body: some View {
@@ -59,15 +81,24 @@ public struct TreeContentView: View {
         // shorter/narrower than the viewport (measured on-host 2026-08-03 —
         // the tree floated mid-panel), while vertical-only keeps rows
         // top-anchored and full-width. Long titles truncate with … (they
-        // already did — the horizontal axis never visibly engaged).
+        // already did — the horizontal axis never visibly engaged); the full
+        // text stays reachable via the title tooltip below (ledger M6).
         style.horizontalContentScroll = false
         style.hosted = false
         // facet-2: sill-native mouse DnD (drag gesture + ghost + insertion /
-        // onto visuals). `.both` resolves onto-vs-between by row fraction; a
-        // header drag chunks its section (whole-section reorder). Validity is
-        // post-hoc — no dropTargetValidator yet (T3/t-6r5m fast-follow).
+        // onto visuals). `.both` resolves onto-vs-between by row fraction;
+        // what a header drag carries is the model's `dragChunkMembers` rule
+        // (section mode chunks = reorder, degrade lifts alone = swap).
         style.draggable = true
         style.dragMode = .both
+        // The hover restorations (ledger M1 + t-ak5e): the flat row hover
+        // fill, and the pointer shapes (rows = link, draggable headers =
+        // grab) the old `SidebarView.hoverCursor` pair carried.
+        style.showsHoverFill = true
+        style.showsPointerAffordances = true
+        // Full-title tooltips — the read-the-long-title affordance replacing
+        // the retired horizontal scroll (ledger M6 / t-q6ay).
+        style.showsTitleTooltips = true
         return ThemedListView<TreeItemID>(
             items: model.listItems,
             selection: $model.selection,
@@ -84,5 +115,8 @@ public struct TreeContentView: View {
             // (nil while idle — the live bindings then drive as usual).
             preview: model.dragPreview)
         .dropTargetValidator(dropIsValid)
+        .dragSourceValidator(dragSourceIsValid)
+        .dragChunk(dragChunk)
+        .dropBand(dropBand)
     }
 }

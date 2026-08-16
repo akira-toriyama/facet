@@ -74,6 +74,12 @@ final class PanelHost: NSObject {
     /// `dropTargetValidator`): rejected ⇒ no affordance, no keyboard aim, no drop.
     var dropIsValidRow: ((ListCore.DragContext<TreeItemID>,
                           ListCore.DropTarget<TreeItemID>) -> Bool)?
+    /// Lift veto (sill's `dragSourceValidator`): a holding row never becomes
+    /// a drag source — no ghost, no dim — while its click / hover stay alive.
+    var dragSourceIsValidRow: ((TreeItemID) -> Bool)?
+    /// The rows a resolved drop affects (sill's `dropBand`): the destination
+    /// section as an AREA for the section-granular commits; `[]` ⇒ line/ring.
+    var dropBandRow: ((ListCore.DropTarget<TreeItemID>) -> [TreeItemID])?
     /// Right-click on a tree row (point = the event's, in SCREEN coords).
     /// Caught at the HOST because SwiftUI has no secondary-click gesture: the
     /// hosting view routes the AppKit event here and the live row rects (#175)
@@ -281,7 +287,9 @@ final class PanelHost: NSObject {
             onHover: { [weak self] in self?.onHoverRow?($0) },
             onDrop: { [weak self] in self?.onDropRow?($0, $1) },
             onRowRects: { [weak self] in self?.treeRowRects = $0 },
-            dropIsValid: { [weak self] in self?.dropIsValidRow?($0, $1) ?? true })
+            dropIsValid: { [weak self] in self?.dropIsValidRow?($0, $1) ?? true },
+            dragSourceIsValid: { [weak self] in self?.dragSourceIsValidRow?($0) ?? true },
+            dropBand: { [weak self] in self?.dropBandRow?($0) ?? [] })
         treeHost.onRightMouseDown = { [weak self] ev in self?.routeTreeRightClick(ev) }
         treeHost.rowProbe = { [weak self] scr in
             self?.rowID(atScreenPoint: scr) != nil

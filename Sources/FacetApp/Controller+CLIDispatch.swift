@@ -1068,6 +1068,15 @@ extension Controller {
     func applyThemeOverride(_ name: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
+        // Validate BEFORE storing: the override feeds `paletteForCanonical`,
+        // whose contract is "the caller already validated" — an unknown name
+        // over the DNC would preconditionFailure the GUI process. The CLI
+        // front door validates loudly; this back door ignores the bad name
+        // and keeps the current theme (the old silent-fallback behaviour).
+        guard paletteFor(key) != nil else {
+            Log.debug("applyThemeOverride: unknown theme '\(key)' ignored")
+            return
+        }
         Log.debug("applyThemeOverride name=\(key)")
         themeOverride = key
         resolveSurfacePalettes()

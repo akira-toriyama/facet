@@ -113,16 +113,32 @@ extension BuildTreeRowsTests {
     }
 
     func testStatusBadges() {
-        XCTAssertEqual(badges(rich(1, master: true)), [TreeBadge(.master)])
-        XCTAssertEqual(badges(rich(1, floating: true)), [TreeBadge(.float)])
-        XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky)])
-        XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden)])
+        // t-fp94: badges carry their WORD again (the glyph-only sweep made
+        // four near-identical pictograms carry the whole meaning), and the
+        // scratchpad shelf spells `scratchpad:NAME` in full.
+        XCTAssertEqual(badges(rich(1, master: true)), [TreeBadge(.master, "master")])
+        XCTAssertEqual(badges(rich(1, floating: true)), [TreeBadge(.float, "float")])
+        XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky, "sticky")])
+        XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden, "hidden")])
         // t-c6fm: an isolate-parked window shows as a NORMAL row — no badge (the
         // tree is an inventory, not a screen mirror; park is screen-only). Since
         // t-pvay that is STRUCTURAL, not a choice: `Window` carries no park flag,
         // so the tree cannot badge one even by accident. Nothing left to assert.
         XCTAssertEqual(badges(rich(1, mark: "a")), [TreeBadge(.mark, "a")])
-        XCTAssertEqual(badges(rich(1, scratch: "shelf")), [TreeBadge(.scratchpad, "shelf")])
+        XCTAssertEqual(badges(rich(1, scratch: "shelf")),
+                       [TreeBadge(.scratchpad, "scratchpad:shelf")])
+    }
+
+    /// The old ladder's exclusivity: `float` is implied — and suppressed — by
+    /// master / sticky / a settled scratchpad (all three force or imply
+    /// floating, so the plain label would be noise).
+    func testFloatBadgeIsSuppressedWhenImplied() {
+        XCTAssertEqual(badges(rich(1, floating: true, sticky: true)),
+                       [TreeBadge(.sticky, "sticky")])
+        XCTAssertEqual(badges(rich(1, master: true, floating: true)),
+                       [TreeBadge(.master, "master")])
+        XCTAssertEqual(badges(rich(1, floating: true, scratch: "s")),
+                       [TreeBadge(.scratchpad, "scratchpad:s")])
     }
 
     func testTagBadgesCapWithOverflow() {
@@ -136,7 +152,7 @@ extension BuildTreeRowsTests {
 
     func testStatusBeforeTags() {
         let b = badges(rich(1, master: true, tags: ["x"]))
-        XCTAssertEqual(b, [TreeBadge(.master), TreeBadge(.tag, "x")])
+        XCTAssertEqual(b, [TreeBadge(.master, "master"), TreeBadge(.tag, "x")])
     }
 }
 

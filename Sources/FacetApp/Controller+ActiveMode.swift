@@ -174,16 +174,21 @@ extension Controller {
     }
 
     /// Cursor move / drag aim + the preview reconcile the old `setSel` used
-    /// to fire (the thumbnail popover follows the keyboard cursor).
+    /// to fire (the thumbnail popover follows the keyboard cursor). The
+    /// arrow RECLAIMS the preview from a resting pointer ("most recent input
+    /// wins"): without the hover clear, a mouse parked over the list pinned
+    /// the preview to its row while the cursor walked away (ledger, t-ak5e).
     private func treeMove(_ d: Int) {
         let vm = panelHost.treeVM
         vm.isKbDragging ? vm.aimDrag(d) : vm.moveCursor(d)
+        treeHoverID = nil
         previewTargetChanged()
     }
 
     private func treeJump(_ d: Int) {
         let vm = panelHost.treeVM
         vm.isKbDragging ? vm.aimDrag(d) : vm.jumpSection(d)
+        treeHoverID = nil
         previewTargetChanged()
     }
 
@@ -240,34 +245,42 @@ extension Controller {
 
     func activateTreeRow(_ id: TreeItemID) {
         let secs = panelHost.treeVM.renderedSections
-        guard !treeRowIsInert(id) else { return }
         // R12: the first click on a PASSIVE tree (kbNav off — after a
         // mac-desktop switch, or after acting dropped key via exitActive)
         // WAKES keyboard nav and parks the cursor on the clicked row instead
         // of acting; the second click (or Enter) acts. The deliberate
         // two-step recovery the old tree had (`SidebarView+Drag` R12) — a
         // stray click on the visible-but-passive panel must not yank the
-        // user to another workspace.
+        // user to another workspace. This runs BEFORE the inert guard: the
+        // old tree woke on a holding-row click too (only the ACT was inert),
+        // and the guard-first order killed the wake outright (t-beqn).
         if !sidebarView.kbNav {
             enterActive()                          // seeds the cursor…
             panelHost.treeVM.parkCursor(on: id)    // …then park on the CLICKED row
             previewTargetChanged()
             return
         }
+        guard !treeRowIsInert(id) else { return }
         exitActive(restore: false)
+        // Next nav entry resumes on the acted-on row (the old tree re-set
+        // `kbSel` after its exitActive for exactly this — t-beqn).
+        panelHost.treeVM.rememberCursor(id)
         switch id {
         case .header(let sectionID):
             guard let g = secs.firstIndex(where: { $0.id == sectionID })
             else { return }
             let sec = secs[g]
             if let i = sec.sourceWorkspaceIndex {
-                // Workspace header: claim the workspace's predicted focus
-                // optimistically (no row when it's empty), then activate.
-                // `i` is 0-based; `ActiveSection.workspace` is 1-based → +1.
-                if let pred = lastWorkspaces.first(where: { $0.index == i })?
-                    .windows.predictedFocus()?.id {
-                    panelHost.treeVM.setOptimistic(.window(group: g, pred))
-                }
+                // Workspace header: claim the workspace's predicted focus AND
+                // the active-workspace paint optimistically — an EMPTY
+                // workspace has no row to fill, and its header going active
+                // (● + emphasis) was the old tree's only immediate feedback
+                // (`optActiveWS`, t-beqn). `i` is 0-based;
+                // `ActiveSection.workspace` is 1-based → +1.
+                let pred = lastWorkspaces.first(where: { $0.index == i })?
+                    .windows.predictedFocus()?.id
+                panelHost.treeVM.setOptimistic(
+                    pred.map { .window(group: g, $0) }, activeWorkspace: i)
                 activateSection(.workspace(i + 1), autoFocus: true)
             } else {
                 // An isolate desktop's matched / holding header: nothing to
@@ -291,7 +304,9 @@ extension Controller {
                 ?? sec.windows.first(where: { $0.id == wid })
             else { return }
             let needSwitch = (i != activeIdx)
-            panelHost.treeVM.setOptimistic(id)
+            // Claim the fill AND the target workspace's active paint (the old
+            // `setOptimistic(windowID:workspaceIndex:)` carried both).
+            panelHost.treeVM.setOptimistic(id, activeWorkspace: i)
             // A HIDDEN row (Cmd+H'd / minimized — hide-reclaim pulled its
             // tile slot) is restored on activation; a normal row just
             // focuses. Off main so the click never hitches (handleClick
@@ -338,11 +353,26 @@ extension Controller {
     /// header → none (t-63h2).
     func showTreeRowMenu(_ row: TreeRowSpec, at scr: NSPoint) {
         let secs = panelHost.treeVM.renderedSections
+        // The menu's type-to-filter needs KEYS: on a passive panel (right-
+        // click without kbNav — AppKit delivers those without focus) not one
+        // keystroke reaches the popup, so the ⌕ box would be dead chrome.
+        // Offer it only while the panel holds key; the passive menu keeps
+        // mouse picking (and j/k row-walk stays a filterable-off affordance).
+        let filterable = panelHost.panel.isKeyWindow
         switch row.id {
         case .header(let sectionID):
             guard let g = secs.firstIndex(where: { $0.id == sectionID })
             else { return }
             let sec = secs[g]
+            // §D caption resolved HERE from the stable id: `g` is the EMITTED
+            // ordinal, and under a search filter `lastSections[g]` (the
+            // legacy caption lookup) points one section off — the display
+            // index is the section's UNFILTERED position, `--focus index:N`'s
+            // address space (S2's caption half; the rename commit was fixed
+            // in `beginSectionRename`).
+            let caption = sectionDisplayLabel(
+                index: (lastSections.firstIndex { $0.id == sec.id } ?? g) + 1,
+                label: sec.label)
             if let ws = sec.sourceWorkspaceIndex {
                 // `headerMenu`'s `group` is a two-coordinate contract
                 // (`sectionHeaderDisplay` / `beginSectionRename`): section mode
@@ -353,9 +383,14 @@ extension Controller {
                 sidebarView.headerMenu(at: scr,
                                        group: treeRenderIsSectionMode ? g : ws,
                                        workspaceIndex: ws,
-                                       filterable: true)
+                                       filterable: filterable,
+                                       header: treeRenderIsSectionMode ? caption : nil)
             } else if sec.sectionType == .matched {
-                sidebarView.isolateHeaderMenu(at: scr, group: g, filterable: true)
+                // Resolve the SECTION here too: the legacy menu's own
+                // `lastSections[g]` read mis-hits under a search filter.
+                sidebarView.isolateHeaderMenu(at: scr, group: g,
+                                              filterable: filterable,
+                                              section: sec, header: caption)
             }                       // holding header: no menu (t-63h2)
         case .window(let g, let wid):
             guard case .window(let pid) = row.kind else { return }
@@ -367,7 +402,7 @@ extension Controller {
             sidebarView.showWindowMenu(at: scr, workspaceIndex: i, pid: pid,
                                        windowID: wid,
                                        title: row.secondary ?? row.primary,
-                                       filterable: true)
+                                       filterable: filterable)
         }
     }
 
@@ -411,17 +446,69 @@ extension Controller {
                 }
                 scheduleReconcile(after: 0.05)
             }
+        case .swap(let from, let to):
+            // Degrade header drag / kb header lift: TRADE the two
+            // workspaces' contents (the AppKit tree's mode-3, restored —
+            // t-fp94 rated its silent drop a feature loss).
+            guard let s = secs[from].sourceWorkspaceIndex,
+                  let t = secs[to].sourceWorkspaceIndex else { return }
+            performSwap(sourceWS: s, targetWS: t)
         }
     }
 
+    /// Swap the entire window membership of two workspaces. The WS indices
+    /// never change (hotkey mapping preserved) — only the windows inside
+    /// trade places. IDs are captured up-front so the two halves don't
+    /// interfere mid-flight; N+M `moveWindow` calls run on the serial backend
+    /// queue, then a reconcile reflects the result. Active WS / focus are
+    /// intentionally left unchanged. (`SidebarView+Drag.performSwap`,
+    /// relocated verbatim for the render swap.)
+    func performSwap(sourceWS: Int, targetWS: Int) {
+        guard sourceWS != targetWS else { return }
+        let srcIDs = lastWorkspaces.first { $0.index == sourceWS }?
+            .windows.map(\.id) ?? []
+        let dstIDs = lastWorkspaces.first { $0.index == targetWS }?
+            .windows.map(\.id) ?? []
+        guard !(srcIDs.isEmpty && dstIDs.isEmpty) else { return }
+        cliQueue.async { [bk = backend] in
+            for id in srcIDs { bk.moveWindow(id, toWorkspaceIndex: targetWS) }
+            for id in dstIDs { bk.moveWindow(id, toWorkspaceIndex: sourceWS) }
+        }
+        scheduleReconcile(after: 0.05)
+    }
+
     /// sill's `dropTargetValidator` seam: the SAME resolver, so a placement the
-    /// commit would refuse draws no affordance and joins no keyboard aim.
+    /// commit would refuse draws no affordance and joins no keyboard aim. Also
+    /// caches the pointer drag's source for `treeDropBand` (the band callback
+    /// receives only the target).
     func treeDropIsValid(_ ctx: ListCore.DragContext<TreeItemID>,
                          _ target: ListCore.DropTarget<TreeItemID>) -> Bool {
-        resolveTreeDrop(ctx, target,
-                        sections: panelHost.treeVM.renderedSections,
-                        sectionMode: treeRenderIsSectionMode,
-                        isolateDesktop: treeRenderIsIsolateDesktop) != nil
+        treePointerDragSource = ctx.sourceID
+        return resolveTreeDrop(ctx, target,
+                               sections: panelHost.treeVM.renderedSections,
+                               sectionMode: treeRenderIsSectionMode,
+                               isolateDesktop: treeRenderIsIsolateDesktop) != nil
+    }
+
+    /// sill's `dropBand` seam: a drop whose commit is section-granular
+    /// (window move / workspace swap) paints its destination SECTION as an
+    /// area; a chunk reorder returns [] and keeps the insertion line. The
+    /// source is the kb lift when one is up, else the cached pointer source.
+    func treeDropBand(_ target: ListCore.DropTarget<TreeItemID>) -> [TreeItemID] {
+        let vm = panelHost.treeVM
+        guard let source = vm.kbDragSource ?? treePointerDragSource else { return [] }
+        let ctx = ListCore.DragContext(sourceID: source, memberIDs: [source])
+        guard let res = resolveTreeDrop(ctx, target,
+                                        sections: vm.renderedSections,
+                                        sectionMode: treeRenderIsSectionMode,
+                                        isolateDesktop: treeRenderIsIsolateDesktop)
+        else { return [] }
+        switch res {
+        case .chunk:
+            return []
+        case .window(_, _, let t), .swap(_, let t):
+            return vm.sectionMemberIDs(ordinal: t)
+        }
     }
 
 

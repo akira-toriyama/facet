@@ -49,16 +49,21 @@ extension SidebarView {
     // identical themed popup (③).
     /// Header right-click / `m` menu → the workspace layout picker. `g` is the
     /// render group (display position) — drives the §D `index (label)` header.
+    /// `header` overrides the legacy caption lookup: the SwiftUI tree's `g` is
+    /// an EMITTED ordinal, which under a search filter is NOT an index into
+    /// `lastSections` — the caller resolves the caption from the stable id
+    /// (S2's caption half) and passes it here.
     public func headerMenu(at scr: NSPoint, group g: Int, workspaceIndex ws: Int,
-                            filterable: Bool = false) {
-        showLayoutMenu(at: scr, group: g, workspaceIndex: ws, filterable: filterable)
+                            filterable: Bool = false, header: String? = nil) {
+        showLayoutMenu(at: scr, group: g, workspaceIndex: ws,
+                       filterable: filterable, header: header)
     }
 
     private func showLayoutMenu(at scr: NSPoint, group g: Int, workspaceIndex ws: Int,
-                                filterable: Bool = false) {
+                                filterable: Bool = false, header: String? = nil) {
         ViewContextMenu.showLayout(at: scr, backend: backend,
                                    workspaceIndex: ws, workspaces: lastWorkspaces,
-                                   header: sectionHeaderDisplay(group: g),
+                                   header: header ?? sectionHeaderDisplay(group: g),
                                    palette: pal, filterable: filterable,
                                    // §E: SECTION ▸ Rename → controller resolves
                                    // `g` to the 1-based index + current label
@@ -89,9 +94,14 @@ extension SidebarView {
     /// layout picker (R9). `g` is the render group; `lastSections[g]` is the
     /// `type=isolate` section it came from. Picking routes through the controller,
     /// which activates the isolate desktop then sets its union layout.
-    public func isolateHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false) {
-        guard g >= 0, g < lastSections.count else { return }
-        let sec = lastSections[g]
+    /// `section` / `header` override the legacy `lastSections[g]` lookup — the
+    /// SwiftUI tree's `g` is an EMITTED ordinal, which under a search filter
+    /// mis-hits the unfiltered list (S2); the caller resolves both from the
+    /// stable id and passes them here.
+    public func isolateHeaderMenu(at scr: NSPoint, group g: Int, filterable: Bool = false,
+                                  section: ProjectedSection? = nil, header: String? = nil) {
+        guard let sec = section ?? (g >= 0 && g < lastSections.count
+                                        ? lastSections[g] : nil) else { return }
         guard sec.sectionType == .matched else { return }
         // No layout picker: an isolate desktop's `layout` is a key on the
         // `[desktop.N]` TABLE, not on a section, so the matched section has no
@@ -99,7 +109,7 @@ extension SidebarView {
         // §D: the header is the unified `index (label)` caption (e.g. "4 (Web)").
         ViewContextMenu.showSectionRenameMenu(
             at: scr,
-            header: sectionDisplayLabel(index: g + 1, label: sec.label),
+            header: header ?? sectionDisplayLabel(index: g + 1, label: sec.label),
             palette: pal, filterable: filterable,
             // §E: SECTION ▸ Rename → controller resolves `g` to index + label
             // (same `sectionHeaderDisplay` logic; passes the SAME `g`).

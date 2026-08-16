@@ -37,6 +37,13 @@ public final class TreeViewModel {
 
     /// The EXACT sections the current rows were built from — see `apply()`.
     public private(set) var renderedSections: [ProjectedSection] = []
+    /// The render mode the sections came from (set by `apply`): config
+    /// sections vs the by-workspace degrade, and the isolate desktop's fixed
+    /// section order. The kb drag aim feeds these to `resolveTreeDrop` — ONE
+    /// rule set with the pointer path (48c6db9), which the kb ladder used to
+    /// bypass with `validate: { _, _ in true }`.
+    public private(set) var sectionMode = true
+    public private(set) var isolateDesktop = false
     /// The raw inputs of the last `apply`, so `setQuery` can re-project
     /// without the host re-feeding sections (facet-3 live filter).
     private var sourceSections: [ProjectedSection] = []
@@ -62,6 +69,11 @@ public final class TreeViewModel {
     /// keeps `selection` on the claim instead of the projection's `isFocused`.
     private var optimisticID: TreeItemID?
     private var optimisticUntil: Date?
+    /// The ACTIVE-workspace half of the claim (the old `optActiveWS`): a
+    /// header click re-paints its header active — ● + emphasis — before the
+    /// backend round-trip lands, even when the workspace is EMPTY (no row to
+    /// fill). Shares the 0.85 s hold above.
+    private var optimisticActiveWS: Int?
 
     /// Rebuild rows + memoized items from a fresh projection. Highlight/
     /// collapsed are id-keyed and survive across rebuilds (dropped only if their
@@ -72,7 +84,9 @@ public final class TreeViewModel {
     public func apply(sections: [ProjectedSection],
                       activeWorkspaceIndex: Int? = nil,
                       titles: [WindowID: String]? = nil,
-                      layoutMode: ((ProjectedSection) -> String?)? = nil) {
+                      layoutMode: ((ProjectedSection) -> String?)? = nil,
+                      sectionMode: Bool? = nil,
+                      isolateDesktop: Bool? = nil) {
         sourceSections = sections
         sourceActiveWS = activeWorkspaceIndex
         // The layout-abbrev provider is STORED so the `setQuery` re-projection
@@ -80,13 +94,21 @@ public final class TreeViewModel {
         // header sub-lines instead of silently dropping them.
         if let layoutMode { layoutModeProvider = layoutMode }
         if let titles { titleOverride = titles }
+        if let sectionMode { self.sectionMode = sectionMode }
+        if let isolateDesktop { self.isolateDesktop = isolateDesktop }
+        // The ACTIVE workspace: the optimistic claim while its hold stands
+        // (a header click paints its header active before the backend
+        // round-trip), else the projection's.
+        let claimHolds = optimisticUntil.map { Date() < $0 } == true
+        let effActive = (claimHolds ? optimisticActiveWS : nil) ?? activeWorkspaceIndex
+        let oldIDs = rows.map(\.id)          // pre-rebuild order, for the cursor re-anchor
         rows = buildTreeRows(
             sections: sections, query: query,
             titles: titleOverride,
             layoutMode: layoutModeProvider,
             isActive: { s in
-                s.sectionType == .workspace && activeWorkspaceIndex != nil
-                    && s.sourceWorkspaceIndex == activeWorkspaceIndex
+                s.sectionType == .workspace && effActive != nil
+                    && s.sourceWorkspaceIndex == effActive
             })
         // The EMITTED sections, aligned with the rows' group ordinals (the
         // same zero-match drop buildTreeRows walks). Hosts resolve a
@@ -101,18 +123,46 @@ public final class TreeViewModel {
         rowsRebuildCount += 1
         let ids = Set(rows.map(\.id))
         collapsed.formIntersection(ids)
-        if let h = highlight, !ids.contains(h) { highlight = nil }
+        if let h = highlight, !ids.contains(h) {
+            // M12: a nav cursor whose row vanished mid-refresh RE-ANCHORS at
+            // the vanished row's old position (the row that slid into its
+            // slot), instead of silently dropping out of keyboard nav.
+            highlight = oldIDs.firstIndex(of: h).flatMap { pos in
+                rows.isEmpty ? nil : rows[min(pos, rows.count - 1)].id
+            }
+        }
         reconcileKbDrag(ids)
 
-        if let opt = optimisticID, let until = optimisticUntil, Date() < until {
+        if claimHolds {
             // A vanished claim row (moved/closed mid-hold) clears the fill —
-            // same as the legacy signature dropping the O-token.
-            selection = ids.contains(opt) ? [opt] : []
+            // same as the legacy signature dropping the O-token. An
+            // active-WS-only claim (empty-workspace header click) derives the
+            // fill from the projection under the CLAIMED active workspace.
+            if let opt = optimisticID {
+                selection = ids.contains(opt) ? [opt] : []
+            } else {
+                selection = Set(focusedRowID(sections: sections,
+                                             activeWorkspaceIndex: effActive)
+                                    .map { [$0] } ?? [])
+            }
         } else {
-            optimisticID = nil; optimisticUntil = nil
+            optimisticID = nil; optimisticUntil = nil; optimisticActiveWS = nil
             selection = Set(focusedRowID(sections: sections,
                                          activeWorkspaceIndex: activeWorkspaceIndex)
                                 .map { [$0] } ?? [])
+        }
+        refreshRowEmphasis()
+    }
+
+    /// Accent + semibold on the FOCUSED window row (the old wash + 3pt bar +
+    /// accent-semibold triple's third mark, ledger L4) — re-mapped whenever
+    /// `selection` changes. Headers keep the emphasis `buildTreeRows` gave
+    /// them (the active workspace).
+    private func refreshRowEmphasis() {
+        let focus = selection.first
+        listItems = listItems.map { item in
+            guard case .row = item.kind else { return item }
+            return item.emphasized(item.id == focus)
         }
     }
 
@@ -138,10 +188,23 @@ public final class TreeViewModel {
 
     /// Claim the fill for an acted-on row NOW (before the backend round-trip
     /// lands) and hold it for 0.85 s — `SidebarView.setOptimistic` parity.
-    public func setOptimistic(_ id: TreeItemID) {
+    /// `activeWorkspace` claims the ACTIVE workspace too (its header paints
+    /// ● + emphasis immediately — the old `optActiveWS` half, which is the
+    /// ONLY visible feedback when the clicked workspace is empty); passing it
+    /// re-projects the rows so the header repaint is instant.
+    public func setOptimistic(_ id: TreeItemID? = nil,
+                              activeWorkspace: Int? = nil) {
         optimisticID = id
+        optimisticActiveWS = activeWorkspace
         optimisticUntil = Date().addingTimeInterval(0.85)
-        selection = rows.contains(where: { $0.id == id }) ? [id] : []
+        if activeWorkspace != nil {
+            // Re-project under the claim (`rebuild()` parity) — apply()
+            // reads the held claim for header emphasis AND the fill.
+            apply(sections: sourceSections, activeWorkspaceIndex: sourceActiveWS)
+        } else if let id {
+            selection = rows.contains(where: { $0.id == id }) ? [id] : []
+            refreshRowEmphasis()
+        }
     }
 
     // MARK: - Keyboard cursor (Task 10)
@@ -151,14 +214,30 @@ public final class TreeViewModel {
     // These mirror the pure `KbNav` math over `rows`: every row is selectable
     // (`TreeRowSpec` has only header/window kinds — no separators).
 
+    /// The row the LAST act landed on, restored by the next `seedCursor` —
+    /// the old tree's `kbSel` re-set after `exitActive` ("pre-syncs the
+    /// cursor for the next nav entry"): acting on a header exits nav, and
+    /// re-entering should resume ON that header, not on the focus fill.
+    private var rememberedCursor: TreeItemID?
+
+    /// Remember `id` as the next nav entry's cursor (called AFTER the act's
+    /// `exitActive` cleared the live cursor).
+    public func rememberCursor(_ id: TreeItemID) { rememberedCursor = id }
+
     /// Seed the cursor entering keyboard nav: keep a still-valid cursor, else
-    /// the focused row, else the first row — `enterKbNav`/`kbDefault` parity.
+    /// the last acted-on row, else the focused row, else the first row —
+    /// `enterKbNav`/`kbDefault` parity (kbSel survived an act-exit).
     public func seedCursor() {
         if let h = highlight, rows.contains(where: { $0.id == h }) { return }
+        if let r = rememberedCursor, rows.contains(where: { $0.id == r }) {
+            highlight = r
+            rememberedCursor = nil
+            return
+        }
         highlight = selection.first ?? rows.first?.id
     }
 
-    public func clearCursor() { highlight = nil }
+    public func clearCursor() { highlight = nil; rememberedCursor = nil }
 
     /// Park the cursor on a specific row — the wake-on-click path (R12) parks
     /// on the CLICKED row, not the seed's selection-or-first fallback.
@@ -216,7 +295,9 @@ public final class TreeViewModel {
     // draws the ghost / insertion line / onto band exactly as an internal
     // drag would.
 
-    private(set) var kbDragSource: TreeItemID?
+    /// Public: the host's `dropBand` seam reads it to know what the live kb
+    /// lift is dragging (the pointer path caches its own source instead).
+    public private(set) var kbDragSource: TreeItemID?
     private var kbDragChunk: [TreeItemID] = []
     private var kbDragAim: [ListCore.DropTarget<TreeItemID>] = []
     private var kbDragAimIndex = 0
@@ -228,42 +309,84 @@ public final class TreeViewModel {
     }
 
     /// Space on the cursor: lift it. A header lifts its whole section chunk
-    /// and aims at section gaps (sill `liftKeyboard` parity). A WINDOW lift
+    /// and aims at section gaps in SECTION mode (sill `liftKeyboard` parity);
+    /// in the by-workspace degrade a header lift aims the per-workspace
+    /// ladder for the content SWAP (the old mode-3 kb lift). A WINDOW lift
     /// aims a COARSE per-section ladder instead of sill's fine per-row run —
     /// the commit is section-granular (window order inside a workspace is
     /// backend-derived), so per-row candidates made most presses appear to
     /// change nothing and crossing an 8-window section took ~16 presses. One
     /// press = one section, and the aim STARTS on the lifted row's own
     /// section (old `kbDropWS = liftSourceWS()` parity), not the top of the
-    /// tree.
+    /// tree. A holding row never lifts (t-63h2 — the old tree bailed before
+    /// the ghost; sill's pointer path vetoes via `dragSourceValidator`).
     public func liftCursor() {
         guard kbDragSource == nil, let h = highlight else { return }
-        let rows = visibleAsRows
-        var chunk: [TreeItemID] = []
-        var aim: [ListCore.DropTarget<TreeItemID>]
-        var start = 0
-        if case .header = h {
-            chunk = chunkMemberIDs(forHeader: h, rows: rows)
-            aim = dragCandidates(source: h, rows: rows, mode: .both,
-                                 chunkIDs: chunk, validate: { _, _ in true })
-        } else {
-            (aim, start) = windowLiftAim(for: h)
-        }
+        guard !isHoldingRow(h) else { return }
+        let (chunk, aim, start) = liftPlan(for: h)
         guard !aim.isEmpty else { return }
         kbDragSource = h; kbDragChunk = chunk; kbDragAim = aim; kbDragAimIndex = start
     }
 
-    /// The window lift's ladder: one `.onto(section header)` per
+    /// t-63h2: a holding row is display-only — it never becomes a drag
+    /// source. Same predicate the Controller's pointer-side
+    /// `dragSourceValidator` applies, derived from the rendered sections.
+    public func isHoldingRow(_ id: TreeItemID) -> Bool {
+        guard case .window(let g, _) = id,
+              g >= 0, g < renderedSections.count else { return false }
+        return renderedSections[g].sectionType == .holding
+    }
+
+    /// The chunk + aim ladder + start index a lift of `id` uses — shared by
+    /// `liftCursor` and the reconcile re-derivation so the two can't drift.
+    /// Candidates run through `resolveTreeDrop` (ONE rule set with the
+    /// pointer path and the commit — the ladder used to bypass it with an
+    /// always-true validate, which let an isolate desktop aim a reorder the
+    /// commit then dropped).
+    private func liftPlan(for h: TreeItemID)
+        -> ([TreeItemID], [ListCore.DropTarget<TreeItemID>], Int) {
+        if case .header = h {
+            if sectionMode {
+                let chunk = chunkMemberIDs(forHeader: h, rows: visibleAsRows)
+                let aim = dragCandidates(source: h, rows: visibleAsRows,
+                                         mode: .both, chunkIDs: chunk,
+                                         validate: kbValidate)
+                return (chunk, aim, 0)
+            }
+            // Degrade: the header lifts ALONE and walks the per-workspace
+            // ladder — commit = workspace-content swap (old mode-3).
+            let (aim, start) = sectionLadderAim(
+                ownGroup: sectionOrdinal(of: h, in: renderedSections) ?? 0)
+            return ([], aim, start)
+        }
+        let (aim, start) = sectionLadderAim(ownGroup: {
+            if case .window(let g, _) = h { return g }
+            return 0
+        }())
+        return ([], aim, start)
+    }
+
+    /// The kb twin of the sill validator seam: a candidate is aimable iff the
+    /// shared resolver would commit it.
+    private func kbValidate(_ ctx: ListCore.DragContext<TreeItemID>,
+                            _ target: ListCore.DropTarget<TreeItemID>) -> Bool {
+        resolveTreeDrop(ctx, target, sections: renderedSections,
+                        sectionMode: sectionMode,
+                        isolateDesktop: isolateDesktop) != nil
+    }
+
+    /// The per-section ladder: one `.onto(section header)` per
     /// workspace-backed section (matched/holding are not destinations, and
     /// `treeDrop` derives the destination section from the header id), plus
-    /// the index of the source's OWN section to seed the aim on. sill draws
-    /// `.onto(header)` as a ring on the header row, so the affordance reads
-    /// "lands in THAT section" — section-granular, like the commit.
-    private func windowLiftAim(for id: TreeItemID)
+    /// the position of the OWN section to seed the aim on. sill draws
+    /// `.onto(header)` as a ring on the header row (a band when the host's
+    /// `dropBand` covers it), so the affordance reads "lands in THAT
+    /// section" — section-granular, like the commit. Shared by the window
+    /// lift (move) and the degrade header lift (swap).
+    private func sectionLadderAim(ownGroup g: Int)
         -> ([ListCore.DropTarget<TreeItemID>], Int) {
         var aim: [ListCore.DropTarget<TreeItemID>] = []
         var start = 0
-        guard case .window(let g, _) = id else { return ([], 0) }
         for (k, sec) in renderedSections.enumerated()
         where sec.sourceWorkspaceIndex != nil {
             if k == g { start = aim.count }
@@ -313,17 +436,11 @@ public final class TreeViewModel {
     private func reconcileKbDrag(_ ids: Set<TreeItemID>) {
         guard let s = kbDragSource else { return }
         guard ids.contains(s) else { cancelDrag(); return }
-        let rows = visibleAsRows
-        if case .header = s {
-            kbDragChunk = chunkMemberIDs(forHeader: s, rows: rows)
-            kbDragAim = dragCandidates(source: s, rows: rows, mode: .both,
-                                       chunkIDs: kbDragChunk, validate: { _, _ in true })
-        } else {
-            // Same coarse per-section ladder the lift built — re-derived
-            // against the refreshed sections (the aim INDEX is preserved via
-            // the clamp below, matching the fine ladder's behaviour).
-            (kbDragAim, _) = windowLiftAim(for: s)
-        }
+        // Same plan the lift built — re-derived against the refreshed
+        // sections (the aim INDEX is preserved via the clamp below).
+        let (chunk, aim, _) = liftPlan(for: s)
+        kbDragChunk = chunk
+        kbDragAim = aim
         if kbDragAim.isEmpty { cancelDrag() }
         else { kbDragAimIndex = min(kbDragAimIndex, kbDragAim.count - 1) }
     }
@@ -338,6 +455,30 @@ public final class TreeViewModel {
     /// to an id and needs the same kind/pid the cursor path gets.
     public func row(_ id: TreeItemID) -> TreeRowSpec? {
         rows.first { $0.id == id }
+    }
+
+    /// What a POINTER lift of `id` carries — sill's `dragChunk` seam. Section
+    /// mode keeps the kit rule (a header lifts its whole section chunk, so a
+    /// header drag reorders); the by-workspace degrade lifts a header ALONE,
+    /// which is what lets it aim `.onto` another workspace's rows — the
+    /// content SWAP (old mode-3; sill forces a chunk to `.reorderBetween`).
+    public func dragChunkMembers(for id: TreeItemID) -> [TreeItemID] {
+        guard case .header = id, sectionMode else { return [] }
+        return chunkMemberIDs(forHeader: id, rows: visibleAsRows)
+    }
+
+    /// Every rendered row id of the section at `ordinal` (header + windows) —
+    /// the membership sill's `dropBand` paints when a drop lands
+    /// section-granular (window move / workspace swap).
+    public func sectionMemberIDs(ordinal: Int) -> [TreeItemID] {
+        guard ordinal >= 0, ordinal < renderedSections.count else { return [] }
+        let sid = renderedSections[ordinal].id
+        return rows.compactMap { r in
+            switch r.id {
+            case .header(let s): return s == sid ? r.id : nil
+            case .window(let g, _): return g == ordinal ? r.id : nil
+            }
+        }
     }
 
     /// Content-space offset (y-down from the tree's top) of the row's TOP —
@@ -411,10 +552,12 @@ enum TreeListItem {
         case let .header(type, subtitle):
             return ListItem(id: r.id, image: headerGlyph(type),
                             primary: r.primary, kind: .sectionHeader(subtitle: subtitle))
+                .emphasized(r.emphasized)     // active workspace → accent + semibold
         case let .window(pid):
             return ListItem(id: r.id, image: AppIcons.icon(forPID: pid),
                             primary: r.primary, secondary: r.secondary,
                             badges: r.badges.map(badge(_:)))
+                .dimmed(r.dimmed)             // hidden window → standing veil (M10)
         }
     }
 

@@ -81,6 +81,13 @@ final class Controller: NSObject {
     /// exit) — the preview overlays' hover source, `SidebarView.hoverIdx`'s
     /// successor.
     var treeHoverID: TreeItemID?
+    /// The live POINTER drag's source row, cached by `treeDropIsValid` (sill
+    /// resolves every placement through it while a drag is up). `dropBand`
+    /// hands the host only the TARGET, but the band's membership depends on
+    /// what is being dragged — this is the missing half. Never cleared
+    /// eagerly: sill stops consulting the band the moment the drag ends, so a
+    /// stale value is unread.
+    var treePointerDragSource: TreeItemID?
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -392,6 +399,19 @@ final class Controller: NSObject {
         // themselves as legal and then no-op silently).
         panelHost.dropIsValidRow = { [weak self] ctx, target in
             self?.treeDropIsValid(ctx, target) ?? false
+        }
+        // Lift veto (t-63h2 / t-jzbf): a holding row is display-only — the
+        // old tree bailed before the ghost ever showed; sill's seam restores
+        // exactly that (click / hover stay alive, unlike `isDisabled`).
+        panelHost.dragSourceIsValidRow = { [weak self] id in
+            !(self?.panelHost.treeVM.isHoldingRow(id) ?? false)
+        }
+        // Section-band drop affordance (t-fp94): the commit is section-
+        // granular (window move / workspace swap), so the affordance paints
+        // the destination SECTION as an area — a chunk reorder keeps its
+        // insertion line ([] falls back).
+        panelHost.dropBandRow = { [weak self] target in
+            self?.treeDropBand(target) ?? []
         }
         // Blank-space click below the last row: wake keyboard nav when
         // passive (the row-less R12 twin — rows wake in `activateTreeRow`).
@@ -1383,7 +1403,11 @@ final class Controller: NSObject {
                 sec.sourceWorkspaceIndex.flatMap { i in
                     wss.first { $0.index == i }?.layoutMode
                 }
-            })
+            },
+            // The render mode rides into the VM so the kb drag ladder runs
+            // the SAME `resolveTreeDrop` rule set as the pointer + commit.
+            sectionMode: renderMode.rendersSections,
+            isolateDesktop: isIsolateDesktop)
         // Mirror the skeleton's source of truth (SidebarView's signature
         // logic, which just ran in `update`) onto the host-side overlay —
         // clears it on content-ready, holds it through a held mid-switch
