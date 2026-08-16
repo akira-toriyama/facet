@@ -37,7 +37,7 @@ extension BuildTreeRowsTests {
         XCTAssertEqual(rows.count, 2)
         guard case .header(.workspace, nil) = rows[0].kind else { return XCTFail() }
         XCTAssertEqual(rows[0].id, .header("ws:0"))
-        XCTAssertEqual(rows[0].primary, "workspace · 1")
+        XCTAssertEqual(rows[0].primary, "workspace · 1 (1)")
         guard case .window(pid: 1) = rows[1].kind else { return XCTFail() }
         XCTAssertEqual(rows[1].id, .window(group: 0, WindowID(serverID: 1)))
         XCTAssertEqual(rows[1].primary, "Safari")
@@ -61,7 +61,22 @@ extension BuildTreeRowsTests {
             sec("ws:1", "2", .workspace, [win(3, "Notes", "todo")], src: 1),
         ], query: "saf")
         // WS1 keeps only Safari; WS2 has no match → whole section dropped.
-        XCTAssertEqual(rows.map(\.primary), ["workspace · 1", "Safari"])
+        XCTAssertEqual(rows.map(\.primary), ["workspace · 1 (1)", "Safari"])
+    }
+
+    /// t-eedb HIGH: the header caption carries the 1-based DISPLAY index (the
+    /// address `--focus index:N` and the `m`-menu caption speak), an unnamed
+    /// workspace stays distinguishable by it, and "●" marks the ACTIVE
+    /// workspace — the accent-bold cue of the old tree, kept textual.
+    func testWorkspaceHeaderIndexUnnamedAndActiveDot() {
+        let rows = buildTreeRows(sections: [
+            sec("ws:0", "Web", .workspace, [], src: 0),
+            sec("ws:1", "", .workspace, [], src: 1),
+        ], query: "", isActive: { $0.id == "ws:0" })
+        XCTAssertEqual(rows[0].primary, "workspace · 1 (Web) ●",
+                       "named + active: index, name, active dot")
+        XCTAssertEqual(rows[1].primary, "workspace · 2",
+                       "unnamed: the index alone keeps it addressable")
     }
 
     /// The four kind words each answer ONE question — "what IS this section"
@@ -98,16 +113,32 @@ extension BuildTreeRowsTests {
     }
 
     func testStatusBadges() {
-        XCTAssertEqual(badges(rich(1, master: true)), [TreeBadge(.master)])
-        XCTAssertEqual(badges(rich(1, floating: true)), [TreeBadge(.float)])
-        XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky)])
-        XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden)])
+        // t-fp94: badges carry their WORD again (the glyph-only sweep made
+        // four near-identical pictograms carry the whole meaning), and the
+        // scratchpad shelf spells `scratchpad:NAME` in full.
+        XCTAssertEqual(badges(rich(1, master: true)), [TreeBadge(.master, "master")])
+        XCTAssertEqual(badges(rich(1, floating: true)), [TreeBadge(.float, "float")])
+        XCTAssertEqual(badges(rich(1, sticky: true)), [TreeBadge(.sticky, "sticky")])
+        XCTAssertEqual(badges(rich(1, onscreen: false)), [TreeBadge(.hidden, "hidden")])
         // t-c6fm: an isolate-parked window shows as a NORMAL row — no badge (the
         // tree is an inventory, not a screen mirror; park is screen-only). Since
         // t-pvay that is STRUCTURAL, not a choice: `Window` carries no park flag,
         // so the tree cannot badge one even by accident. Nothing left to assert.
         XCTAssertEqual(badges(rich(1, mark: "a")), [TreeBadge(.mark, "a")])
-        XCTAssertEqual(badges(rich(1, scratch: "shelf")), [TreeBadge(.scratchpad, "shelf")])
+        XCTAssertEqual(badges(rich(1, scratch: "shelf")),
+                       [TreeBadge(.scratchpad, "scratchpad:shelf")])
+    }
+
+    /// The old ladder's exclusivity: `float` is implied — and suppressed — by
+    /// master / sticky / a settled scratchpad (all three force or imply
+    /// floating, so the plain label would be noise).
+    func testFloatBadgeIsSuppressedWhenImplied() {
+        XCTAssertEqual(badges(rich(1, floating: true, sticky: true)),
+                       [TreeBadge(.sticky, "sticky")])
+        XCTAssertEqual(badges(rich(1, master: true, floating: true)),
+                       [TreeBadge(.master, "master")])
+        XCTAssertEqual(badges(rich(1, floating: true, scratch: "s")),
+                       [TreeBadge(.scratchpad, "scratchpad:s")])
     }
 
     func testTagBadgesCapWithOverflow() {
@@ -121,7 +152,7 @@ extension BuildTreeRowsTests {
 
     func testStatusBeforeTags() {
         let b = badges(rich(1, master: true, tags: ["x"]))
-        XCTAssertEqual(b, [TreeBadge(.master), TreeBadge(.tag, "x")])
+        XCTAssertEqual(b, [TreeBadge(.master, "master"), TreeBadge(.tag, "x")])
     }
 }
 
@@ -143,6 +174,33 @@ extension BuildTreeRowsTests {
         guard case .header(.matched, nil) = rows[0].kind else { return XCTFail() }
     }
 
+    // MARK: AX-resolved titles (ledger M2 / t-pfhs S3)
+
+    func testAXTitleFillsABlankBackendTitle() {
+        let rows = buildTreeRows(
+            sections: [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)],
+            query: "", titles: [WindowID(serverID: 1): "sill — Icons.swift"])
+        XCTAssertEqual(rows[1].secondary, "sill — Icons.swift")
+    }
+
+    func testBackendTitleWinsOverTheAXMap() {
+        let rows = buildTreeRows(
+            sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)],
+            query: "", titles: [WindowID(serverID: 1): "stale"])
+        XCTAssertEqual(rows[1].secondary, "GitHub")
+    }
+
+    func testFilterMatchesTheAXResolvedTitle() {
+        let sections = [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)]
+        let titles = [WindowID(serverID: 1): "Icons.swift"]
+        // Findable by the title the user can SEE …
+        XCTAssertEqual(
+            buildTreeRows(sections: sections, query: "icons", titles: titles).count, 2)
+        // … and the section drops whole without the map (the pre-fix behaviour).
+        XCTAssertEqual(buildTreeRows(sections: sections, query: "icons").count, 0)
+    }
+
+
     func testHoldingHeaderIgnoresLayoutSubtitle() {
         let rows = buildTreeRows(
             sections: [sec("holding:1", "held", .holding, [win(9, "X", "")], src: nil)],
@@ -155,6 +213,29 @@ extension BuildTreeRowsTests {
 
 @MainActor
 extension BuildTreeRowsTests {
+    func testSetQueryKeepsTheStoredTitles() {
+        let vm = TreeViewModel(palette: resolve(.terminal))
+        vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)],
+                 titles: [WindowID(serverID: 1): "Icons.swift"])
+        // `setQuery` re-enters apply() with NO titles argument — the stored map
+        // must survive, or the first keystroke un-finds every Electron-class row.
+        vm.setQuery("icons")
+        XCTAssertEqual(vm.renderedSections.count, 1)
+        XCTAssertEqual(vm.listItems.count, 2)          // header + the still-matching row
+    }
+
+    func testARerenderWithoutTitlesKeepsThem() {
+        let vm = TreeViewModel(palette: resolve(.terminal))
+        let secs = [sec("ws:0", "1", .workspace, [win(1, "Code", "")], src: 0)]
+        vm.apply(sections: secs, titles: [WindowID(serverID: 1): "Icons.swift"])
+        // A re-render (rename / label / filter change) re-projects the last
+        // snapshot WITHOUT re-resolving AX titles — passing none must keep the
+        // stored map, not blank every Electron-class row until the next tick.
+        vm.apply(sections: secs)
+        XCTAssertEqual(vm.listItems.count, 2)
+        XCTAssertEqual(vm.listItems[1].secondary, "Icons.swift")
+    }
+
     func testPaletteMutationDoesNotRebuildItems() {
         let vm = TreeViewModel(palette: resolve(.terminal))      // any preset
         vm.apply(sections: [sec("ws:0", "1", .workspace, [win(1, "Safari", "GitHub")], src: 0)])

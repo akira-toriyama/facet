@@ -81,12 +81,47 @@ extension Controller {
 
     // MARK: - Hover preview reconcile
 
+    /// The SwiftUI tree's replacement for `SidebarView.previewTargets()`
+    /// (whose row rects died with the render swap — the detached view has no
+    /// window). Source row = hover (sill `onHover` → `treeHoverID`), else the
+    /// keyboard cursor while nav is on — the legacy "most recent input wins"
+    /// (hover exit clears `treeHoverID`, an arrow key moves the cursor).
+    /// Anchors come from the LIVE row rects the list streams (`onRowRects`),
+    /// so they are scroll-true like the old `rows[i].rect`.
+    func treePreviewTargets()
+        -> [(window: WindowID, rowAnchor: NSRect, windowFrame: CGRect?)]
+    {
+        let vm = panelHost.treeVM
+        let src = treeHoverID ?? (sidebarView.kbNav ? vm.activateCursor() : nil)
+        guard let src, let anchor = panelHost.rowScreenRect(src) else { return [] }
+        switch src {
+        case .window(_, let wid):
+            guard let ws = lastWorkspaces.first(where: { w in
+                w.windows.contains { $0.id == wid }
+            }), !ws.isActive,
+                  let winModel = ws.windows.first(where: { $0.id == wid })
+            else { return [] }
+            return [(wid, anchor, winModel.frame)]
+        case .header(let sid):
+            // A sourceless (isolate) header has no single workspace to
+            // preview; only a workspace header previews its windows.
+            guard let sec = vm.renderedSections.first(where: { $0.id == sid }),
+                  let wi = sec.sourceWorkspaceIndex,
+                  let ws = lastWorkspaces.first(where: { $0.index == wi }),
+                  !ws.isActive
+            else { return [] }
+            return ws.windows.map {
+                (window: $0.id, rowAnchor: anchor, windowFrame: $0.frame)
+            }
+        }
+    }
+
     /// Debounced reconciliation of `PreviewOverlay`s with whatever
-    /// the sidebar's hover / kb-selection currently points at.
+    /// the tree's hover / kb-cursor currently points at.
     func previewTargetChanged() {
         previewTimer?.invalidate()
         let wp = winPreview
-        let targets = sidebarView.previewTargets()
+        let targets = treePreviewTargets()
         let ids = Set(targets.map(\.window))
         if ids.isEmpty {
             wp.bump(); previewPool.hideAll(); return
@@ -105,7 +140,7 @@ extension Controller {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 // Re-resolve after the dwell (target may have moved).
-                let now = self.sidebarView.previewTargets()
+                let now = self.treePreviewTargets()
                 let nowIDs = Set(now.map(\.window))
                 guard nowIDs == ids else { return }
                 let mode = self.config.effectiveTreePreviewMode
@@ -113,7 +148,7 @@ extension Controller {
                     wp.request(t.window) { [weak self] cg, capFrame, gotID in
                         MainActor.assumeIsolated {
                             guard let self else { return }
-                            let cur = self.sidebarView.previewTargets()
+                            let cur = self.treePreviewTargets()
                             guard let nt = cur.first(where: {
                                 $0.window == gotID
                             }) else { return }

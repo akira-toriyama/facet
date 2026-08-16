@@ -61,6 +61,29 @@ final class Controller: NSObject {
     /// Empty ⇒ section model off here ⇒ the overview degrades to
     /// `lastWorkspaces`. Snapshot-on-show seeds from this.
     var lastSections: [ProjectedSection] = []
+    /// Whether the tree's last feed rendered config sections (vs the
+    /// by-workspace degrade) — `treeDrop` gates the section-only commits
+    /// (applyMove / reorderSection) on this. Set in `apply()`. The section
+    /// LIST itself is resolved via `treeVM.renderedSections` (the emitted
+    /// array aligned with the rows' group ordinals — query-safe by
+    /// construction, which is what killed the facet-3 ordinal bug).
+    var treeRenderIsSectionMode = false
+    /// Whether the tree is rendering an ISOLATE desktop's synthesized sections
+    /// (matched + optional holding). Their order is fixed, so chunk reorder is
+    /// refused there — the AppKit tree's mode-4 `if !isolateDesktop` gate, which
+    /// the render swap dropped on the pointer path.
+    var treeRenderIsIsolateDesktop = false
+    /// The SwiftUI tree row under the pointer (sill `onHover` edge; nil on
+    /// exit) — the preview overlays' hover source, `SidebarView.hoverIdx`'s
+    /// successor.
+    var treeHoverID: TreeItemID?
+    /// The live POINTER drag's source row, cached by `treeDropIsValid` (sill
+    /// resolves every placement through it while a drag is up). `dropBand`
+    /// hands the host only the TARGET, but the band's membership depends on
+    /// what is being dragged — this is the missing half. Never cleared
+    /// eagerly: sill stops consulting the band the moment the drag ends, so a
+    /// stale value is unread.
+    var treePointerDragSource: TreeItemID?
     /// Session-only, per-mac-desktop DISPLAY-ORDER override for the section
     /// list (the drag-to-reorder feature). Keyed by mac-desktop ordinal
     /// (`currentMacDesktopOrdinal() ?? -1`), value = ordered stable section
@@ -293,7 +316,6 @@ final class Controller: NSObject {
     /// `finishTagEditor` knows to revert it on close. When the tree was already
     /// in keyboard nav, this stays false and close just re-keys the tree.
     var tagEditorSelfActivated = false
-    private let searchDelegate = SearchFieldDelegate()
 
     // MARK: - Subscription / polling
 
@@ -340,12 +362,12 @@ final class Controller: NSObject {
         panelHost.handleBar.onContextMenu = { [weak self] scr in
             self?.showDesktopMenu(at: scr)
         }
-        searchDelegate.onChange = { [weak self] q in
-            MainActor.assumeIsolated {
-                self?.sidebarView.setQuery(q)
-            }
+        // facet-3: the sill field's onChange IS the live filter (fires per
+        // keystroke, IME composition included — marked text live-filters like
+        // the old NSTextField delegate did).
+        panelHost.searchBar.onChange = { [weak self] q in
+            self?.setTreeQuery(q)
         }
-        panelHost.searchBar.field.delegate = searchDelegate
         // Keep kbNav in sync with the panel's key status. The panel
         // only becomes key via explicit kb-nav entry (`enterActive` →
         // makeKey); a plain tree-row click no longer grabs key (that
@@ -353,6 +375,55 @@ final class Controller: NSObject {
         // fires on the kb-nav enter/exit, not on every click.
         panelHost.onKeyChanged = { [weak self] isKey in
             self?.handlePanelKeyChange(isKey: isKey)
+        }
+        // #66 activation for the SwiftUI tree (t-tsxg Task 12): a row click
+        // routes through the ONE helper (Enter shares it — Task 10).
+        panelHost.onActivateRow = { [weak self] id in
+            self?.activateTreeRow(id)
+        }
+        // facet-2: mouse drops from the sill drag gesture; the host-driven
+        // keyboard lift commits through the SAME route (handleKbKey).
+        panelHost.onDropRow = { [weak self] ctx, target in
+            self?.treeDrop(ctx, target)
+        }
+        // …and the pre-validation twin, so sill only ever OFFERS placements the
+        // commit accepts (t-6r5m / ledger M4: illegal drops used to advertise
+        // themselves as legal and then no-op silently).
+        panelHost.dropIsValidRow = { [weak self] ctx, target in
+            self?.treeDropIsValid(ctx, target) ?? false
+        }
+        // Lift veto (t-63h2 / t-jzbf): a holding row is display-only — the
+        // old tree bailed before the ghost ever showed; sill's seam restores
+        // exactly that (click / hover stay alive, unlike `isDisabled`).
+        panelHost.dragSourceIsValidRow = { [weak self] id in
+            !(self?.panelHost.treeVM.isHoldingRow(id) ?? false)
+        }
+        // Section-band drop affordance (t-fp94): the commit is section-
+        // granular (window move / workspace swap), so the affordance paints
+        // the destination SECTION as an area — a chunk reorder keeps its
+        // insertion line ([] falls back).
+        panelHost.dropBandRow = { [weak self] target in
+            self?.treeDropBand(target) ?? []
+        }
+        // Blank-space click below the last row: wake keyboard nav when
+        // passive (the row-less R12 twin — rows wake in `activateTreeRow`).
+        // The cursor seeds from selection-or-first; there is no row to park on.
+        panelHost.onBlankMouseDown = { [weak self] in
+            guard let self, !self.sidebarView.kbNav else { return }
+            self.enterActive()
+            self.previewTargetChanged()
+        }
+        // Right-click on a row → the same context menus as `m`, anchored at
+        // the click. Works on a PASSIVE panel (no focus steal) — the mouse
+        // path the render swap had dropped.
+        panelHost.onRowRightClick = { [weak self] id, scr in
+            guard let self, let row = self.panelHost.treeVM.row(id) else { return }
+            self.showTreeRowMenu(row, at: scr)
+        }
+        // Hover → thumbnail previews (SidebarView.hoverIdx's successor).
+        panelHost.onHoverRow = { [weak self] id in
+            self?.treeHoverID = id
+            self?.previewTargetChanged()
         }
         applyBorderFromConfig()
         resolveSurfacePalettes()      // PR-B: seed all three boxes from config
@@ -438,6 +509,16 @@ final class Controller: NSObject {
                 // Tommy: facet must NOT auto-grab focus on a switch).
                 Log.debug("panelKey lost (kbNav-active) → passive")
                 sidebarView.exitKbNav()
+                // Fold the SwiftUI nav state like `exitActive` does — this
+                // branch used to drop only kbNav, so an involuntary loss
+                // mid-search left the tree FILTERED with the band gone
+                // (S1, measured in the capsule VM 2026-08-11: no hint the
+                // filter was active) and kept a live lift / cursor around.
+                panelHost.treeVM.clearCursor()
+                panelHost.treeVM.cancelDrag()
+                panelHost.treeVM.setQuery("")
+                previewTargetChanged()
+                panelHost.layout(searching: sidebarView.searching)
                 // Fully relinquish key, not just kbNav: otherwise `wantsKey`
                 // lingers true and the passive panel re-grabs key on the next OS
                 // activation cycle (e.g. switching desktops back), thrashing key
@@ -801,7 +882,7 @@ final class Controller: NSObject {
             if concrete != name { phase = 0 }   // restart cycle only on a real change
             source = src
             name = concrete
-            box.pal = resolve(paletteFor(concrete))
+            box.pal = resolve(paletteForCanonical(concrete))
         }
         apply(effective: config.effectiveTreeTheme, rawKey: config.treeTheme,
               source: &treeSource, name: &treeThemeName,
@@ -887,7 +968,7 @@ final class Controller: NSObject {
         // selection; fold them onto the steady resolved base so background
         // / foreground / muted / border hold and the UI stays usable.
         guard let f = animatedPalette(theme: name, at: phase) else { return false }
-        let base = resolve(paletteFor(name))
+        let base = resolve(paletteForCanonical(name))
         box.pal = ResolvedPalette(
             background: base.background, foreground: base.foreground,
             muted: base.muted, tertiary: base.tertiary,
@@ -978,8 +1059,14 @@ final class Controller: NSObject {
         }
     }
 
+    /// `titles` is nil for a RE-RENDER (a rename / label / filter change that
+    /// re-projects the last snapshot): only `refresh()` runs `AXTitles.resolve`,
+    /// so a re-render must leave the tree's stored map alone. Passing an empty
+    /// dictionary instead would blank every Electron-class row until the next
+    /// 2 s refresh tick — the same flicker the AppKit tree had, since its
+    /// `if let titles` guard sat behind a non-optional Controller argument.
     func apply(_ wss: [Workspace],
-               _ titles: [WindowID: String] = [:]) {
+               _ titles: [WindowID: String]? = nil) {
         // First non-empty snapshot? Warm the thumbnail cache one-shot
         // so the very first `--view grid` (especially right after
         // launch) shows screenshots instead of falling back to app
@@ -1262,19 +1349,60 @@ final class Controller: NSObject {
         // `lastSections`), so the tree consumes the SAME
         // ordered list all three views share — no second `FilterProjection.project`
         // call, no second diagnostics log (logged once under "overview: ").
-        let contentH: CGFloat
+        // #18/F1 render-swap (t-tsxg Task 8): the SwiftUI `TreeContentView` (on
+        // sill's `ThemedListView`, hosted by PanelHost) is now the render
+        // surface. We still run `sidebarView.update(...)` for its LIVE side
+        // effects — the skeleton auto-clear, `kbNav` selection resolve, and the
+        // `searching` state that gates the search band — because facet-2 (DnD)
+        // and facet-3 (live search) re-wire onto SidebarView before it's
+        // retired; its returned content-height is unused (the panel auto-sizes
+        // from the tree's `ListMetrics`). The tree itself renders from
+        // `treeVM.apply`.
+        let sections: [ProjectedSection]
         if renderMode.rendersSections {
-            contentH = sidebarView.update(sections: lastSections,
-                                          workspaces: wss,
-                                          isolateDesktop: isIsolateDesktop,
-                                          titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+            _ = sidebarView.update(sections: lastSections,
+                                   workspaces: wss,
+                                   isolateDesktop: isIsolateDesktop,
+                                   titles: titles,      // nil on a re-render ⇒ the VM keeps its map
+                                   macDesktop: macDesktopOrdinal)
+            sections = lastSections
         } else {
-            contentH = sidebarView.update(displayWss, titles: titles,
-                                          macDesktop: macDesktopOrdinal)
+            _ = sidebarView.update(displayWss, titles: titles,
+                                   macDesktop: macDesktopOrdinal)
+            // Degrade → 1:1 workspace sections (the same shape the tree's
+            // section path feeds, minus config sections).
+            sections = FilterProjection.project(
+                workspaces: displayWss, sections: []).sections
         }
-        panelHost.layout(contentHeight: contentH,
-                         searching: sidebarView.searching)
+        treeRenderIsSectionMode = renderMode.rendersSections
+        treeRenderIsIsolateDesktop = isIsolateDesktop
+        panelHost.treeVM.apply(
+            sections: sections,
+            activeWorkspaceIndex: wss.first(where: { $0.isActive })?.index,
+            // AX-resolved titles for the windows the backend left blank — the
+            // map only ever reached the retired `SidebarView.update` above, so
+            // the SwiftUI tree rendered Chrome / VS Code / Electron rows with
+            // no title line and the filter could not find them (ledger M2).
+            titles: titles,
+            // Header sub-line: the workspace's layout engine (bsp/stack/…),
+            // `SidebarView.wsLayout` parity — the header context menu is a
+            // layout PICKER, so the tree must show the current value.
+            layoutMode: { sec in
+                sec.sourceWorkspaceIndex.flatMap { i in
+                    wss.first { $0.index == i }?.layoutMode
+                }
+            },
+            // The render mode rides into the VM so the kb drag ladder runs
+            // the SAME `resolveTreeDrop` rule set as the pointer + commit.
+            sectionMode: renderMode.rendersSections,
+            isolateDesktop: isIsolateDesktop)
+        // Mirror the skeleton's source of truth (SidebarView's signature
+        // logic, which just ran in `update`) onto the host-side overlay —
+        // clears it on content-ready, holds it through a held mid-switch
+        // apply (Task 11).
+        panelHost.setSkeletonVisible(sidebarView.isSkeleton)
+        panelHost.setHandleOrdinal(macDesktopOrdinal)
+        panelHost.layout(searching: sidebarView.searching)
         if !panelHost.isVisible { panelHost.show() }
         // Deferred activate for the `--loading` show: the skeleton has now
         // given way to the new mac desktop's real content (`update`
