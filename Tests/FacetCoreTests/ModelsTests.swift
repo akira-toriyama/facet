@@ -34,8 +34,6 @@ struct ModelsTests {
         #expect(ws.windows.last?.frame == nil)
     }
 
-    // MARK: - Sequence<Window>.predictedFocus
-
     /// Minimal Window for focus-pick tests — only `serverID` +
     /// `isFocused` matter to `predictedFocus`.
     private func win(_ serverID: Int, focused: Bool) -> Window {

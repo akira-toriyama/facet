@@ -205,8 +205,6 @@ struct LayoutTree: Equatable, Sendable {
         }
     }
 
-    // MARK: - Toggle orientation
-
     /// Rotate the *parent split* of `id` 90°. No-op when:
     ///   - `id` isn't in the tree
     ///   - `id` is the root leaf (no parent split exists)
@@ -331,7 +329,7 @@ struct LayoutTree: Equatable, Sendable {
         }
     }
 
-    // MARK: - Swap / insert (real-window DnD, 枠C)
+    // MARK: - Swap / insert (real-window DnD, Frame C)
 
     /// Exchange the leaves holding `a` and `b` — the two windows trade
     /// on-screen frames while the split structure (orientations /
@@ -394,7 +392,7 @@ struct LayoutTree: Equatable, Sendable {
         }
     }
 
-    // MARK: - Resize (real-window edge drag, 枠C 機能2)
+    // MARK: - Resize (real-window edge drag, Frame C feature 2)
 
     /// Follow a real resize of leaf `id` to `newFrame`: for each edge
     /// that moved vs its current tiled position, find the *controlling
@@ -488,8 +486,6 @@ struct LayoutTree: Equatable, Sendable {
         return (rebuilt(ratio: s.ratio), [])
     }
 
-    // MARK: - Queries
-
     func contains(_ id: WindowID) -> Bool {
         guard let r = root else { return false }
         return contains(r, id: id)
@@ -520,8 +516,6 @@ struct LayoutTree: Equatable, Sendable {
                 + collectLeaves(s.second.node)
         }
     }
-
-    // MARK: - Frame computation
 
     /// Recursively compute the on-screen rect for every leaf
     /// against `rect` (typically the active display's

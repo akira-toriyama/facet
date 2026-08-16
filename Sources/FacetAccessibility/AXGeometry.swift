@@ -212,7 +212,7 @@ public enum Displays {
 
     /// Bottom-right 1px anchor-sliver point on the display containing
     /// `point` — the on-screen park position that dodges macOS's
-    /// off-screen clamp (memory: [[native-window-hide-methods]] 手法4).
+    /// off-screen clamp (memory: [[native-window-hide-methods]] method 4).
     /// `(maxX-1, maxY-1)` stays a pixel inside the bounds so the window
     /// keeps `isOnscreen == true` while parked.
     public static func anchorSliver(near point: CGPoint) -> CGPoint {

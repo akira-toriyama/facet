@@ -11,8 +11,6 @@ import Foundation
 /// Pure; CI-only (CLT can't run `swift test`).
 struct OverviewLandingGateTests {
 
-    // MARK: - fixtures
-
     private let t0 = Date(timeIntervalSince1970: 0)
 
     private func win(_ id: Int) -> Window {
@@ -24,8 +22,6 @@ struct OverviewLandingGateTests {
         Workspace(index: index, name: "WS\(index)", isActive: false,
                   layoutMode: "bsp", windows: ids.map(win))
     }
-
-    // MARK: - OverviewPendingDrop.landed
 
     @Test func dropNotLandedWhileStillInSource() {
         // Window 1 dropped onto WS 2 but the backend still shows it in WS 1.
@@ -58,8 +54,6 @@ struct OverviewLandingGateTests {
         #expect(!(drop.landed(in: [ws(1, [1])])))
         #expect(!(drop.landed(in: [])))
     }
-
-    // MARK: - OverviewPendingSwap.landed
 
     /// srcIDs=[1] should end in dstWS=2, dstIDs=[2] should end in srcWS=1.
     private func swap12() -> OverviewPendingSwap {

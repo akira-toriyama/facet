@@ -2,13 +2,11 @@ import Testing
 import CoreGraphics
 @testable import FacetCore
 
-/// Pure-logic tests for the workspace-switch slide (枠 E). The clock +
+/// Pure-logic tests for the workspace-switch slide (Frame E). The clock +
 /// AX writes live in the adapter; only the easing + interpolation are
 /// testable here. Accuracy literals are non-Optional FloatingPoint so
 /// these compile under CI's XCTest (CLT-only setups can't run them).
 struct SlideAnimationTests {
-
-    // MARK: SlideCurve.easeOutCubic
 
     @Test func easeOutCubicEndpoints() {
         #expect(abs(SlideCurve.easeOutCubic(0) - 0) < 0.0001)
@@ -35,8 +33,6 @@ struct SlideAnimationTests {
         }
     }
 
-    // MARK: SlideCurve.easeOutQuint
-
     @Test func easeOutQuintEndpointsAndClamp() {
         #expect(abs(SlideCurve.easeOutQuint(0) - 0) < 0.0001)
         #expect(abs(SlideCurve.easeOutQuint(1) - 1) < 0.0001)
@@ -54,15 +50,13 @@ struct SlideAnimationTests {
     }
 
     @Test func easeOutQuintSnappierThanCubic() {
-        // "キレ": quint settles faster, so it sits above cubic mid-tween.
+        // "Crisp": quint settles faster, so it sits above cubic mid-tween.
         for i in 1...19 {
             let t = Double(i) / 20
             #expect(SlideCurve.easeOutQuint(t) >
                                  SlideCurve.easeOutCubic(t))
         }
     }
-
-    // MARK: SlideCurve.easeInOutCubic
 
     @Test func easeInOutCubicEndpointsAndClamp() {
         #expect(abs(SlideCurve.easeInOutCubic(0) - 0) < 0.0001)
@@ -91,8 +85,6 @@ struct SlideAnimationTests {
         }
     }
 
-    // MARK: SlideCurve.spring
-
     @Test func springEndpointsAndClamp() {
         #expect(abs(SlideCurve.spring(0) - 0) < 0.0001)
         #expect(abs(SlideCurve.spring(1) - 1) < 0.0001)
@@ -102,14 +94,12 @@ struct SlideAnimationTests {
 
     @Test func springOvershootsAboveOne() {
         // Underdamped: the response rises past 1 before settling — the
-        // "弾む高級感" bounce. Scan the whole tween for the peak.
+        // The "premium bounce". Scan the whole tween for the peak.
         var peak = 0.0
         for i in 0...100 { peak = max(peak, SlideCurve.spring(Double(i) / 100)) }
         #expect(peak > 1.0,
                              "underdamped spring should overshoot above 1")
     }
-
-    // MARK: WindowSlide.frame
 
     @Test func windowSlideTranslationKeepsSize() {
         // Pure translation (WS-switch slide): size constant, origin
@@ -134,8 +124,6 @@ struct SlideAnimationTests {
         #expect(abs(grow.frame(atEased: 0.5).height - 300) < 0.0001)
         #expect(abs(grow.frame(atEased: 1).width - 600) < 0.0001)
     }
-
-    // MARK: FacetConfig [animation]
 
     @Test func animationDefaultsOff() {
         // Opt-in: a fresh install animates nothing until enabled = true.

@@ -13,7 +13,6 @@ import FacetAccessibility
 import FacetCore
 
 extension NativeAdapter {
-    // MARK: - Queries
 
     public func workspaces() -> [Workspace] {
         refreshCatalog()
@@ -333,7 +332,7 @@ extension NativeAdapter {
     /// destination mac desktop's windows flip `isOnscreen=true` before
     /// `swapCatalogIfMacDesktopChanged` sees the new active-mac-desktop id,
     /// so the two-tick gate adds them to the wrong catalog). Prevention is
-    /// racy and トミー accepts the leak; instead we recompute hard here.
+    /// racy and Tommy accepts the leak; instead we recompute hard here.
     /// Read each managed window's TRUE mac desktop (read-only SkyLight) and
     /// evict any that isn't on the active mac desktop — it'll be re-adopted
     /// by its real mac desktop's catalog on visit. Only runs when SkyLight

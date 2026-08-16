@@ -11,8 +11,6 @@ import Testing
 /// `swift test`).
 struct FacetFilterRoundTripTests {
 
-    // MARK: - helpers
-
     /// Parse `input`, failing the test loudly if it is malformed.
     private func parsed(_ input: String,
                         file: StaticString = #filePath, line: UInt = #line)
@@ -53,8 +51,6 @@ struct FacetFilterRoundTripTests {
                 "AST not stable across round-trip for \(input)")
         return canon
     }
-
-    // MARK: - empty / all
 
     @Test func emptyInputSerializesToEmptyAndRoundTrips() {
         #expect(serialized("") == "")

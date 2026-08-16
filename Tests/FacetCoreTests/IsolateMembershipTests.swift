@@ -12,8 +12,6 @@ import Testing
 /// CI-only (CLT can't run `swift test`).
 struct IsolateMembershipTests {
 
-    // MARK: - fixtures
-
     private func win(_ id: Int, app: String = "App", title: String = "",
                      tags: [String] = [], floating: Bool = false) -> Window {
         Window(id: WindowID(serverID: id), pid: id, appName: app, title: title,
@@ -106,7 +104,7 @@ struct IsolateMembershipTests {
         #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "", filter: f))
     }
 
-    /// 迷子 receptacle (`match='not workspace'`): presence is the assignment,
+    /// The orphan receptacle (`match='not workspace'`): presence is the assignment,
     /// not the display name. An orphan (NO workspace → `inWorkspaceNamed: nil`)
     /// matches; an ASSIGNED window — even one in an UNNAMED workspace (name "")
     /// — does NOT. The predicate behind the receptacle — the same one
@@ -166,8 +164,6 @@ struct IsolateMembershipTests {
         let f = filter("desktop=1")
         #expect(!IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: f))
     }
-
-    // MARK: - total / edge
 
     @Test func allFilterMatchesEverything() {
         #expect(IsolateMembership.matches(win(1), inWorkspaceNamed: "Dev", filter: .all))

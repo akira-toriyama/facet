@@ -12,8 +12,8 @@
 // READ-only + SIP-on. Verified working 2026-05-28 across live
 // mac-desktop switches (memory: facet-per-native-space-ws). facet
 // never MOVES a window across mac desktops — that path (the rejected
-// hide "手法4") is a no-op on macOS 15+ and needs SIP-off; staying
-// read-only keeps facet inside the public-API/"釈迦の掌" contract
+// hide "method 4") is a no-op on macOS 15+ and needs SIP-off; staying
+// read-only keeps facet inside the public-API/"Buddha's palm" contract
 // (facet-buddha-palm-principle).
 //
 // Apple's SkyLight (SLS) symbols below mirror the OS API verbatim

@@ -151,8 +151,6 @@ public final class BorderFX {
         CATransaction.commit()
     }
 
-    // MARK: - Timer
-
     /// Width breathes when both bounds are set with max > min.
     private var breathing: Bool {
         guard fx != nil, let lo = minW, let hi = maxW else { return false }

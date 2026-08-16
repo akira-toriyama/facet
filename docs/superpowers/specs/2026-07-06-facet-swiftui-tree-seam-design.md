@@ -32,7 +32,7 @@ The migration is **View-layer only**. `FacetAdapterNative` (AX/CGS),
 types, and `KbNav`/`fuzzyMatch` pure logic are **untouched**. The seam is
 purely `FacetView*` ↔ sill `ThemeKitUI`.
 
-## 2. Decisions (the 5 locked 論点)
+## 2. Decisions (the 5 locked questions)
 
 1. **Content-only migration.** Keep `KeyablePanel` / `PanelHost` as the
    **AppKit host**; embed the SwiftUI tree + search as an `NSHostingView`
@@ -461,7 +461,7 @@ sill-B ─▶ facet-1 ─▶ facet-2 ─▶ sill-A ─▶ facet-3
 - **sill-A** T1 binding (unblocks search; closes sill #17).
 - **facet-3** search (`ThemedTextFieldView`).
 
-**Merge unit = A (トミー 2026-07-06).** The five slices above are the
+**Merge unit = A (Tommy 2026-07-06).** The five slices above are the
 **development / local-commit order**, NOT five separate merges to `main`.
 facet-1 + facet-2 + facet-3 land as **one squash-merge** so `main` never
 sees a tree with dead DnD or search on the daily-driver WM. (sill-B and
@@ -472,7 +472,7 @@ Each PR: co-dev ritual — `../sill` path-dep during dev → `swift build`
 green → swap back to url + new SemVer floor → re-pin `Package.resolved` →
 single PR, **no path-dep left on main**. facet PRs carry the
 `SetStatus-task` footer for `t-tsxg`. Quality-first / phased / interruptible
-(commit locally freely; push waits for トミー's OK).
+(commit locally freely; push waits for Tommy's OK).
 
 ## 9. Success criteria (completion condition)
 
@@ -508,5 +508,5 @@ Meeting 1–5 = **seam confirmed** → unblocks F2 + cross-app rollout.
   A **Tart VM cannot verify DnD / #66 / kb-focus**: guest window-management
   candidate count is 0 (memory `[[facet-vm-ax-csreq-grant-and-mgmt-limit]]`),
   so the VM path is scoped to **render + theme only**. Success-criteria
-  2 (DnD commits) and 3 (#66 focus) **must** run on the host (with トミー's
+  2 (DnD commits) and 3 (#66 focus) **must** run on the host (with Tommy's
   per-run consent), driven by the closed-loop CLI + log protocol.

@@ -1,4 +1,4 @@
-// Intent-zone geometry for real-window mouse DnD (枠C).
+// Intent-zone geometry for real-window mouse DnD (Frame C).
 //
 // When a tiled window is dragged over another, the cursor's position
 // within the target window decides the drop intent: the central
@@ -15,7 +15,7 @@ import CoreGraphics
 
 /// Fraction of a tiled window's AREA taken by the central "swap" zone.
 /// Outside it, four triangular wedges select an insert edge. ~0.4 per
-/// the 枠C grill; tune on-device (a prediction overlay shows the
+/// the Frame C grill; tune on-device (a prediction overlay shows the
 /// outcome, so precision here isn't critical).
 public let intentZoneCenterFraction: CGFloat = 0.4
 

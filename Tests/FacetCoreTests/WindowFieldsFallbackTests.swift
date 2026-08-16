@@ -17,8 +17,6 @@ import Testing
 /// so those fallback tests are gone.)
 struct WindowFieldsFallbackTests {
 
-    // MARK: - fixtures
-
     private func win(_ id: Int, app: String = "App", title: String = "",
                      tags: [String] = [], floating: Bool = false,
                      sticky: Bool = false, master: Bool = false) -> Window {
@@ -27,8 +25,6 @@ struct WindowFieldsFallbackTests {
                isMaster: master, isSticky: sticky, tags: tags)
     }
 
-    // MARK: - ProjectedWindowFields
-
     @Test func projectedWorkspaceOverlay() {
         let f = ProjectedWindowFields(window: win(1), workspaceName: "Dev")
         #expect(f.filterValue("workspace") == "Dev")
@@ -36,12 +32,12 @@ struct WindowFieldsFallbackTests {
     }
 
     @Test func projectedEmptyWorkspaceReadsAsEmptyStringAndHasTrue() {
-        // EX-3 迷子: presence is ASSIGNMENT-gated (`workspaceName != nil`), NOT
+        // EX-3 orphan: presence is ASSIGNMENT-gated (`workspaceName != nil`), NOT
         // emptiness-gated. An assigned-but-UNNAMED workspace (name `""`) reads
         // its name back verbatim as `""` AND is PRESENT (`filterHas == true`),
         // so a `not workspace` lens does NOT catch it — only a true orphan
         // (`nil`) does. This is the deliberate nil-vs-`""` distinction (the
-        // 迷子 receptacle keys off the ASSIGNMENT, never the display name).
+        // the orphan receptacle keys off the ASSIGNMENT, never the display name).
         let f = ProjectedWindowFields(window: win(1), workspaceName: "")
         #expect(f.filterValue("workspace") == "")
         #expect(f.filterHas("workspace"))

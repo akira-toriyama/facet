@@ -420,8 +420,6 @@ extension FacetFilter.Op {
     }
 }
 
-// MARK: - Lexer
-
 /// One lexical token, carrying its 0-based Character offset for errors.
 enum Token: Sendable, Equatable {
     case word(String, offset: Int)     // bareword (field name, value, or keyword)

@@ -3,7 +3,7 @@
 //
 // On a `[desktop.N] type="isolate"` mac desktop the park is inherent, no opt-in:
 // the windows that fall OUTSIDE the `match` slide to the corner (anchor-park),
-// so the screen shows only the matched set — the dwm-style focus トミー's
+// so the screen shows only the matched set — the dwm-style focus Tommy's
 // original design (PR #313) delivered before t-0021 removed it. This revives
 // ONLY the park (never the union-tile that actually broke — the float-freeze),
 // and it is DERIVED from `match` every reconcile (continuous re-park, no stored

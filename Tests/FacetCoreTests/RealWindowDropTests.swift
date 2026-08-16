@@ -2,7 +2,7 @@ import Testing
 import CoreGraphics
 @testable import FacetCore
 
-/// Pure tests for the real-window-drag resolution (枠C PR-2): which
+/// Pure tests for the real-window-drag resolution (Frame C PR-2): which
 /// window was grabbed, which it was dropped onto, and the intent zone.
 /// Two side-by-side tiles on a 1600×900 screen: A = left half, B =
 /// right half.
@@ -14,8 +14,6 @@ struct RealWindowDropTests {
     private let b = (id: WindowID(serverID: 2),
                      frame: CGRect(x: 800, y: 0, width: 800, height: 900))
     private var wins: [(id: WindowID, frame: CGRect)] { [a, b] }
-
-    // MARK: - grab
 
     @Test func windowAtFindsContainingTile() {
         #expect(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 450))
@@ -29,7 +27,7 @@ struct RealWindowDropTests {
         #expect(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 2000)) == nil)
     }
 
-    // MARK: - grab edge band (枠C 機能2: native resize handle grabs)
+    // MARK: - grab edge band (Frame C feature 2: native resize handle grabs)
 
     @Test func edgeGrabJustOutsideArmsNearestWindow() {
         // The native resize handle sits ON / just outside the frame edge,
@@ -60,8 +58,6 @@ struct RealWindowDropTests {
         // 30px below every tile → outside the 8px band → no arm.
         #expect(RealWindowDrop.window(wins, at: CGPoint(x: 400, y: 930)) == nil)
     }
-
-    // MARK: - drop
 
     @Test func dropOnOtherCenterIsSwap() {
         // Drag A, drop in the center of B → swap.

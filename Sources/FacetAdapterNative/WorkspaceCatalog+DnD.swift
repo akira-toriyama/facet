@@ -8,8 +8,6 @@ import FacetCore
 
 extension WorkspaceCatalog {
 
-    // MARK: - Tree operations
-
     /// Rotate the parent split of `id`. Looks up the owning WS,
     /// then defers to `LayoutTree.toggleOrientation`. No-op when
     /// the window isn't in any tree (float / unknown / stack WS).
@@ -51,7 +49,7 @@ extension WorkspaceCatalog {
         return true
     }
 
-    // MARK: - Swap / insert (real-window DnD, 枠C)
+    // MARK: - Swap / insert (real-window DnD, Frame C)
 
     /// Swap two tiled windows within `n1Based`. bsp → swap their tree
     /// leaves; stateless / stack → swap their order slots. No-op
@@ -110,7 +108,7 @@ extension WorkspaceCatalog {
         return m == StatefulMode.stack || LayoutRegistry.engine(named: m) != nil
     }
 
-    // MARK: - Resize (real-window edge drag, 枠C 機能2)
+    // MARK: - Resize (real-window edge drag, Frame C feature 2)
 
     /// Follow a real resize of `id` to `newFrame` (FOLLOW model — the
     /// window was resized natively, we only adjust the ratio so the

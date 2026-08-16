@@ -27,8 +27,6 @@ import FacetViewRail
 @MainActor
 final class Controller: NSObject {
 
-    // MARK: - Wiring
-
     let backend: any WindowBackend
     /// Mutable so `reloadConfig()` can swap in fresh values when
     /// the user edits config.toml (file watcher) or sends
@@ -51,8 +49,6 @@ final class Controller: NSObject {
     /// for the tile / anchor-rescue side. Two observers, each
     /// scoped to its layer.
     private var displayObserver: DisplayChangeObserver?
-
-    // MARK: - State
 
     /// Latest workspaces snapshot — held so the grid view can render
     /// immediately on first show without round-tripping the backend.
@@ -235,7 +231,7 @@ final class Controller: NSObject {
     var thumbnailTimer: Timer?
     var thumbnailTimerInterval: TimeInterval?
 
-    // MARK: - Real-window DnD (枠C)
+    // MARK: - Real-window DnD (Frame C)
 
     /// Global mouse monitor that turns a drag of a tiled window onto
     /// another into a swap / insert. Installed once at start, lives the
@@ -247,7 +243,7 @@ final class Controller: NSObject {
     /// `predictedDropFrames` requests to the backend's response rate.
     var dndPredictionInFlight = false
 
-    /// Live real-window RESIZE follow (枠C 機能2). The gesture shares the
+    /// Live real-window RESIZE follow (Frame C feature 2). The gesture shares the
     /// DnD monitor; these track the resize half. `liveGestureIsResize`
     /// latches once a tick classifies the drag as a resize, so the move
     /// drop-overlay stays hidden for the rest of the gesture;
@@ -264,8 +260,6 @@ final class Controller: NSObject {
     /// clamp / app self-resize) can't latch resize or write a stray ratio.
     /// The in-flight gate serialises ticks, so this reads consistently.
     var liveResizePrevResized = false
-
-    // MARK: - Grid overview
 
     var gridOverlay: OverviewPanel?
     var gridView: GridView?
@@ -319,8 +313,6 @@ final class Controller: NSObject {
     /// Wide enough to coalesce a rename→match→layout burst AND to let an
     /// async backend round-trip land in `lastWorkspaces` first.
     let configExportDebounce: TimeInterval = 0.75
-
-    // MARK: - Init
 
     init(backend: any WindowBackend,
          config: FacetConfig,
@@ -442,8 +434,8 @@ final class Controller: NSObject {
                 // (a deliberate exitActive clears kbNav first — so a row-click /
                 // Enter never lands here, #66). A mac-desktop switch is the
                 // common trigger: the OS strips key from the shared
-                // `.canJoinAllSpaces` panel. Settle CLEANLY to passive (R12 / ト
-                // ミー: facet must NOT auto-grab focus on a switch).
+                // `.canJoinAllSpaces` panel. Settle CLEANLY to passive (R12 /
+                // Tommy: facet must NOT auto-grab focus on a switch).
                 Log.debug("panelKey lost (kbNav-active) → passive")
                 sidebarView.exitKbNav()
                 // Fully relinquish key, not just kbNav: otherwise `wantsKey`
@@ -465,8 +457,6 @@ final class Controller: NSObject {
             }
         }
     }
-
-    // MARK: - Lifecycle
 
     /// Start the controller: subscribe to backend events, schedule
     /// the fallback poll, run an initial refresh. Idempotent only
@@ -946,8 +936,6 @@ final class Controller: NSObject {
         panelHost.redrawPets()
     }
 
-    // MARK: - Refresh / apply
-
     private func requestRefresh() {
         if refreshPending { return }
         refreshPending = true
@@ -1209,7 +1197,7 @@ final class Controller: NSObject {
         //       (hide-reclaim restore: Cmd+H unhide / Cmd+M deminiaturize
         //       / tree-click reveal). It couldn't be captured while
         //       hidden, so its cached thumbnail is stale / blank —
-        //       re-capture now. (トミー's hide-reclaim PR2 requirement.)
+        //       re-capture now. (Tommy's hide-reclaim PR2 requirement.)
         // Invalidate drops the stale cache for every surface (tree
         // re-captures lazily on the next hover); the open grid / rail
         // then gets a fresh capture pushed via `pushFreshThumbnails`.
@@ -1401,8 +1389,6 @@ final class Controller: NSObject {
         writeStatus(lastWorkspaces)
     }
 
-    // MARK: - Visibility
-
     func setHidden(_ hide: Bool) {
         Log.debug("setHidden hide=\(hide)")
         userHidden = hide
@@ -1433,8 +1419,6 @@ final class Controller: NSObject {
         }
     }
 }
-
-// MARK: - TreeController conformance
 
 extension Controller: TreeController {
 

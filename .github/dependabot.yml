@@ -31,10 +31,16 @@ updates:
     # dependency name (akira-toriyama/.github/.github/workflows/x.yml) matches.
     ignore:
       - dependency-name: "akira-toriyama/*"
-    # gitmoji + Conventional Commits so bot PRs match the house convention
-    # (CONTRIBUTING.md). Bots are exempt from commit-lint, so this is decoration.
+    # Bot PRs ride glyph's one sanctioned grammar (t-271n) — the legacy
+    # `<code> type(scope):` token retired with its producers. The TRAILING
+    # SPACE is load-bearing: dependabot appends ": " only when the prefix
+    # ends in [A-Za-z0-9)\]] (pr_name_prefixer.rb), so ")" would yield
+    # ":arrow_up:(deps): bump ..." — the legacy separator again. Measured
+    # live on glyph-test (#39 recreate): the space suppresses the colon and
+    # the full message lints rc=0. Bots stay lint-exempt; what this buys is
+    # a one-grammar HISTORY.
     commit-message:
-      prefix: ":arrow_up: build(deps)"
+      prefix: ":arrow_up:(deps) "
 
   # Swift package (SPM) updates for the Swift apps (chord, halo, perch, sill, …):
   # keeps in-family deps like Sill fresh. Appended by fleet-sync only where a
@@ -51,4 +57,5 @@ updates:
       swift:
         patterns: ["*"]
     commit-message:
-      prefix: ":arrow_up: build(deps)"
+      # Trailing space is load-bearing — see the base fleet/dependabot.yml.
+      prefix: ":arrow_up:(deps) "

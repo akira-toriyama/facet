@@ -1,0 +1,20 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/workflows/actionlint.yml
+# Complements zizmor.yml, does not overlap it: actionlint = workflow syntax,
+# expression types, shellcheck over run: blocks; zizmor = Actions security. The
+# actionlint version + SHA256 are pinned once in the reusable below, so this
+# caller carries none — nothing here for a per-repo Dependabot to bump. Per-repo
+# waivers live in the repo's own .github/actionlint.yaml (actionlint
+# auto-discovers it in the caller's checkout; no input plumbing needed).
+name: actionlint
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    uses: akira-toriyama/.github/.github/workflows/actionlint.yml@v2

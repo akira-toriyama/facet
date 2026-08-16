@@ -58,8 +58,6 @@ struct GridMathTests {
         }
     }
 
-    // MARK: - gridRowCount
-
     @Test func rowCountFitsOneRowForCountEqualToCols() {
         #expect(gridRowCount(wsCount: 4, cols: 4) == 1)
     }
@@ -80,8 +78,6 @@ struct GridMathTests {
                 "cols clamps to 1, so 5 workspaces → 5 rows")
         #expect(gridRowCount(wsCount: 5, cols: -3) == 5)
     }
-
-    // MARK: - gridCellSize
 
     @Test func cellSizeMirrorsScreenAspect() {
         // Standard 16:9 screen, plenty of room → aspect drives.
@@ -108,8 +104,6 @@ struct GridMathTests {
         #expect(s.width > 0)
         #expect(s.height > 0)
     }
-
-    // MARK: - gridScaledWindowRect
 
     @Test func scaledWindowRectMapsFullScreenToFullCell() {
         let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)

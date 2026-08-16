@@ -1,4 +1,4 @@
-// Real-window DnD prediction overlay (枠C PR-3, the 演出).
+// Real-window DnD prediction overlay (Frame C PR-3, the showpiece).
 //
 // While the user drags a tiled window, this shows the layout that WILL
 // result if they drop right now — HazeOver-style: a dark veil dims the

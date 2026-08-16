@@ -23,8 +23,6 @@ struct FilterAliasDecodeTests {
         diags.filter { $0.severity == .error }.map(\.message)
     }
 
-    // MARK: - [alias] table decode
-
     @Test func decodesAValidTable() {
         let (aliases, diags) = decode("""
         [alias]

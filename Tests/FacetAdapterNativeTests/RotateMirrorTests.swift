@@ -11,8 +11,6 @@ struct RotateMirrorTests {
 
     private let rect = CGRect(x: 0, y: 0, width: 1600, height: 900)
 
-    // MARK: - rotate
-
     @Test func rotate90TurnsLeftRightIntoTopBottom() {
         var t = twoVertical()
         t.rotate(degrees: 90)        // clockwise: left → top
@@ -59,8 +57,6 @@ struct RotateMirrorTests {
         t.rotate(degrees: 90)
         #expect(t.leaves == [])
     }
-
-    // MARK: - mirror
 
     @Test func mirrorHorizontalSwapsLeftRight() {
         var t = twoVertical()

@@ -28,8 +28,6 @@ struct WheelStepsTests {
                        precise: false, gestureBegan: false) == -1)
     }
 
-    // MARK: - zero delta
-
     @Test func zeroDeltaIsNoStep() {
         var accum: CGFloat = 5
         #expect(

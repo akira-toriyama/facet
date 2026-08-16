@@ -69,7 +69,7 @@ struct ProjectedWindowFields: WindowFields {
     /// (ASSIGNED to an unnamed workspace — "show the number"), so an unnamed
     /// workspace never falls out of a bare `workspace` filter.
     ///
-    /// `nil` used to mean 迷子 (a window in NO workspace). t-6rbc retired that:
+    /// `nil` used to mean an orphan (a window in NO workspace). t-6rbc retired that:
     /// every managed window is in exactly one workspace, and every production
     /// call site passes a real name — so nothing reaches `nil` and `not
     /// workspace` matches nothing. Optional survives only as the total form of

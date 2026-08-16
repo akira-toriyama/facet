@@ -60,7 +60,7 @@ keyDown monitor + #66 activation dance stay host-side unchanged.
 - **Row identity is the composite `(group, WindowID)`**, never `WindowID` alone — `group` is the row's SECTION ordinal, and the click / DnD / kb routing needs to know *which section* a row sits in (see Task 2 for the full rationale; the original "multi-match duplication" reason died with the section-lens, t-ec9s).
 - **sill dep**: this phase needs sill product `ThemeKitUI`. During dev use a `../sill` path-dep; before the PR, swap to a URL + SemVer floor and re-pin `Package.resolved` (no path-dep on main).
 - **Custom/upstream glyphs (`spiral`, `bsp`, `master-*`) are vendored by sill-B**, which lands before this phase. Task 9 assumes those slugs resolve from sill's bundle.
-- **Commits**: gitmoji + Conventional Commits (`<:gitmoji:> <type>(<scope>): <subject>`). Local hook at `scripts/hooks/commit-msg`. Commit locally freely; do NOT push without トミー's OK.
+- **Commits**: gitmoji + Conventional Commits (`<:gitmoji:> <type>(<scope>): <subject>`). Local hook at `scripts/hooks/commit-msg`. Commit locally freely; do NOT push without Tommy's OK.
 - **Branch**: `feat/swiftui-tree-render` (off `main`). facet-2 (DnD) and facet-3 (search) continue on **this same branch** so the three land as **one squash-merge** (spec §8, merge=A) — `main` never sees a DnD-/search-dead tree.
 
 ---

@@ -1,69 +1,96 @@
-# rail — summoned WS switcher（Theme D (ii) 設計メモ）
+# rail — summoned WS switcher (the Theme D (ii) design memo)
 
-Status: ✅ **shipped #109 (2026-05-31)** — `facet --view rail` として出荷（`Sources/FacetViewRail/`、`canonicalViews` に登録）。⚠️ **実装は本メモの当初設計から乖離**: shipped 版は「画面下部チップ + 中央ホバープレビュー」ではなく、**全画面 backdrop + 中央 HERO（active WS を大表示）+ 画面下部に全 WS の window サムネ列**（grid 寄りの俯瞰）。←/→ で browse・click で切替・window / header ドラッグで move / swap。以下本文は **Theme D (ii) grill 当時の設計記録**。コードの正は `Sources/FacetViewRail/`（RailView 本体 + RailHeader / RailDrag）。全画面 takeover パネルは rail 専用ではなく FacetView の共有 `OverviewPanel`（旧 `RailOverlay` / `GridOverlay` を統合）。
-図解: [`theme-d-rail.excalidraw`](theme-d-rail.excalidraw)
-（Excalidraw で再編集可。Theme D 全体は [architecture.md](architecture.md) の "Themes A–D" 参照）
+Status: ✅ **shipped #109 (2026-05-31)** — shipped as `facet --view rail`
+(`Sources/FacetViewRail/`, registered in `canonicalViews`). ⚠️ **The
+implementation diverged from this memo's original design**: the shipped
+version is not "bottom-of-screen chips + a central hover preview" but a
+**full-screen backdrop + central HERO (the active WS shown large) + a
+bottom row of every WS's window thumbnails** (a grid-leaning overview).
+←/→ browses, click switches, window / header drag moves / swaps. The body
+below is the **design record from the Theme D (ii) "grill" era**. The code
+truth is `Sources/FacetViewRail/` (RailView proper + RailHeader /
+RailDrag). The full-screen takeover panel is not rail-specific but
+FacetView's shared `OverviewPanel` (merging the old `RailOverlay` /
+`GridOverlay`).
+Diagram: [`theme-d-rail.excalidraw`](theme-d-rail.excalidraw)
+(re-editable in Excalidraw. For Theme D overall see
+[architecture.md](architecture.md)'s "Themes A–D")
 
-## rail とは
+## What rail is
 
-WS を横一列で見せる **召喚式の「速い切り替え」ビュー**（Mission Control /
-Win11 タスクビュー型）。Grid と同じく一時的に画面へ重ねて表示し、操作後に
-閉じる。常設ではない。
+A **summoned "fast switching" view** showing the WSs in one row (Mission
+Control / Win11 task-view style). Like Grid, it overlays the screen
+temporarily and closes after the interaction. Not permanent.
 
-- ホットキーで召喚 → 操作 → Esc で閉じる（Grid の召喚 / dismiss を流用）
-- 画面下部に WS を横一列のチップで並べる（チップ＝番号 + アプリアイコン）
-- **ホバー → 中央に 1 枚だけ大きくプレビュー**（詳細はチップではなく中央プレビューが担う）
-- クリックで切替
+- Summon by hotkey → interact → Esc closes (reusing Grid's summon /
+  dismiss)
+- WSs line up as chips in one row at the bottom of the screen (chip =
+  number + app icons)
+- **Hover → exactly one large preview at center** (detail is the central
+  preview's job, not the chip's)
+- Click switches
 
-## 決定事項（6 課題の決着）
+## Decisions (settling the 6 issues)
 
-| # | 課題 | 結論 |
+| # | Issue | Conclusion |
 |---|------|------|
-| 1 | 常設だと画面の場所を取り合う（タイリングと衝突） | **消滅** — 召喚式なので一時的に重ねるだけ。タイリング領域の予約は不要 |
-| 2 | 並べ替えで hotkey 番号がズレる | **A = swap を採用** — ドラッグは grid と同じ「スロット固定・中身だけ交換」。Phase α の番号保存凍結を守る。true reorder（番号振り直し）は不採用 |
-| 3 | view か dock か / ライフサイクル | **Grid と同じ召喚式 view** として扱う（`--view=rail` 想定）。dock ではない |
-| 4 | 中央プレビューの配置・multi-display | 軽微。`PreviewOverlayPool` 流用 + 配置ロジックのみ新規（詳細は未着手） |
-| 5 | Grid と機能が重複しないか | **両方いる** — 役割が違う。rail = 速い切替（switcher）/ Grid = じっくり管理（manager, window 移動・セルスワップ・俯瞰）。共存 OK＝ rail は作る価値あり |
-| 6 | focus を奪わないか | ほぼ解決。`KeyablePanel` の非アクティブパターン（keyboard nav 時のみ key 化） |
+| 1 | A permanent bar competes for screen space (fights tiling) | **Vanished** — it is summoned, so it only overlays temporarily. No tiling-area reservation needed |
+| 2 | Reordering shifts hotkey numbers | **A = swap adopted** — dragging is grid's "slots fixed, contents exchange". Preserves Phase α's number-preservation freeze. True reorder (renumbering) rejected |
+| 3 | View or dock / lifecycle | Treated as a **summoned view like Grid** (`--view=rail` anticipated). Not a dock |
+| 4 | Central-preview placement / multi-display | Minor. Reuse `PreviewOverlayPool` + only the placement logic is new (detail untouched) |
+| 5 | Does it duplicate Grid? | **Both are needed** — different roles. rail = fast switching (switcher) / Grid = deliberate management (manager: window moves, cell swaps, overview). Coexistence OK = rail is worth building |
+| 6 | Does it steal focus? | Mostly solved. `KeyablePanel`'s inactive pattern (key only during keyboard nav) |
 
-### overflow（WS が増えた時）
+### overflow (when WSs grow)
 
-> ⚠️ **方針は 2 回変わった。現行は 2-b の active 中央カルーセル。**
-> ① 当初＝no-scroll・shrink→wrap（下記・不採用）。② M9-3/M9-4＝固定サイズ
-> cell + スクロール（見切れ peek）。③ **2-b（現行）＝active を strip 中央に
-> 固定し strip が回転するカルーセル**（`[rail] cells` 個・超過は縮小せず回転・
-> 両端 peek・browse 矢印=回転/Return=切替+閉じ）。M9-4 の scroll 機構は 2-b で
-> 置換（`railScrollToShow`→`railCarouselOffsets`）。設計は memory
-> `[[facet-rail-carousel-decisions]]` が canonical。下の当初案①は歴史的記録。
+> ⚠️ **The policy changed twice. Current is 2-b's active-centered
+> carousel.**
+> ① Originally = no-scroll, shrink→wrap (below — rejected). ② M9-3/M9-4 =
+> fixed-size cells + scrolling (clipped-edge peek). ③ **2-b (current) =
+> the carousel pinning active to the strip center while the strip
+> rotates** (`[rail] cells` cells; overflow rotates instead of shrinking;
+> peek at both ends; browse arrows = rotate / Return = switch + close).
+> M9-4's scroll machinery was replaced by 2-b
+> (`railScrollToShow`→`railCarouselOffsets`). The canonical design is
+> memory `[[facet-rail-carousel-decisions]]`. Original plan ① below is a
+> historical record.
 
-当初案（不採用）: scroll は採用しない（要素が隠れ「一眺」に反する）。
-**折り返し（wrap）**で全 WS 可視を維持:
+Original plan (rejected): no scroll (hidden elements defeat
+"one glance"). Keep every WS visible by **wrapping**:
 
-1. まずチップを shrink（番号 + アイコンだけなので耐性が高い）
-2. 下限を割ったら 2 行目に wrap（番号順は維持）
-3. 行数にも上限（2〜3）を設け、それ以上はさらに縮小
+1. First shrink the chips (number + icons only, so they tolerate it)
+2. Below the floor, wrap to a 2nd row (numeric order kept)
+3. Cap the row count too (2-3); beyond that, shrink further
 
-## 実装の見立て
+## Implementation estimate
 
-共有層 `FacetView` の既存部品でほぼ賄える:
+The shared `FacetView` layer's existing parts cover most of it:
 
-| 必要 | 流用部品 |
+| Need | Reused part |
 |------|----------|
-| ホバー→中央プレビュー（WS の全 window をまとめて表示） | `PreviewOverlayPool` + `PreviewOverlay` |
-| window 画像キャプチャ（TTL キャッシュ） | `SCKWindowCapture`（`FacetCapture`・FacetCore の `WindowCapturing` port 経由） |
-| focus を奪わない召喚パネル | `KeyablePanel` |
-| 配色 / テーマ | `Theme` / `Palette` |
+| Hover → central preview (all of a WS's windows together) | `PreviewOverlayPool` + `PreviewOverlay` |
+| Window image capture (TTL cache) | `SCKWindowCapture` (`FacetCapture`, via FacetCore's `WindowCapturing` port) |
+| A summoned panel that steals no focus | `KeyablePanel` |
+| Colors / theme | `Theme` / `Palette` |
 
-**新規で書くのは実質 2 つ**:
+**Only 2 genuinely new pieces**:
 
-1. 横一列レイアウト計算（shrink → wrap の純関数。`GridMath` 相当 → FacetCore でユニットテスト可能）
-2. rail パネルのコントローラ（Tree / Grid のコントローラと同型）
+1. The one-row layout computation (a pure shrink → wrap function —
+   `GridMath`'s analogue → unit-testable in FacetCore)
+2. The rail panel's controller (same shape as Tree / Grid's controllers)
 
-DnD / クリックは既存の「掴んだ対象がアクションを決める」モデルを踏襲。
+DnD / clicks follow the existing "the grabbed target decides the action"
+model.
 
-## 未着手 / 次に詰める
+## Untouched / next to pin down
 
-- ~~召喚ホットキー・CLI（`facet --view=rail` の是非）~~ → ✅ `--view rail` で shipped (#109、`canonicalViews`)。なお起動時の自動表示は無い（facet は常に agent-only 起動・どの view も召喚のみ）
-- 課題4 の中央プレビュー配置ロジックと multi-display の挙動（実装済 HERO + サムネ列での詰めは将来の rail edge / carousel 強化で継続。scroll は 2-b で廃止）
-- 着手前 invariants（[architecture.md](architecture.md) と同じ）: `facet-buddha-palm-principle`
-  / `facet-scope-exclusions` / `WindowBackend` protocol 経由設計を壊さない
+- ~~The summon hotkey / CLI (whether `facet --view=rail` is right)~~ →
+  ✅ shipped as `--view rail` (#109, `canonicalViews`). Note there is no
+  auto-show at launch (facet always starts agent-only; every view is
+  summoned)
+- Issue 4's central-preview placement logic and multi-display behavior
+  (refinement on the shipped HERO + thumbnail row continues in future
+  rail edge / carousel work; scroll was retired by 2-b)
+- Pre-work invariants (same as [architecture.md](architecture.md)): don't
+  break `facet-buddha-palm-principle` / `facet-scope-exclusions` / the
+  `WindowBackend`-protocol-mediated design

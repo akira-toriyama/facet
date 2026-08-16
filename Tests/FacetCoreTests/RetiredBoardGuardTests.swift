@@ -17,8 +17,6 @@ import Testing
 /// The guard survives as the thing that names the retired block.
 struct RetiredBoardGuardTests {
 
-    // MARK: - detection
-
     @Test func findsRetiredBoardHeaders() {
         let found = FacetConfig.retiredBoardHeaders(inTOML: """
         [[desktop.2.tab]]

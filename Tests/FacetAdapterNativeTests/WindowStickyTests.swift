@@ -11,8 +11,6 @@ import Testing
 /// we cover the catalog state machine without AX / AppKit / OS.
 struct WindowStickyTests {
 
-    // MARK: - setSticky
-
     @Test func setStickyMarksAndForcesFloating() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
@@ -80,8 +78,6 @@ struct WindowStickyTests {
                       "a normal window restores on return")
     }
 
-    // MARK: - clearSticky
-
     @Test func clearStickyDropsStateAndUnfloats() {
         var c = seededCatalog()
         _ = c.reconcile(live: [window(10)])
@@ -142,8 +138,6 @@ struct WindowStickyTests {
         #expect(c.windowMap[wid(10)]?.workspace == 1,
                        "the rejected move must not relocate its home WS")
     }
-
-    // MARK: - Prune on close
 
     @Test func stickyPrunedWhenWindowCloses() {
         var c = seededCatalog()

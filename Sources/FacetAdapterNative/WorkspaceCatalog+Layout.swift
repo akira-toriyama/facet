@@ -12,7 +12,7 @@ extension WorkspaceCatalog {
 
     /// Remove `id` from any layout container (`layoutTrees` and
     /// `stackOrders`) that holds it. Memory: lessons file
-    /// "stackOrders / layoutTrees 並列メンテ" — every mutator
+    /// "stackOrders / layoutTrees maintained in parallel" — every mutator
     /// must touch both, this is the one place to forget.
     /// Idempotent.
     mutating func detachFromLayouts(_ id: WindowID) {
@@ -68,8 +68,6 @@ extension WorkspaceCatalog {
             stackOrders[n1Based] = order
         }
     }
-
-    // MARK: - Layout mode
 
     // (`defaultMode` is a stored property, so it lives on the primary
     // declaration — extensions can't hold stored state.)
@@ -129,8 +127,6 @@ extension WorkspaceCatalog {
         }
         return normalised
     }
-
-    // MARK: - Stack ops
 
     /// Ordered stack members of `n1Based` (top first), or empty
     /// when the WS isn't in `"stack"` mode.
@@ -237,8 +233,6 @@ extension WorkspaceCatalog {
         }
         return windows.predictedFocus()
     }
-
-    // MARK: - Floating
 
     func isFloating(_ id: WindowID) -> Bool {
         floatingWindows.contains(id)

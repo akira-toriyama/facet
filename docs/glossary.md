@@ -1,42 +1,46 @@
 ---
-title: facet 用語集
+title: facet glossary
 tags: [glossary, macos, window-manager]
 repo: facet
 aliases: []
 ---
 
-# 用語集 — facet のユビキタス言語
+# Glossary — facet's ubiquitous language
 
-facet を構成する各パーツの **正規の呼び名** をまとめた規範ドキュメント。
-**コード・ドキュメント・コミットメッセージ・PR タイトル・Claude Code への
-プロンプト、すべてここに載っている名前のみを使う**。同義語は揺らぎを生む。
-1 つに決めて、それで通す。
+The normative document collecting the **canonical names** of every part of
+facet. **Code, documentation, commit messages, PR titles, and prompts to
+Claude Code use only the names listed here.** Synonyms breed drift: pick one
+name, use it everywhere.
 
-なお **正規名は英語のまま** 保持する。コード識別子・設定キー
-（`FacetCore`, `WindowBackend`, `[[desktop.N.section]]`, `pal` など）と一対一に対応
-させるため。日本語化するのは説明文だけ。
+Canonical names stay **in English**, 1:1 with code identifiers and config
+keys (`FacetCore`, `WindowBackend`, `[[desktop.N.section]]`, `pal`, …).
 
-なお **似て紛れやすい 5 概念** は最優先で区別する（下の「5 つの中核概念」を
-参照）。とくに **mac desktop**（OS の native Space）と **facet workspace**
-（facet 独自の抽象）は語感が近く混同の温床なので、コード識別子・設定キー・
-コメントすべてで綴り分ける。階層は **mac desktop > [[section]] > window**、
-plus **[[facet workspace]]**（各 section の空間セル）と **[[isolate desktop]]**
-（`[desktop.N] type=isolate` の常時 match 駆動 desktop）。**isolate は desktop の型で
-あって section ではない**（旧 section-lens は t-ec9s で退役・旧称 `lens` は t-mqqw で退役）。
+The **5 easily-confused core concepts** are distinguished before anything
+else (see "The 5 core concepts" below). In particular **mac desktop** (the
+OS's native Space) and **facet workspace** (facet's own abstraction) sound
+alike and are a breeding ground for confusion, so code identifiers, config
+keys, and comments all spell them apart. The hierarchy is **mac desktop >
+[[section]] > window**, plus **[[facet workspace]]** (each section's spatial
+cell) and **[[isolate desktop]]** (the always-on match-driven desktop of
+`[desktop.N] type=isolate`). **isolate is a desktop type, not a section**
+(the old section-lens retired in t-ec9s; the older name `lens` retired in
+t-mqqw).
 
-用語が足りなければ、その用語を導入する PR で同時にこのファイルへ追記する。
-用語名を変える場合は、コード・ドキュメント・このファイルを **同一 PR で**
-書き換える。
+When a term is missing, add it to this file in the same PR that introduces
+it. When renaming a term, rewrite code, docs, and this file **in one PR**.
 
-> 各エントリの形式: **正規名**, 1〜2 行の定義, 設定 / コードでの所在,
-> そして `Don't call it:` 行 — このエントリが置き換える誤った呼び名のリスト。
+> Entry format: **canonical name**, a 1-2 line definition, where it lives in
+> config / code, and a `Don't call it:` line — the list of wrong names this
+> entry replaces.
 
 ---
 
-## アーキテクチャ全体像
+## Architecture overview
 
-facet は **ヘキサゴナル 3 層分割**（[docs/architecture.md](architecture.md)）。
-下の図は層と主要な seam を示す。レイヤーをまたぐ型は常に protocol を介す。
+facet is a **hexagonal 3-layer split**
+([docs/architecture.md](architecture.md)). The diagram below shows the
+layers and the main seams. Types crossing a layer always go through a
+protocol.
 
 ```mermaid
 flowchart TB
@@ -72,764 +76,923 @@ flowchart TB
 
 ---
 
-## レイヤー / モジュール
+## Layers / modules
 
 ### FacetCore
-**純ロジック層**。CoreGraphics の値型は OK だが AppKit / AX / バックエンド型
-は持ち込まない。XCTest で単体検証可能であることが層境界の根拠。
-- 場所: [`Sources/FacetCore/`](../Sources/FacetCore/)
-- 含むもの: `Models`, `WindowBackend` protocol, `FacetConfig`, `Log`
-  （`Controller` は AppKit に依存する Application coordinator なので
-  [[FacetApp]] 側。architecture.md の Application 層に一致）
-- **Don't call it:** domain layer, business logic, model layer, ドメイン層
+The **pure-logic layer**. CoreGraphics value types are OK; AppKit / AX /
+backend types never enter. Being unit-testable under XCTest is the rationale
+for the layer boundary.
+- Location: [`Sources/FacetCore/`](../Sources/FacetCore/)
+- Contains: `Models`, the `WindowBackend` protocol, `FacetConfig`, `Log`
+  (`Controller` is the AppKit-dependent application coordinator, so it lives
+  in [[FacetApp]] — matching architecture.md's Application layer)
+- **Don't call it:** domain layer, business logic, model layer
 
 ### FacetAdapterNative
-**window 管理の唯一の backend adapter**（v2.0.0 で `rift` 廃止。画像 capture は
-別軸の [[FacetCapture]]）。AX / CGS / SkyLight プライベート API への入口。
-[[WindowBackend]] を実装。バックエンド固有の型は **この中に閉じ込める**。
-- 場所: [`Sources/FacetAdapterNative/`](../Sources/FacetAdapterNative/)
-- **Don't call it:** native backend, ax adapter, アダプタレイヤー（一般化したい時のみ）
+The **sole backend adapter for window management** (`rift` retired in
+v2.0.0; image capture is the separate axis [[FacetCapture]]). The doorway to
+the AX / CGS / SkyLight private APIs. Implements [[WindowBackend]].
+Backend-specific types are **confined inside**.
+- Location: [`Sources/FacetAdapterNative/`](../Sources/FacetAdapterNative/)
+- **Don't call it:** native backend, ax adapter
 
 ### FacetCapture
-**画像 capture adapter**（P7）。`ScreenCaptureKit` の唯一の consumer で、
-FacetCore の [[WindowCapturing]] port を実装（`SCKWindowCapture`）。
-window 管理（AX/CGS）とは別軸の backend なので [[FacetAdapterNative]] に畳まず
-独立モジュールにする。`FacetView` は capture backend を import しない。
-- 場所: [`Sources/FacetCapture/`](../Sources/FacetCapture/)
-- **Don't call it:** preview module, screenshot adapter, WindowPreview（旧 FacetView 内の型名・P7 で改名移設）
+The **image-capture adapter** (P7). The sole consumer of
+`ScreenCaptureKit`, implementing FacetCore's [[WindowCapturing]] port
+(`SCKWindowCapture`). A backend on a different axis from window management
+(AX/CGS), so it stays an independent module rather than folding into
+[[FacetAdapterNative]]. `FacetView` never imports a capture backend.
+- Location: [`Sources/FacetCapture/`](../Sources/FacetCapture/)
+- **Don't call it:** preview module, screenshot adapter, WindowPreview (the
+  old FacetView type name — renamed and moved in P7)
 
 ### FacetAccessibility
-M5 で抽出した **AX ヘルパ群**。`AXFocus`, `AXTitles`, `Focus.assert /
-withRetry`, `AXGeom`, `Displays`, `WindowEventObserver`, `MacDesktops` がここに
-住む。Phase ε 後の唯一の consumer は `FacetAdapterNative`。新規 AX コードは
-backend 固有でない限りここへ。
-- 場所: [`Sources/FacetAccessibility/`](../Sources/FacetAccessibility/)
-- **Don't call it:** ax utils, accessibility helpers, AX ユーティリティ
+The **AX helper family** extracted in M5. `AXFocus`, `AXTitles`,
+`Focus.assert / withRetry`, `AXGeom`, `Displays`, `WindowEventObserver`, and
+`MacDesktops` live here. Since Phase ε its sole consumer is
+`FacetAdapterNative`. New AX code goes here unless backend-specific.
+- Location: [`Sources/FacetAccessibility/`](../Sources/FacetAccessibility/)
+- **Don't call it:** ax utils, accessibility helpers
 
 ### FacetView
-**GUI 専用層**。View は `WindowBackend` protocol だけを見る。具体 adapter を
-直接参照しない。
-- 場所: [`Sources/FacetView/`](../Sources/FacetView/)
-- **Don't call it:** ui layer, presentation layer, ビュー層
+The **GUI-only layer**. Views see only the `WindowBackend` protocol — never
+a concrete adapter.
+- Location: [`Sources/FacetView/`](../Sources/FacetView/)
+- **Don't call it:** ui layer, presentation layer
 
 ### WindowBackend (port)
-Core と **window 管理 adapter** の間の seam（hexagonal port）。workspaces /
-move / focus / switch / layout / display / event stream を抽象化。Controller /
-View が見るのはこの protocol のみ。capture は別 port（[[WindowCapturing]]）。
-- 定義: [`Sources/FacetCore/`](../Sources/FacetCore/) 内
-- **Don't call it:** adapter protocol, backend interface, バックエンド契約
+The seam (hexagonal port) between Core and the **window-management
+adapter**. Abstracts workspaces / move / focus / switch / layout / display /
+the event stream. Controller / View see only this protocol. Capture is a
+separate port ([[WindowCapturing]]).
+- Defined in: [`Sources/FacetCore/`](../Sources/FacetCore/)
+- **Don't call it:** adapter protocol, backend interface
 
 ### WindowCapturing (port)
-Core と **capture adapter** の間の seam（hexagonal port・P7）。per-window 画像
-capture（overview サムネ + tree hover preview）を抽象化。[[WindowBackend]] とは
-直交する別軸（window 管理 ではなく描画用 asset の取得）。`CGImage` を返す
-（FacetCore は AppKit-free）＝view 側が `NSImage` に包む。唯一の実装は
-[[FacetCapture]] の `SCKWindowCapture`（ScreenCaptureKit）。
-- 定義: [`Sources/FacetCore/WindowCapturing.swift`](../Sources/FacetCore/WindowCapturing.swift)
-- **Don't call it:** preview protocol, screenshot interface, WindowPreview（旧型名）
+The seam (hexagonal port, P7) between Core and the **capture adapter**.
+Abstracts per-window image capture (overview thumbnails + tree hover
+preview). Orthogonal to [[WindowBackend]] (fetching drawing assets, not
+managing windows). Returns `CGImage` (FacetCore is AppKit-free) = the view
+side wraps it in `NSImage`. Sole implementation:
+[[FacetCapture]]'s `SCKWindowCapture` (ScreenCaptureKit).
+- Defined in: [`Sources/FacetCore/WindowCapturing.swift`](../Sources/FacetCore/WindowCapturing.swift)
+- **Don't call it:** preview protocol, screenshot interface, WindowPreview
+  (the old type name)
 
 ---
 
-## ドメインモデル
+## Domain model
 
-### 5 つの中核概念（最優先で区別する）
+### The 5 core concepts (distinguish these first)
 
-似た語が複数の意味で流通していた歴史があるため、まずこの 5 つを綴り分ける。
+Similar words have historically circulated with different meanings, so spell
+these five apart before anything else.
 
-| 正規名 | 意味 | コード / 設定での所在 |
+| Canonical name | Meaning | Where in code / config |
 |---|---|---|
-| **mac desktop** | macOS の native Space（OS の仮想デスクトップ。Mission Control の "Desktop N"）。**型付き**（`workspace` / `isolate`） | `MacDesktops`, `activeMacDesktopID`, `[desktop.N]` / `[[desktop.N.section]]` |
-| **section** | config が宣言する **順序付きの表示単位**（tree の並び）＝各 [[facet workspace]] の空間セル | `DesktopSection`, `ProjectedSection`, `FilterProjection` |
-| **window** | facet が扱う個々の OS window（title は AX 解決） | `Window`, `WindowSlot`, `AXTitles` |
-| **facet workspace** | facet 独自の window グループ抽象（1 mac desktop に N 個） | `WorkspaceCatalog`, `workspaces()` |
-| **isolate desktop** | `[desktop.N] type=isolate` の **常時有効な filtered mac desktop**。`match` の窓を `layout` でタイルし残りを park（tree 専用）。**旧称 `lens` は t-mqqw で退役** | `desktopType`, `desktopIsolate`, `applyIsolatePark` |
+| **mac desktop** | macOS's native Space (the OS virtual desktop; Mission Control's "Desktop N"). **Typed** (`workspace` / `isolate`) | `MacDesktops`, `activeMacDesktopID`, `[desktop.N]` / `[[desktop.N.section]]` |
+| **section** | the **ordered display unit** config declares (the tree's ordering) = each [[facet workspace]]'s spatial cell | `DesktopSection`, `ProjectedSection`, `FilterProjection` |
+| **window** | an individual OS window facet manages (title resolved via AX) | `Window`, `WindowSlot`, `AXTitles` |
+| **facet workspace** | facet's own window-group abstraction (N per mac desktop) | `WorkspaceCatalog`, `workspaces()` |
+| **isolate desktop** | the **always-on filtered mac desktop** of `[desktop.N] type=isolate`: tiles the `match`ing windows via `layout` and parks the rest (tree-only). **The old name `lens` retired in t-mqqw** | `desktopType`, `desktopIsolate`, `applyIsolatePark` |
 
-**mac desktop ↔ facet workspace は最重要の混同ポイント**。OS のデスクトップ
-（mac desktop）と facet の抽象（facet workspace）は別物で、1 mac desktop が
-複数の facet workspace を抱える（[[per-mac-desktop workspaces]]）。M11-2 で
-両者を 1:1 にする予定だが、それは**実装上の関係**であって、概念としては
-区別し続ける。**facet workspace ↔ [[isolate desktop]]** も別物（前者は窓を並べる
-空間セル・後者は窓を絞り込む型付き mac desktop）。**facet view**（`tree`/`grid`/
-`rail`）は "どう見せるか" の直交軸で、上の 5 概念（何を・どこに）とは別レイヤー。
+**mac desktop ↔ facet workspace is the top confusion hazard.** The OS
+desktop (mac desktop) and facet's abstraction (facet workspace) are
+different things; one mac desktop holds several facet workspaces
+([[per-mac-desktop workspaces]]). M11-2 plans to make them 1:1, but that is
+an **implementation relationship** — conceptually they stay distinct.
+**facet workspace ↔ [[isolate desktop]]** are also distinct (the former is a
+spatial cell that arranges windows; the latter a typed mac desktop that
+filters them). **facet view** (`tree`/`grid`/`rail`) is the orthogonal
+"how to show" axis, a different layer from the 5 concepts above (what /
+where).
 
 ### mac desktop
-macOS の **native Space**（OS が提供する仮想デスクトップ。Mission Control が
-"Desktop 1" / "Desktop 2" … と表示するもの）。facet はこれを **read-only** に
-しか触らない（別 mac desktop への window 移動は SIP-off が要るので非対応）。
-- コード: `MacDesktops`（in `FacetAccessibility`・SkyLight 経由の read-only
-  クエリ）, `NativeAdapter.activeMacDesktopID`
-- 設定: `[[desktop.N.section]]` / `[desktop.N]`（typed desktop・[[isolate desktop]]）
-  ブロック（Mission Control 順の ordinal で指定）
-- UI: tree の上部ハンドル帯に "Desktop N"（macOS の呼称に合わせた表示ラベル）
-- **Don't call it:** Space, native Space, workspace, virtual desktop（facet
-  workspace と紛れる）, デスクトップ別
-  - ※ Apple の API 名（`SLSGetActiveSpace`, `NSWorkspace.activeSpaceDidChange`,
-    SLS の `"Spaces"` dict キー等）は Apple の語のまま残す。"mac desktop" に
-    綴り替えるのは facet 自身の surface だけ。
+macOS's **native Space** (the OS-provided virtual desktop — what Mission
+Control labels "Desktop 1" / "Desktop 2" …). facet touches it **read-only**
+(moving a window to another mac desktop needs SIP-off, so it is
+unsupported).
+- Code: `MacDesktops` (in `FacetAccessibility` — read-only queries via
+  SkyLight), `NativeAdapter.activeMacDesktopID`
+- Config: `[[desktop.N.section]]` / `[desktop.N]` (typed desktop —
+  [[isolate desktop]]) blocks, addressed by Mission Control ordinal
+- UI: the tree's top handle band shows "Desktop N" (display label matching
+  macOS's own wording)
+- **Don't call it:** Space, native Space, workspace, virtual desktop
+  (confusable with facet workspace)
+  - ※ Apple API names (`SLSGetActiveSpace`,
+    `NSWorkspace.activeSpaceDidChange`, SLS's `"Spaces"` dict key, …) keep
+    Apple's word. Only facet's own surfaces respell to "mac desktop".
 
 ### facet workspace
-**facet が定義する Window 集合**。タブのようにグループ化された window 群を
-1 まとまりとして扱う単位。1 つの [[mac desktop]] が複数の facet workspace を
-持つ。**workspace は任意の `label` で config 命名可**（§A・旧 `[desktop.N]` の
-by-name seed は廃止）。**未命名（label 空）は無名のまま 1始まりの index で表示**
-（§B・emoji 自動命名プール `WorkspaceNaming` は退役）。名前変更は実行時
-`facet workspace --rename` でも可（session-only）。workspace は空間スロット＝
-意味は [[section]] / tag が担う。
-- コード: `WorkspaceCatalog` / `workspaces()` / `FacetConfig.effectiveWorkspaceList`
-  （section active 時：非空 `label` を名前に・空は無名スロット）／表示は
-  `sectionDisplayLabel(index:label:)`（§D・`index` or `index (label)`）
-- **Don't call it:** group, tab, page, desktop, mac desktop, Space, グループ, タブ
+A **facet-defined set of windows** — a tab-like grouped unit of windows.
+One [[mac desktop]] holds several facet workspaces. **A workspace can be
+config-named with any `label`** (§A — the old by-name seed of `[desktop.N]`
+is gone). **Unnamed ones (empty label) display as a 1-based index** (§B —
+the emoji auto-naming pool `WorkspaceNaming` retired). Renaming also works
+at runtime via `facet workspace --rename` (session-only). A workspace is
+the spatial slot = meaning is carried by [[section]] / tag.
+- Code: `WorkspaceCatalog` / `workspaces()` /
+  `FacetConfig.effectiveWorkspaceList` (with sections active: non-empty
+  `label` becomes the name; empty = anonymous slot) / display via
+  `sectionDisplayLabel(index:label:)` (§D — `index` or `index (label)`)
+- **Don't call it:** group, tab, page, desktop, mac desktop, Space
 
 ### isolate desktop
-`[desktop.N] type = "isolate"` で型付けした [[mac desktop]]＝**常時有効（always-on）の
-match 駆動 desktop**。階層は **mac desktop > section > window**（旧 **board** 層は
-t-0sbm で廃止——「workspace と isolate を両方使いたい」は board でなく **mac desktop を
-型で分けて**解く。1 ordinal = 1 desktop = 1 type）。`[desktop.N]` は SINGLE table で、
-`type` は `workspace`（従来どおり `[[desktop.N.section]]` が中身を記述・section だけ
-書けば暗黙にこの型）か `isolate`。
-- **挙動**: その mac desktop に居る間ずっと、`match` に合う窓を `layout` でタイルし、
-  合わない窓を corner に anchor-park（sticky は免除・`match` から毎 reconcile 導出）。
-  focus toggle は無い——**desktop に入ることが focus**。flat＝sub-workspace 無し
-  （`effectiveWorkspaceList` は N=1 の 1 slot だけを seed）。**実窓を動かす**（park は
-  離れても解けない）——だから旧称 `lens` は嘘だった（下記）。tree に何を並べるかは
-  `show-non-matching` が決める（`true` で park された非マッチ窓も **holding** section
-  に載り全窓 inventory になる）。
-- **tree 専用**（2世界分離）: membership が動的で固定画面が無い→サムネイル不能。
-  `--view grid` / `--view rail` はその desktop 上では **loud reject**
-  （`IsolateDesktopGate`）。`show-non-matching = true` で tree が **matched** +
-  **holding**（非マッチ）の 2 section 表示（既定 false = matched の 1 section）。
-- 設定: `[desktop.N]`（SINGLE table・`[[…]]` 配列ではない）: `type` 必須／`isolate` は
-  `match` 必須・`layout`・`show-non-matching`・`label` 任意
-- コード: `DesktopType.isolate` / `DesktopMeta` / `FacetConfig.desktopType`・
-  `desktopIsolate` / `FilterProjection.projectIsolateDesktop`（1|2 section 合成・純）/
-  `NativeAdapter.applyIsolatePark`（always-on park + layout seam）/
-  `WorkspaceCatalog.isolateParked` / `IsolatePark.parkSet`（純）/ `IsolateDesktopGate`
-- **🪦 旧称 `lens`（t-mqqw で退役）**: 光学メタファは「見るだけで対象に触れない」ことが
-  語の内容そのものだが、この desktop は**実窓をタイルし・park し・離れても park を解かない**。
-  `type = "lens"` は **loud reject**（alias は作らない・`DesktopMeta.parse` が
-  「it was never a view」と名指しで返す）。コード側は誰にも指示されず `IsolatePark` /
-  `isolateParked` / `facet query` の `parked` に収束していた——config 語がそれに追いついた形。
-- **Don't call it:** lens（🪦退役）, board（旧概念・t-0sbm で廃止）, tab, focus mode,
-  filtered space, saved filter, フォーカスモード
+A [[mac desktop]] typed by `[desktop.N] type = "isolate"` = an **always-on
+match-driven desktop**. The hierarchy is **mac desktop > section > window**
+(the old **board** layer retired in t-0sbm — "I want both workspaces and
+isolate" is solved by **typing the mac desktops**, not by boards: 1 ordinal
+= 1 desktop = 1 type). `[desktop.N]` is a SINGLE table; `type` is
+`workspace` (the classic form — `[[desktop.N.section]]` describes the
+content; writing only sections implies this type) or `isolate`.
+- **Behavior**: for as long as you are on that mac desktop, windows matching
+  `match` are tiled via `layout` and the rest are anchor-parked in a corner
+  (sticky is exempt; the sets derive from `match` on every reconcile). There
+  is no focus toggle — **entering the desktop IS the focus**. Flat = no
+  sub-workspaces (`effectiveWorkspaceList` seeds exactly one N=1 slot). It
+  **moves real windows** (a park does not undo when you leave) — which is
+  why the old name `lens` was a lie (below). What the tree shows is decided
+  by `show-non-matching` (`true` also lists parked non-matching windows in a
+  **holding** section, making a full-window inventory).
+- **Tree-only** (the two-world split): membership is dynamic with no fixed
+  screen → no thumbnails. `--view grid` / `--view rail` are a **loud
+  reject** on that desktop (`IsolateDesktopGate`). With
+  `show-non-matching = true` the tree shows 2 sections — **matched** +
+  **holding** (non-matching); default false = 1 matched section.
+- Config: `[desktop.N]` (a SINGLE table, not an `[[…]]` array): `type`
+  required; `isolate` requires `match`, with optional `layout`,
+  `show-non-matching`, `label`
+- Code: `DesktopType.isolate` / `DesktopMeta` / `FacetConfig.desktopType` /
+  `desktopIsolate` / `FilterProjection.projectIsolateDesktop` (1|2-section
+  composition, pure) / `NativeAdapter.applyIsolatePark` (always-on park +
+  layout seam) / `WorkspaceCatalog.isolateParked` / `IsolatePark.parkSet`
+  (pure) / `IsolateDesktopGate`
+- **🪦 the old name `lens` (retired in t-mqqw)**: the optical metaphor's
+  whole content is "look without touching", but this desktop **tiles real
+  windows, parks them, and keeps the park after you leave**.
+  `type = "lens"` is a **loud reject** (no alias; `DesktopMeta.parse`
+  answers by name that "it was never a view"). Unprompted, the code had
+  already converged on `IsolatePark` / `isolateParked` / `facet query`'s
+  `parked` — the config word caught up with it.
+- **Don't call it:** lens (🪦 retired), board (the old concept — retired in
+  t-0sbm), tab, focus mode, filtered space, saved filter
 
-### 🪦 迷子 (orphan) — 退役（t-6rbc）
-**どの [[facet workspace]] にも属さない窓**、という概念だった（`WindowSlot.workspace == nil`）。
-**死語**。**facet は迷子を作れなかった** —— 唯一の生成源 `setOrphan` の唯一の呼び元
-`orphanWindow` は、t-qtpx が ws→lens DnD を消した時点で**呼び元ゼロ**になっていた。
-つまり迷子の集合は 2 リリースにわたり**証明可能に空**で、そのために 6 モジュールが配管を
-抱え、tree は**永久に空の section**（[[unassigned]] 受け皿）を描き続けていた ——
-[[isolate desktop]] の旧称 `lens` が嘘だったのと**同じクラスの欠陥**（UI が持たないものを
-持つと言う）。
+### 🪦 orphan — retired (t-6rbc)
+Was the concept of **a window belonging to NO [[facet workspace]]**
+(`WindowSlot.workspace == nil`). **A dead word.** **facet could never
+create an orphan** — the only producer `setOrphan`'s only caller
+`orphanWindow` had had **zero callers** since t-qtpx removed ws→lens DnD.
+So the orphan set was **provably empty for two releases**, six modules
+carried plumbing for it, and the tree kept drawing a **permanently empty
+section** (the [[unassigned]] receptacle) — the same defect class as
+[[isolate desktop]]'s old name `lens` being a lie (a UI claiming to hold
+what it does not).
 
-**「窓は必ずどれか 1 つの workspace に居る」は、いまや型**: `WindowSlot.workspace: Int`
-（Optional ではない）。adopt 経路（`reconcile` → `WindowSlot(workspace: activeIndex)`）は
-最初から必ず workspace を割り当てていた。
-- 消えたもの: `setOrphan` / `orphanWindow` / `orphanWindows` / `WindowSlot.workspace` の
-  `Int?` / `ProjectedSectionType.unassigned` / §G 受け皿 / `GridPick.unassigned` /
-  `RailPick.unassigned` / `OverviewCell.isReceptacle` / `facet query` の `"Orphans"` 行
-- **`unassigned` は退役キー**（[[unassigned]] 参照）＝黙って消すと section が workspace セルに
-  **昇格して layout が変わる**ので、行ごと **loud drop** する
-- **Don't call it:** lost window, homeless, デタッチ窓 —— そもそも存在しない
+**"Every window lives in exactly one workspace" is now a type**:
+`WindowSlot.workspace: Int` (not Optional). The adopt path (`reconcile` →
+`WindowSlot(workspace: activeIndex)`) always assigned a workspace from the
+start.
+- Removed: `setOrphan` / `orphanWindow` / `orphanWindows` / the `Int?` of
+  `WindowSlot.workspace` / `ProjectedSectionType.unassigned` / the §G
+  receptacle / `GridPick.unassigned` / `RailPick.unassigned` /
+  `OverviewCell.isReceptacle` / `facet query`'s `"Orphans"` line
+- **`unassigned` is a retired key** (see [[unassigned]]) = silently deleting
+  it would **promote** the section to a workspace cell and change the
+  layout, so the whole line is a **loud drop**
+- **Don't call it:** lost window, homeless — it does not exist at all
 
 ### per-mac-desktop workspaces
-各 [[mac desktop]]（native Space）ごとに **独立した `WorkspaceCatalog`** を
-持つ機能。`NativeAdapter` は active な mac desktop id でカタログを park / swap
-する。SkyLight は **read-only** 利用（書き込みは SIP-off 必要）。SkyLight
-未利用環境では `activeMacDesktopID == 0` で 1 つの shared catalog に縮退
-（pre-feature 挙動）。**opt-in 管理は `[[desktop.N.section]]` または `[desktop.N]`
-ブロックが在れば発火**。[[section]] が 1 つでも在れば section モデルが active 化し、
-その desktop の workspace 数 + 各 layout を section が決める（section 未定義の
-[[mac desktop]] は既定 5 workspace に縮退）。
-- 設定: `[[desktop.N.section]]`（[[section]]・ordinal で指定）
-- コード: `MacDesktops`（in `FacetAccessibility`）, `FacetConfig.isMacDesktopManaged`
-  / `FacetConfig.isSectionModelActive`（section モデル発火の gate）
-- **Don't call it:** per-native-Space workspaces（コメント / メモリでは旧称が
-  残る）, virtual desktop workspace, multi-desktop, デスクトップ別
+Each [[mac desktop]] (native Space) holds an **independent
+`WorkspaceCatalog`**. `NativeAdapter` parks / swaps catalogs by the active
+mac desktop id. SkyLight is used **read-only** (writes need SIP-off). Where
+SkyLight is unavailable, `activeMacDesktopID == 0` degrades to one shared
+catalog (the pre-feature behavior). **Opt-in management fires when a
+`[[desktop.N.section]]` or `[desktop.N]` block exists.** With even one
+[[section]] present, the section model activates and decides that desktop's
+workspace count + each layout (a [[mac desktop]] without sections degrades
+to the default 5 workspaces).
+- Config: `[[desktop.N.section]]` ([[section]], addressed by ordinal)
+- Code: `MacDesktops` (in `FacetAccessibility`),
+  `FacetConfig.isMacDesktopManaged` / `FacetConfig.isSectionModelActive`
+  (the gate for section-model activation)
+- **Don't call it:** per-native-Space workspaces (the old name survives in
+  comments / memory), virtual desktop workspace, multi-desktop
 
 ### facet view
-ユーザー向け UI surface の種類。`tree` / `grid` / `rail` が正規名（`canonicalViews`）。
-新規 view 追加時は `Main.canonicalViews` + `Controller.dispatchView/Hide/Toggle`
-の case を増やすだけで済むよう **per-view 専用フラグを作らない**。`--view`
-（どう見せるか）は [[facet workspace]] / [[tag]] / [[isolate desktop]]（何を見せるか）
-とは直交する別軸。
+The kinds of user-facing UI surface. `tree` / `grid` / `rail` are the
+canonical names (`canonicalViews`). Adding a view must only require new
+cases in `Main.canonicalViews` + `Controller.dispatchView/Hide/Toggle` — 
+**no per-view dedicated flags**. `--view` (how to show) is orthogonal to
+[[facet workspace]] / [[tag]] / [[isolate desktop]] (what to show).
 - CLI: `--view NAME` / `--hide NAME` / `--toggle NAME`
-- **Don't call it:** mode, panel, window, lens（🪦退役・[[isolate desktop]] を参照）,
-  モード, ペイン
+- **Don't call it:** mode, panel, window, lens (🪦 retired — see
+  [[isolate desktop]])
 
 ### tree view
-左サイドバーに表示する **[[facet workspace]] の階層リスト**。`SidebarView` がレンダリング。
-- コード: `SidebarView`
-- **Don't call it:** sidebar, outline, list, サイドバー（描画される場所を指す時のみ別）
+The **hierarchical list of [[facet workspace]]s** shown in the left
+sidebar. Rendered by `SidebarView`.
+- Code: `SidebarView`
+- **Don't call it:** sidebar, outline, list
 
 ### grid view
-全画面の **window グリッド overlay**。`--view grid` で起動。常に key/active
-（construction 上）。
-- **Don't call it:** mosaic, overview, expose, モザイク, グリッド表示
+The full-screen **window grid overlay**. Summoned with `--view grid`.
+Always key/active (by construction).
+- **Don't call it:** mosaic, overview, expose
 
 ### rail view
-全画面の **[[facet workspace]] overview**（Mission Control 風）の **active 中央
-カルーセル switcher**（2-b）。`--view rail` で召喚。中央 HERO に下見中 WS を大表示、
-いずれかの画面 **[[edge]]** に WS の window サムネミニ画面を 1 列（strip）に並べ、
-**active を strip 中央に固定**・前後を循環で配置。strip 軸の矢印で **strip が回転**
-（中央＝選択／下見のみ・hero が追従）・Return/クリックで切替＆閉じ・Esc で閉じ・
-window を WS 間 drag / header drag で swap。WS が `[rail] cells` 数を超えると縮小せず
-**回転**（両端 peek で「まだある」合図）。tree / grid とは役割が違う（速い切替・俯瞰）。
-起動時に自動表示はされない（facet は常に agent-only で起動・どの view も召喚のみ）。#109 shipped →
-M9-3/M9-4 で edge 化 → **2-b でカルーセル化（M9-4 の scroll を置換）**。
-- コード: `RailView`（`FacetViewRail`）/ `railBands`・`railCarouselOffsets`（`FacetCore`、純幾何）
-- **Don't call it:** switcher, expose, mission control, スイッチャー, ミッションコントロール, scroll bar
+The full-screen **[[facet workspace]] overview** (Mission Control-like)
+with an **active-centered carousel switcher** (2-b). Summoned with
+`--view rail`. The central HERO shows the previewed WS large; one of the
+screen's **[[edge]]s** carries a one-row strip of WS window-thumbnail
+mini-screens, with **active pinned to the strip center** and neighbors
+cyclically placed. Arrows along the strip axis **rotate the strip** (center
+= selection / preview only — the hero follows); Return/click switches and
+closes; Esc closes; windows drag between WSs / header-drag swaps. When WSs
+exceed `[rail] cells`, cells never shrink — the strip **rotates** (peek at
+both ends signals "there's more"). A different role from tree / grid (fast
+switching + bird's-eye). Never auto-shows at launch (facet always starts
+agent-only; every view is summoned). #109 shipped → M9-3/M9-4 made it
+edge-based → **2-b made it a carousel (replacing M9-4's scroll)**.
+- Code: `RailView` (`FacetViewRail`) / `railBands` / `railCarouselOffsets`
+  (`FacetCore`, pure geometry)
+- **Don't call it:** switcher, expose, mission control, scroll bar
 
 ### overview surface
-**grid view と rail view が共有する「[[facet workspace]] のミニ画面＋window
-サムネを敷き詰める全画面 overlay」という総称軸**（tree view は含まない — 階層
-リストでミニ画面を持たない）。両 view は値型（`OverviewCell` / `OverviewDrag` /
-`OverviewPendingDrop` / `OverviewPendingSwap`）・スロット周回（`cycleSlotIndex`）・
-サムネ painter（`drawMiniThumb`）・全画面 panel（`OverviewPanel`）・純幾何
-（`OverviewGeometry`）を共有し、さらに**振る舞い契約 `OverviewView`**（`FacetView`
-の protocol — snapshot-on-show 入力・move/swap/run-ops コールバック・サムネ供給・
-border・共通キー Esc/Return/Space/Tab/`m`）で Controller 配線（`Controller+Overview`
-の `seedOverviewCommon` / `presentOverview` / `overviewCommonKey` 等）を 1 本化する。
-本質的に異なる部分（grid の `cols×rows` + FLIP ↔ rail の carousel + hero + edge、
-`onPick` 形、矢印 nav、scroll 回転）は契約に押し込まない。「overview」単独で
-grid view を指すのは禁止（grid view の項参照）— umbrella を指す時は必ず "overview surface"。
-- コード: `Overview*`（値型 / 幾何＝`FacetCore`、描画 / panel / `OverviewView` protocol＝`FacetView`）
-- **Don't call it:** expose, mission control（個別 view の見た目の比喩）, grid（grid view 専用語）
+**The umbrella axis shared by grid view and rail view: a full-screen
+overlay tiled with [[facet workspace]] mini-screens + window thumbnails**
+(tree view is excluded — a hierarchical list with no mini-screens). The two
+views share value types (`OverviewCell` / `OverviewDrag` /
+`OverviewPendingDrop` / `OverviewPendingSwap`), slot cycling
+(`cycleSlotIndex`), the thumbnail painter (`drawMiniThumb`), the
+full-screen panel (`OverviewPanel`), pure geometry (`OverviewGeometry`),
+and moreover the **behavior contract `OverviewView`** (a `FacetView`
+protocol — snapshot-on-show input, move/swap/run-ops callbacks, thumbnail
+supply, border, common keys Esc/Return/Space/Tab/`m`) that unifies the
+Controller wiring (`Controller+Overview`'s `seedOverviewCommon` /
+`presentOverview` / `overviewCommonKey`, …). What genuinely differs (grid's
+`cols×rows` + FLIP ↔ rail's carousel + hero + edge, the `onPick` shape,
+arrow nav, scroll rotation) is kept out of the contract. Using "overview"
+alone for grid view is forbidden (see grid view) — the umbrella is always
+"overview surface".
+- Code: `Overview*` (value types / geometry = `FacetCore`; drawing / panel /
+  the `OverviewView` protocol = `FacetView`)
+- **Don't call it:** expose, mission control (visual metaphors for the
+  individual views), grid (grid view's own word)
 
 ### edge
-rail の strip を寄せる **画面の辺**（`top` / `bottom` / `left` / `right`）。
-`--view rail --edge NAME`（一回限り）か config `[rail] edge`（既定）で指定。CLI typo は
-**loud exit 2**、config typo は **silent clamp→bottom**（[[facet view]] / theme と同じ
-非対称ポリシー）。上下辺＝水平 strip（←/→ browse）、左右辺＝垂直 strip（↑/↓ browse）。
-`RailEdge.axis` がこの軸を返す。M9-3 で導入。
-- コード: `RailEdge`（`FacetCore`）・`canonicalEdges`/`canonicalEdge`（`FacetApp`）
-- **Don't call it:** side, anchor, position, dock（辺以外の意味で）, 配置
+The **screen side** the rail's strip docks to (`top` / `bottom` / `left` /
+`right`). Set per-invocation via `--view rail --edge NAME` or as the
+default via config `[rail] edge`. A CLI typo is a **loud exit 2**; a config
+typo is a **silent clamp→bottom** (the same asymmetric policy as
+[[facet view]] / theme). Top/bottom = horizontal strip (←/→ browse);
+left/right = vertical strip (↑/↓ browse). `RailEdge.axis` returns this
+axis. Introduced in M9-3.
+- Code: `RailEdge` (`FacetCore`) / `canonicalEdges`/`canonicalEdge`
+  (`FacetApp`)
+- **Don't call it:** side, anchor, position, dock (in any non-edge sense)
 
 ### strip
-[[rail view]] で [[facet workspace]] の window サムネミニ画面を [[edge]] に沿って
-1 列に並べた帯。サムネは行を埋めるよう **justify**（拡大）され、セル間は一定の
-gap になる。サイズ上限は `[rail] strip`（画面短辺に対する %・`stripPercent`）で、
-[[hero]] が残り領域を占める。同時表示数の上限は `[rail] cells`。`[rail] strip`
-という設定キー名そのものでもある（帯の概念とキー名が同名）。
-- コード: `RailView.layoutCells` の `stripRect` / `railBands`（strip/hero 分割）
-  / `railScaledPads`（短辺基準の余白）
-- 参照: [[hero]] / [[carousel]] / [[edge]] / [[rail view]]
-- **Don't call it:** bar, dock, filmstrip, tray, [[sliver]]（sliver は anchor
-  park 後の残骸＝別概念）, 帯, バー
+The band in [[rail view]] lining up [[facet workspace]] window-thumbnail
+mini-screens along an [[edge]]. Thumbnails **justify** (scale up) to fill
+the row with a constant gap between cells. Its size cap is `[rail] strip`
+(% of the screen's short side — `stripPercent`); [[hero]] takes the rest.
+The simultaneous-display cap is `[rail] cells`. It is also the literal
+config key name `[rail] strip` (the band concept and the key share the
+name).
+- Code: `RailView.layoutCells`' `stripRect` / `railBands` (strip/hero
+  split) / `railScaledPads` (short-side-based padding)
+- See: [[hero]] / [[carousel]] / [[edge]] / [[rail view]]
+- **Don't call it:** bar, dock, filmstrip, tray, [[sliver]] (a sliver is
+  the residue after anchor park = a different concept)
 
 ### hero
-[[rail view]] の中央に大きく表示する **下見中（strip 中央）の section プレビュー**。
-実画面の縦横比そのままに縮小したミニ画面で、[[strip]] が占めない残り領域を埋める
-（`[rail] strip`% の裏返し）。strip の回転（[[carousel]]）で中央 [[facet workspace]]
-が変わると hero が追従する。
-- コード: `RailView.hero` / `railBands`（hero 領域）
-- 参照: [[strip]] / [[carousel]] / [[rail view]]
-- **Don't call it:** preview, main, focus, big cell, spotlight, 主画面, プレビュー
+The large central **preview of the section under preview (strip center)**
+in [[rail view]]. A mini-screen shrunk at the real screen's aspect ratio,
+filling whatever the [[strip]] does not occupy (the flip side of
+`[rail] strip`%). When the strip's rotation ([[carousel]]) changes the
+central [[facet workspace]], the hero follows.
+- Code: `RailView.hero` / `railBands` (the hero region)
+- See: [[strip]] / [[carousel]] / [[rail view]]
+- **Don't call it:** preview, main, focus, big cell, spotlight
 
 ### carousel
-[[rail view]] の [[strip]] の並べ方（2-b）。**active（＝選択）を strip 中央に固定**
-し、残りを前後へ**循環**配置する。strip 軸の矢印で strip 自体が回転して中央＝
-選択が変わり（下見のみ・[[hero]] が追従）、Return / クリックで確定＆閉じる。
-**strip は [[facet workspace]] 単位**でセルを一列で回す。
-`[rail] cells` 上限を超えるセルは縮小せず回転で送り、両端に **peek**（次セルの
-見切れ）で「まだある」合図を出す。**scroll は無い**（M9-4 の scroll を置換）。
-- コード: `railCarouselOffsets`（`FacetCore`・純幾何・各 position の中央からの
-  符号付き slot offset・選択=0・循環）
-- 参照: [[strip]] / memory `[[facet-rail-carousel-decisions]]`
-- **Don't call it:** scroll, scrollbar, pager, filmstrip, slider, スクロール, ページャ
+How [[rail view]]'s [[strip]] arranges cells (2-b). **Active (= selection)
+is pinned to the strip center**, the rest placed **cyclically** fore and
+aft. Arrows along the strip axis rotate the strip itself so the center (=
+selection) changes (preview only — [[hero]] follows); Return / click
+confirms and closes. **The strip cycles cells per [[facet workspace]]** in
+one row. Cells beyond the `[rail] cells` cap are sent around by rotation
+rather than shrunk, with a **peek** (the next cell's clipped edge) at both
+ends signaling "there's more". **There is no scroll** (2-b replaced
+M9-4's scroll).
+- Code: `railCarouselOffsets` (`FacetCore`, pure geometry — each position's
+  signed slot offset from center; selection=0; cyclic)
+- See: [[strip]] / memory `[[facet-rail-carousel-decisions]]`
+- **Don't call it:** scroll, scrollbar, pager, filmstrip, slider
 
 ### AX target
-**現在 facet が操作対象とする window**。`Window.title` は backend だけで
-埋まるとは限らず、`AXTitles.resolve` が `kAXTitle` を short-TTL で解決する
-（memory `[[window-titles-AX-resolved]]`）。
-- コード: `AXTitles` / `AXFocus`
+**The window facet currently operates on.** `Window.title` is not
+necessarily filled by the backend alone; `AXTitles.resolve` resolves
+`kAXTitle` with a short TTL (memory `[[window-titles-AX-resolved]]`).
+- Code: `AXTitles` / `AXFocus`
 - **Don't call it:** focused window, active window, frontmost window,
-  target app, フォーカスウィンドウ, アクティブウィンドウ
+  target app
 
 ### BSP tiling / stack tiling
-γ Phase で導入された 2 種の tiling layout。`facet workspace --layout NAME`
-で切替。AX role が `dialog` / `sheet` / `palette` の window は **auto-float**
-（tiling 対象外）。
+The 2 tiling layouts introduced in Phase γ. Switched with
+`facet workspace --layout NAME`. Windows whose AX role is `dialog` /
+`sheet` / `palette` **auto-float** (excluded from tiling).
 - CLI: `--layout NAME` / `--retile`, `facet window --toggle-float` /
   `--toggle-orientation` / `--cycle-stack next|prev`
-- **Don't call it:** auto layout, window split, ウィンドウ分割
+- **Don't call it:** auto layout, window split
 
-### master-stack layouts（`master-left` … `master-center`）
-master 窓（`order[0]`）が 1 つの辺に陣取り、残りが反対側に積まれる
-stateless layout 群。**5 つの正準名**＝`master-left` / `master-right`
-/ `master-top` / `master-bottom` / `master-center`（M9-2）。実体は
-2 幾何（4 辺共通の edge-master + 中央 3 帯の center-master）で、対辺
-どうしは内部 mirror/rotate の鏡像。`--layout master-EDGE` で直接選ぶ
-（M9-2 以前の `tall` / `wide` / `centered` は破壊的にリネーム＝alias
-無し）。master 比率 / 枚数は `--grow-master` / `--inc-master` 等で実行時
-調整、`isMaster` / promote-to-master もこの群でのみ有効。`--toggle-
-orientation` での flip は廃止（辺を直接指定するため）。
-- コード: `MasterLeftLayout` … `MasterCenterLayout`（`LayoutRegistry`）。
-  小バッジ表示は `m-EDGE` に省略（`layoutBadgeLabel`）。
-- **Don't call it:** tall, wide, centered（M9-2 で改名・旧称）, 縦/横
-  分割, master_stack
+### master-stack layouts (`master-left` … `master-center`)
+The stateless layout family where the master window (`order[0]`) occupies
+one side and the rest stack opposite. **5 canonical names** =
+`master-left` / `master-right` / `master-top` / `master-bottom` /
+`master-center` (M9-2). The substance is 2 geometries (edge-master shared
+by the 4 sides + the 3-band center-master); opposite sides are internal
+mirror/rotate images. Chosen directly via `--layout master-EDGE` (the
+pre-M9-2 `tall` / `wide` / `centered` were breaking renames — no aliases).
+Master ratio / count adjust at runtime via `--grow-master` /
+`--inc-master`, …; `isMaster` / promote-to-master are valid only in this
+family. The `--toggle-orientation` flip is gone (you name the side
+directly).
+- Code: `MasterLeftLayout` … `MasterCenterLayout` (`LayoutRegistry`). The
+  small badge abbreviates to `m-EDGE` (`layoutBadgeLabel`).
+- **Don't call it:** tall, wide, centered (the pre-M9-2 names),
+  master_stack
 
-### layout mode（per-workspace の layout engine 選択軸）
-**1 つの [[facet workspace]] の tiled 窓をどう並べるかを選ぶ軸**。コードの
-`layoutMode` / `setLayoutMode` / `--layout NAME` がこの軸。**正準名**＝`float`
-（既定・タイルしない）/ `bsp` / `stack` / `master-left` … `master-center`
-（[[master-stack layouts]]）/ `grid` / `spiral`。session 限り（`[layout] default`
-が起動時シード）。
-- ⚠ **`grid` の二義に注意**：ここでの `grid` は **layout**（`GridLayout`・
-  `--layout grid` の値＝窓を格子タイル）。同名の **grid [[facet view]]**（`--view grid`
-  の俯瞰サーフェス）とは別物。
-- コード: `LayoutRegistry`（stateless 群）+ `bsp`/`stack`/`float`（stateful）。
-- **Don't call it:** layout（[[facet view]] の grid と紛れる時のみ明示）
+### layout mode (the per-workspace layout-engine axis)
+**The axis choosing how one [[facet workspace]]'s tiled windows are
+arranged.** The code's `layoutMode` / `setLayoutMode` / `--layout NAME` are
+this axis. **Canonical names** = `float` (default — no tiling) / `bsp` /
+`stack` / `master-left` … `master-center` ([[master-stack layouts]]) /
+`grid` / `spiral`. Session-scoped (`[layout] default` seeds at launch).
+- ⚠ **Mind `grid`'s double meaning**: here `grid` is a **layout**
+  (`GridLayout`, the `--layout grid` value = tile windows in a lattice).
+  The same-named **grid [[facet view]]** (`--view grid`'s bird's-eye
+  surface) is a different thing.
+- Code: `LayoutRegistry` (the stateless family) + `bsp`/`stack`/`float`
+  (stateful).
+- **Don't call it:** layout (spell it out whenever the grid
+  [[facet view]] could be confused)
 
 ### mark
-**window に付く名前付きラベル兼ジャンプ先**。`facet window --mark NAME` で
-focus 中の窓に付け、`--focus-mark NAME` でその窓へ一気に focus 移動（必要なら
-WS も切替）、`--unmark NAME` で外す。**1:1 双射**（1 窓 1 mark・`WorkspaceCatalog.marks`）。
-tree では窓行に **primary 枠線の丸角ピル**で `NAME` を表示。`sticky` / `scratchpad`
-/ `tag` とは直交（mark は識別ハンドル、他は可視性/配置）。session 限り。
-- **Don't call it:** bookmark, label, tag（[[tag]] は可視性ラベルで別概念）, ジャンプ先, しおり
+**A named label-and-jump-target on a window.** `facet window --mark NAME`
+tags the focused window, `--focus-mark NAME` jumps focus straight to that
+window (switching WS if needed), `--unmark NAME` removes it. **A 1:1
+bijection** (one window, one mark — `WorkspaceCatalog.marks`). The tree
+shows `NAME` in a **primary-border rounded pill** on the window row.
+Orthogonal to `sticky` / `scratchpad` / `tag` (a mark is an identity
+handle; the others are visibility/placement). Session-scoped.
+- **Don't call it:** bookmark, label, tag (a [[tag]] is a visibility label
+  — different concept)
 
 ### sticky window
-1 つの window を **現在の mac desktop 内・全 facet workspace のメンバー**
-にして出っぱなしにする（PiP / タイマー / チャット / 音楽）。実装は既存
-anchor park の再利用 2 点だけ:（1）**park 免除** — `shouldParkAnchor` が
-sticky id に false を返し、WS 切替で anchor sliver へ流されない、（2）**強制
-floating** — `floatingWindows` にも入れて tiling に参加させない（WS ごとに
-reflow する tiled 窓が同時に「出っぱなし」はできないため）。集合は
-`WorkspaceCatalog.everywhereWindows`。解除すると **今いる workspace の通常
-タイル窓**に着地（元 home WS には戻さない＝目の前の窓が消えない POLA）。
-mac desktop 跨ぎは対象外（READ-only SkyLight・macOS の「すべてのデスク
-トップ」任せ）。session 限り・per-mac-desktop・`marks` と直交。
-- CLI: `facet window --toggle-sticky`（`--toggle-float` で OFF にしても同じ
-  着地＝float-exit = sticky-exit）。`facet query` に `N sticky`、tree に
-  **枠線無し・水平の `SF:pin` アイコン + "sticky" テキストバッジ**（`pal.foreground`・
-  枠線なし・斜体なし＝pin グリフが float と区別する。旧 📌 絵文字を廃止・PR#252 で
-  枠線/斜体を撤去）。
-- UI: tree の右クリック / `m`（keyboard nav）コンテキストメニューに **"Sticky"**
-  （非 sticky 窓）/ **"Unstick"**（sticky 窓）項目。sticky 窓は floating で
-  float-exit=sticky-exit ゆえ "Unfloat" は出さず "Unstick" 一本に集約。
-- **Don't call it:** always-on-top, pin, float, 常駐ウィンドウ, scratchpad
-  （scratchpad は「名前付きの隠し棚から今の WS に呼ぶ」別機能）
+Makes one window a **member of every facet workspace on the current mac
+desktop** — always visible (PiP / timer / chat / music). Implemented as two
+reuses of the existing anchor park: (1) **park exemption** —
+`shouldParkAnchor` returns false for sticky ids, so WS switches never send
+it to the anchor sliver; (2) **forced floating** — it also joins
+`floatingWindows`, staying out of tiling (a tiled window that reflows per
+WS cannot simultaneously be "always out"). The set is
+`WorkspaceCatalog.everywhereWindows`. Unsticking lands it as a **normal
+tiled window of the current workspace** (never back to its old home WS —
+the window in front of you must not vanish; POLA). Crossing mac desktops is
+out of scope (read-only SkyLight; macOS's "All Desktops" handles that).
+Session-scoped, per-mac-desktop, orthogonal to `marks`.
+- CLI: `facet window --toggle-sticky` (turning it off via `--toggle-float`
+  lands the same way = float-exit = sticky-exit). `facet query` shows
+  `N sticky`; the tree shows a **borderless horizontal `SF:pin` icon +
+  "sticky" text badge** (`pal.foreground`, no border, no italics — the pin
+  glyph is what distinguishes it from float. The old 📌 emoji is gone;
+  PR#252 removed the border/italics).
+- UI: the tree's right-click / `m` (keyboard-nav) context menu carries
+  **"Sticky"** (non-sticky window) / **"Unstick"** (sticky window). A
+  sticky window is floating and float-exit=sticky-exit, so no "Unfloat"
+  item — "Unstick" alone.
+- **Don't call it:** always-on-top, pin, float, scratchpad (the scratchpad
+  is "summon from a named hidden shelf into the current WS" — a different
+  feature)
 
 ### tree status badge (master / float)
-tree の各 window 行に、その窓の状態を示す **枠線無しのアイコン + テキスト
-バッジ**（`SidebarView` の `drawStatusPill`）。**master**（tiling の `order[0]`）は
-`SF:crown` + "master" を `pal.primary`（緑）で、**float**（floating 窓）は
-`SF:macwindow` + "float" を `pal.foreground`（"Desktop N" 帯ラベルと同色）で描く。
-PR#252 で全バッジを枠線/塗り/斜体無しの icon+text に統一（sticky / scratchpad /
-hidden / `#tag` チップと同じ clean な見た目）＝色とグリフが意味を運ぶ。
-- コード: `SidebarView.drawStatusPill`（`FacetViewTree`）
-- ⚠ workspace 単位の layout バッジ（`m-EDGE`＝[[master-stack layouts]]）とは別物：
-  こちらは **窓ごと**の master/float 状態を指す。
-- **Don't call it:** pill, outline badge, ピルバッジ, 枠線バッジ, 斜体バッジ
+The **borderless icon + text badge** on each tree window row showing that
+window's state (`SidebarView`'s `drawStatusPill`). **master** (tiling's
+`order[0]`) draws `SF:crown` + "master" in `pal.primary` (green); **float**
+(a floating window) draws `SF:macwindow` + "float" in `pal.foreground`
+(the same color as the "Desktop N" band label). PR#252 unified every badge
+to border/fill/italic-free icon+text (the same clean look as sticky /
+scratchpad / hidden / `#tag` chips) = color and glyph carry the meaning.
+- Code: `SidebarView.drawStatusPill` (`FacetViewTree`)
+- ⚠ Distinct from the per-workspace layout badge (`m-EDGE` =
+  [[master-stack layouts]]): this one is the **per-window** master/float
+  state.
+- **Don't call it:** pill, outline badge
 
 ### scratchpad
-**名前付きの隠し棚**。既存 window を登録すると即 anchor park で隠れ、必要な時
-に **今いる workspace へフロート overlay として呼ぶ**（ドロップダウン端末 /
-メモ用途）。`sticky` が「全 WS に出っぱなし」なのに対し scratchpad は「普段は
-隠れていて呼んだ WS にだけ出る」＝役割が被らない。実装は park + floating +
-名前付きマップの再利用:`WorkspaceCatalog.scratchpads`（`[名前: WindowID]`
-1:1 双射・`marks` と同型）+ `stashedWindows`（隠れ中＝棚に居る集合）。
-- **stash / summon / settle / release** … `--stash NAME`＝即 park（強制
-  floating + 棚へ）。`--toggle NAME`＝**今の WS で見えていれば棚に戻す / 見え
-  ていなければ今の WS に呼ぶ**（別 WS に居着いた窓を引っ張るのも同じ操作）。
-  呼んだ窓は **居着く**（普通の floating 窓として WS 切替で park/restore・棚
-  に戻すのは見えてる時に toggle した時だけ）。`--release NAME`＝棚から外して
-  今の WS の通常タイル窓にする（`sticky` 解除と同じ着地・POLA）。
-- 表示制御の肝: 隠れ中（stashed）の窓は **snapshot から除外**＝tree にも window
-  count にも出ず、`facet query` の `stashed:` 行にだけ名前が出る。居着き
-  （settled）の窓は tree に **枠線無しの `SF:tray` アイコン + `scratchpad:NAME`
-  テキストバッジ**（`pal.tertiary`＝最も控えめな tier・PR#252 で枠線を撤去）。
-  WS 切替で stashed 窓を絶対 restore しないよう `setActive` の park/restore
-  リストと `resyncVisibleState` で `isStashed` を明示スキップ（`sticky` の
-  park 免除の鏡像）。
-- spawn なし（既存窓の出し入れのみ・launcher 化しない＝rules engine 領域は
-  scope 外）。`sticky` と排他（一方を立てると他方解除）/ `marks` と直交 /
-  float-exit = scratchpad-exit（`--toggle-float` で release）/ 窓 close で
-  `forgetWindow` が自動 prune / session 限り・per-mac-desktop。
+**A named hidden shelf.** Registering an existing window anchor-parks it
+immediately; when needed, it is **summoned into the current workspace as a
+floating overlay** (drop-down terminal / notes). Where `sticky` is "always
+out on every WS", the scratchpad is "normally hidden, appears only on the
+WS that summoned it" — the roles don't overlap. Implemented as park +
+floating + a named map: `WorkspaceCatalog.scratchpads`
+(`[name: WindowID]`, a 1:1 bijection — same shape as `marks`) +
+`stashedWindows` (the currently-hidden = on-the-shelf set).
+- **stash / summon / settle / release** … `--stash NAME` = park now (forced
+  floating + onto the shelf). `--toggle NAME` = **if visible on the current
+  WS, back to the shelf; if not, summon into the current WS** (pulling a
+  window settled on another WS is the same gesture). A summoned window
+  **settles** (an ordinary floating window that parks/restores across WS
+  switches; it returns to the shelf only when toggled while visible).
+  `--release NAME` = off the shelf and into the current WS as a normal
+  tiled window (the same landing as un-sticking; POLA).
+- The display-control crux: stashed windows are **excluded from the
+  snapshot** = they appear neither in the tree nor in window counts; only
+  `facet query`'s `stashed:` line names them. Settled windows show a
+  **borderless `SF:tray` icon + `scratchpad:NAME` text badge** in the tree
+  (`pal.tertiary` — the most muted tier; PR#252 removed the border). So WS
+  switches never restore a stashed window, `setActive`'s park/restore lists
+  and `resyncVisibleState` explicitly skip `isStashed` (the mirror image of
+  sticky's park exemption).
+- No spawning (existing windows in and out only — not a launcher; the
+  rules-engine domain is out of scope). Mutually exclusive with `sticky`
+  (setting one clears the other) / orthogonal to `marks` / float-exit =
+  scratchpad-exit (`--toggle-float` releases) / window close auto-prunes
+  via `forgetWindow` / session-scoped, per-mac-desktop.
 - CLI: `facet scratchpad --stash NAME / --toggle NAME / --release NAME`
-  （`window` でも `workspace` でもない**新 subject**＝名前付きスロットを扱う
-  ため）。
-- **Don't call it:** 隠し窓, hidden window, stash（git の stash ではない）,
-  sticky（sticky は「全 WS に出っぱなし」別機能）, launcher（起動はしない）
+  (a **new subject** — neither `window` nor `workspace` — because it
+  addresses named slots).
+- **Don't call it:** hidden window, stash (not git's stash), sticky
+  (sticky is "always out on every WS" — different feature), launcher (it
+  launches nothing)
 
-### real-window DnD (枠C)
-実 window を mouse で直接掴んで active workspace の tile 内を再配置する操作
-（PR-1 = backend / PR-2 = UI / PR-3 = prediction overlay）。検知は Controller の
-**global NSEvent monitor**（観測のみ・facet 自身の programmatic move は mouse-down
-が無いので自然に除外）。対象は tile 可視 window のみ（**float 除外**）。
-- **intent zone** … drag 中、対象 window 上のカーソル位置を分類する純粋幾何
-  ([Sources/FacetCore/IntentZone.swift](../Sources/FacetCore/IntentZone.swift))。
-  中央矩形（面積 ~40%）= **swap** / 四隅対角線の三角ウェッジ 4 辺 = **insert**。
-- **swap / insert** … backend verb 2 種（`WindowBackend.swapWindows` /
-  `insertWindow(_:beside:edge:)`）。stateless / stack は window order、bsp は
-  `LayoutTree` を変換。**CLI には出さない**（DnD 専用 op）。
-- **InsertEdge** … insert 先の辺（`left` / `right` / `top` / `bottom`）。
-  layout が解釈（bsp = その辺で分割 / stateless = order の前後）。
-- **prediction overlay** … drag 中、ドロップ後レイアウトを HazeOver 風に提示
-  ([Sources/FacetView/DndPredictionOverlay.swift](../Sources/FacetView/DndPredictionOverlay.swift))。
-  暗幕で全体を沈め、**動く window だけ**スポットライト（accent 実線 = 掴み窓 /
-  accent2 破線 = 玉突きで動く窓）。frames は `WindowBackend.predictedDrop`
-  （commit と同じ計算 → ズレ無し）。
-- **resize（機能2・縁ドラッグ）** … window の縁を掴んでリサイズ→隣接連動。
-  FOLLOW モデル（掴んだ window は OS native resize・facet は ratio 更新 +
-  反対側を連動）。`WindowBackend.resizeWindow(_:to:)` が「掴んだ window の新
-  frame → **controlling split**（その辺を仕切る最近接祖先 split・yabai
-  `window_node_fence` 流）の ratio」を更新（bsp）/ master 仕切り
-  （`master-*` の `masterRatio`）。PR-1 = 土台 backend のみ。
-- **Don't call it:** window warp, snap zone, drop zone, ドラッグ移動
+### real-window DnD (Frame C)
+Grabbing a real window with the mouse and rearranging it inside the active
+workspace's tiling (PR-1 = backend / PR-2 = UI / PR-3 = prediction
+overlay). Detection is the Controller's **global NSEvent monitor**
+(observation only — facet's own programmatic moves have no mouse-down, so
+they are naturally excluded). Targets tiled visible windows only (**floats
+excluded**).
+- **intent zone** … pure geometry classifying the cursor position over the
+  target window during a drag
+  ([Sources/FacetCore/IntentZone.swift](../Sources/FacetCore/IntentZone.swift)).
+  Central rectangle (~40% area) = **swap** / the 4 corner-diagonal
+  triangular wedges = **insert**.
+- **swap / insert** … the 2 backend verbs (`WindowBackend.swapWindows` /
+  `insertWindow(_:beside:edge:)`). Stateless / stack transform the window
+  order; bsp transforms the `LayoutTree`. **Not exposed on the CLI**
+  (DnD-only ops).
+- **InsertEdge** … the insertion side (`left` / `right` / `top` /
+  `bottom`). The layout interprets it (bsp = split on that side; stateless
+  = before/after in the order).
+- **prediction overlay** … during the drag, presents the post-drop layout
+  HazeOver-style
+  ([Sources/FacetView/DndPredictionOverlay.swift](../Sources/FacetView/DndPredictionOverlay.swift)):
+  dim everything, spotlight **only the windows that would move** (accent
+  solid = the grabbed window / accent2 dashed = windows displaced in the
+  chain). Frames come from `WindowBackend.predictedDrop` (the same
+  computation as the commit → zero divergence).
+- **resize (feature 2 — edge drag)** … grab a window's edge to resize with
+  neighbors following. The FOLLOW model (the grabbed window resizes OS
+  natively; facet updates the ratio + moves the opposite side).
+  `WindowBackend.resizeWindow(_:to:)` maps "the grabbed window's new frame
+  → the **controlling split**'s ratio (the nearest ancestor split fencing
+  that side — yabai's `window_node_fence` style)" (bsp) / the master fence
+  (`master-*`'s `masterRatio`). PR-1 = backend groundwork only.
+- **Don't call it:** window warp, snap zone, drop zone
 
 ### loading skeleton
-mac desktop 切替時の flicker を隠す **CLI-triggered な skeleton 表示**。
-`facet --view tree --loading MS` を **switch キー押下より前に** 外部から
-発火させる（macOS は pre-mac-desktop-switch hook を出さないため auto trigger 不可）。
-- コード: `Controller.showLoading` → `SidebarView` の skeleton
-- **Don't call it:** placeholder, loader, spinner, ローディング表示
+The **CLI-triggered skeleton display** hiding the flicker of a mac-desktop
+switch. Fire `facet --view tree --loading MS` from outside **before the
+switch keypress** (macOS exposes no pre-mac-desktop-switch hook, so no
+auto-trigger).
+- Code: `Controller.showLoading` → `SidebarView`'s skeleton
+- **Don't call it:** placeholder, loader, spinner
 
 ### anchor
-**非アクティブ [[facet workspace]] の window を画面から隠す手法**。AX
-`kAXPosition` で window を画面隅へ寄せ、最小可視の [[sliver]] だけ残す
-（macOS の clamp で完全な画面外には出せないため）。公開 AX のみ・SIP-on・
-**即時**（アニメ無し）。facet 唯一の hide 手法（`minimize` は genie アニメで
-WS 切替が遅く 2026-05-28 廃止）。parked 窓は `isOnscreen=true` を保つので、
-ユーザーの Cmd+H / Cmd+M による真の hide と区別できる。`sticky` / `scratchpad`
-はこの anchor park の再利用。
-- コード: `shouldParkAnchor` / `applyHide`（`FacetAdapterNative`）
-- 参照: memory `[[native-window-hide-methods]]`（全 hide 手法の検証記録・
-  完全消去は SIP-off 必須で本体 scope 外）
-- **Don't call it:** corner hide, HideCorner（rift の旧称）, off-screen hide,
-  minimize（別手法・廃止済）, 角配置, 隅寄せ
+**The technique hiding a non-active [[facet workspace]]'s windows from the
+screen.** AX `kAXPosition` shoves the window into a screen corner, leaving
+only the minimal visible [[sliver]] (macOS's clamp forbids fully
+off-screen). Public AX only, SIP-on, **instant** (no animation). facet's
+sole hide technique (`minimize` was dropped 2026-05-28 — the genie
+animation made WS switching slow). Parked windows keep `isOnscreen=true`,
+distinguishing them from a user's true hide via Cmd+H / Cmd+M. `sticky` /
+`scratchpad` are reuses of this anchor park.
+- Code: `shouldParkAnchor` / `applyHide` (`FacetAdapterNative`)
+- See: memory `[[native-window-hide-methods]]` (the verification record of
+  every hide technique; full erasure needs SIP-off and is out of scope)
+- **Don't call it:** corner hide, HideCorner (rift's old name), off-screen
+  hide, minimize (a different, retired technique)
 
 ### sliver
-**anchor park 後に画面隅に残る window の可視部分**。macOS の clamp invariant
-により最小 **1×41 logical pt**（右下隅）まで詰められるが、完全な 0px には
-できない（macOS が「title bar は必ず画面内に残して救出可能にする」救済仕様の
-ため）。完全消去（画面 + Mission Control から消す）は公開 / read-only-private
-API では不可能で SIP-off + Dock 注入が要る＝本体 scope 外。
-- 参照: [[anchor]] / memory `[[native-window-hide-methods]]`
-- **Don't call it:** strip, remnant, leftover, edge（[[edge]] は rail の辺の
-  別概念）, 残り, 断片, はみ出し
+**The visible remnant of a window left in the screen corner after an
+anchor park.** macOS's clamp invariant allows squeezing to a minimum of
+**1×41 logical pt** (bottom-right corner) but never to 0px (macOS's rescue
+rule: "a title bar always stays on screen so the window can be saved").
+Full erasure (from the screen + Mission Control) is impossible via public /
+read-only-private APIs — it needs SIP-off + Dock injection = out of scope.
+- See: [[anchor]] / memory `[[native-window-hide-methods]]`
+- **Don't call it:** strip, remnant, leftover, edge (an [[edge]] is the
+  rail's screen side — different concept)
 
 ### tag
-**window に付く自由記述の文字列ラベル**（free-form・多重所属＝1 window = タグの集合）。
-storage は `WindowSlot.tags: Set<String>`（語彙宣言なし・初出で自動生成・上限なし・
-session-only・per-mac-desktop）。[[facet filter]] の `match` で `tag~=NAME` として参照され、
-NAME を持つ窓を集める（[[isolate desktop]] / [[rule]] の `match`・`facet query --filter`）。
-割当は **runtime のみ**（config に静的マッピングなし）：
-`facet window --tag NAME / --untag NAME / --toggle-tag NAME / --retag OLD NEW`。新規窓が
-[[rule]] の [[match]] に当たれば その `apply` tags を継ぐ。tree では各窓行に全タグを `#tag`
-チップ表示（`Window.tags: [String]`・seam で sorted）。tree の `t`（tag-manage）でも編集する。
-- **タグの付与と絞り込みを混同しない**（用語規則）：`facet window --tag` = **窓**にタグを
-  付ける（初出なら自動生成）／[[facet filter]] の `tag~=NAME` = その語彙で **絞り込む**
-  （窓のタグは不変）。`facet window --retag OLD NEW` は窓の OLD を NEW に置換
-  （OLD 不在なら NEW の素の付与・`OLD==NEW` は no-op）。read は `facet query --tags`
-  （いま使われている全タグの sorted union）。
-- **Don't call it:** label, category, workspace（tag は多重所属、workspace は 1 窓 1 個）, group, ラベル, カテゴリ
+**A free-form string label on a window** (free-form, multi-membership = 1
+window carries a set of tags). Storage is `WindowSlot.tags: Set<String>`
+(no vocabulary declaration, auto-created on first use, unbounded,
+session-only, per-mac-desktop). Referenced from a [[facet filter]] `match`
+as `tag~=NAME` to collect the windows carrying NAME ([[isolate desktop]] /
+[[rule]] `match` / `facet query --filter`). Assignment is **runtime only**
+(no static mapping in config):
+`facet window --tag NAME / --untag NAME / --toggle-tag NAME / --retag OLD
+NEW`. A new window hitting a [[rule]]'s [[match]] inherits its `apply`
+tags. The tree shows every tag as a `#tag` chip on each window row
+(`Window.tags: [String]`, sorted at the seam). The tree's `t` (tag-manage)
+also edits them.
+- **Never conflate tagging with filtering** (a vocabulary rule):
+  `facet window --tag` = put a tag **on a window** (auto-created if new) /
+  a [[facet filter]]'s `tag~=NAME` = **filter** by that vocabulary (the
+  window's tags are untouched). `facet window --retag OLD NEW` replaces
+  OLD with NEW on the window (absent OLD = plain add of NEW; `OLD==NEW`
+  is a no-op). The read is `facet query --tags` (the sorted union of every
+  tag currently in use).
+- **Don't call it:** label, category, workspace (tags are
+  multi-membership; a workspace is one per window), group
 
 ---
 
 ## CLI / IPC
 
 ### DNC (Distributed Notification)
-プロセス間 IPC の通り道。`facet --view tree` のような CLI 呼び出しは
-`com.facet.app` 宛の Distributed Notification として届く。
-- **Don't call it:** ipc message, event, distributed event, IPC イベント
+The inter-process IPC path. A CLI invocation like `facet --view tree`
+arrives as a Distributed Notification addressed to `com.facet.app`.
+- **Don't call it:** ipc message, event, distributed event
 
-### `--active` modifier（廃止）
-🪦 **廃止** — `--view tree` 自体に畳み込まれた。tree は常にキーボードナビ
-モードで開く（show = `enterActive`＝activation policy フリップ + key 取得）。
-窓に作用する瞬間（click / Enter → `exitActive` 先行）に key を手放すので
-same-app focus（#66）は維持。[[grid view]] は construction 上常に key/active。
-- **Don't call it:** focus flag, activate flag, アクティブフラグ
+### `--active` modifier (retired)
+🪦 **Retired** — folded into `--view tree` itself. The tree always opens in
+keyboard-nav mode (show = `enterActive` = activation-policy flip + key
+acquisition). Key is released the moment a window is acted on (click /
+Enter → `exitActive` first), so same-app focus (#66) survives.
+[[grid view]] is always key/active by construction.
+- **Don't call it:** focus flag, activate flag
 
 ### typo rejection
-未知の view / theme 名は `exit 2` + stderr で **明示エラー**。silent fallback
-は意図的に出さない。
-- 反例: TOML キーの値は **clamp**（typo 起こしても layout が壊れない方針）
-- **Don't call it:** strict mode, fail-fast, 厳密モード
+Unknown view / theme names are an **explicit error**: `exit 2` + stderr.
+No silent fallback, deliberately.
+- The counterexample: TOML key values are **clamped** (a typo must not
+  break the layout)
+- **Don't call it:** strict mode, fail-fast
 
 ### query
-server の管理状態を読む **read-only verb**（`facet query`）。backend / theme /
-workspaces（active マーカー + 窓数）/ last error / timestamp の greppable な
-スナップショットを stdout に出す。server が `/tmp/facet-status.json` を
-atomically 書き、client が読む（[[DNC (Distributed Notification)]] と同じ
-post-and-exit 系の IPC）。#227 で旧 `facet status` を吸収・改名（出力は同一）。
-`facet query --windows`（#223）は全 mac desktop の全窓を flat JSON 配列で吐く
-（raw プロパティ + 窓ごとの `facet` 状態 / 管理外は `null`・yabai `-m query` 相当・
-`jq` で絞る）。server は `/tmp/facet-query.json` を reconcile 毎に atomic 書き込み。
-`facet query --tags`（#228）は **いま窓に付いている全 [[tag]] の sorted union**を
-JSON 配列で吐く（session-only・窓を 1 つもタグ付けしていなければ `[]`）。
-projection flag は 1 回につき 1 つだけ（`--windows`/`--tags` の複数併用は
-exit 2）。query は read-only。`facet window --tag NAME` がタグを書く write verb なのに
-対し、`query --tags` はその集合を読むだけ（read ↔ write の別物）。
-- コード: `runQuery`/`runQueryWindows`/`runQueryTags`（`FacetApp`）/
-  `StatusSnapshot`・`WindowQueryEntry`/`WindowQuery`（`FacetCore`）/
-  `definedTagNames()`/`queryEntries()`（backend）
-- **Don't call it:** status, facet status, state dump, info コマンド
+The **read-only verb** reading the server's management state
+(`facet query`). Prints a greppable snapshot of backend / theme /
+workspaces (active marker + window counts) / last error / timestamp to
+stdout. The server atomically writes `/tmp/facet-status.json`; the client
+reads it (the same post-and-exit IPC family as
+[[DNC (Distributed Notification)]]). #227 absorbed and renamed the old
+`facet status` (output unchanged). `facet query --windows` (#223) dumps
+every window on every mac desktop as a flat JSON array (raw properties +
+per-window `facet` state / `null` when unmanaged — the yabai `-m query`
+equivalent; narrow with `jq`). The server atomically writes
+`/tmp/facet-query.json` on every reconcile. `facet query --tags` (#228)
+dumps **the sorted union of every [[tag]] currently on windows** as a JSON
+array (session-only; `[]` when nothing is tagged). One projection flag per
+call (`--windows`/`--tags` together is exit 2). query is read-only:
+`facet window --tag NAME` is the write verb; `query --tags` only reads the
+set (read ↔ write are separate things).
+- Code: `runQuery`/`runQueryWindows`/`runQueryTags` (`FacetApp`) /
+  `StatusSnapshot` / `WindowQueryEntry`/`WindowQuery` (`FacetCore`) /
+  `definedTagNames()`/`queryEntries()` (backend)
+- **Don't call it:** status, facet status, state dump
 
 ### facet filter
-window 述語を書く facet 横断のミニ言語（SQL の WHERE 句相当）。`facet query --filter`・
-[[isolate desktop]] の `match`・[[rule]] の `match`・`facet section --match` が **1 つの文法**を
-共有する＝pivot が search / AX-role-float の個別マッチ機構を統合する
-横断プリミティブ（memory `[[facet-filter-pivot-plan]]`）。
-- atom = `field op value`。op は **CSS 属性演算子**：`=`（完全一致）/ `~=`（空白トークン
-  含有・list 値 `tag` 向け）/ `^=`（前方）/ `$=`（後方）/ `*=`（部分）/ `|=`（階層前方）。
-  裸 field は presence（`tag` / `floating` / `sticky` / `master` …）、`not tag` は
-  タグを 1 つも持たない窓。
-- 結合 = `and` / `or` / `not` / `()`（各 1 綴り・優先 `not` > `and` > `or`・暗黙 space-AND /
-  comma-OR / `-` 否定短縮なし）。値は裸 or `"…"`（引用内は `* ^ $` もリテラル）。大小無視が
-  既定・末尾 ` s` で大小区別。primary 位置の `@name` は [[filter alias]] 参照（t-5312 —
-  lock 後唯一の文法追加。combinator / operator は今後も増やさない）。
-- field 名 frozen: `app` / `title` / `bundleId` / `workspace` / `tag` / `floating` / `sticky` /
-  `master` / `mark` / `scratchpad` / `desktop` / `onscreen` / `focused`。未知 field は parse
-  通過 → eval で no-match（typo は eval で loud・parse は crash しない）。malformed 式は caret 付き
-  loud だが **non-fatal**（該当面は show-all へ degrade）。**regex / 数値 op / `is:` / `has:` /
-  `[...]` なし**（重いパターンは将来 `facet query | jig`）。
-- コード: `FacetFilter`（AST + `parse` + `matches` + `description`）/ `WindowFields`（窓 → field
-  解決の protocol）/ `QueryFilter`（`facet query --filter` 配線）。すべて `FacetCore`・
-  純ロジック・CI-only テスト。#283（Phase 0）で AST/parser/evaluator、#290 で
-  `facet query --filter`。[[isolate desktop]] の `match` もこの言語を共有する。
-- **Don't call it:** query language, search syntax, predicate DSL, WHERE engine,
-  クエリ言語, 検索構文, フィルタ DSL
+The cross-facet mini-language for window predicates (SQL's WHERE-clause
+analogue). `facet query --filter`, [[isolate desktop]]'s `match`,
+[[rule]]'s `match`, and `facet section --match` share **one grammar** —
+the pivot that unified the separate matching mechanisms of search /
+AX-role-float into one cross-cutting primitive (memory
+`[[facet-filter-pivot-plan]]`).
+- An atom = `field op value`. The ops are the **CSS attribute operators**:
+  `=` (exact) / `~=` (space-token containment — for the list-valued `tag`)
+  / `^=` (prefix) / `$=` (suffix) / `*=` (substring) / `|=` (hierarchical
+  prefix). A bare field is presence (`tag` / `floating` / `sticky` /
+  `master` …); `not tag` is a window with no tags at all.
+- Combinators = `and` / `or` / `not` / `()` (one spelling each; precedence
+  `not` > `and` > `or`; no implicit space-AND / comma-OR / `-` negation
+  shorthand). Values are bare or `"…"` (inside quotes `* ^ $` are
+  literal). Case-insensitive by default; a trailing ` s` makes it
+  case-sensitive. `@name` in primary position is a [[filter alias]]
+  reference (t-5312 — the only grammar addition since the lock;
+  combinators / operators will not grow).
+- Field names are frozen: `app` / `title` / `bundleId` / `workspace` /
+  `tag` / `floating` / `sticky` / `master` / `mark` / `scratchpad` /
+  `desktop` / `onscreen` / `focused`. An unknown field parses → evals to
+  no-match (typos are loud at eval; parse never crashes). A malformed
+  expression is loud with a caret but **non-fatal** (the affected surface
+  degrades to show-all). **No regex / numeric ops / `is:` / `has:` /
+  `[...]`** (heavy patterns go to a future `facet query | jig`).
+- Code: `FacetFilter` (AST + `parse` + `matches` + `description`) /
+  `WindowFields` (the window → field resolution protocol) / `QueryFilter`
+  (the `facet query --filter` wiring). All `FacetCore`, pure logic,
+  CI-only tests. #283 (Phase 0) built AST/parser/evaluator; #290 wired
+  `facet query --filter`. [[isolate desktop]]'s `match` shares this
+  language.
+- **Don't call it:** query language, search syntax, predicate DSL, WHERE
+  engine
 
 ### filter alias
-config `[alias]` テーブルで**名前を付けた [[facet filter]] 部分式**（t-5312）。
-`web = 'app~=Chrome or app~=Safari'` と定義し、filter が現れる**全 4 面**
-（`[desktop.N] match` / `[[rule]] match` / `facet section --match` /
-`facet query --filter`）で `@web` として参照する。長い述語の重複を名前 1 つに畳む。
-- **文法拡張であってテキスト展開ではない**: parser は `.aliasRef` を記録するだけで、
-  置換は純粋な AST substitution（`resolvingAliases`）。だから引用内 `@`（`title*="a@b"`）や
-  value 位置の裸 `@`（`tag=@web` はリテラル）はタダで無傷・caret は原文に刺さる。
-- 名前は kebab（`[a-z][a-z0-9-]*`）・参照は case-insensitive・**ネスト可**
-  （`work = '@web or app=Slack'`）・循環は loud 検出（`filter alias cycle: @a → @b → @a`）。
-- **エラー方針は面ごと**（undefined / 循環時）: config（isolate / rule の `match`）=
-  **ブロックごと DROP + `.error`**（never-match への degrade は isolate で全窓 park に化けるので
-  禁止・`config --validate` exit 1）／ `section --match` = loud reject（現 match 保持）／
-  `query --filter` = warn + その ref だけ no-match（unknown-field と同格・非致命）。
-  空値 alias（`web = ''`）は decode で drop（空式は `.all` = match-all 事故の封鎖）。
-- **表示名継承**: isolate desktop の `match` が**単一の alias 参照だけ**かつ `label` 省略なら
-  表示名 = alias 名（明示 `label` / runtime `--rename` が勝つ）。snapshot は**参照を verbatim**
-  に書く（展開して書いたら indirection の意味が消える）。
-- 定義は **config 手編集のみ（v1）**・hot-reload 即反映。CLI/GUI は alias を「使う」だけ
-  （save-as-alias は v2 = t-4xxz）。family 先例 = furrow の `[alias]`。
-- コード: `FacetFilter.aliasRef` + `resolvingAliases`（`FilterAlias.swift`）/
-  `FacetConfig.decodeFilterAliases` / `effectiveFilterAliases` /
-  `isolateAliasInheritedLabel`。
-- **Don't call it:** macro, saved filter, named query, filter variable, snippet,
-  マクロ, 保存フィルタ, 変数
+A **named [[facet filter]] sub-expression** in the config `[alias]` table
+(t-5312). Define `web = 'app~=Chrome or app~=Safari'` and reference it as
+`@web` on **all 4 surfaces** where a filter appears (`[desktop.N] match` /
+`[[rule]] match` / `facet section --match` / `facet query --filter`).
+Folds a long predicate's duplication into one name.
+- **A grammar extension, not text expansion**: the parser only records
+  `.aliasRef`; substitution is pure AST substitution (`resolvingAliases`).
+  So `@` inside quotes (`title*="a@b"`) and a bare `@` in value position
+  (`tag=@web` is literal) survive for free, and carets point into the
+  original text.
+- Names are kebab (`[a-z][a-z0-9-]*`); references are case-insensitive;
+  **nesting allowed** (`work = '@web or app=Slack'`); cycles are loudly
+  detected (`filter alias cycle: @a → @b → @a`).
+- **The error policy is per-surface** (on undefined / cycle): config
+  (isolate / rule `match`) = **DROP the whole block + `.error`**
+  (degrading to never-match is forbidden — in an isolate it would become
+  park-everything; `config --validate` exits 1) / `section --match` = loud
+  reject (current match kept) / `query --filter` = warn + only that ref
+  no-matches (same rank as unknown-field; non-fatal). An empty-value alias
+  (`web = ''`) is dropped at decode (an empty expression is `.all` —
+  sealing the match-all accident).
+- **Display-name inheritance**: when an isolate desktop's `match` is
+  **exactly one alias reference** and `label` is omitted, the display name
+  = the alias name (an explicit `label` / runtime `--rename` wins). The
+  snapshot writes the reference **verbatim** (writing it expanded would
+  destroy the point of the indirection).
+- Defined by **hand-editing config only (v1)**; hot-reload applies
+  immediately. CLI/GUI only "use" aliases (save-as-alias is v2 = t-4xxz).
+  Family precedent = furrow's `[alias]`.
+- Code: `FacetFilter.aliasRef` + `resolvingAliases` (`FilterAlias.swift`)
+  / `FacetConfig.decodeFilterAliases` / `effectiveFilterAliases` /
+  `isolateAliasInheritedLabel`.
+- **Don't call it:** macro, saved filter, named query, filter variable,
+  snippet
 
-### CLI 文法（`--flag VALUE`）
-全コマンドが **yabai 式の空白区切り**（`--flag VALUE`）。`--flag=VALUE`（`=`）は
-#227 で全廃（hard cutover・後方互換なし）。各 flag は arity を宣言し、値トークンを
-無条件に食う（**strict consumption**・lookahead ゼロ）ので負座標 `--pos-x -1440` も
-そのまま読める。パース用の純粋型 `ArgCursor` は [[FacetCore]]
-（`Sources/FacetCore/CLIParse.swift`・AppKit 非依存で単体テスト可）にあり、
-FacetApp の client 層（`Main.swift` / `FacetApp+Client*.swift`）がそれを駆動して
-exit / stderr など副作用を担う。コアへ渡る DNC 制御文字列（`view:rail+edge:left` /
-`view:tree+loading:300` 等・`view:NAME` に `+loading:` `+geom:` `+edge:` の修飾子が付く）は不変。
+### CLI grammar (`--flag VALUE`)
+Every command uses **yabai-style space separation** (`--flag VALUE`).
+`--flag=VALUE` (`=`) was fully removed in #227 (hard cutover, no backward
+compatibility). Each flag declares an arity and consumes value tokens
+unconditionally (**strict consumption**, zero lookahead), so a negative
+coordinate `--pos-x -1440` reads as-is. The pure parsing type `ArgCursor`
+lives in [[FacetCore]] (`Sources/FacetCore/CLIParse.swift` —
+AppKit-independent, unit-testable); FacetApp's client layer (`Main.swift`
+/ `FacetApp+Client*.swift`) drives it and owns the side effects (exit /
+stderr). The DNC control strings passed to the core
+(`view:rail+edge:left` / `view:tree+loading:300`, … — `view:NAME` with
+`+loading:` `+geom:` `+edge:` modifiers) are unchanged.
 - **Don't call it:** equals syntax, `--flag=value`, GNU-style options
 
 ### active section
-**常にちょうど 1 つ**。[[facet workspace]] desktop ではアクティブな facet workspace、
-[[isolate desktop]] ではその always-on な合成 section。`ActiveSection`
-（`Sources/FacetCore/ActiveSection.swift`）は **単一 case の enum**（`case workspace(Int)`・
-1-based）＝section を activate するとは workspace を切り替えることに他ならない。
-t-ec9s で **section-lens の ACTIVATE 概念が撤去**され、旧
-`activeLens XOR activeWorkspace` の二択は消えた（`facet lens NAME` という動詞も無い）。
-CLI / tree header クリック / grid・rail のセルクリックは全て `Controller.activateSection`
-という 1 本の seam を通る。
-- **Don't call it:** active lens, current section, selected workspace, アクティブレンズ
+**Always exactly one.** On a [[facet workspace]] desktop it is the active
+facet workspace; on an [[isolate desktop]] its always-on synthesized
+section. `ActiveSection` (`Sources/FacetCore/ActiveSection.swift`) is a
+**single-case enum** (`case workspace(Int)`, 1-based) = activating a
+section IS switching workspace. t-ec9s **removed the section-lens ACTIVATE
+concept**, ending the old `activeLens XOR activeWorkspace` dichotomy
+(there is no `facet lens NAME` verb). CLI / tree-header clicks / grid and
+rail cell clicks all pass through the single seam
+`Controller.activateSection`.
+- **Don't call it:** active lens, current section, selected workspace
 
 ### section
-config で宣言する **順序付きの表示単位**（`[[desktop.N.section]]`）。per-mac-desktop の
-順序付き配列で、**配列順 = [[tree view]] の表示順**。**全 section は [[facet workspace]] の
-空間セル**（タイル単位・grid/rail のセル）＝`{ label, layout }` だけを持つ。
-かつての `type = "lens"` section（保存可視性フィルタ）は **退役**した（t-ec9s）＝その後継は
-[[isolate desktop]] としてのみ存在する。
-- **workspace セル（既定）**: 常設の空間土台。**任意の `label` で命名・無名は 1始まり
-  index 表示**。任意の `layout` seed を持つ。所属は DnD / `facet window --move-to N` で
-  変える。`type` / `match` / `apply` は無い（stray なキーは decode で無視＝
-  `config --validate` が flag）。
-- **🪦 `unassigned = true`（マーカー）は退役**（t-6rbc・[[unassigned]] 参照）。**全 row が
-  workspace セル**になった。
+The **ordered display unit** config declares (`[[desktop.N.section]]`).
+A per-mac-desktop ordered array; **array order = [[tree view]] display
+order**. **Every section is a [[facet workspace]]'s spatial cell** (the
+tiling unit — grid/rail's cell), carrying only `{ label, layout }`. The
+former `type = "lens"` section (a saved visibility filter) **retired**
+(t-ec9s) = its successor exists only as [[isolate desktop]].
+- **The workspace cell (default)**: the permanent spatial substrate.
+  **Named by an optional `label`; unnamed shows a 1-based index.** Holds an
+  optional `layout` seed. Membership changes via DnD /
+  `facet window --move-to N`. It has no `type` / `match` / `apply` (stray
+  keys are ignored at decode = `config --validate` flags them).
+- **🪦 the `unassigned = true` marker is retired** (t-6rbc — see
+  [[unassigned]]). **Every row is now a workspace cell.**
 
-section 未定義の [[mac desktop]] は内蔵の既定 workspace 群へ degrade。**LIVE**（tree が
-消費）＝`FilterProjection.project` が live window 上に section を投影し、1 表示単位として
-`ProjectedSection` を産む。**config の宣言 `DesktopSection` ↔ 投影結果 `ProjectedSection`
-を区別する**（後者は旧称 `FilterGroup`＝Phase D で禁止語 group をリネーム）。
-- コード: `DesktopSection`（config 宣言・`{ label, layout }`）/
-  `ProjectedSection`（投影結果＝1 表示単位・`id`〔`"ws:<index>"`〕/
-  `label` / `windows` / `sourceWorkspaceIndex`・`OverviewModels`）/
-  `FilterProjection.project`（投影・純）/
-  `FacetConfig.macDesktopSectionConfigs` / `decodeDesktopSectionSections` /
-  `effectiveMacDesktopSectionConfigs`（`FacetCore`）
-- **Don't call it:** group（旧称＝旧型名 `FilterGroup`）, lens / `type="lens"` section（🪦両方退役・
-  後継は [[isolate desktop]]）, tab, page, グループ, セクション以外
+A [[mac desktop]] with no sections degrades to the built-in default
+workspaces. **LIVE** (the tree consumes it) = `FilterProjection.project`
+projects sections onto live windows, producing a `ProjectedSection` per
+display unit. **Distinguish the config declaration `DesktopSection` ↔ the
+projection result `ProjectedSection`** (the latter's old name was
+`FilterGroup` — the banned word "group" renamed in Phase D).
+- Code: `DesktopSection` (config declaration, `{ label, layout }`) /
+  `ProjectedSection` (projection result = one display unit; `id`
+  〔`"ws:<index>"`〕 / `label` / `windows` / `sourceWorkspaceIndex` —
+  `OverviewModels`) / `FilterProjection.project` (the projection, pure) /
+  `FacetConfig.macDesktopSectionConfigs` / `decodeDesktopSectionSections`
+  / `effectiveMacDesktopSectionConfigs` (`FacetCore`)
+- **Don't call it:** group (the old name — old type `FilterGroup`), lens /
+  `type="lens"` section (🪦 both retired — the successor is
+  [[isolate desktop]]), tab, page
 
-### 🪦 unassigned — 退役キー（t-6rbc）
-§G の「迷子受け皿 section」（`unassigned = true` マーカー）だった。**死語**。
-受け皿が集める leftover は [[迷子 (orphan)]] であり、**facet は迷子を作れなかった** ⇒
-この section は**永久に空**＝UI が持たないものを持つと言っていた。
+### 🪦 unassigned — retired key (t-6rbc)
+Was §G's "orphan receptacle section" (the `unassigned = true` marker).
+**A dead word.** The leftovers the receptacle collected were
+[[orphan]]s, and **facet could never create an orphan** ⇒ this section was
+**permanently empty** = a UI claiming to hold what it does not.
 
-⚠️ **単に消すのではなく「退役キー」として loud reject する**。unknown key は decode で
-**無視**されるので、キーだけ消すと **その section が普通の workspace セルに黙って昇格** →
-**workspace が 1 個増えて layout が黙って変わる**（`workspaceSubstrateSections` が受け皿を
-substrate から除外していた、その filter が消えるため）。だから **行ごと DROP** する ——
-実効の substrate は今日と同一のまま、概念だけが消える。**沈黙こそが最悪**の答えになる箇所。
-- 挙動: `DesktopSection.parse` が `(nil, "…retired…")` を返す → 行が落ちる →
-  `ConfigDiagnostic(.error)` → `config --validate` が **exit 1**（schema 側も
-  `additionalProperties:false` で unknown key として二重に捕まえる）。daemon は
-  従来どおり**寛容**（ログして起動する）
-- **auto-promote ゾンビも封じた**: snapshot writer の `unassigned` 書き出し経路
-  （退役キーが自分で蘇る唯一の道）を削除
-- **Don't call it:** lost & found, catch-all filter, leftover bucket, ゴミ箱 —— 全部無い
+⚠️ **Not simply deleted — loudly rejected as a retired key.** Unknown keys
+are **ignored** at decode, so deleting just the key would **silently
+promote that section to an ordinary workspace cell** → one more workspace
+and a silently changed layout (`workspaceSubstrateSections` excluded the
+receptacle from the substrate; that filter would vanish). So the **whole
+line DROPs** — the effective substrate stays identical to today, and only
+the concept disappears. This is a spot where **silence would be the worst
+answer**.
+- Behavior: `DesktopSection.parse` returns `(nil, "…retired…")` → the line
+  drops → `ConfigDiagnostic(.error)` → `config --validate` **exits 1**
+  (the schema also double-catches it as an unknown key via
+  `additionalProperties:false`). The daemon stays **lenient** as ever
+  (logs and starts)
+- **The auto-promote zombie is sealed too**: the snapshot writer's
+  `unassigned` emission path (the one way the retired key could resurrect
+  itself) was removed
+- **Don't call it:** lost & found, catch-all filter, leftover bucket —
+  none of them exist
 
 ### facet section
-全 [[section]] を **1始まりの tree index か label で指す統一アドレッシング CLI**。
-`--focus N|LABEL` で activate（workspace 切替。[[isolate desktop]] 上では合成 section の
-先頭窓 focus）、`--rename N "label"` で表示 label を runtime 変更（workspace は catalog 名。
-**[[isolate desktop]] の `matched` section は desktop 自体を改名**＝`[desktop.N] label`・t-j7ps
-（`label` は **表示専用**＝isolate desktop の単一 workspace は**無名**なので、`match` から
-参照できるフィールドではない。かつては workspace 名も兼ねており、rename が**次回起動時に
-その desktop の `match` を黙って壊せた**）。
-`--match` が中身を retarget して永続する以上、名前だけ固定だと**中身について嘘をつく**ので
-その対称形。**ordinal-keyed**〔id は `section:0:<label>` で config label を焼き込んでいるので
-id-keyed だと rename が**自分の鍵を動かして**消える〕・`[config] export-path` があれば
-`--match` と同条件で snapshot 永続。`holding` section は **loud reject**＝match の補集合から
-合成され、書き込み先の config キーが無い。空 label は revert・relaunch で reset・
-`facet reload` では消えない）、
-`--match N "expr"` で [[isolate desktop]] の `match` を runtime retarget（session-only・
-[[facet filter]] 式・空で config へ revert）。GUI twin = tree ヘッダ右クリック →
-Section ▸ Rename / Edit match。
-- CLI: `facet section --focus N|LABEL` / `--rename N "label"` / `--match N "expr"`
-- コード: `addressableSections()` / `dispatchSectionFocus` / `renameSection(indexN1Based:to:)` /
-  `applyLabelOverrides` / `Controller.sectionLabelOverride`（`FacetApp`）
-- **Don't call it:** workspace --focus（旧 per-kind verb・section が統一層）, lens 切替専用（🪦退役）,
-  group --focus
+The unified addressing CLI naming every [[section]] **by 1-based tree
+index or label**. `--focus N|LABEL` activates (a workspace switch; on an
+[[isolate desktop]], focuses the synthesized section's first window).
+`--rename N "label"` changes the display label at runtime (for a
+workspace, the catalog name; **for an [[isolate desktop]]'s `matched`
+section it renames the desktop itself** = `[desktop.N] label`, t-j7ps —
+`label` is **display-only**: an isolate desktop's single workspace is
+**anonymous**, so it is not a field `match` can reference. It once doubled
+as the workspace name, letting a rename **silently break that desktop's
+`match` on the next launch**). Since `--match` retargets the content
+persistently, a fixed name would **lie about the content** — this is its
+symmetric partner. **Ordinal-keyed** 〔the id bakes the config label in as
+`section:0:<label>`, so id-keying would make a rename **move its own key**
+and vanish〕; with `[config] export-path` set, it snapshot-persists under
+the same conditions as `--match`. The `holding` section is a **loud
+reject** = it is synthesized from the match's complement and has no config
+key to write to. An empty label reverts; relaunch resets;
+`facet reload` keeps it.
+`--match N "expr"` retargets an [[isolate desktop]]'s `match` at runtime
+(session-only, a [[facet filter]] expression; empty reverts to config).
+GUI twin = tree header right-click → Section ▸ Rename / Edit match.
+- CLI: `facet section --focus N|LABEL` / `--rename N "label"` /
+  `--match N "expr"`
+- Code: `addressableSections()` / `dispatchSectionFocus` /
+  `renameSection(indexN1Based:to:)` / `applyLabelOverrides` /
+  `Controller.sectionLabelOverride` (`FacetApp`)
+- **Don't call it:** workspace --focus (the old per-kind verb — section is
+  the unifying layer), lens switching (🪦 retired), group --focus
 
 ### rule
-`[[rule]]` adopt-rule（#282/#286 Phase 3）＝**新規窓**が [[match]]（[[facet filter]] の WHERE
-式）に当たると、その窓の adopt 時に [[apply]] facet を設定する宣言的ルール。グローバル（全
-mac desktop・per-desktop でない）で、宣言順に評価し窓は当たった**全 rule** の apply を累積
-（`setWorkspace` は単数値 auto-replace で last-wins）。#191 で撤去された `[[assign]]` の宣言的
-後継を [[facet filter]] 言語で復活させたもの。consumer は facet が窓を adopt した**直後**
-（classify gate の**外**・reconcile 後）に評価する＝malformed [[match]] が role-auto-float を
-乱せない（その rule のみ loud かつ **non-fatal** で skip・他は走る・sheet/dialog は必ず
-float）。wire は兄弟の top-level
-matcher [[exclude]] に倣う **flat キー**（`match` + `workspace`/`tags`/`floating`/`sticky`/
-`master`）＝[[apply]] と同じ `ApplyOp` 語彙だが nested table でなく flat（厳格 schema で typo
-検知・sill `ConfigSchema` に nested-object field 型が無いため）。
-- コード: `Rule` / `FacetConfig.rules` / `FacetConfig.decodeRuleSections` /
-  `effectiveRules`（`FacetCore`）
-- **Don't call it:** assign（旧称・#191 で撤去）, exclude（[[exclude]] は管理可否の**分類**＝別軸）,
-  trigger, hook, automation, ルール以外
+A `[[rule]]` adopt-rule (#282/#286 Phase 3) = a declarative rule that,
+when a **new window** hits [[match]] (a [[facet filter]] WHERE
+expression), sets the [[apply]] facets on that window at adopt time.
+Global (all mac desktops — not per-desktop), evaluated in declaration
+order; a window accumulates the applies of **every rule it hits**
+(`setWorkspace` is a single-valued auto-replace — last wins). The
+declarative successor of `[[assign]]` (removed in #191), revived on the
+[[facet filter]] language. The consumer evaluates **right after** facet
+adopts the window (outside the classify gate, after reconcile) = a
+malformed [[match]] cannot disturb role-auto-float (only that rule skips,
+loudly and **non-fatally**; the rest run; sheet/dialog always float). The
+wire follows the sibling top-level matcher [[exclude]] as **flat keys**
+(`match` + `workspace`/`tags`/`floating`/`sticky`/`master`) = the same
+`ApplyOp` vocabulary as [[apply]] but flat, not a nested table (strict
+schema for typo detection — sill `ConfigSchema` has no nested-object
+field type).
+- Code: `Rule` / `FacetConfig.rules` / `FacetConfig.decodeRuleSections` /
+  `effectiveRules` (`FacetCore`)
+- **Don't call it:** assign (the old name — removed in #191), exclude
+  ([[exclude]] is the manageability **classification** — a different
+  axis), trigger, hook, automation
 
 ### match
-[[isolate desktop]] / [[rule]] が共有する **述語キー**＝当たった窓を isolate desktop がタイル
-（rule では apply 対象に）する [[facet filter]] の WHERE 式。`facet section --match` の
-runtime 値も同じ。config には**文字列のまま**格納し、consumer 側で compile（parse error は
-caret 付き loud かつ **non-fatal**＝該当面は show-all へ degrade）。rule では `match` / [[apply]]
-が match に当たる窓へ apply を効かせる**対のキー**。
-- コード: isolate desktop の `match`（`desktopIsolate`）/ `Rule.match`（生文字列）→
-  `FacetFilter.parse`（consumer）
-- **Don't call it:** filter, where, query, predicate（式言語そのものは [[facet filter]]）,
-  マッチ条件, 絞り込み
+The **predicate key** shared by [[isolate desktop]] / [[rule]] = the
+[[facet filter]] WHERE expression whose hits the isolate desktop tiles
+(or the rule applies to). `facet section --match`'s runtime value is the
+same. Config stores it **as a string**; consumers compile it (a parse
+error is loud with a caret and **non-fatal** = the affected surface
+degrades to show-all). In a rule, `match` / [[apply]] are the **paired
+keys** — apply takes effect on the windows match hits.
+- Code: the isolate desktop's `match` (`desktopIsolate`) / `Rule.match`
+  (raw string) → `FacetFilter.parse` (consumer-side)
+- **Don't call it:** filter, where, query, predicate (the expression
+  language itself is [[facet filter]])
 
 ### apply
-[[rule]] の **[[match]] の逆写像**＝[[match]] に当たった**新規窓**へ adopt 時に設定する
-facet 群（旧 `onDrop` の改称）。型付き `ApplyOp`（`addTag` / `setFloating` / `setSticky` /
-`setMaster` / `setWorkspace`）のリスト。frozen セマンティクス: `addTag`=additive（冪等）/
-`setWorkspace`=単数値 auto-replace（last-wins）。wire は flat キー（`[[rule]]` の
-`workspace` / `tags` / `floating` / `sticky` / `master`）＝兄弟 [[exclude]] に倣う
-（厳格 schema で typo 検知）。かつて `type="lens"` section の drop 副作用（drop で tag 付与・
-move-out で反転）が同じ `ApplyOp` を使ったが、section-lens 退役（t-ec9s）でその DnD 経路は
-無くなり、apply は今や `[[rule]]` の adopt-time 設定のみ。tree DnD は ws→ws のメンバー
-付け替え（＝`setWorkspace`）と受け皿からの rescue に単純化された。
-- コード: `ApplyOp` / `ApplyOp.list(from:)`（`FacetCore`）/
-  `NativeAdapter.setFloating`/`setSticky`/`setMaster` / `Controller.applyAdd`
-- **Don't call it:** onDrop, onGroupChange, action, ハンドラ, 副作用
+[[rule]]'s **inverse image of [[match]]** = the facets set at adopt time
+on a **new window** that hit [[match]] (renamed from the old `onDrop`).
+A list of typed `ApplyOp`s (`addTag` / `setFloating` / `setSticky` /
+`setMaster` / `setWorkspace`). Frozen semantics: `addTag` = additive
+(idempotent) / `setWorkspace` = single-valued auto-replace (last wins).
+The wire is flat keys (`[[rule]]`'s `workspace` / `tags` / `floating` /
+`sticky` / `master`) following the sibling [[exclude]] (strict schema for
+typo detection). The drop side-effects of the former `type="lens"`
+section (tag on drop, inverted on move-out) once used the same `ApplyOp`,
+but section-lens retirement (t-ec9s) removed that DnD path — apply is now
+solely `[[rule]]`'s adopt-time settings. Tree DnD simplified to ws→ws
+membership moves (= `setWorkspace`) and rescue from the receptacle.
+- Code: `ApplyOp` / `ApplyOp.list(from:)` (`FacetCore`) /
+  `NativeAdapter.setFloating`/`setSticky`/`setMaster` /
+  `Controller.applyAdd`
+- **Don't call it:** onDrop, onGroupChange, action
 
 ---
 
-## 設定 / Theme
+## Configuration / Theme
 
 ### `config.toml`
-リポジトリルートの `config.toml` が **source-of-truth テンプレート**。
-ユーザーは `curl` して `~/.config/facet/config.toml` に置く。app は読むだけ
-（書かない / 自動生成しない / 永続化しない）。唯一の例外＝startup `auto-promote`
-（t-hdxb・opt-in）: `[config] auto-promote = true` ＋ `export-path` 設定時のみ、
-次回起動で config.toml より新しい snapshot を promote（overwrite + load）する
-＝唯一の sanctioned write（詳細は CLAUDE.md `### Configuration`）。memory
-`[[config-default-behavior]]`。
-- **Don't call it:** settings, preferences, user config, 設定ファイル（一般指示語）
+The repo-root `config.toml` is the **source-of-truth template**. Users
+`curl` it into `~/.config/facet/config.toml`. The app only reads (never
+writes / generates / persists). The one exception = startup `auto-promote`
+(t-hdxb, opt-in): only with `[config] auto-promote = true` + `export-path`
+set, the next launch promotes a snapshot newer than config.toml (overwrite
++ load) = the sole sanctioned write (details in CLAUDE.md
+`### Configuration`). Memory `[[config-default-behavior]]`.
+- **Don't call it:** settings, preferences, user config
 
 ### effective accessors
-`FacetConfig` の `effective*` プロパティ。out-of-range / unknown 値を
-**default に clamp** して返す。raw Optional は読まずに必ずこちらを通す。
-- **Don't call it:** safe getters, validated accessors, バリデート getter
+`FacetConfig`'s `effective*` properties. Out-of-range / unknown values
+**clamp to the default**. Never read the raw Optionals — always go through
+these.
+- **Don't call it:** safe getters, validated accessors
 
 ### `pal` (palette)
-sill の PaletteKit が公開する **`@MainActor` module-level var**
-（`ResolvedPalette`）。`Sources/FacetView/Palette.swift` が `@_exported
-import` で再公開し、view ファイルが `pal.foreground` / `pal.muted` /
-`pal.primary` などを直接参照する。**`pal` という変数名は改名しない**
-（view 側 ~数百箇所の変更を引き起こすが behavior 利得ゼロ）。ロール名は
-Phase V で Tailwind 風にリネーム（`text→foreground` / `dim→muted` /
-`accent→primary` / `accent2→secondary` …）。
-- preset: `ThemeSpec` の `.terminal` / `.dracula` / `.system` … は純粋
-  `Sendable`（UInt32 hex）。`@MainActor` 制約は解決後の `ResolvedPalette`
-  / `resolve(_:)` 側（`NSColor` が Sendable でないため）。
-- **Don't call it:** theme.current, currentPalette, theme, テーマ
+The **`@MainActor` module-level var** (`ResolvedPalette`) published by
+sill's PaletteKit. `Sources/FacetView/Palette.swift` re-exports it via
+`@_exported import`, and view files reference `pal.foreground` /
+`pal.muted` / `pal.primary` etc. directly. **The variable name `pal` is
+never renamed** (it would touch ~hundreds of view-side sites for zero
+behavioral gain). Role names were renamed Tailwind-style in Phase V
+(`text→foreground` / `dim→muted` / `accent→primary` /
+`accent2→secondary` …).
+- Presets: `ThemeSpec`'s `.terminal` / `.dracula` / `.system` … are pure
+  `Sendable` (UInt32 hex). The `@MainActor` constraint sits on the
+  resolved `ResolvedPalette` / `resolve(_:)` side (`NSColor` is not
+  Sendable).
+- **Don't call it:** theme.current, currentPalette, theme
 
 ---
 
-## ログ / 観測
+## Logging / observability
 
 ### `Log.line`
-**常時 ON** のログ関数。end-user 向けの operational event（AX focus
-mismatch 等）を出す用途。
-- **Don't call it:** info log, always-on log, 通常ログ
+The **always-ON** logging function, for end-user operational events (AX
+focus mismatch, …).
+- **Don't call it:** info log, always-on log
 
 ### `Log.debug`
-**`debugMode` global で gate**（`FACET_DEBUG` 環境変数の設定時のみ）。
-Controller / Adapter / EventSource の hot path で気軽に使う。
-- 出力先: `/tmp/facet.log` 常時 + `FACET_DEBUG` 時のみ stderr ミラー
-- **Don't call it:** verbose log, trace log, 詳細ログ
+**Gated by the `debugMode` global** (set only when the `FACET_DEBUG`
+environment variable exists). Used freely on Controller / Adapter /
+EventSource hot paths.
+- Output: `/tmp/facet.log` always + a stderr mirror only under
+  `FACET_DEBUG`
+- **Don't call it:** verbose log, trace log
 
 ### `FlippedClipView`
-day-one から使う `NSClipView` 派生。非 flipped を使うと grip-drag が
-散発的に失敗する（memory `[[grid-branch-grip-intermittent]]`）。**初日から
-全 scroll view に投入**。
-- **Don't call it:** custom clip view, fixed clip view, クリップビュー
+The `NSClipView` subclass used since day one. A non-flipped clip view
+makes grip-drags fail sporadically (memory
+`[[grid-branch-grip-intermittent]]`). **Installed in every scroll view
+from day one.**
+- **Don't call it:** custom clip view, fixed clip view
 
 ### drag-state lifecycle
-drag 状態は **backend round-trip 完了で clear**（`mouseUp` で clear しない）。
-- **Don't call it:** mouse drag flag, drag state, ドラッグ状態（一般語として
-  はあえて避ける）
+Drag state **clears on backend round-trip completion** (never on
+`mouseUp`).
+- **Don't call it:** mouse drag flag, drag state (avoided even as a
+  generic phrase)
 
 ---
 
-## バンドル / 配布
+## Bundle / distribution
 
 ### bundle id `com.facet.app`
-TCC grant と self-signed cert identity の鍵。**変えない**（M2 で確定）。
-- 設定: [`package.sh`](../package.sh)
-- **Don't call it:** app identifier, app id, バンドル ID
+The key to TCC grants and the self-signed cert identity. **Never change
+it** (settled in M2).
+- Config: [`package.sh`](../package.sh)
+- **Don't call it:** app identifier, app id
 
-### sole backend (`rift` 廃止)
-v2.0.0 で旧 `rift` adapter を retire し、`FacetAdapterNative` が唯一の
-backend に。Phase ε で完了。新規 adapter を足す場合も view 側変更不要
-（`WindowBackend` port 経由のため）。
-- **Don't call it:** legacy backend, primary backend, メイン backend
+### sole backend (`rift` retired)
+v2.0.0 retired the old `rift` adapter, leaving `FacetAdapterNative` as
+the only backend. Completed in Phase ε. Adding a new adapter still needs
+no view-side change (everything goes through the `WindowBackend` port).
+- **Don't call it:** legacy backend, primary backend
 
 ---
 
-## エントリ追加時のルール
+## Entry addition rules
 
-- 1 つの概念につき正規名は 1 つ。複数の呼び方が流通しているなら、
-  このファイルで勝者を選び、敗者は `Don't call it:` 行に並べる。
-- 正規名は **英語のまま** 書く。コード識別子（`FacetCore`, `pal`,
-  `[[desktop.N.section]]`）はその表記を維持する。
-- 定義は **1〜2 文** に収める。動作の詳細は設定セクションやソース
-  ファイルへリンクし、ここで説明し直さない。
-- 用語が CLI surface / DNC / config に表面化する場合は CLI フラグ名を
-  必ず併記する。
+- One canonical name per concept. When several names circulate, this file
+  picks the winner and the losers line up on the `Don't call it:` row.
+- Canonical names are written **in English**, keeping the exact spelling
+  of code identifiers (`FacetCore`, `pal`, `[[desktop.N.section]]`).
+- Definitions stay within **1-2 sentences**. Behavioral detail links to
+  the config sections or source files — never re-explained here.
+- When a term surfaces in the CLI / DNC / config, always list the CLI
+  flag name beside it.

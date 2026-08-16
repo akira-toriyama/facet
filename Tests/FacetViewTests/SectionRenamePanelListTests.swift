@@ -2,7 +2,7 @@ import CoreGraphics
 import Testing
 @testable import FacetView
 
-/// t-kywh (案A rework): the alias-picker CHECKLIST geometry — `panelHeight`
+/// t-kywh (plan-A rework): the alias-picker CHECKLIST geometry — `panelHeight`
 /// is the ONE place the panel's layout bands are summed and
 /// `aliasListVisibleHeight` the one row-cap rule, shared by `show` and the
 /// scroll placement, so these pin them. The toggle/derive SEMANTICS are

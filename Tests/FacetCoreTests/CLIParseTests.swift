@@ -7,8 +7,6 @@ import Testing
 
 struct CLIParseTests {
 
-    // MARK: - parseGeomInt
-
     /// Parse an integer flag value: plain / trimmed / signed, plus the
     /// `requirePositive` guard that rejects `0` and negatives (width / height).
     @Test("parseGeomInt: parse, trim, sign, and requirePositive guard",
@@ -33,8 +31,6 @@ struct CLIParseTests {
         #expect(parseGeomInt(input, requirePositive: requirePositive) == expected)
     }
 
-    // MARK: - canonicalize
-
     /// Canonicalise against a fixed allow-list: exact / lowercased / trimmed
     /// matches succeed; an unknown value rejects with the expected list.
     @Test("canonicalize: exact/lowercase/trim match; unknown rejects",
@@ -50,8 +46,6 @@ struct CLIParseTests {
                            expected: Result<String, CLIParseError>) {
         #expect(canonicalize(input, allowed: ["tree", "grid"]) == expected)
     }
-
-    // MARK: - validateGeom
 
     /// All-or-nothing geometry tuple: none when all nil, complete when all
     /// four set, partial (with the provided count) otherwise.

@@ -7,8 +7,6 @@ import Testing
 // `swift test` (no XCTest module); the local bar is `swift build`.
 struct FacetFilterParserTests {
 
-    // MARK: helpers
-
     private func atom(_ field: String) -> FacetFilter {
         .atom(.init(field: field, kind: .presence))
     }
@@ -121,8 +119,6 @@ struct FacetFilterParserTests {
         #expect(parsed("tag~=web") == cmp("tag", .contains, "web"))
     }
 
-    // MARK: parentheses
-
     @Test func parensOverridePrecedence() {
         #expect(
             parsed("(a~=1 or b~=2) and c~=3") ==
@@ -158,8 +154,6 @@ struct FacetFilterParserTests {
         #expect(parsed("title=\"\"") == cmp("title", .equals, ""))
     }
 
-    // MARK: case-sensitivity flag
-
     @Test func caseInsensitiveByDefault() {
         #expect(parsed("app=safari") == cmp("app", .equals, "safari", cs: false))
     }
@@ -186,8 +180,6 @@ struct FacetFilterParserTests {
         #expect(parsed("mark=or") == cmp("mark", .equals, "or"))
         #expect(parsed("tag=not") == cmp("tag", .equals, "not"))
     }
-
-    // MARK: empty input
 
     @Test func emptyInputIsAll() {
         #expect(parsed("") == .all)

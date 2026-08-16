@@ -3,7 +3,7 @@ import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
-/// Tests for the real-window-DnD backend verbs (枠C): LayoutTree leaf
+/// Tests for the real-window-DnD backend verbs (Frame C): LayoutTree leaf
 /// swap / edge-insert, and the WorkspaceCatalog swap / insert wrappers
 /// across stateless and bsp modes. Pure — no AX / AppKit, same playbook
 /// as `WorkspaceCatalogTests` / `RotateMirrorTests`.
@@ -20,8 +20,6 @@ struct RealWindowDnDTests {
         _ = c.reconcile(live: (1...n).map { window($0) })
         return c
     }
-
-    // MARK: - LayoutTree swap
 
     @Test func treeSwapTradesFrames() {
         var t = twoVertical()
@@ -50,8 +48,6 @@ struct RealWindowDnDTests {
         t.swap(wid(1), wid(1))
         #expect(t == t0)
     }
-
-    // MARK: - LayoutTree insert beside
 
     @Test func treeInsertBottomReSplitsHorizontally() {
         var t = twoVertical()                       // wid1 | wid2

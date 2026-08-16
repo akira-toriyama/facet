@@ -148,7 +148,7 @@ public struct FacetConfig: Sendable {
     public var smartGaps: Bool?
 
     // [animation]
-    /// Window-move animation (枠 E). When on, geometry transitions
+    /// Window-move animation (Frame E). When on, geometry transitions
     /// (Phase 1: workspace switch) slide via per-frame AX writes instead
     /// of jumping. Raw; read `effectiveAnimationsEnabled`.
     public var animationsEnabled: Bool?

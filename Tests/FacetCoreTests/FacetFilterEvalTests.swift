@@ -11,8 +11,6 @@ struct FacetFilterEvalTests {
 
     typealias FWS = WindowQueryEntry.FacetWindowState
 
-    // MARK: fixtures
-
     private func win(app: String = "Safari", title: String = "Home",
                      bundle: String? = "com.apple.Safari",
                      floating: Bool = false, sticky: Bool = false,
@@ -164,8 +162,6 @@ struct FacetFilterEvalTests {
         #expect(!m("scratchpad", plain))
         #expect(m("not floating", plain))
     }
-
-    // MARK: case-sensitivity flag
 
     @Test func caseInsensitiveByDefault() {
         let w = win(app: "Safari")

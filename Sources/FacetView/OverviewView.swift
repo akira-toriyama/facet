@@ -55,8 +55,6 @@ public protocol OverviewView: NSView {
     /// Backend for the shared context menu (③).
     var backend: (any WindowBackend)? { get set }
 
-    // MARK: Shared callbacks
-
     /// Click outside any cell, or Esc — the Controller owns the
     /// hide / restore sequence.
     var onDismiss: (() -> Void)? { get set }

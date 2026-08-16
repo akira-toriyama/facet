@@ -1,4 +1,4 @@
-// 枠 E: workspace-switch slide animation — per-frame driver
+// Frame E: workspace-switch slide animation — per-frame driver
 // (CADisplayLink), easing, and the animate* entry points
 // for switch / retile / stack-cycle. Extracted unchanged from
 // NativeAdapter.swift (#182 phase 4) — same-module extension, no
@@ -24,7 +24,7 @@ final class SlideTicker: NSObject {
 }
 
 extension NativeAdapter {
-    // MARK: - 枠 E: workspace-switch slide animation (Phase 1)
+    // MARK: - Frame E: workspace-switch slide animation (Phase 1)
 
     /// AX element for a managed window (pid via the catalog).
     func axWin(id: WindowID) -> AXUIElement? {
@@ -185,7 +185,7 @@ extension NativeAdapter {
         displayLink = link
     }
 
-    /// Phase 1 of 枠 E: slide the directional filmstrip on a workspace
+    /// Phase 1 of Frame E: slide the directional filmstrip on a workspace
     /// switch. Incoming windows enter from one edge (sized off-screen
     /// first, so visible motion is pure translation); outgoing exit the
     /// opposite edge; the index delta picks the direction. The real
@@ -303,7 +303,7 @@ extension NativeAdapter {
         }
     }
 
-    /// Phase 2 of 枠 E: animate a same-mode re-tile / layout change as an
+    /// Phase 2 of Frame E: animate a same-mode re-tile / layout change as an
     /// in-place reflow — every visible window tweens its full frame
     /// (position + size) from where it sits now to its new tiled frame.
     /// All windows stay on-screen (no off-screen trick), so this is the
@@ -369,7 +369,7 @@ extension NativeAdapter {
         return true
     }
 
-    /// 枠 E: animate a stack cycle as a one-window slide — the old top
+    /// Frame E: animate a stack cycle as a one-window slide — the old top
     /// exits one edge, the next window enters from the opposite edge
     /// (the others stay parked); direction picks the axis. P6: the cycle's
     /// catalog state (park old top / un-park new top) is committed HERE on

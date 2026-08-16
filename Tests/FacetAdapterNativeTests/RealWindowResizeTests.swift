@@ -3,7 +3,7 @@ import Testing
 @testable import FacetCore
 @testable import FacetAdapterNative
 
-/// Tests for the real-window-resize foundation (枠C 機能2 PR-1): the
+/// Tests for the real-window-resize foundation (Frame C feature 2 PR-1): the
 /// LayoutTree fence walk + ratio update, and the WorkspaceCatalog
 /// applyResize wrapper (bsp tree + stateless master divider). Pure — no
 /// AX / AppKit. FOLLOW model: resize a leaf to a new frame, the
@@ -29,8 +29,6 @@ struct RealWindowResizeTests {
         t.insert(wid(2), focused: wid(1), in: tallRect)
         return t
     }
-
-    // MARK: - LayoutTree.resize
 
     @Test func resizeRightEdgeGrowsAndNeighborFollows() {
         var t = twoVertical()                    // 1=(0,0,800,900)
@@ -130,7 +128,7 @@ struct RealWindowResizeTests {
         // w1 | (w2 · w3): dragging w2's LEFT edge moves the ROOT fence
         // (w1 | [w2 w3]); its dragged side comoves, so {w2,w3} freeze and
         // only w1 follows. Without this the live reflow re-tiles w3 to its
-        // computed slot, off w2's actual frame → the gap トミー saw.
+        // computed slot, off w2's actual frame → the gap Tommy saw.
         var t = LayoutTree()
         t.insert(wid(1), focused: nil, in: rect)
         t.insert(wid(2), focused: wid(1), in: rect)   // w1 | w2
@@ -143,8 +141,6 @@ struct RealWindowResizeTests {
             in: rect)
         #expect(frozen == [wid(2), wid(3)])
     }
-
-    // MARK: - Catalog.applyResize
 
     @Test func catalogApplyResizeBsp() {
         var c = seeded(2)
@@ -189,7 +185,7 @@ struct RealWindowResizeTests {
         // With an inner gap the dragged window's on-screen frame is inset
         // from its tree slot. A pure-HEIGHT resize must NOT be read as a
         // width (X) edge move via that constant gap offset — that was the
-        // "縮小すると隣の窓の右がおかしい" bug. Side-by-side (vertical split):
+        // The "shrinking corrupts the neighbour's right edge" bug. Side-by-side (vertical split):
         // wid1's tree slot is [0,800]; on-screen its interior right edge
         // sits at 790 (inner-gap 20). Drag only its bottom edge up; the
         // right edge stays at 790 → no width change, and (no horizontal

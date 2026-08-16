@@ -13,8 +13,6 @@ import FacetView
 
 extension RailView {
 
-    // MARK: - Ghosts
-
     // Construction is the shared FacetView helper (DragGhost.swift),
     // fed the rail's tunables (`railGhostStyle`). The rail passes no
     // app-icon fallback (it shows captures only) — a not-yet-captured
@@ -53,8 +51,6 @@ extension RailView {
     func positionDragGhost(at p: NSPoint) {
         positionGhost(dragGhost, at: p)
     }
-
-    // MARK: - Commit / cancel
 
     func commitDrop(sourceWS: Int, pid: Int, id: WindowID, dstCell: OverviewCell) {
         // Ghost stays at the release point as a placeholder; `drag`

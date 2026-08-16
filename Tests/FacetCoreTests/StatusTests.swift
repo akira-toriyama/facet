@@ -65,8 +65,6 @@ struct StatusTests {
         #expect(entry.windowCount == 3)
     }
 
-    // MARK: - Rendering
-
     @Test func renderIncludesAllHeaderFields() {
         let snap = StatusSnapshot(
             backend: "native",
@@ -186,8 +184,6 @@ struct StatusTests {
         let snap = try JSONDecoder().decode(StatusSnapshot.self, from: json)
         #expect(snap.tags == [])
     }
-
-    // MARK: - Helpers
 
     private func tempPath() -> String {
         NSTemporaryDirectory()

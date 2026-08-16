@@ -23,8 +23,6 @@ struct WindowMenuTests {
                              isSticky: isSticky)
     }
 
-    // MARK: - Float mode
-
     @Test func floatModeNonFloatingMenu() {
         #expect(labels(menu("float")) ==
                        ["Float", "Sticky", "Close window"])
@@ -34,8 +32,6 @@ struct WindowMenuTests {
         #expect(labels(menu("float", floating: true)) ==
                        ["Unfloat", "Sticky", "Close window"])
     }
-
-    // MARK: - BSP mode
 
     @Test func bspModeNonFloatingMenu() {
         let items = menu("bsp")
@@ -52,8 +48,6 @@ struct WindowMenuTests {
         #expect(labels(menu("bsp", floating: true)) ==
                        ["Unfloat", "Sticky", "Close window"])
     }
-
-    // MARK: - Stack mode
 
     @Test func stackModeNonFloatingMenu() {
         let items = menu("stack", windowCount: 2)
@@ -131,8 +125,6 @@ struct WindowMenuTests {
         }
     }
 
-    // MARK: - Sticky
-
     @Test func stickyWindowShowsUnstickOnly() {
         // A sticky window is always floating; float-exit = sticky-exit,
         // so the menu collapses to a single "Unstick" (no "Unfloat",
@@ -156,8 +148,6 @@ struct WindowMenuTests {
             }
         }
     }
-
-    // MARK: - Universal items
 
     @Test func closeAlwaysLastAndCloseFlagged() {
         for mode in ["float", "bsp", "stack", "master-left", "master-top", "master-center"] {

@@ -1,6 +1,6 @@
-// Real-window mouse gestures (枠C): drag a tiled window onto another to
-// swap / insert it (機能1), or drag a window's edge to resize it with the
-// neighbour following along (機能2). Both ride ONE global mouse monitor —
+// Real-window mouse gestures (Frame C): drag a tiled window onto another to
+// swap / insert it (feature 1), or drag a window's edge to resize it with the
+// neighbour following along (feature 2). Both ride ONE global mouse monitor —
 // the gesture self-classifies from what the grabbed window does: its size
 // changing ⇒ a resize, its position-only change ⇒ a move/drop.
 //
@@ -146,7 +146,7 @@ final class RealWindowDragMonitor {
     }
 }
 
-/// Live resize-follow tuning (枠C 機能2). Calibrated against the FOLLOW
+/// Live resize-follow tuning (Frame C feature 2). Calibrated against the FOLLOW
 /// peers (AeroSpace 5px dead-zone, yabai 15fps): a per-tick dead-zone kills
 /// AX-poll sub-pixel jitter (else the neighbour shimmers), the throttle
 /// caps neighbour AX writes, and the classify threshold tells a real resize
@@ -201,7 +201,7 @@ extension Controller {
     /// Polls the dragged window's live frame off-main and self-classifies:
     /// size grew / shrank vs the grab size ⇒ a real-window resize (follow
     /// it, NEIGHBOURS only — the OS owns the dragged window's frame);
-    /// otherwise it's a 機能1 move (drive the drop-prediction overlay). A
+    /// otherwise it's a feature-1 move (drive the drop-prediction overlay). A
     /// per-tick dead-zone drops sub-pixel AX-poll jitter so the neighbour
     /// doesn't shimmer.
     private func liveDragTick(dragged: WindowID, cursor: CGPoint,
@@ -270,7 +270,7 @@ extension Controller {
 
     /// Mouse-up: resolve the gesture authoritatively. Polls the dragged
     /// window's live frame once off-main; a size change vs grab ⇒ resize
-    /// (settle: full reflow snaps it onto its slot), otherwise it's a 機能1
+    /// (settle: full reflow snaps it onto its slot), otherwise it's a feature-1
     /// move ⇒ resolve + commit the swap / insert. `tiles` is captured on
     /// main first (lastWorkspaces is frozen during the drag); the AX read
     /// + apply then run off-main.
@@ -290,7 +290,7 @@ extension Controller {
                 bk.resizeWindow(dragged, to: live, reflowDragged: true)
                 Log.debug("rwdrag resize settle dragged=\(dragged.serverID)")
             } else {
-                // 機能1 move. Only commit a drop when the window genuinely
+                // A feature-1 move. Only commit a drop when the window genuinely
                 // moved (origin travelled) — or when its frame couldn't be
                 // read (preserve feature-1 robustness). Rejects the at-min
                 // edge-drag false positive (neither size nor origin moved).

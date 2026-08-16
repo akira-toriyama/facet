@@ -22,8 +22,6 @@ private let dual = [
 /// in production.
 struct DisplayGeometryTests {
 
-    // MARK: - isVisible
-
     @Test("isVisible: rect intersects any display in the layout", arguments: [
         (rect: CGRect(x: 100, y: 100, width: 400, height: 300),
          displays: single, expected: true),
@@ -42,8 +40,6 @@ struct DisplayGeometryTests {
     func isVisible(rect: CGRect, displays: [CGRect], expected: Bool) {
         #expect(DisplayGeometry.isVisible(rect, in: displays) == expected)
     }
-
-    // MARK: - nearestDisplay
 
     @Test("nearestDisplay: closest by centre distance, nil when empty",
           arguments: [
@@ -66,8 +62,6 @@ struct DisplayGeometryTests {
     func nearestDisplay(rect: CGRect, displays: [CGRect], expected: CGRect?) {
         #expect(DisplayGeometry.nearestDisplay(to: rect, in: displays) == expected)
     }
-
-    // MARK: - orphanedPoints
 
     @Test("orphanedPoints: points not contained by any display", arguments: [
         // All sit on a display → none orphaned.

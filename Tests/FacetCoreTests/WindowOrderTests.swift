@@ -1,7 +1,7 @@
 import Testing
 @testable import FacetCore
 
-/// Pure tests for the window-order ops behind swap / insert (枠C).
+/// Pure tests for the window-order ops behind swap / insert (Frame C).
 /// `nil` means "no change" (the caller's change-detection signal).
 struct WindowOrderTests {
 
@@ -9,8 +9,6 @@ struct WindowOrderTests {
     private func order() -> [WindowID] {
         [wid(1), wid(2), wid(3), wid(4)]
     }
-
-    // MARK: - swap
 
     @Test("swap exchanges positions; same / absent → nil", arguments: [
         (a: 1, b: 4, expected: [4, 2, 3, 1] as [Int]?),  // exchange
@@ -21,8 +19,6 @@ struct WindowOrderTests {
         #expect(WindowOrder.swapped(order(), wid(a), wid(b))
                 == expected?.map(wid))
     }
-
-    // MARK: - insert
 
     @Test("insert beside target per edge; no-move / same / absent → nil", arguments: [
         // Move wid(1) to just after wid(3).
