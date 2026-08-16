@@ -698,8 +698,17 @@ extension PanelHost: NSWindowDelegate {
     nonisolated func windowDidResize(_ notification: Notification) {
         MainActor.assumeIsolated {
             let f = panel.frame
-            userWidth = f.width
-            userHeight = f.height
+            // Pin the session geometry ONLY for a USER-driven (live) resize.
+            // This delegate fires for `layout()`'s programmatic setFrame too
+            // (see windowDidMove's note), so pinning unconditionally froze
+            // auto-height at the FIRST layout's content: the panel never
+            // grew when rows arrived, and a search's shrink re-pinned the
+            // smaller value (the t-84t6 auto-height freeze — trigger now
+            // isolated to exactly this line).
+            if panel.inLiveResize {
+                userWidth = f.width
+                userHeight = f.height
+            }
             anchorTL = NSPoint(x: f.minX, y: f.maxY)
             // The SwiftUI tree reflows itself inside the resized `treeHost`
             // (autoresizingMask + `ThemedListView`'s own scroll) — no manual
