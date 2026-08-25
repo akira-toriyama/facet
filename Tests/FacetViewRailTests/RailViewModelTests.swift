@@ -250,6 +250,76 @@ struct RailViewModelTests {
         #expect(dismissed == 1)
     }
 
+    @Test func tabReadingOrderIsRowMajorForStackedWindows() {
+        // Two rows: top A(1) C(3), bottom B(2). The unit-normalized rects
+        // collapsed `readingOrder`'s row band to the whole square (pure
+        // x-sort: A, B, C) — the fix scales hits back to screen size.
+        let vm = makeVM(workspaces: [
+            ws(0, active: true, windows: [
+                win(1, frame: CGRect(x: 0, y: 0, width: 700, height: 400)),
+                win(2, frame: CGRect(x: 0, y: 500, width: 700, height: 400)),
+                win(3, frame: CGRect(x: 800, y: 0, width: 700, height: 400)),
+            ])])
+        var order: [WindowID] = []
+        for _ in 0..<3 {
+            vm.kbCycleWindow(forward: true)
+            if let s = vm.kbSelectedThumb { order.append(s.thumb.id) }
+        }
+        #expect(order == [WindowID(serverID: 1), WindowID(serverID: 3),
+                          WindowID(serverID: 2)])
+    }
+
+    @Test func pointerTapInClippedMarginResolvesAsBackdrop() {
+        // 10 sections, 7 visible: cells rotate past the viewport but stay
+        // hit-testable in SwiftUI — the tap router must resolve a click on
+        // a clipped-out cell as the backdrop it looks like (dismiss), and
+        // one on a visible cell as its pick.
+        var dismissed = 0
+        var picked: RailPick?
+        let vm = makeVM(workspaces: (0..<10).map { ws($0, active: $0 == 0) })
+        vm.onDismiss = { dismissed += 1 }
+        vm.onPick = { picked = $0 }
+        let lay = vm.layout
+        let off = lay.placements.first {
+            !lay.stripRect.intersects($0.cellRect) && !$0.isWrapGhost
+        }
+        #expect(off != nil)
+        if let off {
+            vm.pointerTap(at: CGPoint(x: off.cellRect.midX, y: off.cellRect.midY))
+        }
+        #expect(dismissed == 1)
+        #expect(picked == nil)
+        vm.pointerTap(at: stripPoint(vm, cellID: "ws:1"))
+        guard case .workspace(let w)? = picked else {
+            Issue.record("expected a workspace pick"); return
+        }
+        #expect(w == 1)
+        #expect(dismissed == 1)
+    }
+
+    @Test func pointerDragEndFallbackNeverDoubleCommits() {
+        // The monitor's post-up fallback fires after the healthy onEnded —
+        // with the landing gate armed it must stand down, not re-commit.
+        var moves = 0
+        let w = win(1)
+        let vm = makeVM(workspaces: [ws(0, active: true, windows: [w]),
+                                     ws(1), ws(2)])
+        vm.onMoveWindow = { _, _, _, _ in moves += 1 }
+        let cell = vm.cells[0]
+        let start = thumbPoint(vm, cellID: "ws:0", thumbIndex: 0)
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
+                            thumbIndex: 0, location: start,
+                            startLocation: start)
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
+                            thumbIndex: 0,
+                            location: stripPoint(vm, cellID: "ws:1"),
+                            startLocation: start)
+        vm.thumbDragEnded()
+        #expect(moves == 1)
+        vm.pointerDragEndFallback()               // the async monitor hop
+        #expect(moves == 1)
+    }
+
     // MARK: - Landing gates + suppression
 
     @Test func windowDropGatesUntilBackendAck() {
@@ -304,6 +374,17 @@ struct RailViewModelTests {
         return CGPoint(x: pl.cellRect.midX + dx, y: pl.cellRect.midY)
     }
 
+    private func headerPoint(_ vm: RailViewModel, cellID: String) -> CGPoint {
+        let pl = vm.placement(of: cellID)!
+        return CGPoint(x: pl.headerRect.midX, y: pl.headerRect.midY)
+    }
+
+    private func thumbPoint(_ vm: RailViewModel, cellID: String,
+                            thumbIndex: Int) -> CGPoint {
+        let r = vm.stripThumbRect(cellID: cellID, thumbIndex: thumbIndex)!
+        return CGPoint(x: r.midX, y: r.midY)
+    }
+
     @Test func thumbDragTargetsOnlyOtherWorkspaceCellsInViewport() {
         // Odd count: all three cells sit fully inside the viewport (an even
         // full count half-clips both ends by design — the mirror peek).
@@ -311,21 +392,24 @@ struct RailViewModelTests {
         let vm = makeVM(workspaces: [ws(0, active: true, windows: [w]),
                                      ws(1), ws(2)])
         let cell = vm.cells[0]
+        let start = thumbPoint(vm, cellID: "ws:0", thumbIndex: 0)
         vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
-                            thumbIndex: 0,
-                            location: stripPoint(vm, cellID: "ws:0"))
+                            thumbIndex: 0, location: start,
+                            startLocation: start)
         #expect(vm.hiddenThumbID == w.id)
         // Over the source cell: no target.
         #expect(vm.drag?.targetCellID == nil)
         vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
                             thumbIndex: 0,
-                            location: stripPoint(vm, cellID: "ws:1"))
+                            location: stripPoint(vm, cellID: "ws:1"),
+                            startLocation: start)
         #expect(vm.drag?.targetCellID == "ws:1")
         // Outside the strip viewport (the hero): no target.
         vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
                             thumbIndex: 0,
                             location: CGPoint(x: vm.layout.heroRect.midX,
-                                              y: vm.layout.heroRect.midY))
+                                              y: vm.layout.heroRect.midY),
+                            startLocation: start)
         #expect(vm.drag?.targetCellID == nil)
         var moved = false
         vm.onMoveWindow = { _, _, _, _ in moved = true }
@@ -339,11 +423,13 @@ struct RailViewModelTests {
         let vm = makeVM(workspaces: [ws(0, active: true), ws(1), ws(2)])
         vm.onReorder = { reorder = ($0, $1) }
         // Drag ws:0's header over ws:2's far half → boundary 3.
-        vm.headerDragChanged(cellID: "ws:0",
-                             location: stripPoint(vm, cellID: "ws:0"))
+        let start = headerPoint(vm, cellID: "ws:0")
+        vm.headerDragChanged(cellID: "ws:0", location: start,
+                             startLocation: start)
         #expect(vm.workspaceGhost?.cell.id == "ws:0")
         vm.headerDragChanged(cellID: "ws:0",
-                             location: stripPoint(vm, cellID: "ws:2", dx: 10))
+                             location: stripPoint(vm, cellID: "ws:2", dx: 10),
+                             startLocation: start)
         #expect(vm.drag?.reorderBoundary == 3)
         #expect(vm.drag?.reorderLine != nil)
         vm.headerDragEnded()
@@ -356,23 +442,30 @@ struct RailViewModelTests {
         var reorders = 0
         let vm = makeVM(workspaces: [ws(0, active: true), ws(1)])
         vm.onReorder = { _, _ in reorders += 1 }
+        let start = headerPoint(vm, cellID: "ws:0")
         vm.headerDragChanged(cellID: "ws:0",
-                             location: stripPoint(vm, cellID: "ws:0", dx: 10))
+                             location: stripPoint(vm, cellID: "ws:0", dx: 10),
+                             startLocation: start)
         #expect(vm.drag?.reorderBoundary == nil)  // own slot / own boundary
         vm.headerDragEnded()
         #expect(reorders == 0)
     }
 
     @Test func lensHeaderArmsReorderToo() {
+        // Odd section count — an even full count half-clips both viewport
+        // ends by design, putting the end cells' centres on the gate edge.
         let secs = [
             ProjectedSection(id: "ws:0", label: "a", windows: [],
                              sourceWorkspaceIndex: 0),
             ProjectedSection(id: "lens", label: "Web", windows: [],
                              sourceWorkspaceIndex: nil, sectionType: .matched),
+            ProjectedSection(id: "ws:1", label: "b", windows: [],
+                             sourceWorkspaceIndex: 1),
         ]
-        let vm = makeVM(workspaces: [ws(0, active: true)], sections: secs)
-        vm.headerDragChanged(cellID: "lens",
-                             location: stripPoint(vm, cellID: "lens"))
+        let vm = makeVM(workspaces: [ws(0, active: true), ws(1)], sections: secs)
+        let start = headerPoint(vm, cellID: "lens")
+        vm.headerDragChanged(cellID: "lens", location: start,
+                             startLocation: start)
         #expect(vm.workspaceGhost?.cell.id == "lens")
         vm.headerDragEnded()
     }

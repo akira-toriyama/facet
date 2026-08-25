@@ -321,22 +321,20 @@ edge-based → **2-b made it a carousel (replacing M9-4's scroll)**.
 ### overview surface
 **The umbrella axis shared by grid view and rail view: a full-screen
 overlay tiled with [[facet workspace]] mini-screens + window thumbnails**
-(tree view is excluded — a hierarchical list with no mini-screens). The two
-views share value types (`OverviewCell` / `OverviewDrag` /
-`OverviewPendingDrop` / `OverviewPendingSwap`), slot cycling
-(`cycleSlotIndex`), the thumbnail painter (`drawMiniThumb`), the
-full-screen panel (`OverviewPanel`), pure geometry (`OverviewGeometry`),
-and moreover the **behavior contract `OverviewView`** (a `FacetView`
-protocol — snapshot-on-show input, move/swap/run-ops callbacks, thumbnail
-supply, border, common keys Esc/Return/Space/Tab/`m`) that unifies the
-Controller wiring (`Controller+Overview`'s `seedOverviewCommon` /
-`presentOverview` / `overviewCommonKey`, …). What genuinely differs (grid's
-`cols×rows` + FLIP ↔ rail's carousel + hero + edge, the `onPick` shape,
-arrow nav, scroll rotation) is kept out of the contract. Using "overview"
-alone for grid view is forbidden (see grid view) — the umbrella is always
-"overview surface".
-- Code: `Overview*` (value types / geometry = `FacetCore`; drawing / panel /
-  the `OverviewView` protocol = `FacetView`)
+(tree view is excluded — a hierarchical list with no mini-screens). Since
+the SwiftUI migration (grid #456, rail #457) each view is an @Observable
+view model (`GridViewModel` / `RailViewModel`) driven by the Controller's
+local monitors; what they share is the landing-gate value types
+(`OverviewPendingDrop` / `OverviewPendingSwap`), slot cycling
+(`cycleSlotIndex`), pure geometry (`OverviewGeometry`), the sill
+WindowShell + `ShellFade` shell, the `snapshotRegion` zoom/crossfade hook,
+and the Controller's move/swap round-trips + thumbnail capture feeds
+(`Controller+Overview`). What genuinely differs (grid's `cols×rows` + FLIP
+↔ rail's carousel + hero + edge, the `onPick` shape, arrow nav, scroll
+rotation) stays per-view. Using "overview" alone for grid view is
+forbidden (see grid view) — the umbrella is always "overview surface".
+- Code: `Overview*` (value types / geometry = `FacetCore`; the shells and
+  feeds = `Controller+Grid` / `Controller+Rail` / `Controller+Overview`)
 - **Don't call it:** expose, mission control (visual metaphors for the
   individual views), grid (grid view's own word)
 

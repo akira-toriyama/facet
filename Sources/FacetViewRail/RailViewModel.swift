@@ -136,6 +136,9 @@ public final class RailViewModel {
         var isKeyboard: Bool
     }
     private(set) var drag: HostDrag?
+    /// Cross-module probe (the Controller's monitors): any drag in flight —
+    /// pointer or keyboard — including one parked on the landing gate.
+    public var isDragging: Bool { drag != nil }
     /// The dragged window stays hidden in BOTH tiers through the drag and
     /// the landing gate (the ghost stands in) — cleared on backend ack.
     private(set) var hiddenThumbID: WindowID?
@@ -149,7 +152,14 @@ public final class RailViewModel {
 
     /// True while any pointer button is down inside the overlay (the
     /// monitor maintains it); a deferred snapshot flushes on release.
-    public var pointerBusy = false { didSet { if !pointerBusy { flushPending() } } }
+    public var pointerBusy = false {
+        didSet {
+            // A press mid-slide settles the carousel instantly: the strip
+            // renders `.offset(slideOffset)` while every hit-test rect is
+            // unshifted, so the two must agree before any gesture resolves.
+            if pointerBusy { settleSlide() } else { flushPending() }
+        }
+    }
     private var pendingApply: (wss: [Workspace], secs: [ProjectedSection])?
 
     // MARK: Carousel slide (2-b v2) + hero crossfade
@@ -346,9 +356,20 @@ public final class RailViewModel {
                                               norm: n, mark: win.mark))
                 }
             }
+            // Reading order needs REAL distances: `readingOrder`'s row band
+            // is `max(1, maxHeight/2)`, which in unit space floors at the
+            // whole square and collapses every row into one x-sort. Scale
+            // the hits back to screen size first (measured, adversarial
+            // review 2026-08-25).
+            let sw = max(screenFrame.width, 1)
+            let sh = max(screenFrame.height, 1)
             let hits = thumbs.map {
                 MiniWindowHit(pid: $0.pid, id: $0.id, isFocused: $0.isFocused,
-                              rect: $0.norm, mark: $0.mark)
+                              rect: CGRect(x: $0.norm.minX * sw,
+                                           y: $0.norm.minY * sh,
+                                           width: $0.norm.width * sw,
+                                           height: $0.norm.height * sh),
+                              mark: $0.mark)
             }
             let ordered = readingOrder(hits)
             let kbOrder = ordered.compactMap { o in thumbs.firstIndex { $0.id == o.id } }
@@ -427,11 +448,21 @@ public final class RailViewModel {
         prevHeroImage = nil          // crossfade done
     }
 
+    /// Snap an in-flight rotation to its resting pose (pointer engagement
+    /// mid-slide — rendered and hit-test geometry must agree).
+    public func settleSlide() {
+        slideOffset = 0
+        stopSlide()
+    }
+
     /// Overlay teardown: settle the slide and fire a pending zoom's switch
     /// (closed mid-zoom must not drop it).
     public func teardown() {
         slideOffset = 0
         stopSlide()
+        hoverID = nil
+        hoverHeaderID = nil
+        NSCursor.arrow.set()
         if zoomPerform != nil { finishZoom() }
     }
 
@@ -463,6 +494,8 @@ public final class RailViewModel {
         }
         let slot = layout.slot
         selectedSectionID = order[ni]
+        hoverID = nil                 // cells moved under a static pointer
+        hoverHeaderID = nil
         if drag != nil {
             // Lifted: the carousel rotates under the ghost; centre = target.
             syncKbDragToSelection()
@@ -601,6 +634,27 @@ public final class RailViewModel {
 
     // MARK: - Pointer picks
 
+    /// The single click resolver, in the old `mouseDown` order: a window
+    /// thumb (hero first) → a viewport-gated strip cell (header or empty
+    /// area) → the hero's focal no-op → the backdrop dismiss. Every tap
+    /// gesture routes through here with its rail-space location, so a cell
+    /// rotated past the carousel clip — clipped visually but still
+    /// hit-testable in SwiftUI — resolves like the bare backdrop it looks
+    /// like instead of switching workspaces.
+    public func pointerTap(at p: CGPoint) {
+        guard zoom == nil, drag == nil else { return }
+        if let hit = thumbAt(p) {
+            tapThumb(cellID: hit.cell.id, thumb: hit.thumb)
+            return
+        }
+        if let cell = stripCellAt(p) {
+            tapCell(cell.id)
+            return
+        }
+        if layout.heroRect.contains(p) { return }
+        onDismiss?()
+    }
+
     public func tapBackdrop() {
         guard zoom == nil, drag == nil else { return }
         onDismiss?()
@@ -630,11 +684,16 @@ public final class RailViewModel {
     // MARK: - Pointer window drag (hero = primary source, strip = secondary)
 
     public func thumbDragChanged(cellID: String, thumb: RailThumbVM,
-                                 thumbIndex: Int, location: CGPoint) {
+                                 thumbIndex: Int, location: CGPoint,
+                                 startLocation: CGPoint) {
         guard zoom == nil else { return }
         if drag == nil {
-            // A keyboard lift owns the gesture space — a stray mouse drag
-            // must not hijack its aim (the old pendingDown guard).
+            // Only a WORKSPACE cell's thumb is move-draggable (Decision 6 —
+            // the old rail refused lens thumbs, unlike the grid), and the
+            // press must land on the thumb's VISIBLE part: a cell rotated
+            // past the carousel clip stays hit-testable in SwiftUI, so the
+            // viewport-gated `thumbAt` re-checks the start point.
+            guard thumbAt(startLocation)?.thumb.id == thumb.id else { return }
             guard let cell = cells.first(where: { $0.id == cellID }),
                   cell.sectionType == .workspace else { return }
             let size = stripThumbRect(cellID: cellID, thumbIndex: thumbIndex)?.size
@@ -685,12 +744,15 @@ public final class RailViewModel {
     // MARK: - Pointer section reorder (mouse header drag — display-only;
     // what sill's kit owned for the grid, host-side here)
 
-    public func headerDragChanged(cellID: String, location: CGPoint) {
+    public func headerDragChanged(cellID: String, location: CGPoint,
+                                  startLocation: CGPoint) {
         guard zoom == nil else { return }
         if drag == nil {
-            // BOTH workspace + lens headers arm a reorder (the old rule);
-            // a keyboard lift in flight blocks the mouse (isKeyboard guard).
-            guard cells.contains(where: { $0.id == cellID }) else { return }
+            // BOTH workspace + lens headers arm a reorder (the old rule); a
+            // keyboard lift in flight blocks the mouse (isKeyboard guard),
+            // and the press must land on the header's VISIBLE part (the
+            // viewport gate — same rule as the thumb drag).
+            guard headerCellAt(startLocation)?.id == cellID else { return }
             drag = HostDrag(kind: .reorder(sourceCellID: cellID),
                             location: location, targetCellID: nil,
                             reorderBoundary: nil, reorderLine: nil,
@@ -722,11 +784,14 @@ public final class RailViewModel {
     private func reorderTarget(at p: CGPoint, draggedID: String)
         -> (Int?, (a: CGPoint, b: CGPoint)?) {
         let lay = layout
-        guard let cell = stripCellAt(p),
-              let t = cells.firstIndex(where: { $0.id == cell.id }),
+        // The placement actually under the cursor — the wrap-peek ghost
+        // included, so a drop on the mirrored end draws its line where the
+        // pointer is (the old view hit-tested the ghost cell the same way).
+        guard lay.stripRect.contains(p),
               let placement = lay.placements.first(where: {
-                  !$0.isWrapGhost && $0.sourceIndex == t })
+                  $0.cellRect.contains(p) || $0.headerRect.contains(p) })
         else { return (nil, nil) }
+        let t = placement.sourceIndex
         let horizontal = config.edge.axis == .horizontal
         let r = placement.cellRect
         let after = horizontal ? (p.x >= r.midX) : (p.y >= r.midY)
@@ -786,7 +851,13 @@ public final class RailViewModel {
         DispatchQueue.main.asyncAfter(deadline: .now() + overviewDropAckTimeout) {
             [weak self] in
             guard let self else { return }
-            self.apply(workspaces: self.workspaces, sections: self.sections)
+            // Prefer a deferred snapshot over the pre-drag local one: the
+            // gate defers reconciles into `pendingApply`, so re-applying
+            // `self.workspaces` verbatim would resurrect stale data and
+            // discard the newest snapshot.
+            let p = self.pendingApply ?? (self.workspaces, self.sections)
+            self.pendingApply = nil
+            self.apply(workspaces: p.wss, sections: p.secs)
         }
     }
 
@@ -806,6 +877,11 @@ public final class RailViewModel {
     /// window drag or the reorder at its current target; a keyboard lift
     /// is untouched (it ends by key).
     public func pointerDragEndFallback() {
+        // A committed drop keeps `drag` armed through the landing gate (the
+        // ghost stands in), so the monitor's post-up fallback would re-run
+        // the commit and fire a SECOND backend move. The gate being armed
+        // IS the healthy-path signal — stand down then.
+        guard lastDrop == nil, lastSwap == nil else { return }
         guard let d = drag, !d.isKeyboard else { return }
         switch d.kind {
         case .window:        thumbDragEnded()
@@ -846,7 +922,8 @@ public final class RailViewModel {
         let lay = layout
         if let hero = heroCell, lay.heroRect.contains(p) {
             for ti in hero.thumbs.indices.reversed() {
-                if absRect(hero.thumbs[ti].norm, in: lay.heroRect).contains(p) {
+                let r = absRect(hero.thumbs[ti].norm, in: lay.heroRect)
+                if r.width >= 2, r.height >= 2, r.contains(p) {
                     return (hero, hero.thumbs[ti], ti)
                 }
             }

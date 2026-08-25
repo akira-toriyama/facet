@@ -35,10 +35,13 @@ public struct RailContentView: View {
     public var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Backdrop — solid black hides the desktop.
+                // Backdrop — solid black hides the desktop. Its tap routes
+                // through the same resolver as everything else (dismiss is
+                // its else-branch).
                 Color.black.opacity(railBackdropAlpha)
                     .contentShape(Rectangle())
-                    .onTapGesture { model.tapBackdrop() }
+                    .gesture(SpatialTapGesture(coordinateSpace: .named(facetRailSpace))
+                        .onEnded { model.pointerTap(at: $0.location) })
 
                 railLayers
                     // Commit zoom draws EXCLUSIVELY (the old early-return)
@@ -46,12 +49,15 @@ public struct RailContentView: View {
                     .opacity(model.zoom == nil ? 1 : 0)
                     .allowsHitTesting(model.zoom == nil)
 
-                ghostLayer
-
-                if model.borderEffect != nil {
+                // Border under the ghost (the old ghost was a subview above
+                // the whole draw) and hidden during the zoom (the old draw
+                // early-returned past it).
+                if model.borderEffect != nil, model.zoom == nil {
                     borderLayer
                         .allowsHitTesting(false)
                 }
+
+                ghostLayer
 
                 zoomLayer(geo.size)
             }

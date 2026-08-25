@@ -52,12 +52,12 @@ struct RailMiniScreen: View {
         .clipShape(shape)
         .overlay { shape.stroke(strokeColor, lineWidth: strokeWidth) }
         .contentShape(Rectangle())
-        // Empty-area click: a strip cell switches (zoom iff centred); the
-        // hero is a focal preview, not a target — its tap swallows so the
-        // backdrop can't dismiss through it.
-        .gesture(TapGesture().onEnded {
-            if !isHero { model.tapCell(cell.id) }
-        })
+        // Every click routes through the VM's location resolver: a strip
+        // cell switches (zoom iff centred), the hero's empty area is a
+        // focal no-op, and a cell rotated past the carousel clip — still
+        // hit-testable in SwiftUI — resolves as the backdrop it looks like.
+        .gesture(SpatialTapGesture(coordinateSpace: .named(facetRailSpace))
+            .onEnded { model.pointerTap(at: $0.location) })
         .onHover { inside in
             if !isHero { model.hoverID = inside ? cell.id : nil }
         }
@@ -157,10 +157,10 @@ struct RailThumbView: View {
         .overlay {
             if isKbSelected {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .inset(by: 1)
+                    .inset(by: -1)
                     .fill(Color(nsColor: pal.primary).opacity(0.30))
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .inset(by: 1)
+                    .inset(by: -1)
                     .stroke(Color(nsColor: pal.primary),
                             lineWidth: isHero ? 3 : 2)
             }
@@ -172,16 +172,16 @@ struct RailThumbView: View {
                 .onChanged { v in
                     model.thumbDragChanged(cellID: cell.id, thumb: thumb,
                                            thumbIndex: thumbIndex,
-                                           location: v.location)
+                                           location: v.location,
+                                           startLocation: v.startLocation)
                     NSCursor.closedHand.set()
                 }
                 .onEnded { _ in
                     model.thumbDragEnded()
                     NSCursor.arrow.set()
                 })
-        .gesture(TapGesture().onEnded {
-            model.tapThumb(cellID: cell.id, thumb: thumb)
-        })
+        .gesture(SpatialTapGesture(coordinateSpace: .named(facetRailSpace))
+            .onEnded { model.pointerTap(at: $0.location) })
     }
 }
 

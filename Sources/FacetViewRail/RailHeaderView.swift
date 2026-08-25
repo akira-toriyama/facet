@@ -15,9 +15,13 @@ struct RailHeaderView: View {
     let model: RailViewModel
     let cell: RailCellVM
     let bandH: CGFloat
-    @State private var hovering = false
 
     private var pal: PaletteKit.ResolvedPalette { model.palette }
+
+    /// Hover lives in the VM keyed by cell id — a local @State would ride
+    /// the ForEach's INDEX identity and light the wrong header after a
+    /// section reorder shuffles `cells` under a stable slot.
+    private var hovering: Bool { model.hoverHeaderID == cell.id }
 
     /// Keyboard "whole-WS" pick: the WS-name slot is selected (Tab cycled
     /// to -1, or an arrow just landed here).
@@ -96,17 +100,22 @@ struct RailHeaderView: View {
             DragGesture(minimumDistance: pointerDragThreshold,
                         coordinateSpace: .named(facetRailSpace))
                 .onChanged { v in
-                    model.headerDragChanged(cellID: cell.id, location: v.location)
+                    model.headerDragChanged(cellID: cell.id,
+                                            location: v.location,
+                                            startLocation: v.startLocation)
                     NSCursor.closedHand.set()
                 }
                 .onEnded { _ in
                     model.headerDragEnded()
                     NSCursor.arrow.set()
                 })
-        .gesture(TapGesture().onEnded { model.tapCell(cell.id) })
+        .gesture(SpatialTapGesture(coordinateSpace: .named(facetRailSpace))
+            .onEnded { model.pointerTap(at: $0.location) })
         .onHover { inside in
-            hovering = inside
             model.hoverHeaderID = inside ? cell.id : nil
+            // The old view lit the CELL ring from a header hover too
+            // (`stripCellAt` matched header rects).
+            model.hoverID = inside ? cell.id : nil
             // The open-hand cursor only over a WORKSPACE header (a lens
             // header reorders but never swaps — the old cursor rule).
             if cell.sectionType == .workspace {

@@ -206,11 +206,11 @@ extension Controller {
         ) { [weak self] e in
             guard let self, let vm = self.railVM,
                   let panel = self.railOverlay, e.window === panel else { return e }
-            if PopupMenu.shared.isOpen { return e }
-            switch e.type {
-            case .leftMouseDown:
-                vm.pointerBusy = true
-            case .leftMouseUp:
+            // The up-release bookkeeping runs BEFORE the PopupMenu guard: a
+            // menu opening mid-press (the `m` key) would otherwise swallow
+            // the up event and latch `pointerBusy` — freezing snapshot
+            // application for the rail's whole lifetime.
+            if e.type == .leftMouseUp {
                 // Release AFTER SwiftUI finishes this turn's gesture
                 // handling, and end a pointer drag whose gesture died
                 // without an onEnded (the monitor always sees the up).
@@ -218,7 +218,15 @@ extension Controller {
                     self?.railVM?.pointerDragEndFallback()
                     self?.railVM?.pointerBusy = false
                 }
+                NSCursor.arrow.set()      // the old mouseUp defer
+                return e
+            }
+            if PopupMenu.shared.isOpen { return e }
+            switch e.type {
+            case .leftMouseDown:
+                vm.pointerBusy = true
             case .rightMouseDown:
+                vm.settleSlide()          // hit tests vs the eased offset
                 self.railRightClick(e)
                 return nil
             default:
@@ -235,7 +243,7 @@ extension Controller {
     /// or strip) → window-ops menu. Lens headers stay click-only.
     private func railRightClick(_ e: NSEvent) {
         guard let vm = railVM, let host = railHosting,
-              let win = railOverlay else { return }
+              let win = railOverlay, !vm.isDragging else { return }
         let p = host.convert(e.locationInWindow, from: nil)
         let scr = win.convertPoint(toScreen: e.locationInWindow)
         if let cell = vm.headerCellAt(p) {
@@ -280,7 +288,9 @@ extension Controller {
                                        header: cell.caption,
                                        palette: railPaletteBox.pal)
         } else if let s = vm.kbSelectedThumb,
-                  let tr = vm.heroThumbRect(thumbIndex: s.thumbIndex) {
+                  let tr = vm.heroThumbRect(thumbIndex: s.thumbIndex)
+                    ?? vm.stripThumbRect(cellID: s.cell.id,
+                                         thumbIndex: s.thumbIndex) {
             let home = vm.windowHomeWS[s.thumb.id] ?? cell.wsIndex
             guard home >= 0 else { return }
             ViewContextMenu.showWindow(
