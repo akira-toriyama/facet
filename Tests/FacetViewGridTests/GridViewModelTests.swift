@@ -10,6 +10,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import FacetCore
+import FacetView
 import PaletteKit
 import Palette
 @testable import FacetViewGrid
@@ -471,5 +472,67 @@ struct GridViewModelTests {
         #expect(moves == 1)
         vm.pointerDragEndFallback()               // the async monitor hop
         #expect(moves == 1)
+    }
+
+    // MARK: - Landing-gate fences (t-88qt — the drag-takeover duplicate move)
+
+    @Test func landingGateRefusesANewDragTakeover() {
+        // The measured takeover: drag A ws0→ws1 commits and arms the gate; a
+        // SECOND press (on B, aiming ws:2) inside the ack window used to skip
+        // the arm block, steer the OLD drag and re-commit A into ws:2 — B
+        // never moves, A moves twice. The fence refuses arm AND mutate.
+        var moves: [WindowID] = []
+        let vm = makeVM(workspaces: [ws(0, active: true,
+                                        windows: [win(1), win(2)]),
+                                     ws(1), ws(2)])
+        seedFrames(vm)
+        vm.onMoveWindow = { _, _, _, id in moves.append(id) }
+        let cell = vm.cells[0]
+        let dragged = cell.thumbs[0]
+        vm.thumbDragChanged(cellID: cell.id, thumb: dragged, thumbIndex: 0,
+                            location: CGPoint(x: 160, y: 50))
+        vm.thumbDragEnded()                       // → ws:1, gate arms
+        #expect(moves == [dragged.id])
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[1],
+                            thumbIndex: 1, location: CGPoint(x: 270, y: 50))
+        #expect(vm.kitPreview?.dropTargetID == "ws:1")   // old drag unsteered
+        vm.thumbDragEnded()                       // second up: swallowed
+        #expect(moves == [dragged.id])
+        #expect(vm.hiddenThumbID == dragged.id)   // the ghost still stands in
+    }
+
+    @Test func duplicateReturnIsSwallowedWhileGatePending() {
+        // The rail's Return fence, ported: kbCommit during the ack window
+        // must not re-commit the armed drag.
+        var moves = 0
+        let vm = makeVM(workspaces: [ws(0, active: true, windows: [win(1)]),
+                                     ws(1)])
+        seedFrames(vm)
+        vm.onMoveWindow = { _, _, _, _ in moves += 1 }
+        let cell = vm.cells[0]
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
+                            thumbIndex: 0, location: CGPoint(x: 160, y: 50))
+        vm.thumbDragEnded()
+        vm.kbCommit()                             // Return mid-gate: swallowed
+        #expect(moves == 1)
+    }
+
+    @Test func rejectedMoveReleasesTheGateAtTheAckDeadline() async throws {
+        // A backend that silently refuses the move (a sticky window etc.)
+        // sends no changed snapshot — the deferred re-apply must give the
+        // gate up at overviewDropAckTimeout instead of holding the ghost
+        // until the 2 s poll (the rail's scheduleAckDeadline, ported).
+        let vm = makeVM(workspaces: [ws(0, active: true, windows: [win(1)]),
+                                     ws(1)])
+        seedFrames(vm)
+        vm.onMoveWindow = { _, _, _, _ in }
+        let cell = vm.cells[0]
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
+                            thumbIndex: 0, location: CGPoint(x: 160, y: 50))
+        vm.thumbDragEnded()
+        #expect(vm.hiddenThumbID != nil)          // gate armed
+        try await Task.sleep(for: .seconds(overviewDropAckTimeout + 0.4))
+        #expect(vm.hiddenThumbID == nil)          // released, thumb revealed
+        #expect(vm.kitPreview == nil)
     }
 }
