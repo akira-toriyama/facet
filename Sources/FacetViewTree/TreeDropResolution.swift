@@ -74,6 +74,20 @@ public func resolveTreeDrop(
         guard g >= 0, g < secs.count,
               secs[g].sectionType != .holding      // inert source (t-63h2)
         else { return nil }
+        // The escape hatch, both ends (t-65nf T2): the old tree's wsBands
+        // ended at the list edges — a release past them ABORTED — but sill's
+        // ±32 pt tolerance band maps the below-the-end gap to the LAST
+        // section and the above-the-first gap to the FIRST, so a flick past
+        // either edge committed a real move. Kill both, exactly as the swap
+        // branch above kills its end gap.
+        switch target.placement {
+        case .between(nil):
+            return nil                             // below the last row
+        case .between(.header(let topID)) where secs.first?.id == topID:
+            return nil                             // above the first header
+        default:
+            break
+        }
         let dest = destinationOrdinal(target.placement, in: secs)
         guard let t = dest, t != g, t >= 0, t < secs.count else { return nil }
         // A holding section is display-only in BOTH directions: nothing lands
