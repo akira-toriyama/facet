@@ -1,34 +1,30 @@
 // Layout / typography constants for the workspace rail.
 //
 // The rail is a full-screen switcher (like the grid) laid out as a
-// Mission-Control-style two-tier: a HERO cell showing the active
-// (centred) workspace large, and an edge-docked STRIP that is an
-// active-centred carousel of a capped subset of workspaces, each a
-// small mini-screen with a grid-style header (name + layout mode +
-// grip). A solid black backdrop hides the desktop. Strip/hero split
-// and edge are configurable ([rail] strip / cells / edge).
+// Mission-Control-style two-tier: a HERO cell showing the browsed
+// workspace large, and an edge-docked STRIP that is an active-centred
+// carousel of a capped subset of workspaces, each a small mini-screen
+// with a grid-style header (name + layout mode + grip). A solid black
+// backdrop hides the desktop. Strip/hero split and edge are configurable
+// ([rail] strip / cells / edge).
 
 import CoreGraphics
-import FacetView
 import Foundation
 
 /// Backdrop opacity — solid black so the desktop is fully hidden
-/// (matches the grid's takeover feel). Was 0.97 (a hair of translucency
-/// for an "overlay opening" read); set opaque per request so neither
-/// overview bleeds the desktop through.
+/// (matches the grid's takeover feel).
 let railBackdropAlpha: CGFloat = 1.0
 
 /// Gap between adjacent strip cells, along the strip's running axis.
 let railCellGap: CGFloat = 16
-/// Sanity floor for a strip cell's short dimension — cells are
-/// fixed-size (`[rail] cells` slots), so this only guards a
-/// pathologically thin strip, not the old shrink-to-fit chain.
+/// Sanity floor for a strip cell's short dimension — guards a
+/// pathologically thin strip.
 let railCellMinDim: CGFloat = 40
 /// Breathing room between a cell and its header.
 let railLabelGap: CGFloat = 6
 /// Peek depth (points): when the carousel holds more workspaces than the
 /// viewport shows, each end reveals this much of the next cell — the
-/// both-ends "there's more to rotate to" cue (2-b).
+/// both-ends "there's more to rotate to" cue.
 let railPeek: CGFloat = 18
 
 // -- Carousel rotation animation (2-b v2) --
@@ -43,17 +39,13 @@ let railSlideMaxSlots: CGFloat = 3
 // (commit zoom-out duration is FacetView's shared `overviewCommitZoomDuration`.)
 
 // -- Responsive layout (orientation- & display-size-aware) --
-// The strip / hero proportions and the gaps are derived from the
-// SHORT screen edge (so they stay balanced in landscape OR portrait,
-// on a laptop OR a big external display). The strip band size itself is
-// the user-facing `[rail] strip` percent; these gaps feed the pure
-// `railScaledPads` in FacetCore.
+// The strip / hero proportions and the gaps are derived from the SHORT
+// screen edge (balanced in landscape OR portrait, on any display size);
+// they feed the pure `railScaledPads` in FacetCore.
 //
-/// Strip's float off the docked screen edge (fraction of short edge) —
-/// keeps the cells from butting against the very edge.
+/// Strip's float off the docked screen edge (fraction of short edge).
 let railEdgeFloatFrac: CGFloat = 0.035
-/// Gap between the strip cells and the hero (fraction of short edge) —
-/// separates the big preview from the workspace row.
+/// Gap between the strip cells and the hero (fraction of short edge).
 let railHeroGapFrac: CGFloat = 0.05
 /// Hero inset from the three outer screen edges + the carousel
 /// viewport's run-axis inset (fraction of short edge).
@@ -63,8 +55,8 @@ let railOuterFrac: CGFloat = 0.035
 let railCellRadius: CGFloat = 8
 
 // -- Header band (grid-style: grip + WS name + layout mode) --
-// Smaller clamps than the grid (rail bottom cells are tinier); the
-// grip's 3-row compact texture kicks in below 28 pt so it stays legible.
+// Smaller clamps than the grid (rail strip cells are tinier); the grip's
+// 3-row compact texture kicks in below 28 pt so it stays legible.
 let railHeaderRatio: CGFloat = 0.34     // header ≈ 34% of nominal cell height
 let railHeaderMinH: CGFloat = 22
 let railHeaderMaxH: CGFloat = 40
@@ -81,17 +73,9 @@ let railHeaderTwoLineMinH: CGFloat = 26
 
 // (drag threshold is FacetView's shared `pointerDragThreshold`.)
 
-// Scroll-wheel delta (points) accumulated per carousel step (⑦). Lower
-// = more sensitive (fewer points to advance one workspace). Tune to taste.
+/// Scroll-wheel delta (points) accumulated per carousel step. Lower =
+/// more sensitive (fewer points to advance one workspace).
 let railScrollStep: CGFloat = 30
 
-
-/// Centred label size on an empty-WS swap ghost.
+/// Centred label size on an empty-WS ghost card.
 let railGhostLabelSize: CGFloat = 22
-
-/// The rail's drag-ghost style: the shared dnd-kit "lift" feedback
-/// (DragGhostStyle.overview — values formerly copied from the grid),
-/// specialised with the rail's cell corner radius + empty-WS label size.
-let railGhostStyle = DragGhostStyle.overview(
-    cellCornerRadius: railCellRadius,
-    ghostLabelSize: railGhostLabelSize)

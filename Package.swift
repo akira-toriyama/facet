@@ -135,7 +135,13 @@ let package = Package(
             // the host-driven keyboard nav, mirroring the tree's ListCore role.
             .product(name: "GridCore", package: "sill"),
         ]),
-        .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
+        .target(name: "FacetViewRail", dependencies: [
+            "FacetView", "FacetCore",
+            // ThemeKitUI: AnimatedBorderView renders the `[border]` neon
+            // frame; the carousel itself is host-side (t-n3be: no sill
+            // grid kit under the rail — rule-of-three fails).
+            .product(name: "ThemeKitUI", package: "sill"),
+        ]),
         // Capture adapter: the sole ScreenCaptureKit consumer, behind
         // FacetCore's `WindowCapturing` port (so FacetView stays free of
         // OS-backend imports). Same role as FacetAdapterNative for AX/CGS.
@@ -168,6 +174,12 @@ let package = Package(
         .testTarget(name: "FacetViewGridTests",
                     dependencies: [
                         "FacetViewGrid",
+                        .product(name: "Palette", package: "sill"),
+                        .product(name: "PaletteKit", package: "sill"),
+                    ]),
+        .testTarget(name: "FacetViewRailTests",
+                    dependencies: [
+                        "FacetViewRail",
                         .product(name: "Palette", package: "sill"),
                         .product(name: "PaletteKit", package: "sill"),
                     ]),
