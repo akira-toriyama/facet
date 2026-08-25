@@ -79,32 +79,6 @@ struct GridMathTests {
         #expect(gridRowCount(wsCount: 5, cols: -3) == 5)
     }
 
-    @Test func cellSizeMirrorsScreenAspect() {
-        // Standard 16:9 screen, plenty of room → aspect drives.
-        let s = gridCellSize(usableW: 1600, usableH: 1000,
-                             cols: 2, rows: 1, screenAspect: 16.0 / 9.0)
-        #expect(abs(s.width / s.height - 16.0 / 9.0) < 0.001)
-    }
-
-    @Test func cellSizeShrinksWhenHeightIsTheLimit() {
-        // Tall narrow region → height caps; width recomputed so the
-        // aspect doesn't drift even though width could have been
-        // larger.
-        let s = gridCellSize(usableW: 4000, usableH: 200,
-                             cols: 1, rows: 1, screenAspect: 16.0 / 9.0)
-        #expect(s.height <= 200)
-        #expect(abs(s.width / s.height - 16.0 / 9.0) < 0.001)
-    }
-
-    @Test func cellSizeNeverNegative() {
-        // Useable area smaller than the inter-cell gap budget — pure
-        // math fallback (max(1, …)) keeps values positive.
-        let s = gridCellSize(usableW: 1, usableH: 1,
-                             cols: 4, rows: 4, screenAspect: 1)
-        #expect(s.width > 0)
-        #expect(s.height > 0)
-    }
-
     @Test func scaledWindowRectMapsFullScreenToFullCell() {
         let screen = CGRect(x: 0, y: 0, width: 1920, height: 1080)
         let cell   = CGRect(x: 100, y: 200, width: 384, height: 216)
@@ -133,19 +107,81 @@ struct GridMathTests {
         #expect(mapped == .zero)
     }
 
-    // MARK: - vertical placement (gridUsableHeight / gridOriginY)
-
-    /// The cell block centres in the usable area — the origin is exactly
-    /// `(boundsHeight - totalH) / 2` (flipped view, top-down).
-    @Test func gridOriginCentresCellBlock() {
-        let h: CGFloat = 1000, pad = gridOuterPad, totalH: CGFloat = 600
-        #expect(abs(gridUsableHeight(boundsHeight: h, outerPad: pad)
-                    - (h - 2 * pad)) < 0.0001)
-        #expect(abs(gridOriginY(boundsHeight: h, outerPad: pad, totalH: totalH)
-                    - (h - totalH) / 2) < 0.0001)
-    }
-
     // §D: the WS caption (`gridLabel`) was retired in favour of the shared
     // FacetCore `sectionDisplayLabel(index:label:)` — its tests live in
     // `WorkspaceLabelTests`.
+}
+
+/// `gridFitMetrics` — the closed form that lets sill's `fitsViewport` grid
+/// reproduce the old sizing rule exactly: the returned `aspect`, pushed
+/// through the kit's own width-first/height-clamped fit, must yield a cell
+/// whose mini-screen area (cell minus the returned band minus the label gap)
+/// keeps EXACTLY the screen's aspect.
+struct GridFitMetricsTests {
+
+    /// Mirror of sill GridCore's `gridFittedCellSize` (width-first, shrink to
+    /// row height, ratio-preserving) — small enough to restate for the test.
+    private func kitFit(availW: CGFloat, availH: CGFloat, cols: Int, rows: Int,
+                        gap: CGFloat, ratio: CGFloat) -> CGSize {
+        let w = max((availW - gap * CGFloat(cols - 1)) / CGFloat(cols), 1)
+        let h = w / ratio
+        let maxH = max((availH - gap * CGFloat(rows - 1)) / CGFloat(rows), 1)
+        guard h > maxH else { return CGSize(width: w, height: h) }
+        return CGSize(width: maxH * ratio, height: maxH)
+    }
+
+    private func assertRoundTrip(availW: CGFloat, availH: CGFloat,
+                                 cols: Int, count: Int, aspect: CGFloat,
+                                 pad: CGFloat = 8, gap: CGFloat = 8) {
+        let m = gridFitMetrics(availW: availW, availH: availH, cols: cols,
+                               count: count, screenAspect: aspect,
+                               pad: pad, gap: gap)
+        let rows = gridRowCount(wsCount: count, cols: cols)
+        let cell = kitFit(availW: availW - 2 * pad, availH: availH - 2 * pad,
+                          cols: cols, rows: rows, gap: gap, ratio: m.aspect)
+        let miniH = cell.height - m.labelH - 4          // gridLabelGap
+        #expect(miniH > 1, "mini-screen collapsed")
+        #expect(abs(cell.width / miniH - aspect) < 0.01,
+                "mini-screen must keep the screen aspect (got \(cell.width / miniH) want \(aspect))")
+        // The band the kit's cell actually leaves for the header is the one
+        // we predicted.
+        #expect(m.labelH >= 32 && m.labelH <= 64)
+    }
+
+    /// Plenty of room → width drives; 16:9 mini-screens.
+    @Test func widthDrivenKeepsScreenAspect() {
+        assertRoundTrip(availW: 1920, availH: 1080, cols: 4, count: 8,
+                        aspect: 16.0 / 9.0)
+    }
+
+    /// One wide row on a short screen → the row height caps the cell and the
+    /// width is recomputed from the remaining mini height.
+    @Test func heightDrivenKeepsScreenAspect() {
+        assertRoundTrip(availW: 3840, availH: 500, cols: 2, count: 2,
+                        aspect: 16.0 / 9.0)
+    }
+
+    /// Many rows shrink the nominal cell; the band clamps at its 32 pt floor
+    /// yet the mini-screen still keeps aspect.
+    @Test func manyRowsClampBandAtFloor() {
+        let m = gridFitMetrics(availW: 1200, availH: 800, cols: 3, count: 12,
+                               screenAspect: 16.0 / 9.0, pad: 8, gap: 8)
+        #expect(m.labelH == 32)
+        assertRoundTrip(availW: 1200, availH: 800, cols: 3, count: 12,
+                        aspect: 16.0 / 9.0)
+    }
+
+    /// A single huge cell rides the 64 pt ceiling.
+    @Test func singleCellClampBandAtCeiling() {
+        let m = gridFitMetrics(availW: 1920, availH: 1200, cols: 1, count: 1,
+                               screenAspect: 16.0 / 9.0, pad: 8, gap: 8)
+        #expect(m.labelH == 64)
+    }
+
+    /// Degenerate inputs stay positive (the old `max(1, …)` discipline).
+    @Test func degenerateInputsStayPositive() {
+        let m = gridFitMetrics(availW: 10, availH: 10, cols: 4, count: 9,
+                               screenAspect: 1, pad: 8, gap: 8)
+        #expect(m.aspect > 0)
+    }
 }

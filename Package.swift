@@ -77,7 +77,7 @@ let package = Package(
         // the same 2.x, never a split graph. For local, atomic sill↔facet
         // editing, temporarily swap this for `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "8.5.0")),
+                 .upToNextMinor(from: "8.8.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
@@ -128,7 +128,13 @@ let package = Package(
             // DropTarget) behind the host-driven keyboard lift (facet-2).
             .product(name: "ListCore", package: "sill"),
         ]),
-        .target(name: "FacetViewGrid", dependencies: ["FacetView", "FacetCore"]),
+        .target(name: "FacetViewGrid", dependencies: [
+            "FacetView", "FacetCore",
+            .product(name: "ThemeKitUI", package: "sill"),
+            // GridCore: the pure grid math (nextGridIndex / fit sizing) behind
+            // the host-driven keyboard nav, mirroring the tree's ListCore role.
+            .product(name: "GridCore", package: "sill"),
+        ]),
         .target(name: "FacetViewRail", dependencies: ["FacetView", "FacetCore"]),
         // Capture adapter: the sole ScreenCaptureKit consumer, behind
         // FacetCore's `WindowCapturing` port (so FacetView stays free of
@@ -160,7 +166,11 @@ let package = Package(
         .testTarget(name: "FacetViewTests",
                     dependencies: ["FacetView"]),
         .testTarget(name: "FacetViewGridTests",
-                    dependencies: ["FacetViewGrid"]),
+                    dependencies: [
+                        "FacetViewGrid",
+                        .product(name: "Palette", package: "sill"),
+                        .product(name: "PaletteKit", package: "sill"),
+                    ]),
         .testTarget(name: "FacetViewTreeTests",
                     dependencies: ["FacetViewTree"]),
     ]

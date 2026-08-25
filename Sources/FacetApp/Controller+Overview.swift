@@ -135,7 +135,7 @@ extension Controller {
     /// feels "right after"; under 30 ms grabs the pre-move frame on BSP.
     func refreshOverviewThumbnails(forWSIndices indices: [Int],
                                    in wss: [Workspace]) {
-        guard gridView != nil || railView != nil else { return }
+        guard gridVM != nil || railView != nil else { return }
         let wp = winPreview
         let want = Set(indices)
         let ids: [WindowID] = wss
