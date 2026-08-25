@@ -66,6 +66,28 @@ public enum SectionOrder {
         return ids
     }
 
+    /// Translate an insertion boundary measured against a RENDERED id list
+    /// (the tree's search filter drops zero-match sections from it) into the
+    /// FULL display list `reorder` mutates. Same coordinate convention as
+    /// `reorder` on both sides: `0` = before the first, `count` = after the
+    /// last. The rendered END gap lands right AFTER the last rendered id —
+    /// not past unrelated hidden trailing ids. A rendered id missing from
+    /// `all` (a stale mid-refresh drop) clamps to the end. Identity when
+    /// nothing is filtered.
+    public static func translateBoundary(_ boundary: Int,
+                                         rendered: [String],
+                                         all: [String]) -> Int {
+        if boundary >= 0, boundary < rendered.count,
+           let i = all.firstIndex(of: rendered[boundary]) {
+            return i
+        }
+        if boundary >= rendered.count, let last = rendered.last,
+           let i = all.firstIndex(of: last) {
+            return i + 1
+        }
+        return boundary <= 0 ? 0 : all.count
+    }
+
     /// Stable-partition: items whose `id` is in `orderedIDs` come first in
     /// override order; the rest keep their input order, appended after.
     /// Total — output is always a permutation of `items` (never drops /

@@ -126,6 +126,44 @@ final class TreeDropResolutionTests: XCTestCase {
         XCTAssertNil(r)
     }
 
+    // MARK: escape bands (t-65nf T2 — sill's ±32 pt tolerance vs wsBands)
+
+    /// The gap BELOW the last row is the flick-away band: the old tree's
+    /// wsBands ended at the list edges and a release past them ABORTED, but
+    /// `destinationOrdinal` maps the end gap to the LAST section — a flick
+    /// below the tree became a real move (measured: docY 145…175 committed
+    /// into the last section).
+    func testWindowToTheEndGapAborts() {
+        let r = resolveTreeDrop(drag(.window(group: 0, WindowID(serverID: 1))),
+                                between(nil),
+                                sections: twoSections(), sectionMode: true,
+                                isolateDesktop: false)
+        XCTAssertNil(r)
+    }
+
+    /// Same band above the FIRST header (measured: docY −1…−31 committed into
+    /// the first section). An interior header's gap still targets the
+    /// previous section — see the test below.
+    func testWindowAboveTheFirstHeaderAborts() {
+        let r = resolveTreeDrop(drag(.window(group: 1, WindowID(serverID: 2))),
+                                between(.header("ws:0")),
+                                sections: twoSections(), sectionMode: true,
+                                isolateDesktop: false)
+        XCTAssertNil(r)
+    }
+
+    /// The degrade path shares the `.window` branch — same escape bands.
+    func testDegradeWindowEscapeBandsAbort() {
+        XCTAssertNil(resolveTreeDrop(drag(.window(group: 0, WindowID(serverID: 1))),
+                                     between(nil),
+                                     sections: twoSections(), sectionMode: false,
+                                     isolateDesktop: false))
+        XCTAssertNil(resolveTreeDrop(drag(.window(group: 1, WindowID(serverID: 2))),
+                                     between(.header("ws:0")),
+                                     sections: twoSections(), sectionMode: false,
+                                     isolateDesktop: false))
+    }
+
     /// The gap ABOVE a header closes the PREVIOUS section (sill's geometry has
     /// no sections; this is where the tree's meaning is applied).
     func testBetweenAboveAHeaderTargetsThePreviousSection() {

@@ -120,6 +120,40 @@ struct SectionOrderTests {
         #expect(SectionOrder.reorder(cur, move: "Z", toBoundary: 2) == cur)
     }
 
+    // MARK: - filtered-boundary translation (t-65nf T1)
+    //
+    // The tree's chunk boundary is measured against the RENDERED (search-
+    // filtered) list, but `reorder` mutates the FULL display list. The
+    // measured regression: A/B/C/D with only B/C/D matching — "C above B" is
+    // rendered boundary 0, which applied untranslated committed [C,A,B,D]
+    // instead of [A,C,B,D], and the session order kept the error.
+
+    @Test func translateIsIdentityWhenNothingIsFiltered() {
+        for b in 0...cur.count {
+            #expect(SectionOrder.translateBoundary(b, rendered: cur, all: cur) == b)
+        }
+    }
+
+    @Test func translateMapsARenderedBoundaryIntoTheFullList() {
+        // rendered [B,C,D] over all [A,B,C,D]: "before B" (0) → before B (1).
+        let t = SectionOrder.translateBoundary(0, rendered: ["B", "C", "D"],
+                                               all: cur)
+        #expect(t == 1)
+        #expect(SectionOrder.reorder(cur, move: "C", toBoundary: t) ==
+                ["A", "C", "B", "D"])
+    }
+
+    @Test func translateEndGapLandsRightAfterTheLastRenderedID() {
+        // A hidden trailing E must not be jumped: end of [B,C,D] = after D.
+        #expect(SectionOrder.translateBoundary(
+            3, rendered: ["B", "C", "D"], all: ["A", "B", "C", "D", "E"]) == 4)
+    }
+
+    @Test func translateStaleRenderedIDClampsToTheEnd() {
+        #expect(SectionOrder.translateBoundary(
+            1, rendered: ["B", "Z", "D"], all: cur) == cur.count)
+    }
+
     @Test func boundaryPastEndClampsToTail() {
         #expect(SectionOrder.reorder(cur, move: "A", toBoundary: 99) ==
                        ["B", "C", "D", "A"])

@@ -261,15 +261,36 @@ extension Controller {
             return
         }
         guard !treeRowIsInert(id) else { return }
+        // Capture the STABLE half of the identity BEFORE exitActive: leaving
+        // active mode ends the search filter, which reprojects the tree — the
+        // ordinal in `id` (and the `secs` capture above) then indexes the
+        // filtered list, not the one on screen, so the optimistic fill and
+        // the cursor memory land on the wrong row (t-65nf T4).
+        let stableSectionID: String? = {
+            guard case .window(let g, _) = id,
+                  g >= 0, g < secs.count else { return nil }
+            return secs[g].id
+        }()
         exitActive(restore: false)
+        let liveSecs = panelHost.treeVM.renderedSections
+        let liveID: TreeItemID
+        switch id {
+        case .header:
+            liveID = id                    // a header id carries no ordinal
+        case .window(_, let wid):
+            guard let sid = stableSectionID,
+                  let g = liveSecs.firstIndex(where: { $0.id == sid })
+            else { return }
+            liveID = .window(group: g, wid)
+        }
         // Next nav entry resumes on the acted-on row (the old tree re-set
         // `kbSel` after its exitActive for exactly this — t-beqn).
-        panelHost.treeVM.rememberCursor(id)
-        switch id {
+        panelHost.treeVM.rememberCursor(liveID)
+        switch liveID {
         case .header(let sectionID):
-            guard let g = secs.firstIndex(where: { $0.id == sectionID })
+            guard let g = liveSecs.firstIndex(where: { $0.id == sectionID })
             else { return }
-            let sec = secs[g]
+            let sec = liveSecs[g]
             if let i = sec.sourceWorkspaceIndex {
                 // Workspace header: claim the workspace's predicted focus AND
                 // the active-workspace paint optimistically — an EMPTY
@@ -289,8 +310,8 @@ extension Controller {
                 focusFirstWindow(inSectionID: sec.id)
             }
         case .window(let g, let wid):
-            guard g >= 0, g < secs.count else { return }
-            let sec = secs[g]
+            guard g >= 0, g < liveSecs.count else { return }
+            let sec = liveSecs[g]
             // The row's REAL workspace (a matched-section row lives in its
             // real ws — the `realWS` resolution), else the section's source,
             // else the active ws.
@@ -306,7 +327,7 @@ extension Controller {
             let needSwitch = (i != activeIdx)
             // Claim the fill AND the target workspace's active paint (the old
             // `setOptimistic(windowID:workspaceIndex:)` carried both).
-            panelHost.treeVM.setOptimistic(id, activeWorkspace: i)
+            panelHost.treeVM.setOptimistic(liveID, activeWorkspace: i)
             // A HIDDEN row (Cmd+H'd / minimized — hide-reclaim pulled its
             // tile slot) is restored on activation; a normal row just
             // focuses. Off main so the click never hitches (handleClick
@@ -431,7 +452,15 @@ extension Controller {
         switch resolution {
         case .chunk(let boundary):
             guard case .header(let sid) = ctx.sourceID else { return }
-            reorderSection(move: sid, toBoundary: boundary)
+            // The boundary is measured against the RENDERED list; a search
+            // filter drops zero-match sections from it, while `reorderSection`
+            // mutates the UNFILTERED display list — translate first, or the
+            // commit lands the chunk against the wrong neighbour and the
+            // session order keeps the error (t-65nf T1). Chunk reorder is a
+            // section-mode gesture, so `lastSections` is the full list.
+            reorderSection(move: sid, toBoundary: SectionOrder.translateBoundary(
+                boundary, rendered: secs.map(\.id),
+                all: lastSections.map(\.id)))
         case .window(let wid, let g, let t):
             if treeRenderIsSectionMode {
                 applyMove(windowID: wid, fromSectionID: secs[g].id,
