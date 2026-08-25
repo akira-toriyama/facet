@@ -18,10 +18,8 @@ public let pointerDragThreshold: CGFloat = 5
 /// workspace switch fires as it ends).
 public let overviewCommitZoomDuration: TimeInterval = 0.20
 
-/// Fade durations for the full-screen overview overlay (`OverviewPanel`)
-/// on show / hide — shared by the grid and the rail. (Were `gridFadeIn`
-/// / `gridFadeOut` in FacetViewGrid, though the rail's show / hide used
-/// them too.)
+/// Fade durations for the full-screen overview shell (sill WindowShell +
+/// ShellFade) on show / hide — shared by the grid and the rail.
 public let overviewFadeIn: TimeInterval = 0.12
 public let overviewFadeOut: TimeInterval = 0.10
 

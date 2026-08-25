@@ -299,14 +299,20 @@ final class Controller: NSObject {
 
     // MARK: - Workspace rail (bottom overview bar)
 
-    var railOverlay: OverviewPanel?
-    var railView: RailView?
-    /// Local key monitor for the rail's Escape-to-dismiss while it's up.
+    var railOverlay: ShellPanel?
+    var railVM: RailViewModel?
+    /// The `NSHostingView` rendering the SwiftUI rail — kept as a plain
+    /// `NSView` for coordinate conversion + `snapshotRegion` (commit zoom
+    /// + the browse crossfade).
+    var railHosting: NSView?
+    /// Local key monitor for the rail's browse / overview verbs while it's up.
     var railKbMonitor: Any?
     /// Local scroll-wheel monitor (⑦) — rotates the carousel while the
     /// rail is up. A monitor (not an NSView override) so it fires for the
     /// nonactivating panel, exactly like `railKbMonitor`.
     var railScrollMonitor: Any?
+    /// Pointer bookkeeping + right-click catch (mirrors `gridMouseMonitor`).
+    var railMouseMonitor: Any?
     var isRailVisible: Bool { railOverlay != nil }
 
     // MARK: - Active mode (kb-nav)
@@ -472,8 +478,8 @@ final class Controller: NSObject {
         // reconfigure on a hot-reload too.
         gridVM?.applyBorder(effectName: e, glow: g, width: w,
                             cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
-        railView?.applyBorder(effectName: e, glow: g, width: w,
-                              cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
+        railVM?.applyBorder(effectName: e, glow: g, width: w,
+                            cycleSeconds: cs, cycleColors: cc, minWidth: mn, maxWidth: mx)
     }
 
     /// True while ANY of facet's own keyable sibling editors holds key (the
@@ -914,7 +920,7 @@ final class Controller: NSObject {
         panelHost.applyTheme()
         sidebarView.needsDisplay = true
         gridVM?.palette = gridPaletteBox.pal
-        railView?.needsDisplay = true
+        railVM?.palette = railPaletteBox.pal
         updateThemeAnimator()
     }
 
@@ -1000,7 +1006,7 @@ final class Controller: NSObject {
         }
         if tickSurfaceCycle(name: railThemeName, phase: &railFXPhase,
                             box: railPaletteBox) {
-            railView?.needsDisplay = true
+            railVM?.palette = railPaletteBox.pal
         }
         // Line-pets ride a panel-level overlay (above the border); repaint
         // it every tick so they keep orbiting even on a static theme.
@@ -1112,7 +1118,7 @@ final class Controller: NSObject {
         if let prev = prevActive, prevActiveWSIndex != prev {
             if panelHost.isVisible { panelHost.flashBorder() }
             gridVM?.flashBorder()
-            railView?.flashBorder()
+            railVM?.flashBorder()
         }
         // Mac desktop ordinal (read-only SkyLight): the tree's top handle
         // band, the section-model routing below, AND the PR7 grid/rail
@@ -1243,26 +1249,11 @@ final class Controller: NSObject {
         gridVM?.apply(workspaces: displayWss, sections: lastSections)
         // The rail is a *persistent* bar (unlike the snapshot-on-show
         // grid), so keep it live with every reconcile — the active-WS
-        // highlight + window counts track switches and add/close.
-        if let rv = railView {
-            // EX-2b: the active SECTION id BEFORE the field update (reads the
-            // rail's still-old activeIndex/sections).
-            let oldActiveID = activeSectionID(activeIndex: rv.activeIndex,
-                                              sections: rv.sections)
-            rv.workspaces = displayWss         // reorder: degrade-path cell order
-            rv.activeIndex = wss.first(where: { $0.isActive })?.index
-            rv.sections = lastSections         // EX-2: section list (empty ⇒ degrade)
-            // 2-b carousel: an EXTERNAL activate (CLI) while the rail is open
-            // re-centres the strip on the new active SECTION — but only when
-            // the user isn't mid-browse (cursor still on the OLD active
-            // section), so a manual rotation isn't yanked back.
-            let newActiveID = activeSectionID(activeIndex: rv.activeIndex,
-                                              sections: rv.sections)
-            if rv.selectedSectionID == oldActiveID, let n = newActiveID {
-                rv.selectedSectionID = n
-            }
-            rv.layoutCells()      // refresh open rail on backend events
-        }
+        // highlight + window counts track switches and add/close. The VM
+        // owns the landing gates, the mid-gesture suppression, AND the
+        // external-activate re-centre rule (cursor-on-active follows a CLI
+        // switch; a mid-browse cursor is never yanked).
+        railVM?.apply(workspaces: displayWss, sections: lastSections)
         if firstRealApply {
             refreshThumbnailCache()
         }

@@ -289,11 +289,21 @@ public final class GridViewModel {
                                               norm: n, mark: win.mark))
                 }
             }
-            // Reading order over the normalized rects — banding compares
-            // same-axis distances, so the anisotropic unit scale preserves it.
+            // Reading order needs REAL distances: `readingOrder`'s row band
+            // is `max(1, maxHeight/2)`, which in unit space floors at the
+            // whole square and collapses every row into one x-sort (the
+            // earlier "anisotropic scale preserves it" claim was wrong —
+            // measured, rail adversarial review 2026-08-25). Scale the hits
+            // back to screen size first.
+            let sw = max(screenFrame.width, 1)
+            let sh = max(screenFrame.height, 1)
             let hits = thumbs.map {
                 MiniWindowHit(pid: $0.pid, id: $0.id, isFocused: $0.isFocused,
-                              rect: $0.norm, mark: $0.mark)
+                              rect: CGRect(x: $0.norm.minX * sw,
+                                           y: $0.norm.minY * sh,
+                                           width: $0.norm.width * sw,
+                                           height: $0.norm.height * sh),
+                              mark: $0.mark)
             }
             let ordered = readingOrder(hits)
             let kbOrder = ordered.compactMap { o in thumbs.firstIndex { $0.id == o.id } }
@@ -608,6 +618,12 @@ public final class GridViewModel {
     /// target, exactly like `thumbDragEnded`. A keyboard lift is untouched
     /// (it ends by key, not by button).
     public func pointerDragEndFallback() {
+        // A committed drop keeps `drag` armed through the landing gate (the
+        // ghost stands in), so this post-up fallback would re-run the commit
+        // and fire a SECOND backend move (measured, rail adversarial review
+        // 2026-08-25 — the "healthy path has already cleared `drag`" comment
+        // this replaced was wrong). An armed gate IS the healthy signal.
+        guard lastDrop == nil, lastSwap == nil else { return }
         guard let d = drag, !d.isKeyboard else { return }
         thumbDragEnded()
     }

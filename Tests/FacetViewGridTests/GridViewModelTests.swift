@@ -430,4 +430,46 @@ struct GridViewModelTests {
         vm.kbSpaceLift()                     // window slot lifts again
         #expect(vm.kitPreview != nil)
     }
+
+    // MARK: - Regressions found by the rail migration review (2026-08-25)
+
+    @Test func tabReadingOrderIsRowMajorForStackedWindows() {
+        // Two rows: top A(1) C(3), bottom B(2). Unit-normalized hits
+        // collapsed `readingOrder`'s row band to the whole square (pure
+        // x-sort: A, B, C) — the fix scales hits back to screen size.
+        let vm = makeVM(workspaces: [
+            ws(0, active: true, windows: [
+                win(1, frame: CGRect(x: 0, y: 0, width: 700, height: 350)),
+                win(2, frame: CGRect(x: 0, y: 450, width: 700, height: 350)),
+                win(3, frame: CGRect(x: 800, y: 0, width: 700, height: 350)),
+            ])])
+        vm.kbSeedToActiveCell()
+        var order: [WindowID] = []
+        for _ in 0..<3 {
+            vm.kbCycleWindow(forward: true)
+            if let s = vm.kbSelectedThumb { order.append(s.thumb.id) }
+        }
+        #expect(order == [WindowID(serverID: 1), WindowID(serverID: 3),
+                          WindowID(serverID: 2)])
+    }
+
+    @Test func pointerDragEndFallbackNeverDoubleCommits() {
+        // The monitor's post-up fallback fires after the healthy onEnded —
+        // with the landing gate armed it must stand down, not re-commit a
+        // second backend move.
+        var moves = 0
+        let w = win(1)
+        let vm = makeVM(workspaces: [ws(0, active: true, windows: [w]), ws(1)])
+        seedFrames(vm)
+        vm.onMoveWindow = { _, _, _, _ in moves += 1 }
+        let cell = vm.cells[0]
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
+                            thumbIndex: 0, location: CGPoint(x: 50, y: 50))
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[0],
+                            thumbIndex: 0, location: CGPoint(x: 160, y: 50))
+        vm.thumbDragEnded()
+        #expect(moves == 1)
+        vm.pointerDragEndFallback()               // the async monitor hop
+        #expect(moves == 1)
+    }
 }

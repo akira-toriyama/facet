@@ -8,10 +8,9 @@ version is not "bottom-of-screen chips + a central hover preview" but a
 bottom row of every WS's window thumbnails** (a grid-leaning overview).
 ←/→ browses, click switches, window / header drag moves / swaps. The body
 below is the **design record from the Theme D (ii) "grill" era**. The code
-truth is `Sources/FacetViewRail/` (RailView proper + RailHeader /
-RailDrag). The full-screen takeover panel is not rail-specific but
-FacetView's shared `OverviewPanel` (merging the old `RailOverlay` /
-`GridOverlay`).
+truth is `Sources/FacetViewRail/` (SwiftUI since #457: `RailViewModel` +
+`RailContentView`, pure `railLayout` geometry). The full-screen takeover
+shell is sill's WindowShell (floor 2), built in `Controller+Rail`.
 Diagram: [`theme-d-rail.excalidraw`](theme-d-rail.excalidraw)
 (re-editable in Excalidraw. For Theme D overall see
 [architecture.md](architecture.md)'s "Themes A–D")

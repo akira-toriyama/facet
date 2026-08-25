@@ -57,7 +57,7 @@ extension Controller {
             MainActor.assumeIsolated {
                 let img = Self.nsThumb(cg, frame)
                 self?.gridVM?.setThumbnail(img, for: gotID)
-                self?.railView?.setThumbnail(img, for: gotID)
+                self?.railVM?.setThumbnail(img, for: gotID)
             }
         }
     }
@@ -72,7 +72,7 @@ extension Controller {
     /// tree refreshes lazily on the next hover off the invalidated
     /// cache, so it needs no push).
     func pushFreshThumbnails(_ ids: [WindowID], _ wp: any WindowCapturing) {
-        guard gridVM != nil || railView != nil, !ids.isEmpty else { return }
+        guard gridVM != nil || railVM != nil, !ids.isEmpty else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self else { return }
             for id in ids { self.captureAndPushToOverview(id, wp) }
