@@ -448,6 +448,10 @@ public final class GridViewModel {
     /// the cell zooms out to full screen (②), then the switch + close fire.
     public func kbCommit() {
         guard zoom == nil else { return }
+        // A commit already awaits the backend ack — swallow a second Return
+        // so it can't fire a duplicate move/swap before the gate clears
+        // (the rail's fence, ported — t-88qt).
+        if lastDrop != nil || lastSwap != nil { return }
         if let d = drag {
             if let tid = d.targetCellID, let dst = cells.first(where: { $0.id == tid }) {
                 switch d.kind {
@@ -514,6 +518,11 @@ public final class GridViewModel {
     public func thumbDragChanged(cellID: String, thumb: GridThumbVM,
                                  thumbIndex: Int, location: CGPoint) {
         guard zoom == nil else { return }
+        // Landing-gate fence (t-88qt): a committed drop keeps `drag` armed
+        // until the backend acks, so a new press would skip the arm block and
+        // steer the OLD drag — its `thumbDragEnded` then re-commits the old
+        // window as a duplicate backend move. Refuse arm AND mutate.
+        guard lastDrop == nil, lastSwap == nil else { return }
         if drag == nil {
             guard let cell = cells.first(where: { $0.id == cellID }) else { return }
             // A lens cell's thumb still drags — its source is the window's
@@ -535,6 +544,10 @@ public final class GridViewModel {
     }
 
     public func thumbDragEnded() {
+        // The armed gate IS the healthy-path signal (same fence as
+        // `pointerDragEndFallback`): a second gesture's up must not re-commit
+        // the old drag the gate is holding.
+        guard lastDrop == nil, lastSwap == nil else { return }
         guard let d = drag, !d.isKeyboard else { return }
         if let tid = d.targetCellID, let dst = cells.first(where: { $0.id == tid }),
            case .window(let pid, let id, let srcWS, _, _) = d.kind {
@@ -575,6 +588,7 @@ public final class GridViewModel {
         // `drag` + `hiddenThumbID` stay set: the ghost stands in for the thumb
         // until the backend acks (cleared in `apply`'s landed path).
         onMoveWindow?(sourceWS, dstCell.wsIndex, pid, id)
+        scheduleAckDeadline()
     }
 
     private func commitSwap(sourceCellID: String, sourceWS: Int,
@@ -592,6 +606,25 @@ public final class GridViewModel {
                                        srcIDs: srcIDs, dstIDs: dstIDs,
                                        committedAt: Date())
         onSwap?(sourceWS, dstCell.wsIndex, srcIDs, dstIDs)
+        scheduleAckDeadline()
+    }
+
+    /// The landing gate's timeout is only evaluated when a snapshot arrives —
+    /// a silently-rejected move (a sticky window etc.) would otherwise hold
+    /// the gate until the 2 s poll. One deferred re-apply honours it (the
+    /// rail's scheduleAckDeadline, ported — t-88qt).
+    private func scheduleAckDeadline() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + overviewDropAckTimeout) {
+            [weak self] in
+            guard let self else { return }
+            // Prefer a deferred snapshot over the pre-drag local one: the
+            // gate defers reconciles into `pendingApply`, so re-applying
+            // `self.workspaces` verbatim would resurrect stale data and
+            // discard the newest snapshot.
+            let p = self.pendingApply ?? (self.workspaces, self.sections)
+            self.pendingApply = nil
+            self.apply(workspaces: p.wss, sections: p.secs)
+        }
     }
 
     public func cancelDrag() {

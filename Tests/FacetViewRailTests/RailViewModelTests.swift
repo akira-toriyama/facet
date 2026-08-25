@@ -357,6 +357,47 @@ struct RailViewModelTests {
         #expect(moves == 1)
     }
 
+    @Test func landingGateRefusesANewDragTakeover() {
+        // The measured t-88qt takeover: drag A ws0→ws1 commits and arms the
+        // gate; a SECOND press (on B, aiming ws:2) inside the ack window used
+        // to skip the arm block, steer the OLD drag and re-commit A into ws:2
+        // — B never moves, A moves twice. The old RailView's `drag == nil` +
+        // pendingDown gate made that press fully inert; the fence restores it.
+        var moves: [WindowID] = []
+        // Distinct frames — identical rects leave the model order vs the
+        // strip layout order unspecified and `thumbAt`'s start-point guard
+        // then refuses the very first arm.
+        let vm = makeVM(workspaces: [
+            ws(0, active: true, windows: [
+                win(1, frame: CGRect(x: 0, y: 0, width: 700, height: 350)),
+                win(2, frame: CGRect(x: 800, y: 0, width: 700, height: 350)),
+            ]),
+            ws(1), ws(2)])
+        vm.onMoveWindow = { _, _, _, id in moves.append(id) }
+        let cell = vm.cells[0]
+        let dragged = cell.thumbs[0]
+        let start = thumbPoint(vm, cellID: "ws:0", thumbIndex: 0)
+        vm.thumbDragChanged(cellID: cell.id, thumb: dragged, thumbIndex: 0,
+                            location: start, startLocation: start)
+        vm.thumbDragChanged(cellID: cell.id, thumb: dragged, thumbIndex: 0,
+                            location: stripPoint(vm, cellID: "ws:1"),
+                            startLocation: start)
+        vm.thumbDragEnded()                       // → ws:1, gate arms
+        #expect(moves == [dragged.id])
+        let start2 = thumbPoint(vm, cellID: "ws:0", thumbIndex: 1)
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[1],
+                            thumbIndex: 1, location: start2,
+                            startLocation: start2)
+        vm.thumbDragChanged(cellID: cell.id, thumb: cell.thumbs[1],
+                            thumbIndex: 1,
+                            location: stripPoint(vm, cellID: "ws:2"),
+                            startLocation: start2)
+        #expect(vm.drag?.targetCellID == "ws:1")  // old drag unsteered
+        vm.thumbDragEnded()                       // second up: swallowed
+        #expect(moves == [dragged.id])
+        #expect(vm.hiddenThumbID == dragged.id)   // the ghost still stands in
+    }
+
     @Test func pointerBusyDefersApplyUntilRelease() {
         let vm = makeVM(workspaces: [ws(0, active: true), ws(1)])
         vm.pointerBusy = true

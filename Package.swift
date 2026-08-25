@@ -174,6 +174,7 @@ let package = Package(
         .testTarget(name: "FacetViewGridTests",
                     dependencies: [
                         "FacetViewGrid",
+                        "FacetView",          // overviewDropAckTimeout (t-88qt)
                         .product(name: "Palette", package: "sill"),
                         .product(name: "PaletteKit", package: "sill"),
                     ]),

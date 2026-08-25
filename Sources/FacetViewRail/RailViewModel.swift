@@ -687,6 +687,12 @@ public final class RailViewModel {
                                  thumbIndex: Int, location: CGPoint,
                                  startLocation: CGPoint) {
         guard zoom == nil else { return }
+        // Landing-gate fence (t-88qt): a committed drop keeps `drag` armed
+        // until the backend acks, so a new press would skip the arm block and
+        // steer the OLD drag — its `thumbDragEnded` then re-commits the old
+        // window as a duplicate backend move (the old RailView's pendingDown
+        // gate made this inert; the migration lost it). Refuse arm AND mutate.
+        guard lastDrop == nil, lastSwap == nil else { return }
         if drag == nil {
             // Only a WORKSPACE cell's thumb is move-draggable (Decision 6 —
             // the old rail refused lens thumbs, unlike the grid), and the
@@ -714,6 +720,10 @@ public final class RailViewModel {
     }
 
     public func thumbDragEnded() {
+        // The armed gate IS the healthy-path signal (same fence as
+        // `pointerDragEndFallback`): a second gesture's up must not re-commit
+        // the old drag the gate is holding.
+        guard lastDrop == nil, lastSwap == nil else { return }
         guard let d = drag, !d.isKeyboard, case .window(let pid, let id,
             let srcWS, _, _) = d.kind else { return }
         if let tid = d.targetCellID, let dst = cells.first(where: { $0.id == tid }) {
