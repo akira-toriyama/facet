@@ -44,10 +44,21 @@ public func resolveTreeDrop(
             // By-workspace degrade: a header drag TRADES two workspaces'
             // contents (mode-3). Any position inside another workspace's
             // section — its header, a row, a gap — is that workspace's band,
-            // exactly like the retired `wsBands` hit-test. The END gap is
-            // BELOW the tree, which was outside every band (release did
-            // nothing) — keeping it nil also keeps the flick-below abort.
-            if case .between(nil) = target.placement { return nil }
+            // exactly like the retired `wsBands` hit-test. BOTH edge gaps lie
+            // outside every band, and `dropEscapeMargin` hands them over
+            // anyway: the end gap maps to the last section, the above-the-first
+            // gap clamps to the first (`destinationOrdinal`'s `max(0, k - 1)`).
+            // Killing both keeps the flick-away an ABORT. A swap has no undo —
+            // it fires N+M `moveWindow` calls — and t-dc2w measured a release
+            // 16 pt above the list trading two workspaces' contents.
+            switch target.placement {
+            case .between(nil):
+                return nil                         // below the last row
+            case .between(.header(let topID)) where secs.first?.id == topID:
+                return nil                         // above the first header
+            default:
+                break
+            }
             guard secs[g].sourceWorkspaceIndex != nil,
                   let t = destinationOrdinal(target.placement, in: secs),
                   t != g, secs[t].sourceWorkspaceIndex != nil else { return nil }
@@ -79,7 +90,7 @@ public func resolveTreeDrop(
         // ±32 pt tolerance band maps the below-the-end gap to the LAST
         // section and the above-the-first gap to the FIRST, so a flick past
         // either edge committed a real move. Kill both, exactly as the swap
-        // branch above kills its end gap.
+        // branch above kills its two.
         switch target.placement {
         case .between(nil):
             return nil                             // below the last row

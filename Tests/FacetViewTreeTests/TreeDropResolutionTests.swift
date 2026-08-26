@@ -152,6 +152,38 @@ final class TreeDropResolutionTests: XCTestCase {
         XCTAssertNil(r)
     }
 
+    /// The degrade HEADER drag (mode-3 swap) needs the same two bands. Only
+    /// the end gap was killed, so a release above the list clamped to ordinal
+    /// 0 and traded two workspaces' contents — and a swap has no undo.
+    /// Measured live in the capsule VM (t-dc2w): a header released 16 pt above
+    /// the list moved both of workspace 1's windows into workspace 2.
+    func testDegradeHeaderAboveTheFirstHeaderAborts() {
+        let r = resolveTreeDrop(drag(.header("ws:1")),
+                                between(.header("ws:0")),
+                                sections: twoSections(), sectionMode: false,
+                                isolateDesktop: false)
+        XCTAssertNil(r)
+    }
+
+    /// The band's other end, so the pair cannot drift apart again.
+    func testDegradeHeaderToTheEndGapAborts() {
+        let r = resolveTreeDrop(drag(.header("ws:0")), between(nil),
+                                sections: twoSections(), sectionMode: false,
+                                isolateDesktop: false)
+        XCTAssertNil(r)
+    }
+
+    /// The kill is the LIST edge, not "any header gap": an interior header's
+    /// gap stays a legal swap target (it closes the previous section).
+    func testDegradeHeaderAboveAnInteriorHeaderStillSwaps() {
+        let secs = twoSections() + [sec("ws:2", .workspace, [win(3, "Notes")], src: 2)]
+        let r = resolveTreeDrop(drag(.header("ws:2")),
+                                between(.header("ws:1")),
+                                sections: secs, sectionMode: false,
+                                isolateDesktop: false)
+        XCTAssertEqual(r, .swap(from: 2, to: 0))
+    }
+
     /// The degrade path shares the `.window` branch — same escape bands.
     func testDegradeWindowEscapeBandsAbort() {
         XCTAssertNil(resolveTreeDrop(drag(.window(group: 0, WindowID(serverID: 1))),
