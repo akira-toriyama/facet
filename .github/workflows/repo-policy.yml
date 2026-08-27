@@ -1,0 +1,20 @@
+# Canonical standard file managed by fleet-sync (.github/workflows/fleet-sync.yml).
+# Do NOT edit per-repo copies — edit THIS file; fleet-sync propagates it to every
+# owned, non-fork, non-archived repo. Synced to: .github/workflows/repo-policy.yml
+# House-policy gate, no external tool: (1) translation files (*.ja.* paths) are
+# banned — docs live in English only (doc-consistency-policy); (2) an
+# available(macOS …) gate at or below the repo's own Package.swift floor is dead
+# code. The logic + its table test live in the hub (scripts/repo-policy-check.sh);
+# repos without a Package.swift skip check 2 automatically, so this caller is
+# fleet-safe on non-Swift repos too.
+name: repo-policy
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-policy:
+    uses: akira-toriyama/.github/.github/workflows/repo-policy.yml@v2
