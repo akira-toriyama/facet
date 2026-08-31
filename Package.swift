@@ -38,9 +38,11 @@
 //   FacetApp            executable target: @main, CLI argv,
 //                       Controller orchestration.
 //
-// Tests are split per module under Tests/<Module>Tests. GUI
-// modules (Views, App) deliberately skipped — pure logic in Core
-// + Adapter contract checks is where the value is.
+// Tests are split per module under Tests/<Module>Tests. The view
+// modules carry their own suites (the SwiftUI view models are where
+// the tree/grid/rail logic lives since #448/#456/#457); FacetApp is
+// the one target deliberately left untested — its Controller is
+// orchestration over surfaces the VM gate exercises instead.
 
 import PackageDescription
 
@@ -61,38 +63,48 @@ let package = Package(
     dependencies: [
         // Shared theming foundation (plan atelier). Pinned to a SemVer
         // tag for release/CI reproducibility; `.upToNextMinor` keeps it on
-        // a single minor. Floor 3.1.0 = the sill release (PR #109, t-5d5a)
-        // that added `ObjectShape.dynamicValue` — a TYPED open-map value
-        // schema for dynamic-ordinal tables — so the ONE `configSpec` gives
-        // `[desktop.<N>]` field-level completion + strict validation instead
-        // of a bare permissive object (t-kz0m; see FacetConfig+Spec.swift
-        // `desktop`). This 1.29.0→3.x jump crosses sill 2.0.0/3.0.0, which
-        // raised sill's macOS floor to 26 (t-tbar) — hence facet's own
-        // `.macOS("26.0")` bump above. The breaking majors touched only
-        // ThemeKit/ThemeKitUI/prism (the AppKit ThemedList retirement), none
-        // of the modules facet links (Palette / PaletteKit / Effects /
-        // ConfigSchema). sill's OWN swift-toml-edit floor stays 2.0.0 (the
-        // breaking `Toml.Row`/source-span bump, chord#148) — facet's DIRECT
-        // swift-toml-edit 2.x pin below and sill's transitive one resolve to
-        // the same 2.x, never a split graph. For local, atomic sill↔facet
-        // editing, temporarily swap this for `.package(path: "../sill")`.
+        // a single minor. Floor 8.8.0 carries `ObjectShape.dynamicValue` —
+        // the TYPED open-map value schema for dynamic-ordinal tables that
+        // gives the ONE `configSpec` `[desktop.<N>]` field-level completion
+        // and strict validation instead of a bare permissive object
+        // (t-kz0m; see FacetConfig+Spec.swift `desktop`). sill's macOS-26
+        // floor (t-tbar) is what facet's `.macOS("26.0")` above tracks.
+        //
+        // BUMPING THIS: facet links EIGHT sill products (see the targets
+        // below), not the four this comment used to name — ThemeKit,
+        // ThemeKitUI, ListCore and GridCore joined with the SwiftUI view
+        // migration (#448/#456/#457). Every sill major from 4.0.0 on has
+        // touched at least one of them, measured by
+        // `git diff --name-only <prev> <tag> -- Sources`:
+        //   4.0.0  ConfigSchema, Effects
+        //   5.0.0  Palette, PaletteKit, ThemeKit, ThemeKitUI
+        //   6.0.0  Palette, PaletteKit, Effects, ThemeKitUI
+        //   7.0.0  all of the above plus ConfigSchema and GridCore
+        //   8.0.0  ThemeKitUI
+        // So there is no module facet can assume is insulated, and
+        // ThemeKitUI is the highest-traffic one: the last two pin bumps
+        // (#458 → 8.8.1, #462 → 8.8.2) both shipped to fix a ThemeKitUI
+        // regression facet's own suite did not catch. Read sill's release
+        // notes for the linked eight and re-run the VM gate; a green
+        // `swift build` proves nothing about the view layer.
+        //
+        // For local, atomic sill↔facet editing, temporarily swap this for
+        // `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
                  .upToNextMinor(from: "8.8.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
-        // module name is unchanged, so `import Toml` survives. Floor 2.0.0:
-        // the family unified on swift-toml-edit 2.x (chord#148). 2.0.0's break
-        // — source spans carried on a typed `Toml.Row`, the synthetic
-        // `__line__` key dropped — is confined to the STRICT nested `parse` /
-        // `Value.arrayOfTables` surface; facet reads only `parseFlat`
-        // (`.tables` / `.arrays`, element type unchanged) and the lossless
-        // `Toml.Annotated` DOM (board nesting, `parseTOMLNestedTabs`), neither
-        // of which 2.0.0 touched — so this is a pin-only bump, no code change.
-        // `.upToNextMajor` mirrors sill's own pin for this bedrock dependency.
-        // Floor 2.3.0: ConfigSnapshot writes a lens desktop's retargeted
-        // `[desktop.N] match=` via the scalar `settingValue(_:atTable:forKey:)`
-        // added there (t-sgqk) — an older 2.x has no such symbol.
+        // module name is unchanged, so `import Toml` survives. Floor 3.0.0,
+        // matching sill's own `.upToNextMajor(from: "3.0.0")` — the two
+        // resolve to one 3.x, never a split graph. 3.0.0 retired the
+        // line-based strict scanner and made `parse` delegate to
+        // `parseWithSpans` (swift-toml-edit#19): an engine rewrite BEHIND
+        // the same `parse` / `parseFlat` surface, so it was a pin-only bump.
+        // facet reads `parseFlat` (`.tables` / `.arrays`), the lossless
+        // `Toml.Annotated` DOM, and the scalar `settingValue(_:atTable:forKey:)`
+        // that ConfigSnapshot writes an isolate desktop's retargeted
+        // `[desktop.N] match=` with (t-sgqk).
         .package(url: "https://github.com/akira-toriyama/swift-toml-edit.git",
                  .upToNextMajor(from: "3.0.0")),
     ],

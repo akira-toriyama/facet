@@ -813,7 +813,7 @@ extension Controller {
             // predicate is the single ordinal-keyed session override (D6) over
             // the config `match` off `desktopIsolate`.
             guard !configMatch.isEmpty else { return "" }
-            return capturedOrdinal.flatMap { isolateMatchOverride[$0] } ?? configMatch
+            return isolateMatchOverride[ordinal] ?? configMatch
         }()
 
         let caption = sectionDisplayLabel(index: g + 1, label: sec.label)
