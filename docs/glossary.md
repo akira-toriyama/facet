@@ -55,7 +55,7 @@ flowchart TB
   end
   subgraph VIEW["FacetView — GUI only"]
     PANELHOST["PanelHost"]
-    SIDEBAR["SidebarView (tree)"]
+    SIDEBAR["TreeContentView (SwiftUI tree, on sill's ThemedListView)"]
     GRID["Grid overlay"]
     THEME["pal (palette)"]
   end
@@ -291,8 +291,11 @@ cases in `Main.canonicalViews` + `Controller.dispatchView/Hide/Toggle` —
 
 ### tree view
 The **hierarchical list of [[facet workspace]]s** shown in the left
-sidebar. Rendered by `SidebarView`.
-- Code: `SidebarView`
+sidebar. Rendered in SwiftUI on sill's `ThemedListView` since #448.
+- Code: `TreeContentView` / `TreeViewModel` (`FacetViewTree`), hosted by
+  `PanelHost` (`FacetApp`). `SidebarView` survives only as state holder
+  (`searching` / `kbNav` / `isSkeleton`) — no longer the render surface
+  (full retirement = t-67th)
 - **Don't call it:** sidebar, outline, list
 
 ### grid view
@@ -314,8 +317,9 @@ both ends signals "there's more"). A different role from tree / grid (fast
 switching + bird's-eye). Never auto-shows at launch (facet always starts
 agent-only; every view is summoned). #109 shipped → M9-3/M9-4 made it
 edge-based → **2-b made it a carousel (replacing M9-4's scroll)**.
-- Code: `RailView` (`FacetViewRail`) / `railBands` / `railCarouselOffsets`
-  (`FacetCore`, pure geometry)
+- Code: `RailContentView` / `RailViewModel` (`FacetViewRail`, SwiftUI
+  since #457) / `railBands` / `railCarouselOffsets` (`FacetCore`, pure
+  geometry)
 - **Don't call it:** switcher, expose, mission control, scroll bar
 
 ### overview surface
@@ -358,7 +362,7 @@ the row with a constant gap between cells. Its size cap is `[rail] strip`
 The simultaneous-display cap is `[rail] cells`. It is also the literal
 config key name `[rail] strip` (the band concept and the key share the
 name).
-- Code: `RailView.layoutCells`' `stripRect` / `railBands` (strip/hero
+- Code: `railLayout` (`RailMath`)'s `stripRect` / `railBands` (strip/hero
   split) / `railScaledPads` (short-side-based padding)
 - See: [[hero]] / [[carousel]] / [[edge]] / [[rail view]]
 - **Don't call it:** bar, dock, filmstrip, tray, [[sliver]] (a sliver is
@@ -370,7 +374,7 @@ in [[rail view]]. A mini-screen shrunk at the real screen's aspect ratio,
 filling whatever the [[strip]] does not occupy (the flip side of
 `[rail] strip`%). When the strip's rotation ([[carousel]]) changes the
 central [[facet workspace]], the hero follows.
-- Code: `RailView.hero` / `railBands` (the hero region)
+- Code: `RailLayout.heroRect` (`RailMath`) / `railBands` (the hero region)
 - See: [[strip]] / [[carousel]] / [[rail view]]
 - **Don't call it:** preview, main, focus, big cell, spotlight
 
@@ -463,10 +467,10 @@ out of scope (read-only SkyLight; macOS's "All Desktops" handles that).
 Session-scoped, per-mac-desktop, orthogonal to `marks`.
 - CLI: `facet window --toggle-sticky` (turning it off via `--toggle-float`
   lands the same way = float-exit = sticky-exit). `facet query` shows
-  `N sticky`; the tree shows a **borderless horizontal `SF:pin` icon +
-  "sticky" text badge** (`pal.foreground`, no border, no italics — the pin
+  `N sticky`; the tree shows a **borderless horizontal Phosphor `push-pin`
+  icon + "sticky" text badge** (no border, no italics — the pin
   glyph is what distinguishes it from float. The old 📌 emoji is gone;
-  PR#252 removed the border/italics).
+  PR#252 removed the border/italics; #448 swapped SF → Phosphor).
 - UI: the tree's right-click / `m` (keyboard-nav) context menu carries
   **"Sticky"** (non-sticky window) / **"Unstick"** (sticky window). A
   sticky window is floating and float-exit=sticky-exit, so no "Unfloat"
@@ -477,13 +481,14 @@ Session-scoped, per-mac-desktop, orthogonal to `marks`.
 
 ### tree status badge (master / float)
 The **borderless icon + text badge** on each tree window row showing that
-window's state (`SidebarView`'s `drawStatusPill`). **master** (tiling's
-`order[0]`) draws `SF:crown` + "master" in `pal.primary` (green); **float**
-(a floating window) draws `SF:macwindow` + "float" in `pal.foreground`
-(the same color as the "Desktop N" band label). PR#252 unified every badge
-to border/fill/italic-free icon+text (the same clean look as sticky /
-scratchpad / hidden / `#tag` chips) = color and glyph carry the meaning.
-- Code: `SidebarView.drawStatusPill` (`FacetViewTree`)
+window's state. **master** (tiling's `order[0]`) draws Phosphor `crown` +
+"master" in the primary role (green); **float** (a floating window) draws
+Phosphor `app-window` + "float" in the secondary role. PR#252 unified
+every badge to border/fill/italic-free icon+text (the same clean look as
+sticky / scratchpad / hidden / `#tag` chips) = color and glyph carry the
+meaning; the SwiftUI migration (#448) swapped the SF glyphs for Phosphor.
+- Code: `windowBadges` / `TreeBadge` (`TreeRowSpec`, pure spec) →
+  `TreeViewModel.badge` (Phosphor slug + role) → sill row rendering
 - ⚠ Distinct from the per-workspace layout badge (`m-EDGE` =
   [[master-stack layouts]]): this one is the **per-window** master/float
   state.
@@ -509,7 +514,7 @@ floating + a named map: `WorkspaceCatalog.scratchpads`
 - The display-control crux: stashed windows are **excluded from the
   snapshot** = they appear neither in the tree nor in window counts; only
   `facet query`'s `stashed:` line names them. Settled windows show a
-  **borderless `SF:tray` icon + `scratchpad:NAME` text badge** in the tree
+  **borderless Phosphor `tray` icon + `scratchpad:NAME` text badge** in the tree
   (`pal.tertiary` — the most muted tier; PR#252 removed the border). So WS
   switches never restore a stashed window, `setActive`'s park/restore lists
   and `resyncVisibleState` explicitly skip `isStashed` (the mirror image of
@@ -566,7 +571,10 @@ The **CLI-triggered skeleton display** hiding the flicker of a mac-desktop
 switch. Fire `facet --view tree --loading MS` from outside **before the
 switch keypress** (macOS exposes no pre-mac-desktop-switch hook, so no
 auto-trigger).
-- Code: `Controller.showLoading` → `SidebarView`'s skeleton
+- Code: `Controller.showLoading` → `SidebarView.isSkeleton` (the
+  content-ready signature — still the source of truth) →
+  `PanelHost.setSkeletonVisible` / `TreeSkeletonView` (the host-side
+  ghost that draws it since #448)
 - **Don't call it:** placeholder, loader, spinner
 
 ### anchor
