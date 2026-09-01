@@ -60,6 +60,43 @@ wraps it for drawing — so `FacetView` imports no OS capture backend.
   dock-bar, command palette, etc.) plug in without touching Core
   or Adapter.
 
+## The view layer after the SwiftUI migration
+
+Since the migration PRs (#448 tree / #456 grid / #457 rail) all three
+views render in **SwiftUI on [sill](https://github.com/akira-toriyama/sill)'s
+`ThemeKitUI`** widget layer, hosted inside AppKit panels the app layer
+owns. The per-view wiring:
+
+- **tree** — `PanelHost` (`FacetApp`) owns the `NSPanel` + chrome
+  (search band, `HandleBar`, border, skeleton overlay) and hosts
+  `TreeContentView` (`FacetViewTree`) via an `NSHostingView`
+  (`TreeHostingView`). `TreeContentView` renders on sill's
+  `ThemedListView`; `TreeViewModel` (`@Observable`) is fed by the
+  Controller (`apply(sections:)`) and re-themed by repointing its
+  `palette` (no re-flatten). Row activation funnels
+  `PanelHost.onActivateRow` → `Controller.activateTreeRow`; DnD
+  pre-validation and drop routing ride sill's `ListCore` seams
+  (`DragContext` / `DropTarget` / `dropTargetValidator`).
+  `SidebarView` is still constructed for its state (`searching`,
+  `kbNav`, the `isSkeleton` signature logic) but is no longer the
+  render surface — its full retirement is tracked separately
+  (t-67th).
+- **grid** — `Controller+Grid` builds
+  `NSHostingView(rootView: GridContentView(model: GridViewModel))`.
+  Keyboard nav is host-driven (a local monitor feeds the view
+  model; no SwiftUI key handling), with the pure index math in
+  sill's `GridCore`.
+- **rail** — `RailContentView` + `RailViewModel`
+  (`FacetViewRail`); the carousel is host-side by design (t-n3be),
+  with pure geometry split between `FacetCore`
+  (`railBands` / `railCarouselOffsets`) and `RailMath`.
+
+The tree's search field is sill's AppKit `ThemedTextField`
+(`ThemeKit`); palettes come from sill's `Palette` / `PaletteKit`
+(the `pal` var), and every `[border]` frame is sill's
+`AnimatedBorderView`. Which sill product each target links is
+declared (with the bump-risk record) in `Package.swift`.
+
 ## Milestones
 
 Milestone / phase status (M1–M11 — what shipped when) lives in the
@@ -396,7 +433,7 @@ two vocabularies don't drift apart:
 |---|---|
 | **Clean Architecture — Domain** (Entity + Repository protocol) | `FacetCore` (`Workspace`, `Window`, `WindowID`, `WindowAction`, `WindowBackend` + `WindowCapturing` protocols) |
 | **Clean Architecture — Platform / Infrastructure** (Repository impl) | `FacetAdapterNative` (`NativeAdapter`, `WorkspaceCatalog`, `LayoutTree`) + `FacetAccessibility` (AX helpers) + `FacetCapture` (`SCKWindowCapture`, ScreenCaptureKit, behind `WindowCapturing`) |
-| **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid`, `FacetViewRail` (AppKit-bound) |
+| **Clean Architecture — Frameworks & Drivers** (UI) | `FacetView`, `FacetViewTree`, `FacetViewGrid`, `FacetViewRail` (SwiftUI on sill's `ThemeKitUI`, hosted in AppKit panels) |
 | **Clean Architecture — Application** (DI + Coordinator) | `FacetApp` (`Controller` + `Main`) |
 | **Clean Architecture — Use Case (Interactor)** | *NOT a separate layer* — see below |
 | **DDD — Entity** | `Workspace`, `Window` |
@@ -595,8 +632,9 @@ layer.
 
 ### Where it is consumed
 
-The tree (`SidebarView.update(sections:)`) renders `[ProjectedSection]`
-directly, as do the grid and rail. The read-path is the sole window-grouping
+The tree (`TreeViewModel.apply(sections:)` → sill's `ThemedListView`)
+renders `[ProjectedSection]` directly, as do the grid and rail
+(`GridViewModel` / `RailViewModel`). The read-path is the sole window-grouping
 model, and the section list it renders comes from the **typed-desktop layer**
 (next subsection): a workspace desktop renders its flat `[[desktop.N.section]]`
 blocks (none declared → degrade 1:1 to the built-in by-workspace tree), and a
@@ -663,10 +701,10 @@ On a workspace desktop all **three views render this one ordered section list**
 the grid's cells, and the rail's carousel cells (with the active section as the
 centre **hero**). Each lights **exactly one** section, the active one —
 **3-view unified highlight**, completed across tree (EX-1), grid (EX-2a), and
-rail (EX-2b). `OverviewCell.isActive` bakes the single-highlight at cell-build
-time, so the accent draw is identical across surfaces; cell/window picks funnel
-through `WindowBackend.activateSection` (the same throughline the CLI + tree
-use). An isolate desktop is tree-only, so the grid/rail cell path applies only to
+rail (EX-2b). `GridCellVM.isActive` / `RailCellVM.isActive` bake the
+single-highlight at cell-build time, so the accent draw is identical across
+surfaces; cell/window picks funnel through `Controller.activateSection` (the
+same throughline the CLI + tree use). An isolate desktop is tree-only, so the grid/rail cell path applies only to
 workspace desktops.
 
 ## Non-goals

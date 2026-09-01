@@ -71,6 +71,20 @@ reimplemented**. The exact module → target wiring:
   - `ConfigSchema` — one declarative `Spec` drives config.toml decode +
     `config --emit-schema` (taplo completion) + `config --validate`
     (sill 1.29.0 bridge, t-0029) → the three cannot drift.
+  - `ThemeKit` (AppKit widgets) — `ThemedTextField` is the tree's
+    type-to-filter search field (facet-3; the host key monitor needs
+    its live `isComposing` / `focus()` handles).
+  - `ThemeKitUI` (SwiftUI widgets) — the render surface of all three
+    views since the SwiftUI migration (#448 tree / #456 grid / #457
+    rail): `ThemedListView` under the tree, `ThemedGrid` under the
+    grid, `AnimatedBorderView` for every `[border]` frame. Linked by
+    all three view targets — the highest-traffic module on a sill
+    bump (see the Package.swift pin comment).
+  - `ListCore` (pure) — the tree's DnD math (`DragContext` /
+    `DropTarget` / drag candidates); also linked by `FacetApp` for
+    the drop route.
+  - `GridCore` (pure) — grid math (`nextGridIndex` / fit sizing)
+    behind the grid's host-driven keyboard nav.
 - **[swift-toml-edit](https://github.com/akira-toriyama/swift-toml-edit)**
   — the family's only TOML implementation (the `Toml` module).
   Originally sill in-tree, split into its own repo at 0.11.0;
@@ -377,9 +391,10 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
   take key — so ↑↓ / Enter / search (``s``) / tag-manage (``t``)
   work the instant the panel appears (Spotlight-style; a hotkey
   jumps straight in). **#66 is preserved by handing key BACK
-  before focusing**: acting on a row (mouse click in
-  ``SidebarView.mouseDown`` → ``handleClick``, or Enter →
-  ``kbActivate``) calls ``exitActive(restore: false)`` FIRST, so
+  before focusing**: acting on a row (a SwiftUI row click →
+  ``PanelHost.onActivateRow``, or Enter → ``activateTreeCursor`` —
+  both land in ``Controller.activateTreeRow``, the one routing
+  helper) calls ``exitActive(restore: false)`` FIRST, so
   facet relinquishes key and a same-app window focuses via public
   AX (``KeyablePanel.canBecomeKey`` is still gated to ``wantsKey``;
   a click never leaves the panel holding key *while* focusing).
