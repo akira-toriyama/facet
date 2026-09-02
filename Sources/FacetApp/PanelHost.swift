@@ -112,6 +112,11 @@ final class PanelHost: NSObject {
     /// Pre-dispatch left-mouse router for the tree body (⌘/blank panel
     /// move + blank wake) — see the init comment for why a monitor.
     private var treeMouseMonitor: Any?
+    /// The edge cursor held for the duration of an OS live resize (t-xrkr):
+    /// picked from the mouse's grab edge at `windowWillStartLiveResize`,
+    /// re-asserted every `windowDidResize` tick (the OS resize loop resets
+    /// to arrow between ticks), cleared at `windowDidEndLiveResize`.
+    private var liveResizeCursor: NSCursor?
 
     /// Line-pets overlay — a transparent, click-through child window `pad`
     /// LARGER than the panel, drawing arcade sprites centred ON the panel's
@@ -554,7 +559,13 @@ final class PanelHost: NSObject {
             onBlankMouseDown?()
         }
         Log.debug("treeMouseDown: \(isCommandDrag ? "⌘" : "blank") → performDrag")
+        // Grab feedback for the whole move: closed hand now (the modal drag
+        // loop resets to arrow otherwise — t-xrkr), re-asserted every
+        // `windowDidMove` tick, open hand when the loop returns (the pointer
+        // rides the panel, so it lands where it grabbed).
+        NSCursor.closedHand.set()
         panel.performDrag(with: event)
+        NSCursor.openHand.set()
         return true
     }
 
@@ -724,6 +735,9 @@ extension PanelHost: NSWindowDelegate {
             if panel.inLiveResize {
                 userWidth = f.width
                 userHeight = f.height
+                // Hold the grab-edge cursor across the whole resize —
+                // the OS loop resets to arrow between ticks (t-xrkr).
+                liveResizeCursor?.set()
             }
             anchorTL = NSPoint(x: f.minX, y: f.maxY)
             // The SwiftUI tree reflows itself inside the resized `treeHost`
@@ -750,7 +764,60 @@ extension PanelHost: NSWindowDelegate {
             // for programmatic layout() setFrame too — harmless, anchorTL
             // just re-asserts the value layout() derived it from.
             anchorTL = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+            // Hold the grab cursor for the WHOLE panel move (t-xrkr): the
+            // window-server drag loop resets to arrow, but it also fires
+            // this delegate every tick, so re-asserting here covers every
+            // move path (HandleBar / blank / ⌘) with no state. Left button
+            // down + a moving window IS a live panel drag; programmatic
+            // setFrame runs with no button down and stays untouched.
+            if NSEvent.pressedMouseButtons & 1 == 1 {
+                NSCursor.closedHand.set()
+            }
         }
+    }
+
+    nonisolated func windowWillStartLiveResize(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            liveResizeCursor = resizeCursorForCurrentMouse()
+            liveResizeCursor?.set()
+        }
+    }
+
+    nonisolated func windowDidEndLiveResize(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            liveResizeCursor = nil
+            // Back to neutral; the tracking areas (sill hover / blank
+            // mouseMoved / OS edge band) re-establish the context cursor
+            // on the next pointer move.
+            NSCursor.arrow.set()
+        }
+    }
+
+    /// The frame-resize cursor matching the edge the mouse grabbed, read at
+    /// live-resize start (the theme frame never hands us the mouseDown, so
+    /// the grab edge is inferred from the current mouse position vs the
+    /// panel frame; tolerance straddles the border since the OS band
+    /// extends a little to both sides).
+    private func resizeCursorForCurrentMouse() -> NSCursor {
+        let m = NSEvent.mouseLocation
+        let f = panel.frame
+        let t = Self.resizeBand + 4
+        let left = m.x <= f.minX + t
+        let right = m.x >= f.maxX - t
+        let bottom = m.y <= f.minY + t
+        let top = m.y >= f.maxY - t
+        let pos: NSCursor.FrameResizePosition
+        switch (left, right, bottom, top) {
+        case (true, _, true, _): pos = .bottomLeft
+        case (_, true, true, _): pos = .bottomRight
+        case (true, _, _, true): pos = .topLeft
+        case (_, true, _, true): pos = .topRight
+        case (true, _, _, _): pos = .left
+        case (_, true, _, _): pos = .right
+        case (_, _, true, _): pos = .bottom
+        default: pos = .top
+        }
+        return .frameResize(position: pos, directions: .all)
     }
 
     nonisolated func windowDidBecomeKey(_ notification: Notification) {
