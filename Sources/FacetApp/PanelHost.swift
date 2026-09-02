@@ -145,7 +145,7 @@ final class PanelHost: NSObject {
     /// to normal window dispatch so `.resizable`'s theme-frame edge handling
     /// can start a resize (t-yr1j). Slightly over AppKit's own band so a
     /// resize-cursor click never lands in `performDrag`.
-    private static let resizeBand: CGFloat = 6
+    fileprivate static let resizeBand: CGFloat = 6
 
     init(view: SidebarView, paletteBox: PaletteBox) {
         self.view = view
@@ -838,5 +838,38 @@ final class TreeSkeletonView: NSView {
     override func rightMouseDown(with event: NSEvent) {
         guard let onRightMouseDown else { return super.rightMouseDown(with: event) }
         onRightMouseDown(event)
+    }
+
+    // The blank area below the last row is a panel-move handle (see
+    // `routeTreeMouseDown`), so it shows the HandleBar's open-hand cursor
+    // (t-yr1j follow-up). Division of authority: rows belong to sill's
+    // pointer affordances (link / grab — never touched here, not even to
+    // reset, or every mouseMoved would fight sill's hover cursor), the
+    // `PanelHost.resizeBand` edge sliver belongs to the OS resize cursor,
+    // and only the remaining blank gets the hand. Exit restores the arrow.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.filter { $0.owner === self }.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited,
+                      .inVisibleRect],
+            owner: self))
+    }
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard let window, let probe = rowProbe else { return }
+        let loc = event.locationInWindow
+        guard let content = window.contentView?.bounds else { return }
+        let band = PanelHost.resizeBand
+        let inResizeBand = loc.x < band || loc.x > content.width - band
+            || loc.y < band
+        if !inResizeBand, !probe(window.convertPoint(toScreen: loc)) {
+            NSCursor.openHand.set()
+        }
+    }
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        NSCursor.arrow.set()
     }
 }
