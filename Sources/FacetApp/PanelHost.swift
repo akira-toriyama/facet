@@ -140,6 +140,12 @@ final class PanelHost: NSObject {
     private let minWidth: CGFloat = 160
     private let minHeight: CGFloat = 140
     private let cornerRadius: CGFloat = 12
+    /// Width of the edge sliver the tree mouse monitor leaves to the OS:
+    /// clicks this close to the panel's left/right/bottom edge fall through
+    /// to normal window dispatch so `.resizable`'s theme-frame edge handling
+    /// can start a resize (t-yr1j). Slightly over AppKit's own band so a
+    /// resize-cursor click never lands in `performDrag`.
+    private static let resizeBand: CGFloat = 6
 
     init(view: SidebarView, paletteBox: PaletteBox) {
         self.view = view
@@ -301,6 +307,20 @@ final class PanelHost: NSObject {
             matching: .leftMouseDown
         ) { [weak self] event in
             guard let self, event.window === self.panel else { return event }
+            // The OS resize band along the panel's left/right/bottom edges
+            // must reach normal dispatch: `.resizable`'s theme-frame edge
+            // handling wins over content views there, but only for
+            // DISPATCHED events — a click this monitor consumes never
+            // resizes, it moves (the cursor still flips to resize because
+            // tracking needs no click; measured on the host, t-yr1j). The
+            // top edge sits above the HandleBar band, outside treeHost, so
+            // it already passes through.
+            let loc = event.locationInWindow
+            let b = self.effect.bounds
+            if loc.x < Self.resizeBand || loc.x > b.width - Self.resizeBand
+                || loc.y < Self.resizeBand {
+                return event
+            }
             let p = self.treeHost.convert(event.locationInWindow, from: nil)
             guard self.treeHost.bounds.contains(p) else { return event }
             return self.routeTreeMouseDown(event) ? nil : event
