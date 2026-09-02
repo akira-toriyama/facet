@@ -72,7 +72,13 @@ public final class HandleBar: NSView {
         // area). A bare click is a harmless no-op (performDrag with no
         // motion just returns).
         if e.clickCount == 2 { onResetGeometry?(); return }
+        // Closed hand for the grab; the host's `windowDidMove` re-asserts
+        // it every tick of the drag loop (which resets to arrow otherwise),
+        // and the open hand returns with the release — the pointer rides
+        // the panel, so it is still over this bar (t-xrkr).
+        NSCursor.closedHand.set()
         window?.performDrag(with: e)
+        NSCursor.openHand.set()
     }
 
     public override func rightMouseDown(with e: NSEvent) {
