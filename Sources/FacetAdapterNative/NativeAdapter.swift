@@ -529,8 +529,22 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
     /// matches the same pred chain the sidebar's optimistic
     /// highlight uses (memory `facet-ws-switch-focus-management`).
     func applyAutoFocus(newActiveWS: Int) {
-        let wsWindows = enumerateCGWindows().filter {
+        // Candidates are restricted to ONSCREEN windows: a window filed in
+        // this desktop's catalog can physically sit on another mac desktop
+        // (filed at launch, before its Space was ever visited), and raising
+        // one makes macOS follow it there — a workspace click teleported the
+        // user to Desktop 2 (t-hxsr). `kCGWindowIsOnscreen` is the public-API
+        // proxy for "on the current desktop": facet's own parked slivers stay
+        // onscreen, so only cross-desktop / minimized / ⌘H windows drop out.
+        // The no-pick convenience must never travel; an EXPLICIT pick (row
+        // Enter, #66) still follows its window wherever it lives.
+        let all = enumerateCGWindows().filter {
             catalog.windowMap[$0.id]?.workspace == newActiveWS
+        }
+        let wsWindows = all.filter(\.isOnscreen)
+        if wsWindows.count != all.count {
+            Log.debug("native: autoFocus excluded "
+                + "\(all.count - wsWindows.count) offscreen candidate(s)")
         }
         guard let pick = catalog.autoFocusTarget(
                 in: newActiveWS, windows: wsWindows)
@@ -554,6 +568,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
         guard let finder = finders.first else {
             Log.debug("native: autoFocus defocus skipped "
                 + "(Finder not running, unexpected)")
+            return
+        }
+        // Activation is not Space-neutral: with macOS's default-on
+        // "switch to a Space with open windows for the application"
+        // setting, activating Finder teleports the user to a Finder
+        // window's desktop when every Finder window sits offscreen —
+        // the second t-hxsr vector, hit after the raise path was
+        // already guarded. Same `kCGWindowIsOnscreen` proxy as
+        // `applyAutoFocus`: skip the defocus when Finder has windows
+        // but none onscreen. The previous app keeps the menu-bar
+        // crown then — an empty-WS signal lost beats a Space jump.
+        let pid = Int(finder.processIdentifier)
+        let finderWindows = enumerateCGWindows().filter { $0.pid == pid }
+        if !finderWindows.isEmpty,
+           !finderWindows.contains(where: \.isOnscreen) {
+            Log.debug("native: autoFocus defocus skipped (all "
+                + "\(finderWindows.count) Finder window(s) offscreen)")
             return
         }
         finder.activate()
