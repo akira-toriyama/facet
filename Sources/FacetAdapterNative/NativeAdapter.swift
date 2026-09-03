@@ -570,6 +570,23 @@ public final class NativeAdapter: WindowBackend, @unchecked Sendable {
                 + "(Finder not running, unexpected)")
             return
         }
+        // Activation is not Space-neutral: with macOS's default-on
+        // "switch to a Space with open windows for the application"
+        // setting, activating Finder teleports the user to a Finder
+        // window's desktop when every Finder window sits offscreen —
+        // the second t-hxsr vector, hit after the raise path was
+        // already guarded. Same `kCGWindowIsOnscreen` proxy as
+        // `applyAutoFocus`: skip the defocus when Finder has windows
+        // but none onscreen. The previous app keeps the menu-bar
+        // crown then — an empty-WS signal lost beats a Space jump.
+        let pid = Int(finder.processIdentifier)
+        let finderWindows = enumerateCGWindows().filter { $0.pid == pid }
+        if !finderWindows.isEmpty,
+           !finderWindows.contains(where: \.isOnscreen) {
+            Log.debug("native: autoFocus defocus skipped (all "
+                + "\(finderWindows.count) Finder window(s) offscreen)")
+            return
+        }
         finder.activate()
         Log.debug("native: autoFocus defocus -> Finder")
     }
