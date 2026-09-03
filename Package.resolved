@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/akira-toriyama/sill.git",
       "state" : {
-        "revision" : "7272667ff248d88abd75bf897c17e254fdfe6c11",
-        "version" : "8.8.3"
+        "revision" : "5ceda3fdf7d338dbd4fe873b731dddef5aed3918",
+        "version" : "8.8.4"
       }
     },
     {
