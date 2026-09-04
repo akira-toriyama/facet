@@ -51,6 +51,12 @@ final class Controller: NSObject {
     /// scoped to its layer.
     private var displayObserver: DisplayChangeObserver?
 
+    /// t-s6qk: fast-path hide on a switch onto an UNMANAGED mac desktop.
+    /// Controller-side twin of the adapter's `activeSpaceDidChange`
+    /// observer — same two-observer layering as `displayObserver` (the
+    /// adapter's drives the catalog swap; this one is view-only).
+    private var spaceChangeToken: NSObjectProtocol?
+
     /// Latest workspaces snapshot — held so the grid view can render
     /// immediately on first show without round-tripping the backend.
     /// (Setter is internal — the grid / rail cold-start fetch in
@@ -598,6 +604,7 @@ final class Controller: NSObject {
                             // the first backend reply
         installConfigWatcher()
         installDisplayObserver()
+        installSpaceChangeObserver()
         installRealWindowDrag()
         refresh()
     }
@@ -669,6 +676,41 @@ final class Controller: NSObject {
         }
         displayObserver = obs
         obs.start()
+    }
+
+    /// t-s6qk: hide the `.canJoinAllSpaces` tree the moment a mac-desktop
+    /// switch lands on an UNMANAGED desktop. The regular hide — `apply()`'s
+    /// empty guard — waits for the adapter's `.refreshNeeded` → cliQueue AX
+    /// re-enumeration round-trip (several hundred ms), during which the
+    /// previous desktop's tree sits visible on a desktop facet is hands-off
+    /// about. macOS gives no pre-switch hook (memory
+    /// facet-per-native-space-ws), so notification time is the earliest
+    /// possible hide; the destination ordinal is readable synchronously via
+    /// read-only SkyLight. The slow path still runs and re-hides
+    /// (idempotent); returning to a managed desktop re-shows via `apply()`.
+    /// `userHidden` stays untouched — this is a positional hide, not a user
+    /// choice, exactly like the empty guard's.
+    private func installSpaceChangeObserver() {
+        spaceChangeToken = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.hideTreeIfUnmanagedMacDesktop()
+            }
+        }
+    }
+
+    /// See ``installSpaceChangeObserver``. Grid / rail are deliberately NOT
+    /// hidden here — the empty guard they'd mirror doesn't hide them either
+    /// (symmetry with the slow path, not a new policy).
+    private func hideTreeIfUnmanagedMacDesktop() {
+        guard panelHost.isVisible else { return }
+        let ordinal = currentMacDesktopOrdinal()
+        guard !config.isMacDesktopManaged(ordinal: ordinal) else { return }
+        Log.debug("space-switch fast-path: unmanaged mac desktop "
+            + "\(ordinal.map(String.init) ?? "nil") → hide tree")
+        panelHost.hide()
     }
 
     /// Re-read config.toml and apply whatever changed. Idempotent:
