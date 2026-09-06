@@ -30,7 +30,15 @@ template = '''
 # carries none. `skip = true` drops a matching commit from lint, bump and
 # notes entirely (a skipped commit is not a violation).
 [[patterns]]
-pattern = '^:[a-z0-9_]+:(\((?P<scope>[a-z0-9-]+)\))?(?P<semver_sigil>[=~^!%]) (?P<subject>.+)'
+# The subject group is the WHOLE line, gitmoji + scope + sigil included, so a
+# release-body line reads exactly as its commit does (`:sparkles:(cli)^ add
+# the thing`, which GitHub renders with the emoji) instead of the bare text
+# after the sigil. Nothing else reads the group: bump reads semver_sigil, lint
+# reads the match, and note.line's `$subject` is the only consumer. Keeping the
+# name `subject` (rather than adding a `$raw` group to the template) is what
+# keeps the revert pattern and the unmatched-commit fallback — both bind
+# `subject` alone — rendering unchanged.
+pattern = '^(?P<subject>:[a-z0-9_]+:(\((?P<scope>[a-z0-9-]+)\))?(?P<semver_sigil>[=~^!%]) .+)'
 
 [[patterns]]
 # raw `git revert`. The subject group takes the WHOLE line, quotes and all,
