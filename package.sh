@@ -47,11 +47,17 @@ for b in .build/release/*.bundle; do
   [[ -e "$b" ]] && ditto "$b" "$APP/Contents/Resources/$(basename "$b")"
 done
 
-# Stamp the bundle's marketing version from git so `facet --version` is
-# accurate (the committed Info.plist value is only a fallback for a
-# tag-less tarball build). `git describe` → e.g. v4.0.0-3-g1e77545 →
-# 4.0.0-3-g1e77545; a clean tagged build is just 4.0.0.
-VERSION="$(git describe --tags --dirty 2>/dev/null | sed 's/^v//')"
+# Stamp the bundle's marketing version so `facet --version` is accurate.
+# The tag this build is FOR arrives as RELEASE_TAG (glyph's release.yml
+# states it on the build step): the draft's tag exists as a git ref only
+# once a human publishes, so `git describe` in CI can only name the
+# PREVIOUS release — measured 2026-09-25, the v7.0.2 draft carried an app
+# printing 7.0.1-48-g729d4a7. Without RELEASE_TAG (a local build) `git
+# describe` stays: v4.0.0-3-g1e77545 → 4.0.0-3-g1e77545, a clean tagged
+# build is just 4.0.0, and the committed Info.plist value is only a
+# fallback for a tag-less tarball build.
+VERSION="${RELEASE_TAG:-$(git describe --tags --dirty 2>/dev/null || true)}"
+VERSION="${VERSION#v}"
 if [[ -n "$VERSION" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
     "$APP/Contents/Info.plist" >/dev/null 2>&1 || true
