@@ -91,7 +91,7 @@ let package = Package(
         // For local, atomic sill↔facet editing, temporarily swap this for
         // `.package(path: "../sill")`.
         .package(url: "https://github.com/akira-toriyama/sill.git",
-                 .upToNextMinor(from: "8.8.0")),
+                 .upToNextMinor(from: "8.9.0")),
         // swift-toml-edit — the family's ONE TOML implementation. It was
         // sill's in-tree `Toml` until sill 0.11.0 moved it into its own repo;
         // FacetCore takes `Toml` (pure, Foundation-only) from here now. The
