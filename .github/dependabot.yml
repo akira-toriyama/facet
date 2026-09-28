@@ -50,9 +50,19 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # Same 7-day supply-chain cooldown as github-actions above.
+    # Same 7-day supply-chain cooldown as github-actions above — except for the
+    # house packages (sill, swift-toml-edit). Both sides of that bump are ours,
+    # so the wait guards nothing and costs a version per cycle: the 2026-09-04
+    # weekly run proposed sill 8.8.2 to glance (#63) while 8.8.3 and 8.8.4 were
+    # already out but inside the window, and the pull closed unmerged the next
+    # day (t-xev4). Dependabot names a swift dependency by its URL with the
+    # scheme and `.git` stripped (`github.com/akira-toriyama/sill`, chord#218),
+    # so one wildcard covers every consumer. gomod carries no such exclusion: no
+    # Go repo depends on a house module (measured 2026-09-28).
     cooldown:
       default-days: 7
+      exclude:
+        - "github.com/akira-toriyama/*"
     groups:
       swift:
         patterns: ["*"]
