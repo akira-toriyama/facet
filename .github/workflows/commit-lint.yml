@@ -33,3 +33,12 @@ permissions:
 jobs:
   lint:
     uses: akira-toriyama/glyph/.github/workflows/lint.yml@v4.3.0
+    # Where the lint job runs is each repository's own choice, made with the
+    # Actions variable CI_RUNNER and no edit to this file: a repository that
+    # owns a self-hosted runner sets it (`self-hosted`), every other repository
+    # leaves it unset and the reusable falls back to ubuntu-latest (an unset
+    # variable arrives as an empty input; measured in glyph-test#115, run
+    # 37175462681). Never set it on a PUBLIC repository: a self-hosted runner
+    # there runs whatever a fork's pull request sends it.
+    with:
+      runner: ${{ vars.CI_RUNNER }}
