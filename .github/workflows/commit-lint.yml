@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   lint:
-    uses: akira-toriyama/glyph/.github/workflows/lint.yml@v4.3.0
+    uses: akira-toriyama/glyph/.github/workflows/lint.yml@v5.0.0
     # Where the lint job runs is each repository's own choice, made with the
     # Actions variable CI_RUNNER and no edit to this file: a repository that
     # owns a self-hosted runner sets it (`self-hosted`), every other repository
