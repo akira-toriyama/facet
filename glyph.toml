@@ -6,7 +6,6 @@ schema = 1
 exclude_authors = ['dependabot[bot]', 'renovate[bot]']
 
 [commit]
-style = "gemoji"
 
 # The gemoji vocabulary: https://github.com/github/gemoji
 # (machine-readable list: https://api.github.com/emojis)
