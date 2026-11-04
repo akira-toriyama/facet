@@ -59,18 +59,6 @@ skip = true
 pattern = '^(fixup|squash)! '
 skip = true
 
-[[patterns]]
-# v1 acceptance (the gemoji fleet's migration window): a gitmoji subject with
-# no sigil lints clean WITH the warning below and folds as none — the version
-# does not move. The v1 breaking form (`:code:! subject`) needs no window: the
-# strict pattern above already reads its `!` as the major sigil. What this
-# block silently costs is every v1-style minor/patch signal, which is exactly
-# what the warning names. Remove the whole block once every commit behind the
-# release walk's base carries a sigil.
-pattern = '^:[a-z0-9_]+:(\((?P<scope>[a-z0-9-]+)\))? (?P<subject>.+)'
-semver_sigil = '='
-warn = 'v1-acceptance window: no version sigil, so this commit folds as none and cannot move the version — write <:code:>[(scope)]<sigil> <subject> with = ~ ^ ! or %'
-
 [note]
 # One line per commit. $xxx reads the winning pattern's named groups;
 # $pr / $author / $hash are built in. A commit no pattern matches (bots)
