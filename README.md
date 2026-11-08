@@ -813,11 +813,12 @@ swift test           # XCTest — needs Xcode (CLT has none)
   steps if you hit oddness on multi-monitor setups.
 - **Window preview** needs Screen Recording.
 - **Ad-hoc signed builds re-prompt** for Accessibility on every
-  rebuild. Run `./setup-signing-cert.sh` once for a persistent
-  self-signed identity that keeps the TCC grant stable across
-  rebuilds (Homebrew install gets ad-hoc — re-prompts on
-  upgrade — because the install subprocess can't reach the
-  login keychain).
+  rebuild. Run `./setup-signing-cert.sh` once, in a terminal, for a
+  persistent self-signed identity that keeps the TCC grant stable
+  across rebuilds; it asks for your login password once so that
+  `codesign` can use the key without a dialog (Homebrew install gets
+  ad-hoc — re-prompts on upgrade — because the install subprocess
+  can't reach the login keychain).
 - **Drop target is by vertical band of a workspace** in the
   tree view; dropping onto an empty workspace works (its header
   band is the target).

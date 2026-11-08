@@ -311,6 +311,22 @@ FACET_DEBUG=1 .build/release/facet 2>&1 | tee /tmp/facet-bug-$(date +%H%M%S).log
 - **Bundle id is `com.facet.app`** (M2 done). See
   [package.sh](package.sh) at repo root. The id keys the TCC grant
   and self-signed cert identity — don't change it.
+- **`setup-signing-cert.sh` widens the key's partition list** to
+  `apple-tool:,apple:,codesign:`, password asked on the terminal, only
+  when the key lacks `apple:` (t-wc1c, mirroring chord#237/#238).
+  `security import -A` leaves it at `apple-tool:`, which keeps
+  `codesign` out: `errSecInternalComponent` over ssh, a SecurityAgent
+  dialog in a GUI session. A usable key must stay a silent exit 0:
+  capsule's `verify.sh` runs the script (`--silent`) on every verify of
+  a facet profile, unattended, output in a log, and a failure stops the
+  run. Without a terminal, a key that needs the list is exit 1 with a
+  message; the terminal test is taken BEFORE the default tee, since the
+  tee makes stderr a pipe for a person too. `-l "facet Local Signing"`
+  matters: without it every signing key in the keychain gets the list.
+  Read the list back with `security dump-keychain -a` in a session with
+  the keychain unlocked (a locked one shows no `partition_id` entry).
+  The script uses `/usr/bin/openssl` (LibreSSL) without `-legacy`, so it
+  no longer depends on Homebrew's openssl.
 
 ### CLI surface
 
